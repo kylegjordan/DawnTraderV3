@@ -76,7 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/settings', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
-      const validatedData = insertTradingSettingsSchema.parse(req.body);
+      const validatedData = insertTradingSettingsSchema.omit({ userId: true }).parse(req.body);
       
       const settings = await storage.updateTradingSettings(userId, validatedData);
       res.json(settings);
