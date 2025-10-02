@@ -1,11 +1,27 @@
 import OpenAI from "openai";
 import { storage } from '../storage';
-import { Trade, TradingSettings, AIReport } from '@shared/schema';
+import { Trade, TradingSettings, AIReport, InsertAIAuditLog, InsertErrorLog } from '@shared/schema';
+import { databaseQueryService } from './database-query';
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
 });
+
+export interface SettingsChangeProposal {
+  settingName: string;
+  currentValue: any;
+  proposedValue: any;
+  reason: string;
+  requiresConfirmation: boolean;
+}
+
+export interface ChatResponse {
+  response: string;
+  updatedContext: any;
+  settingsProposal?: SettingsChangeProposal;
+  auditLogId?: string;
+}
 
 export class AIAnalyst {
   
@@ -172,7 +188,7 @@ export class AIAnalyst {
     userId: string,
     message: string,
     context?: any
-  ): Promise<{ response: string; updatedContext: any }> {
+  ): Promise<ChatResponse> {
     try {
       // Get or create conversation
       let conversation = await storage.getAIConversation(userId);
@@ -185,32 +201,55 @@ export class AIAnalyst {
         });
       }
 
-      // Get recent trading data for context
-      const [recentTrades, settings, activeTrades] = await Promise.all([
-        storage.getTrades(userId, { limit: 10 }),
-        storage.getTradingSettings(userId),
-        storage.getActiveTrades(userId)
+      // Get comprehensive trading data for context
+      const [recentTrades, settings, activeTrades, stats, watchlist] = await Promise.all([
+        databaseQueryService.getTrades(userId, { limit: 10 }),
+        databaseQueryService.getRiskSettings(userId),
+        databaseQueryService.getOpenTrades(userId),
+        databaseQueryService.getTradeStatistics(userId),
+        databaseQueryService.getWatchlist(userId)
       ]);
 
-      // Build context message
+      // Build enhanced context message
       const contextMessage = `
+        You are an AI trading assistant for a crypto day trading platform with full database access.
+        
         Current Trading Context:
         - Active trades: ${activeTrades.length}
-        - Recent trades: ${recentTrades.length}
         - Trading mode: ${settings?.userId ? 'Live' : 'Paper'}
         - Risk per trade: $${settings?.riskPerTrade || '100'}
+        - Watchlist pairs: ${watchlist.length}
         
-        You are an AI trading assistant for a crypto day trading platform. The user trades using three strategies:
+        Performance Statistics:
+        - Total trades: ${stats.totalTrades}
+        - Win rate: ${stats.winRate.toFixed(2)}%
+        - Total P/L: $${stats.totalPL.toFixed(2)}
+        - Average R-multiple: ${stats.avgRMultiple.toFixed(2)}R
+        
+        Trading Strategies:
         1. VWAP Pullback - entering on pullbacks to VWAP with reversal confirmation
         2. ABCD Long - pattern-based entries on measured moves
         3. SMA Trend Ride - trend following entries on SMA bounces
         
-        Help the user with trading questions, strategy explanations, performance analysis, and platform usage.
+        Your Capabilities:
+        - Answer trading questions and provide strategy explanations
+        - Analyze performance data and provide insights
+        - Suggest settings changes (ALWAYS require user confirmation before applying)
+        - Diagnose errors and issues
+        - Generate custom reports
+        
+        Important: When suggesting settings changes, you MUST:
+        1. Explain the current value and proposed change
+        2. Provide clear reasoning
+        3. Request explicit user confirmation
+        4. Never apply changes without confirmation
+        
+        Respond naturally and conversationally. Keep responses concise but helpful.
       `;
 
       const messages = [
         { role: "system", content: contextMessage },
-        ...((conversation.messages as any[]) || []).slice(-10), // Last 10 messages
+        ...((conversation.messages as any[]) || []).slice(-10), // Last 10 messages for context
         { role: "user", content: message }
       ];
 
@@ -222,6 +261,9 @@ export class AIAnalyst {
 
       const assistantResponse = response.choices[0].message.content || "I'm sorry, I couldn't process that request.";
 
+      // Check if response includes a settings change suggestion
+      const settingsProposal = this.detectSettingsProposal(assistantResponse, settings);
+
       // Update conversation
       const updatedMessages = [
         ...((conversation.messages as any[]) || []),
@@ -232,6 +274,7 @@ export class AIAnalyst {
       const updatedContext = {
         ...conversation.context,
         lastInteraction: new Date(),
+        pendingProposal: settingsProposal,
         ...context
       };
 
@@ -241,17 +284,183 @@ export class AIAnalyst {
         context: updatedContext
       });
 
+      // Create audit log for analysis request
+      await storage.createAuditLog({
+        userId,
+        actionType: 'analysis_request',
+        gptResponse: assistantResponse,
+        status: 'completed'
+      });
+
       return {
         response: assistantResponse,
-        updatedContext
+        updatedContext,
+        settingsProposal
       };
     } catch (error) {
       console.error('Error in AI chat:', error);
+      
+      // Log error for diagnosis
+      await storage.createErrorLog({
+        userId,
+        errorType: 'ai_chat_error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        context: { message }
+      });
+      
       return {
         response: "I'm experiencing some difficulties right now. Please try again later.",
         updatedContext: context || {}
       };
     }
+  }
+
+  async applySettingsChange(
+    userId: string,
+    settingName: string,
+    newValue: any,
+    confirmation: boolean
+  ): Promise<{ success: boolean; message: string; auditLogId?: string }> {
+    if (!confirmation) {
+      return {
+        success: false,
+        message: "Settings change cancelled by user"
+      };
+    }
+
+    try {
+      const currentSettings = await storage.getTradingSettings(userId);
+      if (!currentSettings) {
+        return { success: false, message: "User settings not found" };
+      }
+
+      const oldValue = (currentSettings as any)[settingName];
+      
+      // Apply the change
+      const updates: any = {};
+      updates[settingName] = newValue;
+      await storage.updateTradingSettings(userId, updates);
+
+      // Create audit log
+      const auditLog = await storage.createAuditLog({
+        userId,
+        actionType: 'update_setting',
+        settingName,
+        oldValue: { [settingName]: oldValue },
+        newValue: { [settingName]: newValue },
+        confirmationMethod: 'user_confirmed_chat',
+        gptResponse: `Updated ${settingName} from ${oldValue} to ${newValue}`,
+        status: 'completed'
+      });
+
+      return {
+        success: true,
+        message: `Successfully updated ${settingName} to ${newValue}`,
+        auditLogId: auditLog.id
+      };
+    } catch (error) {
+      console.error('Error applying settings change:', error);
+      
+      await storage.createErrorLog({
+        userId,
+        errorType: 'settings_update_error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        context: { settingName, newValue }
+      });
+      
+      return {
+        success: false,
+        message: "Failed to apply settings change"
+      };
+    }
+  }
+
+  async diagnoseError(errorId: string, userId: string): Promise<{
+    diagnosis: string;
+    suggestedFixes: string[];
+    relatedIssues: string[];
+  }> {
+    try {
+      const error = await databaseQueryService.getErrorLogById(errorId, userId);
+      if (!error) {
+        return {
+          diagnosis: "Error not found",
+          suggestedFixes: [],
+          relatedIssues: []
+        };
+      }
+
+      const prompt = `
+        Diagnose this trading system error and provide actionable solutions:
+        
+        Error Type: ${error.errorType}
+        Error Message: ${error.errorMessage}
+        Context: ${JSON.stringify(error.context, null, 2)}
+        Stack Trace: ${error.errorStack || 'Not available'}
+        
+        Provide:
+        1. A clear diagnosis of what went wrong
+        2. Specific suggested fixes (actionable steps)
+        3. Related issues to watch for
+        
+        Respond in JSON format: {
+          "diagnosis": "string",
+          "suggestedFixes": ["fix1", "fix2"],
+          "relatedIssues": ["issue1", "issue2"]
+        }
+      `;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 1024
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || '{}');
+
+      // Create audit log for diagnosis
+      await storage.createAuditLog({
+        userId,
+        actionType: 'error_diagnosis',
+        gptResponse: JSON.stringify(result),
+        status: 'completed'
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Error diagnosing issue:', error);
+      return {
+        diagnosis: "Unable to diagnose error",
+        suggestedFixes: ["Check system logs", "Contact support"],
+        relatedIssues: []
+      };
+    }
+  }
+
+  private detectSettingsProposal(response: string, settings: TradingSettings | null): SettingsChangeProposal | undefined {
+    // Simple heuristic to detect if AI is suggesting a settings change
+    // In production, could use structured output or function calling
+    const proposalKeywords = ['suggest', 'recommend', 'change', 'update', 'adjust', 'modify'];
+    const settingKeywords = ['risk', 'exposure', 'trades', 'slippage'];
+    
+    const hasProposal = proposalKeywords.some(kw => response.toLowerCase().includes(kw));
+    const hasSetting = settingKeywords.some(kw => response.toLowerCase().includes(kw));
+    
+    if (hasProposal && hasSetting && settings) {
+      // This is a simplified detection - in production, use GPT function calling
+      return {
+        settingName: 'detected_in_conversation',
+        currentValue: 'see_current_settings',
+        proposedValue: 'see_ai_response',
+        reason: 'AI suggested an optimization',
+        requiresConfirmation: true
+      };
+    }
+    
+    return undefined;
   }
 
   private calculateMetrics(trades: Trade[], activeTrades: Trade[]): any {

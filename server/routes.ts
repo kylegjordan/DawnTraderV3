@@ -365,6 +365,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/ai/settings/apply', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { settingName, newValue, confirmation } = req.body;
+      
+      const result = await aiAnalyst.applySettingsChange(userId, settingName, newValue, confirmation);
+      res.json(result);
+    } catch (error) {
+      console.error('Error applying settings change:', error);
+      res.status(500).json({ error: 'Failed to apply settings change' });
+    }
+  });
+
+  app.get('/api/ai/audit-logs', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { limit } = req.query;
+      
+      const logs = await storage.getAuditLogs(userId, limit ? parseInt(limit as string) : 50);
+      res.json(logs);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      res.status(500).json({ error: 'Failed to fetch audit logs' });
+    }
+  });
+
+  app.get('/api/ai/error-logs', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { resolved, errorType, limit } = req.query;
+      
+      const filters: any = {};
+      if (resolved !== undefined) filters.resolved = resolved === 'true';
+      if (errorType) filters.errorType = errorType as string;
+      if (limit) filters.limit = parseInt(limit as string);
+      
+      const logs = await storage.getErrorLogs(userId, filters);
+      res.json(logs);
+    } catch (error) {
+      console.error('Error fetching error logs:', error);
+      res.status(500).json({ error: 'Failed to fetch error logs' });
+    }
+  });
+
+  app.post('/api/ai/diagnose-error', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { errorId } = req.body;
+      
+      const diagnosis = await aiAnalyst.diagnoseError(errorId, userId);
+      res.json(diagnosis);
+    } catch (error) {
+      console.error('Error diagnosing error:', error);
+      res.status(500).json({ error: 'Failed to diagnose error' });
+    }
+  });
+
+  app.post('/api/ai/error-logs/:id/resolve', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { notes } = req.body;
+      
+      const resolvedLog = await storage.resolveErrorLog(id, notes);
+      res.json(resolvedLog);
+    } catch (error) {
+      console.error('Error resolving error log:', error);
+      res.status(500).json({ error: 'Failed to resolve error log' });
+    }
+  });
+
   // Export functionality
   app.get('/api/export/trades', async (req, res) => {
     try {
