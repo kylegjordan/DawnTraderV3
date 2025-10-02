@@ -107,7 +107,7 @@ export function AuditLogViewer() {
                   )}
                   
                   <p className="text-xs text-muted-foreground mt-2">
-                    {new Date(log.timestamp).toLocaleString()}
+                    {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}
                   </p>
                 </div>
               </div>

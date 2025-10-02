@@ -50,10 +50,8 @@ export function ChatPanel() {
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      return await apiRequest<ChatResponse>('/api/ai/chat', {
-        method: 'POST',
-        body: { message, context: {} }
-      });
+      const res = await apiRequest('POST', '/api/ai/chat', { message, context: {} });
+      return await res.json() as ChatResponse;
     },
     onSuccess: (data) => {
       // Add assistant response to messages
@@ -79,10 +77,8 @@ export function ChatPanel() {
       newValue: any; 
       confirmation: boolean;
     }) => {
-      return await apiRequest('/api/ai/settings/apply', {
-        method: 'POST',
-        body: { settingName, newValue, confirmation }
-      });
+      const res = await apiRequest('POST', '/api/ai/settings/apply', { settingName, newValue, confirmation });
+      return await res.json() as { success: boolean; message: string; auditLogId?: string };
     },
     onSuccess: (data) => {
       setPendingProposal(null);

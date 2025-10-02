@@ -181,10 +181,10 @@ export default function Analysis() {
                         
                         {report.metrics && (
                           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg">
-                            {Object.entries(report.metrics).map(([key, value]) => (
+                            {Object.entries(report.metrics as Record<string, any>).map(([key, value]) => (
                               <div key={key} className="text-center">
                                 <div className="text-lg font-bold text-foreground">
-                                  {typeof value === 'number' ? value.toFixed(2) : value}
+                                  {typeof value === 'number' ? value.toFixed(2) : String(value)}
                                 </div>
                                 <div className="text-xs text-muted-foreground capitalize">
                                   {key.replace(/([A-Z])/g, ' $1').trim()}

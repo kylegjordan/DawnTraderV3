@@ -2,7 +2,9 @@
 
 ## Overview
 
-A long-only, spot-trading cryptocurrency day trading web application that automates trading strategies on Kraken markets. The application scans markets hourly, monitors shortlisted pairs in real-time, and executes three distinct strategies: VWAP Pullback, ABCD Long, and SMA Trend Ride. It enforces disciplined risk management with configurable parameters, supports both live and paper trading modes, and integrates OpenAI's GPT for AI-powered analysis and assistance. The platform provides comprehensive trade tracking, performance analytics, and tax-ready export functionality through a responsive dashboard interface optimized for Android and Windows.
+A long-only, spot-trading cryptocurrency day trading web application that automates trading strategies on Kraken markets. The application scans markets hourly, monitors shortlisted pairs in real-time, and executes three distinct strategies: VWAP Pullback, ABCD Long, and SMA Trend Ride. It enforces disciplined risk management with configurable parameters, supports both live and paper trading modes, and integrates OpenAI's GPT-5 for AI-powered analysis, conversational assistance, and intelligent system management. The platform provides comprehensive trade tracking, performance analytics, tax-ready export functionality, audit trails for all AI actions, and error diagnosis capabilities through a responsive dashboard interface optimized for Android and Windows.
+
+**Recent Enhancement (Oct 2, 2025)**: Implemented comprehensive GPT-5 integration with database access, Ask→Confirm→Update flow for settings changes, complete audit logging, and error diagnosis capabilities.
 
 ## User Preferences
 
@@ -82,10 +84,14 @@ Preferred communication style: Simple, everyday language.
 - HMAC-SHA512 signature generation for authenticated requests
 - Rate limiting considerations for API calls
 
-**OpenAI GPT-5 API**: AI analysis and conversational assistant powered by latest GPT model (as of August 2025). Used for:
-- Daily/weekly/monthly trading performance reports
-- Symbol-specific technical analysis
-- Trading strategy recommendations
+**OpenAI GPT-5 API**: AI analysis and conversational assistant powered by latest GPT model (as of August 2025). Comprehensive features include:
+- **ChatGPT-Style Interface**: Multi-turn conversation with full trading context and database access
+- **Database Query Capabilities**: AI can safely query trading data, risk settings, performance stats, and error logs through predefined query templates
+- **Ask → Confirm → Update Flow**: All settings changes proposed by AI require explicit user confirmation before execution
+- **Audit Trail System**: Complete logging of all AI-driven actions (settings changes, analysis requests, error diagnoses) stored in `ai_audit_log` table
+- **Error Diagnosis**: AI-powered analysis of system errors with actionable fix suggestions, stored in `error_logs` table
+- **Performance Reports**: Daily/weekly/monthly trading reports with insights and recommendations
+- **Symbol Analysis**: Technical analysis and strategy recommendations for specific trading pairs
 - Interactive chat assistance for trading questions
 
 **Neon Database**: Serverless PostgreSQL database with WebSocket connection support. Requires `DATABASE_URL` environment variable for connection string.

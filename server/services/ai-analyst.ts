@@ -262,7 +262,7 @@ export class AIAnalyst {
       const assistantResponse = response.choices[0].message.content || "I'm sorry, I couldn't process that request.";
 
       // Check if response includes a settings change suggestion
-      const settingsProposal = this.detectSettingsProposal(assistantResponse, settings);
+      const settingsProposal = this.detectSettingsProposal(assistantResponse, settings || null);
 
       // Update conversation
       const updatedMessages = [
@@ -272,10 +272,10 @@ export class AIAnalyst {
       ];
 
       const updatedContext = {
-        ...conversation.context,
+        ...(conversation.context as any || {}),
         lastInteraction: new Date(),
         pendingProposal: settingsProposal,
-        ...context
+        ...(context || {})
       };
 
       await storage.updateAIConversation(userId, {
@@ -722,3 +722,5 @@ export class AIAnalyst {
     return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   }
 }
+
+export const aiAnalyst = new AIAnalyst();

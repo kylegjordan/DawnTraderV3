@@ -30,10 +30,8 @@ export function ErrorLogViewer() {
 
   const diagnoseMutation = useMutation({
     mutationFn: async (errorId: string) => {
-      return await apiRequest('/api/ai/diagnose-error', {
-        method: 'POST',
-        body: { errorId }
-      });
+      const res = await apiRequest('POST', '/api/ai/diagnose-error', { errorId });
+      return await res.json();
     },
     onSuccess: (data) => {
       setDiagnosis(data);
@@ -42,10 +40,8 @@ export function ErrorLogViewer() {
 
   const resolveMutation = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes?: string }) => {
-      return await apiRequest(`/api/ai/error-logs/${id}/resolve`, {
-        method: 'POST',
-        body: { notes }
-      });
+      const res = await apiRequest('POST', `/api/ai/error-logs/${id}/resolve`, { notes });
+      return await res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ai/error-logs'] });
@@ -134,7 +130,7 @@ export function ErrorLogViewer() {
                           )}
                           
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{new Date(error.timestamp).toLocaleString()}</span>
+                            <span>{error.timestamp ? new Date(error.timestamp).toLocaleString() : 'N/A'}</span>
                             {error.resolvedAt && (
                               <span>• Resolved: {new Date(error.resolvedAt).toLocaleString()}</span>
                             )}
