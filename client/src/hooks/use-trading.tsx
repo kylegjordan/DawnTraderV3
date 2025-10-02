@@ -210,14 +210,20 @@ export function useMarket() {
       if (format) params.append('format', format);
       
       const url = `/api/export/trades?${params.toString()}`;
-      const response = await fetch(url, { credentials: 'include' });
+      const response = await fetch(url, { 
+        credentials: 'include',
+        headers: {
+          'user-id': 'default-user'
+        }
+      });
       
       if (format === 'csv') {
         const blob = await response.blob();
         const url2 = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url2;
-        a.download = 'trades.csv';
+        const timestamp = new Date().toISOString().split('T')[0];
+        a.download = `trades_export_${timestamp}.csv`;
         a.click();
         window.URL.revokeObjectURL(url2);
         return { success: true };
