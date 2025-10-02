@@ -38,6 +38,27 @@ export function ChatPanel() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
+  // Load conversation history
+  const { data: conversation, isLoading: isLoadingHistory } = useQuery({
+    queryKey: ['/api/ai/conversation'],
+    queryFn: () => fetch('/api/ai/conversation').then(r => r.json()),
+  });
+
+  // Initialize messages from conversation history
+  useEffect(() => {
+    if (conversation?.messages && Array.isArray(conversation.messages)) {
+      setMessages(conversation.messages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(msg.timestamp)
+      })));
+      // Also check for pending proposal
+      if (conversation.context?.pendingProposal) {
+        setPendingProposal(conversation.context.pendingProposal);
+      }
+    }
+  }, [conversation]);
+
   // Scroll to bottom on new messages
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -93,8 +114,9 @@ export function ChatPanel() {
         }
       ]);
 
-      // Invalidate settings cache
+      // Invalidate settings cache and conversation history
       queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ai/conversation'] });
     },
   });
 
@@ -152,6 +174,17 @@ export function ChatPanel() {
       handleSendMessage();
     }
   };
+
+  if (isLoadingHistory) {
+    return (
+      <Card className="flex flex-col h-[600px] items-center justify-center" data-testid="card-chat-panel">
+        <div className="flex flex-col items-center gap-4 text-muted-foreground">
+          <Bot className="w-12 h-12 animate-pulse" />
+          <p>Loading conversation...</p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="flex flex-col h-[600px]" data-testid="card-chat-panel">

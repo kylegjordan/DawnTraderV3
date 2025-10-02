@@ -352,6 +352,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/ai/conversation', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const conversation = await storage.getAIConversation(userId);
+      res.json(conversation || { messages: [], context: {} });
+    } catch (error) {
+      console.error('Error fetching conversation:', error);
+      res.status(500).json({ error: 'Failed to fetch conversation' });
+    }
+  });
+
   app.post('/api/ai/chat', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
