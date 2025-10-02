@@ -102,15 +102,24 @@ export default function Settings() {
         slippageToleranceMajors: formData.slippageToleranceMajors,
         slippageToleranceMidcaps: formData.slippageToleranceMidcaps,
         slippageToleranceSmall: formData.slippageToleranceSmall,
-        aiCapitalAllocation: formData.aiCapitalAllocation
+        aiCapitalAllocation: formData.aiCapitalAllocation,
+        krakenApiKey: formData.krakenApiKey,
+        krakenApiSecret: formData.krakenApiSecret
       };
 
       await updateSettings(settingsUpdate);
       
       toast({
         title: "Settings Saved",
-        description: "Your trading settings have been updated successfully.",
+        description: "Your trading settings and API credentials have been updated successfully.",
       });
+      
+      // Clear the credential fields after successful save for security
+      setFormData(prev => ({
+        ...prev,
+        krakenApiKey: '',
+        krakenApiSecret: ''
+      }));
     } catch (error) {
       toast({
         title: "Error",
@@ -627,12 +636,20 @@ export default function Settings() {
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Status indicators */}
+              {(settings as any)?.krakenApiKeySet && (
+                <div className="flex items-center gap-2 p-3 bg-success/10 border border-success/20 rounded-lg">
+                  <div className="w-2 h-2 rounded-full bg-success" />
+                  <span className="text-sm text-success font-medium">API credentials are configured</span>
+                </div>
+              )}
+              
               <div className="space-y-2">
                 <Label htmlFor="kraken-key">Kraken API Key</Label>
                 <Input
                   id="kraken-key"
                   type="password"
-                  placeholder="Enter your Kraken API key"
+                  placeholder={(settings as any)?.krakenApiKeySet ? "••••••••••••••••" : "Enter your Kraken API key"}
                   value={formData.krakenApiKey}
                   onChange={(e) => setFormData(prev => ({ ...prev, krakenApiKey: e.target.value }))}
                   data-testid="input-kraken-key"
@@ -643,17 +660,21 @@ export default function Settings() {
                 <Input
                   id="kraken-secret"
                   type="password"
-                  placeholder="Enter your Kraken API secret"
+                  placeholder={(settings as any)?.krakenApiSecretSet ? "••••••••••••••••" : "Enter your Kraken API secret"}
                   value={formData.krakenApiSecret}
                   onChange={(e) => setFormData(prev => ({ ...prev, krakenApiSecret: e.target.value }))}
                   data-testid="input-kraken-secret"
                 />
               </div>
-              <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg">
-                <p className="text-sm text-warning font-medium mb-1">Security Notice</p>
-                <p className="text-xs text-muted-foreground">
-                  Your API credentials are encrypted and stored securely. Never share your API keys with anyone.
-                </p>
+              
+              <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg space-y-2">
+                <p className="text-sm text-warning font-medium">Security Options</p>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p><strong>Option 1 (Database):</strong> Store credentials in the database (saved when you click Save Settings). ⚠️ Stored in plaintext - not encrypted.</p>
+                  <p><strong>Option 2 (Recommended):</strong> Use environment secrets KRAKEN_API_KEY and KRAKEN_API_SECRET in the Secrets panel. ✓ More secure.</p>
+                  <p className="mt-2"><strong>Priority:</strong> Environment secrets → Database → None</p>
+                  <p className="text-warning">Never share your API keys. To clear stored database credentials, save with empty fields.</p>
+                </div>
               </div>
             </CardContent>
           </Card>
