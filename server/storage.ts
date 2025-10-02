@@ -6,6 +6,7 @@ import {
   aiReports,
   aiConversations,
   priceData,
+  databaseSizeLogs,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -19,7 +20,9 @@ import {
   type AIConversation,
   type InsertAIConversation,
   type PriceData,
-  type InsertPriceData
+  type InsertPriceData,
+  type DatabaseSizeLog,
+  type InsertDatabaseSizeLog
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
@@ -58,6 +61,11 @@ export interface IStorage {
   // Price data methods
   getPriceData(symbol: string, from?: Date, to?: Date): Promise<PriceData[]>;
   savePriceData(data: InsertPriceData[]): Promise<void>;
+
+  // Database size monitoring methods
+  logDatabaseSize(log: InsertDatabaseSizeLog): Promise<DatabaseSizeLog>;
+  getLatestDatabaseSize(): Promise<DatabaseSizeLog | undefined>;
+  getDatabaseSizeHistory(limit?: number): Promise<DatabaseSizeLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -154,7 +162,7 @@ export class DatabaseStorage implements IStorage {
     let query = db.select().from(trades).where(and(...conditions)).orderBy(desc(trades.entryTime));
     
     if (filters?.limit) {
-      query = query.limit(filters.limit);
+      return await query.limit(filters.limit);
     }
     
     return await query;
@@ -191,7 +199,7 @@ export class DatabaseStorage implements IStorage {
 
     const entryValue = parseFloat(trade.entryPrice) * parseFloat(trade.quantity);
     const exitValue = exitPrice * parseFloat(trade.quantity);
-    const totalFees = parseFloat(trade.entryFee) + exitFee;
+    const totalFees = parseFloat(trade.entryFee || "0") + exitFee;
     const realizedPL = exitValue - entryValue - totalFees;
     const realizedPLPercent = (realizedPL / entryValue) * 100;
     const realizedPLR = realizedPL / parseFloat(trade.riskAmount);
@@ -279,6 +287,29 @@ export class DatabaseStorage implements IStorage {
     if (data.length > 0) {
       await db.insert(priceData).values(data);
     }
+  }
+
+  // Database size monitoring methods
+  async logDatabaseSize(log: InsertDatabaseSizeLog): Promise<DatabaseSizeLog> {
+    const [result] = await db.insert(databaseSizeLogs).values(log).returning();
+    return result;
+  }
+
+  async getLatestDatabaseSize(): Promise<DatabaseSizeLog | undefined> {
+    const [result] = await db
+      .select()
+      .from(databaseSizeLogs)
+      .orderBy(desc(databaseSizeLogs.checkedAt))
+      .limit(1);
+    return result || undefined;
+  }
+
+  async getDatabaseSizeHistory(limit = 30): Promise<DatabaseSizeLog[]> {
+    return await db
+      .select()
+      .from(databaseSizeLogs)
+      .orderBy(desc(databaseSizeLogs.checkedAt))
+      .limit(limit);
   }
 }
 

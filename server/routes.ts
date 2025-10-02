@@ -8,6 +8,7 @@ import { AIAnalyst } from "./services/ai-analyst";
 import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema } from "@shared/schema";
+import { databaseMonitor } from "./services/database-monitor";
 
 const tradingEngines = new Map<string, TradingEngine>();
 const marketScanner = new MarketScanner();
@@ -400,6 +401,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error exporting trades:', error);
       res.status(500).json({ error: 'Failed to export trades' });
+    }
+  });
+
+  // Database monitoring
+  app.get('/api/database/status', async (req, res) => {
+    try {
+      const currentStatus = await databaseMonitor.checkDatabaseSize();
+      const history = await storage.getDatabaseSizeHistory(7); // Last 7 days
+      
+      res.json({
+        current: currentStatus,
+        history: history.map(log => ({
+          sizeMb: parseFloat(log.sizeMb),
+          sizeGb: parseFloat(log.sizeGb),
+          checkedAt: log.checkedAt,
+        })),
+        limits: {
+          maxSizeGb: 10,
+          warningThresholdGb: 5,
+          criticalThresholdGb: 7,
+        },
+      });
+    } catch (error) {
+      console.error('Error getting database status:', error);
+      res.status(500).json({ error: 'Failed to get database status' });
     }
   });
 

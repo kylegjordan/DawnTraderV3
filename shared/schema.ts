@@ -132,6 +132,14 @@ export const priceData = pgTable("price_data", {
   sma: decimal("sma", { precision: 20, scale: 8 }),
 });
 
+// Database size logs (for monitoring storage usage)
+export const databaseSizeLogs = pgTable("database_size_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sizeMb: decimal("size_mb", { precision: 10, scale: 2 }).notNull(),
+  sizeGb: decimal("size_gb", { precision: 10, scale: 4 }).notNull(),
+  checkedAt: timestamp("checked_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -211,6 +219,11 @@ export const insertPriceDataSchema = createInsertSchema(priceData).omit({
   id: true,
 });
 
+export const insertDatabaseSizeLogSchema = createInsertSchema(databaseSizeLogs).omit({
+  id: true,
+  checkedAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -232,3 +245,6 @@ export type AIConversation = typeof aiConversations.$inferSelect;
 
 export type InsertPriceData = z.infer<typeof insertPriceDataSchema>;
 export type PriceData = typeof priceData.$inferSelect;
+
+export type InsertDatabaseSizeLog = z.infer<typeof insertDatabaseSizeLogSchema>;
+export type DatabaseSizeLog = typeof databaseSizeLogs.$inferSelect;
