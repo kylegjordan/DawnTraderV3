@@ -140,6 +140,34 @@ export const databaseSizeLogs = pgTable("database_size_logs", {
   checkedAt: timestamp("checked_at").defaultNow(),
 });
 
+// AI audit log (tracks all GPT-driven changes)
+export const aiAuditLog = pgTable("ai_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  actionType: varchar("action_type", { length: 100 }).notNull(), // e.g., "update_setting", "analysis_request"
+  settingName: varchar("setting_name", { length: 100 }), // nullable
+  oldValue: jsonb("old_value"), // Previous value
+  newValue: jsonb("new_value"), // New value
+  confirmationMethod: varchar("confirmation_method", { length: 50 }), // e.g., "user_confirmed_chat"
+  gptResponse: text("gpt_response"), // Full text of GPT explanation
+  status: varchar("status", { length: 20 }).default("completed"), // completed, pending, cancelled
+});
+
+// Error logs (for error diagnosis)
+export const errorLogs = pgTable("error_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  timestamp: timestamp("timestamp").defaultNow(),
+  errorType: varchar("error_type", { length: 100 }).notNull(), // e.g., "trade_execution", "scanner_error", "api_error"
+  errorMessage: text("error_message").notNull(),
+  errorStack: text("error_stack"), // Stack trace if available
+  context: jsonb("context"), // Additional context (symbol, trade ID, etc.)
+  resolved: boolean("resolved").default(false),
+  resolvedAt: timestamp("resolved_at"),
+  notes: text("notes"), // User or system notes about resolution
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -224,6 +252,16 @@ export const insertDatabaseSizeLogSchema = createInsertSchema(databaseSizeLogs).
   checkedAt: true,
 });
 
+export const insertAIAuditLogSchema = createInsertSchema(aiAuditLog).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertErrorLogSchema = createInsertSchema(errorLogs).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -248,3 +286,9 @@ export type PriceData = typeof priceData.$inferSelect;
 
 export type InsertDatabaseSizeLog = z.infer<typeof insertDatabaseSizeLogSchema>;
 export type DatabaseSizeLog = typeof databaseSizeLogs.$inferSelect;
+
+export type InsertAIAuditLog = z.infer<typeof insertAIAuditLogSchema>;
+export type AIAuditLog = typeof aiAuditLog.$inferSelect;
+
+export type InsertErrorLog = z.infer<typeof insertErrorLogSchema>;
+export type ErrorLog = typeof errorLogs.$inferSelect;

@@ -7,6 +7,8 @@ import {
   aiConversations,
   priceData,
   databaseSizeLogs,
+  aiAuditLog,
+  errorLogs,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -22,7 +24,11 @@ import {
   type PriceData,
   type InsertPriceData,
   type DatabaseSizeLog,
-  type InsertDatabaseSizeLog
+  type InsertDatabaseSizeLog,
+  type AIAuditLog,
+  type InsertAIAuditLog,
+  type ErrorLog,
+  type InsertErrorLog
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
@@ -66,6 +72,17 @@ export interface IStorage {
   logDatabaseSize(log: InsertDatabaseSizeLog): Promise<DatabaseSizeLog>;
   getLatestDatabaseSize(): Promise<DatabaseSizeLog | undefined>;
   getDatabaseSizeHistory(limit?: number): Promise<DatabaseSizeLog[]>;
+
+  // AI audit log methods
+  createAuditLog(log: InsertAIAuditLog): Promise<AIAuditLog>;
+  getAuditLogs(userId: string, limit?: number): Promise<AIAuditLog[]>;
+  getAuditLogsByAction(userId: string, actionType: string, limit?: number): Promise<AIAuditLog[]>;
+  updateAuditLogStatus(id: string, status: string): Promise<AIAuditLog>;
+
+  // Error log methods
+  createErrorLog(log: InsertErrorLog): Promise<ErrorLog>;
+  getErrorLogs(userId?: string, filters?: { resolved?: boolean; errorType?: string; limit?: number }): Promise<ErrorLog[]>;
+  resolveErrorLog(id: string, notes?: string): Promise<ErrorLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -310,6 +327,81 @@ export class DatabaseStorage implements IStorage {
       .from(databaseSizeLogs)
       .orderBy(desc(databaseSizeLogs.checkedAt))
       .limit(limit);
+  }
+
+  // AI audit log methods
+  async createAuditLog(log: InsertAIAuditLog): Promise<AIAuditLog> {
+    const [result] = await db.insert(aiAuditLog).values(log).returning();
+    return result;
+  }
+
+  async getAuditLogs(userId: string, limit = 50): Promise<AIAuditLog[]> {
+    return await db
+      .select()
+      .from(aiAuditLog)
+      .where(eq(aiAuditLog.userId, userId))
+      .orderBy(desc(aiAuditLog.timestamp))
+      .limit(limit);
+  }
+
+  async getAuditLogsByAction(userId: string, actionType: string, limit = 50): Promise<AIAuditLog[]> {
+    return await db
+      .select()
+      .from(aiAuditLog)
+      .where(and(eq(aiAuditLog.userId, userId), eq(aiAuditLog.actionType, actionType)))
+      .orderBy(desc(aiAuditLog.timestamp))
+      .limit(limit);
+  }
+
+  async updateAuditLogStatus(id: string, status: string): Promise<AIAuditLog> {
+    const [result] = await db
+      .update(aiAuditLog)
+      .set({ status })
+      .where(eq(aiAuditLog.id, id))
+      .returning();
+    return result;
+  }
+
+  // Error log methods
+  async createErrorLog(log: InsertErrorLog): Promise<ErrorLog> {
+    const [result] = await db.insert(errorLogs).values(log).returning();
+    return result;
+  }
+
+  async getErrorLogs(
+    userId?: string,
+    filters?: { resolved?: boolean; errorType?: string; limit?: number }
+  ): Promise<ErrorLog[]> {
+    const conditions = [];
+    
+    if (userId) {
+      conditions.push(eq(errorLogs.userId, userId));
+    }
+    if (filters?.resolved !== undefined) {
+      conditions.push(eq(errorLogs.resolved, filters.resolved));
+    }
+    if (filters?.errorType) {
+      conditions.push(eq(errorLogs.errorType, filters.errorType));
+    }
+    
+    const query = db.select().from(errorLogs)
+      .orderBy(desc(errorLogs.timestamp));
+    
+    if (conditions.length > 0) {
+      const limitedQuery = query.where(and(...conditions));
+      return await (filters?.limit ? limitedQuery.limit(filters.limit) : limitedQuery);
+    }
+    
+    return await (filters?.limit ? query.limit(filters.limit) : query);
+  }
+
+  async resolveErrorLog(id: string, notes?: string): Promise<ErrorLog> {
+    const [result] = await db
+      .update(errorLogs)
+      .set({ resolved: true, resolvedAt: new Date(), notes })
+      .where(eq(errorLogs.id, id))
+      .returning();
+    return result;
   }
 }
 
