@@ -108,6 +108,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const apiKey = process.env.KRAKEN_API_KEY;
       const apiSecret = process.env.KRAKEN_API_SECRET;
       
+      // Validate credentials are present before starting
+      if (!apiKey || !apiSecret) {
+        return res.status(400).json({ 
+          error: 'Kraken API credentials not configured',
+          message: 'Please add KRAKEN_API_KEY and KRAKEN_API_SECRET to Replit Secrets before starting trading.'
+        });
+      }
+      
       let engine = tradingEngines.get(userId);
       if (!engine) {
         engine = new TradingEngine(userId, apiKey, apiSecret);
