@@ -7,6 +7,7 @@ import Dashboard from "@/pages/dashboard";
 import History from "@/pages/history";
 import Analysis from "@/pages/analysis";
 import Settings from "@/pages/settings";
+import WatchlistPage from "@/pages/watchlist";
 import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
 import AIAssistant from "@/components/ai/ai-assistant";
@@ -35,6 +36,7 @@ function Router() {
         <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
+          <Route path="/watchlist" component={WatchlistPage} />
           <Route path="/history" component={History} />
           <Route path="/analysis" component={Analysis} />
           <Route path="/settings" component={Settings} />
