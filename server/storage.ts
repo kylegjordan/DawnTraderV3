@@ -139,19 +139,19 @@ export class DatabaseStorage implements IStorage {
     userId: string, 
     filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }
   ): Promise<Trade[]> {
-    let query = db.select().from(trades).where(eq(trades.userId, userId));
+    const conditions = [eq(trades.userId, userId)];
     
     if (filters?.status) {
-      query = query.where(eq(trades.status, filters.status as any));
+      conditions.push(eq(trades.status, filters.status as any));
     }
     if (filters?.symbol) {
-      query = query.where(eq(trades.symbol, filters.symbol));
+      conditions.push(eq(trades.symbol, filters.symbol));
     }
     if (filters?.strategy) {
-      query = query.where(eq(trades.strategy, filters.strategy as any));
+      conditions.push(eq(trades.strategy, filters.strategy as any));
     }
     
-    query = query.orderBy(desc(trades.entryTime));
+    let query = db.select().from(trades).where(and(...conditions)).orderBy(desc(trades.entryTime));
     
     if (filters?.limit) {
       query = query.limit(filters.limit);
@@ -216,13 +216,14 @@ export class DatabaseStorage implements IStorage {
 
   // AI methods
   async getAIReports(userId: string, type?: string, limit = 10): Promise<AIReport[]> {
-    let query = db.select().from(aiReports).where(eq(aiReports.userId, userId));
+    const conditions = [eq(aiReports.userId, userId)];
     
     if (type) {
-      query = query.where(eq(aiReports.reportType, type));
+      conditions.push(eq(aiReports.reportType, type));
     }
     
-    return await query
+    return await db.select().from(aiReports)
+      .where(and(...conditions))
       .orderBy(desc(aiReports.generatedAt))
       .limit(limit);
   }
@@ -260,16 +261,18 @@ export class DatabaseStorage implements IStorage {
 
   // Price data methods
   async getPriceData(symbol: string, from?: Date, to?: Date): Promise<PriceData[]> {
-    let query = db.select().from(priceData).where(eq(priceData.symbol, symbol));
+    const conditions = [eq(priceData.symbol, symbol)];
     
     if (from) {
-      query = query.where(gte(priceData.timestamp, from));
+      conditions.push(gte(priceData.timestamp, from));
     }
     if (to) {
-      query = query.where(lte(priceData.timestamp, to));
+      conditions.push(lte(priceData.timestamp, to));
     }
     
-    return await query.orderBy(priceData.timestamp);
+    return await db.select().from(priceData)
+      .where(and(...conditions))
+      .orderBy(priceData.timestamp);
   }
 
   async savePriceData(data: InsertPriceData[]): Promise<void> {

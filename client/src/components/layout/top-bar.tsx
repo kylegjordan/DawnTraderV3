@@ -6,6 +6,7 @@ import { useTrading } from "@/hooks/use-trading";
 import { useMarket } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 interface TopBarProps {
   onMenuClick: () => void;
