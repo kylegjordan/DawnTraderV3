@@ -6,8 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAI } from "@/hooks/use-trading";
-import { Brain, Search, FileText, TrendingUp, Target } from "lucide-react";
+import { Brain, Search, FileText, TrendingUp, Target, MessageSquare, History, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ChatPanel } from "@/components/ai/chat-panel";
+import { AuditLogViewer } from "@/components/ai/audit-log-viewer";
+import { ErrorLogViewer } from "@/components/ai/error-log-viewer";
 
 export default function Analysis() {
   const [searchSymbol, setSearchSymbol] = useState('');
@@ -65,11 +68,34 @@ export default function Analysis() {
         </div>
       </div>
 
-      <Tabs defaultValue="reports" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="reports" data-testid="tab-reports">Performance Reports</TabsTrigger>
-          <TabsTrigger value="search" data-testid="tab-search">Symbol Analysis</TabsTrigger>
+      <Tabs defaultValue="chat" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="chat" data-testid="tab-chat">
+            <MessageSquare className="w-4 h-4 mr-2" />
+            Chat Assistant
+          </TabsTrigger>
+          <TabsTrigger value="reports" data-testid="tab-reports">
+            <FileText className="w-4 h-4 mr-2" />
+            Reports
+          </TabsTrigger>
+          <TabsTrigger value="search" data-testid="tab-search">
+            <Search className="w-4 h-4 mr-2" />
+            Symbol Analysis
+          </TabsTrigger>
+          <TabsTrigger value="audit" data-testid="tab-audit">
+            <History className="w-4 h-4 mr-2" />
+            Audit Log
+          </TabsTrigger>
+          <TabsTrigger value="errors" data-testid="tab-errors">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            Error Logs
+          </TabsTrigger>
         </TabsList>
+
+        {/* Chat Assistant Tab */}
+        <TabsContent value="chat">
+          <ChatPanel />
+        </TabsContent>
 
         {/* Reports Tab */}
         <TabsContent value="reports" className="space-y-6">
@@ -294,6 +320,16 @@ export default function Analysis() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Audit Log Tab */}
+        <TabsContent value="audit">
+          <AuditLogViewer />
+        </TabsContent>
+
+        {/* Error Logs Tab */}
+        <TabsContent value="errors">
+          <ErrorLogViewer />
         </TabsContent>
       </Tabs>
     </div>
