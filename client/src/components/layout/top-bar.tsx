@@ -56,10 +56,28 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
           description: "Trading engine has been stopped",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      let errorMessage = "Failed to toggle trading status";
+      
+      // Parse error message from API response
+      if (error?.message) {
+        try {
+          // Extract JSON from error message (format: "400: {json}")
+          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
+          if (jsonMatch) {
+            const errorData = JSON.parse(jsonMatch[1]);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            errorMessage = error.message;
+          }
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to toggle trading status",
+        description: errorMessage,
         variant: "destructive",
       });
     }
