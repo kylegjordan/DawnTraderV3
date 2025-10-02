@@ -26,8 +26,6 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
-  krakenApiKey: text("kraken_api_key"),
-  krakenApiSecret: text("kraken_api_secret"),
   tradingMode: tradingModeEnum("trading_mode").default("paper"),
   tradingStatus: tradingStatusEnum("trading_status").default("stopped"),
   createdAt: timestamp("created_at").defaultNow(),

@@ -2,9 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { db } from "./db";
-import { users } from "@shared/schema";
-import { sql, eq } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
@@ -69,16 +66,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         settings = await storage.createTradingSettings({ userId });
       }
       
-      // Get user to include API key status
-      const user = await storage.getUser(userId);
-      const hasKrakenApiKey = !!(user?.krakenApiKey);
-      const hasKrakenApiSecret = !!(user?.krakenApiSecret);
+      // Check if environment secrets are configured
+      const hasKrakenApiKey = !!process.env.KRAKEN_API_KEY;
+      const hasKrakenApiSecret = !!process.env.KRAKEN_API_SECRET;
       
       res.json({
         ...settings,
         hasKrakenApiKey,
         hasKrakenApiSecret,
-        // Don't send actual keys for security - only indicate if they exist
         krakenApiKeySet: hasKrakenApiKey,
         krakenApiSecretSet: hasKrakenApiSecret
       });
@@ -91,39 +86,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/settings', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
-      const { krakenApiKey, krakenApiSecret, ...settingsData } = req.body;
       
-      // Update Kraken API credentials if provided
-      // Empty string explicitly clears the stored credential
-      if (krakenApiKey !== undefined || krakenApiSecret !== undefined) {
-        const userUpdates: any = {};
-        
-        // Use explicit null or the value (Drizzle handles null correctly)
-        if (krakenApiKey !== undefined) {
-          if (krakenApiKey === '') {
-            // Use raw SQL to set NULL explicitly
-            await db.update(users).set({ krakenApiKey: sql`NULL` }).where(eq(users.id, userId));
-          } else {
-            userUpdates.krakenApiKey = krakenApiKey;
-          }
-        }
-        
-        if (krakenApiSecret !== undefined) {
-          if (krakenApiSecret === '') {
-            await db.update(users).set({ krakenApiSecret: sql`NULL` }).where(eq(users.id, userId));
-          } else {
-            userUpdates.krakenApiSecret = krakenApiSecret;
-          }
-        }
-        
-        // Update non-null values
-        if (Object.keys(userUpdates).length > 0) {
-          await storage.updateUser(userId, userUpdates);
-        }
-      }
-      
-      // Update trading settings
-      const validatedData = insertTradingSettingsSchema.omit({ userId: true }).parse(settingsData);
+      // Update trading settings (credentials are now only stored in environment secrets)
+      const validatedData = insertTradingSettingsSchema.omit({ userId: true }).parse(req.body);
       const settings = await storage.updateTradingSettings(userId, validatedData);
       
       res.json(settings);
@@ -139,11 +104,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.headers['user-id'] as string || 'default-user';
       const { mode } = req.body; // 'live' or 'paper'
       
-      // Get user to retrieve API credentials
-      // Priority: Environment secrets → Database → empty
-      const user = await storage.getUser(userId);
-      const apiKey = process.env.KRAKEN_API_KEY || user?.krakenApiKey;
-      const apiSecret = process.env.KRAKEN_API_SECRET || user?.krakenApiSecret;
+      // Get API credentials from environment secrets only
+      const apiKey = process.env.KRAKEN_API_KEY;
+      const apiSecret = process.env.KRAKEN_API_SECRET;
       
       let engine = tradingEngines.get(userId);
       if (!engine) {
