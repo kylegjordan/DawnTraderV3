@@ -1,0 +1,29 @@
+import PortfolioOverview from "@/components/trading/portfolio-overview";
+import ActiveTrades from "@/components/trading/active-trades";
+import RecentTrades from "@/components/trading/recent-trades";
+import Watchlist from "@/components/trading/watchlist";
+import AIInsights from "@/components/ai/ai-insights";
+
+export default function Dashboard() {
+  return (
+    <div className="p-6 space-y-6" data-testid="dashboard-page">
+      {/* Portfolio Overview Section */}
+      <section>
+        <h2 className="text-2xl font-bold text-foreground mb-4">Portfolio Overview</h2>
+        <PortfolioOverview />
+      </section>
+
+      {/* Active Trades Section */}
+      <ActiveTrades />
+
+      {/* Recent Trades Section */}
+      <RecentTrades />
+
+      {/* AI Analyst Preview Section */}
+      <AIInsights />
+
+      {/* Watchlist Preview */}
+      <Watchlist />
+    </div>
+  );
+}
