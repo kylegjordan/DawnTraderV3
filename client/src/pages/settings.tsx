@@ -48,10 +48,6 @@ export default function Settings() {
     // AI Settings
     aiCapitalAllocation: false,
     
-    // API Credentials (placeholder - would be handled securely)
-    krakenApiKey: '',
-    krakenApiSecret: '',
-    
     // Notification Settings
     emailNotifications: true,
     pushNotifications: true,
@@ -75,10 +71,6 @@ export default function Settings() {
         slippageToleranceMidcaps: settings.slippageToleranceMidcaps,
         slippageToleranceSmall: settings.slippageToleranceSmall,
         aiCapitalAllocation: settings.aiCapitalAllocation,
-        
-        // These would come from user settings in a real app
-        krakenApiKey: '',
-        krakenApiSecret: '',
         emailNotifications: true,
         pushNotifications: true,
         telegramNotifications: false,
@@ -102,24 +94,15 @@ export default function Settings() {
         slippageToleranceMajors: formData.slippageToleranceMajors,
         slippageToleranceMidcaps: formData.slippageToleranceMidcaps,
         slippageToleranceSmall: formData.slippageToleranceSmall,
-        aiCapitalAllocation: formData.aiCapitalAllocation,
-        krakenApiKey: formData.krakenApiKey,
-        krakenApiSecret: formData.krakenApiSecret
+        aiCapitalAllocation: formData.aiCapitalAllocation
       };
 
       await updateSettings(settingsUpdate);
       
       toast({
         title: "Settings Saved",
-        description: "Your trading settings and API credentials have been updated successfully.",
+        description: "Your trading settings have been updated successfully.",
       });
-      
-      // Clear the credential fields after successful save for security
-      setFormData(prev => ({
-        ...prev,
-        krakenApiKey: '',
-        krakenApiSecret: ''
-      }));
     } catch (error) {
       toast({
         title: "Error",
@@ -143,8 +126,6 @@ export default function Settings() {
         slippageToleranceMidcaps: settings.slippageToleranceMidcaps,
         slippageToleranceSmall: settings.slippageToleranceSmall,
         aiCapitalAllocation: settings.aiCapitalAllocation,
-        krakenApiKey: '',
-        krakenApiSecret: '',
         emailNotifications: true,
         pushNotifications: true,
         telegramNotifications: false,
@@ -632,48 +613,42 @@ export default function Settings() {
                 API Credentials
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Configure your exchange API credentials for live trading
+                Kraken API credentials are managed securely through Replit environment secrets
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Status indicators */}
-              {(settings as any)?.krakenApiKeySet && (
+              {(settings as any)?.krakenApiKeySet && (settings as any)?.krakenApiSecretSet ? (
                 <div className="flex items-center gap-2 p-3 bg-success/10 border border-success/20 rounded-lg">
                   <div className="w-2 h-2 rounded-full bg-success" />
-                  <span className="text-sm text-success font-medium">API credentials are configured</span>
+                  <span className="text-sm text-success font-medium">API credentials are configured ✓</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-warning" />
+                  <span className="text-sm text-warning font-medium">API credentials not configured</span>
                 </div>
               )}
               
-              <div className="space-y-2">
-                <Label htmlFor="kraken-key">Kraken API Key</Label>
-                <Input
-                  id="kraken-key"
-                  type="password"
-                  placeholder={(settings as any)?.krakenApiKeySet ? "••••••••••••••••" : "Enter your Kraken API key"}
-                  value={formData.krakenApiKey}
-                  onChange={(e) => setFormData(prev => ({ ...prev, krakenApiKey: e.target.value }))}
-                  data-testid="input-kraken-key"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="kraken-secret">Kraken API Secret</Label>
-                <Input
-                  id="kraken-secret"
-                  type="password"
-                  placeholder={(settings as any)?.krakenApiSecretSet ? "••••••••••••••••" : "Enter your Kraken API secret"}
-                  value={formData.krakenApiSecret}
-                  onChange={(e) => setFormData(prev => ({ ...prev, krakenApiSecret: e.target.value }))}
-                  data-testid="input-kraken-secret"
-                />
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-3">
+                <p className="text-sm font-medium">How to add your Kraken API credentials:</p>
+                <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                  <li>Click on the <strong>Secrets</strong> panel (lock icon) in the Replit sidebar</li>
+                  <li>Add a new secret with key: <code className="px-1.5 py-0.5 bg-muted rounded text-xs">KRAKEN_API_KEY</code></li>
+                  <li>Paste your Kraken API key as the value</li>
+                  <li>Add another secret with key: <code className="px-1.5 py-0.5 bg-muted rounded text-xs">KRAKEN_API_SECRET</code></li>
+                  <li>Paste your Kraken API secret as the value</li>
+                  <li>Restart the application to apply the changes</li>
+                </ol>
               </div>
               
-              <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg space-y-2">
-                <p className="text-sm text-warning font-medium">Security Options</p>
+              <div className="p-4 bg-success/10 border border-success/20 rounded-lg space-y-2">
+                <p className="text-sm text-success font-medium">✓ Secure Storage</p>
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p><strong>Option 1 (Database):</strong> Store credentials in the database (saved when you click Save Settings). ⚠️ Stored in plaintext - not encrypted.</p>
-                  <p><strong>Option 2 (Recommended):</strong> Use environment secrets KRAKEN_API_KEY and KRAKEN_API_SECRET in the Secrets panel. ✓ More secure.</p>
-                  <p className="mt-2"><strong>Priority:</strong> Environment secrets → Database → None</p>
-                  <p className="text-warning">Never share your API keys. To clear stored database credentials, save with empty fields.</p>
+                  <p>• Credentials are encrypted by Replit's secure secret management</p>
+                  <p>• Never stored in plaintext in the database</p>
+                  <p>• Automatically available as environment variables</p>
+                  <p>• Not visible in code or version control</p>
                 </div>
               </div>
             </CardContent>
