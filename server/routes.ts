@@ -619,6 +619,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Kill Switch Incident Analysis Conversation
+  app.post('/api/kill-switch/create-analysis-chat', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { eventId } = req.body;
+      
+      // Get kill switch event details
+      const event = eventId 
+        ? await storage.getKillSwitchEventById(eventId)
+        : await storage.getLatestKillSwitchEvent(userId);
+      
+      if (!event) {
+        return res.status(404).json({ error: 'No kill switch event found' });
+      }
+
+      // Get settings at time of incident
+      const settings = await storage.getTradingSettings(userId);
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found' });
+      }
+
+      // Parse closed trades
+      let closedTrades: any[] = [];
+      if (event.tradesClosed) {
+        try {
+          const parsed = JSON.parse(event.tradesClosed);
+          closedTrades = Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+          console.error('Failed to parse tradesClosed:', error);
+        }
+      }
+
+      // Build incident context
+      const incidentContext = {
+        eventId: event.id,
+        triggeredAt: event.triggeredAt,
+        lossPercent: event.lossPercent,
+        lossAmount: event.lossAmount,
+        accountEquity: event.accountEquity,
+        portfolioValue: event.portfolioValue,
+        killSwitchLimit: event.killSwitchLimit,
+        warningTrigger: event.warningTrigger,
+        tradesCount: closedTrades.length,
+        closedTrades: closedTrades.map((t: any) => ({
+          symbol: t.symbol,
+          strategy: t.strategy,
+          entryPrice: t.entryPrice,
+          exitPrice: t.exitPrice,
+          profitLoss: t.profitLoss,
+          rMultiple: t.rMultiple
+        })),
+        currentSettings: {
+          screener: {
+            minVolume: settings.minVolume,
+            minDailyRange: settings.minDailyRange,
+            minPrice: settings.minPrice
+          },
+          guardrails: {
+            riskPerTrade: settings.riskPerTrade,
+            maxExposurePercent: settings.maxExposurePercent,
+            maxOpenTrades: settings.maxOpenTrades
+          },
+          strategies: {
+            vwap: {
+              timeframe: settings.vwapTimeframe,
+              pullbackThreshold: settings.vwapPullbackThreshold,
+              volumeMultiplier: settings.vwapVolumeMultiplier
+            },
+            abcd: {
+              minConsolidation: settings.abcdMinConsolidation,
+              breakoutThreshold: settings.abcdBreakoutThreshold,
+              exitType: settings.abcdExitType
+            },
+            sma: {
+              length: settings.smaLength,
+              entryCondition: settings.smaEntryCondition,
+              exitCondition: settings.smaExitCondition
+            }
+          }
+        }
+      };
+
+      // Create initial message with incident context
+      const initialMessage = {
+        role: 'user',
+        content: `Kill Switch Incident Analysis Request
+
+INCIDENT SUMMARY:
+- Triggered: ${new Date(event.triggeredAt).toISOString()}
+- Loss: ${event.lossPercent}% ($${event.lossAmount})
+- Account Equity (before): $${event.accountEquity}
+- Portfolio Value (after): $${event.portfolioValue}
+- Kill Switch Limit: ${event.killSwitchLimit}%
+- Warning Trigger: ${event.warningTrigger}%
+
+TRADES CLOSED: ${closedTrades.length} positions
+${closedTrades.map((t: any, i: number) => `
+${i + 1}. ${t.symbol} (${t.strategy})
+   Entry: $${t.entryPrice} → Exit: $${t.exitPrice}
+   P/L: $${t.profitLoss} (${t.rMultiple}R)`).join('')}
+
+CURRENT SETTINGS SNAPSHOT:
+- Screener: Min Volume $${settings.minVolume}, Min Range ${settings.minDailyRange}%
+- Guardrails: Risk/Trade $${settings.riskPerTrade}, Max Exposure ${settings.maxExposurePercent}%, Max Trades ${settings.maxOpenTrades}
+- Strategies: VWAP (${settings.vwapTimeframe}min, ${settings.vwapPullbackThreshold}% pullback), ABCD (${settings.abcdMinConsolidation} bars, ${settings.abcdBreakoutThreshold}% breakout), SMA (${settings.smaLength} period, ${settings.smaEntryCondition} entry)
+
+Please analyze this kill switch incident and provide:
+1. Root cause analysis - What led to these losses?
+2. Pattern identification - Were there common factors across losing trades?
+3. Settings recommendations - Should I adjust screener filters, guardrails, or strategy parameters?
+4. Risk management improvements - How can I prevent this in the future?
+
+Provide specific, actionable recommendations.`,
+        timestamp: new Date()
+      };
+
+      // Create conversation with incident context
+      const conversation = await storage.createAIConversation({
+        userId,
+        title: `Kill Switch Analysis - ${new Date(event.triggeredAt).toLocaleDateString()}`,
+        messages: [initialMessage],
+        context: incidentContext,
+        maxContextMessages: 20
+      });
+
+      res.json({
+        success: true,
+        conversationId: conversation.id,
+        conversation
+      });
+    } catch (error: any) {
+      console.error('Error creating kill switch analysis chat:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Chat cost tracking
   app.get('/api/chat-logs', async (req, res) => {
     try {

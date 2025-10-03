@@ -69,6 +69,32 @@ export default function KillSwitchScreen() {
     }
   });
 
+  // ChatGPT Analysis mutation
+  const chatMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/kill-switch/create-analysis-chat', {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.conversationId) {
+        setLocation(`/analysis?conversation=${data.conversationId}`);
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Create Analysis",
+        description: error.message || "Could not create AI analysis conversation"
+      });
+    }
+  });
+
+  const handleChatGPTAnalysis = () => {
+    chatMutation.mutate();
+  };
+
   // Redirect if not suspended
   useEffect(() => {
     if (status && !status.tradingSuspended) {
@@ -259,17 +285,17 @@ export default function KillSwitchScreen() {
           </CardHeader>
           <CardContent className="space-y-4">
             {/* ChatGPT Analysis Button */}
-            <Link href="/analysis">
-              <Button 
-                variant="outline" 
-                size="lg" 
-                className="w-full"
-                data-testid="button-chatgpt-analysis"
-              >
-                <MessageSquare className="w-5 h-5 mr-2" />
-                Analyze with ChatGPT
-              </Button>
-            </Link>
+            <Button 
+              variant="outline" 
+              size="lg" 
+              className="w-full"
+              data-testid="button-chatgpt-analysis"
+              onClick={handleChatGPTAnalysis}
+              disabled={chatMutation.isPending}
+            >
+              <MessageSquare className="w-5 h-5 mr-2" />
+              {chatMutation.isPending ? 'Creating Analysis...' : 'Analyze with ChatGPT'}
+            </Button>
 
             <Separator />
 
