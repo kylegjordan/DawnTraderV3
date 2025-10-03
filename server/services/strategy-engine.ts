@@ -201,11 +201,13 @@ export class StrategyEngine {
     // ✅ Entry condition logic: Above vs Crossover
     if (entryCondition === 'above') {
       // Entry when price is above SMA and near it
-      const nearSMA = Math.abs(currentPrice - sma) / sma < 0.015; // Within 1.5% of SMA
+      // Using trailing stop percent as proximity threshold (repurposed setting)
+      const nearSMAThreshold = trailingStopPercent; // e.g., 2% trailing stop = 2% proximity threshold
+      const nearSMA = Math.abs(currentPrice - sma) / sma <= nearSMAThreshold;
       const bounceConfirmation = currentPrice > sma && this.hasBouncePattern(priceHistory.slice(-5));
       entrySignal = isUptrend && nearSMA && bounceConfirmation;
       
-      console.log(`[SMA Strategy] Entry condition ABOVE: uptrend=${isUptrend}, nearSMA=${nearSMA}, bounce=${bounceConfirmation}`);
+      console.log(`[SMA Strategy] Entry condition ABOVE: uptrend=${isUptrend}, nearSMA=${nearSMA} (threshold=${(nearSMAThreshold*100).toFixed(1)}%), bounce=${bounceConfirmation}`);
     } else {
       // Entry when price crosses above SMA
       const crossedAbove = previousPrice <= sma && currentPrice > sma;

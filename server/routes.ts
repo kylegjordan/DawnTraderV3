@@ -762,6 +762,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Strategy test endpoint - analyze watchlist pairs for signals
+  app.post('/api/strategies/test', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const watchlist = await storage.getWatchlist(userId);
+      const settings = await storage.getTradingSettings(userId);
+      
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found' });
+      }
+
+      console.log(`\n🧪 Testing strategies for ${watchlist.length} watchlist pairs...`);
+      console.log(`User settings:`, {
+        vwapPullback: settings.vwapPullbackThreshold,
+        vwapVolume: settings.vwapVolumeMultiplier,
+        abcdBreakout: settings.abcdBreakoutThreshold,
+        abcdExitType: settings.abcdExitType,
+        smaEntry: settings.smaEntryCondition,
+        smaExit: settings.smaExitCondition
+      });
+      
+      const { StrategyEngine } = await import('./services/strategy-engine');
+      const strategyEngine = new StrategyEngine();
+      const kraken = new KrakenService();
+      
+      const results = [];
+      
+      for (const pair of watchlist) {
+        console.log(`\n🔍 Analyzing ${pair.symbol} for strategy signals...`);
+        
+        try {
+          const ohlcData = await kraken.getOHLCData(pair.symbol, 60);
+          
+          if (!ohlcData.ohlc || ohlcData.ohlc.length < 20) {
+            results.push({ symbol: pair.symbol, error: 'Insufficient data' });
+            continue;
+          }
+
+          const priceData = ohlcData.ohlc.map(candle => ({
+            symbol: pair.symbol,
+            timestamp: new Date(candle.time * 1000),
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+            vwap: candle.vwap,
+            sma: '0'
+          }));
+
+          const currentPrice = parseFloat(priceData[priceData.length - 1].close);
+          const vwap = strategyEngine.calculateVWAP(priceData.slice(-24));
+          const sma = strategyEngine.calculateSMA(priceData, parseInt(settings.smaLength?.toString() || '20'));
+          
+          const indicators = {
+            vwap,
+            sma,
+            currentPrice,
+            volume: parseFloat(priceData[priceData.length - 1].volume),
+            high24h: Math.max(...priceData.slice(-24).map(p => parseFloat(p.high))),
+            low24h: Math.min(...priceData.slice(-24).map(p => parseFloat(p.low)))
+          };
+
+          const vwapSignal = strategyEngine.detectVWAPPullback(indicators, settings);
+          const abcdSignal = strategyEngine.detectABCDLong(priceData, settings);
+          const smaSignal = strategyEngine.detectSMATrendRide(indicators, priceData, settings);
+
+          results.push({
+            symbol: pair.symbol,
+            analyzed: true,
+            signals: {
+              vwap: vwapSignal ? 'FOUND' : null,
+              abcd: abcdSignal ? 'FOUND' : null,
+              sma: smaSignal ? 'FOUND' : null
+            }
+          });
+        } catch (error: any) {
+          results.push({ symbol: pair.symbol, error: error.message });
+        }
+      }
+      
+      res.json({
+        success: true,
+        watchlistSize: watchlist.length,
+        results,
+        message: 'Check server logs for detailed strategy analysis and settings used'
+      });
+    } catch (error: any) {
+      console.error('Strategy test error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
