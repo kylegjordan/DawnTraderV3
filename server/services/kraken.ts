@@ -211,6 +211,7 @@ export class KrakenService {
     allowedTradingPairs?: string[];
     blacklistedSymbols?: string[];
     whitelistedSymbols?: string[];
+    minHistoryDays?: number;
   }): Promise<Array<{
     symbol: string;
     baseCurrency: string;
@@ -227,6 +228,7 @@ export class KrakenService {
     ]);
 
     const eligiblePairs: any[] = [];
+    const candidatePairs: any[] = [];
     const exclusionReasons: Record<string, string> = {};
 
     // Parse settings with defaults
@@ -238,6 +240,7 @@ export class KrakenService {
     const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT'];
     const blacklist = settings.blacklistedSymbols || [];
     const whitelist = settings.whitelistedSymbols || [];
+    const minHistoryDays = settings.minHistoryDays || 90;
 
     // Stablecoin patterns
     const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD'];
@@ -305,8 +308,8 @@ export class KrakenService {
         return;
       }
 
-      // All filters passed - add to eligible pairs
-      eligiblePairs.push({
+      // All basic filters passed - add to candidate pairs for history check
+      candidatePairs.push({
         symbol: pairName,
         baseCurrency: pairInfo.base,
         quoteCurrency: pairInfo.quote,
@@ -317,21 +320,48 @@ export class KrakenService {
       });
     });
 
-    // Log screening results
+    // Filter 9: Check data history for candidate pairs
+    console.log(`\n📊 Screener: ${candidatePairs.length} pairs passed basic filters, checking history...`);
+    
+    for (const pair of candidatePairs) {
+      try {
+        // Check if pair has sufficient historical data (90 days = ~90 daily candles)
+        const requiredSeconds = minHistoryDays * 24 * 60 * 60;
+        const sinceTimestamp = Math.floor(Date.now() / 1000) - requiredSeconds;
+        
+        const { ohlc } = await this.getOHLCData(pair.symbol, 1440, sinceTimestamp); // 1440 = daily candles
+        
+        if (ohlc.length < minHistoryDays * 0.9) { // Allow 10% tolerance for missing days
+          exclusionReasons[pair.symbol] = `Insufficient history: ${ohlc.length} days < ${minHistoryDays} days`;
+          continue;
+        }
+        
+        // History check passed - add to final eligible pairs
+        eligiblePairs.push(pair);
+      } catch (error: any) {
+        exclusionReasons[pair.symbol] = `History check failed: ${error.message}`;
+      }
+    }
+
+    // Log screening results with detailed exclusion reasons
     console.log(`\n📊 Screener Results:`);
     console.log(`  ✅ Eligible pairs: ${eligiblePairs.length}`);
     console.log(`  ❌ Excluded pairs: ${Object.keys(exclusionReasons).length}`);
     
-    if (Object.keys(exclusionReasons).length > 0 && Object.keys(exclusionReasons).length <= 20) {
-      console.log(`\n❌ Exclusion reasons (sample):`);
-      Object.entries(exclusionReasons).slice(0, 10).forEach(([symbol, reason]) => {
+    // Always log sample of exclusion reasons for debugging
+    if (Object.keys(exclusionReasons).length > 0) {
+      console.log(`\n❌ Exclusion reasons (showing first 15):`);
+      Object.entries(exclusionReasons).slice(0, 15).forEach(([symbol, reason]) => {
         console.log(`  ${symbol}: ${reason}`);
       });
+      if (Object.keys(exclusionReasons).length > 15) {
+        console.log(`  ... and ${Object.keys(exclusionReasons).length - 15} more`);
+      }
     }
 
     if (eligiblePairs.length > 0) {
-      console.log(`\n✅ Eligible pairs (sample):`);
-      eligiblePairs.slice(0, 5).forEach(pair => {
+      console.log(`\n✅ Eligible pairs:`);
+      eligiblePairs.forEach(pair => {
         console.log(`  ${pair.symbol}: Vol=$${(pair.volume24h/1000000).toFixed(1)}M, Range=${pair.dailyRange.toFixed(1)}%, Price=$${pair.currentPrice}`);
       });
     }

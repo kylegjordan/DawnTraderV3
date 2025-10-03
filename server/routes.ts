@@ -743,7 +743,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         excludeStablecoins: true,
         allowedTradingPairs: ['USD', 'USDT'],
         blacklistedSymbols: [],
-        whitelistedSymbols: []
+        whitelistedSymbols: [],
+        minHistoryDays: 90
       };
 
       console.log('\n🧪 Screener Test with custom settings:', testSettings);

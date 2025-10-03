@@ -51,7 +51,8 @@ export class MarketScanner {
           excludeStablecoins: true,
           allowedTradingPairs: ['USD', 'USDT'],
           blacklistedSymbols: [],
-          whitelistedSymbols: []
+          whitelistedSymbols: [],
+          minHistoryDays: 90
         };
         
         const eligiblePairs = await this.kraken.getEligiblePairs(defaultSettings);
@@ -77,7 +78,8 @@ export class MarketScanner {
             excludeStablecoins: settings.excludeStablecoins ?? undefined,
             allowedTradingPairs: settings.allowedTradingPairs || undefined,
             blacklistedSymbols: settings.blacklistedSymbols || undefined,
-            whitelistedSymbols: settings.whitelistedSymbols || undefined
+            whitelistedSymbols: settings.whitelistedSymbols || undefined,
+            minHistoryDays: settings.minDataHistoryDays || 90
           });
           
           await this.updateUserWatchlist(user.id, eligiblePairs);
