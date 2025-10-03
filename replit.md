@@ -13,12 +13,15 @@ A long-only, spot-trading cryptocurrency day trading web application that automa
    - Auto-trimming to stay within token limits
    - Conversation management (create, rename, delete)
 
-2. Added timezone and time format display settings:
-   - Timezone selection dropdown with major world timezones including Mikolajki Pomorskie, Poland (default: Asia/Dubai - Abu Dhabi/UAE)
-   - 12hr/24hr time format toggle (default: 12hr)
-   - Settings persist across sessions
-   - Time widget in top bar now displays current time using selected timezone and format
-   - Real-time clock updates every second with timezone abbreviation (e.g., CET, EST, GST)
+2. Comprehensive timezone handling system (UTC storage, local display):
+   - **Database Migration**: All timestamp columns migrated to `timestamptz` for timezone-aware storage in UTC
+   - **Timezone Utilities** (`client/src/lib/timezone.ts`): Robust conversion functions using dayjs + Intl.DateTimeFormat for reliable timezone abbreviations
+   - **Dual-Time Widget**: TopBar displays both UTC (24hr, muted) and Local time (user's format, highlighted) side-by-side with real-time updates
+   - **Comprehensive Timezone List**: 79+ global options organized by region (Americas, Europe, Middle East, Asia, Oceania, Africa) including Mikolajki Pomorskie, Poland (Europe/Warsaw)
+   - **User Settings**: Timezone selection (default: Asia/Dubai) and 12hr/24hr time format toggle (default: 12hr)
+   - **Timestamp Displays**: All trade times, report timestamps, and AI insights converted from UTC to user's timezone on display
+   - **Immediate Reactivity**: Settings changes instantly update dual-time widget and all timestamps via TanStack Query cache invalidation
+   - **Bug Fix**: Timezone abbreviations now use Intl.DateTimeFormat API (fixed dayjs format('z') returning 'z' placeholder)
 
 **Previous Enhancement (Oct 2, 2025)**: Implemented comprehensive GPT-5 integration with database access, Ask→Confirm→Update flow for settings changes, complete audit logging, and error diagnosis capabilities.
 
