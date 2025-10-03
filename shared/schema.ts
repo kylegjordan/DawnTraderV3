@@ -48,6 +48,35 @@ export const tradingSettings = pgTable("trading_settings", {
   aiCapitalAllocation: boolean("ai_capital_allocation").default(false),
   timezone: varchar("timezone", { length: 50 }).default("Asia/Dubai"),
   timeFormat: varchar("time_format", { length: 10 }).default("12hr"),
+  
+  // Global Screener Filters
+  minPrice: decimal("min_price", { precision: 10, scale: 8 }).default("0.01"),
+  maxBidAskSpread: decimal("max_bid_ask_spread", { precision: 5, scale: 2 }).default("1.00"),
+  excludeStablecoins: boolean("exclude_stablecoins").default(true),
+  minDataHistoryDays: integer("min_data_history_days").default(90),
+  allowedTradingPairs: text("allowed_trading_pairs").array().default(sql`ARRAY['USD', 'USDT']::text[]`),
+  blacklistedSymbols: text("blacklisted_symbols").array().default(sql`ARRAY[]::text[]`),
+  whitelistedSymbols: text("whitelisted_symbols").array().default(sql`ARRAY[]::text[]`),
+  
+  // VWAP Pullback Strategy Parameters
+  vwapTimeframe: integer("vwap_timeframe").default(60), // minutes
+  vwapPullbackThreshold: decimal("vwap_pullback_threshold", { precision: 5, scale: 2 }).default("2.00"),
+  vwapVolumeMultiplier: decimal("vwap_volume_multiplier", { precision: 5, scale: 2 }).default("1.50"),
+  vwapMaxHoldingPeriod: integer("vwap_max_holding_period").default(24), // bars/candles
+  
+  // ABCD Long Strategy Parameters
+  abcdMinConsolidation: integer("abcd_min_consolidation").default(10), // bars
+  abcdBreakoutThreshold: decimal("abcd_breakout_threshold", { precision: 5, scale: 2 }).default("1.50"),
+  abcdVolumeMultiplier: decimal("abcd_volume_multiplier", { precision: 5, scale: 2 }).default("1.50"),
+  abcdExitType: varchar("abcd_exit_type", { length: 20 }).default("target"), // 'target' or 'trailing'
+  abcdTargetPercent: decimal("abcd_target_percent", { precision: 5, scale: 2 }).default("3.00"),
+  abcdTrailingStopPercent: decimal("abcd_trailing_stop_percent", { precision: 5, scale: 2 }).default("2.00"),
+  
+  // SMA Trend Ride Strategy Parameters
+  smaEntryCondition: varchar("sma_entry_condition", { length: 20 }).default("crossover"), // 'above' or 'crossover'
+  smaExitCondition: varchar("sma_exit_condition", { length: 20 }).default("break"), // 'break' or 'trailing'
+  smaTrailingStopPercent: decimal("sma_trailing_stop_percent", { precision: 5, scale: 2 }).default("2.00"),
+  
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 

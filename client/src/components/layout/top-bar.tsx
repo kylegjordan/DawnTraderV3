@@ -30,7 +30,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
 
   // Fetch user settings for timezone and time format
-  const { data: settings } = useQuery({ 
+  const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
     queryKey: ['/api/settings'],
   });
 
