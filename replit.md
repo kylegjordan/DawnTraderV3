@@ -4,13 +4,20 @@
 
 A long-only, spot-trading cryptocurrency day trading web application that automates trading strategies on Kraken markets. The application scans markets hourly, monitors shortlisted pairs in real-time, and executes three distinct strategies: VWAP Pullback, ABCD Long, and SMA Trend Ride. It enforces disciplined risk management with configurable parameters, supports both live and paper trading modes, and integrates OpenAI's GPT-5 for AI-powered analysis, conversational assistance, and intelligent system management. The platform provides comprehensive trade tracking, performance analytics, tax-ready export functionality, audit trails for all AI actions, and error diagnosis capabilities through a responsive dashboard interface optimized for Android and Windows.
 
-**Recent Enhancement (Oct 3, 2025)**: Implemented comprehensive chat history system with cost control:
-- Multiple conversation support with history sidebar
-- Token counting and cost estimation for all GPT API calls
-- Configurable context size (10/20/50 messages)
-- Chat log tracking with cost summaries
-- Auto-trimming to stay within token limits
-- Conversation management (create, rename, delete)
+**Recent Enhancement (Oct 3, 2025)**: 
+1. Implemented comprehensive chat history system with cost control:
+   - Multiple conversation support with history sidebar
+   - Token counting and cost estimation for all GPT API calls
+   - Configurable context size (10/20/50 messages)
+   - Chat log tracking with cost summaries
+   - Auto-trimming to stay within token limits
+   - Conversation management (create, rename, delete)
+
+2. Added timezone and time format display settings:
+   - Timezone selection dropdown with major world timezones (default: Asia/Dubai - Abu Dhabi/UAE)
+   - 12hr/24hr time format toggle (default: 12hr)
+   - Settings persist across sessions
+   - Future-ready for time display formatting throughout the application
 
 **Previous Enhancement (Oct 2, 2025)**: Implemented comprehensive GPT-5 integration with database access, Ask→Confirm→Update flow for settings changes, complete audit logging, and error diagnosis capabilities.
 
