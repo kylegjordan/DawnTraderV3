@@ -77,6 +77,11 @@ export const tradingSettings = pgTable("trading_settings", {
   smaExitCondition: varchar("sma_exit_condition", { length: 20 }).default("break"), // 'break' or 'trailing'
   smaTrailingStopPercent: decimal("sma_trailing_stop_percent", { precision: 5, scale: 2 }).default("2.00"),
   
+  // Daily Loss Kill Switch
+  dailyLossKillSwitch: decimal("daily_loss_kill_switch", { precision: 5, scale: 2 }).default("7.00"), // % of portfolio
+  dailyLossWarningTrigger: decimal("daily_loss_warning_trigger", { precision: 5, scale: 2 }).default("75.00"), // % of kill switch threshold
+  tradingSuspended: boolean("trading_suspended").default(false), // System-controlled flag
+  
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -215,6 +220,24 @@ export const errorLogs = pgTable("error_logs", {
   notes: text("notes"), // User or system notes about resolution
 });
 
+// Kill switch events (for logging kill switch triggers)
+export const killSwitchEvents = pgTable("kill_switch_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  triggeredAt: timestamp("triggered_at", { withTimezone: true }).defaultNow(),
+  eventType: varchar("event_type", { length: 20 }).notNull(), // 'warning' or 'kill_switch'
+  portfolioValueBefore: decimal("portfolio_value_before", { precision: 15, scale: 2 }).notNull(),
+  portfolioValueAfter: decimal("portfolio_value_after", { precision: 15, scale: 2 }).notNull(),
+  lossAmount: decimal("loss_amount", { precision: 15, scale: 2 }).notNull(),
+  lossPercent: decimal("loss_percent", { precision: 8, scale: 4 }).notNull(),
+  killSwitchThreshold: decimal("kill_switch_threshold", { precision: 5, scale: 2 }).notNull(), // What it was set to
+  tradesClosed: jsonb("trades_closed"), // Array of closed trades with details
+  resolved: boolean("resolved").default(false), // Whether user has reset
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolvedMethod: varchar("resolved_method", { length: 50 }), // 'manual_ui' or 'chatgpt'
+  notes: text("notes"),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -222,6 +245,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   trades: many(trades),
   reports: many(aiReports),
   conversations: many(aiConversations),
+  killSwitchEvents: many(killSwitchEvents),
 }));
 
 export const tradingSettingsRelations = relations(tradingSettings, ({ one }) => ({
@@ -327,6 +351,11 @@ export const insertErrorLogSchema = createInsertSchema(errorLogs).omit({
   timestamp: true,
 });
 
+export const insertKillSwitchEventSchema = createInsertSchema(killSwitchEvents).omit({
+  id: true,
+  triggeredAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -360,3 +389,6 @@ export type AIAuditLog = typeof aiAuditLog.$inferSelect;
 
 export type InsertErrorLog = z.infer<typeof insertErrorLogSchema>;
 export type ErrorLog = typeof errorLogs.$inferSelect;
+
+export type InsertKillSwitchEvent = z.infer<typeof insertKillSwitchEventSchema>;
+export type KillSwitchEvent = typeof killSwitchEvents.$inferSelect;
