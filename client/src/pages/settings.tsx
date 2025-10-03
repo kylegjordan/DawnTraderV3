@@ -55,6 +55,8 @@ export default function Settings() {
     slippageToleranceMajors: '',
     slippageToleranceMidcaps: '',
     slippageToleranceSmall: '',
+    dailyLossKillSwitch: '7.00',
+    dailyLossWarningTrigger: '75.00',
     
     // VWAP Pullback Strategy
     vwapTimeframe: 60,
@@ -115,6 +117,8 @@ export default function Settings() {
         slippageToleranceMajors: settings.slippageToleranceMajors,
         slippageToleranceMidcaps: settings.slippageToleranceMidcaps,
         slippageToleranceSmall: settings.slippageToleranceSmall,
+        dailyLossKillSwitch: settings.dailyLossKillSwitch || '7.00',
+        dailyLossWarningTrigger: settings.dailyLossWarningTrigger || '75.00',
         
         // VWAP Pullback Strategy
         vwapTimeframe: settings.vwapTimeframe || 60,
@@ -188,6 +192,8 @@ export default function Settings() {
         slippageToleranceMajors: settings.slippageToleranceMajors,
         slippageToleranceMidcaps: settings.slippageToleranceMidcaps,
         slippageToleranceSmall: settings.slippageToleranceSmall,
+        dailyLossKillSwitch: settings.dailyLossKillSwitch || '7.00',
+        dailyLossWarningTrigger: settings.dailyLossWarningTrigger || '75.00',
         vwapTimeframe: settings.vwapTimeframe || 60,
         vwapPullbackThreshold: settings.vwapPullbackThreshold || '2.00',
         vwapVolumeMultiplier: settings.vwapVolumeMultiplier || '1.50',
@@ -592,6 +598,70 @@ export default function Settings() {
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Kill Switch */}
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-destructive/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Zap className="w-6 h-6 text-destructive" />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-lg">Daily Loss Kill Switch</Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Automatically suspends trading when 24-hour portfolio losses exceed this threshold. 
+                      All open trades are closed immediately when triggered. Requires manual reset to resume.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Kill Switch Threshold */}
+                  <div className="space-y-2">
+                    <Label htmlFor="dailyLossKillSwitch" className="text-sm font-medium">
+                      Kill Switch Threshold (%)
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="dailyLossKillSwitch"
+                        type="number"
+                        step="0.01"
+                        value={formData.dailyLossKillSwitch}
+                        onChange={(e) => setFormData({...formData, dailyLossKillSwitch: e.target.value})}
+                        placeholder="7.00"
+                        data-testid="input-daily-loss-kill-switch"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      When 24h portfolio loss reaches this %, trading stops automatically
+                    </p>
+                  </div>
+
+                  {/* Warning Trigger */}
+                  <div className="space-y-2">
+                    <Label htmlFor="dailyLossWarningTrigger" className="text-sm font-medium">
+                      Warning Trigger (% of threshold)
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="dailyLossWarningTrigger"
+                        type="number"
+                        step="0.01"
+                        value={formData.dailyLossWarningTrigger}
+                        onChange={(e) => setFormData({...formData, dailyLossWarningTrigger: e.target.value})}
+                        placeholder="75.00"
+                        data-testid="input-daily-loss-warning-trigger"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      At 75% threshold (e.g., -5.25% with 7% limit), you'll receive a warning
+                    </p>
                   </div>
                 </div>
               </div>

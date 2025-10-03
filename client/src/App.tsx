@@ -8,15 +8,32 @@ import History from "@/pages/history";
 import Analysis from "@/pages/analysis";
 import Settings from "@/pages/settings";
 import WatchlistPage from "@/pages/watchlist";
+import KillSwitchScreen from "@/pages/kill-switch";
 import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
+  const [location, setLocation] = useLocation();
+  
+  // Check kill switch status and auto-redirect
+  const { data: settings } = useQuery({
+    queryKey: ['/api/settings'],
+    refetchInterval: 5000 // Check every 5 seconds
+  });
+  
+  useEffect(() => {
+    const allowedPaths = ['/kill-switch', '/settings'];
+    if (settings?.tradingSuspended && !allowedPaths.includes(location)) {
+      setLocation('/kill-switch');
+    }
+  }, [settings, location, setLocation]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -39,6 +56,7 @@ function Router() {
           <Route path="/history" component={History} />
           <Route path="/analysis" component={Analysis} />
           <Route path="/settings" component={Settings} />
+          <Route path="/kill-switch" component={KillSwitchScreen} />
           <Route component={NotFound} />
         </Switch>
       </main>
