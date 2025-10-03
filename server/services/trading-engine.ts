@@ -150,13 +150,26 @@ export class TradingEngine {
 
   private async placeStopAndTargetOrders(trade: Trade): Promise<void> {
     try {
-      // Place stop-loss order
+      // Get settings to apply stop buffer
+      const settings = await storage.getTradingSettings(this.userId);
+      if (!settings) {
+        throw new Error('Trading settings not found');
+      }
+
+      // Apply stop buffer to protect against premature stop-outs
+      const stopBuffer = parseFloat(settings.stopBufferPercent) / 100; // Convert % to decimal
+      const baseStopPrice = parseFloat(trade.stopPrice);
+      const bufferedStopPrice = baseStopPrice * (1 - stopBuffer); // Lower stop for long positions
+      
+      console.log(`📊 Applying stop buffer: Base=${baseStopPrice}, Buffer=${settings.stopBufferPercent}%, Final=${bufferedStopPrice.toFixed(6)}`);
+
+      // Place stop-loss order with buffer applied
       const stopOrderResult = await this.kraken.addOrder({
         pair: trade.symbol,
         type: 'sell',
         ordertype: 'stop-loss',
         volume: trade.quantity,
-        price: trade.stopPrice
+        price: bufferedStopPrice.toString()
       });
 
       // Place target order (limit order)

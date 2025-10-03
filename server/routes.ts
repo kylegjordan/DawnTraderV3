@@ -762,6 +762,155 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Portfolio guardrails test endpoint - simulate multiple signals
+  app.post('/api/guardrails/test', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const settings = await storage.getTradingSettings(userId);
+      
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found' });
+      }
+
+      console.log('\n🛡️  PORTFOLIO GUARDRAILS TEST');
+      console.log('='.repeat(60));
+      console.log('Settings:', {
+        riskPerTrade: settings.riskPerTrade,
+        maxExposure: `${settings.maxExposurePercent}%`,
+        maxOpenTrades: settings.maxOpenTrades,
+        stopBuffer: `${settings.stopBufferPercent}%`,
+        slippageMajors: `${settings.slippageToleranceMajors}%`,
+        slippageMidcaps: `${settings.slippageToleranceMidcaps}%`
+      });
+
+      const { RiskManager } = await import('./services/risk-manager');
+      const { TradingEngine } = await import('./services/trading-engine');
+      
+      const riskManager = new RiskManager();
+      const tradingEngine = new TradingEngine(userId);
+
+      // Simulate 5 different trading signals
+      const testSignals = [
+        {
+          symbol: 'BTCUSD',
+          strategy: 'vwap_pullback' as const,
+          entryPrice: 65000,
+          stopPrice: 64000,
+          targetPrice: 67000,
+          confidence: 0.85,
+          metadata: { vwap: 64500 }
+        },
+        {
+          symbol: 'ETHUSD',
+          strategy: 'abcd_long' as const,
+          entryPrice: 3500,
+          stopPrice: 3400,
+          targetPrice: 3700,
+          confidence: 0.80,
+          metadata: { breakout: true }
+        },
+        {
+          symbol: 'SOLUSD',
+          strategy: 'sma_trend_ride' as const,
+          entryPrice: 150,
+          stopPrice: 145,
+          targetPrice: 160,
+          confidence: 0.75,
+          metadata: { sma: 148 }
+        },
+        {
+          symbol: 'XRPUSD',
+          strategy: 'vwap_pullback' as const,
+          entryPrice: 2.50,
+          stopPrice: 2.40,
+          targetPrice: 2.70,
+          confidence: 0.70,
+          metadata: { vwap: 2.45 }
+        },
+        {
+          symbol: 'ADAUSD',
+          strategy: 'sma_trend_ride' as const,
+          entryPrice: 0.75,
+          stopPrice: 0.70,
+          targetPrice: 0.85,
+          confidence: 0.65,
+          metadata: { sma: 0.73 }
+        }
+      ];
+
+      const results = [];
+
+      for (let i = 0; i < testSignals.length; i++) {
+        const signal = testSignals[i];
+        console.log(`\n📊 Signal ${i + 1}/${testSignals.length}: ${signal.symbol} (${signal.strategy})`);
+        console.log(`   Entry: $${signal.entryPrice}, Stop: $${signal.stopPrice}, Target: $${signal.targetPrice}`);
+
+        // Check pre-trade risk
+        const riskCheck = await riskManager.checkPreTradeRisk(userId, signal, settings);
+        
+        if (riskCheck.approved) {
+          // Calculate position details
+          const riskAmount = parseFloat(settings.riskPerTrade || '150');
+          const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
+          const quantity = riskAmount / stopDistance;
+          const positionValue = signal.entryPrice * quantity;
+          
+          // Apply stop buffer
+          const stopBuffer = parseFloat(settings.stopBufferPercent || '0.3') / 100;
+          const bufferedStop = signal.stopPrice * (1 - stopBuffer);
+          
+          console.log(`   ✅ APPROVED - Position: ${quantity.toFixed(4)} units ($${positionValue.toFixed(2)})`);
+          console.log(`   Stop Buffer Applied: ${signal.stopPrice} → ${bufferedStop.toFixed(6)} (${settings.stopBufferPercent}%)`);
+          
+          results.push({
+            signal: `${signal.symbol} ${signal.strategy}`,
+            status: 'APPROVED',
+            quantity: quantity.toFixed(4),
+            positionValue: positionValue.toFixed(2),
+            bufferedStop: bufferedStop.toFixed(6)
+          });
+        } else {
+          console.log(`   ❌ REJECTED - ${riskCheck.reason}`);
+          results.push({
+            signal: `${signal.symbol} ${signal.strategy}`,
+            status: 'REJECTED',
+            reason: riskCheck.reason
+          });
+        }
+      }
+
+      // Get current portfolio metrics
+      const metrics = await riskManager.getPortfolioMetrics(userId);
+      
+      console.log('\n📈 Portfolio Metrics:');
+      console.log(`   Open Trades: ${metrics.openTradesCount}/${settings.maxOpenTrades}`);
+      console.log(`   Current Exposure: $${metrics.currentExposure.toFixed(2)}`);
+      console.log(`   Realized P/L: $${metrics.realizedPL.toFixed(2)}`);
+      console.log('='.repeat(60));
+
+      res.json({
+        success: true,
+        guardrails: {
+          riskPerTrade: settings.riskPerTrade,
+          maxExposure: settings.maxExposurePercent,
+          maxOpenTrades: settings.maxOpenTrades,
+          stopBuffer: settings.stopBufferPercent,
+          slippageTolerance: {
+            majors: settings.slippageToleranceMajors,
+            midcaps: settings.slippageToleranceMidcaps,
+            small: settings.slippageToleranceSmall
+          }
+        },
+        results,
+        portfolioMetrics: metrics,
+        message: 'Check server logs for detailed guardrail application'
+      });
+    } catch (error: any) {
+      console.error('Guardrails test error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Strategy test endpoint - analyze watchlist pairs for signals
   app.post('/api/strategies/test', async (req, res) => {
     try {
