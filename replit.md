@@ -5,7 +5,19 @@
 A long-only, spot-trading cryptocurrency day trading web application that automates trading strategies on Kraken markets. The application scans markets hourly, monitors shortlisted pairs in real-time, and executes three distinct strategies: VWAP Pullback, ABCD Long, and SMA Trend Ride. It enforces disciplined risk management with configurable parameters, supports both live and paper trading modes, and integrates OpenAI's GPT-5 for AI-powered analysis, conversational assistance, and intelligent system management. The platform provides comprehensive trade tracking, performance analytics, tax-ready export functionality, audit trails for all AI actions, and error diagnosis capabilities through a responsive dashboard interface optimized for Android and Windows.
 
 **Recent Enhancement (Oct 3, 2025)**: 
-1. Implemented comprehensive chat history system with cost control:
+1. **Settings Page Reorganization with Beginner-Friendly Interface**:
+   - **Four-Tab Layout**: Screener Filters → Portfolio Guardrails → Strategies → Notifications
+   - **Plain-Language Descriptions**: Every setting has explanatory text for beginners
+   - **Collapsible Strategy Sections**: Three strategy cards (VWAP Pullback, ABCD Long, SMA Trend Ride) with detailed parameters
+   - **Finalized Default Values**:
+     - Screener: Min Volume $30M (↑from $20M), Min Range 6.5% (↑from 5%), Min Price $0.01, Max Spread 1%, Exclude Stablecoins ON, 90d History
+     - Guardrails: Risk/Trade $150 (↑from $100), Max Exposure 25% (↑from 20%), Max Trades 3, Stop Buffer 0.3%, Slippage (Majors 0.5%, Mid 2%, Small 5%)
+     - VWAP: Timeframe 60min, Pullback 2%, Volume 1.5x, Max Hold 24 bars
+     - ABCD: Consolidation 10 bars, Breakout 1.5%, Volume 1.5x, Exit Type dropdown (Fixed Target 3% / Trailing Stop 2%)
+     - SMA: Length 20, Entry dropdown (Above/Crossover), Exit dropdown (Break/Trailing), Trailing 2%
+   - **Comprehensive Type Safety**: Updated TradingSettings interface with all 30+ new parameters
+
+2. Implemented comprehensive chat history system with cost control:
    - Multiple conversation support with history sidebar
    - Token counting and cost estimation for all GPT API calls
    - Configurable context size (10/20/50 messages)
@@ -13,7 +25,7 @@ A long-only, spot-trading cryptocurrency day trading web application that automa
    - Auto-trimming to stay within token limits
    - Conversation management (create, rename, delete)
 
-2. Comprehensive timezone handling system (UTC storage, local display):
+3. Comprehensive timezone handling system (UTC storage, local display):
    - **Database Migration**: All timestamp columns migrated to `timestamptz` for timezone-aware storage in UTC
    - **Timezone Utilities** (`client/src/lib/timezone.ts`): Robust conversion functions using dayjs + Intl.DateTimeFormat for reliable timezone abbreviations
    - **Dual-Time Widget**: TopBar displays both UTC (24hr, muted) and Local time (user's format, highlighted) side-by-side with real-time updates
