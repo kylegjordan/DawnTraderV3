@@ -15,6 +15,10 @@ A long-only, spot-trading cryptocurrency day trading web application that automa
    - **User-Controlled Recovery**: Manual reset button allows users to resume trading after reviewing losses and adjusting settings
    - **Settings Access During Suspension**: Auto-redirect allows access to /settings and /kill-switch while suspended for threshold adjustments
    - **Robust Error Handling**: Safe JSON parsing of closed trades with try-catch and array validation prevents crashes
+   - **ChatGPT Incident Analysis**: One-click conversation creation with pre-filled incident context, closed trades breakdown, and automated analysis request
+   - **Comprehensive Testing**: Test endpoints for simulating warning/kill scenarios and verifying trade blocking
+   - **Complete Documentation**: Integration guide (`KILL_SWITCH_INTEGRATION.md`), verification report (`KILL_SWITCH_PHASE3_VERIFICATION.md`), and CHANGELOG entry
+   - **Status**: ✅ Fully implemented and verified (Oct 3, 2025)
 
 2. **Settings Page Reorganization with Beginner-Friendly Interface**:
    - **Four-Tab Layout**: Screener Filters → Portfolio Guardrails → Strategies → Notifications
