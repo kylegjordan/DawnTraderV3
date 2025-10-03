@@ -202,7 +202,16 @@ export class KrakenService {
   }
 
   // Utility methods
-  async getEligiblePairs(): Promise<Array<{
+  async getEligiblePairs(settings: {
+    minVolume: string;
+    minDailyRange: string;
+    minPrice?: string;
+    maxBidAskSpread?: string;
+    excludeStablecoins?: boolean;
+    allowedTradingPairs?: string[];
+    blacklistedSymbols?: string[];
+    whitelistedSymbols?: string[];
+  }): Promise<Array<{
     symbol: string;
     baseCurrency: string;
     quoteCurrency: string;
@@ -210,6 +219,7 @@ export class KrakenService {
     volume24h: number;
     currentPrice: number;
     dailyRange: number;
+    vwap?: number;
   }>> {
     const [tickers, pairs] = await Promise.all([
       this.getTicker(),
@@ -217,6 +227,20 @@ export class KrakenService {
     ]);
 
     const eligiblePairs: any[] = [];
+    const exclusionReasons: Record<string, string> = {};
+
+    // Parse settings with defaults
+    const minVolume = parseFloat(settings.minVolume || '30000000');
+    const minDailyRange = parseFloat(settings.minDailyRange || '6.5');
+    const minPrice = parseFloat(settings.minPrice || '0.01');
+    const maxBidAskSpread = parseFloat(settings.maxBidAskSpread || '1.00');
+    const excludeStablecoins = settings.excludeStablecoins ?? true;
+    const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT'];
+    const blacklist = settings.blacklistedSymbols || [];
+    const whitelist = settings.whitelistedSymbols || [];
+
+    // Stablecoin patterns
+    const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD'];
 
     Object.entries(tickers).forEach(([pairName, ticker]) => {
       const pairInfo = pairs[pairName];
@@ -227,24 +251,90 @@ export class KrakenService {
       const high24h = parseFloat(ticker.h[1]);
       const low24h = parseFloat(ticker.l[1]);
       const dailyRange = ((high24h - low24h) / low24h) * 100;
+      
+      // Calculate bid-ask spread
+      const askPrice = parseFloat(ticker.a[0]);
+      const bidPrice = parseFloat(ticker.b[0]);
+      const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 100;
 
-      // Apply screener criteria
-      if (
-        volume24h >= 20000000 && // Min 24h volume: $20M
-        dailyRange >= 5.0 && // Min daily range: 5%
-        currentPrice >= 0.001 // Min price: $0.001
-      ) {
-        eligiblePairs.push({
-          symbol: pairName,
-          baseCurrency: pairInfo.base,
-          quoteCurrency: pairInfo.quote,
-          volume24h,
-          currentPrice,
-          dailyRange,
-          vwap: parseFloat(ticker.p[1]) // 24h VWAP
-        });
+      // Filter 1: Whitelist check (if whitelist exists and is not empty, ONLY allow whitelisted symbols)
+      if (whitelist.length > 0 && !whitelist.includes(pairInfo.base)) {
+        exclusionReasons[pairName] = `Not in whitelist`;
+        return;
       }
+
+      // Filter 2: Blacklist check
+      if (blacklist.includes(pairInfo.base)) {
+        exclusionReasons[pairName] = `Blacklisted symbol`;
+        return;
+      }
+
+      // Filter 3: Allowed quote assets (must be USD, USDT, etc.)
+      if (!allowedQuotes.includes(pairInfo.quote)) {
+        exclusionReasons[pairName] = `Quote currency ${pairInfo.quote} not in allowed list: ${allowedQuotes.join(', ')}`;
+        return;
+      }
+
+      // Filter 4: Stablecoin exclusion
+      if (excludeStablecoins && stablecoinPatterns.some(pattern => pairInfo.base.includes(pattern))) {
+        exclusionReasons[pairName] = `Stablecoin excluded`;
+        return;
+      }
+
+      // Filter 5: Minimum 24h volume
+      if (volume24h < minVolume) {
+        exclusionReasons[pairName] = `Volume $${volume24h.toFixed(0)} < $${minVolume.toFixed(0)}`;
+        return;
+      }
+
+      // Filter 6: Minimum daily range
+      if (dailyRange < minDailyRange) {
+        exclusionReasons[pairName] = `Daily range ${dailyRange.toFixed(2)}% < ${minDailyRange}%`;
+        return;
+      }
+
+      // Filter 7: Minimum price threshold
+      if (currentPrice < minPrice) {
+        exclusionReasons[pairName] = `Price $${currentPrice} < $${minPrice}`;
+        return;
+      }
+
+      // Filter 8: Maximum bid-ask spread
+      if (bidAskSpread > maxBidAskSpread) {
+        exclusionReasons[pairName] = `Bid-ask spread ${bidAskSpread.toFixed(2)}% > ${maxBidAskSpread}%`;
+        return;
+      }
+
+      // All filters passed - add to eligible pairs
+      eligiblePairs.push({
+        symbol: pairName,
+        baseCurrency: pairInfo.base,
+        quoteCurrency: pairInfo.quote,
+        volume24h,
+        currentPrice,
+        dailyRange,
+        vwap: parseFloat(ticker.p[1]) // 24h VWAP
+      });
     });
+
+    // Log screening results
+    console.log(`\n📊 Screener Results:`);
+    console.log(`  ✅ Eligible pairs: ${eligiblePairs.length}`);
+    console.log(`  ❌ Excluded pairs: ${Object.keys(exclusionReasons).length}`);
+    
+    if (Object.keys(exclusionReasons).length > 0 && Object.keys(exclusionReasons).length <= 20) {
+      console.log(`\n❌ Exclusion reasons (sample):`);
+      Object.entries(exclusionReasons).slice(0, 10).forEach(([symbol, reason]) => {
+        console.log(`  ${symbol}: ${reason}`);
+      });
+    }
+
+    if (eligiblePairs.length > 0) {
+      console.log(`\n✅ Eligible pairs (sample):`);
+      eligiblePairs.slice(0, 5).forEach(pair => {
+        console.log(`  ${pair.symbol}: Vol=$${(pair.volume24h/1000000).toFixed(1)}M, Range=${pair.dailyRange.toFixed(1)}%, Price=$${pair.currentPrice}`);
+      });
+    }
 
     return eligiblePairs;
   }
