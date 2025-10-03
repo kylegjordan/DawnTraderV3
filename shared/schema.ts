@@ -46,6 +46,8 @@ export const tradingSettings = pgTable("trading_settings", {
   minVolume: decimal("min_volume", { precision: 15, scale: 2 }).default("20000000.00"),
   minDailyRange: decimal("min_daily_range", { precision: 5, scale: 2 }).default("5.00"),
   aiCapitalAllocation: boolean("ai_capital_allocation").default(false),
+  timezone: varchar("timezone", { length: 50 }).default("Asia/Dubai"),
+  timeFormat: varchar("time_format", { length: 10 }).default("12hr"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
