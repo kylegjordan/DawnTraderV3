@@ -10,6 +10,7 @@ import {
   databaseSizeLogs,
   aiAuditLog,
   errorLogs,
+  killSwitchEvents,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -31,7 +32,9 @@ import {
   type AIAuditLog,
   type InsertAIAuditLog,
   type ErrorLog,
-  type InsertErrorLog
+  type InsertErrorLog,
+  type KillSwitchEvent,
+  type InsertKillSwitchEvent
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
@@ -102,6 +105,12 @@ export interface IStorage {
   createErrorLog(log: InsertErrorLog): Promise<ErrorLog>;
   getErrorLogs(userId?: string, filters?: { resolved?: boolean; errorType?: string; limit?: number }): Promise<ErrorLog[]>;
   resolveErrorLog(id: string, notes?: string): Promise<ErrorLog>;
+
+  // Kill switch methods
+  createKillSwitchEvent(event: InsertKillSwitchEvent): Promise<KillSwitchEvent>;
+  getKillSwitchEvents(userId: string, filters?: { resolved?: boolean; limit?: number }): Promise<KillSwitchEvent[]>;
+  getLatestKillSwitchEvent(userId: string): Promise<KillSwitchEvent | undefined>;
+  resolveKillSwitchEvent(id: string, method: string, notes?: string): Promise<KillSwitchEvent>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -502,6 +511,55 @@ export class DatabaseStorage implements IStorage {
       .update(errorLogs)
       .set({ resolved: true, resolvedAt: new Date(), notes })
       .where(eq(errorLogs.id, id))
+      .returning();
+    return result;
+  }
+
+  // Kill switch methods
+  async createKillSwitchEvent(event: InsertKillSwitchEvent): Promise<KillSwitchEvent> {
+    const [result] = await db.insert(killSwitchEvents).values(event).returning();
+    return result;
+  }
+
+  async getKillSwitchEvents(
+    userId: string,
+    filters?: { resolved?: boolean; limit?: number }
+  ): Promise<KillSwitchEvent[]> {
+    const conditions = [eq(killSwitchEvents.userId, userId)];
+    
+    if (filters?.resolved !== undefined) {
+      conditions.push(eq(killSwitchEvents.resolved, filters.resolved));
+    }
+    
+    const query = db
+      .select()
+      .from(killSwitchEvents)
+      .where(and(...conditions))
+      .orderBy(desc(killSwitchEvents.triggeredAt));
+    
+    return await (filters?.limit ? query.limit(filters.limit) : query);
+  }
+
+  async getLatestKillSwitchEvent(userId: string): Promise<KillSwitchEvent | undefined> {
+    const [result] = await db
+      .select()
+      .from(killSwitchEvents)
+      .where(eq(killSwitchEvents.userId, userId))
+      .orderBy(desc(killSwitchEvents.triggeredAt))
+      .limit(1);
+    return result || undefined;
+  }
+
+  async resolveKillSwitchEvent(id: string, method: string, notes?: string): Promise<KillSwitchEvent> {
+    const [result] = await db
+      .update(killSwitchEvents)
+      .set({ 
+        resolved: true, 
+        resolvedAt: new Date(), 
+        resolvedMethod: method,
+        notes 
+      })
+      .where(eq(killSwitchEvents.id, id))
       .returning();
     return result;
   }

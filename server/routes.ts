@@ -911,6 +911,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Kill Switch endpoints
+  app.get('/api/kill-switch/status', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const settings = await storage.getTradingSettings(userId);
+      
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found' });
+      }
+
+      const pl24h = await riskManager.calculate24hPL(userId);
+      const latestEvent = await storage.getLatestKillSwitchEvent(userId);
+
+      res.json({
+        tradingSuspended: settings.tradingSuspended || false,
+        dailyLossKillSwitch: settings.dailyLossKillSwitch,
+        dailyLossWarningTrigger: settings.dailyLossWarningTrigger,
+        current24hPL: pl24h,
+        latestEvent
+      });
+    } catch (error: any) {
+      console.error('Kill switch status error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/kill-switch/check', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const settings = await storage.getTradingSettings(userId);
+      
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found' });
+      }
+
+      const result = await riskManager.checkKillSwitch(userId, settings);
+      
+      // Refetch settings to get updated tradingSuspended status
+      const updatedSettings = await storage.getTradingSettings(userId);
+      
+      res.json({
+        ...result,
+        tradingSuspended: updatedSettings?.tradingSuspended || false
+      });
+    } catch (error: any) {
+      console.error('Kill switch check error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/kill-switch/reset', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { notes } = req.body;
+      
+      const settings = await storage.getTradingSettings(userId);
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found' });
+      }
+
+      if (!settings.tradingSuspended) {
+        return res.status(400).json({ error: 'Trading is not suspended' });
+      }
+
+      const latestEvent = await storage.getLatestKillSwitchEvent(userId);
+      if (latestEvent && !latestEvent.resolved) {
+        await storage.resolveKillSwitchEvent(latestEvent.id, 'manual_ui', notes);
+      }
+
+      await storage.updateTradingSettings(userId, { tradingSuspended: false });
+
+      console.log(`✅ Kill Switch reset for user ${userId}`);
+      
+      res.json({
+        success: true,
+        message: 'Trading resumed. Kill switch has been reset.',
+        tradingSuspended: false
+      });
+    } catch (error: any) {
+      console.error('Kill switch reset error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/kill-switch/events', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      
+      const events = await storage.getKillSwitchEvents(userId, { limit });
+      
+      res.json(events);
+    } catch (error: any) {
+      console.error('Kill switch events error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Strategy test endpoint - analyze watchlist pairs for signals
   app.post('/api/strategies/test', async (req, res) => {
     try {
