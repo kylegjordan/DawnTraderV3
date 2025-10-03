@@ -13,6 +13,14 @@ export class RiskManager {
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
+    // Check 0: Trading suspended (kill switch)
+    if (settings.tradingSuspended) {
+      return {
+        approved: false,
+        reason: '🚨 Trading suspended due to Kill Switch activation. Reset required before resuming trades.'
+      };
+    }
+
     // Check 1: Available balance (for live trading)
     const balanceCheck = await this.checkAvailableBalance(userId, signal, settings);
     if (!balanceCheck.approved) {
@@ -257,5 +265,172 @@ export class RiskManager {
       losses: losses.length,
       profitFactor
     };
+  }
+
+  /**
+   * Calculate rolling 24h P/L (realized + unrealized)
+   */
+  async calculate24hPL(userId: string): Promise<{
+    totalPL: number;
+    realizedPL: number;
+    unrealizedPL: number;
+    portfolioValueBefore: number;
+    portfolioValueCurrent: number;
+    lossPercent: number;
+  }> {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    // Get all closed trades in last 24h
+    const closedTrades = await storage.getTrades(userId, { status: 'closed' });
+    const recentClosed = closedTrades.filter(trade => 
+      trade.exitTime && new Date(trade.exitTime) >= twentyFourHoursAgo
+    );
+    
+    // Calculate realized P/L from closed trades
+    const realizedPL = recentClosed.reduce((sum, trade) => 
+      sum + parseFloat(trade.realizedPL || '0'), 0
+    );
+    
+    // Get active trades
+    const activeTrades = await storage.getActiveTrades(userId);
+    
+    // Calculate unrealized P/L (simplified - in reality would need current market prices)
+    let unrealizedPL = 0;
+    // TODO: Fetch current market prices and calculate unrealized P/L for active trades
+    
+    const totalPL = realizedPL + unrealizedPL;
+    
+    // Portfolio value calculation (assuming $50K starting balance)
+    const basePortfolioValue = 50000;
+    const portfolioValueCurrent = basePortfolioValue + realizedPL + unrealizedPL;
+    const portfolioValueBefore = portfolioValueCurrent - totalPL;
+    const lossPercent = portfolioValueBefore > 0 ? 
+      (Math.abs(totalPL) / portfolioValueBefore) * 100 : 0;
+    
+    return {
+      totalPL,
+      realizedPL,
+      unrealizedPL,
+      portfolioValueBefore,
+      portfolioValueCurrent,
+      lossPercent
+    };
+  }
+
+  /**
+   * Check kill switch thresholds and trigger if needed
+   */
+  async checkKillSwitch(userId: string, settings: TradingSettings): Promise<{
+    triggered: boolean;
+    eventType: 'none' | 'warning' | 'kill_switch';
+    message: string;
+  }> {
+    // Skip if already suspended
+    if (settings.tradingSuspended) {
+      return { triggered: false, eventType: 'none', message: '' };
+    }
+    
+    const pl24h = await this.calculate24hPL(userId);
+    
+    // Only check if there's a loss
+    if (pl24h.totalPL >= 0) {
+      return { triggered: false, eventType: 'none', message: '' };
+    }
+    
+    const killSwitchThreshold = parseFloat(settings.dailyLossKillSwitch || '7.00');
+    const warningTriggerPercent = parseFloat(settings.dailyLossWarningTrigger || '75.00');
+    const warningThreshold = (warningTriggerPercent / 100) * killSwitchThreshold;
+    
+    console.log(`\n🛡️  Kill Switch Monitor:`);
+    console.log(`   24h Loss: ${pl24h.lossPercent.toFixed(2)}% ($${Math.abs(pl24h.totalPL).toFixed(2)})`);
+    console.log(`   Warning Threshold: ${warningThreshold.toFixed(2)}%`);
+    console.log(`   Kill Switch Threshold: ${killSwitchThreshold.toFixed(2)}%`);
+    
+    // Check kill switch threshold
+    if (pl24h.lossPercent >= killSwitchThreshold) {
+      console.log(`   🚨 KILL SWITCH TRIGGERED!`);
+      
+      // Close all open trades
+      const closedTrades = await this.closeAllTrades(userId);
+      
+      // Log kill switch event
+      await storage.createKillSwitchEvent({
+        userId,
+        eventType: 'kill_switch',
+        portfolioValueBefore: pl24h.portfolioValueBefore,
+        portfolioValueAfter: pl24h.portfolioValueCurrent,
+        lossAmount: Math.abs(pl24h.totalPL).toString(),
+        lossPercent: pl24h.lossPercent.toString(),
+        killSwitchThreshold: killSwitchThreshold.toString(),
+        tradesClosed: JSON.stringify(closedTrades)
+      });
+      
+      // Suspend trading
+      await storage.updateTradingSettings(userId, { tradingSuspended: true });
+      
+      return {
+        triggered: true,
+        eventType: 'kill_switch',
+        message: `🚨 Kill Switch Triggered: Portfolio down ${pl24h.lossPercent.toFixed(2)}% in last 24h. All trades closed. Trading suspended.`
+      };
+    }
+    
+    // Check warning threshold
+    if (pl24h.lossPercent >= warningThreshold) {
+      console.log(`   ⚠️  WARNING triggered!`);
+      
+      // Log warning event
+      await storage.createKillSwitchEvent({
+        userId,
+        eventType: 'warning',
+        portfolioValueBefore: pl24h.portfolioValueBefore,
+        portfolioValueAfter: pl24h.portfolioValueCurrent,
+        lossAmount: Math.abs(pl24h.totalPL).toString(),
+        lossPercent: pl24h.lossPercent.toString(),
+        killSwitchThreshold: killSwitchThreshold.toString(),
+        tradesClosed: JSON.stringify([])
+      });
+      
+      return {
+        triggered: true,
+        eventType: 'warning',
+        message: `⚠️ Portfolio down ${pl24h.lossPercent.toFixed(2)}% in last 24h. Approaching Kill Switch limit of ${killSwitchThreshold}%.`
+      };
+    }
+    
+    return { triggered: false, eventType: 'none', message: '' };
+  }
+
+  /**
+   * Close all open trades (called when kill switch triggers)
+   */
+  private async closeAllTrades(userId: string): Promise<any[]> {
+    const activeTrades = await storage.getActiveTrades(userId);
+    const closedTrades = [];
+    
+    console.log(`   Closing ${activeTrades.length} open trades...`);
+    
+    for (const trade of activeTrades) {
+      try {
+        // Get current market price (simplified - would need real-time price)
+        const exitPrice = parseFloat(trade.entryPrice) * 0.99; // Simulate 1% loss
+        
+        // Close the trade
+        const closed = await storage.closeTrade(trade.id, exitPrice, 0, 0);
+        closedTrades.push({
+          symbol: trade.symbol,
+          strategy: trade.strategy,
+          entryPrice: trade.entryPrice,
+          exitPrice: exitPrice.toString(),
+          pnl: closed.realizedPL
+        });
+        
+        console.log(`   ✓ Closed ${trade.symbol}: ${closed.realizedPL}`);
+      } catch (error) {
+        console.error(`   ✗ Failed to close ${trade.symbol}:`, error);
+      }
+    }
+    
+    return closedTrades;
   }
 }
