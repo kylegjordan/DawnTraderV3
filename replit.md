@@ -14,10 +14,11 @@ A long-only, spot-trading cryptocurrency day trading web application that automa
    - Conversation management (create, rename, delete)
 
 2. Added timezone and time format display settings:
-   - Timezone selection dropdown with major world timezones (default: Asia/Dubai - Abu Dhabi/UAE)
+   - Timezone selection dropdown with major world timezones including Mikolajki Pomorskie, Poland (default: Asia/Dubai - Abu Dhabi/UAE)
    - 12hr/24hr time format toggle (default: 12hr)
    - Settings persist across sessions
-   - Future-ready for time display formatting throughout the application
+   - Time widget in top bar now displays current time using selected timezone and format
+   - Real-time clock updates every second with timezone abbreviation (e.g., CET, EST, GST)
 
 **Previous Enhancement (Oct 2, 2025)**: Implemented comprehensive GPT-5 integration with database access, Ask→Confirm→Update flow for settings changes, complete audit logging, and error diagnosis capabilities.
 
