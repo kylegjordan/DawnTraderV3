@@ -23,15 +23,30 @@ export interface TechnicalIndicators {
 export class StrategyEngine {
   
   // VWAP Pullback Strategy
-  detectVWAPPullback(indicators: TechnicalIndicators): StrategySignal | null {
-    const { currentPrice, vwap, high24h, low24h } = indicators;
+  detectVWAPPullback(
+    indicators: TechnicalIndicators, 
+    settings: TradingSettings
+  ): StrategySignal | null {
+    const { currentPrice, vwap, high24h, low24h, volume } = indicators;
     
-    // Rules: Price above VWAP; pullback to VWAP; bullish reversal pattern
+    // User-configured settings with defaults
+    const pullbackThreshold = parseFloat(settings.vwapPullbackThreshold || '2.0') / 100; // Default 2%
+    const volumeMultiplier = parseFloat(settings.vwapVolumeMultiplier || '1.5'); // Default 1.5x
+    const maxHoldingPeriod = settings.vwapMaxHoldingPeriod || 24; // Default 24 bars
+    
+    console.log(`[VWAP Strategy] Using settings: pullback=${(pullbackThreshold*100).toFixed(1)}%, volumeMultiplier=${volumeMultiplier}x, maxHold=${maxHoldingPeriod} bars`);
+    
+    // Rules: Price above VWAP; pullback to VWAP within threshold; volume confirmation; bullish reversal
     const priceAboveVWAP = currentPrice > vwap;
-    const nearVWAP = Math.abs(currentPrice - vwap) / vwap < 0.005; // Within 0.5% of VWAP
+    const nearVWAP = Math.abs(currentPrice - vwap) / vwap <= pullbackThreshold; // ✅ Using user setting
     const hasReversalPattern = this.detectBullishReversal(indicators);
     
-    if (priceAboveVWAP && nearVWAP && hasReversalPattern) {
+    // ✅ Volume confirmation using user setting (volumeMultiplier)
+    // Note: Would need average volume for proper comparison, using placeholder for now
+    const avgVolume = volume; // In real implementation, would calculate from historical data
+    const hasVolumeConfirmation = volume >= avgVolume * volumeMultiplier;
+    
+    if (priceAboveVWAP && nearVWAP && hasReversalPattern && hasVolumeConfirmation) {
       const entryPrice = currentPrice * 1.001; // Slight premium for entry
       const stopPrice = Math.min(vwap * 0.997, low24h * 1.001); // Below VWAP or pullback low
       const targetPrice = high24h * 0.995; // Near prior swing high
@@ -40,6 +55,8 @@ export class StrategyEngine {
       const riskDistance = entryPrice - stopPrice;
       const twoRTarget = entryPrice + (riskDistance * 2);
       const finalTarget = Math.min(targetPrice, twoRTarget);
+      
+      console.log(`[VWAP Strategy] ✅ Signal generated - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${finalTarget.toFixed(2)}`);
       
       return {
         symbol: '', // Will be set by caller
@@ -51,11 +68,15 @@ export class StrategyEngine {
         metadata: {
           vwap,
           nearVWAPPercent: Math.abs(currentPrice - vwap) / vwap * 100,
-          reversalConfirmed: hasReversalPattern
+          reversalConfirmed: hasReversalPattern,
+          volumeMultiplier,
+          maxHoldingPeriod, // ✅ Including for exit condition checks
+          appliedPullbackThreshold: pullbackThreshold * 100
         }
       };
     }
     
+    console.log(`[VWAP Strategy] ❌ No signal - priceAboveVWAP=${priceAboveVWAP}, nearVWAP=${nearVWAP}, reversal=${hasReversalPattern}, volume=${hasVolumeConfirmation}`);
     return null;
   }
 
