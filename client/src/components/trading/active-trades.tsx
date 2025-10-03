@@ -6,6 +6,8 @@ import { useTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Trade } from "@/lib/types";
+import { useQuery } from "@tanstack/react-query";
+import { formatTime } from "@/lib/timezone";
 
 const strategyColors = {
   vwap_pullback: "bg-primary/10 text-primary",
@@ -28,6 +30,11 @@ function TradeRow({ trade }: { trade: Trade }) {
   const unrealizedPL = (currentPrice - entryPrice) * parseFloat(trade.quantity);
   const unrealizedPLPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
   const unrealizedR = unrealizedPL / parseFloat(trade.riskAmount);
+  
+  // Fetch user settings for timezone conversion
+  const { data: settings } = useQuery({ 
+    queryKey: ['/api/settings'],
+  });
   
   const handleClose = async () => {
     try {
@@ -64,12 +71,10 @@ function TradeRow({ trade }: { trade: Trade }) {
           <div>
             <div className="font-semibold text-foreground">{trade.symbol}</div>
             <div className="text-xs text-muted-foreground">
-              {new Date(trade.entryTime).toLocaleTimeString('en-US', { 
-                hour12: false, 
-                timeZone: 'UTC',
-                hour: '2-digit',
-                minute: '2-digit'
-              })} UTC
+              {settings && formatTime(trade.entryTime, {
+                timezone: settings.timezone || 'Asia/Dubai',
+                timeFormat: settings.timeFormat || '12hr'
+              })}
             </div>
           </div>
         </div>

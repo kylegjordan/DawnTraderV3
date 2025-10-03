@@ -7,6 +7,8 @@ import { ArrowRight, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Trade } from "@/lib/types";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { formatTime } from "@/lib/timezone";
 
 const strategyColors = {
   vwap_pullback: "bg-primary/10 text-primary",
@@ -30,6 +32,11 @@ function TradeRow({ trade }: { trade: Trade }) {
   
   const isProfit = realizedPL > 0;
   
+  // Fetch user settings for timezone conversion
+  const { data: settings } = useQuery({ 
+    queryKey: ['/api/settings'],
+  });
+  
   const getSymbolColor = (symbol: string) => {
     if (symbol.includes('BTC')) return 'text-orange-500';
     if (symbol.includes('ETH')) return 'text-blue-500';
@@ -49,12 +56,10 @@ function TradeRow({ trade }: { trade: Trade }) {
   return (
     <tr className="trade-row transition-colors" data-testid={`recent-trade-${trade.id}`}>
       <td className="px-4 py-3 text-sm text-muted-foreground">
-        {trade.exitTime 
-          ? new Date(trade.exitTime).toLocaleTimeString('en-US', { 
-              hour12: false, 
-              timeZone: 'UTC',
-              hour: '2-digit',
-              minute: '2-digit'
+        {trade.exitTime && settings
+          ? formatTime(trade.exitTime, {
+              timezone: settings.timezone || 'Asia/Dubai',
+              timeFormat: settings.timeFormat || '12hr'
             })
           : 'N/A'
         }

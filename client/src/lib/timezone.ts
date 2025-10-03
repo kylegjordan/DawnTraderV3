@@ -58,7 +58,19 @@ export function getCurrentTimeLocal(timezone: string, timeFormat: '12hr' | '24hr
 }
 
 export function getTimezoneAbbr(timezone: string): string {
-  return dayjs().tz(timezone).format('z');
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'short'
+    });
+    
+    const parts = formatter.formatToParts(new Date());
+    const tzPart = parts.find(part => part.type === 'timeZoneName');
+    return tzPart?.value || timezone.split('/').pop() || 'Local';
+  } catch (error) {
+    // Fallback to last part of timezone string
+    return timezone.split('/').pop() || 'Local';
+  }
 }
 
 export function formatTimestampWithTZ(

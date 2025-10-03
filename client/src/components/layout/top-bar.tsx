@@ -1,4 +1,4 @@
-import { Menu, Bell, Download, Clock } from "lucide-react";
+import { Menu, Bell, Download, Clock, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
+import { getCurrentTimeUTC, getCurrentTimeLocal, getTimezoneAbbr } from "@/lib/timezone";
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -24,40 +25,27 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   } = useTrading();
   const { exportTrades, isExporting } = useMarket();
   const { toast } = useToast();
-  const [currentTime, setCurrentTime] = useState<string>('');
+  const [utcTime, setUtcTime] = useState<string>('');
+  const [localTime, setLocalTime] = useState<string>('');
+  const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
 
   // Fetch user settings for timezone and time format
   const { data: settings } = useQuery({ 
     queryKey: ['/api/settings'],
   });
 
-  // Update time display
+  // Update dual time display (UTC + Local)
   useEffect(() => {
     const updateTime = () => {
-      const now = new Date();
       const timezone = settings?.timezone || 'Asia/Dubai';
       const timeFormat = settings?.timeFormat || '12hr';
       
-      // Format time according to user preferences
-      const options: Intl.DateTimeFormatOptions = {
-        timeZone: timezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: timeFormat === '12hr'
-      };
+      // Update UTC time
+      setUtcTime(getCurrentTimeUTC());
       
-      const formattedTime = new Intl.DateTimeFormat('en-US', options).format(now);
-      
-      // Get timezone abbreviation
-      const tzAbbr = new Intl.DateTimeFormat('en-US', { 
-        timeZone: timezone, 
-        timeZoneName: 'short' 
-      })
-        .formatToParts(now)
-        .find(part => part.type === 'timeZoneName')?.value || '';
-      
-      setCurrentTime(`${formattedTime} ${tzAbbr}`);
+      // Update local time with timezone abbreviation
+      setLocalTime(getCurrentTimeLocal(timezone, timeFormat));
+      setLocalTzAbbr(getTimezoneAbbr(timezone));
     };
 
     updateTime();
@@ -208,12 +196,29 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         
         {/* Right Actions */}
         <div className="flex items-center gap-3">
-          {/* Time Display */}
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-mono text-foreground" data-testid="text-current-time">
-              {currentTime}
-            </span>
+          {/* Dual Time Display: UTC + Local */}
+          <div className="hidden md:flex items-center gap-3">
+            {/* UTC Time */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md">
+              <Globe className="w-4 h-4 text-muted-foreground" />
+              <div className="flex flex-col">
+                <span className="text-[10px] text-muted-foreground leading-none">UTC</span>
+                <span className="text-sm font-mono text-foreground leading-tight" data-testid="text-utc-time">
+                  {utcTime}
+                </span>
+              </div>
+            </div>
+            
+            {/* Local Time */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-md border border-primary/20">
+              <Clock className="w-4 h-4 text-primary" />
+              <div className="flex flex-col">
+                <span className="text-[10px] text-primary leading-none">{localTzAbbr}</span>
+                <span className="text-sm font-mono text-foreground leading-tight" data-testid="text-local-time">
+                  {localTime}
+                </span>
+              </div>
+            </div>
           </div>
           
           {/* Notifications */}

@@ -4,9 +4,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAI } from "@/hooks/use-trading";
 import { Lightbulb, Zap, ArrowRight, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { formatTime } from "@/lib/timezone";
 
 export default function AIInsights() {
   const { aiReports, reportsLoading } = useAI();
+  
+  // Fetch user settings for timezone conversion
+  const { data: settings } = useQuery({ 
+    queryKey: ['/api/settings'],
+  });
   
   // Get the most recent daily report
   const latestReport = aiReports.find(report => report.reportType === 'daily');
@@ -91,7 +98,10 @@ export default function AIInsights() {
               <div className="flex-1">
                 <CardTitle className="text-lg">Daily Performance Summary</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Updated {latestReport ? new Date(latestReport.generatedAt).toLocaleTimeString() : '5 minutes ago'}
+                  Updated {latestReport && settings ? formatTime(latestReport.generatedAt, {
+                    timezone: settings.timezone || 'Asia/Dubai',
+                    timeFormat: settings.timeFormat || '12hr'
+                  }) : '5 minutes ago'}
                 </p>
               </div>
             </div>
