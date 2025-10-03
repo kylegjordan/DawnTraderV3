@@ -10,7 +10,6 @@ import Settings from "@/pages/settings";
 import WatchlistPage from "@/pages/watchlist";
 import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
-import AIAssistant from "@/components/ai/ai-assistant";
 import { useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import NotFound from "@/pages/not-found";
@@ -43,8 +42,6 @@ function Router() {
           <Route component={NotFound} />
         </Switch>
       </main>
-      
-      <AIAssistant />
       
       {isMobile && sidebarOpen && (
         <div 
