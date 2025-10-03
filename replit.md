@@ -5,7 +5,18 @@
 A long-only, spot-trading cryptocurrency day trading web application that automates trading strategies on Kraken markets. The application scans markets hourly, monitors shortlisted pairs in real-time, and executes three distinct strategies: VWAP Pullback, ABCD Long, and SMA Trend Ride. It enforces disciplined risk management with configurable parameters, supports both live and paper trading modes, and integrates OpenAI's GPT-5 for AI-powered analysis, conversational assistance, and intelligent system management. The platform provides comprehensive trade tracking, performance analytics, tax-ready export functionality, audit trails for all AI actions, and error diagnosis capabilities through a responsive dashboard interface optimized for Android and Windows.
 
 **Recent Enhancement (Oct 3, 2025)**: 
-1. **Settings Page Reorganization with Beginner-Friendly Interface**:
+1. **Daily Loss Kill Switch Feature**:
+   - **Automatic Trading Suspension**: System automatically stops trading when 24-hour rolling losses exceed configurable threshold (default: 7%)
+   - **Warning System**: Pre-emptive alerts when losses reach warning trigger (default: 75% of kill switch = -5.25%)
+   - **Emergency Position Closure**: All open trades automatically closed at market when kill switch activates
+   - **Comprehensive Event Logging**: Complete audit trail in `killSwitchEvents` table with P/L snapshots, closed trade details, and timestamps
+   - **Kill Switch Screen**: Dedicated UI showing event summary, portfolio breakdown, closed trade list, and historical events
+   - **Safe Defaults & Reset**: Settings form initializes to 7.00%/75.00% defaults, handleReset restores defaults, tradingSuspended flag prevents new trades
+   - **User-Controlled Recovery**: Manual reset button allows users to resume trading after reviewing losses and adjusting settings
+   - **Settings Access During Suspension**: Auto-redirect allows access to /settings and /kill-switch while suspended for threshold adjustments
+   - **Robust Error Handling**: Safe JSON parsing of closed trades with try-catch and array validation prevents crashes
+
+2. **Settings Page Reorganization with Beginner-Friendly Interface**:
    - **Four-Tab Layout**: Screener Filters → Portfolio Guardrails → Strategies → Notifications
    - **Plain-Language Descriptions**: Every setting has explanatory text for beginners
    - **Collapsible Strategy Sections**: Three strategy cards (VWAP Pullback, ABCD Long, SMA Trend Ride) with detailed parameters
