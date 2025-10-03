@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAI } from "@/hooks/use-trading";
 import { Brain, Search, FileText, TrendingUp, Target, MessageSquare, History, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ChatPanel } from "@/components/ai/chat-panel";
+import { ChatContainer } from "@/components/ai/chat-container";
 import { AuditLogViewer } from "@/components/ai/audit-log-viewer";
 import { ErrorLogViewer } from "@/components/ai/error-log-viewer";
 
@@ -94,7 +94,7 @@ export default function Analysis() {
 
         {/* Chat Assistant Tab */}
         <TabsContent value="chat">
-          <ChatPanel />
+          <ChatContainer />
         </TabsContent>
 
         {/* Reports Tab */}
