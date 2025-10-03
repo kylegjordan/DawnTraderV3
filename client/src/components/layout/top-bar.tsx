@@ -221,6 +221,17 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
             </div>
           </div>
           
+          {/* CSV Export */}
+          <Button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+            data-testid="button-export"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden md:inline">Export CSV</span>
+          </Button>
+          
           {/* Notifications */}
           <Button
             variant="ghost"
@@ -233,17 +244,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               variant="destructive" 
               className="absolute -top-1 -right-1 w-2 h-2 p-0 rounded-full"
             />
-          </Button>
-          
-          {/* CSV Export */}
-          <Button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-            data-testid="button-export"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden md:inline">Export CSV</span>
           </Button>
         </div>
       </div>
