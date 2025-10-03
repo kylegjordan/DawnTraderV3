@@ -517,6 +517,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI Conversations - Multiple chats management
+  app.get('/api/conversations', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const conversations = await storage.getAIConversations(userId);
+      res.json(conversations);
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      res.status(500).json({ error: 'Failed to fetch conversations' });
+    }
+  });
+
+  app.get('/api/conversations/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const conversation = await storage.getAIConversationById(id);
+      
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+      
+      res.json(conversation);
+    } catch (error) {
+      console.error('Error fetching conversation:', error);
+      res.status(500).json({ error: 'Failed to fetch conversation' });
+    }
+  });
+
+  app.post('/api/conversations', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { title } = req.body;
+      
+      const conversation = await storage.createAIConversation({
+        userId,
+        title: title || 'New Chat',
+        messages: [],
+        context: {},
+        maxContextMessages: 20
+      });
+      
+      res.json(conversation);
+    } catch (error) {
+      console.error('Error creating conversation:', error);
+      res.status(500).json({ error: 'Failed to create conversation' });
+    }
+  });
+
+  app.patch('/api/conversations/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, maxContextMessages } = req.body;
+      
+      const updates: Partial<any> = {};
+      if (title !== undefined) updates.title = title;
+      if (maxContextMessages !== undefined) updates.maxContextMessages = maxContextMessages;
+      
+      const conversation = await storage.updateAIConversationById(id, updates);
+      res.json(conversation);
+    } catch (error) {
+      console.error('Error updating conversation:', error);
+      res.status(500).json({ error: 'Failed to update conversation' });
+    }
+  });
+
+  app.delete('/api/conversations/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteAIConversation(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      res.status(500).json({ error: 'Failed to delete conversation' });
+    }
+  });
+
+  app.post('/api/conversations/:id/message', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { id } = req.params;
+      const { message, context } = req.body;
+      
+      const result = await aiAnalyst.chatWithAssistant(userId, message, context, id);
+      res.json(result);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      res.status(500).json({ error: 'Failed to send message' });
+    }
+  });
+
+  // Chat cost tracking
+  app.get('/api/chat-logs', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { conversationId, limit } = req.query;
+      
+      const logs = await storage.getChatLogs(
+        userId,
+        conversationId as string | undefined,
+        limit ? parseInt(limit as string) : 50
+      );
+      res.json(logs);
+    } catch (error) {
+      console.error('Error fetching chat logs:', error);
+      res.status(500).json({ error: 'Failed to fetch chat logs' });
+    }
+  });
+
+  app.get('/api/chat-costs', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { fromDate, toDate } = req.query;
+      
+      const summary = await storage.getChatCostSummary(
+        userId,
+        fromDate ? new Date(fromDate as string) : undefined,
+        toDate ? new Date(toDate as string) : undefined
+      );
+      res.json(summary);
+    } catch (error) {
+      console.error('Error fetching chat costs:', error);
+      res.status(500).json({ error: 'Failed to fetch chat costs' });
+    }
+  });
+
   app.post('/api/ai/error-logs/:id/resolve', async (req, res) => {
     try {
       const { id } = req.params;

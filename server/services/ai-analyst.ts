@@ -2,6 +2,12 @@ import OpenAI from "openai";
 import { storage } from '../storage';
 import { Trade, TradingSettings, AIReport, InsertAIAuditLog, InsertErrorLog } from '@shared/schema';
 import { databaseQueryService } from './database-query';
+import { 
+  estimateMessagesTokens, 
+  calculateCost, 
+  trimMessagesToCount, 
+  trimMessagesToTokenLimit 
+} from '../utils/token-counter';
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ 
@@ -21,6 +27,12 @@ export interface ChatResponse {
   updatedContext: any;
   settingsProposal?: SettingsChangeProposal;
   auditLogId?: string;
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCost: number;
+  };
 }
 
 export class AIAnalyst {
@@ -187,18 +199,29 @@ export class AIAnalyst {
   async chatWithAssistant(
     userId: string,
     message: string,
-    context?: any
+    context?: any,
+    conversationId?: string
   ): Promise<ChatResponse> {
     try {
       // Get or create conversation
-      let conversation = await storage.getAIConversation(userId);
-      
-      if (!conversation) {
-        conversation = await storage.updateAIConversation(userId, {
-          userId,
-          messages: [],
-          context: context || {}
-        });
+      let conversation;
+      if (conversationId) {
+        conversation = await storage.getAIConversationById(conversationId);
+        if (!conversation) {
+          throw new Error('Conversation not found');
+        }
+      } else {
+        // Legacy: get most recent conversation
+        conversation = await storage.getAIConversation(userId);
+        if (!conversation) {
+          conversation = await storage.createAIConversation({
+            userId,
+            title: 'New Chat',
+            messages: [],
+            context: context || {},
+            maxContextMessages: 20
+          });
+        }
       }
 
       // Get comprehensive trading data for context
@@ -247,26 +270,57 @@ export class AIAnalyst {
         Respond naturally and conversationally. Keep responses concise but helpful.
       `;
 
+      // Prepare conversation messages with trimming
+      const maxMessages = conversation.maxContextMessages || 20;
+      const conversationMessages = ((conversation.messages as any[]) || []);
+      
+      // Trim to max message count first
+      const trimmedByCount = trimMessagesToCount(conversationMessages, maxMessages);
+      
+      // Build full message array
       const messages = [
         { role: "system", content: contextMessage },
-        ...((conversation.messages as any[]) || []).slice(-10), // Last 10 messages for context
+        ...trimmedByCount,
         { role: "user", content: message }
       ];
+      
+      // Trim to token limit (4000 tokens to be safe)
+      const finalMessages = trimMessagesToTokenLimit(messages, 4000);
+      
+      // Estimate input tokens
+      const inputTokens = estimateMessagesTokens(finalMessages);
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: messages as any,
+        model: "gpt-4o",
+        messages: finalMessages as any,
         max_completion_tokens: 1024
       });
 
       const assistantResponse = response.choices[0].message.content || "I'm sorry, I couldn't process that request.";
+      
+      // Get actual token usage from response (or estimate if not available)
+      const actualInputTokens = response.usage?.prompt_tokens || inputTokens;
+      const actualOutputTokens = response.usage?.completion_tokens || estimateMessagesTokens([{ role: "assistant", content: assistantResponse }]);
+      const totalTokens = actualInputTokens + actualOutputTokens;
+      const estimatedCost = calculateCost(actualInputTokens, actualOutputTokens, 'gpt-4o');
+      
+      // Log token usage and cost
+      await storage.createChatLog({
+        userId,
+        conversationId: conversation.id,
+        inputTokens: actualInputTokens,
+        outputTokens: actualOutputTokens,
+        totalTokens,
+        estimatedCost: estimatedCost.toString(),
+        model: 'gpt-4o'
+      });
 
       // Check if response includes a settings change suggestion
       const settingsProposal = this.detectSettingsProposal(assistantResponse, settings || null);
 
       // Update conversation
       const updatedMessages = [
-        ...((conversation.messages as any[]) || []),
+        ...conversationMessages,
         { role: "user", content: message, timestamp: new Date() },
         { role: "assistant", content: assistantResponse, timestamp: new Date() }
       ];
@@ -278,8 +332,7 @@ export class AIAnalyst {
         ...(context || {})
       };
 
-      await storage.updateAIConversation(userId, {
-        userId,
+      await storage.updateAIConversationById(conversation.id, {
         messages: updatedMessages,
         context: updatedContext
       });
@@ -295,7 +348,13 @@ export class AIAnalyst {
       return {
         response: assistantResponse,
         updatedContext,
-        settingsProposal
+        settingsProposal,
+        tokenUsage: {
+          inputTokens: actualInputTokens,
+          outputTokens: actualOutputTokens,
+          totalTokens,
+          estimatedCost
+        }
       };
     } catch (error) {
       console.error('Error in AI chat:', error);

@@ -113,9 +113,25 @@ export const aiReports = pgTable("ai_reports", {
 export const aiConversations = pgTable("ai_conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
+  title: text("title").default("New Chat"), // Conversation title
   messages: jsonb("messages").notNull(), // Array of {role, content, timestamp}
   context: jsonb("context"), // Current trading context
+  maxContextMessages: integer("max_context_messages").default(20), // Max messages to send to GPT
+  createdAt: timestamp("created_at").defaultNow(),
   lastUpdated: timestamp("last_updated").defaultNow(),
+});
+
+// AI chat logs (tracks API usage and costs)
+export const aiChatLogs = pgTable("ai_chat_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  conversationId: varchar("conversation_id").references(() => aiConversations.id),
+  inputTokens: integer("input_tokens").notNull(),
+  outputTokens: integer("output_tokens").notNull(),
+  totalTokens: integer("total_tokens").notNull(),
+  estimatedCost: decimal("estimated_cost", { precision: 10, scale: 6 }).notNull(), // in USD
+  model: varchar("model", { length: 50 }).default("gpt-4o"), // Model used
+  timestamp: timestamp("timestamp").defaultNow(),
 });
 
 // Price data cache
@@ -205,10 +221,22 @@ export const aiReportsRelations = relations(aiReports, ({ one }) => ({
   }),
 }));
 
-export const aiConversationsRelations = relations(aiConversations, ({ one }) => ({
+export const aiConversationsRelations = relations(aiConversations, ({ one, many }) => ({
   user: one(users, {
     fields: [aiConversations.userId],
     references: [users.id],
+  }),
+  chatLogs: many(aiChatLogs),
+}));
+
+export const aiChatLogsRelations = relations(aiChatLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [aiChatLogs.userId],
+    references: [users.id],
+  }),
+  conversation: one(aiConversations, {
+    fields: [aiChatLogs.conversationId],
+    references: [aiConversations.id],
   }),
 }));
 
@@ -240,7 +268,13 @@ export const insertAIReportSchema = createInsertSchema(aiReports).omit({
 
 export const insertAIConversationSchema = createInsertSchema(aiConversations).omit({
   id: true,
+  createdAt: true,
   lastUpdated: true,
+});
+
+export const insertAIChatLogSchema = createInsertSchema(aiChatLogs).omit({
+  id: true,
+  timestamp: true,
 });
 
 export const insertPriceDataSchema = createInsertSchema(priceData).omit({
@@ -280,6 +314,9 @@ export type AIReport = typeof aiReports.$inferSelect;
 
 export type InsertAIConversation = z.infer<typeof insertAIConversationSchema>;
 export type AIConversation = typeof aiConversations.$inferSelect;
+
+export type InsertAIChatLog = z.infer<typeof insertAIChatLogSchema>;
+export type AIChatLog = typeof aiChatLogs.$inferSelect;
 
 export type InsertPriceData = z.infer<typeof insertPriceDataSchema>;
 export type PriceData = typeof priceData.$inferSelect;

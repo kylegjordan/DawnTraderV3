@@ -5,6 +5,7 @@ import {
   trades,
   aiReports,
   aiConversations,
+  aiChatLogs,
   priceData,
   databaseSizeLogs,
   aiAuditLog,
@@ -21,6 +22,8 @@ import {
   type InsertAIReport,
   type AIConversation,
   type InsertAIConversation,
+  type AIChatLog,
+  type InsertAIChatLog,
   type PriceData,
   type InsertPriceData,
   type DatabaseSizeLog,
@@ -61,8 +64,24 @@ export interface IStorage {
   // AI methods
   getAIReports(userId: string, type?: string, limit?: number): Promise<AIReport[]>;
   createAIReport(report: InsertAIReport): Promise<AIReport>;
-  getAIConversation(userId: string): Promise<AIConversation | undefined>;
-  updateAIConversation(userId: string, conversation: InsertAIConversation): Promise<AIConversation>;
+  
+  // AI Conversations - multiple chats support
+  getAIConversations(userId: string): Promise<AIConversation[]>;
+  getAIConversationById(conversationId: string): Promise<AIConversation | undefined>;
+  getAIConversation(userId: string): Promise<AIConversation | undefined>; // Legacy - gets most recent
+  createAIConversation(conversation: InsertAIConversation): Promise<AIConversation>;
+  updateAIConversation(userId: string, conversation: InsertAIConversation): Promise<AIConversation>; // Legacy
+  updateAIConversationById(conversationId: string, updates: Partial<AIConversation>): Promise<AIConversation>;
+  deleteAIConversation(conversationId: string): Promise<void>;
+  
+  // AI Chat Logs - cost tracking
+  createChatLog(log: InsertAIChatLog): Promise<AIChatLog>;
+  getChatLogs(userId: string, conversationId?: string, limit?: number): Promise<AIChatLog[]>;
+  getChatCostSummary(userId: string, fromDate?: Date, toDate?: Date): Promise<{
+    totalCost: number;
+    totalTokens: number;
+    requestCount: number;
+  }>;
 
   // Price data methods
   getPriceData(symbol: string, from?: Date, to?: Date): Promise<PriceData[]>;
@@ -282,6 +301,89 @@ export class DatabaseStorage implements IStorage {
       const [result] = await db.insert(aiConversations).values(conversation).returning();
       return result;
     }
+  }
+
+  // AI Conversations - multiple chats support
+  async getAIConversations(userId: string): Promise<AIConversation[]> {
+    return await db
+      .select()
+      .from(aiConversations)
+      .where(eq(aiConversations.userId, userId))
+      .orderBy(desc(aiConversations.lastUpdated));
+  }
+
+  async getAIConversationById(conversationId: string): Promise<AIConversation | undefined> {
+    const [conversation] = await db
+      .select()
+      .from(aiConversations)
+      .where(eq(aiConversations.id, conversationId))
+      .limit(1);
+    return conversation || undefined;
+  }
+
+  async createAIConversation(conversation: InsertAIConversation): Promise<AIConversation> {
+    const [result] = await db.insert(aiConversations).values(conversation).returning();
+    return result;
+  }
+
+  async updateAIConversationById(conversationId: string, updates: Partial<AIConversation>): Promise<AIConversation> {
+    const [result] = await db
+      .update(aiConversations)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(eq(aiConversations.id, conversationId))
+      .returning();
+    return result;
+  }
+
+  async deleteAIConversation(conversationId: string): Promise<void> {
+    await db.delete(aiConversations).where(eq(aiConversations.id, conversationId));
+  }
+
+  // AI Chat Logs - cost tracking
+  async createChatLog(log: InsertAIChatLog): Promise<AIChatLog> {
+    const [result] = await db.insert(aiChatLogs).values(log).returning();
+    return result;
+  }
+
+  async getChatLogs(userId: string, conversationId?: string, limit = 50): Promise<AIChatLog[]> {
+    const conditions = [eq(aiChatLogs.userId, userId)];
+    
+    if (conversationId) {
+      conditions.push(eq(aiChatLogs.conversationId, conversationId));
+    }
+    
+    return await db
+      .select()
+      .from(aiChatLogs)
+      .where(and(...conditions))
+      .orderBy(desc(aiChatLogs.timestamp))
+      .limit(limit);
+  }
+
+  async getChatCostSummary(userId: string, fromDate?: Date, toDate?: Date): Promise<{
+    totalCost: number;
+    totalTokens: number;
+    requestCount: number;
+  }> {
+    const conditions = [eq(aiChatLogs.userId, userId)];
+    
+    if (fromDate) {
+      conditions.push(gte(aiChatLogs.timestamp, fromDate));
+    }
+    if (toDate) {
+      conditions.push(lte(aiChatLogs.timestamp, toDate));
+    }
+    
+    const logs = await db
+      .select()
+      .from(aiChatLogs)
+      .where(and(...conditions));
+    
+    return {
+      totalCost: logs.reduce((sum, log) => sum + parseFloat(log.estimatedCost), 0),
+      totalTokens: logs.reduce((sum, log) => sum + log.totalTokens, 0),
+      requestCount: logs.length
+    };
   }
 
   // Price data methods
