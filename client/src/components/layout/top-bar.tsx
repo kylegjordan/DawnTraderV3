@@ -7,6 +7,7 @@ import { useMarket } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -25,20 +26,44 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const { toast } = useToast();
   const [currentTime, setCurrentTime] = useState<string>('');
 
+  // Fetch user settings for timezone and time format
+  const { data: settings } = useQuery({ 
+    queryKey: ['/api/settings'],
+  });
+
   // Update time display
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      const hours = String(now.getUTCHours()).padStart(2, '0');
-      const minutes = String(now.getUTCMinutes()).padStart(2, '0');
-      const seconds = String(now.getUTCSeconds()).padStart(2, '0');
-      setCurrentTime(`${hours}:${minutes}:${seconds} UTC`);
+      const timezone = settings?.timezone || 'Asia/Dubai';
+      const timeFormat = settings?.timeFormat || '12hr';
+      
+      // Format time according to user preferences
+      const options: Intl.DateTimeFormatOptions = {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: timeFormat === '12hr'
+      };
+      
+      const formattedTime = new Intl.DateTimeFormat('en-US', options).format(now);
+      
+      // Get timezone abbreviation
+      const tzAbbr = new Intl.DateTimeFormat('en-US', { 
+        timeZone: timezone, 
+        timeZoneName: 'short' 
+      })
+        .formatToParts(now)
+        .find(part => part.type === 'timeZoneName')?.value || '';
+      
+      setCurrentTime(`${formattedTime} ${tzAbbr}`);
     };
 
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [settings?.timezone, settings?.timeFormat]);
 
   const handleTradingToggle = async (enabled: boolean) => {
     try {
