@@ -22,7 +22,9 @@ import {
   TrendingUp,
   AlertTriangle,
   Save,
-  RotateCcw
+  RotateCcw,
+  Clock,
+  Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +56,11 @@ export default function Settings() {
     telegramNotifications: false,
     quietHoursEnabled: false,
     quietHoursStart: '22:00',
-    quietHoursEnd: '08:00'
+    quietHoursEnd: '08:00',
+    
+    // Display Settings
+    timezone: 'Asia/Dubai',
+    timeFormat: '12hr'
   });
 
   useEffect(() => {
@@ -76,7 +82,9 @@ export default function Settings() {
         telegramNotifications: false,
         quietHoursEnabled: false,
         quietHoursStart: '22:00',
-        quietHoursEnd: '08:00'
+        quietHoursEnd: '08:00',
+        timezone: settings.timezone || 'Asia/Dubai',
+        timeFormat: settings.timeFormat || '12hr'
       });
     }
   }, [settings]);
@@ -94,7 +102,9 @@ export default function Settings() {
         slippageToleranceMajors: formData.slippageToleranceMajors,
         slippageToleranceMidcaps: formData.slippageToleranceMidcaps,
         slippageToleranceSmall: formData.slippageToleranceSmall,
-        aiCapitalAllocation: formData.aiCapitalAllocation
+        aiCapitalAllocation: formData.aiCapitalAllocation,
+        timezone: formData.timezone,
+        timeFormat: formData.timeFormat
       };
 
       await updateSettings(settingsUpdate);
@@ -131,7 +141,9 @@ export default function Settings() {
         telegramNotifications: false,
         quietHoursEnabled: false,
         quietHoursStart: '22:00',
-        quietHoursEnd: '08:00'
+        quietHoursEnd: '08:00',
+        timezone: settings.timezone || 'Asia/Dubai',
+        timeFormat: settings.timeFormat || '12hr'
       });
     }
   };
@@ -601,6 +613,77 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Display Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="w-5 h-5 text-primary" />
+                Display Settings
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Configure timezone and time format preferences
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="timezone" className="flex items-center gap-2">
+                    <Globe className="w-4 h-4" />
+                    Timezone
+                  </Label>
+                  <Select
+                    value={formData.timezone}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, timezone: value }))}
+                  >
+                    <SelectTrigger id="timezone" data-testid="select-timezone">
+                      <SelectValue placeholder="Select timezone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Asia/Dubai">Abu Dhabi / Dubai (UAE)</SelectItem>
+                      <SelectItem value="America/New_York">New York (EST)</SelectItem>
+                      <SelectItem value="America/Los_Angeles">Los Angeles (PST)</SelectItem>
+                      <SelectItem value="America/Chicago">Chicago (CST)</SelectItem>
+                      <SelectItem value="Europe/London">London (GMT)</SelectItem>
+                      <SelectItem value="Europe/Paris">Paris (CET)</SelectItem>
+                      <SelectItem value="Europe/Berlin">Berlin (CET)</SelectItem>
+                      <SelectItem value="Asia/Tokyo">Tokyo (JST)</SelectItem>
+                      <SelectItem value="Asia/Hong_Kong">Hong Kong (HKT)</SelectItem>
+                      <SelectItem value="Asia/Singapore">Singapore (SGT)</SelectItem>
+                      <SelectItem value="Asia/Shanghai">Shanghai (CST)</SelectItem>
+                      <SelectItem value="Australia/Sydney">Sydney (AEST)</SelectItem>
+                      <SelectItem value="Pacific/Auckland">Auckland (NZST)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    All timestamps will be displayed in this timezone
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="time-format" className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Time Format
+                  </Label>
+                  <Select
+                    value={formData.timeFormat}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, timeFormat: value }))}
+                  >
+                    <SelectTrigger id="time-format" data-testid="select-time-format">
+                      <SelectValue placeholder="Select time format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="12hr">12-hour (2:30 PM)</SelectItem>
+                      <SelectItem value="24hr">24-hour (14:30)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    How times are displayed throughout the app
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
