@@ -1009,6 +1009,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test endpoint for simulating kill switch scenarios
+  app.post('/api/test/simulate-loss', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { scenario } = req.body; // 'warning', 'kill', or custom loss %
+      
+      const settings = await storage.getTradingSettings(userId);
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found' });
+      }
+
+      const killSwitchPercent = parseFloat(settings.dailyLossKillSwitch || '7.00');
+      const warningTriggerPercent = parseFloat(settings.dailyLossWarningTrigger || '75.00');
+      
+      let targetLossPercent: number;
+      
+      if (scenario === 'warning') {
+        // Set loss to warning threshold (e.g., 75% of 7% = -5.25%)
+        targetLossPercent = killSwitchPercent * (warningTriggerPercent / 100);
+      } else if (scenario === 'kill') {
+        // Set loss to just above kill threshold (e.g., -7.5%)
+        targetLossPercent = killSwitchPercent * 1.1;
+      } else if (typeof req.body.lossPercent === 'number') {
+        // Custom loss percentage
+        targetLossPercent = req.body.lossPercent;
+      } else {
+        return res.status(400).json({ error: 'Invalid scenario. Use "warning", "kill", or provide lossPercent' });
+      }
+
+      // Create a simulated losing trade to reach the target loss
+      const riskAmount = parseFloat(settings.riskPerTrade || '150');
+      const lossAmount = (riskAmount / 0.01) * (targetLossPercent / 100); // Scale up the loss
+      
+      const simulatedTrade = await storage.createTrade({
+        userId,
+        symbol: 'BTCUSD',
+        strategy: 'vwap_pullback',
+        mode: 'paper',
+        entryPrice: '50000',
+        quantity: (Math.abs(lossAmount) / 50000).toFixed(8),
+        stopPrice: '49500',
+        targetPrice: '51000',
+        status: 'closed',
+        exitPrice: (50000 - Math.abs(lossAmount) / (Math.abs(lossAmount) / 50000)).toFixed(2),
+        exitTime: new Date(),
+        profitLoss: lossAmount.toString(),
+        rMultiple: '-1.0',
+        riskAmount: riskAmount.toString(),
+        metadata: { test: true, scenario }
+      });
+
+      // Check kill switch after creating the losing trade
+      const result = await riskManager.checkKillSwitch(userId, settings);
+      const updatedSettings = await storage.getTradingSettings(userId);
+
+      res.json({
+        success: true,
+        simulatedTrade,
+        killSwitchResult: result,
+        tradingSuspended: updatedSettings?.tradingSuspended || false,
+        targetLossPercent,
+        actualLossPercent: result.current24hPL
+      });
+    } catch (error: any) {
+      console.error('Test simulate-loss error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Test endpoint to check if trade execution is blocked during suspension
+  app.post('/api/test/attempt-trade', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const settings = await storage.getTradingSettings(userId);
+      
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found' });
+      }
+
+      // Create a test signal
+      const testSignal = {
+        symbol: 'ETHUSD',
+        strategy: 'vwap_pullback' as const,
+        entryPrice: 3000,
+        stopPrice: 2950,
+        targetPrice: 3100,
+        confidence: 0.8,
+        metadata: { test: true }
+      };
+
+      // Run through risk checks
+      const riskCheck = await riskManager.checkPreTradeRisk(userId, testSignal, settings);
+
+      res.json({
+        tradingSuspended: settings.tradingSuspended,
+        riskCheckApproved: riskCheck.approved,
+        riskCheckReason: riskCheck.reason,
+        testSignal
+      });
+    } catch (error: any) {
+      console.error('Test attempt-trade error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Strategy test endpoint - analyze watchlist pairs for signals
   app.post('/api/strategies/test', async (req, res) => {
     try {
