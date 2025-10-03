@@ -125,7 +125,7 @@ export const aiConversations = pgTable("ai_conversations", {
 export const aiChatLogs = pgTable("ai_chat_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
-  conversationId: varchar("conversation_id").references(() => aiConversations.id),
+  conversationId: varchar("conversation_id").references(() => aiConversations.id, { onDelete: 'cascade' }),
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
   totalTokens: integer("total_tokens").notNull(),
