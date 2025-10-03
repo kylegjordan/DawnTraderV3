@@ -3,54 +3,54 @@
 @tailwind utilities;
 
 :root {
-  /* Dark Trading Theme - matching design reference exactly */
+  /* Light Trading Theme - Clean and Professional */
   --radius: 0.5rem;
   
-  --background: hsl(215, 28%, 6%);
-  --foreground: hsl(213, 27%, 94%);
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(222, 47%, 11%);
   
-  --card: hsl(216, 28%, 10%);
-  --card-foreground: hsl(213, 27%, 94%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(222, 47%, 11%);
   
-  --popover: hsl(216, 28%, 12%);
-  --popover-foreground: hsl(213, 27%, 94%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(222, 47%, 11%);
   
-  --primary: hsl(193, 100%, 50%);
-  --primary-foreground: hsl(216, 28%, 10%);
+  --primary: hsl(193, 100%, 45%);
+  --primary-foreground: hsl(0, 0%, 100%);
   
-  --secondary: hsl(217, 25%, 20%);
-  --secondary-foreground: hsl(213, 27%, 94%);
+  --secondary: hsl(210, 40%, 96%);
+  --secondary-foreground: hsl(222, 47%, 11%);
   
-  --muted: hsl(217, 25%, 18%);
-  --muted-foreground: hsl(215, 15%, 65%);
+  --muted: hsl(210, 40%, 96%);
+  --muted-foreground: hsl(215, 16%, 47%);
   
-  --accent: hsl(193, 100%, 50%);
-  --accent-foreground: hsl(216, 28%, 10%);
+  --accent: hsl(193, 100%, 45%);
+  --accent-foreground: hsl(0, 0%, 100%);
   
   --destructive: hsl(0, 84%, 60%);
   --destructive-foreground: hsl(0, 0%, 100%);
   
-  --border: hsl(217, 25%, 20%);
-  --input: hsl(217, 25%, 20%);
-  --ring: hsl(193, 100%, 50%);
+  --border: hsl(214, 32%, 91%);
+  --input: hsl(214, 32%, 91%);
+  --ring: hsl(193, 100%, 45%);
   
-  --chart-1: hsl(193, 100%, 50%);
+  --chart-1: hsl(193, 100%, 45%);
   --chart-2: hsl(142, 76%, 36%);
   --chart-3: hsl(38, 92%, 50%);
   --chart-4: hsl(0, 84%, 60%);
   --chart-5: hsl(271, 76%, 53%);
   
-  --success: hsl(142, 76%, 45%);
+  --success: hsl(142, 76%, 36%);
   --warning: hsl(38, 92%, 50%);
   
-  --sidebar: hsl(216, 28%, 10%);
-  --sidebar-foreground: hsl(213, 27%, 94%);
-  --sidebar-primary: hsl(193, 100%, 50%);
-  --sidebar-primary-foreground: hsl(216, 28%, 10%);
-  --sidebar-accent: hsl(217, 25%, 20%);
-  --sidebar-accent-foreground: hsl(193, 100%, 50%);
-  --sidebar-border: hsl(217, 25%, 20%);
-  --sidebar-ring: hsl(193, 100%, 50%);
+  --sidebar: hsl(0, 0%, 100%);
+  --sidebar-foreground: hsl(222, 47%, 11%);
+  --sidebar-primary: hsl(193, 100%, 45%);
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(210, 40%, 96%);
+  --sidebar-accent-foreground: hsl(193, 100%, 45%);
+  --sidebar-border: hsl(214, 32%, 91%);
+  --sidebar-ring: hsl(193, 100%, 45%);
   
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
@@ -119,12 +119,13 @@
   }
   
   .trade-row:hover {
-    background-color: hsl(217, 25%, 15%);
+    background-color: hsl(210, 40%, 98%);
   }
   
   .metric-card {
-    background: linear-gradient(135deg, hsl(216, 28%, 12%) 0%, hsl(216, 28%, 10%) 100%);
+    background: hsl(0, 0%, 100%);
     border: 1px solid var(--border);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
   }
   
   .scrollbar-thin::-webkit-scrollbar {
