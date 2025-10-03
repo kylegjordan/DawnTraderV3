@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/hooks/use-trading";
 import { 
@@ -16,36 +17,64 @@ import {
   Shield, 
   Brain, 
   Bell, 
-  Key, 
   DollarSign,
   Target,
   TrendingUp,
-  AlertTriangle,
   Save,
   RotateCcw,
-  Clock,
-  Globe
+  ChevronDown,
+  Filter,
+  Activity,
+  LineChart,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { timezones } from "@/lib/timezone";
 
 export default function Settings() {
   const { settings, settingsLoading, updateSettings, isUpdatingSettings } = useTrading();
   const { toast } = useToast();
   
   const [formData, setFormData] = useState({
-    // Risk & Exposure
+    // Global Screener Filters
+    minVolume: '',
+    minDailyRange: '',
+    minPrice: '',
+    maxBidAskSpread: '',
+    excludeStablecoins: true,
+    minDataHistoryDays: 90,
+    allowedTradingPairs: ['USD', 'USDT'],
+    blacklistedSymbols: [] as string[],
+    whitelistedSymbols: [] as string[],
+    
+    // Portfolio Guardrails
     riskPerTrade: '',
     maxExposurePercent: '',
     maxOpenTrades: 3,
-    
-    // Strategy Parameters
     stopBufferPercent: '',
-    smaLength: 20,
-    minVolume: '',
-    minDailyRange: '',
     slippageToleranceMajors: '',
     slippageToleranceMidcaps: '',
     slippageToleranceSmall: '',
+    
+    // VWAP Pullback Strategy
+    vwapTimeframe: 60,
+    vwapPullbackThreshold: '',
+    vwapVolumeMultiplier: '',
+    vwapMaxHoldingPeriod: 24,
+    
+    // ABCD Long Strategy
+    abcdMinConsolidation: 10,
+    abcdBreakoutThreshold: '',
+    abcdVolumeMultiplier: '',
+    abcdExitType: 'target' as 'target' | 'trailing',
+    abcdTargetPercent: '',
+    abcdTrailingStopPercent: '',
+    
+    // SMA Trend Ride Strategy
+    smaLength: 20,
+    smaEntryCondition: 'crossover' as 'above' | 'crossover',
+    smaExitCondition: 'break' as 'break' | 'trailing',
+    smaTrailingStopPercent: '',
     
     // AI Settings
     aiCapitalAllocation: false,
@@ -54,60 +83,77 @@ export default function Settings() {
     emailNotifications: true,
     pushNotifications: true,
     telegramNotifications: false,
-    quietHoursEnabled: false,
-    quietHoursStart: '22:00',
-    quietHoursEnd: '08:00',
     
     // Display Settings
     timezone: 'Asia/Dubai',
-    timeFormat: '12hr'
+    timeFormat: '12hr' as '12hr' | '24hr'
   });
+
+  const [vwapOpen, setVwapOpen] = useState(true);
+  const [abcdOpen, setAbcdOpen] = useState(false);
+  const [smaOpen, setSmaOpen] = useState(false);
 
   useEffect(() => {
     if (settings) {
       setFormData({
+        // Global Screener Filters
+        minVolume: settings.minVolume,
+        minDailyRange: settings.minDailyRange,
+        minPrice: settings.minPrice || '0.01',
+        maxBidAskSpread: settings.maxBidAskSpread || '1.00',
+        excludeStablecoins: settings.excludeStablecoins ?? true,
+        minDataHistoryDays: settings.minDataHistoryDays || 90,
+        allowedTradingPairs: settings.allowedTradingPairs || ['USD', 'USDT'],
+        blacklistedSymbols: settings.blacklistedSymbols || [],
+        whitelistedSymbols: settings.whitelistedSymbols || [],
+        
+        // Portfolio Guardrails
         riskPerTrade: settings.riskPerTrade,
         maxExposurePercent: settings.maxExposurePercent,
         maxOpenTrades: settings.maxOpenTrades,
         stopBufferPercent: settings.stopBufferPercent,
-        smaLength: settings.smaLength,
-        minVolume: settings.minVolume,
-        minDailyRange: settings.minDailyRange,
         slippageToleranceMajors: settings.slippageToleranceMajors,
         slippageToleranceMidcaps: settings.slippageToleranceMidcaps,
         slippageToleranceSmall: settings.slippageToleranceSmall,
+        
+        // VWAP Pullback Strategy
+        vwapTimeframe: settings.vwapTimeframe || 60,
+        vwapPullbackThreshold: settings.vwapPullbackThreshold || '2.00',
+        vwapVolumeMultiplier: settings.vwapVolumeMultiplier || '1.50',
+        vwapMaxHoldingPeriod: settings.vwapMaxHoldingPeriod || 24,
+        
+        // ABCD Long Strategy
+        abcdMinConsolidation: settings.abcdMinConsolidation || 10,
+        abcdBreakoutThreshold: settings.abcdBreakoutThreshold || '1.50',
+        abcdVolumeMultiplier: settings.abcdVolumeMultiplier || '1.50',
+        abcdExitType: (settings.abcdExitType as 'target' | 'trailing') || 'target',
+        abcdTargetPercent: settings.abcdTargetPercent || '3.00',
+        abcdTrailingStopPercent: settings.abcdTrailingStopPercent || '2.00',
+        
+        // SMA Trend Ride Strategy
+        smaLength: settings.smaLength,
+        smaEntryCondition: (settings.smaEntryCondition as 'above' | 'crossover') || 'crossover',
+        smaExitCondition: (settings.smaExitCondition as 'break' | 'trailing') || 'break',
+        smaTrailingStopPercent: settings.smaTrailingStopPercent || '2.00',
+        
+        // AI Settings
         aiCapitalAllocation: settings.aiCapitalAllocation,
+        
+        // Notification Settings
         emailNotifications: true,
         pushNotifications: true,
         telegramNotifications: false,
-        quietHoursEnabled: false,
-        quietHoursStart: '22:00',
-        quietHoursEnd: '08:00',
+        
+        // Display Settings
         timezone: settings.timezone || 'Asia/Dubai',
-        timeFormat: settings.timeFormat || '12hr'
+        timeFormat: (settings.timeFormat as '12hr' | '24hr') || '12hr'
       });
     }
   }, [settings]);
 
   const handleSave = async () => {
     try {
-      const settingsUpdate = {
-        riskPerTrade: formData.riskPerTrade,
-        maxExposurePercent: formData.maxExposurePercent,
-        maxOpenTrades: formData.maxOpenTrades,
-        stopBufferPercent: formData.stopBufferPercent,
-        smaLength: formData.smaLength,
-        minVolume: formData.minVolume,
-        minDailyRange: formData.minDailyRange,
-        slippageToleranceMajors: formData.slippageToleranceMajors,
-        slippageToleranceMidcaps: formData.slippageToleranceMidcaps,
-        slippageToleranceSmall: formData.slippageToleranceSmall,
-        aiCapitalAllocation: formData.aiCapitalAllocation,
-        timezone: formData.timezone,
-        timeFormat: formData.timeFormat
-      };
-
-      await updateSettings(settingsUpdate);
+      await updateSettings(formData);
       
       toast({
         title: "Settings Saved",
@@ -125,392 +171,427 @@ export default function Settings() {
   const handleReset = () => {
     if (settings) {
       setFormData({
+        // Reset to current saved settings
+        minVolume: settings.minVolume,
+        minDailyRange: settings.minDailyRange,
+        minPrice: settings.minPrice || '0.01',
+        maxBidAskSpread: settings.maxBidAskSpread || '1.00',
+        excludeStablecoins: settings.excludeStablecoins ?? true,
+        minDataHistoryDays: settings.minDataHistoryDays || 90,
+        allowedTradingPairs: settings.allowedTradingPairs || ['USD', 'USDT'],
+        blacklistedSymbols: settings.blacklistedSymbols || [],
+        whitelistedSymbols: settings.whitelistedSymbols || [],
         riskPerTrade: settings.riskPerTrade,
         maxExposurePercent: settings.maxExposurePercent,
         maxOpenTrades: settings.maxOpenTrades,
         stopBufferPercent: settings.stopBufferPercent,
-        smaLength: settings.smaLength,
-        minVolume: settings.minVolume,
-        minDailyRange: settings.minDailyRange,
         slippageToleranceMajors: settings.slippageToleranceMajors,
         slippageToleranceMidcaps: settings.slippageToleranceMidcaps,
         slippageToleranceSmall: settings.slippageToleranceSmall,
+        vwapTimeframe: settings.vwapTimeframe || 60,
+        vwapPullbackThreshold: settings.vwapPullbackThreshold || '2.00',
+        vwapVolumeMultiplier: settings.vwapVolumeMultiplier || '1.50',
+        vwapMaxHoldingPeriod: settings.vwapMaxHoldingPeriod || 24,
+        abcdMinConsolidation: settings.abcdMinConsolidation || 10,
+        abcdBreakoutThreshold: settings.abcdBreakoutThreshold || '1.50',
+        abcdVolumeMultiplier: settings.abcdVolumeMultiplier || '1.50',
+        abcdExitType: (settings.abcdExitType as 'target' | 'trailing') || 'target',
+        abcdTargetPercent: settings.abcdTargetPercent || '3.00',
+        abcdTrailingStopPercent: settings.abcdTrailingStopPercent || '2.00',
+        smaLength: settings.smaLength,
+        smaEntryCondition: (settings.smaEntryCondition as 'above' | 'crossover') || 'crossover',
+        smaExitCondition: (settings.smaExitCondition as 'break' | 'trailing') || 'break',
+        smaTrailingStopPercent: settings.smaTrailingStopPercent || '2.00',
         aiCapitalAllocation: settings.aiCapitalAllocation,
         emailNotifications: true,
         pushNotifications: true,
         telegramNotifications: false,
-        quietHoursEnabled: false,
-        quietHoursStart: '22:00',
-        quietHoursEnd: '08:00',
         timezone: settings.timezone || 'Asia/Dubai',
-        timeFormat: settings.timeFormat || '12hr'
+        timeFormat: (settings.timeFormat as '12hr' | '24hr') || '12hr'
+      });
+      
+      toast({
+        title: "Reset Complete",
+        description: "Settings have been reset to last saved values.",
       });
     }
   };
 
   if (settingsLoading) {
     return (
-      <div className="p-6 space-y-6" data-testid="settings-page">
-        <div className="flex items-center gap-3 mb-6">
-          <Skeleton className="w-12 h-12 rounded-lg" />
-          <div>
-            <Skeleton className="h-8 w-32 mb-2" />
-            <Skeleton className="h-4 w-48" />
-          </div>
-        </div>
-        
-        <div className="space-y-6">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}>
-              <CardHeader>
-                <Skeleton className="h-6 w-40" />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {Array.from({ length: 4 }).map((_, j) => (
-                    <div key={j} className="space-y-2">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-10 w-full" />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      <div className="container max-w-6xl mx-auto py-8 px-4">
+        <Skeleton className="h-12 w-64 mb-8" />
+        <Skeleton className="h-96 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6" data-testid="settings-page">
+    <div className="container max-w-6xl mx-auto py-8 px-4">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-          <SettingsIcon className="w-7 h-7 text-primary" />
-        </div>
+      <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-          <p className="text-muted-foreground">Configure your trading parameters and preferences</p>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+              <SettingsIcon className="w-7 h-7 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Settings</h1>
+              <p className="text-sm text-muted-foreground mt-1">Configure your trading parameters and preferences</p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex gap-3">
+          <Button
+            onClick={handleReset}
+            variant="outline"
+            className="flex items-center gap-2"
+            data-testid="button-reset"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reset
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isUpdatingSettings}
+            className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+            data-testid="button-save"
+          >
+            <Save className="w-4 h-4" />
+            Save Changes
+          </Button>
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center gap-4">
-        <Button
-          onClick={handleSave}
-          disabled={isUpdatingSettings}
-          className="flex items-center gap-2"
-          data-testid="button-save-settings"
-        >
-          <Save className="w-4 h-4" />
-          {isUpdatingSettings ? 'Saving...' : 'Save Changes'}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={handleReset}
-          className="flex items-center gap-2"
-          data-testid="button-reset-settings"
-        >
-          <RotateCcw className="w-4 h-4" />
-          Reset
-        </Button>
-      </div>
-
-      <Tabs defaultValue="risk" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="risk" data-testid="tab-risk">Risk & Exposure</TabsTrigger>
-          <TabsTrigger value="strategies" data-testid="tab-strategies">Strategy Params</TabsTrigger>
-          <TabsTrigger value="ai" data-testid="tab-ai">AI Settings</TabsTrigger>
-          <TabsTrigger value="notifications" data-testid="tab-notifications">Notifications</TabsTrigger>
+      <Tabs defaultValue="screener" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsTrigger value="screener" className="flex items-center gap-2">
+            <Filter className="w-4 h-4" />
+            Screener Filters
+          </TabsTrigger>
+          <TabsTrigger value="guardrails" className="flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            Portfolio Guardrails
+          </TabsTrigger>
+          <TabsTrigger value="strategies" className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" />
+            Strategies
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <Bell className="w-4 h-4" />
+            Notifications
+          </TabsTrigger>
         </TabsList>
 
-        {/* Risk & Exposure Tab */}
-        <TabsContent value="risk" className="space-y-6">
+        {/* TAB 1: SCREENER FILTERS */}
+        <TabsContent value="screener">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-destructive" />
-                Risk Management
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Configure position sizing and exposure limits to protect your capital
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="risk-per-trade" className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4" />
-                    Risk Per Trade ($)
-                  </Label>
-                  <Input
-                    id="risk-per-trade"
-                    type="number"
-                    step="0.01"
-                    min="1"
-                    max="10000"
-                    value={formData.riskPerTrade}
-                    onChange={(e) => setFormData(prev => ({ ...prev, riskPerTrade: e.target.value }))}
-                    data-testid="input-risk-per-trade"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Amount you're willing to risk per trade
-                  </p>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Filter className="w-6 h-6 text-primary" />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="max-exposure" className="flex items-center gap-2">
-                    <Target className="w-4 h-4" />
-                    Max Exposure (%)
-                  </Label>
-                  <Input
-                    id="max-exposure"
-                    type="number"
-                    step="0.1"
-                    min="1"
-                    max="100"
-                    value={formData.maxExposurePercent}
-                    onChange={(e) => setFormData(prev => ({ ...prev, maxExposurePercent: e.target.value }))}
-                    data-testid="input-max-exposure"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Maximum portfolio exposure across all trades
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="max-trades">Max Open Trades</Label>
-                  <Select
-                    value={formData.maxOpenTrades.toString()}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, maxOpenTrades: parseInt(value) }))}
-                  >
-                    <SelectTrigger data-testid="select-max-trades">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 Trade</SelectItem>
-                      <SelectItem value="2">2 Trades</SelectItem>
-                      <SelectItem value="3">3 Trades</SelectItem>
-                      <SelectItem value="5">5 Trades</SelectItem>
-                      <SelectItem value="10">10 Trades</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Maximum number of concurrent positions
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="stop-buffer">Stop Buffer (%)</Label>
-                  <Input
-                    id="stop-buffer"
-                    type="number"
-                    step="0.01"
-                    min="0.1"
-                    max="5"
-                    value={formData.stopBufferPercent}
-                    onChange={(e) => setFormData(prev => ({ ...prev, stopBufferPercent: e.target.value }))}
-                    data-testid="input-stop-buffer"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Additional buffer beyond calculated stop levels
-                  </p>
+                <div>
+                  <CardTitle className="text-xl">Global Screener Filters</CardTitle>
+                  <CardDescription className="mt-1.5">
+                    These filters decide which coins are considered for trading before any strategy logic is applied. 
+                    They reduce noise and screen out low-quality assets.
+                  </CardDescription>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Strategy Parameters Tab */}
-        <TabsContent value="strategies" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-chart-2" />
-                Strategy Configuration
-              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="sma-length">SMA Length (periods)</Label>
-                  <Input
-                    id="sma-length"
-                    type="number"
-                    min="5"
-                    max="200"
-                    value={formData.smaLength}
-                    onChange={(e) => setFormData(prev => ({ ...prev, smaLength: parseInt(e.target.value) || 20 }))}
-                    data-testid="input-sma-length"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Simple Moving Average period for SMA Trend Ride strategy
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="min-volume">Min 24h Volume ($)</Label>
-                  <Input
-                    id="min-volume"
-                    type="number"
-                    step="1000000"
-                    min="1000000"
-                    value={formData.minVolume}
-                    onChange={(e) => setFormData(prev => ({ ...prev, minVolume: e.target.value }))}
-                    data-testid="input-min-volume"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Minimum 24-hour trading volume for screening
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="min-range">Min Daily Range (%)</Label>
-                  <Input
-                    id="min-range"
-                    type="number"
-                    step="0.1"
-                    min="1"
-                    max="50"
-                    value={formData.minDailyRange}
-                    onChange={(e) => setFormData(prev => ({ ...prev, minDailyRange: e.target.value }))}
-                    data-testid="input-min-range"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Minimum daily price range for volatility screening
-                  </p>
-                </div>
+              {/* Minimum Volume */}
+              <div className="space-y-2">
+                <Label htmlFor="minVolume" className="text-sm font-medium">
+                  Minimum 24h Trading Volume ($)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Excludes illiquid coins with low trading activity
+                  </span>
+                </Label>
+                <Input
+                  id="minVolume"
+                  type="number"
+                  value={formData.minVolume}
+                  onChange={(e) => setFormData({...formData, minVolume: e.target.value})}
+                  placeholder="20000000.00"
+                  data-testid="input-min-volume"
+                />
               </div>
 
-              <Separator />
-
-              <div>
-                <h4 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-warning" />
-                  Slippage Tolerance
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Badge variant="default" className="text-xs">Major Pairs</Badge>
-                      Majors (%)
-                    </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.1"
-                      max="5"
-                      value={formData.slippageToleranceMajors}
-                      onChange={(e) => setFormData(prev => ({ ...prev, slippageToleranceMajors: e.target.value }))}
-                      data-testid="input-slippage-majors"
-                    />
-                    <p className="text-xs text-muted-foreground">BTC, ETH, top-20 coins</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">Mid-caps</Badge>
-                      Mid-caps (%)
-                    </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.1"
-                      max="10"
-                      value={formData.slippageToleranceMidcaps}
-                      onChange={(e) => setFormData(prev => ({ ...prev, slippageToleranceMidcaps: e.target.value }))}
-                      data-testid="input-slippage-midcaps"
-                    />
-                    <p className="text-xs text-muted-foreground">Mid-cap cryptocurrencies</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">Small/Meme</Badge>
-                      Small (%)
-                    </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.1"
-                      max="20"
-                      value={formData.slippageToleranceSmall}
-                      onChange={(e) => setFormData(prev => ({ ...prev, slippageToleranceSmall: e.target.value }))}
-                      data-testid="input-slippage-small"
-                    />
-                    <p className="text-xs text-muted-foreground">Small-cap and meme coins</p>
-                  </div>
-                </div>
+              {/* Minimum Daily Range */}
+              <div className="space-y-2">
+                <Label htmlFor="minDailyRange" className="text-sm font-medium">
+                  Minimum Daily Price Range (%)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Ensures only coins with sufficient volatility are included
+                  </span>
+                </Label>
+                <Input
+                  id="minDailyRange"
+                  type="number"
+                  step="0.01"
+                  value={formData.minDailyRange}
+                  onChange={(e) => setFormData({...formData, minDailyRange: e.target.value})}
+                  placeholder="5.00"
+                  data-testid="input-min-daily-range"
+                />
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        {/* AI Settings Tab */}
-        <TabsContent value="ai" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="w-5 h-5 text-chart-3" />
-                AI Configuration
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Configure AI-powered features and capital allocation
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-                <div className="space-y-1">
-                  <Label htmlFor="ai-allocation" className="text-sm font-medium">
-                    AI Capital Allocation
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Allow AI to recommend capital distribution across signals
-                  </p>
-                </div>
-                <Switch
-                  id="ai-allocation"
-                  checked={formData.aiCapitalAllocation}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, aiCapitalAllocation: checked }))}
-                  data-testid="switch-ai-allocation"
+              {/* Minimum Price */}
+              <div className="space-y-2">
+                <Label htmlFor="minPrice" className="text-sm font-medium">
+                  Minimum Price Threshold ($)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Filters out "dust" tokens or micro-price assets
+                  </span>
+                </Label>
+                <Input
+                  id="minPrice"
+                  type="number"
+                  step="0.00000001"
+                  value={formData.minPrice}
+                  onChange={(e) => setFormData({...formData, minPrice: e.target.value})}
+                  placeholder="0.01"
+                  data-testid="input-min-price"
+                />
+              </div>
+
+              {/* Bid-Ask Spread */}
+              <div className="space-y-2">
+                <Label htmlFor="maxBidAskSpread" className="text-sm font-medium">
+                  Maximum Bid-Ask Spread (%)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Excludes pairs with wide spreads (high slippage risk)
+                  </span>
+                </Label>
+                <Input
+                  id="maxBidAskSpread"
+                  type="number"
+                  step="0.01"
+                  value={formData.maxBidAskSpread}
+                  onChange={(e) => setFormData({...formData, maxBidAskSpread: e.target.value})}
+                  placeholder="1.00"
+                  data-testid="input-max-bid-ask-spread"
                 />
               </div>
 
               <Separator />
 
+              {/* Stablecoin Exclusion */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">
+                    Exclude Stablecoins
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Removes stablecoins and pegged assets from screener
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.excludeStablecoins}
+                  onCheckedChange={(checked) => setFormData({...formData, excludeStablecoins: checked})}
+                  data-testid="switch-exclude-stablecoins"
+                />
+              </div>
+
+              <Separator />
+
+              {/* Data History Requirement */}
+              <div className="space-y-2">
+                <Label htmlFor="minDataHistoryDays" className="text-sm font-medium">
+                  Data History Requirement (days)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Ensures sufficient candle history exists for backtesting/analysis
+                  </span>
+                </Label>
+                <Input
+                  id="minDataHistoryDays"
+                  type="number"
+                  value={formData.minDataHistoryDays}
+                  onChange={(e) => setFormData({...formData, minDataHistoryDays: parseInt(e.target.value)})}
+                  placeholder="90"
+                  data-testid="input-min-data-history-days"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TAB 2: PORTFOLIO GUARDRAILS */}
+        <TabsContent value="guardrails">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Shield className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl">Portfolio Guardrails</CardTitle>
+                  <CardDescription className="mt-1.5">
+                    Universal risk protections that apply after a strategy signals a trade but before execution. 
+                    These safeguards protect your capital across all trading strategies.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Risk Per Trade */}
+              <div className="space-y-2">
+                <Label htmlFor="riskPerTrade" className="text-sm font-medium">
+                  Risk Per Trade ($)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Maximum amount of capital risked per trade
+                  </span>
+                </Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="riskPerTrade"
+                    type="number"
+                    step="0.01"
+                    value={formData.riskPerTrade}
+                    onChange={(e) => setFormData({...formData, riskPerTrade: e.target.value})}
+                    placeholder="100.00"
+                    className="pl-9"
+                    data-testid="input-risk-per-trade"
+                  />
+                </div>
+              </div>
+
+              {/* Maximum Exposure */}
+              <div className="space-y-2">
+                <Label htmlFor="maxExposurePercent" className="text-sm font-medium">
+                  Maximum Portfolio Exposure (% of account)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Caps total exposure across all open trades
+                  </span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="maxExposurePercent"
+                    type="number"
+                    step="0.01"
+                    value={formData.maxExposurePercent}
+                    onChange={(e) => setFormData({...formData, maxExposurePercent: e.target.value})}
+                    placeholder="20.00"
+                    data-testid="input-max-exposure-percent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                </div>
+              </div>
+
+              {/* Maximum Open Trades */}
+              <div className="space-y-2">
+                <Label htmlFor="maxOpenTrades" className="text-sm font-medium">
+                  Maximum Open Trades (number of concurrent positions)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Limits the number of simultaneous positions
+                  </span>
+                </Label>
+                <Input
+                  id="maxOpenTrades"
+                  type="number"
+                  value={formData.maxOpenTrades}
+                  onChange={(e) => setFormData({...formData, maxOpenTrades: parseInt(e.target.value)})}
+                  placeholder="3"
+                  data-testid="input-max-open-trades"
+                />
+              </div>
+
+              <Separator />
+
+              {/* Stop Buffer */}
+              <div className="space-y-2">
+                <Label htmlFor="stopBufferPercent" className="text-sm font-medium">
+                  Stop Buffer (%)
+                  <span className="text-muted-foreground font-normal ml-2">
+                    - Adds extra margin beyond calculated stop levels
+                  </span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="stopBufferPercent"
+                    type="number"
+                    step="0.01"
+                    value={formData.stopBufferPercent}
+                    onChange={(e) => setFormData({...formData, stopBufferPercent: e.target.value})}
+                    placeholder="0.30"
+                    data-testid="input-stop-buffer-percent"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Slippage Tolerance */}
               <div className="space-y-4">
-                <h4 className="text-lg font-semibold text-foreground">Report Preferences</h4>
-                
+                <div>
+                  <Label className="text-sm font-medium">Slippage Tolerance by Market Category</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Maximum tolerated slippage during order execution, categorized by market cap
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 border border-border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <Label className="text-sm font-medium">Daily Reports</Label>
-                      <Switch defaultChecked data-testid="switch-daily-reports" />
+                  {/* Majors */}
+                  <div className="space-y-2">
+                    <Label htmlFor="slippageToleranceMajors" className="text-sm font-medium">
+                      Majors (BTC/ETH/Top 20)
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="slippageToleranceMajors"
+                        type="number"
+                        step="0.01"
+                        value={formData.slippageToleranceMajors}
+                        onChange={(e) => setFormData({...formData, slippageToleranceMajors: e.target.value})}
+                        placeholder="0.50"
+                        data-testid="input-slippage-tolerance-majors"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Receive daily trading performance analysis
-                    </p>
                   </div>
 
-                  <div className="p-4 border border-border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <Label className="text-sm font-medium">Weekly Reports</Label>
-                      <Switch defaultChecked data-testid="switch-weekly-reports" />
+                  {/* Mid-caps */}
+                  <div className="space-y-2">
+                    <Label htmlFor="slippageToleranceMidcaps" className="text-sm font-medium">
+                      Mid-caps
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="slippageToleranceMidcaps"
+                        type="number"
+                        step="0.01"
+                        value={formData.slippageToleranceMidcaps}
+                        onChange={(e) => setFormData({...formData, slippageToleranceMidcaps: e.target.value})}
+                        placeholder="2.00"
+                        data-testid="input-slippage-tolerance-midcaps"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Get weekly strategy performance summaries
-                    </p>
                   </div>
 
-                  <div className="p-4 border border-border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <Label className="text-sm font-medium">Monthly Reports</Label>
-                      <Switch defaultChecked data-testid="switch-monthly-reports" />
+                  {/* Small/Meme */}
+                  <div className="space-y-2">
+                    <Label htmlFor="slippageToleranceSmall" className="text-sm font-medium">
+                      Small/Meme Coins
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="slippageToleranceSmall"
+                        type="number"
+                        step="0.01"
+                        value={formData.slippageToleranceSmall}
+                        onChange={(e) => setFormData({...formData, slippageToleranceSmall: e.target.value})}
+                        placeholder="5.00"
+                        data-testid="input-slippage-tolerance-small"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Comprehensive monthly performance analysis
-                    </p>
                   </div>
                 </div>
               </div>
@@ -518,304 +599,505 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        {/* Notifications Tab */}
-        <TabsContent value="notifications" className="space-y-6">
+        {/* TAB 3: STRATEGIES */}
+        <TabsContent value="strategies">
+          <div className="space-y-4">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold mb-2">Trading Strategies</h2>
+              <p className="text-sm text-muted-foreground">
+                Configure parameters for each strategy. Click on a strategy to expand and view its specific settings.
+              </p>
+            </div>
+
+            {/* VWAP Pullback Strategy */}
+            <Collapsible open={vwapOpen} onOpenChange={setVwapOpen}>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-start gap-3 text-left">
+                        <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Activity className="w-6 h-6 text-blue-500" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">VWAP Pullback</CardTitle>
+                          <CardDescription className="mt-1">
+                            Trades pullbacks to VWAP (Volume-Weighted Average Price) during uptrends, aiming to capture continuation moves
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <ChevronDown className={cn(
+                        "w-5 h-5 text-muted-foreground transition-transform",
+                        vwapOpen && "transform rotate-180"
+                      )} />
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="pt-0 space-y-6">
+                    <Separator />
+
+                    {/* VWAP Timeframe */}
+                    <div className="space-y-2">
+                      <Label htmlFor="vwapTimeframe" className="text-sm font-medium">
+                        VWAP Timeframe (minutes)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Period used to calculate the Volume-Weighted Average Price
+                        </span>
+                      </Label>
+                      <Input
+                        id="vwapTimeframe"
+                        type="number"
+                        value={formData.vwapTimeframe}
+                        onChange={(e) => setFormData({...formData, vwapTimeframe: parseInt(e.target.value)})}
+                        placeholder="60"
+                        data-testid="input-vwap-timeframe"
+                      />
+                    </div>
+
+                    {/* VWAP Pullback Threshold */}
+                    <div className="space-y-2">
+                      <Label htmlFor="vwapPullbackThreshold" className="text-sm font-medium">
+                        Pullback Threshold (%)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - How far price must pull back to VWAP before triggering entry
+                        </span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="vwapPullbackThreshold"
+                          type="number"
+                          step="0.01"
+                          value={formData.vwapPullbackThreshold}
+                          onChange={(e) => setFormData({...formData, vwapPullbackThreshold: e.target.value})}
+                          placeholder="2.00"
+                          data-testid="input-vwap-pullback-threshold"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                      </div>
+                    </div>
+
+                    {/* VWAP Volume Multiplier */}
+                    <div className="space-y-2">
+                      <Label htmlFor="vwapVolumeMultiplier" className="text-sm font-medium">
+                        Volume Confirmation Multiplier
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Required volume relative to average for entry confirmation
+                        </span>
+                      </Label>
+                      <Input
+                        id="vwapVolumeMultiplier"
+                        type="number"
+                        step="0.01"
+                        value={formData.vwapVolumeMultiplier}
+                        onChange={(e) => setFormData({...formData, vwapVolumeMultiplier: e.target.value})}
+                        placeholder="1.50"
+                        data-testid="input-vwap-volume-multiplier"
+                      />
+                    </div>
+
+                    {/* VWAP Max Holding Period */}
+                    <div className="space-y-2">
+                      <Label htmlFor="vwapMaxHoldingPeriod" className="text-sm font-medium">
+                        Maximum Holding Period (candles/bars)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Maximum time to hold position before auto-exit
+                        </span>
+                      </Label>
+                      <Input
+                        id="vwapMaxHoldingPeriod"
+                        type="number"
+                        value={formData.vwapMaxHoldingPeriod}
+                        onChange={(e) => setFormData({...formData, vwapMaxHoldingPeriod: parseInt(e.target.value)})}
+                        placeholder="24"
+                        data-testid="input-vwap-max-holding-period"
+                      />
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* ABCD Long Strategy */}
+            <Collapsible open={abcdOpen} onOpenChange={setAbcdOpen}>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-start gap-3 text-left">
+                        <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Zap className="w-6 h-6 text-green-500" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">ABCD Long</CardTitle>
+                          <CardDescription className="mt-1">
+                            Trades the breakout from consolidation after forming the A-B-C-D price structure
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <ChevronDown className={cn(
+                        "w-5 h-5 text-muted-foreground transition-transform",
+                        abcdOpen && "transform rotate-180"
+                      )} />
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="pt-0 space-y-6">
+                    <Separator />
+
+                    {/* ABCD Min Consolidation */}
+                    <div className="space-y-2">
+                      <Label htmlFor="abcdMinConsolidation" className="text-sm font-medium">
+                        Minimum Consolidation Length (candles/bars)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Required consolidation period before breakout
+                        </span>
+                      </Label>
+                      <Input
+                        id="abcdMinConsolidation"
+                        type="number"
+                        value={formData.abcdMinConsolidation}
+                        onChange={(e) => setFormData({...formData, abcdMinConsolidation: parseInt(e.target.value)})}
+                        placeholder="10"
+                        data-testid="input-abcd-min-consolidation"
+                      />
+                    </div>
+
+                    {/* ABCD Breakout Threshold */}
+                    <div className="space-y-2">
+                      <Label htmlFor="abcdBreakoutThreshold" className="text-sm font-medium">
+                        Breakout Threshold (%)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Percentage move required to confirm breakout
+                        </span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="abcdBreakoutThreshold"
+                          type="number"
+                          step="0.01"
+                          value={formData.abcdBreakoutThreshold}
+                          onChange={(e) => setFormData({...formData, abcdBreakoutThreshold: e.target.value})}
+                          placeholder="1.50"
+                          data-testid="input-abcd-breakout-threshold"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                      </div>
+                    </div>
+
+                    {/* ABCD Volume Multiplier */}
+                    <div className="space-y-2">
+                      <Label htmlFor="abcdVolumeMultiplier" className="text-sm font-medium">
+                        Volume Confirmation Multiplier
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Required volume relative to average for breakout confirmation
+                        </span>
+                      </Label>
+                      <Input
+                        id="abcdVolumeMultiplier"
+                        type="number"
+                        step="0.01"
+                        value={formData.abcdVolumeMultiplier}
+                        onChange={(e) => setFormData({...formData, abcdVolumeMultiplier: e.target.value})}
+                        placeholder="1.50"
+                        data-testid="input-abcd-volume-multiplier"
+                      />
+                    </div>
+
+                    {/* ABCD Exit Type */}
+                    <div className="space-y-2">
+                      <Label htmlFor="abcdExitType" className="text-sm font-medium">
+                        Exit Condition Type
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - How to exit the trade: fixed target or trailing stop
+                        </span>
+                      </Label>
+                      <Select 
+                        value={formData.abcdExitType} 
+                        onValueChange={(value: 'target' | 'trailing') => setFormData({...formData, abcdExitType: value})}
+                      >
+                        <SelectTrigger data-testid="select-abcd-exit-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="target">Fixed Target (%)</SelectItem>
+                          <SelectItem value="trailing">Trailing Stop (%)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* ABCD Target Percent */}
+                    <div className="space-y-2">
+                      <Label htmlFor="abcdTargetPercent" className="text-sm font-medium">
+                        Target Profit (%)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Fixed profit target when using "Fixed Target" exit
+                        </span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="abcdTargetPercent"
+                          type="number"
+                          step="0.01"
+                          value={formData.abcdTargetPercent}
+                          onChange={(e) => setFormData({...formData, abcdTargetPercent: e.target.value})}
+                          placeholder="3.00"
+                          data-testid="input-abcd-target-percent"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                      </div>
+                    </div>
+
+                    {/* ABCD Trailing Stop */}
+                    <div className="space-y-2">
+                      <Label htmlFor="abcdTrailingStopPercent" className="text-sm font-medium">
+                        Trailing Stop Distance (%)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Distance of trailing stop when using "Trailing Stop" exit
+                        </span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="abcdTrailingStopPercent"
+                          type="number"
+                          step="0.01"
+                          value={formData.abcdTrailingStopPercent}
+                          onChange={(e) => setFormData({...formData, abcdTrailingStopPercent: e.target.value})}
+                          placeholder="2.00"
+                          data-testid="input-abcd-trailing-stop-percent"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* SMA Trend Ride Strategy */}
+            <Collapsible open={smaOpen} onOpenChange={setSmaOpen}>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-start gap-3 text-left">
+                        <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <LineChart className="w-6 h-6 text-purple-500" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">SMA Trend Ride</CardTitle>
+                          <CardDescription className="mt-1">
+                            Rides momentum trends based on Simple Moving Average (SMA) alignment and crossovers
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <ChevronDown className={cn(
+                        "w-5 h-5 text-muted-foreground transition-transform",
+                        smaOpen && "transform rotate-180"
+                      )} />
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="pt-0 space-y-6">
+                    <Separator />
+
+                    {/* SMA Length */}
+                    <div className="space-y-2">
+                      <Label htmlFor="smaLength" className="text-sm font-medium">
+                        SMA Length (number of periods in moving average)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Number of candles used to calculate the Simple Moving Average
+                        </span>
+                      </Label>
+                      <Input
+                        id="smaLength"
+                        type="number"
+                        value={formData.smaLength}
+                        onChange={(e) => setFormData({...formData, smaLength: parseInt(e.target.value)})}
+                        placeholder="20"
+                        data-testid="input-sma-length"
+                      />
+                    </div>
+
+                    {/* SMA Entry Condition */}
+                    <div className="space-y-2">
+                      <Label htmlFor="smaEntryCondition" className="text-sm font-medium">
+                        Entry Condition
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - When to enter: price above SMA or crossover
+                        </span>
+                      </Label>
+                      <Select 
+                        value={formData.smaEntryCondition} 
+                        onValueChange={(value: 'above' | 'crossover') => setFormData({...formData, smaEntryCondition: value})}
+                      >
+                        <SelectTrigger data-testid="select-sma-entry-condition">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="above">Price Above SMA</SelectItem>
+                          <SelectItem value="crossover">Price Crosses Above SMA</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* SMA Exit Condition */}
+                    <div className="space-y-2">
+                      <Label htmlFor="smaExitCondition" className="text-sm font-medium">
+                        Exit Condition
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - When to exit: price breaks SMA or use trailing stop
+                        </span>
+                      </Label>
+                      <Select 
+                        value={formData.smaExitCondition} 
+                        onValueChange={(value: 'break' | 'trailing') => setFormData({...formData, smaExitCondition: value})}
+                      >
+                        <SelectTrigger data-testid="select-sma-exit-condition">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="break">Price Breaks Below SMA</SelectItem>
+                          <SelectItem value="trailing">Trailing Stop</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* SMA Trailing Stop */}
+                    <div className="space-y-2">
+                      <Label htmlFor="smaTrailingStopPercent" className="text-sm font-medium">
+                        Trailing Stop Distance (%)
+                        <span className="text-muted-foreground font-normal ml-2">
+                          - Distance of trailing stop when using "Trailing Stop" exit
+                        </span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="smaTrailingStopPercent"
+                          type="number"
+                          step="0.01"
+                          value={formData.smaTrailingStopPercent}
+                          onChange={(e) => setFormData({...formData, smaTrailingStopPercent: e.target.value})}
+                          placeholder="2.00"
+                          data-testid="input-sma-trailing-stop-percent"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          </div>
+        </TabsContent>
+
+        {/* TAB 4: NOTIFICATIONS */}
+        <TabsContent value="notifications">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-chart-4" />
-                Notification Settings
-              </CardTitle>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Bell className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl">Notification Settings</CardTitle>
+                  <CardDescription className="mt-1.5">
+                    Configure how you want to receive trade alerts and system notifications
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Email Notifications</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Receive trade alerts and reports via email
-                    </p>
-                  </div>
-                  <Switch
-                    checked={formData.emailNotifications}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, emailNotifications: checked }))}
-                    data-testid="switch-email-notifications"
-                  />
+              {/* Email Notifications */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Email Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive trade alerts and reports via email
+                  </p>
                 </div>
-
-                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Push Notifications</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Browser push notifications for trade executions
-                    </p>
-                  </div>
-                  <Switch
-                    checked={formData.pushNotifications}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, pushNotifications: checked }))}
-                    data-testid="switch-push-notifications"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Telegram Notifications</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Send alerts to your Telegram bot
-                    </p>
-                  </div>
-                  <Switch
-                    checked={formData.telegramNotifications}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, telegramNotifications: checked }))}
-                    data-testid="switch-telegram-notifications"
-                  />
-                </div>
+                <Switch
+                  checked={formData.emailNotifications}
+                  onCheckedChange={(checked) => setFormData({...formData, emailNotifications: checked})}
+                  data-testid="switch-email-notifications"
+                />
               </div>
 
               <Separator />
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-                  <div className="space-y-1">
-                    <Label className="text-sm font-medium">Quiet Hours</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Disable notifications during specified hours
-                    </p>
-                  </div>
-                  <Switch
-                    checked={formData.quietHoursEnabled}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, quietHoursEnabled: checked }))}
-                    data-testid="switch-quiet-hours"
-                  />
-                </div>
-
-                {formData.quietHoursEnabled && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/20 rounded-lg">
-                    <div className="space-y-2">
-                      <Label htmlFor="quiet-start">Start Time</Label>
-                      <Input
-                        id="quiet-start"
-                        type="time"
-                        value={formData.quietHoursStart}
-                        onChange={(e) => setFormData(prev => ({ ...prev, quietHoursStart: e.target.value }))}
-                        data-testid="input-quiet-start"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="quiet-end">End Time</Label>
-                      <Input
-                        id="quiet-end"
-                        type="time"
-                        value={formData.quietHoursEnd}
-                        onChange={(e) => setFormData(prev => ({ ...prev, quietHoursEnd: e.target.value }))}
-                        data-testid="input-quiet-end"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Display Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="w-5 h-5 text-primary" />
-                Display Settings
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Configure timezone and time format preferences
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="timezone" className="flex items-center gap-2">
-                    <Globe className="w-4 h-4" />
-                    Timezone
-                  </Label>
-                  <Select
-                    value={formData.timezone}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, timezone: value }))}
-                  >
-                    <SelectTrigger id="timezone" data-testid="select-timezone">
-                      <SelectValue placeholder="Select timezone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {/* Americas - North America */}
-                      <SelectItem value="America/New_York">New York (EST/EDT)</SelectItem>
-                      <SelectItem value="America/Toronto">Toronto (EST/EDT)</SelectItem>
-                      <SelectItem value="America/Chicago">Chicago (CST/CDT)</SelectItem>
-                      <SelectItem value="America/Denver">Denver (MST/MDT)</SelectItem>
-                      <SelectItem value="America/Phoenix">Phoenix (MST)</SelectItem>
-                      <SelectItem value="America/Los_Angeles">Los Angeles (PST/PDT)</SelectItem>
-                      <SelectItem value="America/Vancouver">Vancouver (PST/PDT)</SelectItem>
-                      <SelectItem value="America/Anchorage">Anchorage (AKST/AKDT)</SelectItem>
-                      <SelectItem value="Pacific/Honolulu">Honolulu (HST)</SelectItem>
-                      
-                      {/* Americas - Central & South America */}
-                      <SelectItem value="America/Mexico_City">Mexico City (CST/CDT)</SelectItem>
-                      <SelectItem value="America/Bogota">Bogotá (COT)</SelectItem>
-                      <SelectItem value="America/Lima">Lima (PET)</SelectItem>
-                      <SelectItem value="America/Sao_Paulo">São Paulo (BRT)</SelectItem>
-                      <SelectItem value="America/Buenos_Aires">Buenos Aires (ART)</SelectItem>
-                      <SelectItem value="America/Santiago">Santiago (CLT)</SelectItem>
-                      <SelectItem value="America/Caracas">Caracas (VET)</SelectItem>
-                      
-                      {/* Europe - Western */}
-                      <SelectItem value="Europe/London">London (GMT/BST)</SelectItem>
-                      <SelectItem value="Europe/Dublin">Dublin (GMT/IST)</SelectItem>
-                      <SelectItem value="Europe/Lisbon">Lisbon (WET/WEST)</SelectItem>
-                      <SelectItem value="Atlantic/Reykjavik">Reykjavik (GMT)</SelectItem>
-                      
-                      {/* Europe - Central */}
-                      <SelectItem value="Europe/Paris">Paris (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Berlin">Berlin (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Rome">Rome (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Madrid">Madrid (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Amsterdam">Amsterdam (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Brussels">Brussels (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Vienna">Vienna (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Prague">Prague (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Warsaw">Warsaw / Mikolajki Pomorskie, Poland (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Stockholm">Stockholm (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Copenhagen">Copenhagen (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Oslo">Oslo (CET/CEST)</SelectItem>
-                      <SelectItem value="Europe/Zurich">Zurich (CET/CEST)</SelectItem>
-                      
-                      {/* Europe - Eastern */}
-                      <SelectItem value="Europe/Athens">Athens (EET/EEST)</SelectItem>
-                      <SelectItem value="Europe/Bucharest">Bucharest (EET/EEST)</SelectItem>
-                      <SelectItem value="Europe/Helsinki">Helsinki (EET/EEST)</SelectItem>
-                      <SelectItem value="Europe/Istanbul">Istanbul (TRT)</SelectItem>
-                      <SelectItem value="Europe/Kiev">Kyiv (EET/EEST)</SelectItem>
-                      <SelectItem value="Europe/Moscow">Moscow (MSK)</SelectItem>
-                      
-                      {/* Middle East */}
-                      <SelectItem value="Asia/Dubai">Dubai / Abu Dhabi (GST)</SelectItem>
-                      <SelectItem value="Asia/Riyadh">Riyadh (AST)</SelectItem>
-                      <SelectItem value="Asia/Kuwait">Kuwait (AST)</SelectItem>
-                      <SelectItem value="Asia/Qatar">Doha (AST)</SelectItem>
-                      <SelectItem value="Asia/Bahrain">Manama (AST)</SelectItem>
-                      <SelectItem value="Asia/Jerusalem">Jerusalem (IST)</SelectItem>
-                      <SelectItem value="Asia/Beirut">Beirut (EET/EEST)</SelectItem>
-                      <SelectItem value="Asia/Tehran">Tehran (IRST)</SelectItem>
-                      
-                      {/* Asia - South & Central */}
-                      <SelectItem value="Asia/Karachi">Karachi (PKT)</SelectItem>
-                      <SelectItem value="Asia/Kolkata">Mumbai / Delhi (IST)</SelectItem>
-                      <SelectItem value="Asia/Dhaka">Dhaka (BST)</SelectItem>
-                      <SelectItem value="Asia/Colombo">Colombo (IST)</SelectItem>
-                      <SelectItem value="Asia/Kathmandu">Kathmandu (NPT)</SelectItem>
-                      <SelectItem value="Asia/Almaty">Almaty (ALMT)</SelectItem>
-                      <SelectItem value="Asia/Tashkent">Tashkent (UZT)</SelectItem>
-                      
-                      {/* Asia - East & Southeast */}
-                      <SelectItem value="Asia/Bangkok">Bangkok (ICT)</SelectItem>
-                      <SelectItem value="Asia/Ho_Chi_Minh">Ho Chi Minh City (ICT)</SelectItem>
-                      <SelectItem value="Asia/Jakarta">Jakarta (WIB)</SelectItem>
-                      <SelectItem value="Asia/Singapore">Singapore (SGT)</SelectItem>
-                      <SelectItem value="Asia/Kuala_Lumpur">Kuala Lumpur (MYT)</SelectItem>
-                      <SelectItem value="Asia/Manila">Manila (PST)</SelectItem>
-                      <SelectItem value="Asia/Hong_Kong">Hong Kong (HKT)</SelectItem>
-                      <SelectItem value="Asia/Shanghai">Shanghai / Beijing (CST)</SelectItem>
-                      <SelectItem value="Asia/Taipei">Taipei (CST)</SelectItem>
-                      <SelectItem value="Asia/Tokyo">Tokyo (JST)</SelectItem>
-                      <SelectItem value="Asia/Seoul">Seoul (KST)</SelectItem>
-                      
-                      {/* Oceania */}
-                      <SelectItem value="Australia/Perth">Perth (AWST)</SelectItem>
-                      <SelectItem value="Australia/Adelaide">Adelaide (ACST/ACDT)</SelectItem>
-                      <SelectItem value="Australia/Darwin">Darwin (ACST)</SelectItem>
-                      <SelectItem value="Australia/Brisbane">Brisbane (AEST)</SelectItem>
-                      <SelectItem value="Australia/Sydney">Sydney (AEST/AEDT)</SelectItem>
-                      <SelectItem value="Australia/Melbourne">Melbourne (AEST/AEDT)</SelectItem>
-                      <SelectItem value="Pacific/Auckland">Auckland (NZST/NZDT)</SelectItem>
-                      <SelectItem value="Pacific/Fiji">Fiji (FJT)</SelectItem>
-                      
-                      {/* Africa */}
-                      <SelectItem value="Africa/Cairo">Cairo (EET)</SelectItem>
-                      <SelectItem value="Africa/Johannesburg">Johannesburg (SAST)</SelectItem>
-                      <SelectItem value="Africa/Lagos">Lagos (WAT)</SelectItem>
-                      <SelectItem value="Africa/Nairobi">Nairobi (EAT)</SelectItem>
-                      <SelectItem value="Africa/Casablanca">Casablanca (WET)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    All timestamps will be displayed in this timezone
+              {/* Push Notifications */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Push Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Browser push notifications for trade executions
                   </p>
                 </div>
+                <Switch
+                  checked={formData.pushNotifications}
+                  onCheckedChange={(checked) => setFormData({...formData, pushNotifications: checked})}
+                  data-testid="switch-push-notifications"
+                />
+              </div>
 
+              <Separator />
+
+              {/* Telegram Notifications */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Telegram Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Send alerts to your Telegram bot
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.telegramNotifications}
+                  onCheckedChange={(checked) => setFormData({...formData, telegramNotifications: checked})}
+                  data-testid="switch-telegram-notifications"
+                />
+              </div>
+
+              <Separator className="my-8" />
+
+              {/* Display Settings */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Display Settings</h3>
+                
+                {/* Timezone */}
+                <div className="space-y-2 mb-4">
+                  <Label htmlFor="timezone" className="text-sm font-medium">
+                    Timezone
+                  </Label>
+                  <Select value={formData.timezone} onValueChange={(value) => setFormData({...formData, timezone: value})}>
+                    <SelectTrigger data-testid="select-timezone">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {timezones.map((tz) => (
+                        <SelectItem key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Time Format */}
                 <div className="space-y-2">
-                  <Label htmlFor="time-format" className="flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
+                  <Label htmlFor="timeFormat" className="text-sm font-medium">
                     Time Format
                   </Label>
-                  <Select
-                    value={formData.timeFormat}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, timeFormat: value }))}
-                  >
-                    <SelectTrigger id="time-format" data-testid="select-time-format">
-                      <SelectValue placeholder="Select time format" />
+                  <Select value={formData.timeFormat} onValueChange={(value: '12hr' | '24hr') => setFormData({...formData, timeFormat: value})}>
+                    <SelectTrigger data-testid="select-time-format">
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="12hr">12-hour (2:30 PM)</SelectItem>
                       <SelectItem value="24hr">24-hour (14:30)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    How times are displayed throughout the app
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* API Credentials */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Key className="w-5 h-5 text-primary" />
-                API Credentials
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Kraken API credentials are managed securely through Replit environment secrets
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Status indicators */}
-              {(settings as any)?.krakenApiKeySet && (settings as any)?.krakenApiSecretSet ? (
-                <div className="flex items-center gap-2 p-3 bg-success/10 border border-success/20 rounded-lg">
-                  <div className="w-2 h-2 rounded-full bg-success" />
-                  <span className="text-sm text-success font-medium">API credentials are configured ✓</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg">
-                  <AlertTriangle className="w-4 h-4 text-warning" />
-                  <span className="text-sm text-warning font-medium">API credentials not configured</span>
-                </div>
-              )}
-              
-              <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-3">
-                <p className="text-sm font-medium">How to add your Kraken API credentials:</p>
-                <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-                  <li>Click on the <strong>Secrets</strong> panel (lock icon) in the Replit sidebar</li>
-                  <li>Add a new secret with key: <code className="px-1.5 py-0.5 bg-muted rounded text-xs">KRAKEN_API_KEY</code></li>
-                  <li>Paste your Kraken API key as the value</li>
-                  <li>Add another secret with key: <code className="px-1.5 py-0.5 bg-muted rounded text-xs">KRAKEN_API_SECRET</code></li>
-                  <li>Paste your Kraken API secret as the value</li>
-                  <li>Restart the application to apply the changes</li>
-                </ol>
-              </div>
-              
-              <div className="p-4 bg-success/10 border border-success/20 rounded-lg space-y-2">
-                <p className="text-sm text-success font-medium">✓ Secure Storage</p>
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>• Credentials are encrypted by Replit's secure secret management</p>
-                  <p>• Never stored in plaintext in the database</p>
-                  <p>• Automatically available as environment variables</p>
-                  <p>• Not visible in code or version control</p>
                 </div>
               </div>
             </CardContent>

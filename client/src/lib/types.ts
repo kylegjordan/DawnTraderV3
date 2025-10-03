@@ -8,6 +8,8 @@ export interface User {
 export interface TradingSettings {
   id: string;
   userId: string;
+  
+  // Portfolio Guardrails
   riskPerTrade: string;
   maxExposurePercent: string;
   maxOpenTrades: number;
@@ -15,10 +17,46 @@ export interface TradingSettings {
   slippageToleranceMidcaps: string;
   slippageToleranceSmall: string;
   stopBufferPercent: string;
+  
+  // Legacy Strategy Parameters
   smaLength: number;
   minVolume: string;
   minDailyRange: string;
+  
+  // Global Screener Filters
+  minPrice?: string;
+  maxBidAskSpread?: string;
+  excludeStablecoins?: boolean;
+  minDataHistoryDays?: number;
+  allowedTradingPairs?: string[];
+  blacklistedSymbols?: string[];
+  whitelistedSymbols?: string[];
+  
+  // VWAP Pullback Strategy Parameters
+  vwapTimeframe?: number;
+  vwapPullbackThreshold?: string;
+  vwapVolumeMultiplier?: string;
+  vwapMaxHoldingPeriod?: number;
+  
+  // ABCD Long Strategy Parameters
+  abcdMinConsolidation?: number;
+  abcdBreakoutThreshold?: string;
+  abcdVolumeMultiplier?: string;
+  abcdExitType?: 'target' | 'trailing';
+  abcdTargetPercent?: string;
+  abcdTrailingStopPercent?: string;
+  
+  // SMA Trend Ride Strategy Parameters
+  smaEntryCondition?: 'above' | 'crossover';
+  smaExitCondition?: 'break' | 'trailing';
+  smaTrailingStopPercent?: string;
+  
+  // AI Settings
   aiCapitalAllocation: boolean;
+  
+  // Display Settings
+  timezone?: string;
+  timeFormat?: '12hr' | '24hr';
 }
 
 export interface Trade {
