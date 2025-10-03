@@ -175,47 +175,88 @@ export class StrategyEngine {
   }
 
   // SMA Trend Ride Strategy
-  detectSMATrendRide(indicators: TechnicalIndicators, priceHistory: PriceData[]): StrategySignal | null {
+  detectSMATrendRide(
+    indicators: TechnicalIndicators, 
+    priceHistory: PriceData[], 
+    settings: TradingSettings
+  ): StrategySignal | null {
     const { currentPrice, sma, volume } = indicators;
+    
+    // User-configured settings with defaults
+    const entryCondition = settings.smaEntryCondition || 'above'; // Default: above
+    const exitCondition = settings.smaExitCondition || 'break'; // Default: break below
+    const trailingStopPercent = parseFloat(settings.smaTrailingStopPercent || '2.0') / 100; // Default 2%
+    const smaLength = settings.smaLength || 20; // Default 20
+    
+    console.log(`[SMA Strategy] Using settings: smaLength=${smaLength}, entryCondition=${entryCondition}, exitCondition=${exitCondition}, trailingStop=${(trailingStopPercent*100).toFixed(1)}%`);
     
     if (!sma || priceHistory.length < 10) return null;
     
-    // Rules: Uptrend above SMA; pullback to SMA; bounce confirmation
     const recentPrices = priceHistory.slice(-10).map(p => parseFloat(p.close));
+    const previousPrice = recentPrices[recentPrices.length - 2];
     const isUptrend = this.detectUptrend(recentPrices, sma);
-    const nearSMA = Math.abs(currentPrice - sma) / sma < 0.008; // Within 0.8% of SMA
-    const bounceConfirmation = currentPrice > sma && this.hasBouncePattern(priceHistory.slice(-5));
     
-    if (isUptrend && nearSMA && bounceConfirmation) {
+    let entrySignal = false;
+    
+    // ✅ Entry condition logic: Above vs Crossover
+    if (entryCondition === 'above') {
+      // Entry when price is above SMA and near it
+      const nearSMA = Math.abs(currentPrice - sma) / sma < 0.015; // Within 1.5% of SMA
+      const bounceConfirmation = currentPrice > sma && this.hasBouncePattern(priceHistory.slice(-5));
+      entrySignal = isUptrend && nearSMA && bounceConfirmation;
+      
+      console.log(`[SMA Strategy] Entry condition ABOVE: uptrend=${isUptrend}, nearSMA=${nearSMA}, bounce=${bounceConfirmation}`);
+    } else {
+      // Entry when price crosses above SMA
+      const crossedAbove = previousPrice <= sma && currentPrice > sma;
+      entrySignal = isUptrend && crossedAbove;
+      
+      console.log(`[SMA Strategy] Entry condition CROSSOVER: uptrend=${isUptrend}, crossedAbove=${crossedAbove}`);
+    }
+    
+    if (entrySignal) {
       const entryPrice = currentPrice * 1.002; // Small premium for entry
       const priorSwingLow = Math.min(...recentPrices.slice(-5));
       const stopPrice = Math.min(priorSwingLow * 0.998, sma * 0.995); // Below swing low or SMA
       
-      // Target based on recent uptrend strength
-      const trendStrength = this.calculateTrendStrength(recentPrices);
-      const baseTarget = entryPrice * (1 + trendStrength * 0.02); // 2% per strength unit
+      let targetPrice: number;
       
-      // Alternative: +2R target
-      const riskDistance = entryPrice - stopPrice;
-      const twoRTarget = entryPrice + (riskDistance * 2);
-      const finalTarget = Math.min(baseTarget, twoRTarget);
+      // ✅ Exit condition determines target calculation
+      if (exitCondition === 'trailing') {
+        // Trailing stop exit - set wider initial target
+        const trendStrength = this.calculateTrendStrength(recentPrices);
+        targetPrice = entryPrice * (1 + trendStrength * 0.03); // 3% per strength unit
+        
+        console.log(`[SMA Strategy] Using TRAILING STOP exit: ${(trailingStopPercent * 100).toFixed(1)}%`);
+      } else {
+        // Break below SMA exit - use fixed 2R target
+        const riskDistance = entryPrice - stopPrice;
+        targetPrice = entryPrice + (riskDistance * 2);
+        
+        console.log(`[SMA Strategy] Using BREAK exit: 2R target`);
+      }
+      
+      console.log(`[SMA Strategy] ✅ Signal generated - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
       return {
         symbol: '',
         strategy: 'sma_trend_ride',
         entryPrice,
         stopPrice,
-        targetPrice: finalTarget,
-        confidence: 0.6 + (trendStrength * 0.1),
+        targetPrice,
+        confidence: 0.65,
         metadata: {
           sma,
-          trendStrength,
-          bounceConfirmed: bounceConfirmation,
+          smaLength,
+          entryCondition,
+          exitCondition,
+          trailingStopPercent: exitCondition === 'trailing' ? trailingStopPercent * 100 : null,
           distanceFromSMA: Math.abs(currentPrice - sma) / sma * 100
         }
       };
     }
     
+    console.log(`[SMA Strategy] ❌ No signal - entryCondition=${entryCondition}, entrySignal=${entrySignal}`);
     return null;
   }
 
