@@ -35,10 +35,10 @@ export default function PortfolioOverview() {
     {
       title: "Portfolio Value",
       value: `$${portfolioMetrics.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
-      change: "+2.34%",
-      changeType: "positive" as const,
+      change: `Win Rate: ${portfolioMetrics.winRate.toFixed(1)}%`,
+      changeType: portfolioMetrics.winRate >= 50 ? "positive" : "negative" as const,
       icon: DollarSign,
-      subtitle: "today"
+      subtitle: `${portfolioMetrics.wins}W / ${portfolioMetrics.losses}L`
     },
     {
       title: "Realized P/L (24h)",
