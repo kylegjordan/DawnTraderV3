@@ -81,10 +81,23 @@ export class StrategyEngine {
   }
 
   // ABCD Long Strategy
-  detectABCDLong(priceHistory: PriceData[]): StrategySignal | null {
-    if (priceHistory.length < 20) return null;
+  detectABCDLong(
+    priceHistory: PriceData[], 
+    settings: TradingSettings
+  ): StrategySignal | null {
+    // User-configured settings with defaults
+    const minConsolidation = settings.abcdMinConsolidation || 10; // Default 10 bars
+    const breakoutThreshold = parseFloat(settings.abcdBreakoutThreshold || '1.5') / 100; // Default 1.5%
+    const volumeMultiplier = parseFloat(settings.abcdVolumeMultiplier || '1.5'); // Default 1.5x
+    const exitType = settings.abcdExitType || 'target'; // Default: fixed target
+    const targetPercent = parseFloat(settings.abcdTargetPercent || '3.0') / 100; // Default 3%
+    const trailingStopPercent = parseFloat(settings.abcdTrailingStopPercent || '2.0') / 100; // Default 2%
     
-    const recent = priceHistory.slice(-20);
+    console.log(`[ABCD Strategy] Using settings: minConsolidation=${minConsolidation} bars, breakout=${(breakoutThreshold*100).toFixed(1)}%, volumeMultiplier=${volumeMultiplier}x, exitType=${exitType}`);
+    
+    if (priceHistory.length < minConsolidation + 10) return null;
+    
+    const recent = priceHistory.slice(-(minConsolidation + 10));
     const current = recent[recent.length - 1];
     
     // Simplified ABCD pattern detection
@@ -96,44 +109,68 @@ export class StrategyEngine {
     const bPoint = this.findPullback(recent.slice(5, 15), aPoint);
     if (!bPoint) return null;
     
-    const cPoint = this.findHigherLow(recent.slice(10, 18), bPoint);
+    // ✅ Using user-configured consolidation period
+    const cPoint = this.findHigherLow(recent.slice(10, 10 + minConsolidation), bPoint);
     if (!cPoint || !current.vwap || parseFloat(cPoint.close) < parseFloat(current.vwap)) return null;
     
-    // Check for breakout (D point)
+    // ✅ Check for breakout using user-configured threshold
     const cHigh = parseFloat(cPoint.high);
     const currentPrice = parseFloat(current.close);
-    const isBreakout = currentPrice > cHigh * 1.002; // 0.2% above C high
+    const currentVolume = parseFloat(current.volume);
+    const isBreakout = currentPrice > cHigh * (1 + breakoutThreshold);
     
-    if (isBreakout) {
-      const entryPrice = cHigh * 1.003; // Buy stop above C-range high
+    // ✅ Volume confirmation using user setting
+    const avgVolume = parseFloat(aPoint.volume); // Using spike volume as reference
+    const hasVolumeConfirmation = currentVolume >= avgVolume * volumeMultiplier;
+    
+    if (isBreakout && hasVolumeConfirmation) {
+      const entryPrice = cHigh * (1 + breakoutThreshold + 0.003); // Buy stop above breakout level
       const stopPrice = parseFloat(cPoint.low) * 0.998; // Below C low
       
-      // Measured move: A-B distance added to C breakout
-      const abDistance = parseFloat(aPoint.high) - parseFloat(bPoint.low);
-      const measuredTarget = entryPrice + abDistance;
+      let targetPrice: number;
       
-      // Alternative: +2R target
-      const riskDistance = entryPrice - stopPrice;
-      const twoRTarget = entryPrice + (riskDistance * 2);
-      const finalTarget = Math.min(measuredTarget, twoRTarget);
+      // ✅ Exit type logic: Fixed Target vs Trailing Stop
+      if (exitType === 'target') {
+        // Fixed target based on user-configured percentage
+        targetPrice = entryPrice * (1 + targetPercent);
+        console.log(`[ABCD Strategy] Using FIXED TARGET exit: ${(targetPercent * 100).toFixed(1)}%`);
+      } else {
+        // Trailing stop - use measured move as initial target
+        const abDistance = parseFloat(aPoint.high) - parseFloat(bPoint.low);
+        const measuredTarget = entryPrice + abDistance;
+        
+        // Alternative: +2R target
+        const riskDistance = entryPrice - stopPrice;
+        const twoRTarget = entryPrice + (riskDistance * 2);
+        targetPrice = Math.min(measuredTarget, twoRTarget);
+        
+        console.log(`[ABCD Strategy] Using TRAILING STOP exit: ${(trailingStopPercent * 100).toFixed(1)}%`);
+      }
+      
+      console.log(`[ABCD Strategy] ✅ Signal generated - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
       return {
         symbol: '',
         strategy: 'abcd_long',
         entryPrice,
         stopPrice,
-        targetPrice: finalTarget,
+        targetPrice,
         confidence: 0.75,
         metadata: {
           aPoint: { price: aPoint.high, time: aPoint.timestamp },
           bPoint: { price: bPoint.low, time: bPoint.timestamp },
           cPoint: { price: cPoint.close, time: cPoint.timestamp },
-          measuredMove: abDistance,
-          breakoutLevel: cHigh
+          breakoutLevel: cHigh,
+          consolidationBars: minConsolidation,
+          breakoutThreshold: breakoutThreshold * 100,
+          volumeMultiplier,
+          exitType,
+          trailingStopPercent: exitType === 'trailing' ? trailingStopPercent * 100 : null
         }
       };
     }
     
+    console.log(`[ABCD Strategy] ❌ No signal - breakout=${isBreakout}, volumeConfirmed=${hasVolumeConfirmation}`);
     return null;
   }
 
