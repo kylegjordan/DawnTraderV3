@@ -209,14 +209,19 @@ export class MarketScanner {
         low24h: Math.min(...priceData.slice(-24).map(p => parseFloat(p.low)))
       };
 
-      // Check each strategy for signals
+      // Check each strategy for signals - ✅ Now passing settings to all strategies
+      console.log(`\n🔍 Analyzing ${pair.symbol} for strategy signals...`);
       const signals = [
-        this.strategyEngine.detectVWAPPullback(indicators),
-        this.strategyEngine.detectABCDLong(priceData),
-        this.strategyEngine.detectSMATrendRide(indicators, priceData)
+        this.strategyEngine.detectVWAPPullback(indicators, settings),
+        this.strategyEngine.detectABCDLong(priceData, settings),
+        this.strategyEngine.detectSMATrendRide(indicators, priceData, settings)
       ].filter(signal => signal !== null);
 
       // Process any found signals
+      if (signals.length > 0) {
+        console.log(`✅ Found ${signals.length} signal(s) for ${pair.symbol}`);
+      }
+      
       for (const signal of signals) {
         if (signal) {
           signal.symbol = pair.symbol;
