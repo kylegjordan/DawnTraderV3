@@ -731,6 +731,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Screener test endpoint for demonstrating different filter configurations
+  app.post('/api/screener/test', async (req, res) => {
+    try {
+      const kraken = new KrakenService();
+      const testSettings = req.body || {
+        minVolume: '10000000',
+        minDailyRange: '3.0',
+        minPrice: '0.01',
+        maxBidAskSpread: '1.00',
+        excludeStablecoins: true,
+        allowedTradingPairs: ['USD', 'USDT'],
+        blacklistedSymbols: [],
+        whitelistedSymbols: []
+      };
+
+      console.log('\n🧪 Screener Test with custom settings:', testSettings);
+      const eligiblePairs = await kraken.getEligiblePairs(testSettings);
+      
+      res.json({
+        success: true,
+        settings: testSettings,
+        eligiblePairs,
+        totalEligible: eligiblePairs.length
+      });
+    } catch (error: any) {
+      console.error('Screener test error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
