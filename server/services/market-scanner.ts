@@ -161,6 +161,12 @@ export class MarketScanner {
       
       if (!settings) return;
 
+      // Check if trading is suspended by kill switch
+      if (settings.tradingSuspended) {
+        console.log('🚨 Trading suspended by Kill Switch — strategies skipped.');
+        return;
+      }
+
       for (const pair of watchlist) {
         await this.analyzeSymbolForSignals(userId, pair, settings);
         
