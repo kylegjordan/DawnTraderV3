@@ -650,6 +650,7 @@ export default function Settings() {
                       <SelectItem value="Europe/London">London (GMT)</SelectItem>
                       <SelectItem value="Europe/Paris">Paris (CET)</SelectItem>
                       <SelectItem value="Europe/Berlin">Berlin (CET)</SelectItem>
+                      <SelectItem value="Europe/Warsaw">Mikolajki Pomorskie, Poland (CET)</SelectItem>
                       <SelectItem value="Asia/Tokyo">Tokyo (JST)</SelectItem>
                       <SelectItem value="Asia/Hong_Kong">Hong Kong (HKT)</SelectItem>
                       <SelectItem value="Asia/Singapore">Singapore (SGT)</SelectItem>
