@@ -185,6 +185,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/portfolio/history', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const period = (req.query.period as string) || '1M';
+      
+      const user = await storage.getUser(userId);
+      const initialBalance = user?.initialBalance || 50000;
+      
+      const now = new Date();
+      let startDate = new Date();
+      
+      switch (period) {
+        case '7D':
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case '1M':
+          startDate.setMonth(now.getMonth() - 1);
+          break;
+        case '3M':
+          startDate.setMonth(now.getMonth() - 3);
+          break;
+        case 'YTD':
+          startDate = new Date(now.getFullYear(), 0, 1);
+          break;
+        case 'ALL':
+          startDate = new Date(now.getFullYear() - 2, 0, 1);
+          break;
+      }
+      
+      const allTrades = await storage.getTrades(userId, {});
+      const closedTrades = allTrades.filter(t => 
+        t.status === 'closed' && 
+        t.exitTime
+      ).sort((a, b) => 
+        new Date(a.exitTime!).getTime() - new Date(b.exitTime!).getTime()
+      );
+      
+      let portfolioValueAtStart = initialBalance;
+      const tradesInPeriod: typeof closedTrades = [];
+      
+      closedTrades.forEach(trade => {
+        const tradeDate = new Date(trade.exitTime!);
+        if (tradeDate < startDate) {
+          portfolioValueAtStart += trade.profitLoss || 0;
+        } else {
+          tradesInPeriod.push(trade);
+        }
+      });
+      
+      const dataPoints: Array<{ date: string; value: number; timestamp: number }> = [];
+      let currentValue = portfolioValueAtStart;
+      
+      dataPoints.push({
+        date: startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        value: portfolioValueAtStart,
+        timestamp: startDate.getTime()
+      });
+      
+      tradesInPeriod.forEach(trade => {
+        if (trade.profitLoss) {
+          currentValue += trade.profitLoss;
+          dataPoints.push({
+            date: new Date(trade.exitTime!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            value: currentValue,
+            timestamp: new Date(trade.exitTime!).getTime()
+          });
+        }
+      });
+      
+      if (dataPoints.length === 1 || (dataPoints.length > 1 && new Date(dataPoints[dataPoints.length - 1].timestamp).getTime() < now.getTime() - 86400000)) {
+        dataPoints.push({
+          date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: currentValue,
+          timestamp: now.getTime()
+        });
+      }
+      
+      res.json(dataPoints);
+    } catch (error) {
+      console.error('Error fetching portfolio history:', error);
+      res.status(500).json({ error: 'Failed to fetch portfolio history' });
+    }
+  });
+
   // Trades
   app.get('/api/trades', async (req, res) => {
     try {
