@@ -60,6 +60,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/settings', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
+      
+      // Ensure user exists first
+      let user = await storage.getUser(userId);
+      if (!user) {
+        user = await storage.createUser({
+          id: userId,
+          username: userId,
+          tradingStatus: 'stopped',
+          tradingMode: 'paper'
+        });
+      }
+      
       let settings = await storage.getTradingSettings(userId);
       
       if (!settings) {

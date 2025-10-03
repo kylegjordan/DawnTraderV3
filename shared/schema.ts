@@ -25,7 +25,7 @@ export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"),
   tradingMode: tradingModeEnum("trading_mode").default("paper"),
   tradingStatus: tradingStatusEnum("trading_status").default("stopped"),
   createdAt: timestamp("created_at").defaultNow(),
