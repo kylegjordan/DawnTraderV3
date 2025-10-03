@@ -28,7 +28,7 @@ export const users = pgTable("users", {
   password: text("password"),
   tradingMode: tradingModeEnum("trading_mode").default("paper"),
   tradingStatus: tradingStatusEnum("trading_status").default("stopped"),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 // Trading settings
@@ -48,7 +48,7 @@ export const tradingSettings = pgTable("trading_settings", {
   aiCapitalAllocation: boolean("ai_capital_allocation").default(false),
   timezone: varchar("timezone", { length: 50 }).default("Asia/Dubai"),
   timeFormat: varchar("time_format", { length: 10 }).default("12hr"),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 // Watchlist pairs
@@ -64,9 +64,9 @@ export const watchlistPairs = pgTable("watchlist_pairs", {
   vwap: decimal("vwap", { precision: 20, scale: 8 }),
   sma: decimal("sma", { precision: 20, scale: 8 }),
   dailyRange: decimal("daily_range", { precision: 5, scale: 2 }),
-  lastScanned: timestamp("last_scanned"),
+  lastScanned: timestamp("last_scanned", { withTimezone: true }),
   isActive: boolean("is_active").default(true),
-  addedAt: timestamp("added_at").defaultNow(),
+  addedAt: timestamp("added_at", { withTimezone: true }).defaultNow(),
 });
 
 // Trades
@@ -93,8 +93,8 @@ export const trades = pgTable("trades", {
   realizedPL: decimal("realized_pl", { precision: 10, scale: 2 }),
   realizedPLPercent: decimal("realized_pl_percent", { precision: 8, scale: 4 }),
   realizedPLR: decimal("realized_pl_r", { precision: 8, scale: 4 }),
-  entryTime: timestamp("entry_time").defaultNow(),
-  exitTime: timestamp("exit_time"),
+  entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
+  exitTime: timestamp("exit_time", { withTimezone: true }),
   metadata: jsonb("metadata"), // Additional strategy-specific data
 });
 
@@ -108,7 +108,7 @@ export const aiReports = pgTable("ai_reports", {
   insights: jsonb("insights"), // Structured insights data
   recommendations: jsonb("recommendations"), // Structured recommendations
   metrics: jsonb("metrics"), // Performance metrics
-  generatedAt: timestamp("generated_at").defaultNow(),
+  generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow(),
 });
 
 // AI conversations
@@ -119,8 +119,8 @@ export const aiConversations = pgTable("ai_conversations", {
   messages: jsonb("messages").notNull(), // Array of {role, content, timestamp}
   context: jsonb("context"), // Current trading context
   maxContextMessages: integer("max_context_messages").default(20), // Max messages to send to GPT
-  createdAt: timestamp("created_at").defaultNow(),
-  lastUpdated: timestamp("last_updated").defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
 });
 
 // AI chat logs (tracks API usage and costs)
@@ -133,14 +133,14 @@ export const aiChatLogs = pgTable("ai_chat_logs", {
   totalTokens: integer("total_tokens").notNull(),
   estimatedCost: decimal("estimated_cost", { precision: 10, scale: 6 }).notNull(), // in USD
   model: varchar("model", { length: 50 }).default("gpt-4o"), // Model used
-  timestamp: timestamp("timestamp").defaultNow(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 });
 
 // Price data cache
 export const priceData = pgTable("price_data", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
-  timestamp: timestamp("timestamp").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).notNull(),
   open: decimal("open", { precision: 20, scale: 8 }).notNull(),
   high: decimal("high", { precision: 20, scale: 8 }).notNull(),
   low: decimal("low", { precision: 20, scale: 8 }).notNull(),
@@ -155,14 +155,14 @@ export const databaseSizeLogs = pgTable("database_size_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sizeMb: decimal("size_mb", { precision: 10, scale: 2 }).notNull(),
   sizeGb: decimal("size_gb", { precision: 10, scale: 4 }).notNull(),
-  checkedAt: timestamp("checked_at").defaultNow(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).defaultNow(),
 });
 
 // AI audit log (tracks all GPT-driven changes)
 export const aiAuditLog = pgTable("ai_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
-  timestamp: timestamp("timestamp").defaultNow(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
   actionType: varchar("action_type", { length: 100 }).notNull(), // e.g., "update_setting", "analysis_request"
   settingName: varchar("setting_name", { length: 100 }), // nullable
   oldValue: jsonb("old_value"), // Previous value
@@ -176,13 +176,13 @@ export const aiAuditLog = pgTable("ai_audit_log", {
 export const errorLogs = pgTable("error_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id),
-  timestamp: timestamp("timestamp").defaultNow(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
   errorType: varchar("error_type", { length: 100 }).notNull(), // e.g., "trade_execution", "scanner_error", "api_error"
   errorMessage: text("error_message").notNull(),
   errorStack: text("error_stack"), // Stack trace if available
   context: jsonb("context"), // Additional context (symbol, trade ID, etc.)
   resolved: boolean("resolved").default(false),
-  resolvedAt: timestamp("resolved_at"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   notes: text("notes"), // User or system notes about resolution
 });
 
