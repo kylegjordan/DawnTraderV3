@@ -16,11 +16,12 @@ const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
 const riskManager = new RiskManager();
 
-// Start market scanner
-marketScanner.startHourlyScanning();
+// TEMPORARILY DISABLED: Do not ping Kraken for 1 hour (maintenance mode)
+// marketScanner.startHourlyScanning();
 
 // AI Opportunities service will be started conditionally based on user settings
 // (service checks settings before starting hourly generation)
+// TEMPORARILY DISABLED: Do not ping Kraken for 1 hour
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -199,9 +200,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
       
-      const liveBalance = await riskManager.getLiveKrakenBalance(userId);
+      // TEMPORARILY DISABLED: Skip Kraken API calls (maintenance mode)
+      // const liveBalance = await riskManager.getLiveKrakenBalance(userId);
       const metrics = await riskManager.getPortfolioMetrics(userId);
+      const cashCrypto = await riskManager.getCashVsCrypto(userId);
       const winRateData = await riskManager.getWinRate(userId, 30);
+      
+      // Use internal calculation only (no Kraken API)
+      const liveBalance = {
+        totalValueUSD: metrics.totalValue,
+        cashUSD: cashCrypto.cash,
+        cryptoUSD: cashCrypto.crypto,
+        syncTimestamp: Date.now(),
+        source: 'internal' as const,
+        error: 'Kraken API temporarily disabled (maintenance mode)'
+      };
       
       res.json({
         totalValue: liveBalance.totalValueUSD,
