@@ -178,7 +178,7 @@ export class AIAnalyst {
       `;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
         max_completion_tokens: 2048
@@ -472,7 +472,7 @@ export class AIAnalyst {
       `;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
         max_completion_tokens: 1024
@@ -608,7 +608,7 @@ export class AIAnalyst {
     `;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       max_completion_tokens: 2048
@@ -622,7 +622,7 @@ export class AIAnalyst {
     const prompt = `Generate a weekly trading analysis with focus on patterns and trends over the week...`;
     
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       max_completion_tokens: 3072
@@ -636,7 +636,7 @@ export class AIAnalyst {
     const prompt = `Generate a comprehensive monthly trading analysis focusing on overall progress and strategic adjustments...`;
     
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       max_completion_tokens: 4096

@@ -156,8 +156,7 @@ export function useAI() {
 
   const generateReportMutation = useMutation({
     mutationFn: async (type: 'daily' | 'weekly' | 'monthly') => {
-      const response = await apiRequest('POST', '/api/ai/reports/generate', { type });
-      return response.json();
+      return await apiRequest('POST', '/api/ai/reports/generate', { type });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ai/reports'] });
@@ -166,15 +165,13 @@ export function useAI() {
 
   const analyzeSymbolMutation = useMutation({
     mutationFn: async (symbol: string) => {
-      const response = await apiRequest('POST', '/api/ai/analyze-symbol', { symbol });
-      return response.json();
+      return await apiRequest('POST', '/api/ai/analyze-symbol', { symbol });
     }
   });
 
   const chatMutation = useMutation({
     mutationFn: async ({ message, context }: { message: string; context?: any }) => {
-      const response = await apiRequest('POST', '/api/ai/chat', { message, context });
-      return response.json();
+      return await apiRequest('POST', '/api/ai/chat', { message, context });
     }
   });
 
