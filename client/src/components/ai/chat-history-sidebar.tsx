@@ -57,15 +57,13 @@ export function ChatHistorySidebar({
   const { data: conversations = [], isLoading } = useQuery<Conversation[]>({
     queryKey: ['/api/conversations'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/conversations');
-      return response.json();
+      return await apiRequest<Conversation[]>('GET', '/api/conversations');
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest('POST', '/api/conversations', { title: 'New Chat' });
-      return await res.json();
+      return await apiRequest('POST', '/api/conversations', { title: 'New Chat' });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
@@ -76,8 +74,7 @@ export function ChatHistorySidebar({
 
   const renameMutation = useMutation({
     mutationFn: async ({ id, title }: { id: string; title: string }) => {
-      const res = await apiRequest('PATCH', `/api/conversations/${id}`, { title });
-      return await res.json();
+      return await apiRequest('PATCH', `/api/conversations/${id}`, { title });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });

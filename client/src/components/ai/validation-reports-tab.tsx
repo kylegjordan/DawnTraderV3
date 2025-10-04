@@ -39,8 +39,7 @@ export function ValidationReportsTab() {
   const { data: report, isLoading } = useQuery<ValidationReport>({
     queryKey: ["/api/ai/opportunities/validation-report"],
     queryFn: async () => {
-      const response = await apiRequest("GET", "/api/ai/opportunities/validation-report");
-      return response.json();
+      return await apiRequest<ValidationReport>("GET", "/api/ai/opportunities/validation-report");
     },
   });
 

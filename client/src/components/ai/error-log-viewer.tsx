@@ -19,8 +19,7 @@ export function ErrorLogViewer() {
   const { data: unresolvedErrors } = useQuery<ErrorLog[]>({
     queryKey: ['/api/ai/error-logs', 'unresolved'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/ai/error-logs?resolved=false');
-      return response.json();
+      return await apiRequest<ErrorLog[]>('GET', '/api/ai/error-logs?resolved=false');
     },
     refetchInterval: 30000,
   });
@@ -28,16 +27,14 @@ export function ErrorLogViewer() {
   const { data: allErrors } = useQuery<ErrorLog[]>({
     queryKey: ['/api/ai/error-logs', 'all'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/ai/error-logs');
-      return response.json();
+      return await apiRequest<ErrorLog[]>('GET', '/api/ai/error-logs');
     },
     refetchInterval: 60000,
   });
 
   const diagnoseMutation = useMutation({
     mutationFn: async (errorId: string) => {
-      const res = await apiRequest('POST', '/api/ai/diagnose-error', { errorId });
-      return await res.json();
+      return await apiRequest('POST', '/api/ai/diagnose-error', { errorId });
     },
     onSuccess: (data) => {
       setDiagnosis(data);
@@ -46,8 +43,7 @@ export function ErrorLogViewer() {
 
   const resolveMutation = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes?: string }) => {
-      const res = await apiRequest('POST', `/api/ai/error-logs/${id}/resolve`, { notes });
-      return await res.json();
+      return await apiRequest('POST', `/api/ai/error-logs/${id}/resolve`, { notes });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ai/error-logs'] });

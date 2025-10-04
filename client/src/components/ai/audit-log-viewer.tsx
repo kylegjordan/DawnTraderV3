@@ -10,8 +10,7 @@ export function AuditLogViewer() {
   const { data: auditLogs, isLoading } = useQuery<AIAuditLog[]>({
     queryKey: ['/api/ai/audit-logs'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/ai/audit-logs');
-      return response.json();
+      return await apiRequest<AIAuditLog[]>('GET', '/api/ai/audit-logs');
     },
     refetchInterval: 30000, // Refresh every 30 seconds
   });

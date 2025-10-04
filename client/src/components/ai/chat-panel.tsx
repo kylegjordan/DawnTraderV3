@@ -41,7 +41,7 @@ export function ChatPanel() {
   // Load conversation history
   const { data: conversation, isLoading: isLoadingHistory } = useQuery({
     queryKey: ['/api/ai/conversation'],
-    queryFn: () => fetch('/api/ai/conversation').then(r => r.json()),
+    queryFn: () => apiRequest('GET', '/api/ai/conversation'),
   });
 
   // Initialize messages from conversation history
@@ -71,8 +71,7 @@ export function ChatPanel() {
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      const res = await apiRequest('POST', '/api/ai/chat', { message, context: {} });
-      return await res.json() as ChatResponse;
+      return await apiRequest<ChatResponse>('POST', '/api/ai/chat', { message, context: {} });
     },
     onSuccess: (data) => {
       // Add assistant response to messages
@@ -98,8 +97,7 @@ export function ChatPanel() {
       newValue: any; 
       confirmation: boolean;
     }) => {
-      const res = await apiRequest('POST', '/api/ai/settings/apply', { settingName, newValue, confirmation });
-      return await res.json() as { success: boolean; message: string; auditLogId?: string };
+      return await apiRequest<{ success: boolean; message: string; auditLogId?: string }>('POST', '/api/ai/settings/apply', { settingName, newValue, confirmation });
     },
     onSuccess: (data) => {
       setPendingProposal(null);

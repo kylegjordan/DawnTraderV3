@@ -76,8 +76,7 @@ export function AIOpportunitiesTab() {
       if (minProbability !== "0") params.append("minProbability", minProbability);
       
       const url = `/api/ai/opportunities${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await apiRequest("GET", url);
-      return response.json();
+      return await apiRequest<AIOpportunity[]>("GET", url);
     },
   });
 
@@ -85,16 +84,14 @@ export function AIOpportunitiesTab() {
   const { data: latestRun } = useQuery<LatestRun>({
     queryKey: ["/api/ai/opportunities/latest-run"],
     queryFn: async () => {
-      const response = await apiRequest("GET", "/api/ai/opportunities/latest-run");
-      return response.json();
+      return await apiRequest<LatestRun>("GET", "/api/ai/opportunities/latest-run");
     },
   });
 
   // Update opportunity status
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const response = await apiRequest("PATCH", `/api/ai/opportunities/${id}/status`, { status });
-      return response.json();
+      return await apiRequest("PATCH", `/api/ai/opportunities/${id}/status`, { status });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/opportunities"] });
@@ -108,8 +105,7 @@ export function AIOpportunitiesTab() {
   // Manual trigger generation
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/ai/opportunities/generate");
-      return response.json();
+      return await apiRequest("POST", "/api/ai/opportunities/generate");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai/opportunities"] });
@@ -159,15 +155,13 @@ export function AIOpportunitiesTab() {
         riskRewardRating: opp.riskRewardRating
       }, null, 2);
       
-      const response = await apiRequest("POST", "/api/conversations", { 
+      return await apiRequest("POST", "/api/conversations", { 
         title,
         context: {
           opportunityContext: contextMessage,
           opportunityId: opp.id
         }
       });
-      
-      return response.json();
     },
     onSuccess: (conversation) => {
       setLocation(`/analysis?conversation_id=${conversation.id}#chat`);

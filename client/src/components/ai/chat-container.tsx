@@ -80,8 +80,7 @@ export function ChatContainer() {
     queryKey: ['/api/conversations', currentConversationId],
     queryFn: async () => {
       if (!currentConversationId) return null;
-      const res = await apiRequest('GET', `/api/conversations/${currentConversationId}`);
-      return res.json();
+      return await apiRequest('GET', `/api/conversations/${currentConversationId}`);
     },
     enabled: !!currentConversationId
   });
@@ -90,8 +89,7 @@ export function ChatContainer() {
   const { data: costSummary } = useQuery({
     queryKey: ['/api/chat-costs'],
     queryFn: async () => {
-      const res = await apiRequest('GET', '/api/chat-costs');
-      return res.json();
+      return await apiRequest('GET', '/api/chat-costs');
     },
     refetchInterval: 30000 // Refresh every 30 seconds
   });
@@ -128,11 +126,10 @@ export function ChatContainer() {
       if (!currentConversationId) {
         throw new Error('No conversation selected');
       }
-      const res = await apiRequest('POST', `/api/conversations/${currentConversationId}/message`, {
+      return await apiRequest<ChatResponse>('POST', `/api/conversations/${currentConversationId}/message`, {
         message,
         context: {}
       });
-      return await res.json() as ChatResponse;
     },
     onSuccess: (data) => {
       // Add assistant response to messages
@@ -161,8 +158,7 @@ export function ChatContainer() {
       newValue: any; 
       confirmation: boolean;
     }) => {
-      const res = await apiRequest('POST', '/api/ai/settings/apply', { settingName, newValue, confirmation });
-      return await res.json() as { success: boolean; message: string; auditLogId?: string };
+      return await apiRequest<{ success: boolean; message: string; auditLogId?: string }>('POST', '/api/ai/settings/apply', { settingName, newValue, confirmation });
     },
     onSuccess: (data) => {
       setPendingProposal(null);
@@ -186,10 +182,9 @@ export function ChatContainer() {
   const updateContextMutation = useMutation({
     mutationFn: async (maxMessages: number) => {
       if (!currentConversationId) return;
-      const res = await apiRequest('PATCH', `/api/conversations/${currentConversationId}`, {
+      return await apiRequest('PATCH', `/api/conversations/${currentConversationId}`, {
         maxContextMessages: maxMessages
       });
-      return await res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/conversations', currentConversationId] });
