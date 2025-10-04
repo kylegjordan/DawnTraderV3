@@ -1,13 +1,115 @@
 import { storage } from '../storage';
 import { TradingSettings } from '@shared/schema';
 import { TradeSignal } from './trading-engine';
+import { KrakenService } from './kraken';
+import { marketDataService } from './market-data';
 
 export interface RiskCheckResult {
   approved: boolean;
   reason?: string;
 }
 
+interface BalanceCache {
+  totalValueUSD: number;
+  cashUSD: number;
+  cryptoUSD: number;
+  syncTimestamp: number;
+  source: 'kraken' | 'internal';
+  error?: string;
+}
+
 export class RiskManager {
+  private krakenService: KrakenService;
+  private balanceCacheMap: Map<string, BalanceCache> = new Map();
+  private readonly BALANCE_CACHE_TTL = 45000;
+
+  constructor() {
+    this.krakenService = new KrakenService();
+  }
+
+  /**
+   * Fetch live Kraken account balance and convert all holdings to USD
+   * Uses 45-second cache to avoid excessive API calls
+   * Falls back to internal calculation if Kraken API fails
+   */
+  async getLiveKrakenBalance(userId: string): Promise<{
+    totalValueUSD: number;
+    cashUSD: number;
+    cryptoUSD: number;
+    syncTimestamp: number;
+    source: 'kraken' | 'internal';
+    error?: string;
+  }> {
+    const cachedBalance = this.balanceCacheMap.get(userId);
+    if (cachedBalance && Date.now() - cachedBalance.syncTimestamp < this.BALANCE_CACHE_TTL) {
+      console.log(`[Portfolio:${userId}] Using cached balance (${Math.floor((Date.now() - cachedBalance.syncTimestamp) / 1000)}s old)`);
+      return cachedBalance;
+    }
+
+    try {
+      console.log(`[Portfolio:${userId}] Fetching live Kraken balance...`);
+      const balances = await this.krakenService.getAccountBalance();
+      
+      let cashUSD = 0;
+      let cryptoUSD = 0;
+      
+      const USD_ASSETS = ['ZUSD', 'USD', 'USDT', 'USDC', 'DAI'];
+      
+      for (const [asset, balance] of Object.entries(balances)) {
+        const amount = parseFloat(balance);
+        if (amount === 0) continue;
+        
+        const normalizedAsset = asset.replace(/^[XZ]/, '');
+        
+        if (USD_ASSETS.includes(asset) || USD_ASSETS.includes(normalizedAsset)) {
+          cashUSD += amount;
+          console.log(`  [Portfolio:${userId}] ${asset}: $${amount.toFixed(2)} (USD)`);
+        } else {
+          try {
+            const marketData = await marketDataService.getMarketData(normalizedAsset);
+            const valueUSD = amount * marketData.price;
+            cryptoUSD += valueUSD;
+            console.log(`  [Portfolio:${userId}] ${asset}: ${amount.toFixed(8)} × $${marketData.price.toFixed(2)} = $${valueUSD.toFixed(2)}`);
+          } catch (error) {
+            console.warn(`  [Portfolio:${userId}] Failed to get price for ${asset}, skipping:`, error);
+          }
+        }
+      }
+      
+      const totalValueUSD = cashUSD + cryptoUSD;
+      
+      console.log(`[Portfolio:${userId}] Kraken balance: $${totalValueUSD.toFixed(2)} (Cash: $${cashUSD.toFixed(2)}, Crypto: $${cryptoUSD.toFixed(2)})`);
+      
+      const krakenBalance = {
+        totalValueUSD,
+        cashUSD,
+        cryptoUSD,
+        syncTimestamp: Date.now(),
+        source: 'kraken' as const
+      };
+      
+      this.balanceCacheMap.set(userId, krakenBalance);
+      return krakenBalance;
+    } catch (error: any) {
+      console.error(`[Portfolio:${userId}] Failed to fetch Kraken balance, falling back to internal calculation:`, error.message);
+      
+      const metrics = await this.getPortfolioMetrics(userId);
+      const cashCrypto = await this.getCashVsCrypto(userId);
+      
+      const fallbackResult = {
+        totalValueUSD: metrics.totalValue,
+        cashUSD: cashCrypto.cash,
+        cryptoUSD: cashCrypto.crypto,
+        syncTimestamp: Date.now(),
+        source: 'internal' as const,
+        error: 'Kraken API unavailable'
+      };
+      
+      this.balanceCacheMap.set(userId, fallbackResult);
+      return fallbackResult;
+    }
+  }
+
   async checkPreTradeRisk(
     userId: string,
     signal: TradeSignal,

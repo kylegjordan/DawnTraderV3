@@ -51,6 +51,24 @@ export default function PortfolioOverview() {
 
   const earnings = earningsData || { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0, thisYear: 0, lifetime: 0 };
 
+  const formatSyncTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toISOString().substring(11, 19) + ' UTC';
+  };
+
+  const getSyncStatus = () => {
+    if (portfolioMetrics.balanceError) {
+      return `Sync failed • ${portfolioMetrics.balanceError}`;
+    }
+    if (portfolioMetrics.balanceSource === 'kraken' && portfolioMetrics.syncTimestamp) {
+      return `Synced from Kraken • Last updated ${formatSyncTime(portfolioMetrics.syncTimestamp)}`;
+    }
+    if (portfolioMetrics.balanceSource === 'internal') {
+      return `Using internal estimate`;
+    }
+    return '';
+  };
+
   const metrics = [
     {
       title: "Portfolio Value",
@@ -58,7 +76,8 @@ export default function PortfolioOverview() {
       change: `Win Rate: ${portfolioMetrics.winRate.toFixed(1)}%`,
       changeType: portfolioMetrics.winRate >= 50 ? "positive" : "negative" as const,
       icon: DollarSign,
-      subtitle: `${portfolioMetrics.wins}W / ${portfolioMetrics.losses}L`
+      subtitle: `${portfolioMetrics.wins}W / ${portfolioMetrics.losses}L`,
+      syncStatus: getSyncStatus()
     },
     {
       title: "Earnings Summary",
@@ -185,6 +204,12 @@ export default function PortfolioOverview() {
                   )}>
                     {metric.value}
                   </div>
+                  
+                  {(metric as any).syncStatus && (
+                    <div className="text-[10px] text-muted-foreground mb-2 font-mono">
+                      {(metric as any).syncStatus}
+                    </div>
+                  )}
                   
                   <div className="flex items-center gap-1">
                     {metric.changeType === "positive" && (

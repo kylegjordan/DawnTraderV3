@@ -198,14 +198,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/portfolio/overview', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
+      
+      const liveBalance = await riskManager.getLiveKrakenBalance(userId);
       const metrics = await riskManager.getPortfolioMetrics(userId);
       const winRateData = await riskManager.getWinRate(userId, 30);
-      const cashVsCrypto = await riskManager.getCashVsCrypto(userId);
       
       res.json({
-        ...metrics,
+        totalValue: liveBalance.totalValueUSD,
+        unrealizedPL: metrics.unrealizedPL,
+        realizedPL: metrics.realizedPL,
+        currentExposure: metrics.currentExposure,
+        openTradesCount: metrics.openTradesCount,
         ...winRateData,
-        ...cashVsCrypto
+        cash: liveBalance.cashUSD,
+        crypto: liveBalance.cryptoUSD,
+        cashPercent: liveBalance.totalValueUSD > 0 ? (liveBalance.cashUSD / liveBalance.totalValueUSD) * 100 : 0,
+        cryptoPercent: liveBalance.totalValueUSD > 0 ? (liveBalance.cryptoUSD / liveBalance.totalValueUSD) * 100 : 0,
+        syncTimestamp: liveBalance.syncTimestamp,
+        balanceSource: liveBalance.source,
+        balanceError: liveBalance.error
       });
     } catch (error) {
       console.error('Error fetching portfolio overview:', error);
