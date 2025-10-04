@@ -85,6 +85,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API rate limits respected to prevent bans
 - Transient network errors auto-recover without manual intervention
 
+### Testing Notes
+- **Phases 3-6**: Fully validated through automated tests with genuine execution and assertions
+- **Phases 1-2**: Verified through logical inspection and code review; certain failure scenarios (bracket rollback under exchange rejection, partial fills with live order book) require staging validation with live Kraken API
+- **Staging Required**: Manual validation tests documented in `STAGING_TEST_PLAN.md` must pass before production deployment
+
 ## [2.0.0] - 2025-10-03
 
 ### Added - Daily Loss Kill Switch Feature
