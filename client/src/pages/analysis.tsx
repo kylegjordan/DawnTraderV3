@@ -255,9 +255,53 @@ export default function Analysis() {
 
           {/* Analysis Results */}
           {symbolAnalysis && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Technical Analysis */}
-              <Card>
+            <>
+              {/* Live Market Data */}
+              {symbolAnalysis.livePrice && (
+                <Card className="border-primary/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                      Live Market Data
+                      <span className="ml-auto text-xs font-normal text-muted-foreground">
+                        Source: {symbolAnalysis.dataSource?.toUpperCase()}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Current Price</div>
+                        <div className="text-2xl font-bold text-foreground" data-testid="text-live-price">
+                          ${symbolAnalysis.livePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">24h Change</div>
+                        <div className={`text-2xl font-bold ${symbolAnalysis.change24h && symbolAnalysis.change24h >= 0 ? 'text-green-500' : 'text-red-500'}`} data-testid="text-change-24h">
+                          {symbolAnalysis.change24h !== undefined ? `${symbolAnalysis.change24h >= 0 ? '+' : ''}${symbolAnalysis.change24h.toFixed(2)}%` : 'N/A'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">24h Volume</div>
+                        <div className="text-2xl font-bold text-foreground" data-testid="text-volume-24h">
+                          {symbolAnalysis.volume24h ? `$${(symbolAnalysis.volume24h / 1000000).toFixed(1)}M` : 'N/A'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Last Updated</div>
+                        <div className="text-sm font-medium text-foreground" data-testid="text-timestamp">
+                          {symbolAnalysis.timestamp ? new Date(symbolAnalysis.timestamp).toLocaleTimeString() : 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Technical Analysis */}
+                <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-chart-1" />
@@ -325,7 +369,8 @@ export default function Analysis() {
                   </div>
                 </CardContent>
               </Card>
-            </div>
+              </div>
+            </>
           )}
 
           {isAnalyzingSymbol && (

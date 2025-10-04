@@ -153,4 +153,9 @@ export interface SymbolAnalysis {
   strategyRecommendations: string;
   riskAssessment: string;
   historicalPerformance: string;
+  livePrice?: number;
+  change24h?: number;
+  volume24h?: number;
+  dataSource?: string;
+  timestamp?: number;
 }

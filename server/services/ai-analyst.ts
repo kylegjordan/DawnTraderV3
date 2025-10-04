@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { storage } from '../storage';
 import { Trade, TradingSettings, AIReport, InsertAIAuditLog, InsertErrorLog } from '@shared/schema';
 import { databaseQueryService } from './database-query';
+import { marketDataService } from './market-data';
 import { 
   estimateMessagesTokens, 
   calculateCost, 
@@ -144,16 +145,38 @@ export class AIAnalyst {
     strategyRecommendations: string;
     riskAssessment: string;
     historicalPerformance: any;
+    livePrice?: number;
+    change24h?: number;
+    volume24h?: number;
+    dataSource?: string;
+    timestamp?: number;
   }> {
     try {
-      // Get historical data for the symbol
+      let liveMarketData;
+      try {
+        liveMarketData = await marketDataService.getMarketData(symbol);
+        console.log(`[AI Analyst] Live market data for ${symbol}:`, liveMarketData);
+      } catch (marketError) {
+        console.warn(`[AI Analyst] Failed to fetch live market data for ${symbol}:`, marketError);
+      }
+
       const priceData = await storage.getPriceData(symbol);
       const userTrades = await storage.getTrades(userId, { symbol, limit: 50 });
       
+      const liveDataSection = liveMarketData ? `
+        LIVE MARKET DATA (${liveMarketData.source}):
+        - Current Price: $${liveMarketData.price.toLocaleString()}
+        - 24h Change: ${liveMarketData.change24h.toFixed(2)}%
+        - 24h Volume: $${liveMarketData.volume24h ? liveMarketData.volume24h.toLocaleString() : 'N/A'}
+        - Data Source: ${liveMarketData.source.toUpperCase()}
+        - Last Updated: ${new Date(liveMarketData.timestamp).toISOString()}
+        
+      ` : '';
+
       const prompt = `
         Analyze the cryptocurrency trading pair ${symbol} with the following context:
         
-        Historical Performance:
+        ${liveDataSection}Historical Performance:
         - User has made ${userTrades.length} trades on this symbol
         - Success rate: ${this.calculateSuccessRate(userTrades)}%
         - Average hold time: ${this.calculateAverageHoldTime(userTrades)} hours
@@ -164,9 +187,9 @@ export class AIAnalyst {
         ).join('\n')}
         
         Provide analysis in these areas:
-        1. Technical Analysis: Current price action, support/resistance, trend analysis
-        2. Strategy Recommendations: Which of the three strategies (VWAP Pullback, ABCD Long, SMA Trend Ride) would work best
-        3. Risk Assessment: Typical volatility, slippage expectations, position sizing recommendations
+        1. Technical Analysis: Use the LIVE market data above. Include current price action, support/resistance, trend analysis
+        2. Strategy Recommendations: Which of the three strategies (VWAP Pullback, ABCD Long, SMA Trend Ride) would work best with current conditions
+        3. Risk Assessment: Typical volatility, slippage expectations, position sizing recommendations based on the 24h change
         4. Historical Performance: How this symbol has performed in user's past trades
         
         Respond in JSON format with the structure: {
@@ -184,7 +207,16 @@ export class AIAnalyst {
         max_completion_tokens: 2048
       });
 
-      return JSON.parse(response.choices[0].message.content || '{}');
+      const analysis = JSON.parse(response.choices[0].message.content || '{}');
+
+      return {
+        ...analysis,
+        livePrice: liveMarketData?.price,
+        change24h: liveMarketData?.change24h,
+        volume24h: liveMarketData?.volume24h,
+        dataSource: liveMarketData?.source,
+        timestamp: liveMarketData?.timestamp
+      };
     } catch (error) {
       console.error('Error analyzing symbol:', error);
       return {
