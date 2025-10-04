@@ -11,6 +11,8 @@ import {
   aiAuditLog,
   errorLogs,
   killSwitchEvents,
+  aiOpportunityRuns,
+  aiOpportunities,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -34,7 +36,11 @@ import {
   type ErrorLog,
   type InsertErrorLog,
   type KillSwitchEvent,
-  type InsertKillSwitchEvent
+  type InsertKillSwitchEvent,
+  type AIOpportunityRun,
+  type InsertAIOpportunityRun,
+  type AIOpportunity,
+  type InsertAIOpportunity
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
@@ -111,6 +117,19 @@ export interface IStorage {
   getKillSwitchEvents(userId: string, filters?: { resolved?: boolean; limit?: number }): Promise<KillSwitchEvent[]>;
   getLatestKillSwitchEvent(userId: string): Promise<KillSwitchEvent | undefined>;
   resolveKillSwitchEvent(id: string, method: string, notes?: string): Promise<KillSwitchEvent>;
+
+  // AI Opportunities methods
+  createAIOpportunityRun(run: InsertAIOpportunityRun): Promise<AIOpportunityRun>;
+  updateAIOpportunityRun(id: string, updates: Partial<AIOpportunityRun>): Promise<AIOpportunityRun>;
+  getLatestAIOpportunityRun(userId: string): Promise<AIOpportunityRun | undefined>;
+  
+  createAIOpportunity(opportunity: InsertAIOpportunity): Promise<AIOpportunity>;
+  updateAIOpportunity(id: string, updates: Partial<AIOpportunity>): Promise<AIOpportunity>;
+  getAIOpportunities(userId: string, filters?: { status?: string; type?: string; minProbability?: number }): Promise<AIOpportunity[]>;
+  getAIOpportunitiesByRun(runId: string): Promise<AIOpportunity[]>;
+
+  // User utility methods
+  getAllUsers(): Promise<User[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -562,6 +581,83 @@ export class DatabaseStorage implements IStorage {
       .where(eq(killSwitchEvents.id, id))
       .returning();
     return result;
+  }
+
+  // AI Opportunities methods
+  async createAIOpportunityRun(run: InsertAIOpportunityRun): Promise<AIOpportunityRun> {
+    const [result] = await db.insert(aiOpportunityRuns).values(run).returning();
+    return result;
+  }
+
+  async updateAIOpportunityRun(id: string, updates: Partial<AIOpportunityRun>): Promise<AIOpportunityRun> {
+    const [result] = await db
+      .update(aiOpportunityRuns)
+      .set(updates)
+      .where(eq(aiOpportunityRuns.id, id))
+      .returning();
+    return result;
+  }
+
+  async getLatestAIOpportunityRun(userId: string): Promise<AIOpportunityRun | undefined> {
+    const [result] = await db
+      .select()
+      .from(aiOpportunityRuns)
+      .where(eq(aiOpportunityRuns.userId, userId))
+      .orderBy(desc(aiOpportunityRuns.startedAt))
+      .limit(1);
+    return result || undefined;
+  }
+
+  async createAIOpportunity(opportunity: InsertAIOpportunity): Promise<AIOpportunity> {
+    const [result] = await db.insert(aiOpportunities).values(opportunity).returning();
+    return result;
+  }
+
+  async updateAIOpportunity(id: string, updates: Partial<AIOpportunity>): Promise<AIOpportunity> {
+    const [result] = await db
+      .update(aiOpportunities)
+      .set(updates)
+      .where(eq(aiOpportunities.id, id))
+      .returning();
+    return result;
+  }
+
+  async getAIOpportunities(
+    userId: string, 
+    filters?: { status?: string; type?: string; minProbability?: number }
+  ): Promise<AIOpportunity[]> {
+    const conditions = [eq(aiOpportunities.userId, userId)];
+    
+    if (filters?.status) {
+      conditions.push(eq(aiOpportunities.status, filters.status as any));
+    }
+    if (filters?.type) {
+      conditions.push(eq(aiOpportunities.type, filters.type as any));
+    }
+    if (filters?.minProbability !== undefined) {
+      conditions.push(gte(aiOpportunities.probabilityScore, filters.minProbability));
+    }
+    
+    const query = db
+      .select()
+      .from(aiOpportunities)
+      .where(and(...conditions))
+      .orderBy(desc(aiOpportunities.createdAt));
+    
+    return await query;
+  }
+
+  async getAIOpportunitiesByRun(runId: string): Promise<AIOpportunity[]> {
+    return await db
+      .select()
+      .from(aiOpportunities)
+      .where(eq(aiOpportunities.runId, runId))
+      .orderBy(desc(aiOpportunities.probabilityScore));
+  }
+
+  // User utility methods
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 }
 

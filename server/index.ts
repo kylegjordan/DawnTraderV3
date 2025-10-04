@@ -53,6 +53,13 @@ app.use((req, res, next) => {
   // Start database monitoring
   databaseMonitor.startDailyChecks();
 
+  // Start AI Opportunities service (async, non-blocking)
+  import('./services/ai-opportunities').then(({ aiOpportunitiesService }) => {
+    aiOpportunitiesService.startHourlyOpportunityGeneration().catch((error) => {
+      console.error('[Server] Failed to start AI Opportunities service:', error);
+    });
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -75,11 +82,18 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  
+  // Check if port is already in use before listening
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use. Exiting...`);
+      process.exit(1);
+    } else {
+      throw err;
+    }
+  });
+
+  server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
   });
 })();

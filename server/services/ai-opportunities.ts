@@ -50,6 +50,17 @@ export class AIOpportunitiesService {
   }
 
   async startHourlyOpportunityGeneration(): Promise<void> {
+    console.log('Checking if AI Opportunities is enabled...');
+    
+    // Check if ANY user has the feature enabled before starting
+    const users = await this.getAllActiveUsers();
+    const anyEnabled = await this.isFeatureEnabledForAnyUser(users);
+    
+    if (!anyEnabled) {
+      console.log('AI Opportunities disabled for all users, not starting service');
+      return;
+    }
+    
     console.log('Starting hourly AI opportunity generation...');
     
     // Run initial generation
@@ -63,9 +74,27 @@ export class AIOpportunitiesService {
     }, 60 * 60 * 1000); // Default 1 hour, can be made configurable
   }
 
+  private async isFeatureEnabledForAnyUser(users: Array<{ id: string }>): Promise<boolean> {
+    for (const user of users) {
+      const settings = await storage.getTradingSettings(user.id);
+      if (settings?.aiOpportunitiesEnabled) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   async generateOpportunities(): Promise<void> {
     if (this.isRunning) {
       console.log('AI Opportunities generation already in progress, skipping...');
+      return;
+    }
+
+    // Check if feature is enabled for ANY user BEFORE setting isRunning
+    const users = await this.getAllActiveUsers();
+    const anyEnabled = await this.isFeatureEnabledForAnyUser(users);
+    if (!anyEnabled) {
+      console.log('AI Opportunities disabled for all users, skipping generation');
       return;
     }
 
@@ -73,9 +102,6 @@ export class AIOpportunitiesService {
     console.log('\n🤖 Starting AI Opportunities generation...');
 
     try {
-      // Get all active users
-      const users = await this.getAllActiveUsers();
-      
       for (const user of users) {
         await this.generateOpportunitiesForUser(user.id);
       }
@@ -134,7 +160,7 @@ export class AIOpportunitiesService {
       }
 
       // Step 6: Log to audit trail
-      await storage.createAIAuditLog({
+      await storage.createAuditLog({
         userId,
         actionType: 'create_opportunity',
         gptResponse: `Generated ${validOpportunities.length} opportunities`,
@@ -288,9 +314,10 @@ Return ONLY a JSON array of opportunities, no other text. Maximum ${maxOpportuni
         response_format: { type: "json_object" }
       });
 
+      const inputTokens = completion.usage?.prompt_tokens || inputTokensEst;
       const outputTokens = completion.usage?.completion_tokens || 0;
       const totalTokens = completion.usage?.total_tokens || 0;
-      const cost = calculateCost('gpt-4o-mini', inputTokensEst, outputTokens);
+      const cost = calculateCost(inputTokens, outputTokens, 'gpt-4o-mini');
 
       console.log(`💰 API call cost: $${cost.toFixed(4)} (${totalTokens} tokens)`);
 
@@ -362,8 +389,7 @@ Return ONLY a JSON array of opportunities, no other text. Maximum ${maxOpportuni
 
   private async createOpportunityRun(userId: string): Promise<string> {
     const run: InsertAIOpportunityRun = {
-      userId,
-      startedAt: new Date()
+      userId
     };
 
     const created = await storage.createAIOpportunityRun(run);
@@ -392,6 +418,41 @@ Return ONLY a JSON array of opportunities, no other text. Maximum ${maxOpportuni
   }
 
   // Public methods for API
+
+  async generateOpportunitiesForSingleUser(userId: string): Promise<void> {
+    // CRITICAL: Set isRunning FIRST to prevent race condition
+    if (this.isRunning) {
+      throw new Error('AI Opportunities generation already in progress, please try again later');
+    }
+    this.isRunning = true;
+    
+    try {
+      // Check cooldown - no runs within last 5 minutes
+      const latestRun = await storage.getLatestAIOpportunityRun(userId);
+      if (latestRun) {
+        // If latest run hasn't finished, it's still in progress
+        if (!latestRun.finishedAt) {
+          throw new Error('AI Opportunities generation already in progress for your account, please wait');
+        }
+        
+        // Check 5-minute cooldown on finished runs
+        const timeSinceLastRun = Date.now() - new Date(latestRun.finishedAt).getTime();
+        const cooldownMs = 5 * 60 * 1000; // 5 minutes
+        
+        if (timeSinceLastRun < cooldownMs) {
+          const remainingMs = cooldownMs - timeSinceLastRun;
+          const remainingMin = Math.ceil(remainingMs / 60000);
+          throw new Error(`Please wait ${remainingMin} more minute(s) before generating again`);
+        }
+      }
+
+      // Run for single user only
+      await this.generateOpportunitiesForUser(userId);
+    } finally {
+      // Always reset isRunning flag
+      this.isRunning = false;
+    }
+  }
 
   async getOpportunitiesForUser(userId: string, filters?: {
     status?: string;

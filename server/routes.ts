@@ -7,6 +7,7 @@ import { TradingEngine } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
 import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
+import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 
@@ -17,6 +18,9 @@ const riskManager = new RiskManager();
 
 // Start market scanner
 marketScanner.startHourlyScanning();
+
+// AI Opportunities service will be started conditionally based on user settings
+// (service checks settings before starting hourly generation)
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -42,6 +46,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // API Routes
+
+  // Health check endpoint
+  app.get('/api/health', (_req, res) => {
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      env: process.env.NODE_ENV || 'development'
+    });
+  });
 
   // User and Authentication
   app.get('/api/user/profile', async (req, res) => {
@@ -800,6 +814,89 @@ Provide specific, actionable recommendations.`,
     } catch (error) {
       console.error('Error resolving error log:', error);
       res.status(500).json({ error: 'Failed to resolve error log' });
+    }
+  });
+
+  // AI Opportunities routes
+  app.get('/api/ai/opportunities', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { status, type, minProbability } = req.query;
+      
+      const opportunities = await aiOpportunitiesService.getOpportunitiesForUser(userId, {
+        status: status as string | undefined,
+        type: type as string | undefined,
+        minProbability: minProbability ? parseFloat(minProbability as string) : undefined
+      });
+      
+      res.json(opportunities);
+    } catch (error) {
+      console.error('Error fetching AI opportunities:', error);
+      res.status(500).json({ error: 'Failed to fetch opportunities' });
+    }
+  });
+
+  app.get('/api/ai/opportunities/latest-run', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const latestRun = await aiOpportunitiesService.getLatestRun(userId);
+      res.json(latestRun || null);
+    } catch (error) {
+      console.error('Error fetching latest run:', error);
+      res.status(500).json({ error: 'Failed to fetch latest run' });
+    }
+  });
+
+  app.get('/api/ai/opportunities/validation-report', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const report = await aiOpportunitiesService.getValidationReport(userId);
+      res.json(report);
+    } catch (error) {
+      console.error('Error generating validation report:', error);
+      res.status(500).json({ error: 'Failed to generate validation report' });
+    }
+  });
+
+  app.patch('/api/ai/opportunities/:id/status', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      
+      await aiOpportunitiesService.updateOpportunityStatus(id, status);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating opportunity status:', error);
+      res.status(500).json({ error: 'Failed to update opportunity status' });
+    }
+  });
+
+  app.post('/api/ai/opportunities/generate', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      
+      // Check if feature is enabled for this user
+      const settings = await storage.getTradingSettings(userId);
+      if (!settings?.aiOpportunitiesEnabled) {
+        return res.status(403).json({ error: 'AI Opportunities feature is disabled for this user' });
+      }
+      
+      // Generate for this user only (with cooldown protection)
+      await aiOpportunitiesService.generateOpportunitiesForSingleUser(userId);
+      
+      // Audit log the manual trigger
+      await storage.createAuditLog({
+        userId,
+        actionType: 'manual_opportunity_generation',
+        gptResponse: 'User manually triggered AI opportunities generation',
+        status: 'completed'
+      });
+      
+      res.json({ success: true, message: 'Opportunity generation started for your account' });
+    } catch (error) {
+      console.error('Error starting opportunity generation:', error);
+      const errorMessage = (error as Error).message || 'Failed to start opportunity generation';
+      res.status(429).json({ error: errorMessage }); // 429 for rate limiting
     }
   });
 
