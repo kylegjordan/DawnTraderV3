@@ -14,6 +14,12 @@ export interface TradeSignal {
   metadata: any;
 }
 
+export interface TradingEngineDependencies {
+  krakenService?: KrakenService;
+  riskManager?: RiskManager;
+  strategyEngine?: StrategyEngine;
+}
+
 export class TradingEngine {
   private kraken: KrakenService;
   private riskManager: RiskManager;
@@ -21,11 +27,16 @@ export class TradingEngine {
   private isRunning = false;
   private userId: string;
 
-  constructor(userId: string, apiKey?: string, apiSecret?: string) {
+  constructor(
+    userId: string, 
+    apiKey?: string, 
+    apiSecret?: string,
+    dependencies?: TradingEngineDependencies
+  ) {
     this.userId = userId;
-    this.kraken = new KrakenService(apiKey, apiSecret);
-    this.riskManager = new RiskManager();
-    this.strategyEngine = new StrategyEngine();
+    this.kraken = dependencies?.krakenService || new KrakenService(apiKey, apiSecret);
+    this.riskManager = dependencies?.riskManager || new RiskManager();
+    this.strategyEngine = dependencies?.strategyEngine || new StrategyEngine();
   }
 
   async start(): Promise<void> {
