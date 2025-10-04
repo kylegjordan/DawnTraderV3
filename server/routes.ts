@@ -1066,6 +1066,104 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Reports Export API
+  app.get('/api/reports/export', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { reportType, format, from, to, symbol, strategy, mode } = req.query;
+      
+      // Fetch all trades for the user
+      const allTrades = await storage.getTrades(userId, { 
+        status: 'closed',
+        limit: 10000 
+      });
+      
+      // Apply filters
+      let filteredTrades = allTrades;
+      
+      // Date range filter
+      if (from || to) {
+        filteredTrades = filteredTrades.filter(trade => {
+          if (!trade.exitTime) return false;
+          const exitDate = new Date(trade.exitTime);
+          if (from && exitDate < new Date(from as string)) return false;
+          if (to && exitDate > new Date(to as string)) return false;
+          return true;
+        });
+      }
+      
+      // Symbol filter
+      if (symbol && symbol !== 'all') {
+        filteredTrades = filteredTrades.filter(trade => trade.symbol === symbol);
+      }
+      
+      // Strategy filter
+      if (strategy && strategy !== 'all') {
+        filteredTrades = filteredTrades.filter(trade => trade.strategy === strategy);
+      }
+      
+      // Mode filter
+      if (mode && mode !== 'all') {
+        filteredTrades = filteredTrades.filter(trade => trade.mode === mode);
+      }
+      
+      // Generate report based on type
+      let csvData = '';
+      let filename = 'report.csv';
+      
+      switch (reportType) {
+        case 'tax':
+          csvData = generateTaxReport(filteredTrades);
+          filename = 'tax-report.csv';
+          break;
+        case 'performance':
+          csvData = generatePerformanceReport(filteredTrades);
+          filename = 'performance-report.csv';
+          break;
+        case 'journal':
+          csvData = generateTradeJournalReport(filteredTrades);
+          filename = 'trade-journal.csv';
+          break;
+        case 'fees':
+          csvData = generateFeesReport(filteredTrades);
+          filename = 'fees-report.csv';
+          break;
+        case 'pnl-monthly':
+          csvData = generatePnLReport(filteredTrades, 'monthly');
+          filename = 'pnl-monthly.csv';
+          break;
+        case 'pnl-quarterly':
+          csvData = generatePnLReport(filteredTrades, 'quarterly');
+          filename = 'pnl-quarterly.csv';
+          break;
+        case 'pnl-annual':
+          csvData = generatePnLReport(filteredTrades, 'annual');
+          filename = 'pnl-annual.csv';
+          break;
+        case 'custom':
+        case 'all-trades':
+        default:
+          csvData = generateTradeCSV(filteredTrades);
+          filename = 'trades.csv';
+          break;
+      }
+      
+      if (format === 'pdf') {
+        // For now, return CSV with a note that PDF generation is not yet implemented
+        // In production, you would use a PDF library here
+        res.status(501).json({ error: 'PDF export coming soon. Please use CSV format.' });
+        return;
+      }
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+      res.send(csvData);
+    } catch (error) {
+      console.error('Error generating report:', error);
+      res.status(500).json({ error: 'Failed to generate report' });
+    }
+  });
+
   // Export functionality
   app.get('/api/export/trades', async (req, res) => {
     try {
@@ -1715,6 +1813,393 @@ function generateTradeCSV(trades: any[]): string {
       (parseFloat(trade.realizedPLR || '0') * parseFloat(trade.riskAmount)).toFixed(2),
       holdTime.toFixed(2)
     ].map(value => `"${value}"`).join(',');
+  });
+  
+  return [headers.join(','), ...rows].join('\n');
+}
+
+// Tax Report Generator
+function generateTaxReport(trades: any[]): string {
+  const headers = [
+    'Trade ID',
+    'Date/Time (UTC)',
+    'Date/Time (Local)',
+    'Symbol',
+    'Side',
+    'Entry Price',
+    'Exit Price',
+    'Quantity',
+    'Entry Fee',
+    'Exit Fee',
+    'Total Fees',
+    'Gross P/L',
+    'Net P/L',
+    'P/L %',
+    'Cost Basis',
+    'Proceeds',
+    'Holding Duration (days)',
+    'Term Classification',
+    'Realized Gains'
+  ];
+  
+  const rows = trades.map(trade => {
+    const entryTime = new Date(trade.entryTime);
+    const exitTime = trade.exitTime ? new Date(trade.exitTime) : null;
+    const holdDays = exitTime ? 
+      (exitTime.getTime() - entryTime.getTime()) / (1000 * 60 * 60 * 24) : 0;
+    
+    const entryFee = parseFloat(trade.entryFee || '0');
+    const exitFee = parseFloat(trade.exitFee || '0');
+    const totalFees = entryFee + exitFee;
+    
+    const costBasis = parseFloat(trade.entryPrice) * parseFloat(trade.quantity) + entryFee;
+    const proceeds = trade.exitPrice ? 
+      parseFloat(trade.exitPrice) * parseFloat(trade.quantity) - exitFee : 0;
+    const grossPL = proceeds - (parseFloat(trade.entryPrice) * parseFloat(trade.quantity));
+    const netPL = proceeds - costBasis;
+    const realizedGains = netPL;
+    const termClassification = holdDays >= 365 ? 'Long-term' : 'Short-term';
+    
+    return [
+      trade.id,
+      entryTime.toISOString(),
+      entryTime.toLocaleString(),
+      trade.symbol,
+      'LONG', // Crypto day trading (long-only)
+      trade.entryPrice,
+      trade.exitPrice || '',
+      trade.quantity,
+      entryFee.toFixed(4),
+      exitFee.toFixed(4),
+      totalFees.toFixed(4),
+      grossPL.toFixed(2),
+      netPL.toFixed(2),
+      trade.realizedPLPercent || '',
+      costBasis.toFixed(2),
+      proceeds.toFixed(2),
+      holdDays.toFixed(2),
+      termClassification,
+      realizedGains.toFixed(2)
+    ].map(value => `"${value}"`).join(',');
+  });
+  
+  return [headers.join(','), ...rows].join('\n');
+}
+
+// Performance Summary Report
+function generatePerformanceReport(trades: any[]): string {
+  // Group by symbol and strategy
+  const bySymbol: { [key: string]: any[] } = {};
+  const byStrategy: { [key: string]: any[] } = {};
+  
+  trades.forEach(trade => {
+    if (!bySymbol[trade.symbol]) bySymbol[trade.symbol] = [];
+    bySymbol[trade.symbol].push(trade);
+    
+    if (!byStrategy[trade.strategy]) byStrategy[trade.strategy] = [];
+    byStrategy[trade.strategy].push(trade);
+  });
+  
+  const headers = [
+    'Group Type',
+    'Group Name',
+    'Total Trades',
+    'Wins',
+    'Losses',
+    'Win Rate %',
+    'Avg R Multiple',
+    'Total P/L',
+    'Max Drawdown',
+    'Avg Hold Time (hrs)',
+    'Total Fees'
+  ];
+  
+  const calculateMetrics = (groupTrades: any[]) => {
+    const wins = groupTrades.filter(t => parseFloat(t.realizedPLR || '0') > 0).length;
+    const losses = groupTrades.filter(t => parseFloat(t.realizedPLR || '0') < 0).length;
+    const winRate = groupTrades.length > 0 ? (wins / groupTrades.length) * 100 : 0;
+    const avgR = groupTrades.reduce((sum, t) => sum + parseFloat(t.realizedPLR || '0'), 0) / groupTrades.length || 0;
+    const totalPL = groupTrades.reduce((sum, t) => {
+      const entry = parseFloat(t.entryPrice) * parseFloat(t.quantity);
+      const exit = t.exitPrice ? parseFloat(t.exitPrice) * parseFloat(t.quantity) : entry;
+      return sum + (exit - entry);
+    }, 0);
+    const totalFees = groupTrades.reduce((sum, t) => 
+      sum + parseFloat(t.entryFee || '0') + parseFloat(t.exitFee || '0'), 0);
+    const avgHoldTime = groupTrades.reduce((sum, t) => {
+      const entry = new Date(t.entryTime);
+      const exit = t.exitTime ? new Date(t.exitTime) : entry;
+      return sum + (exit.getTime() - entry.getTime()) / (1000 * 60 * 60);
+    }, 0) / groupTrades.length || 0;
+    
+    return {
+      total: groupTrades.length,
+      wins,
+      losses,
+      winRate: winRate.toFixed(2),
+      avgR: avgR.toFixed(2),
+      totalPL: totalPL.toFixed(2),
+      maxDD: '0.00', // Simplified for now
+      avgHoldTime: avgHoldTime.toFixed(2),
+      totalFees: totalFees.toFixed(2)
+    };
+  };
+  
+  const rows: string[] = [];
+  
+  // Overall summary
+  const overallMetrics = calculateMetrics(trades);
+  rows.push([
+    'Overall',
+    'All Trades',
+    overallMetrics.total,
+    overallMetrics.wins,
+    overallMetrics.losses,
+    overallMetrics.winRate,
+    overallMetrics.avgR,
+    overallMetrics.totalPL,
+    overallMetrics.maxDD,
+    overallMetrics.avgHoldTime,
+    overallMetrics.totalFees
+  ].map(v => `"${v}"`).join(','));
+  
+  // By symbol
+  Object.keys(bySymbol).forEach(symbol => {
+    const metrics = calculateMetrics(bySymbol[symbol]);
+    rows.push([
+      'Symbol',
+      symbol,
+      metrics.total,
+      metrics.wins,
+      metrics.losses,
+      metrics.winRate,
+      metrics.avgR,
+      metrics.totalPL,
+      metrics.maxDD,
+      metrics.avgHoldTime,
+      metrics.totalFees
+    ].map(v => `"${v}"`).join(','));
+  });
+  
+  // By strategy
+  Object.keys(byStrategy).forEach(strategy => {
+    const metrics = calculateMetrics(byStrategy[strategy]);
+    rows.push([
+      'Strategy',
+      strategy,
+      metrics.total,
+      metrics.wins,
+      metrics.losses,
+      metrics.winRate,
+      metrics.avgR,
+      metrics.totalPL,
+      metrics.maxDD,
+      metrics.avgHoldTime,
+      metrics.totalFees
+    ].map(v => `"${v}"`).join(','));
+  });
+  
+  return [headers.join(','), ...rows].join('\n');
+}
+
+// Trade Journal Report
+function generateTradeJournalReport(trades: any[]): string {
+  const headers = [
+    'Trade ID',
+    'Entry Date/Time',
+    'Exit Date/Time',
+    'Symbol',
+    'Strategy',
+    'Entry Price',
+    'Stop Loss',
+    'Target',
+    'Exit Price',
+    'Quantity',
+    'R Amount',
+    'Result (R)',
+    'P/L $',
+    'P/L %',
+    'Hold Time',
+    'Notes'
+  ];
+  
+  const rows = trades.map(trade => {
+    const entryTime = new Date(trade.entryTime);
+    const exitTime = trade.exitTime ? new Date(trade.exitTime) : null;
+    const holdTime = exitTime ? 
+      `${((exitTime.getTime() - entryTime.getTime()) / (1000 * 60 * 60)).toFixed(1)} hrs` : '-';
+    
+    const entryValue = parseFloat(trade.entryPrice) * parseFloat(trade.quantity);
+    const exitValue = trade.exitPrice ? parseFloat(trade.exitPrice) * parseFloat(trade.quantity) : entryValue;
+    const pl = exitValue - entryValue;
+    const plPercent = entryValue > 0 ? ((pl / entryValue) * 100).toFixed(2) : '0.00';
+    
+    return [
+      trade.id,
+      entryTime.toISOString(),
+      exitTime ? exitTime.toISOString() : '-',
+      trade.symbol,
+      trade.strategy,
+      trade.entryPrice,
+      trade.stopLoss || '-',
+      trade.target || '-',
+      trade.exitPrice || '-',
+      trade.quantity,
+      trade.riskAmount || '-',
+      trade.realizedPLR || '-',
+      pl.toFixed(2),
+      plPercent,
+      holdTime,
+      trade.notes || '-'
+    ].map(value => `"${value}"`).join(',');
+  });
+  
+  return [headers.join(','), ...rows].join('\n');
+}
+
+// Fees & Costs Report
+function generateFeesReport(trades: any[]): string {
+  // Group by month
+  const byMonth: { [key: string]: any[] } = {};
+  trades.forEach(trade => {
+    const month = new Date(trade.entryTime).toISOString().substring(0, 7); // YYYY-MM
+    if (!byMonth[month]) byMonth[month] = [];
+    byMonth[month].push(trade);
+  });
+  
+  const headers = [
+    'Period',
+    'Total Trades',
+    'Total Entry Fees',
+    'Total Exit Fees',
+    'Total Fees',
+    'Avg Fee Per Trade',
+    'Fee % of Volume'
+  ];
+  
+  const rows = Object.keys(byMonth).sort().map(month => {
+    const monthTrades = byMonth[month];
+    const totalEntryFees = monthTrades.reduce((sum, t) => sum + parseFloat(t.entryFee || '0'), 0);
+    const totalExitFees = monthTrades.reduce((sum, t) => sum + parseFloat(t.exitFee || '0'), 0);
+    const totalFees = totalEntryFees + totalExitFees;
+    const avgFee = totalFees / monthTrades.length;
+    const totalVolume = monthTrades.reduce((sum, t) => 
+      sum + (parseFloat(t.entryPrice) * parseFloat(t.quantity)), 0);
+    const feePercent = totalVolume > 0 ? (totalFees / totalVolume) * 100 : 0;
+    
+    return [
+      month,
+      monthTrades.length,
+      totalEntryFees.toFixed(4),
+      totalExitFees.toFixed(4),
+      totalFees.toFixed(4),
+      avgFee.toFixed(4),
+      feePercent.toFixed(4)
+    ].map(v => `"${v}"`).join(',');
+  });
+  
+  // Add total row
+  const totalTrades = trades.length;
+  const grandTotalEntryFees = trades.reduce((sum, t) => sum + parseFloat(t.entryFee || '0'), 0);
+  const grandTotalExitFees = trades.reduce((sum, t) => sum + parseFloat(t.exitFee || '0'), 0);
+  const grandTotalFees = grandTotalEntryFees + grandTotalExitFees;
+  const grandAvgFee = totalTrades > 0 ? grandTotalFees / totalTrades : 0;
+  const grandTotalVolume = trades.reduce((sum, t) => 
+    sum + (parseFloat(t.entryPrice) * parseFloat(t.quantity)), 0);
+  const grandFeePercent = grandTotalVolume > 0 ? (grandTotalFees / grandTotalVolume) * 100 : 0;
+  
+  rows.push([
+    'TOTAL',
+    totalTrades,
+    grandTotalEntryFees.toFixed(4),
+    grandTotalExitFees.toFixed(4),
+    grandTotalFees.toFixed(4),
+    grandAvgFee.toFixed(4),
+    grandFeePercent.toFixed(4)
+  ].map(v => `"${v}"`).join(','));
+  
+  return [headers.join(','), ...rows].join('\n');
+}
+
+// P&L Report (Monthly, Quarterly, Annual)
+function generatePnLReport(trades: any[], period: 'monthly' | 'quarterly' | 'annual'): string {
+  const groupedTrades: { [key: string]: any[] } = {};
+  
+  trades.forEach(trade => {
+    const date = new Date(trade.entryTime);
+    let key = '';
+    
+    if (period === 'monthly') {
+      key = date.toISOString().substring(0, 7); // YYYY-MM
+    } else if (period === 'quarterly') {
+      const quarter = Math.floor(date.getMonth() / 3) + 1;
+      key = `${date.getFullYear()}-Q${quarter}`;
+    } else {
+      key = date.getFullYear().toString();
+    }
+    
+    if (!groupedTrades[key]) groupedTrades[key] = [];
+    groupedTrades[key].push(trade);
+  });
+  
+  const headers = [
+    'Period',
+    'Total Trades',
+    'Wins',
+    'Losses',
+    'Win Rate %',
+    'Gross P/L',
+    'Net P/L',
+    'Total Fees',
+    'Avg Hold Time (hrs)',
+    'Best Trade',
+    'Worst Trade'
+  ];
+  
+  const rows = Object.keys(groupedTrades).sort().map(periodKey => {
+    const periodTrades = groupedTrades[periodKey];
+    const wins = periodTrades.filter(t => parseFloat(t.realizedPLR || '0') > 0).length;
+    const losses = periodTrades.filter(t => parseFloat(t.realizedPLR || '0') < 0).length;
+    const winRate = periodTrades.length > 0 ? (wins / periodTrades.length) * 100 : 0;
+    
+    const totalFees = periodTrades.reduce((sum, t) => 
+      sum + parseFloat(t.entryFee || '0') + parseFloat(t.exitFee || '0'), 0);
+    
+    const grossPL = periodTrades.reduce((sum, t) => {
+      const entry = parseFloat(t.entryPrice) * parseFloat(t.quantity);
+      const exit = t.exitPrice ? parseFloat(t.exitPrice) * parseFloat(t.quantity) : entry;
+      return sum + (exit - entry);
+    }, 0);
+    
+    const netPL = grossPL - totalFees;
+    
+    const avgHoldTime = periodTrades.reduce((sum, t) => {
+      const entry = new Date(t.entryTime);
+      const exit = t.exitTime ? new Date(t.exitTime) : entry;
+      return sum + (exit.getTime() - entry.getTime()) / (1000 * 60 * 60);
+    }, 0) / periodTrades.length || 0;
+    
+    const plValues = periodTrades.map(t => {
+      const entry = parseFloat(t.entryPrice) * parseFloat(t.quantity);
+      const exit = t.exitPrice ? parseFloat(t.exitPrice) * parseFloat(t.quantity) : entry;
+      return exit - entry;
+    });
+    const bestTrade = plValues.length > 0 ? Math.max(...plValues) : 0;
+    const worstTrade = plValues.length > 0 ? Math.min(...plValues) : 0;
+    
+    return [
+      periodKey,
+      periodTrades.length,
+      wins,
+      losses,
+      winRate.toFixed(2),
+      grossPL.toFixed(2),
+      netPL.toFixed(2),
+      totalFees.toFixed(4),
+      avgHoldTime.toFixed(2),
+      bestTrade.toFixed(2),
+      worstTrade.toFixed(2)
+    ].map(v => `"${v}"`).join(',');
   });
   
   return [headers.join(','), ...rows].join('\n');

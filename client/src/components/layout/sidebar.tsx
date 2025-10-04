@@ -8,7 +8,8 @@ import {
   Brain,
   Settings,
   TrendingUp,
-  User
+  User,
+  FileText
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +25,7 @@ const navigation = [
   { name: "Watchlist", href: "/watchlist", icon: Eye },
   { name: "Active Trades", href: "/active-trades", icon: BarChart3 },
   { name: "Trade History", href: "/history", icon: Clock },
+  { name: "Reports", href: "/reports", icon: FileText },
   { name: "AI Analysis", href: "/analysis", icon: Brain },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

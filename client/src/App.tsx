@@ -9,6 +9,7 @@ import Analysis from "@/pages/analysis";
 import Settings from "@/pages/settings";
 import WatchlistPage from "@/pages/watchlist";
 import KillSwitchScreen from "@/pages/kill-switch";
+import ReportsPage from "@/pages/reports";
 import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
 import { useState, useEffect } from "react";
@@ -54,6 +55,7 @@ function Router() {
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/watchlist" component={WatchlistPage} />
           <Route path="/history" component={History} />
+          <Route path="/reports" component={ReportsPage} />
           <Route path="/analysis" component={Analysis} />
           <Route path="/settings" component={Settings} />
           <Route path="/kill-switch" component={KillSwitchScreen} />
