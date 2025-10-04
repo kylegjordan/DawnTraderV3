@@ -54,7 +54,9 @@ interface ChatResponse {
 
 export function ChatContainer() {
   const [location] = useLocation();
-  const urlParams = new URLSearchParams(location.split('?')[1] || '');
+  // Strip hash fragment before parsing query params
+  const queryString = location.split('?')[1]?.split('#')[0] || '';
+  const urlParams = new URLSearchParams(queryString);
   const conversationIdFromUrl = urlParams.get('conversation_id');
   
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(conversationIdFromUrl);
