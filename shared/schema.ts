@@ -82,6 +82,10 @@ export const tradingSettings = pgTable("trading_settings", {
   dailyLossWarningTrigger: decimal("daily_loss_warning_trigger", { precision: 5, scale: 2 }).default("75.00"), // % of kill switch threshold
   tradingSuspended: boolean("trading_suspended").default(false), // System-controlled flag
   
+  // Phase 2: Partial Fill Recovery
+  partialFillThreshold: decimal("partial_fill_threshold", { precision: 5, scale: 2 }).default("90.00"), // % threshold
+  partialFillAction: varchar("partial_fill_action", { length: 20 }).default("scale"), // 'scale' or 'catchup'
+  
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 

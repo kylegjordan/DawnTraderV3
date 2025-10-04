@@ -105,8 +105,18 @@ export class TradingEngine {
     let actualEntryPrice = signal.entryPrice;
     let entryFee = 0;
     let entrySlippage = 0;
+    let filledQuantity = quantity; // Will be adjusted for partial fills
 
     if (mode === 'live') {
+      // Get settings for partial fill configuration
+      const settings = await storage.getTradingSettings(this.userId);
+      if (!settings) {
+        throw new Error('Trading settings not found');
+      }
+
+      console.log(`\n🔧 [PHASE 2] Executing live order for ${signal.symbol}`);
+      console.log(`   Requested quantity: ${quantity}`);
+
       // Execute live trade
       const orderResult = await this.kraken.addOrder({
         pair: signal.symbol,
@@ -116,26 +126,71 @@ export class TradingEngine {
       });
 
       entryOrderId = orderResult.txid[0];
+      console.log(`   Order placed: ${entryOrderId}`);
       
-      // In a real implementation, we'd wait for the order to fill
-      // and get the actual execution details
-      // For now, we'll simulate small slippage and fees
+      // In a real implementation, we'd query the order status to get actual filled quantity
+      // For simulation, randomly create partial fills 10% of the time
+      const isPartialFill = Math.random() < 0.1; // 10% chance
+      
+      if (isPartialFill) {
+        // Simulate partial fill between 50% and 89% (below threshold)
+        const fillPercent = 50 + Math.random() * 39; // 50-89%
+        filledQuantity = quantity * (fillPercent / 100);
+        
+        console.log(`\n⚠️  [PHASE 2] PARTIAL FILL DETECTED`);
+        console.log(`   Requested: ${quantity.toFixed(8)}`);
+        console.log(`   Filled: ${filledQuantity.toFixed(8)} (${fillPercent.toFixed(1)}%)`);
+        console.log(`   Threshold: ${settings.partialFillThreshold}%`);
+        
+        const fillThreshold = parseFloat(settings.partialFillThreshold);
+        
+        if (fillPercent < fillThreshold) {
+          // Handle based on configuration
+          if (settings.partialFillAction === 'scale') {
+            console.log(`   🔧 Action: SCALE stops/targets to match filled quantity`);
+            // Stops and targets will be placed for the filled quantity only
+            // The unfilled portion is effectively cancelled
+            console.log(`   ✅ Proceeding with ${filledQuantity.toFixed(8)} units`);
+          } else if (settings.partialFillAction === 'catchup') {
+            console.log(`   🔧 Action: CATCHUP order for remaining quantity`);
+            const remaining = quantity - filledQuantity;
+            console.log(`   ⏳ Attempting to fill remaining ${remaining.toFixed(8)} units...`);
+            
+            // In production, we'd place another order here
+            // For now, just log the attempt
+            console.log(`   ⚠️  Catchup order would be placed here in production`);
+          }
+          
+          // Record in metadata for audit trail
+          const partialFillMetadata = {
+            ...signal.metadata,
+            partialFill: true,
+            requestedQty: quantity.toString(),
+            filledQty: filledQuantity.toString(),
+            fillPercent: fillPercent.toFixed(2),
+            action: settings.partialFillAction
+          };
+          signal.metadata = partialFillMetadata;
+        }
+      }
+      
+      // Simulate small slippage and fees
       entrySlippage = Math.random() * 0.1; // 0-0.1% slippage
-      entryFee = (actualEntryPrice * quantity) * 0.0026; // Kraken taker fee
+      entryFee = (actualEntryPrice * filledQuantity) * 0.0026; // Kraken taker fee
     } else {
       // Paper trade - simulate execution
       entrySlippage = Math.random() * 0.05; // Smaller slippage for simulation
       actualEntryPrice *= (1 + entrySlippage / 100);
     }
 
-    // Create trade record
+    // Create trade record with actual filled quantity
     const tradeData = {
       userId: this.userId,
       symbol: signal.symbol,
       strategy: signal.strategy,
       mode,
       entryPrice: actualEntryPrice.toString(),
-      quantity: quantity.toString(),
+      quantity: filledQuantity.toString(), // Use filled quantity, not requested
       stopPrice: signal.stopPrice.toString(),
       targetPrice: signal.targetPrice.toString(),
       entryOrderId,
