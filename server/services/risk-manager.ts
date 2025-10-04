@@ -433,4 +433,151 @@ export class RiskManager {
     
     return closedTrades;
   }
+
+  /**
+   * Calculate earnings for different time periods
+   * Excludes paper trades and only includes realized P/L from live trades
+   */
+  async getEarnings(userId: string): Promise<{
+    today: number;
+    yesterday: number;
+    thisWeek: number;
+    thisMonth: number;
+    thisYear: number;
+    lifetime: number;
+  }> {
+    const now = new Date();
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
+    const yesterdayEnd = todayStart;
+    
+    const weekStart = new Date(todayStart);
+    weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
+    
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+
+    const closedTrades = await storage.getTrades(userId, { status: 'closed' });
+    
+    const liveTrades = closedTrades.filter(trade => trade.mode === 'live' && trade.exitTime && trade.realizedPL);
+
+    const safeParseFloat = (value: string | null | undefined): number => {
+      if (!value) return 0;
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
+    const today = liveTrades
+      .filter(trade => new Date(trade.exitTime!) >= todayStart)
+      .reduce((sum, trade) => sum + safeParseFloat(trade.realizedPL), 0);
+
+    const yesterday = liveTrades
+      .filter(trade => {
+        const exitDate = new Date(trade.exitTime!);
+        return exitDate >= yesterdayStart && exitDate < yesterdayEnd;
+      })
+      .reduce((sum, trade) => sum + safeParseFloat(trade.realizedPL), 0);
+
+    const thisWeek = liveTrades
+      .filter(trade => new Date(trade.exitTime!) >= weekStart)
+      .reduce((sum, trade) => sum + safeParseFloat(trade.realizedPL), 0);
+
+    const thisMonth = liveTrades
+      .filter(trade => new Date(trade.exitTime!) >= monthStart)
+      .reduce((sum, trade) => sum + safeParseFloat(trade.realizedPL), 0);
+
+    const thisYear = liveTrades
+      .filter(trade => new Date(trade.exitTime!) >= yearStart)
+      .reduce((sum, trade) => sum + safeParseFloat(trade.realizedPL), 0);
+
+    const lifetime = liveTrades
+      .reduce((sum, trade) => sum + safeParseFloat(trade.realizedPL), 0);
+
+    return {
+      today,
+      yesterday,
+      thisWeek,
+      thisMonth,
+      thisYear,
+      lifetime
+    };
+  }
+
+  /**
+   * Get daily earnings data for chart
+   * Returns one data point per day showing total earnings for that day
+   */
+  async getEarningsChartData(userId: string, days = 30): Promise<Array<{
+    date: string;
+    earnings: number;
+    timestamp: number;
+  }>> {
+    const closedTrades = await storage.getTrades(userId, { status: 'closed' });
+    const liveTrades = closedTrades.filter(trade => trade.mode === 'live' && trade.exitTime);
+
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setDate(startDate.getDate() - days);
+
+    const dailyEarnings = new Map<string, number>();
+
+    liveTrades.forEach(trade => {
+      if (!trade.exitTime) return;
+      
+      const exitDate = new Date(trade.exitTime);
+      if (exitDate < startDate) return;
+
+      const dateKey = exitDate.toISOString().split('T')[0];
+      const earnings = parseFloat(trade.realizedPL || '0');
+      
+      dailyEarnings.set(dateKey, (dailyEarnings.get(dateKey) || 0) + earnings);
+    });
+
+    const chartData: Array<{ date: string; earnings: number; timestamp: number }> = [];
+    
+    for (let i = 0; i < days; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      const dateKey = date.toISOString().split('T')[0];
+      
+      chartData.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        earnings: dailyEarnings.get(dateKey) || 0,
+        timestamp: date.getTime()
+      });
+    }
+
+    return chartData;
+  }
+
+  /**
+   * Calculate Cash vs Crypto allocation
+   */
+  async getCashVsCrypto(userId: string): Promise<{
+    cash: number;
+    crypto: number;
+    cashPercent: number;
+    cryptoPercent: number;
+  }> {
+    const activeTrades = await storage.getActiveTrades(userId);
+    const metrics = await this.getPortfolioMetrics(userId);
+    
+    const cryptoValue = activeTrades.reduce((sum, trade) => {
+      return sum + (parseFloat(trade.entryPrice) * parseFloat(trade.quantity));
+    }, 0);
+    
+    const totalValue = metrics.totalValue || 50000;
+    const cash = totalValue - cryptoValue;
+    
+    const cashPercent = (cash / totalValue) * 100;
+    const cryptoPercent = (cryptoValue / totalValue) * 100;
+
+    return {
+      cash,
+      crypto: cryptoValue,
+      cashPercent,
+      cryptoPercent
+    };
+  }
 }

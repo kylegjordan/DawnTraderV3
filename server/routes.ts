@@ -200,14 +200,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.headers['user-id'] as string || 'default-user';
       const metrics = await riskManager.getPortfolioMetrics(userId);
       const winRateData = await riskManager.getWinRate(userId, 30);
+      const cashVsCrypto = await riskManager.getCashVsCrypto(userId);
       
       res.json({
         ...metrics,
-        ...winRateData
+        ...winRateData,
+        ...cashVsCrypto
       });
     } catch (error) {
       console.error('Error fetching portfolio overview:', error);
       res.status(500).json({ error: 'Failed to fetch portfolio data' });
+    }
+  });
+
+  app.get('/api/portfolio/earnings', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const earnings = await riskManager.getEarnings(userId);
+      res.json(earnings);
+    } catch (error) {
+      console.error('Error fetching earnings:', error);
+      res.status(500).json({ error: 'Failed to fetch earnings data' });
+    }
+  });
+
+  app.get('/api/portfolio/earnings-chart', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const days = parseInt(req.query.days as string) || 30;
+      const chartData = await riskManager.getEarningsChartData(userId, days);
+      res.json(chartData);
+    } catch (error) {
+      console.error('Error fetching earnings chart data:', error);
+      res.status(500).json({ error: 'Failed to fetch earnings chart data' });
     }
   });
 
