@@ -56,6 +56,10 @@ export function ChatHistorySidebar({
 
   const { data: conversations = [], isLoading } = useQuery<Conversation[]>({
     queryKey: ['/api/conversations'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/conversations');
+      return response.json();
+    },
   });
 
   const createMutation = useMutation({

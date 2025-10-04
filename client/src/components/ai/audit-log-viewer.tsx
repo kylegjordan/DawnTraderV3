@@ -4,10 +4,15 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Clock, CheckCircle, AlertCircle, Settings } from 'lucide-react';
 import type { AIAuditLog } from '@shared/schema';
+import { apiRequest } from '@/lib/queryClient';
 
 export function AuditLogViewer() {
   const { data: auditLogs, isLoading } = useQuery<AIAuditLog[]>({
     queryKey: ['/api/ai/audit-logs'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/ai/audit-logs');
+      return response.json();
+    },
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 

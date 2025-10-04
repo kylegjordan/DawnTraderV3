@@ -80,7 +80,7 @@ export function ChatContainer() {
     queryKey: ['/api/conversations', currentConversationId],
     queryFn: async () => {
       if (!currentConversationId) return null;
-      const res = await fetch(`/api/conversations/${currentConversationId}`);
+      const res = await apiRequest('GET', `/api/conversations/${currentConversationId}`);
       return res.json();
     },
     enabled: !!currentConversationId
@@ -89,6 +89,10 @@ export function ChatContainer() {
   // Load cost summary
   const { data: costSummary } = useQuery({
     queryKey: ['/api/chat-costs'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/chat-costs');
+      return res.json();
+    },
     refetchInterval: 30000 // Refresh every 30 seconds
   });
 

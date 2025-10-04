@@ -18,13 +18,19 @@ export function ErrorLogViewer() {
 
   const { data: unresolvedErrors } = useQuery<ErrorLog[]>({
     queryKey: ['/api/ai/error-logs', 'unresolved'],
-    queryFn: () => fetch('/api/ai/error-logs?resolved=false').then(r => r.json()),
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/ai/error-logs?resolved=false');
+      return response.json();
+    },
     refetchInterval: 30000,
   });
 
   const { data: allErrors } = useQuery<ErrorLog[]>({
     queryKey: ['/api/ai/error-logs', 'all'],
-    queryFn: () => fetch('/api/ai/error-logs').then(r => r.json()),
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/ai/error-logs');
+      return response.json();
+    },
     refetchInterval: 60000,
   });
 

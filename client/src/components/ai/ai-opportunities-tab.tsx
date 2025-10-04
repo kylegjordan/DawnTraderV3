@@ -69,11 +69,25 @@ export function AIOpportunitiesTab() {
       statusFilter !== "all" ? statusFilter : undefined,
       minProbability !== "0" ? minProbability : undefined,
     ],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (typeFilter !== "all") params.append("type", typeFilter);
+      if (statusFilter !== "all") params.append("status", statusFilter);
+      if (minProbability !== "0") params.append("minProbability", minProbability);
+      
+      const url = `/api/ai/opportunities${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await apiRequest("GET", url);
+      return response.json();
+    },
   });
 
   // Fetch latest run stats
   const { data: latestRun } = useQuery<LatestRun>({
     queryKey: ["/api/ai/opportunities/latest-run"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/ai/opportunities/latest-run");
+      return response.json();
+    },
   });
 
   // Update opportunity status

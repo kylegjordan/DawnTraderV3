@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClipboardCopy, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ValidationReport {
   runId: string;
@@ -37,6 +38,10 @@ export function ValidationReportsTab() {
 
   const { data: report, isLoading } = useQuery<ValidationReport>({
     queryKey: ["/api/ai/opportunities/validation-report"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/ai/opportunities/validation-report");
+      return response.json();
+    },
   });
 
   const copyToClipboard = (text: string) => {
