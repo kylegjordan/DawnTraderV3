@@ -88,6 +88,12 @@ export const tradingSettings = pgTable("trading_settings", {
   partialFillThreshold: decimal("partial_fill_threshold", { precision: 5, scale: 2 }).default("90.00"), // % threshold
   partialFillAction: varchar("partial_fill_action", { length: 20 }).default("scale"), // 'scale' or 'catchup'
   
+  // AI Opportunities Settings
+  aiOpportunitiesEnabled: boolean("ai_opportunities_enabled").default(true),
+  aiOpportunitiesFrequency: integer("ai_opportunities_frequency").default(60), // minutes
+  aiOpportunitiesMaxPairs: integer("ai_opportunities_max_pairs").default(150), // max pairs to send to AI
+  aiOpportunitiesMaxSaved: integer("ai_opportunities_max_saved").default(40), // max opportunities to save per run
+  
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 

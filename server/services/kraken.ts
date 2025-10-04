@@ -127,9 +127,17 @@ export class KrakenService {
     return await this.makePublicRequest('AssetPairs');
   }
 
+  async getAssetPairs(): Promise<any> {
+    return await this.getTradablePairs();
+  }
+
   async getTicker(pair?: string): Promise<Record<string, KrakenTicker>> {
     const params = pair ? { pair } : {};
     return await this.makePublicRequest('Ticker', params);
+  }
+
+  async getTickers(): Promise<Record<string, KrakenTicker>> {
+    return await this.getTicker();
   }
 
   async getOHLCData(pair: string, interval = 60, since?: number): Promise<{
