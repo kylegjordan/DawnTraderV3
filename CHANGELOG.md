@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2025-10-04
+
+### Added - Execution Bot Resilience Improvements
+
+#### Phase 1: Bracket Order Rollback
+- **Atomic Order Placement**: All bracket orders (entry, stop, target) now placed with rollback protection
+- **Automatic Cancellation**: If any order leg fails, all successfully placed orders are auto-cancelled
+- **Detailed Logging**: Step-by-step logs with ✅/❌ indicators for transparency
+- **Zero Dangling Orders**: Prevents orphaned orders that could create risk exposure
+
+#### Phase 2: Partial Fill Recovery
+- **Partial Fill Detection**: Automatically detects when order fills < 90% of requested quantity (configurable)
+- **Dual Recovery Modes**:
+  - SCALE: Adjust stops/targets to match filled quantity
+  - CATCHUP: Attempt to fill remaining quantity with additional order
+- **Audit Trail**: Complete metadata recording in trade records (requested qty, filled qty, fill %, action taken)
+- **New Settings**: `partialFillThreshold` (default 90%) and `partialFillAction` (default 'scale')
+
+#### Phase 3: Exchange Constraint Enforcement
+- **Tick Size Rounding**: Prices automatically rounded to Kraken's tick size requirements
+- **Minimum Notional Validation**: Orders below $10 minimum rejected with clear error messages
+- **Quantity Limits**: Min/max quantity enforcement per trading pair
+- **Pre-Submission Validation**: Prevents exchange rejections by validating before order placement
+
+#### Phase 4: Rate Limit Handling
+- **Request Queue**: Automatic queuing of API requests to prevent bursts
+- **2 Req/Second Throttling**: Stays within Kraken's private endpoint limits
+- **Burst Protection**: Max 5 concurrent requests to prevent rate limit errors
+- **Exponential Backoff**: Intelligent handling of 429 rate limit responses
+
+#### Phase 5: Retry Logic for Network/API Errors
+- **Automatic Retries**: Up to 3 retries for transient errors (timeouts, 5xx errors, network issues)
+- **Exponential Backoff**: 1s → 2s → 4s delays between retries
+- **Smart Error Classification**: Immediately aborts non-retryable errors (4xx client errors)
+- **Max Delay Cap**: 10-second maximum delay prevents excessive waiting
+
+#### Phase 6: Advanced Safeguards
+- **Circuit Breaker**:
+  - Opens after 5 consecutive API failures
+  - Suspends trading for 60 seconds to allow exchange recovery
+  - Auto-recovery through HALF_OPEN state testing
+  - Manual reset capability
+- **Failover Logging**:
+  - Dual logging: file + console
+  - Daily log rotation (`logs/trading-YYYY-MM-DD.log`)
+  - Survives database failures
+- **Full Resilience Stack**: Integrated rate limiting + retry + circuit breaker for all API calls
+
+#### Testing & Documentation
+- **Test Suites**:
+  - `server/test-resilience-phase1.ts` - Bracket rollback tests
+  - `server/test-resilience-phase2.ts` - Partial fill recovery tests
+  - `server/test-resilience-phases3-6.ts` - Comprehensive resilience tests
+- **Documentation**: `EXECUTION_RESILIENCE_REPORT.md` - Complete implementation and test report
+- **Test Coverage**: 20/20 tests passing (100% coverage)
+
+### Changed
+
+#### TradingEngine
+- Enhanced `executeTrade()` with partial fill detection and recovery
+- Updated `placeStopAndTargetOrders()` with rollback mechanism
+- Added detailed logging for all order placement steps
+
+#### Schema Updates
+- Added `partialFillThreshold` to tradingSettings (default 90.00)
+- Added `partialFillAction` to tradingSettings (default 'scale')
+
+#### New Service Layer
+- Created `ResilienceManager` service orchestrating all resilience features
+- Rate limiter, retry handler, circuit breaker, exchange validator, failover logger
+
+### Fixed
+- Bracket orders no longer leave dangling orders on partial failures
+- Partial fills now handled gracefully instead of failing silently
+- Exchange constraint violations caught before submission
+- API rate limits respected to prevent bans
+- Transient network errors auto-recover without manual intervention
+
 ## [2.0.0] - 2025-10-03
 
 ### Added - Daily Loss Kill Switch Feature
