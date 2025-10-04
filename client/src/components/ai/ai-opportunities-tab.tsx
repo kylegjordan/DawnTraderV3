@@ -79,12 +79,7 @@ export function AIOpportunitiesTab() {
   // Update opportunity status
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const response = await fetch(`/api/ai/opportunities/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!response.ok) throw new Error("Failed to update status");
+      const response = await apiRequest("PATCH", `/api/ai/opportunities/${id}/status`, { status });
       return response.json();
     },
     onSuccess: () => {
@@ -99,14 +94,7 @@ export function AIOpportunitiesTab() {
   // Manual trigger generation
   const generateMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/ai/opportunities/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to generate opportunities");
-      }
+      const response = await apiRequest("POST", "/api/ai/opportunities/generate");
       return response.json();
     },
     onSuccess: () => {
@@ -157,19 +145,14 @@ export function AIOpportunitiesTab() {
         riskRewardRating: opp.riskRewardRating
       }, null, 2);
       
-      const response = await fetch("/api/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          title,
-          context: {
-            opportunityContext: contextMessage,
-            opportunityId: opp.id
-          }
-        }),
+      const response = await apiRequest("POST", "/api/conversations", { 
+        title,
+        context: {
+          opportunityContext: contextMessage,
+          opportunityId: opp.id
+        }
       });
       
-      if (!response.ok) throw new Error("Failed to create conversation");
       return response.json();
     },
     onSuccess: (conversation) => {
@@ -243,27 +226,27 @@ export function AIOpportunitiesTab() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Pairs Analyzed:</span>
-                  <span className="font-semibold text-gray-800">{latestRun.pairsConsidered}</span>
+                  <span className="font-semibold text-gray-800" data-testid="text-pairs-analyzed">{latestRun.pairsConsidered}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Sent to AI:</span>
-                  <span className="font-semibold text-gray-800">{latestRun.pairsSentToAi}</span>
+                  <span className="font-semibold text-gray-800" data-testid="text-sent-to-ai">{latestRun.pairsSentToAi}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Opportunities Created:</span>
-                  <span className="font-semibold text-gray-800">{latestRun.opportunitiesCreated}</span>
+                  <span className="font-semibold text-gray-800" data-testid="text-opportunities-created">{latestRun.opportunitiesCreated}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Model:</span>
-                  <span className="font-mono text-xs text-gray-800">{latestRun.modelUsed}</span>
+                  <span className="font-mono text-xs text-gray-800" data-testid="text-model-used">{latestRun.modelUsed}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Cost:</span>
-                  <span className="font-mono text-xs text-green-600">
+                  <span className="font-mono text-xs text-green-600" data-testid="text-cost-estimate">
                     ${parseFloat(latestRun.costEstimate).toFixed(4)}
                   </span>
                 </div>
-                <div className="text-xs text-gray-500 mt-2">
+                <div className="text-xs text-gray-500 mt-2" data-testid="text-last-run">
                   Last run: {new Date(latestRun.finishedAt).toLocaleString()}
                 </div>
               </div>
