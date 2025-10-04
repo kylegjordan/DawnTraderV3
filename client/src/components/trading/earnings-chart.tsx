@@ -135,10 +135,11 @@ export default function EarningsChart() {
                 stroke="hsl(var(--primary))" 
                 strokeWidth={2}
                 dot={(props: any) => {
-                  const { cx, cy, payload } = props;
+                  const { cx, cy, payload, index } = props;
                   const color = payload.earnings >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))';
                   return (
                     <circle 
+                      key={`dot-${index}`}
                       cx={cx} 
                       cy={cy} 
                       r={3} 
