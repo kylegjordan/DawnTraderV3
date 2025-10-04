@@ -149,7 +149,13 @@ export class TradingEngine {
   }
 
   private async placeStopAndTargetOrders(trade: Trade): Promise<void> {
+    const placedOrders: string[] = [];
+    
     try {
+      console.log(`\n🔧 [PHASE 1] Starting bracket order placement for ${trade.symbol}`);
+      console.log(`   Trade ID: ${trade.id}`);
+      console.log(`   Entry: $${trade.entryPrice}, Stop: $${trade.stopPrice}, Target: $${trade.targetPrice}`);
+
       // Get settings to apply stop buffer
       const settings = await storage.getTradingSettings(this.userId);
       if (!settings) {
@@ -161,9 +167,10 @@ export class TradingEngine {
       const baseStopPrice = parseFloat(trade.stopPrice);
       const bufferedStopPrice = baseStopPrice * (1 - stopBuffer); // Lower stop for long positions
       
-      console.log(`📊 Applying stop buffer: Base=${baseStopPrice}, Buffer=${settings.stopBufferPercent}%, Final=${bufferedStopPrice.toFixed(6)}`);
+      console.log(`   📊 Stop buffer: Base=${baseStopPrice}, Buffer=${settings.stopBufferPercent}%, Final=${bufferedStopPrice.toFixed(6)}`);
 
-      // Place stop-loss order with buffer applied
+      // STEP 1: Place stop-loss order with buffer applied
+      console.log(`   ⏳ Placing stop-loss order...`);
       const stopOrderResult = await this.kraken.addOrder({
         pair: trade.symbol,
         type: 'sell',
@@ -171,8 +178,11 @@ export class TradingEngine {
         volume: trade.quantity,
         price: bufferedStopPrice.toString()
       });
+      placedOrders.push(stopOrderResult.txid[0]);
+      console.log(`   ✅ Stop-loss placed: ${stopOrderResult.txid[0]}`);
 
-      // Place target order (limit order)
+      // STEP 2: Place target order (limit order)
+      console.log(`   ⏳ Placing take-profit order...`);
       const targetOrderResult = await this.kraken.addOrder({
         pair: trade.symbol,
         type: 'sell',
@@ -180,16 +190,41 @@ export class TradingEngine {
         volume: trade.quantity,
         price: trade.targetPrice
       });
+      placedOrders.push(targetOrderResult.txid[0]);
+      console.log(`   ✅ Take-profit placed: ${targetOrderResult.txid[0]}`);
 
-      // Update trade with order IDs
+      // STEP 3: All orders successful - update trade with order IDs
       await storage.updateTrade(trade.id, {
         stopOrderId: stopOrderResult.txid[0],
         targetOrderId: targetOrderResult.txid[0]
       });
 
+      console.log(`✅ [PHASE 1] Bracket orders complete for ${trade.symbol}\n`);
+
     } catch (error) {
-      console.error('Error placing stop/target orders:', error);
-      // In a real system, we'd have error recovery mechanisms
+      console.error(`\n❌ [PHASE 1 ROLLBACK] Bracket order failure for ${trade.symbol}`);
+      console.error(`   Error: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`   Placed orders before failure: ${placedOrders.length}`);
+      
+      // ROLLBACK: Cancel all successfully placed orders
+      if (placedOrders.length > 0) {
+        console.log(`   🔄 Rolling back ${placedOrders.length} placed order(s)...`);
+        
+        for (const orderId of placedOrders) {
+          try {
+            await this.kraken.cancelOrder(orderId);
+            console.log(`   ✅ Cancelled order: ${orderId}`);
+          } catch (cancelError) {
+            console.error(`   ❌ Failed to cancel order ${orderId}:`, cancelError);
+          }
+        }
+        
+        console.log(`   ✅ Rollback complete\n`);
+      }
+
+      // Mark trade as failed/invalid
+      console.log(`   🚨 Marking trade as failed due to bracket placement error`);
+      throw error; // Re-throw to let caller handle
     }
   }
 
