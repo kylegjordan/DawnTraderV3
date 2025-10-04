@@ -295,6 +295,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/portfolio/value-history', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const period = (req.query.period as string) || '30d';
+      
+      const user = await storage.getUser(userId);
+      const initialBalance = user?.initialBalance || 50000;
+      
+      const now = new Date();
+      let startDate = new Date();
+      
+      switch (period) {
+        case '30d':
+          startDate.setDate(now.getDate() - 30);
+          break;
+        case '90d':
+          startDate.setDate(now.getDate() - 90);
+          break;
+        case '1y':
+          startDate.setFullYear(now.getFullYear() - 1);
+          break;
+        case 'all':
+          startDate = new Date(now.getFullYear() - 2, 0, 1);
+          break;
+      }
+      
+      const allTrades = await storage.getTrades(userId, {});
+      const closedTrades = allTrades.filter(t => 
+        t.status === 'closed' && 
+        t.exitTime
+      ).sort((a, b) => 
+        new Date(a.exitTime!).getTime() - new Date(b.exitTime!).getTime()
+      );
+      
+      let portfolioValueAtStart = initialBalance;
+      const tradesInPeriod: typeof closedTrades = [];
+      
+      closedTrades.forEach(trade => {
+        const tradeDate = new Date(trade.exitTime!);
+        if (tradeDate < startDate) {
+          portfolioValueAtStart += trade.profitLoss || 0;
+        } else {
+          tradesInPeriod.push(trade);
+        }
+      });
+      
+      const dataPoints: Array<{ date: string; value: number }> = [];
+      let currentValue = portfolioValueAtStart;
+      
+      dataPoints.push({
+        date: startDate.toISOString(),
+        value: portfolioValueAtStart
+      });
+      
+      tradesInPeriod.forEach(trade => {
+        if (trade.profitLoss) {
+          currentValue += trade.profitLoss;
+          dataPoints.push({
+            date: trade.exitTime!,
+            value: currentValue
+          });
+        }
+      });
+      
+      if (dataPoints.length === 1 || (dataPoints.length > 1 && new Date(dataPoints[dataPoints.length - 1].date).getTime() < now.getTime() - 86400000)) {
+        dataPoints.push({
+          date: now.toISOString(),
+          value: currentValue
+        });
+      }
+      
+      res.json(dataPoints);
+    } catch (error) {
+      console.error('Error fetching portfolio value history:', error);
+      res.status(500).json({ error: 'Failed to fetch portfolio value history' });
+    }
+  });
+
+  app.get('/api/portfolio/stats', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      
+      const user = await storage.getUser(userId);
+      const initialBalance = user?.initialBalance || 50000;
+      
+      const allTrades = await storage.getTrades(userId, {});
+      const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
+      
+      const totalProfitLoss = closedTrades.reduce((sum, t) => sum + (t.profitLoss || 0), 0);
+      const currentValue = initialBalance + totalProfitLoss;
+      
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const tradesLast24h = closedTrades.filter(t => 
+        t.exitTime && new Date(t.exitTime) >= yesterday
+      );
+      
+      const change24h = tradesLast24h.reduce((sum, t) => sum + (t.profitLoss || 0), 0);
+      const valueYesterday = currentValue - change24h;
+      const changePercent24h = valueYesterday !== 0 ? (change24h / valueYesterday) * 100 : 0;
+      
+      const winningTrades = closedTrades.filter(t => (t.profitLoss || 0) > 0).length;
+      const winRate = closedTrades.length > 0 ? (winningTrades / closedTrades.length) * 100 : 0;
+      
+      res.json({
+        currentValue,
+        change24h,
+        changePercent24h,
+        winRate
+      });
+    } catch (error) {
+      console.error('Error fetching portfolio stats:', error);
+      res.status(500).json({ error: 'Failed to fetch portfolio stats' });
+    }
+  });
+
   // Trades
   app.get('/api/trades', async (req, res) => {
     try {

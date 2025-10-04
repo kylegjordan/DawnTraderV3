@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
@@ -52,7 +53,11 @@ interface ChatResponse {
 }
 
 export function ChatContainer() {
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [location] = useLocation();
+  const urlParams = new URLSearchParams(location.split('?')[1] || '');
+  const conversationIdFromUrl = urlParams.get('conversation_id');
+  
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(conversationIdFromUrl);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [pendingProposal, setPendingProposal] = useState<SettingsProposal | null>(null);
@@ -60,6 +65,13 @@ export function ChatContainer() {
   const [maxContextMessages, setMaxContextMessages] = useState(20);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  
+  // Update conversation ID when URL changes
+  useEffect(() => {
+    if (conversationIdFromUrl && conversationIdFromUrl !== currentConversationId) {
+      setCurrentConversationId(conversationIdFromUrl);
+    }
+  }, [conversationIdFromUrl]);
 
   // Load conversation when selected
   const { data: conversation, isLoading: isLoadingConversation } = useQuery({

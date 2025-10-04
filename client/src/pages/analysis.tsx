@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { ChatContainer } from "@/components/ai/chat-container";
 import { AuditLogViewer } from "@/components/ai/audit-log-viewer";
 import { ErrorLogViewer } from "@/components/ai/error-log-viewer";
+import { AIOpportunitiesTab } from "@/components/ai/ai-opportunities-tab";
+import { ValidationReportsTab } from "@/components/ai/validation-reports-tab";
 
 export default function Analysis() {
   const [searchSymbol, setSearchSymbol] = useState('');
@@ -69,10 +71,18 @@ export default function Analysis() {
       </div>
 
       <Tabs defaultValue="chat" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="chat" data-testid="tab-chat">
             <MessageSquare className="w-4 h-4 mr-2" />
             Chat Assistant
+          </TabsTrigger>
+          <TabsTrigger value="opportunities" data-testid="tab-opportunities">
+            <Target className="w-4 h-4 mr-2" />
+            AI Opportunities
+          </TabsTrigger>
+          <TabsTrigger value="validation" data-testid="tab-validation">
+            <TrendingUp className="w-4 h-4 mr-2" />
+            Validation Reports
           </TabsTrigger>
           <TabsTrigger value="reports" data-testid="tab-reports">
             <FileText className="w-4 h-4 mr-2" />
@@ -95,6 +105,16 @@ export default function Analysis() {
         {/* Chat Assistant Tab */}
         <TabsContent value="chat">
           <ChatContainer />
+        </TabsContent>
+
+        {/* AI Opportunities Tab */}
+        <TabsContent value="opportunities">
+          <AIOpportunitiesTab />
+        </TabsContent>
+
+        {/* Validation Reports Tab */}
+        <TabsContent value="validation">
+          <ValidationReportsTab />
         </TabsContent>
 
         {/* Reports Tab */}
