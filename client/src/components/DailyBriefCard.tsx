@@ -15,13 +15,21 @@ interface DailyBrief {
   summary: string;
   narrative: string;
   metrics: {
-    total_trades: number;
+    pnl_pct: number;
     win_rate: number;
-    total_pnl: number;
-    largest_win: number;
-    largest_loss: number;
-    avg_hold_time_hours: number;
+    drawdown: number;
+    exposure: number;
+    num_trades: number;
+    realized_pl: number;
+    unrealized_pl: number;
   } | null;
+  trades: {
+    top_winners: Array<{ symbol: string; pnl: number; pnl_pct: number }>;
+    top_losers: Array<{ symbol: string; pnl: number; pnl_pct: number }>;
+    closed: Array<{ symbol: string; pnl: number; time: string }>;
+    open: Array<{ symbol: string; entry: number; current_pnl: number }>;
+  } | null;
+  learnings: Array<{ insight: string; actionable: boolean }> | null;
   systemHealth: {
     status: 'operational' | 'degraded' | 'issues';
     issues: string[];
@@ -109,31 +117,41 @@ export default function DailyBriefCard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Trades</p>
-              <p className="text-lg font-semibold" data-testid="text-total-trades">
-                {brief.metrics.total_trades}
+              <p className="text-lg font-semibold" data-testid="text-num-trades">
+                {brief.metrics.num_trades}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Win Rate</p>
               <p className="text-lg font-semibold" data-testid="text-win-rate">
-                {brief.metrics.win_rate.toFixed(0)}%
+                {brief.metrics.win_rate?.toFixed(0) ?? '0'}%
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Total P&L</p>
               <p 
                 className={`text-lg font-semibold ${
-                  brief.metrics.total_pnl >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                  (brief.metrics.realized_pl + brief.metrics.unrealized_pl) >= 0 
+                    ? 'text-green-600 dark:text-green-400' 
+                    : 'text-red-600 dark:text-red-400'
                 }`}
                 data-testid="text-total-pnl"
               >
-                ${brief.metrics.total_pnl >= 0 ? '+' : ''}{brief.metrics.total_pnl.toFixed(2)}
+                ${(brief.metrics.realized_pl + brief.metrics.unrealized_pl) >= 0 ? '+' : ''}
+                {(brief.metrics.realized_pl + brief.metrics.unrealized_pl).toFixed(2)}
               </p>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Avg Hold</p>
-              <p className="text-lg font-semibold" data-testid="text-avg-hold-time">
-                {brief.metrics.avg_hold_time_hours.toFixed(1)}h
+              <p className="text-xs text-muted-foreground">Portfolio %</p>
+              <p 
+                className={`text-lg font-semibold ${
+                  brief.metrics.pnl_pct >= 0 
+                    ? 'text-green-600 dark:text-green-400' 
+                    : 'text-red-600 dark:text-red-400'
+                }`}
+                data-testid="text-pnl-pct"
+              >
+                {brief.metrics.pnl_pct >= 0 ? '+' : ''}{brief.metrics.pnl_pct.toFixed(2)}%
               </p>
             </div>
           </div>

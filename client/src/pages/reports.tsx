@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,11 +13,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
-import { CalendarIcon, Download, FileText, TrendingUp, DollarSign, PieChart, Brain } from "lucide-react";
+import { CalendarIcon, Download, FileText, TrendingUp, DollarSign, PieChart, Brain, Newspaper } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Trade } from "@/lib/types";
+import { Link } from "wouter";
 
 export default function ReportsPage() {
+  const [location] = useLocation();
+  
+  // Parse tab from query parameter
+  const params = new URLSearchParams(location.split('?')[1] || '');
+  const tabParam = params.get('tab');
+  
   const [dateFrom, setDateFrom] = useState<Date>();
   const [dateTo, setDateTo] = useState<Date>();
   const [selectedSymbol, setSelectedSymbol] = useState<string>("all");
@@ -105,12 +114,13 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="canned" className="space-y-6">
-        <TabsList className="grid w-full max-w-4xl grid-cols-4">
+      <Tabs defaultValue={tabParam || "canned"} className="space-y-6">
+        <TabsList className="grid w-full max-w-5xl grid-cols-5">
           <TabsTrigger value="canned" data-testid="tab-canned-reports">Canned Reports</TabsTrigger>
           <TabsTrigger value="custom" data-testid="tab-custom-reports">Custom Reports</TabsTrigger>
           <TabsTrigger value="exports" data-testid="tab-exports">Exports</TabsTrigger>
           <TabsTrigger value="ai-reports" data-testid="tab-ai-reports">AI Reports</TabsTrigger>
+          <TabsTrigger value="daily-briefs" data-testid="tab-daily-briefs">Daily Briefs</TabsTrigger>
         </TabsList>
 
         {/* Canned Reports Tab */}
@@ -647,7 +657,154 @@ export default function ReportsPage() {
             )}
           </div>
         </TabsContent>
+
+        {/* Daily Briefs Tab */}
+        <TabsContent value="daily-briefs" className="space-y-6">
+          <DailyBriefsTab />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function DailyBriefsTab() {
+  const { data: briefs = [], isLoading } = useQuery<any[]>({
+    queryKey: ['/api/daily-briefs'],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-64 mt-2" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-20 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  if (briefs.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <Newspaper className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">No Daily Briefs Yet</h3>
+          <p className="text-muted-foreground mb-4">
+            Daily briefs are automatically generated every day. Check back soon!
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Daily Trading Briefs</h2>
+          <p className="text-muted-foreground mt-1">
+            Review your daily trading performance summaries and insights
+          </p>
+        </div>
+        <Link href="/daily-brief">
+          <Button data-testid="button-view-today-brief">
+            <Newspaper className="h-4 w-4 mr-2" />
+            View Today's Brief
+          </Button>
+        </Link>
+      </div>
+
+      <div className="space-y-4">
+        {briefs.map((brief) => (
+          <Card key={brief.id} data-testid={`brief-${brief.id}`}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    <CardDescription>
+                      {formatDate(brief.date)}
+                    </CardDescription>
+                    <Badge variant={brief.status === 'final' ? 'default' : 'secondary'}>
+                      {brief.status === 'final' ? 'Final' : 'In Progress'}
+                    </Badge>
+                  </div>
+                  <CardTitle data-testid={`brief-headline-${brief.id}`}>
+                    {brief.headline}
+                  </CardTitle>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground mb-4" data-testid={`brief-summary-${brief.id}`}>
+                {brief.summary}
+              </p>
+
+              {brief.metrics && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-foreground">
+                      {brief.metrics.num_trades}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Trades</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-foreground">
+                      {brief.metrics.win_rate?.toFixed(1) ?? '0'}%
+                    </div>
+                    <div className="text-xs text-muted-foreground">Win Rate</div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-2xl font-bold ${
+                      (brief.metrics.realized_pl + brief.metrics.unrealized_pl) >= 0
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}>
+                      ${((brief.metrics.realized_pl + brief.metrics.unrealized_pl) >= 0 ? '+' : '')}
+                      {(brief.metrics.realized_pl + brief.metrics.unrealized_pl).toFixed(2)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Total P&L</div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-2xl font-bold ${
+                      brief.metrics.pnl_pct >= 0
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}>
+                      {brief.metrics.pnl_pct >= 0 ? '+' : ''}{brief.metrics.pnl_pct.toFixed(2)}%
+                    </div>
+                    <div className="text-xs text-muted-foreground">Portfolio %</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end mt-4">
+                <Link href={`/daily-brief?date=${brief.date}`}>
+                  <Button variant="outline" size="sm" data-testid={`button-view-brief-${brief.id}`}>
+                    View Full Brief
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
