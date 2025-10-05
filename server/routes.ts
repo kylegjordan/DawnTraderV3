@@ -10,6 +10,8 @@ import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
+import { stockService } from "./services/stocks";
+import { marketDataService } from "./services/market-data";
 
 const tradingEngines = new Map<string, TradingEngine>();
 const marketScanner = new MarketScanner();
@@ -1063,6 +1065,90 @@ Provide specific, actionable recommendations.`,
       console.error('Error starting opportunity generation:', error);
       const errorMessage = (error as Error).message || 'Failed to start opportunity generation';
       res.status(429).json({ error: errorMessage }); // 429 for rate limiting
+    }
+  });
+
+  // Stock API routes
+  app.get('/api/stocks/quote/:symbol', async (req, res) => {
+    try {
+      const { symbol } = req.params;
+      const quote = await stockService.getQuote(symbol);
+      res.json(quote);
+    } catch (error) {
+      console.error('Error fetching stock quote:', error);
+      res.status(500).json({ error: 'Failed to fetch stock quote' });
+    }
+  });
+
+  app.get('/api/stocks/company/:symbol', async (req, res) => {
+    try {
+      const { symbol } = req.params;
+      const company = await stockService.getCompanyInfo(symbol);
+      res.json(company);
+    } catch (error) {
+      console.error('Error fetching company info:', error);
+      res.status(500).json({ error: 'Failed to fetch company info' });
+    }
+  });
+
+  app.get('/api/stocks/search/:query', async (req, res) => {
+    try {
+      const { query } = req.params;
+      const results = await stockService.search(query);
+      res.json(results);
+    } catch (error) {
+      console.error('Error searching stocks:', error);
+      res.status(500).json({ error: 'Failed to search stocks' });
+    }
+  });
+
+  // Crypto search route
+  app.get('/api/crypto/search/:query', async (req, res) => {
+    try {
+      const { query } = req.params;
+      const normalizedQuery = query.toLowerCase().trim();
+      
+      // Search through supported crypto symbols and names
+      const cryptoList = [
+        { symbol: 'BTC', name: 'Bitcoin' },
+        { symbol: 'ETH', name: 'Ethereum' },
+        { symbol: 'SOL', name: 'Solana' },
+        { symbol: 'SUI', name: 'Sui' },
+        { symbol: 'ADA', name: 'Cardano' },
+        { symbol: 'DOT', name: 'Polkadot' },
+        { symbol: 'MATIC', name: 'Polygon' },
+        { symbol: 'AVAX', name: 'Avalanche' },
+        { symbol: 'LINK', name: 'Chainlink' },
+        { symbol: 'UNI', name: 'Uniswap' },
+        { symbol: 'ATOM', name: 'Cosmos' },
+        { symbol: 'XRP', name: 'XRP' },
+        { symbol: 'DOGE', name: 'Dogecoin' },
+        { symbol: 'LTC', name: 'Litecoin' },
+        { symbol: 'BCH', name: 'Bitcoin Cash' },
+        { symbol: 'XLM', name: 'Stellar' },
+        { symbol: 'ALGO', name: 'Algorand' },
+        { symbol: 'VET', name: 'VeChain' },
+        { symbol: 'FIL', name: 'Filecoin' },
+        { symbol: 'TRX', name: 'TRON' },
+        { symbol: 'ETC', name: 'Ethereum Classic' }
+      ];
+
+      const results = cryptoList
+        .filter(crypto => 
+          crypto.symbol.toLowerCase().includes(normalizedQuery) ||
+          crypto.name.toLowerCase().includes(normalizedQuery)
+        )
+        .slice(0, 5)
+        .map(crypto => ({
+          symbol: crypto.symbol,
+          description: crypto.name,
+          type: 'Crypto'
+        }));
+
+      res.json(results);
+    } catch (error) {
+      console.error('Error searching crypto:', error);
+      res.status(500).json({ error: 'Failed to search crypto' });
     }
   });
 
