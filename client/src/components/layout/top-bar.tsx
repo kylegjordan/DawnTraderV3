@@ -1,9 +1,8 @@
-import { Menu, Bell, Download, Clock, Globe } from "lucide-react";
+import { Menu, Bell, Clock, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useTrading } from "@/hooks/use-trading";
-import { useMarket } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -23,7 +22,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     isStarting, 
     isStopping 
   } = useTrading();
-  const { exportTrades, isExporting } = useMarket();
   const { toast } = useToast();
   const [utcTime, setUtcTime] = useState<string>('');
   const [localTime, setLocalTime] = useState<string>('');
@@ -107,14 +105,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
     
     startTrading(mode);
-  };
-
-  const handleExport = () => {
-    exportTrades({ format: 'csv' });
-    toast({
-      title: "Export Started",
-      description: "Your trading data export will download shortly",
-    });
   };
 
   const isActive = tradingStatus?.tradingStatus === 'active';
@@ -220,17 +210,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               </div>
             </div>
           </div>
-          
-          {/* CSV Export */}
-          <Button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-            data-testid="button-export"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden md:inline">Export CSV</span>
-          </Button>
           
           {/* Notifications */}
           <Button
