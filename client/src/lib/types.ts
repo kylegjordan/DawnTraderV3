@@ -123,6 +123,13 @@ export interface PortfolioMetrics {
   wins: number;
   losses: number;
   profitFactor: number;
+  balanceError?: string;
+  balanceSource?: 'kraken' | 'internal';
+  syncTimestamp?: number;
+  cash?: number;
+  crypto?: number;
+  cashPercent?: number;
+  cryptoPercent?: number;
 }
 
 export interface TradingStatus {
