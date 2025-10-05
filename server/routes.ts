@@ -8,6 +8,7 @@ import { AIAnalyst } from "./services/ai-analyst";
 import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
+import { dailyBriefService } from "./services/daily-brief";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
@@ -616,6 +617,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error analyzing symbol:', error);
       res.status(500).json({ error: 'Failed to analyze symbol' });
+    }
+  });
+
+  // Daily Briefs
+  app.get('/api/daily-briefs/today', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const today = new Date().toISOString().split('T')[0];
+      
+      const brief = await storage.getDailyBrief(userId, today);
+      res.json(brief || null);
+    } catch (error) {
+      console.error('Error fetching today\'s brief:', error);
+      res.status(500).json({ error: 'Failed to fetch today\'s brief' });
+    }
+  });
+
+  app.get('/api/daily-briefs', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { status, limit } = req.query;
+      
+      const briefs = await storage.getDailyBriefs(userId, {
+        status: status as string,
+        limit: limit ? parseInt(limit as string) : 30
+      });
+      
+      res.json(briefs);
+    } catch (error) {
+      console.error('Error fetching briefs:', error);
+      res.status(500).json({ error: 'Failed to fetch briefs' });
+    }
+  });
+
+  app.get('/api/daily-briefs/:date', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { date } = req.params;
+      
+      const brief = await storage.getDailyBrief(userId, date);
+      res.json(brief || null);
+    } catch (error) {
+      console.error('Error fetching brief:', error);
+      res.status(500).json({ error: 'Failed to fetch brief' });
+    }
+  });
+
+  app.post('/api/daily-briefs/update', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      
+      await dailyBriefService.updateDailyBrief(userId);
+      res.json({ success: true, message: 'Brief updated successfully' });
+    } catch (error) {
+      console.error('Error updating brief:', error);
+      res.status(500).json({ error: 'Failed to update brief' });
     }
   });
 

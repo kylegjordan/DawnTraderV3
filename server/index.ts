@@ -66,6 +66,13 @@ app.use((req, res, next) => {
     });
   });
 
+  // Start Daily Brief service (async, non-blocking)
+  import('./services/daily-brief').then(({ dailyBriefService }) => {
+    dailyBriefService.startDailyBriefScheduler().catch((error) => {
+      console.error('[Server] Failed to start Daily Brief service:', error);
+    });
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
