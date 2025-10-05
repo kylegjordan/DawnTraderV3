@@ -12,7 +12,6 @@ import {
   FileText
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
-import { Checkbox } from "@/components/ui/checkbox";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -28,12 +27,6 @@ const navigation = [
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "AI Analysis", href: "/analysis", icon: Brain },
   { name: "Settings", href: "/settings", icon: Settings },
-];
-
-const strategies = [
-  { name: "VWAP Pullback", key: "vwap_pullback" },
-  { name: "ABCD Long", key: "abcd_long" },
-  { name: "SMA Trend Ride", key: "sma_trend_ride" },
 ];
 
 export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {

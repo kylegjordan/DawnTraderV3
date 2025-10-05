@@ -76,9 +76,9 @@ export default function PortfolioOverview() {
       change: portfolioMetrics.totalTrades === 0 
         ? `Win Rate: —` 
         : `Win Rate: ${portfolioMetrics.winRate.toFixed(1)}%`,
-      changeType: portfolioMetrics.totalTrades === 0 
+      changeType: (portfolioMetrics.totalTrades === 0 
         ? "neutral" 
-        : (portfolioMetrics.winRate >= 50 ? "positive" : "negative") as const,
+        : (portfolioMetrics.winRate >= 50 ? "positive" : "negative")) as const,
       icon: DollarSign,
       iconHidden: true,
       subtitle: portfolioMetrics.totalTrades === 0 

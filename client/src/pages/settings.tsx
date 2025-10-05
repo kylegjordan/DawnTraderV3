@@ -94,6 +94,11 @@ export default function Settings() {
   const [vwapOpen, setVwapOpen] = useState(true);
   const [abcdOpen, setAbcdOpen] = useState(false);
   const [smaOpen, setSmaOpen] = useState(false);
+  
+  // Strategy enabled states (UI-only for now)
+  const [vwapEnabled, setVwapEnabled] = useState(true);
+  const [abcdEnabled, setAbcdEnabled] = useState(true);
+  const [smaEnabled, setSmaEnabled] = useState(true);
 
   useEffect(() => {
     if (settings) {
@@ -685,19 +690,32 @@ export default function Settings() {
                 <CollapsibleTrigger className="w-full">
                   <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-start gap-3 text-left">
+                      <div className="flex items-start gap-3 text-left flex-1">
                         <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                           <Activity className="w-6 h-6 text-blue-500" />
                         </div>
-                        <div>
-                          <CardTitle className="text-lg">VWAP Pullback</CardTitle>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <CardTitle className="text-lg">VWAP Pullback</CardTitle>
+                            <div className="flex items-center gap-2 mr-8" onClick={(e) => e.stopPropagation()}>
+                              <Switch
+                                checked={vwapEnabled}
+                                onCheckedChange={setVwapEnabled}
+                                className="data-[state=checked]:bg-success"
+                                data-testid="switch-vwap-enabled"
+                              />
+                              <span className="text-sm font-medium text-muted-foreground">
+                                {vwapEnabled ? 'Enabled' : 'Disabled'}
+                              </span>
+                            </div>
+                          </div>
                           <CardDescription className="mt-1">
                             Trades pullbacks to VWAP (Volume-Weighted Average Price) during uptrends, aiming to capture continuation moves
                           </CardDescription>
                         </div>
                       </div>
                       <ChevronDown className={cn(
-                        "w-5 h-5 text-muted-foreground transition-transform",
+                        "w-5 h-5 text-muted-foreground transition-transform flex-shrink-0",
                         vwapOpen && "transform rotate-180"
                       )} />
                     </div>
@@ -794,19 +812,32 @@ export default function Settings() {
                 <CollapsibleTrigger className="w-full">
                   <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-start gap-3 text-left">
+                      <div className="flex items-start gap-3 text-left flex-1">
                         <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                           <Zap className="w-6 h-6 text-green-500" />
                         </div>
-                        <div>
-                          <CardTitle className="text-lg">ABCD Long</CardTitle>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <CardTitle className="text-lg">ABCD Long</CardTitle>
+                            <div className="flex items-center gap-2 mr-8" onClick={(e) => e.stopPropagation()}>
+                              <Switch
+                                checked={abcdEnabled}
+                                onCheckedChange={setAbcdEnabled}
+                                className="data-[state=checked]:bg-success"
+                                data-testid="switch-abcd-enabled"
+                              />
+                              <span className="text-sm font-medium text-muted-foreground">
+                                {abcdEnabled ? 'Enabled' : 'Disabled'}
+                              </span>
+                            </div>
+                          </div>
                           <CardDescription className="mt-1">
                             Trades the breakout from consolidation after forming the A-B-C-D price structure
                           </CardDescription>
                         </div>
                       </div>
                       <ChevronDown className={cn(
-                        "w-5 h-5 text-muted-foreground transition-transform",
+                        "w-5 h-5 text-muted-foreground transition-transform flex-shrink-0",
                         abcdOpen && "transform rotate-180"
                       )} />
                     </div>
@@ -951,19 +982,32 @@ export default function Settings() {
                 <CollapsibleTrigger className="w-full">
                   <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-start gap-3 text-left">
+                      <div className="flex items-start gap-3 text-left flex-1">
                         <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
                           <LineChart className="w-6 h-6 text-purple-500" />
                         </div>
-                        <div>
-                          <CardTitle className="text-lg">SMA Trend Ride</CardTitle>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <CardTitle className="text-lg">SMA Trend Ride</CardTitle>
+                            <div className="flex items-center gap-2 mr-8" onClick={(e) => e.stopPropagation()}>
+                              <Switch
+                                checked={smaEnabled}
+                                onCheckedChange={setSmaEnabled}
+                                className="data-[state=checked]:bg-success"
+                                data-testid="switch-sma-enabled"
+                              />
+                              <span className="text-sm font-medium text-muted-foreground">
+                                {smaEnabled ? 'Enabled' : 'Disabled'}
+                              </span>
+                            </div>
+                          </div>
                           <CardDescription className="mt-1">
                             Rides momentum trends based on Simple Moving Average (SMA) alignment and crossovers
                           </CardDescription>
                         </div>
                       </div>
                       <ChevronDown className={cn(
-                        "w-5 h-5 text-muted-foreground transition-transform",
+                        "w-5 h-5 text-muted-foreground transition-transform flex-shrink-0",
                         smaOpen && "transform rotate-180"
                       )} />
                     </div>
