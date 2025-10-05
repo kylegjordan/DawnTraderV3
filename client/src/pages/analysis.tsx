@@ -122,11 +122,15 @@ export default function Analysis() {
   };
 
   const handleAnalyzeSymbol = () => {
+    // Clear any previous "no results" state when starting new analysis
+    setNoResultsQuery(null);
+    
     if (selectedAsset) {
       analyzeSymbol(selectedAsset.symbol.toUpperCase());
     } else if (searchQuery.trim()) {
       // Fallback: try to analyze direct symbol input
-      analyzeSymbol(searchQuery.trim().toUpperCase());
+      const directSymbol = searchQuery.trim().split(' ')[0].toUpperCase();
+      analyzeSymbol(directSymbol);
     }
   };
 
