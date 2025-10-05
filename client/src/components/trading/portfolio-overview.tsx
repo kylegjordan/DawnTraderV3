@@ -4,11 +4,12 @@ import { TrendingUp, DollarSign, Target, PieChart } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { EarningsData } from "@/lib/types";
 
 export default function PortfolioOverview() {
   const { portfolioMetrics, portfolioLoading } = useTrading();
   
-  const { data: earningsData, isLoading: earningsLoading } = useQuery({
+  const { data: earningsData, isLoading: earningsLoading } = useQuery<EarningsData>({
     queryKey: ['/api/portfolio/earnings'],
   });
 
@@ -38,18 +39,20 @@ export default function PortfolioOverview() {
     );
   }
 
-  const formatEarnings = (value: number) => {
+  const formatEarnings = (value: number | null | undefined) => {
+    if (value == null) return '—';
     const formatted = `${value >= 0 ? '+' : ''}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     return formatted;
   };
 
-  const getChangeType = (value: number): 'positive' | 'negative' | 'neutral' => {
+  const getChangeType = (value: number | null | undefined): 'positive' | 'negative' | 'neutral' => {
+    if (value == null) return 'neutral';
     if (value > 0) return 'positive';
     if (value < 0) return 'negative';
     return 'neutral';
   };
 
-  const earnings = earningsData || { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0, thisYear: 0, lifetime: 0 };
+  const earnings: EarningsData = earningsData || { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0, thisYear: 0, lifetime: 0 };
 
   const formatSyncTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -72,18 +75,24 @@ export default function PortfolioOverview() {
   const metrics = [
     {
       title: "Portfolio Value",
-      value: `$${portfolioMetrics.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      value: portfolioMetrics.totalValue != null 
+        ? `$${portfolioMetrics.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
+        : '—',
       change: portfolioMetrics.totalTrades === 0 
         ? `Win Rate: —` 
-        : `Win Rate: ${portfolioMetrics.winRate.toFixed(1)}%`,
-      changeType: (portfolioMetrics.totalTrades === 0 
+        : portfolioMetrics.winRate != null 
+          ? `Win Rate: ${portfolioMetrics.winRate.toFixed(1)}%`
+          : 'Win Rate: —',
+      changeType: portfolioMetrics.totalTrades === 0 
         ? "neutral" 
-        : (portfolioMetrics.winRate >= 50 ? "positive" : "negative")) as const,
+        : portfolioMetrics.winRate != null && portfolioMetrics.winRate >= 50 
+          ? "positive" 
+          : "negative",
       icon: DollarSign,
       iconHidden: true,
       subtitle: portfolioMetrics.totalTrades === 0 
         ? `No trades yet` 
-        : `${portfolioMetrics.wins}W / ${portfolioMetrics.losses}L`,
+        : `${portfolioMetrics.wins ?? 0}W / ${portfolioMetrics.losses ?? 0}L`,
       syncStatus: getSyncStatus()
     },
     {
@@ -98,9 +107,11 @@ export default function PortfolioOverview() {
     },
     {
       title: "Unrealized P/L",
-      value: `${portfolioMetrics.unrealizedPL >= 0 ? '+' : ''}$${Math.abs(portfolioMetrics.unrealizedPL).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
-      change: `${portfolioMetrics.openTradesCount} open positions`,
-      changeType: portfolioMetrics.unrealizedPL >= 0 ? "positive" : "negative" as const,
+      value: portfolioMetrics.unrealizedPL != null
+        ? `${portfolioMetrics.unrealizedPL >= 0 ? '+' : ''}$${Math.abs(portfolioMetrics.unrealizedPL).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+        : '—',
+      change: `${portfolioMetrics.openTradesCount ?? 0} open positions`,
+      changeType: portfolioMetrics.unrealizedPL != null && portfolioMetrics.unrealizedPL >= 0 ? "positive" : "negative",
       icon: Target,
       subtitle: ""
     },

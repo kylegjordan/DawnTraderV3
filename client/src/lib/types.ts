@@ -180,3 +180,12 @@ export interface AssetContext {
   name: string;
   type: 'stock' | 'crypto';
 }
+
+export interface EarningsData {
+  today: number;
+  yesterday: number;
+  thisWeek: number;
+  thisMonth: number;
+  thisYear: number;
+  lifetime: number;
+}
