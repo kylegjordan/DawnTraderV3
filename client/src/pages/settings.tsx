@@ -704,7 +704,7 @@ export default function Settings() {
                                 className="data-[state=checked]:bg-success"
                                 data-testid="switch-vwap-enabled"
                               />
-                              <span className="text-sm font-medium text-muted-foreground">
+                              <span className={cn("text-sm font-medium", vwapEnabled ? "text-success" : "text-muted-foreground")}>
                                 {vwapEnabled ? 'Enabled' : 'Disabled'}
                               </span>
                             </div>
@@ -826,7 +826,7 @@ export default function Settings() {
                                 className="data-[state=checked]:bg-success"
                                 data-testid="switch-abcd-enabled"
                               />
-                              <span className="text-sm font-medium text-muted-foreground">
+                              <span className={cn("text-sm font-medium", abcdEnabled ? "text-success" : "text-muted-foreground")}>
                                 {abcdEnabled ? 'Enabled' : 'Disabled'}
                               </span>
                             </div>
@@ -996,7 +996,7 @@ export default function Settings() {
                                 className="data-[state=checked]:bg-success"
                                 data-testid="switch-sma-enabled"
                               />
-                              <span className="text-sm font-medium text-muted-foreground">
+                              <span className={cn("text-sm font-medium", smaEnabled ? "text-success" : "text-muted-foreground")}>
                                 {smaEnabled ? 'Enabled' : 'Disabled'}
                               </span>
                             </div>
