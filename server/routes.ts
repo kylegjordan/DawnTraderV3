@@ -676,6 +676,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Paper Trading Routes (Complete data isolation from live trading)
+  app.get('/api/paper/trades', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const trades = await storage.getAllPaperTrades(userId);
+      res.json(trades);
+    } catch (error) {
+      console.error('Error fetching paper trades:', error);
+      res.status(500).json({ error: 'Failed to fetch paper trades' });
+    }
+  });
+
+  app.get('/api/paper/trades/open', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const trades = await storage.getOpenPaperTrades(userId);
+      res.json(trades);
+    } catch (error) {
+      console.error('Error fetching open paper trades:', error);
+      res.status(500).json({ error: 'Failed to fetch open paper trades' });
+    }
+  });
+
+  app.delete('/api/paper/trades/clear', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      await storage.deleteAllPaperTrades(userId);
+      res.json({ success: true, message: 'All paper trades cleared' });
+    } catch (error) {
+      console.error('Error clearing paper trades:', error);
+      res.status(500).json({ error: 'Failed to clear paper trades' });
+    }
+  });
+
+  app.get('/api/paper/briefs/today', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const today = new Date().toISOString().split('T')[0];
+      
+      const brief = await storage.getPaperDailyBrief(userId, today);
+      res.json(brief || null);
+    } catch (error) {
+      console.error('Error fetching today\'s paper brief:', error);
+      res.status(500).json({ error: 'Failed to fetch today\'s paper brief' });
+    }
+  });
+
+  app.get('/api/paper/briefs', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { status, limit } = req.query;
+      
+      const briefs = await storage.getPaperDailyBriefs(userId, {
+        status: status as string,
+        limit: limit ? parseInt(limit as string) : 30
+      });
+      
+      res.json(briefs);
+    } catch (error) {
+      console.error('Error fetching paper briefs:', error);
+      res.status(500).json({ error: 'Failed to fetch paper briefs' });
+    }
+  });
+
+  app.get('/api/paper/metrics', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { PaperMetricsService } = await import('./services/paper-metrics.js');
+      const metricsService = new PaperMetricsService(userId);
+      
+      const [portfolio, winRate, stats, performanceByStrategy, earnings, ade, trend] = await Promise.all([
+        metricsService.getPortfolioMetrics(),
+        metricsService.getWinRate(30),
+        metricsService.getTradeStatistics(),
+        metricsService.getPerformanceByStrategy(),
+        metricsService.getEarnings(),
+        metricsService.getAverageDailyEarnings(),
+        metricsService.get7DayEarningsTrend()
+      ]);
+      
+      res.json({
+        portfolio,
+        winRate,
+        stats,
+        performanceByStrategy,
+        earnings,
+        averageDailyEarnings: ade,
+        earningsTrend: trend
+      });
+    } catch (error) {
+      console.error('Error fetching paper metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch paper metrics' });
+    }
+  });
+
+  app.get('/api/paper/metrics/portfolio', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { PaperMetricsService } = await import('./services/paper-metrics.js');
+      const metricsService = new PaperMetricsService(userId);
+      
+      const metrics = await metricsService.getPortfolioMetrics();
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error fetching paper portfolio metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch paper portfolio metrics' });
+    }
+  });
+
   app.get('/api/ai/conversation', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
