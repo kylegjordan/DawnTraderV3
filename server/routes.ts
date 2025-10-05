@@ -202,21 +202,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
       
-      // TEMPORARILY DISABLED: Skip Kraken API calls (maintenance mode)
-      // const liveBalance = await riskManager.getLiveKrakenBalance(userId);
+      const liveBalance = await riskManager.getLiveKrakenBalance(userId);
       const metrics = await riskManager.getPortfolioMetrics(userId);
       const cashCrypto = await riskManager.getCashVsCrypto(userId);
       const winRateData = await riskManager.getWinRate(userId, 30);
-      
-      // Use internal calculation only (no Kraken API)
-      const liveBalance = {
-        totalValueUSD: metrics.totalValue,
-        cashUSD: cashCrypto.cash,
-        cryptoUSD: cashCrypto.crypto,
-        syncTimestamp: Date.now(),
-        source: 'internal' as const,
-        error: 'Kraken API temporarily disabled (maintenance mode)'
-      };
       
       res.json({
         totalValue: liveBalance.totalValueUSD,
