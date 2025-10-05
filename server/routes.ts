@@ -1111,59 +1111,62 @@ Provide specific, actionable recommendations.`,
       console.log(`[Test Finnhub Feed] Starting test for ${testSymbol} at ${timestamp}`);
       
       // Test search functionality
-      let searchResults;
+      let searchResults: any = null;
+      let searchError: string | null = null;
       try {
         searchResults = await stockService.search(testSymbol);
         console.log(`[Test Finnhub Feed] Search results:`, searchResults);
-      } catch (searchError: any) {
+      } catch (error: any) {
         console.error(`[Test Finnhub Feed] Search failed:`, {
-          status: searchError.status || 'unknown',
-          message: searchError.message,
-          stack: searchError.stack
+          status: error.status || 'unknown',
+          message: error.message,
+          stack: error.stack
         });
-        searchResults = { error: searchError.message };
+        searchError = error.message;
       }
       
       // Test quote functionality
-      let quoteData;
+      let quoteData: any = null;
+      let quoteError: string | null = null;
       try {
         quoteData = await stockService.getQuote(testSymbol);
         console.log(`[Test Finnhub Feed] Quote data:`, quoteData);
-      } catch (quoteError: any) {
+      } catch (error: any) {
         console.error(`[Test Finnhub Feed] Quote failed:`, {
-          status: quoteError.status || 'unknown',
-          message: quoteError.message,
-          stack: quoteError.stack
+          status: error.status || 'unknown',
+          message: error.message,
+          stack: error.stack
         });
-        quoteData = { error: quoteError.message };
+        quoteError = error.message;
       }
       
       // Test company profile functionality
-      let companyData;
+      let companyData: any = null;
+      let companyError: string | null = null;
       try {
         companyData = await stockService.getCompanyInfo(testSymbol);
         console.log(`[Test Finnhub Feed] Company data:`, companyData);
-      } catch (companyError: any) {
+      } catch (error: any) {
         console.error(`[Test Finnhub Feed] Company info failed:`, {
-          status: companyError.status || 'unknown',
-          message: companyError.message,
-          stack: companyError.stack
+          status: error.status || 'unknown',
+          message: error.message,
+          stack: error.stack
         });
-        companyData = { error: companyError.message };
+        companyError = error.message;
       }
       
       // Return comprehensive test results
       res.json({
         testSymbol,
         timestamp,
-        search: searchResults,
-        quote: quoteData,
-        company: companyData,
+        search: searchResults || { error: searchError },
+        quote: quoteData || { error: quoteError },
+        company: companyData || { error: companyError },
         summary: {
-          searchSuccessful: !searchResults?.error,
-          quoteSuccessful: !quoteData?.error,
-          companySuccessful: !companyData?.error,
-          allTestsPassed: !searchResults?.error && !quoteData?.error && !companyData?.error
+          searchSuccessful: !searchError,
+          quoteSuccessful: !quoteError,
+          companySuccessful: !companyError,
+          allTestsPassed: !searchError && !quoteError && !companyError
         }
       });
     } catch (error: any) {
