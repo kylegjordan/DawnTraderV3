@@ -7,6 +7,7 @@ import Watchlist from "@/components/trading/watchlist";
 import AIInsights from "@/components/ai/ai-insights";
 import DatabaseAlert from "@/components/database/database-alert";
 import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
+import DailyBriefCard from "@/components/DailyBriefCard";
 
 export default function Dashboard() {
   return (
@@ -16,6 +17,9 @@ export default function Dashboard() {
       
       {/* Database Size Alert */}
       <DatabaseAlert />
+
+      {/* Daily Trading Brief */}
+      <DailyBriefCard />
 
       {/* Portfolio Overview Section */}
       <section>
