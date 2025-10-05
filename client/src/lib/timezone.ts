@@ -65,6 +65,20 @@ export function getCurrentDateLocal(timezone: string): string {
   return dayjs().tz(timezone).format('DD MMM YYYY');
 }
 
+export function formatUTCTimeWithDate(timeFormat: '12hr' | '24hr'): string {
+  const format = timeFormat === '12hr' ? 'h:mm A' : 'HH:mm';
+  const time = dayjs().utc().format(format);
+  const date = dayjs().utc().format('MMM D, YYYY');
+  return `${time} — ${date}`;
+}
+
+export function formatLocalTimeWithDate(timezone: string, timeFormat: '12hr' | '24hr'): string {
+  const format = timeFormat === '12hr' ? 'h:mm A' : 'HH:mm';
+  const time = dayjs().tz(timezone).format(format);
+  const date = dayjs().tz(timezone).format('MMM D, YYYY');
+  return `${time} — ${date}`;
+}
+
 export function getTimezoneAbbr(timezone: string): string {
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {

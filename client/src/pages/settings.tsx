@@ -701,10 +701,15 @@ export default function Settings() {
                               <Switch
                                 checked={vwapEnabled}
                                 onCheckedChange={setVwapEnabled}
-                                className="data-[state=checked]:bg-success"
+                                className={cn(
+                                  "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-300",
+                                  "transition-all duration-200 ease-in-out",
+                                  "[&>span]:transition-all [&>span]:duration-200 [&>span]:ease-in-out",
+                                  vwapEnabled && "[&>span]:shadow-[0_0_8px_rgba(34,197,94,0.6)]"
+                                )}
                                 data-testid="switch-vwap-enabled"
                               />
-                              <span className={cn("text-sm font-medium", vwapEnabled ? "text-success" : "text-muted-foreground")}>
+                              <span className={cn("text-sm font-medium transition-colors duration-200", vwapEnabled ? "text-green-500" : "text-gray-400")}>
                                 {vwapEnabled ? 'Enabled' : 'Disabled'}
                               </span>
                             </div>
@@ -823,10 +828,15 @@ export default function Settings() {
                               <Switch
                                 checked={abcdEnabled}
                                 onCheckedChange={setAbcdEnabled}
-                                className="data-[state=checked]:bg-success"
+                                className={cn(
+                                  "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-300",
+                                  "transition-all duration-200 ease-in-out",
+                                  "[&>span]:transition-all [&>span]:duration-200 [&>span]:ease-in-out",
+                                  abcdEnabled && "[&>span]:shadow-[0_0_8px_rgba(34,197,94,0.6)]"
+                                )}
                                 data-testid="switch-abcd-enabled"
                               />
-                              <span className={cn("text-sm font-medium", abcdEnabled ? "text-success" : "text-muted-foreground")}>
+                              <span className={cn("text-sm font-medium transition-colors duration-200", abcdEnabled ? "text-green-500" : "text-gray-400")}>
                                 {abcdEnabled ? 'Enabled' : 'Disabled'}
                               </span>
                             </div>
@@ -993,10 +1003,15 @@ export default function Settings() {
                               <Switch
                                 checked={smaEnabled}
                                 onCheckedChange={setSmaEnabled}
-                                className="data-[state=checked]:bg-success"
+                                className={cn(
+                                  "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-300",
+                                  "transition-all duration-200 ease-in-out",
+                                  "[&>span]:transition-all [&>span]:duration-200 [&>span]:ease-in-out",
+                                  smaEnabled && "[&>span]:shadow-[0_0_8px_rgba(34,197,94,0.6)]"
+                                )}
                                 data-testid="switch-sma-enabled"
                               />
-                              <span className={cn("text-sm font-medium", smaEnabled ? "text-success" : "text-muted-foreground")}>
+                              <span className={cn("text-sm font-medium transition-colors duration-200", smaEnabled ? "text-green-500" : "text-gray-400")}>
                                 {smaEnabled ? 'Enabled' : 'Disabled'}
                               </span>
                             </div>
