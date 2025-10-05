@@ -1837,16 +1837,20 @@ function generateTaxReport(trades: any[]): string {
     'P/L %',
     'Cost Basis',
     'Proceeds',
+    'Holding Duration (hours)',
     'Holding Duration (days)',
     'Term Classification',
-    'Realized Gains'
+    'Realized Gains',
+    'Unrealized Gains',
+    'Account Type'
   ];
   
   const rows = trades.map(trade => {
     const entryTime = new Date(trade.entryTime);
     const exitTime = trade.exitTime ? new Date(trade.exitTime) : null;
-    const holdDays = exitTime ? 
-      (exitTime.getTime() - entryTime.getTime()) / (1000 * 60 * 60 * 24) : 0;
+    const holdHours = exitTime ? 
+      (exitTime.getTime() - entryTime.getTime()) / (1000 * 60 * 60) : 0;
+    const holdDays = holdHours / 24;
     
     const entryFee = parseFloat(trade.entryFee || '0');
     const exitFee = parseFloat(trade.exitFee || '0');
@@ -1857,8 +1861,19 @@ function generateTaxReport(trades: any[]): string {
       parseFloat(trade.exitPrice) * parseFloat(trade.quantity) - exitFee : 0;
     const grossPL = proceeds - (parseFloat(trade.entryPrice) * parseFloat(trade.quantity));
     const netPL = proceeds - costBasis;
-    const realizedGains = netPL;
+    
+    // Realized gains only apply to closed trades (trades with exitPrice)
+    const realizedGains = trade.exitPrice ? netPL : 0;
+    
+    // Unrealized gains apply to open trades (trades without exitPrice)
+    const currentPrice = parseFloat(trade.currentPrice || trade.entryPrice);
+    const unrealizedProceeds = !trade.exitPrice ? 
+      currentPrice * parseFloat(trade.quantity) - exitFee : 0;
+    const unrealizedGains = !trade.exitPrice ? 
+      unrealizedProceeds - costBasis : 0;
+    
     const termClassification = holdDays >= 365 ? 'Long-term' : 'Short-term';
+    const accountType = trade.mode === 'live' ? 'Live' : 'Paper';
     
     return [
       trade.id,
@@ -1877,9 +1892,12 @@ function generateTaxReport(trades: any[]): string {
       trade.realizedPLPercent || '',
       costBasis.toFixed(2),
       proceeds.toFixed(2),
+      holdHours.toFixed(2),
       holdDays.toFixed(2),
       termClassification,
-      realizedGains.toFixed(2)
+      realizedGains.toFixed(2),
+      unrealizedGains.toFixed(2),
+      accountType
     ].map(value => `"${value}"`).join(',');
   });
   
