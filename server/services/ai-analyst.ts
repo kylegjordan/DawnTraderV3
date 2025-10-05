@@ -218,7 +218,7 @@ export class AIAnalyst {
       const liveDataSection = liveMarketData ? `
         LIVE MARKET DATA (${liveMarketData.source}):
         - Asset Type: ${assetType.toUpperCase()}
-        - Current Price: $${liveMarketData.price.toLocaleString()}
+        - Current Price: ${liveMarketData.price !== null ? `$${liveMarketData.price.toLocaleString()}` : 'N/A'}
         - 24h Change: ${liveMarketData.change24h.toFixed(2)}%
         - 24h Volume: $${liveMarketData.volume24h ? liveMarketData.volume24h.toLocaleString() : 'N/A'}
         - Data Source: ${liveMarketData.source.toUpperCase()}
