@@ -24,7 +24,7 @@ function Router() {
   const [location, setLocation] = useLocation();
   
   // Check kill switch status and auto-redirect
-  const { data: settings } = useQuery({
+  const { data: settings } = useQuery<{ tradingSuspended?: boolean }>({
     queryKey: ['/api/settings'],
     refetchInterval: 5000 // Check every 5 seconds
   });

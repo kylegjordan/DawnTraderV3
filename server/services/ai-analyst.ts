@@ -56,7 +56,7 @@ export class AIAnalyst {
       const metrics = this.calculateMetrics(todayTrades, activeTrades);
       
       // Generate AI analysis
-      const analysis = await this.generateAnalysis(metrics, todayTrades, settings);
+      const analysis = await this.generateAnalysis(metrics, todayTrades, settings || null);
       
       // Create report
       const report = await storage.createAIReport({
@@ -145,6 +145,7 @@ export class AIAnalyst {
     strategyRecommendations: string;
     riskAssessment: string;
     historicalPerformance: any;
+    symbolName?: string;
     livePrice?: number;
     change24h?: number;
     volume24h?: number;
@@ -211,6 +212,7 @@ export class AIAnalyst {
 
       return {
         ...analysis,
+        symbolName: liveMarketData?.name,
         livePrice: liveMarketData?.price,
         change24h: liveMarketData?.change24h,
         volume24h: liveMarketData?.volume24h,
@@ -707,8 +709,8 @@ export class AIAnalyst {
     if (closedTrades.length === 0) return 0;
 
     const totalHours = closedTrades.reduce((sum, trade) => {
-      const entryTime = new Date(trade.entryTime);
-      const exitTime = new Date(trade.exitTime!);
+      const entryTime = trade.entryTime ? new Date(trade.entryTime) : new Date();
+      const exitTime = trade.exitTime ? new Date(trade.exitTime) : new Date();
       const hours = (exitTime.getTime() - entryTime.getTime()) / (1000 * 60 * 60);
       return sum + hours;
     }, 0);

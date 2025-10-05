@@ -1,5 +1,6 @@
 interface MarketData {
   symbol: string;
+  name?: string;
   price: number;
   change24h: number;
   volume24h?: number;
@@ -34,6 +35,30 @@ const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
   'FIL': 'filecoin',
   'TRX': 'tron',
   'ETC': 'ethereum-classic'
+};
+
+const SYMBOL_TO_COIN_NAME: Record<string, string> = {
+  'BTC': 'Bitcoin',
+  'ETH': 'Ethereum',
+  'SOL': 'Solana',
+  'SUI': 'Sui',
+  'ADA': 'Cardano',
+  'DOT': 'Polkadot',
+  'MATIC': 'Polygon',
+  'AVAX': 'Avalanche',
+  'LINK': 'Chainlink',
+  'UNI': 'Uniswap',
+  'ATOM': 'Cosmos',
+  'XRP': 'XRP',
+  'DOGE': 'Dogecoin',
+  'LTC': 'Litecoin',
+  'BCH': 'Bitcoin Cash',
+  'XLM': 'Stellar',
+  'ALGO': 'Algorand',
+  'VET': 'VeChain',
+  'FIL': 'Filecoin',
+  'TRX': 'TRON',
+  'ETC': 'Ethereum Classic'
 };
 
 const SYMBOL_TO_KRAKEN_PAIR: Record<string, string> = {
@@ -121,6 +146,7 @@ export class MarketDataService {
 
     return {
       symbol,
+      name: SYMBOL_TO_COIN_NAME[symbol] || symbol,
       price: coinData.usd,
       change24h: coinData.usd_24h_change || 0,
       volume24h: coinData.usd_24h_vol,
@@ -162,6 +188,7 @@ export class MarketDataService {
 
     return {
       symbol,
+      name: SYMBOL_TO_COIN_NAME[symbol] || symbol,
       price: currentPrice,
       change24h,
       volume24h,

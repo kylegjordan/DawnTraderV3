@@ -153,6 +153,7 @@ export interface SymbolAnalysis {
   strategyRecommendations: string;
   riskAssessment: string;
   historicalPerformance: string;
+  symbolName?: string;
   livePrice?: number;
   change24h?: number;
   volume24h?: number;

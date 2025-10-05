@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
-import { CalendarIcon, Download, FileText, TrendingUp, DollarSign, PieChart } from "lucide-react";
+import { CalendarIcon, Download, FileText, TrendingUp, DollarSign, PieChart, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Trade } from "@/lib/types";
 
@@ -19,10 +21,27 @@ export default function ReportsPage() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>("all");
   const [selectedStrategy, setSelectedStrategy] = useState<string>("all");
   const [selectedMode, setSelectedMode] = useState<string>("all");
+  const [reportType, setReportType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const queryClient = useQueryClient();
 
   // Fetch all trades for reports
   const { data: allTrades = [] } = useQuery<Trade[]>({
     queryKey: ['/api/trades', {}],
+  });
+
+  // Fetch AI reports
+  const { data: aiReports = [], isLoading: reportsLoading } = useQuery<any[]>({
+    queryKey: ['/api/ai/reports'],
+  });
+
+  // Generate AI report mutation
+  const generateReportMutation = useMutation({
+    mutationFn: async (type: 'daily' | 'weekly' | 'monthly') => {
+      return await apiRequest('POST', '/api/ai/generate-report', { reportType: type });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ai/reports'] });
+    },
   });
 
   const handleExportCSV = (reportType: string) => {
@@ -59,6 +78,24 @@ export default function ReportsPage() {
   const uniqueSymbols = Array.from(new Set(allTrades.map(t => t.symbol)));
   const uniqueStrategies = Array.from(new Set(allTrades.map(t => t.strategy)));
 
+  const formatReportContent = (content: string) => {
+    return content.split('\n').map((line, index) => {
+      if (line.startsWith('# ')) {
+        return <h3 key={index} className="text-lg font-bold text-foreground mt-4 mb-2">{line.slice(2)}</h3>;
+      }
+      if (line.startsWith('## ')) {
+        return <h4 key={index} className="text-md font-semibold text-foreground mt-3 mb-2">{line.slice(3)}</h4>;
+      }
+      if (line.startsWith('- ')) {
+        return <li key={index} className="text-sm text-foreground ml-4 mb-1">{line.slice(2)}</li>;
+      }
+      if (line.trim()) {
+        return <p key={index} className="text-sm text-foreground mb-2 leading-relaxed">{line}</p>;
+      }
+      return <br key={index} />;
+    });
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -69,10 +106,11 @@ export default function ReportsPage() {
       </div>
 
       <Tabs defaultValue="canned" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className="grid w-full max-w-4xl grid-cols-4">
           <TabsTrigger value="canned" data-testid="tab-canned-reports">Canned Reports</TabsTrigger>
           <TabsTrigger value="custom" data-testid="tab-custom-reports">Custom Reports</TabsTrigger>
           <TabsTrigger value="exports" data-testid="tab-exports">Exports</TabsTrigger>
+          <TabsTrigger value="ai-reports" data-testid="tab-ai-reports">AI Reports</TabsTrigger>
         </TabsList>
 
         {/* Canned Reports Tab */}
@@ -503,6 +541,111 @@ export default function ReportsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* AI Reports Tab */}
+        <TabsContent value="ai-reports" className="space-y-6">
+          {/* Generate New AI Report */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="w-5 h-5" />
+                Generate New AI Report
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <Select value={reportType} onValueChange={(value: any) => setReportType(value)}>
+                  <SelectTrigger className="w-48" data-testid="select-ai-report-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily Report</SelectItem>
+                    <SelectItem value="weekly">Weekly Report</SelectItem>
+                    <SelectItem value="monthly">Monthly Report</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={() => generateReportMutation.mutate(reportType)}
+                  disabled={generateReportMutation.isPending}
+                  data-testid="button-generate-ai-report"
+                >
+                  {generateReportMutation.isPending ? 'Generating...' : 'Generate Report'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent AI Reports */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-foreground">Recent AI Reports</h2>
+            
+            {reportsLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Card key={i}>
+                    <CardHeader>
+                      <div className="flex justify-between">
+                        <Skeleton className="h-6 w-32" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-24 w-full" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {aiReports.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <p className="text-muted-foreground">No AI reports generated yet</p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Generate your first AI report to get started
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  aiReports.map((report: any) => (
+                    <Card key={report.id} data-testid={`ai-report-${report.id}`}>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="capitalize">
+                            {report.reportType} Report - {report.period}
+                          </CardTitle>
+                          <span className="text-sm text-muted-foreground">
+                            {new Date(report.generatedAt).toLocaleString()}
+                          </span>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="prose prose-sm max-w-none">
+                          {formatReportContent(report.content)}
+                        </div>
+                        
+                        {report.metrics && (
+                          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg">
+                            {Object.entries(report.metrics as Record<string, any>).map(([key, value]) => (
+                              <div key={key} className="text-center">
+                                <div className="text-lg font-bold text-foreground">
+                                  {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                                </div>
+                                <div className="text-xs text-muted-foreground capitalize">
+                                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>
