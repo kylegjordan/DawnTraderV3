@@ -116,8 +116,8 @@ export default function DailyBriefPage() {
   };
 
   const totalPL = brief.metrics 
-    ? (brief.metrics.realized_pl + brief.metrics.unrealized_pl) 
-    : 0;
+    ? ((brief.metrics.realized_pl ?? 0) + (brief.metrics.unrealized_pl ?? 0))
+    : null;
 
   return (
     <div className="container mx-auto p-6 space-y-6" data-testid="daily-brief-page">
@@ -172,7 +172,7 @@ export default function DailyBriefPage() {
       </Card>
 
       {/* Metrics Grid */}
-      {brief.metrics && (
+      {brief.metrics ? (
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
@@ -180,7 +180,7 @@ export default function DailyBriefPage() {
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold" data-testid="text-metric-num-trades">
-                {brief.metrics.num_trades}
+                {brief.metrics.num_trades != null ? brief.metrics.num_trades : '—'}
               </p>
             </CardContent>
           </Card>
@@ -191,7 +191,7 @@ export default function DailyBriefPage() {
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold" data-testid="text-metric-win-rate">
-                {brief.metrics.win_rate?.toFixed(1) ?? '0'}%
+                {brief.metrics.win_rate != null ? `${brief.metrics.win_rate.toFixed(1)}%` : '—'}
               </p>
             </CardContent>
           </Card>
@@ -203,13 +203,15 @@ export default function DailyBriefPage() {
             <CardContent>
               <p 
                 className={`text-3xl font-bold ${
-                  totalPL >= 0 
+                  totalPL != null && totalPL >= 0 
                     ? 'text-green-600 dark:text-green-400' 
-                    : 'text-red-600 dark:text-red-400'
+                    : totalPL != null && totalPL < 0
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-muted-foreground'
                 }`}
                 data-testid="text-metric-total-pnl"
               >
-                ${totalPL >= 0 ? '+' : ''}{totalPL.toFixed(2)}
+                {totalPL != null ? `${totalPL >= 0 ? '+' : ''}$${Math.abs(totalPL).toFixed(2)}` : '—'}
               </p>
             </CardContent>
           </Card>
@@ -221,17 +223,27 @@ export default function DailyBriefPage() {
             <CardContent>
               <p 
                 className={`text-3xl font-bold ${
-                  brief.metrics.pnl_pct >= 0 
+                  brief.metrics.pnl_pct != null && brief.metrics.pnl_pct >= 0 
                     ? 'text-green-600 dark:text-green-400' 
-                    : 'text-red-600 dark:text-red-400'
+                    : brief.metrics.pnl_pct != null && brief.metrics.pnl_pct < 0
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-muted-foreground'
                 }`}
                 data-testid="text-metric-pnl-pct"
               >
-                {brief.metrics.pnl_pct >= 0 ? '+' : ''}{brief.metrics.pnl_pct.toFixed(2)}%
+                {brief.metrics.pnl_pct != null ? `${brief.metrics.pnl_pct >= 0 ? '+' : ''}${brief.metrics.pnl_pct.toFixed(2)}%` : '—'}
               </p>
             </CardContent>
           </Card>
         </div>
+      ) : (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-sm text-muted-foreground italic text-center">
+              Some trading metrics are still updating.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Narrative */}
