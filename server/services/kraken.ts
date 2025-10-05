@@ -144,14 +144,17 @@ export class KrakenService {
   }
 
   private getMessageSignature(path: string, request: any, secret: string, nonce: number): string {
-    const message = new URLSearchParams(request).toString();
-    const hash = crypto.createHash('sha256');
-    const hmac = crypto.createHmac('sha512', Buffer.from(secret, 'base64'));
+    const postData = new URLSearchParams(request).toString();
+    const message = nonce.toString() + postData;
+    const hash = crypto.createHash('sha256').update(message).digest();
     
-    hash.update(nonce + message);
-    hmac.update(path + hash.digest());
+    const hmacMessage = Buffer.concat([Buffer.from(path), hash]);
+    const hmac = crypto
+      .createHmac('sha512', Buffer.from(secret, 'base64'))
+      .update(hmacMessage)
+      .digest('base64');
     
-    return hmac.digest('base64');
+    return hmac;
   }
 
   private async makePublicRequest(endpoint: string, params: any = {}): Promise<any> {

@@ -1880,15 +1880,8 @@ Provide specific, actionable recommendations.`,
   // TEST ENDPOINT: Test Kraken credentials
   app.get('/api/test/kraken-balance', async (_req, res) => {
     try {
-      console.log('\n=== TESTING KRAKEN API CREDENTIALS ===');
       const krakenService = new KrakenService();
-      console.log('Calling KrakenService.getAccountBalance()...');
-      
       const balances = await krakenService.getAccountBalance();
-      
-      console.log('\n✅ SUCCESS! Kraken API returned balances:');
-      console.log(JSON.stringify(balances, null, 2));
-      console.log('=== END TEST ===\n');
       
       res.json({ 
         success: true, 
@@ -1896,9 +1889,6 @@ Provide specific, actionable recommendations.`,
         balances 
       });
     } catch (error: any) {
-      console.error('\n❌ ERROR! Kraken API call failed:');
-      console.error(error.message);
-      console.error('=== END TEST ===\n');
       
       res.status(500).json({ 
         success: false, 
