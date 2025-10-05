@@ -273,13 +273,29 @@ export class AIAnalyst {
         timestamp: liveMarketData?.timestamp,
         assetType
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error analyzing symbol:', error);
+      
+      // Provide more helpful error messages based on the error type
+      let errorMessage = "Unable to fetch market data for this symbol. ";
+      
+      if (error.message?.includes('API key') || error.message?.includes('FINNHUB_API_KEY')) {
+        errorMessage += "API credentials are not configured.";
+      } else if (error.message?.includes('429') || error.message?.includes('rate limit')) {
+        errorMessage += "API rate limit reached. Please try again in a few moments.";
+      } else if (error.message?.includes('404') || error.message?.includes('not found') || error.message?.includes('No quote data')) {
+        errorMessage += "This symbol was not found in our data sources.";
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage += "Network error. Please check your connection and try again.";
+      } else {
+        errorMessage += "Please try again or search for a different symbol.";
+      }
+      
       return {
-        technicalAnalysis: "Error analyzing technical data",
-        strategyRecommendations: "Unable to generate recommendations",
-        riskAssessment: "Risk assessment unavailable",
-        historicalPerformance: "Historical data unavailable"
+        technicalAnalysis: errorMessage,
+        strategyRecommendations: "Unable to generate recommendations without market data.",
+        riskAssessment: "Risk assessment unavailable without current price information.",
+        historicalPerformance: "Historical analysis unavailable for this symbol."
       };
     }
   }
