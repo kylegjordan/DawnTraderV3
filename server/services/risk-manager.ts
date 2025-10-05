@@ -164,7 +164,7 @@ export class RiskManager {
 
       // For live trading, we'd check actual Kraken balance
       // This is a simplified check
-      const riskAmount = parseFloat(settings.riskPerTrade);
+      const riskAmount = parseFloat(settings.riskPerTrade || '0');
       const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
       const positionSize = riskAmount / stopDistance;
       const requiredCapital = positionSize * signal.entryPrice;
@@ -191,7 +191,7 @@ export class RiskManager {
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
-    const riskAmount = parseFloat(settings.riskPerTrade);
+    const riskAmount = parseFloat(settings.riskPerTrade || '0');
     
     if (riskAmount <= 0) {
       return {
@@ -216,7 +216,7 @@ export class RiskManager {
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
     const activeTrades = await storage.getActiveTrades(userId);
-    const maxExposurePercent = parseFloat(settings.maxExposurePercent);
+    const maxExposurePercent = parseFloat(settings.maxExposurePercent || '0');
 
     // Calculate current exposure
     let currentExposure = 0;
@@ -226,7 +226,7 @@ export class RiskManager {
     }
 
     // Calculate new trade exposure
-    const riskAmount = parseFloat(settings.riskPerTrade);
+    const riskAmount = parseFloat(settings.riskPerTrade || '0');
     const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
     const positionSize = riskAmount / stopDistance;
     const newTradeValue = positionSize * signal.entryPrice;
@@ -251,7 +251,7 @@ export class RiskManager {
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
     const activeTrades = await storage.getActiveTrades(userId);
-    const maxOpenTrades = settings.maxOpenTrades;
+    const maxOpenTrades = settings.maxOpenTrades || 0;
 
     if (activeTrades.length >= maxOpenTrades) {
       return {
@@ -459,8 +459,8 @@ export class RiskManager {
       await storage.createKillSwitchEvent({
         userId,
         eventType: 'kill_switch',
-        portfolioValueBefore: pl24h.portfolioValueBefore,
-        portfolioValueAfter: pl24h.portfolioValueCurrent,
+        portfolioValueBefore: pl24h.portfolioValueBefore.toString(),
+        portfolioValueAfter: pl24h.portfolioValueCurrent.toString(),
         lossAmount: Math.abs(pl24h.totalPL).toString(),
         lossPercent: pl24h.lossPercent.toString(),
         killSwitchThreshold: killSwitchThreshold.toString(),
@@ -485,8 +485,8 @@ export class RiskManager {
       await storage.createKillSwitchEvent({
         userId,
         eventType: 'warning',
-        portfolioValueBefore: pl24h.portfolioValueBefore,
-        portfolioValueAfter: pl24h.portfolioValueCurrent,
+        portfolioValueBefore: pl24h.portfolioValueBefore.toString(),
+        portfolioValueAfter: pl24h.portfolioValueCurrent.toString(),
         lossAmount: Math.abs(pl24h.totalPL).toString(),
         lossPercent: pl24h.lossPercent.toString(),
         killSwitchThreshold: killSwitchThreshold.toString(),

@@ -1907,6 +1907,30 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // ENDPOINT: Get Kraken API cache statistics
+  app.get('/api/kraken/cache-stats', async (_req, res) => {
+    try {
+      const krakenService = new KrakenService();
+      const stats = krakenService.getCacheStats();
+      
+      res.json({ 
+        success: true, 
+        cacheStats: stats,
+        config: {
+          balanceCacheTTL: '60s',
+          openOrdersCacheTTL: '90s',
+          closedOrdersCacheTTL: '600s (10 min)',
+          rateLimitCooldown: '120s (2 min)'
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  });
+
   return httpServer;
 }
 

@@ -40,13 +40,36 @@ interface KrakenOrderBook {
   bids: OrderBookEntry[];
 }
 
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  rateLimitState?: {
+    isLocked: boolean;
+    lockoutUntil: number;
+    lastErrorTime: number;
+  };
+}
+
 export class KrakenService {
   private config: KrakenConfig;
+  private balanceCache: Map<string, CacheEntry<Record<string, string>>> = new Map();
+  private openOrdersCache: Map<string, CacheEntry<any>> = new Map();
+  private closedOrdersCache: Map<string, CacheEntry<any>> = new Map();
+  private rateLimitStates: Map<string, {
+    isLocked: boolean;
+    lockoutUntil: number;
+    lastErrorTime: number;
+  }> = new Map();
+  
+  private readonly BALANCE_CACHE_TTL = 60000;
+  private readonly OPEN_ORDERS_CACHE_TTL = 90000;
+  private readonly CLOSED_ORDERS_CACHE_TTL = 600000;
+  private readonly RATE_LIMIT_COOLDOWN = 120000;
 
   constructor(apiKey?: string, apiSecret?: string) {
     this.config = {
       apiKey: apiKey || process.env.KRAKEN_API_KEY || "",
-      apiSecret: apiSecret || process.env.KRAKEN_API_SECRET || "",
+      apiSecret: apiSecret || process.env.KRAKEN_PRIVATE_KEY || process.env.KRAKEN_API_SECRET || "",
       baseUrl: "https://api.kraken.com"
     };
   }
@@ -60,6 +83,64 @@ export class KrakenService {
       console.log('⚠️  Kraken API disabled – Maintenance Mode active.');
       throw new Error('Kraken API is disabled during maintenance mode');
     }
+  }
+
+  private getRateLimitState(userId: string): {
+    isLocked: boolean;
+    lockoutUntil: number;
+    lastErrorTime: number;
+  } {
+    if (!this.rateLimitStates.has(userId)) {
+      this.rateLimitStates.set(userId, {
+        isLocked: false,
+        lockoutUntil: 0,
+        lastErrorTime: 0
+      });
+    }
+    return this.rateLimitStates.get(userId)!;
+  }
+
+  private checkRateLimitLockout(userId: string): void {
+    const now = Date.now();
+    const state = this.getRateLimitState(userId);
+    
+    if (state.isLocked && now < state.lockoutUntil) {
+      const remainingSeconds = Math.ceil((state.lockoutUntil - now) / 1000);
+      console.log(`⏳ Kraken API rate limit cooldown active for user ${userId} (${remainingSeconds}s remaining)`);
+      throw new Error(`Kraken API in cooldown mode. Retry in ${remainingSeconds} seconds.`);
+    }
+    
+    if (state.isLocked && now >= state.lockoutUntil) {
+      console.log(`✅ Kraken API rate limit cooldown expired for user ${userId}, resuming normal operations`);
+      state.isLocked = false;
+      state.lockoutUntil = 0;
+    }
+  }
+
+  private handleRateLimitError(userId: string, error: any): void {
+    if (error.message && error.message.includes('EGeneral:Temporary lockout')) {
+      const now = Date.now();
+      const state = this.getRateLimitState(userId);
+      state.isLocked = true;
+      state.lockoutUntil = now + this.RATE_LIMIT_COOLDOWN;
+      state.lastErrorTime = now;
+      
+      console.error(`🚨 Kraken API Rate Limit Hit for user ${userId}!`);
+      console.error(`   Endpoint locked for ${this.RATE_LIMIT_COOLDOWN / 1000} seconds`);
+      console.error(`   Cooldown expires at: ${new Date(state.lockoutUntil).toISOString()}`);
+    }
+  }
+
+  private getCacheKey(userId: string = 'default'): string {
+    return userId;
+  }
+
+  private isCacheValid<T>(cache: Map<string, CacheEntry<T>>, key: string, ttl: number): boolean {
+    const entry = cache.get(key);
+    if (!entry) return false;
+    
+    const age = Date.now() - entry.timestamp;
+    return age < ttl;
   }
 
   private getMessageSignature(path: string, request: any, secret: string, nonce: number): string {
@@ -93,40 +174,49 @@ export class KrakenService {
     return data.result;
   }
 
-  private async makePrivateRequest(endpoint: string, params: any = {}): Promise<any> {
+  private async makePrivateRequest(endpoint: string, params: any = {}, userId: string = 'default'): Promise<any> {
     this.checkMaintenanceMode();
+    this.checkRateLimitLockout(userId);
     
     if (!this.config.apiKey || !this.config.apiSecret) {
       throw new Error("Kraken API credentials not configured");
     }
 
-    const nonce = Date.now() * 1000;
-    const path = `/0/private/${endpoint}`;
-    
-    const request = {
-      nonce: nonce.toString(),
-      ...params
-    };
+    try {
+      const nonce = Date.now() * 1000;
+      const path = `/0/private/${endpoint}`;
+      
+      const request = {
+        nonce: nonce.toString(),
+        ...params
+      };
 
-    const signature = this.getMessageSignature(path, request, this.config.apiSecret, nonce);
+      const signature = this.getMessageSignature(path, request, this.config.apiSecret, nonce);
 
-    const response = await fetch(`${this.config.baseUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        'API-Key': this.config.apiKey,
-        'API-Sign': signature,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams(request).toString()
-    });
+      console.log(`[Kraken] Private API call: ${endpoint} for user ${userId}`);
+      const response = await fetch(`${this.config.baseUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          'API-Key': this.config.apiKey,
+          'API-Sign': signature,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams(request).toString()
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (data.error && data.error.length > 0) {
-      throw new Error(`Kraken API error: ${data.error.join(', ')}`);
+      if (data.error && data.error.length > 0) {
+        const error = new Error(`Kraken API error: ${data.error.join(', ')}`);
+        this.handleRateLimitError(userId, error);
+        throw error;
+      }
+
+      return data.result;
+    } catch (error: any) {
+      this.handleRateLimitError(userId, error);
+      throw error;
     }
-
-    return data.result;
   }
 
   // Public endpoints
@@ -190,17 +280,98 @@ export class KrakenService {
     return await this.makePublicRequest('Trades', params);
   }
 
-  // Private endpoints
-  async getAccountBalance(): Promise<Record<string, string>> {
-    return await this.makePrivateRequest('Balance');
+  // Private endpoints with caching
+  async getAccountBalance(userId: string = 'default', bypassCache: boolean = false): Promise<Record<string, string>> {
+    const cacheKey = this.getCacheKey(userId);
+    const rateLimitState = this.getRateLimitState(userId);
+    
+    if (!bypassCache && this.isCacheValid(this.balanceCache, cacheKey, this.BALANCE_CACHE_TTL)) {
+      const cached = this.balanceCache.get(cacheKey)!;
+      const ageSeconds = Math.floor((Date.now() - cached.timestamp) / 1000);
+      console.log(`[Kraken] getAccountBalance (user: ${userId}) - Cache HIT (${ageSeconds}s old, TTL: ${this.BALANCE_CACHE_TTL / 1000}s)`);
+      return cached.data;
+    }
+    
+    if (rateLimitState.isLocked) {
+      const cached = this.balanceCache.get(cacheKey);
+      if (cached) {
+        console.log(`[Kraken] getAccountBalance (user: ${userId}) - Returning stale cache due to rate limit lockout`);
+        return cached.data;
+      }
+      throw new Error(`Kraken API in cooldown mode and no cached data available`);
+    }
+    
+    console.log(`[Kraken] getAccountBalance (user: ${userId}) - Cache MISS, fetching from API`);
+    const result = await this.makePrivateRequest('Balance', {}, userId);
+    
+    this.balanceCache.set(cacheKey, {
+      data: result,
+      timestamp: Date.now()
+    });
+    
+    return result;
   }
 
-  async getOpenOrders(): Promise<any> {
-    return await this.makePrivateRequest('OpenOrders');
+  async getOpenOrders(userId: string = 'default', bypassCache: boolean = false): Promise<any> {
+    const cacheKey = this.getCacheKey(userId);
+    const rateLimitState = this.getRateLimitState(userId);
+    
+    if (!bypassCache && this.isCacheValid(this.openOrdersCache, cacheKey, this.OPEN_ORDERS_CACHE_TTL)) {
+      const cached = this.openOrdersCache.get(cacheKey)!;
+      const ageSeconds = Math.floor((Date.now() - cached.timestamp) / 1000);
+      console.log(`[Kraken] getOpenOrders (user: ${userId}) - Cache HIT (${ageSeconds}s old, TTL: ${this.OPEN_ORDERS_CACHE_TTL / 1000}s)`);
+      return cached.data;
+    }
+    
+    if (rateLimitState.isLocked) {
+      const cached = this.openOrdersCache.get(cacheKey);
+      if (cached) {
+        console.log(`[Kraken] getOpenOrders (user: ${userId}) - Returning stale cache due to rate limit lockout`);
+        return cached.data;
+      }
+      throw new Error(`Kraken API in cooldown mode and no cached data available`);
+    }
+    
+    console.log(`[Kraken] getOpenOrders (user: ${userId}) - Cache MISS, fetching from API`);
+    const result = await this.makePrivateRequest('OpenOrders', {}, userId);
+    
+    this.openOrdersCache.set(cacheKey, {
+      data: result,
+      timestamp: Date.now()
+    });
+    
+    return result;
   }
 
-  async getClosedOrders(): Promise<any> {
-    return await this.makePrivateRequest('ClosedOrders');
+  async getClosedOrders(userId: string = 'default', bypassCache: boolean = false): Promise<any> {
+    const cacheKey = this.getCacheKey(userId);
+    const rateLimitState = this.getRateLimitState(userId);
+    
+    if (!bypassCache && this.isCacheValid(this.closedOrdersCache, cacheKey, this.CLOSED_ORDERS_CACHE_TTL)) {
+      const cached = this.closedOrdersCache.get(cacheKey)!;
+      const ageSeconds = Math.floor((Date.now() - cached.timestamp) / 1000);
+      console.log(`[Kraken] getClosedOrders (user: ${userId}) - Cache HIT (${ageSeconds}s old, TTL: ${this.CLOSED_ORDERS_CACHE_TTL / 1000}s)`);
+      return cached.data;
+    }
+    
+    if (rateLimitState.isLocked) {
+      const cached = this.closedOrdersCache.get(cacheKey);
+      if (cached) {
+        console.log(`[Kraken] getClosedOrders (user: ${userId}) - Returning stale cache due to rate limit lockout`);
+        return cached.data;
+      }
+      throw new Error(`Kraken API in cooldown mode and no cached data available`);
+    }
+    
+    console.log(`[Kraken] getClosedOrders (user: ${userId}) - Cache MISS, fetching from API`);
+    const result = await this.makePrivateRequest('ClosedOrders', {}, userId);
+    
+    this.closedOrdersCache.set(cacheKey, {
+      data: result,
+      timestamp: Date.now()
+    });
+    
+    return result;
   }
 
   async addOrder(params: {
@@ -222,6 +393,53 @@ export class KrakenService {
 
   async cancelOrder(txid: string): Promise<any> {
     return await this.makePrivateRequest('CancelOrder', { txid });
+  }
+
+  getCacheStats(): {
+    balance: { size: number; oldestAgeSeconds: number | null };
+    openOrders: { size: number; oldestAgeSeconds: number | null };
+    closedOrders: { size: number; oldestAgeSeconds: number | null };
+    rateLimitStates: Record<string, { isLocked: boolean; lockoutUntil: number; lastErrorTime: number }>;
+  } {
+    const now = Date.now();
+    
+    const getOldestAge = <T>(cache: Map<string, CacheEntry<T>>): number | null => {
+      if (cache.size === 0) return null;
+      let oldest = Infinity;
+      cache.forEach(entry => {
+        const age = now - entry.timestamp;
+        if (age < oldest) oldest = age;
+      });
+      return Math.floor(oldest / 1000);
+    };
+    
+    const rateLimitStatesObj: Record<string, { isLocked: boolean; lockoutUntil: number; lastErrorTime: number }> = {};
+    this.rateLimitStates.forEach((state, userId) => {
+      rateLimitStatesObj[userId] = { ...state };
+    });
+    
+    return {
+      balance: {
+        size: this.balanceCache.size,
+        oldestAgeSeconds: getOldestAge(this.balanceCache)
+      },
+      openOrders: {
+        size: this.openOrdersCache.size,
+        oldestAgeSeconds: getOldestAge(this.openOrdersCache)
+      },
+      closedOrders: {
+        size: this.closedOrdersCache.size,
+        oldestAgeSeconds: getOldestAge(this.closedOrdersCache)
+      },
+      rateLimitStates: rateLimitStatesObj
+    };
+  }
+
+  clearAllCaches(): void {
+    this.balanceCache.clear();
+    this.openOrdersCache.clear();
+    this.closedOrdersCache.clear();
+    console.log('[Kraken] All caches cleared');
   }
 
   // Utility methods
