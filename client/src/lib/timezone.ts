@@ -52,9 +52,17 @@ export function getCurrentTimeUTC(): string {
   return dayjs().utc().format('HH:mm:ss');
 }
 
+export function getCurrentDateUTC(): string {
+  return dayjs().utc().format('DD MMM YYYY');
+}
+
 export function getCurrentTimeLocal(timezone: string, timeFormat: '12hr' | '24hr'): string {
   const format = timeFormat === '12hr' ? 'h:mm:ss A' : 'HH:mm:ss';
   return dayjs().tz(timezone).format(format);
+}
+
+export function getCurrentDateLocal(timezone: string): string {
+  return dayjs().tz(timezone).format('DD MMM YYYY');
 }
 
 export function getTimezoneAbbr(timezone: string): string {

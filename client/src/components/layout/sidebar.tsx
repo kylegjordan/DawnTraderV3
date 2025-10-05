@@ -94,30 +94,6 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
             })}
           </nav>
           
-          {/* Strategy Filter */}
-          <div className="mt-8 pt-6 border-t border-border">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Strategies
-            </h3>
-            <div className="space-y-2">
-              {strategies.map((strategy) => (
-                <label 
-                  key={strategy.key}
-                  className="flex items-center gap-2 cursor-pointer group"
-                  data-testid={`strategy-${strategy.key}`}
-                >
-                  <Checkbox 
-                    defaultChecked 
-                    className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary focus:ring-offset-0"
-                  />
-                  <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-                    {strategy.name}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-          
           {/* Account Info */}
           <div className="mt-8 pt-6 border-t border-border">
             <div className="flex items-center gap-3">

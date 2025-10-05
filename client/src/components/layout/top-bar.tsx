@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { getCurrentTimeUTC, getCurrentTimeLocal, getTimezoneAbbr } from "@/lib/timezone";
+import { getCurrentTimeUTC, getCurrentDateUTC, getCurrentTimeLocal, getCurrentDateLocal, getTimezoneAbbr } from "@/lib/timezone";
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -24,7 +24,9 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   } = useTrading();
   const { toast } = useToast();
   const [utcTime, setUtcTime] = useState<string>('');
+  const [utcDate, setUtcDate] = useState<string>('');
   const [localTime, setLocalTime] = useState<string>('');
+  const [localDate, setLocalDate] = useState<string>('');
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
 
   // Fetch user settings for timezone and time format
@@ -38,11 +40,13 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       const timezone = settings?.timezone || 'Asia/Dubai';
       const timeFormat = settings?.timeFormat || '12hr';
       
-      // Update UTC time
+      // Update UTC time and date
       setUtcTime(getCurrentTimeUTC());
+      setUtcDate(getCurrentDateUTC());
       
-      // Update local time with timezone abbreviation
+      // Update local time, date, and timezone abbreviation
       setLocalTime(getCurrentTimeLocal(timezone, timeFormat));
+      setLocalDate(getCurrentDateLocal(timezone));
       setLocalTzAbbr(getTimezoneAbbr(timezone));
     };
 
@@ -194,7 +198,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               <div className="flex flex-col">
                 <span className="text-[10px] text-muted-foreground leading-none">UTC</span>
                 <span className="text-sm font-mono text-foreground leading-tight" data-testid="text-utc-time">
-                  {utcTime}
+                  {utcTime} | {utcDate}
                 </span>
               </div>
             </div>
@@ -205,7 +209,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               <div className="flex flex-col">
                 <span className="text-[10px] text-primary leading-none">{localTzAbbr}</span>
                 <span className="text-sm font-mono text-foreground leading-tight" data-testid="text-local-time">
-                  {localTime}
+                  {localTime} | {localDate}
                 </span>
               </div>
             </div>

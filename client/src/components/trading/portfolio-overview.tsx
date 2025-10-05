@@ -73,10 +73,17 @@ export default function PortfolioOverview() {
     {
       title: "Portfolio Value",
       value: `$${portfolioMetrics.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
-      change: `Win Rate: ${portfolioMetrics.winRate.toFixed(1)}%`,
-      changeType: portfolioMetrics.winRate >= 50 ? "positive" : "negative" as const,
+      change: portfolioMetrics.totalTrades === 0 
+        ? `Win Rate: —` 
+        : `Win Rate: ${portfolioMetrics.winRate.toFixed(1)}%`,
+      changeType: portfolioMetrics.totalTrades === 0 
+        ? "neutral" 
+        : (portfolioMetrics.winRate >= 50 ? "positive" : "negative") as const,
       icon: DollarSign,
-      subtitle: `${portfolioMetrics.wins}W / ${portfolioMetrics.losses}L`,
+      iconHidden: true,
+      subtitle: portfolioMetrics.totalTrades === 0 
+        ? `No trades yet` 
+        : `${portfolioMetrics.wins}W / ${portfolioMetrics.losses}L`,
       syncStatus: getSyncStatus()
     },
     {
@@ -99,11 +106,16 @@ export default function PortfolioOverview() {
     },
     {
       title: "Cash vs Crypto",
-      value: `${portfolioMetrics.cashPercent?.toFixed(1) || '100.0'}%`,
-      change: `Crypto: ${portfolioMetrics.cryptoPercent?.toFixed(1) || '0.0'}%`,
+      value: "",
+      change: "",
       changeType: "neutral" as const,
       icon: PieChart,
-      subtitle: `$${(portfolioMetrics.cash || portfolioMetrics.totalValue).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} cash`
+      subtitle: "",
+      isCashCrypto: true,
+      cashAmount: portfolioMetrics.cash || portfolioMetrics.totalValue,
+      cryptoAmount: portfolioMetrics.crypto || 0,
+      cashPercent: portfolioMetrics.cashPercent || 100,
+      cryptoPercent: portfolioMetrics.cryptoPercent || 0
     }
   ];
 
@@ -117,12 +129,14 @@ export default function PortfolioOverview() {
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-muted-foreground">{metric.title}</span>
-                <Icon className={cn(
-                  "w-5 h-5",
-                  metric.changeType === "positive" && "text-success",
-                  metric.changeType === "negative" && "text-destructive",
-                  metric.changeType === "neutral" && "text-primary"
-                )} />
+                {!(metric as any).iconHidden && (
+                  <Icon className={cn(
+                    "w-5 h-5",
+                    metric.changeType === "positive" && "text-success",
+                    metric.changeType === "negative" && "text-destructive",
+                    metric.changeType === "neutral" && "text-primary"
+                  )} />
+                )}
               </div>
               
               {(metric as any).isEarnings ? (
@@ -192,6 +206,35 @@ export default function PortfolioOverview() {
                     )} data-testid="earnings-lifetime">
                       {formatEarnings((metric as any).earningsData.lifetime)}
                     </span>
+                  </div>
+                </div>
+              ) : (metric as any).isCashCrypto ? (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Cash:</span>
+                      <span className="text-lg font-bold font-mono text-foreground">
+                        ${(metric as any).cashAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground ml-4">
+                        ({(metric as any).cashPercent.toFixed(1)}%)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Crypto:</span>
+                      <span className="text-lg font-bold font-mono text-foreground">
+                        ${(metric as any).cryptoAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground ml-4">
+                        ({(metric as any).cryptoPercent.toFixed(1)}%)
+                      </span>
+                    </div>
                   </div>
                 </div>
               ) : (
