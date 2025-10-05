@@ -163,10 +163,35 @@ export class AIAnalyst {
         assetType = 'crypto';
         console.log(`[AI Analyst] Live crypto data for ${symbol}:`, liveMarketData);
       } catch (cryptoError) {
-        // Try stock if crypto fails
+        // Try stock if crypto fails with retry logic
         try {
           const { stockService } = await import('./stocks');
-          const stockQuote = await stockService.getQuote(symbol);
+          let stockQuote;
+          
+          // Try fetching with retry (once after a short delay)
+          try {
+            stockQuote = await stockService.getQuote(symbol);
+          } catch (firstAttemptError: any) {
+            console.warn(`[AI Analyst] First attempt failed for ${symbol}:`, {
+              status: firstAttemptError.message,
+              error: firstAttemptError
+            });
+            
+            // Wait 500ms and retry once
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            try {
+              console.log(`[AI Analyst] Retrying stock quote for ${symbol}...`);
+              stockQuote = await stockService.getQuote(symbol);
+            } catch (retryError: any) {
+              console.error(`[AI Analyst] Retry failed for ${symbol}:`, {
+                status: retryError.message,
+                error: retryError
+              });
+              throw new Error(`Live stock data unavailable — please try again later. ${retryError.message}`);
+            }
+          }
+          
           liveMarketData = {
             symbol: stockQuote.symbol,
             name: stockQuote.name,
@@ -178,8 +203,11 @@ export class AIAnalyst {
           };
           assetType = 'stock';
           console.log(`[AI Analyst] Live stock data for ${symbol}:`, liveMarketData);
-        } catch (stockError) {
-          console.warn(`[AI Analyst] Failed to fetch data for ${symbol} from both crypto and stock sources`);
+        } catch (stockError: any) {
+          console.warn(`[AI Analyst] Failed to fetch data for ${symbol} from both crypto and stock sources:`, {
+            cryptoError: cryptoError instanceof Error ? cryptoError.message : String(cryptoError),
+            stockError: stockError instanceof Error ? stockError.message : String(stockError)
+          });
         }
       }
 
