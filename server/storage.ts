@@ -14,6 +14,9 @@ import {
   aiOpportunityRuns,
   aiOpportunities,
   dailyBriefs,
+  paperTrades,
+  paperDailyBriefs,
+  paperAIReports,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -43,7 +46,13 @@ import {
   type AIOpportunity,
   type InsertAIOpportunity,
   type DailyBrief,
-  type InsertDailyBrief
+  type InsertDailyBrief,
+  type PaperTrade,
+  type InsertPaperTrade,
+  type PaperDailyBrief,
+  type InsertPaperDailyBrief,
+  type PaperAIReport,
+  type InsertPaperAIReport
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
@@ -137,6 +146,25 @@ export interface IStorage {
   getDailyBrief(userId: string, date: string): Promise<DailyBrief | undefined>;
   getDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<DailyBrief[]>;
   finalizeDailyBrief(id: string): Promise<DailyBrief>;
+
+  // Paper trading methods (simulated trades - isolated from live)
+  createPaperTrade(trade: InsertPaperTrade): Promise<PaperTrade>;
+  updatePaperTrade(id: string, updates: Partial<PaperTrade>): Promise<PaperTrade>;
+  getPaperTradeById(id: string): Promise<PaperTrade | undefined>;
+  getAllPaperTrades(userId: string): Promise<PaperTrade[]>;
+  getOpenPaperTrades(userId: string): Promise<PaperTrade[]>;
+  deleteAllPaperTrades(userId: string): Promise<void>;
+
+  // Paper daily brief methods
+  createPaperDailyBrief(brief: InsertPaperDailyBrief): Promise<PaperDailyBrief>;
+  updatePaperDailyBrief(id: string, updates: Partial<PaperDailyBrief>): Promise<PaperDailyBrief>;
+  getPaperDailyBrief(userId: string, date: string): Promise<PaperDailyBrief | undefined>;
+  getPaperDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<PaperDailyBrief[]>;
+  finalizePaperDailyBrief(id: string): Promise<PaperDailyBrief>;
+
+  // Paper AI report methods
+  createPaperAIReport(report: InsertPaperAIReport): Promise<PaperAIReport>;
+  getPaperAIReports(userId: string, type?: string, limit?: number): Promise<PaperAIReport[]>;
 
   // User utility methods
   getAllUsers(): Promise<User[]>;
@@ -719,6 +747,131 @@ export class DatabaseStorage implements IStorage {
       .where(eq(dailyBriefs.id, id))
       .returning();
     return result;
+  }
+
+  // Paper trading methods (completely isolated from live)
+  async createPaperTrade(trade: InsertPaperTrade): Promise<PaperTrade> {
+    const [result] = await db.insert(paperTrades).values(trade).returning();
+    return result;
+  }
+
+  async updatePaperTrade(id: string, updates: Partial<PaperTrade>): Promise<PaperTrade> {
+    const [result] = await db
+      .update(paperTrades)
+      .set(updates)
+      .where(eq(paperTrades.id, id))
+      .returning();
+    return result;
+  }
+
+  async getPaperTradeById(id: string): Promise<PaperTrade | undefined> {
+    const [result] = await db
+      .select()
+      .from(paperTrades)
+      .where(eq(paperTrades.id, id));
+    return result || undefined;
+  }
+
+  async getAllPaperTrades(userId: string): Promise<PaperTrade[]> {
+    return await db
+      .select()
+      .from(paperTrades)
+      .where(eq(paperTrades.userId, userId))
+      .orderBy(desc(paperTrades.entryTime));
+  }
+
+  async getOpenPaperTrades(userId: string): Promise<PaperTrade[]> {
+    return await db
+      .select()
+      .from(paperTrades)
+      .where(and(eq(paperTrades.userId, userId), eq(paperTrades.status, 'open')))
+      .orderBy(desc(paperTrades.entryTime));
+  }
+
+  async deleteAllPaperTrades(userId: string): Promise<void> {
+    await db.delete(paperTrades).where(eq(paperTrades.userId, userId));
+  }
+
+  // Paper daily brief methods
+  async createPaperDailyBrief(brief: InsertPaperDailyBrief): Promise<PaperDailyBrief> {
+    const [result] = await db.insert(paperDailyBriefs).values(brief).returning();
+    return result;
+  }
+
+  async updatePaperDailyBrief(id: string, updates: Partial<PaperDailyBrief>): Promise<PaperDailyBrief> {
+    const [result] = await db
+      .update(paperDailyBriefs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(paperDailyBriefs.id, id))
+      .returning();
+    return result;
+  }
+
+  async getPaperDailyBrief(userId: string, date: string): Promise<PaperDailyBrief | undefined> {
+    const [result] = await db
+      .select()
+      .from(paperDailyBriefs)
+      .where(and(eq(paperDailyBriefs.userId, userId), eq(paperDailyBriefs.date, date)));
+    return result || undefined;
+  }
+
+  async getPaperDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<PaperDailyBrief[]> {
+    const conditions = [eq(paperDailyBriefs.userId, userId)];
+    
+    if (filters?.status) {
+      conditions.push(eq(paperDailyBriefs.status, filters.status as any));
+    }
+    
+    const query = db
+      .select()
+      .from(paperDailyBriefs)
+      .where(and(...conditions))
+      .orderBy(desc(paperDailyBriefs.date));
+    
+    if (filters?.limit) {
+      query.limit(filters.limit);
+    }
+    
+    return await query;
+  }
+
+  async finalizePaperDailyBrief(id: string): Promise<PaperDailyBrief> {
+    const [result] = await db
+      .update(paperDailyBriefs)
+      .set({ 
+        status: 'final' as const,
+        finalizedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(paperDailyBriefs.id, id))
+      .returning();
+    return result;
+  }
+
+  // Paper AI report methods
+  async createPaperAIReport(report: InsertPaperAIReport): Promise<PaperAIReport> {
+    const [result] = await db.insert(paperAIReports).values(report).returning();
+    return result;
+  }
+
+  async getPaperAIReports(userId: string, type?: string, limit?: number): Promise<PaperAIReport[]> {
+    const conditions = [eq(paperAIReports.userId, userId)];
+    
+    if (type) {
+      conditions.push(eq(paperAIReports.reportType, type));
+    }
+    
+    const query = db
+      .select()
+      .from(paperAIReports)
+      .where(and(...conditions))
+      .orderBy(desc(paperAIReports.generatedAt));
+    
+    if (limit) {
+      query.limit(limit);
+    }
+    
+    return await query;
   }
 
   // User utility methods
