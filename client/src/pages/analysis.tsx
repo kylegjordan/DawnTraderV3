@@ -13,7 +13,7 @@ import { AIOpportunitiesTab } from "@/components/ai/ai-opportunities-tab";
 import { ValidationReportsTab } from "@/components/ai/validation-reports-tab";
 import { apiRequest } from "@/lib/queryClient";
 import type { SearchResult, AssetContext } from "@/lib/types";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export default function Analysis() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,8 +21,10 @@ export default function Analysis() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [noResultsQuery, setNoResultsQuery] = useState<string | null>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
   
   const {
     analyzeSymbol,
@@ -35,10 +37,13 @@ export default function Analysis() {
     if (!query.trim() || query.length < 2) {
       setSearchResults([]);
       setShowDropdown(false);
+      setNoResultsQuery(null);
       return;
     }
 
     setIsSearching(true);
+    setNoResultsQuery(null);
+    
     try {
       const [stockResults, cryptoResults] = await Promise.all([
         apiRequest<SearchResult[]>('GET', `/api/stocks/search/${encodeURIComponent(query)}`).catch(() => []),
@@ -51,11 +56,22 @@ export default function Analysis() {
       ].slice(0, 8);
 
       setSearchResults(combined);
-      setShowDropdown(combined.length > 0);
+      setShowDropdown(query.length >= 2);
+      
+      // Clear previous analysis and selected asset if no results found
+      if (combined.length === 0) {
+        setNoResultsQuery(query);
+        setSelectedAsset(null);
+        queryClient.setMutationDefaults(['analyzeSymbol'], {
+          mutationFn: undefined
+        });
+        queryClient.resetQueries({ queryKey: ['analyzeSymbol'], exact: false });
+      }
     } catch (error) {
       console.error('Search error:', error);
       setSearchResults([]);
       setShowDropdown(false);
+      setNoResultsQuery(null);
     } finally {
       setIsSearching(false);
     }
@@ -99,6 +115,7 @@ export default function Analysis() {
     });
     setSearchQuery(`${result.symbol} - ${result.description}`);
     setShowDropdown(false);
+    setNoResultsQuery(null);
     
     // Automatically analyze the selected asset
     analyzeSymbol(result.symbol.toUpperCase());
@@ -276,7 +293,7 @@ export default function Analysis() {
                 )}
 
                 {showDropdown && searchResults.length === 0 && !isSearching && searchQuery.length >= 2 && (
-                  <div className="absolute z-50 w-full mt-2 bg-background border border-border rounded-md shadow-lg p-4 text-center text-muted-foreground">
+                  <div className="absolute z-50 w-full mt-2 bg-background border border-border rounded-md shadow-lg p-4 text-center text-muted-foreground" data-testid="message-no-results">
                     No results found for "{searchQuery}". Try another keyword.
                   </div>
                 )}
@@ -284,8 +301,29 @@ export default function Analysis() {
             </CardContent>
           </Card>
 
+          {/* No Results Message - Centered */}
+          {noResultsQuery && !symbolAnalysis && (
+            <Card className="border-destructive/20">
+              <CardContent className="pt-6 pb-6 text-center">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+                    <AlertCircle className="w-8 h-8 text-destructive" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-foreground mb-1" data-testid="text-no-results-title">
+                      No results found for "{noResultsQuery}"
+                    </h3>
+                    <p className="text-muted-foreground">
+                      Try another keyword or symbol
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Analysis Results */}
-          {symbolAnalysis && (
+          {symbolAnalysis && !noResultsQuery && (
             <>
               {/* Symbol Header with Name and Start Chat Button */}
               {symbolAnalysis.symbolName && (
