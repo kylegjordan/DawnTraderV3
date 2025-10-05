@@ -13,6 +13,7 @@ import {
   killSwitchEvents,
   aiOpportunityRuns,
   aiOpportunities,
+  dailyBriefs,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -40,7 +41,9 @@ import {
   type AIOpportunityRun,
   type InsertAIOpportunityRun,
   type AIOpportunity,
-  type InsertAIOpportunity
+  type InsertAIOpportunity,
+  type DailyBrief,
+  type InsertDailyBrief
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
@@ -127,6 +130,13 @@ export interface IStorage {
   updateAIOpportunity(id: string, updates: Partial<AIOpportunity>): Promise<AIOpportunity>;
   getAIOpportunities(userId: string, filters?: { status?: string; type?: string; minProbability?: number }): Promise<AIOpportunity[]>;
   getAIOpportunitiesByRun(runId: string): Promise<AIOpportunity[]>;
+
+  // Daily brief methods
+  createDailyBrief(brief: InsertDailyBrief): Promise<DailyBrief>;
+  updateDailyBrief(id: string, updates: Partial<DailyBrief>): Promise<DailyBrief>;
+  getDailyBrief(userId: string, date: string): Promise<DailyBrief | undefined>;
+  getDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<DailyBrief[]>;
+  finalizeDailyBrief(id: string): Promise<DailyBrief>;
 
   // User utility methods
   getAllUsers(): Promise<User[]>;
@@ -653,6 +663,62 @@ export class DatabaseStorage implements IStorage {
       .from(aiOpportunities)
       .where(eq(aiOpportunities.runId, runId))
       .orderBy(desc(aiOpportunities.probabilityScore));
+  }
+
+  // Daily brief methods
+  async createDailyBrief(brief: InsertDailyBrief): Promise<DailyBrief> {
+    const [result] = await db.insert(dailyBriefs).values(brief).returning();
+    return result;
+  }
+
+  async updateDailyBrief(id: string, updates: Partial<DailyBrief>): Promise<DailyBrief> {
+    const [result] = await db
+      .update(dailyBriefs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(dailyBriefs.id, id))
+      .returning();
+    return result;
+  }
+
+  async getDailyBrief(userId: string, date: string): Promise<DailyBrief | undefined> {
+    const [result] = await db
+      .select()
+      .from(dailyBriefs)
+      .where(and(eq(dailyBriefs.userId, userId), eq(dailyBriefs.date, date)));
+    return result || undefined;
+  }
+
+  async getDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<DailyBrief[]> {
+    const conditions = [eq(dailyBriefs.userId, userId)];
+    
+    if (filters?.status) {
+      conditions.push(eq(dailyBriefs.status, filters.status as any));
+    }
+    
+    const query = db
+      .select()
+      .from(dailyBriefs)
+      .where(and(...conditions))
+      .orderBy(desc(dailyBriefs.date));
+    
+    if (filters?.limit) {
+      query.limit(filters.limit);
+    }
+    
+    return await query;
+  }
+
+  async finalizeDailyBrief(id: string): Promise<DailyBrief> {
+    const [result] = await db
+      .update(dailyBriefs)
+      .set({ 
+        status: 'final' as const,
+        finalizedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(dailyBriefs.id, id))
+      .returning();
+    return result;
   }
 
   // User utility methods

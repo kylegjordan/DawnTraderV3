@@ -22,6 +22,7 @@ export const tradeStatusEnum = pgEnum("trade_status", ["open", "closed", "cancel
 export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);
 export const opportunityTypeEnum = pgEnum("opportunity_type", ["long_term_hold", "moonshot", "momentum", "breakout", "mean_reversion"]);
 export const opportunityStatusEnum = pgEnum("opportunity_status", ["new", "watchlist", "executed", "dismissed", "expired"]);
+export const dailyBriefStatusEnum = pgEnum("daily_brief_status", ["in_progress", "final"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -290,6 +291,25 @@ export const aiOpportunities = pgTable("ai_opportunities", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+// Daily briefs (trading day narratives and summaries)
+export const dailyBriefs = pgTable("daily_briefs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  status: dailyBriefStatusEnum("status").default("in_progress"),
+  headline: varchar("headline", { length: 200 }),
+  summary: text("summary"), // One-sentence summary for dashboard
+  narrative: text("narrative"), // Full storytelling description
+  metrics: jsonb("metrics"), // {pnl_pct, win_rate, drawdown, exposure, num_trades, realized_pl, unrealized_pl}
+  trades: jsonb("trades"), // {top_winners: [], top_losers: [], closed: [], open: []}
+  learnings: jsonb("learnings"), // Array of lessons/recommendations
+  systemHealth: jsonb("system_health"), // {status, issues: []}
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+  emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -300,6 +320,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   killSwitchEvents: many(killSwitchEvents),
   opportunityRuns: many(aiOpportunityRuns),
   opportunities: many(aiOpportunities),
+  dailyBriefs: many(dailyBriefs),
 }));
 
 export const tradingSettingsRelations = relations(tradingSettings, ({ one }) => ({
@@ -376,6 +397,13 @@ export const aiOpportunitiesRelations = relations(aiOpportunities, ({ one }) => 
   }),
 }));
 
+export const dailyBriefsRelations = relations(dailyBriefs, ({ one }) => ({
+  user: one(users, {
+    fields: [dailyBriefs.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -448,6 +476,12 @@ export const insertAIOpportunitySchema = createInsertSchema(aiOpportunities).omi
   updatedAt: true,
 });
 
+export const insertDailyBriefSchema = createInsertSchema(dailyBriefs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -490,3 +524,6 @@ export type AIOpportunityRun = typeof aiOpportunityRuns.$inferSelect;
 
 export type InsertAIOpportunity = z.infer<typeof insertAIOpportunitySchema>;
 export type AIOpportunity = typeof aiOpportunities.$inferSelect;
+
+export type InsertDailyBrief = z.infer<typeof insertDailyBriefSchema>;
+export type DailyBrief = typeof dailyBriefs.$inferSelect;
