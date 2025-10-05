@@ -6,9 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { useMarket } from "@/hooks/use-trading";
 import { Trade } from "@/lib/types";
-import { Download, Filter, TrendingUp, TrendingDown } from "lucide-react";
+import { Filter, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const strategyColors = {
@@ -32,20 +31,10 @@ export default function History() {
     dateTo: ''
   });
   
-  const { exportTrades, isExporting } = useMarket();
-  
   const { data: trades = [], isLoading } = useQuery<Trade[]>({
     queryKey: ['/api/trades', filters],
     refetchInterval: 30000
   });
-
-  const handleExport = () => {
-    const params: any = { format: 'csv' };
-    if (filters.dateFrom) params.from = filters.dateFrom;
-    if (filters.dateTo) params.to = filters.dateTo;
-    
-    exportTrades(params);
-  };
 
   const filteredTrades = trades.filter(trade => {
     if (filters.symbol && !trade.symbol.toLowerCase().includes(filters.symbol.toLowerCase())) {
@@ -92,15 +81,6 @@ export default function History() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-foreground">Trade History</h1>
-        <Button
-          onClick={handleExport}
-          disabled={isExporting}
-          className="flex items-center gap-2"
-          data-testid="button-export-history"
-        >
-          <Download className="w-4 h-4" />
-          Export CSV
-        </Button>
       </div>
 
       {/* Filters */}
