@@ -121,7 +121,7 @@ export default function DailyBriefCard() {
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Trades</p>
               <p className="text-lg font-semibold" data-testid="text-num-trades">
-                {brief.metrics.num_trades}
+                {brief.metrics.num_trades ?? 0}
               </p>
             </div>
             <div className="space-y-1">
@@ -134,27 +134,27 @@ export default function DailyBriefCard() {
               <p className="text-xs text-muted-foreground">Total P&L</p>
               <p 
                 className={`text-lg font-semibold ${
-                  (brief.metrics.realized_pl + brief.metrics.unrealized_pl) >= 0 
+                  ((brief.metrics.realized_pl ?? 0) + (brief.metrics.unrealized_pl ?? 0)) >= 0 
                     ? 'text-green-600 dark:text-green-400' 
                     : 'text-red-600 dark:text-red-400'
                 }`}
                 data-testid="text-total-pnl"
               >
-                ${(brief.metrics.realized_pl + brief.metrics.unrealized_pl) >= 0 ? '+' : ''}
-                {(brief.metrics.realized_pl + brief.metrics.unrealized_pl).toFixed(2)}
+                ${((brief.metrics.realized_pl ?? 0) + (brief.metrics.unrealized_pl ?? 0)) >= 0 ? '+' : ''}
+                {((brief.metrics.realized_pl ?? 0) + (brief.metrics.unrealized_pl ?? 0)).toFixed(2)}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Portfolio %</p>
               <p 
                 className={`text-lg font-semibold ${
-                  brief.metrics.pnl_pct >= 0 
+                  (brief.metrics.pnl_pct ?? 0) >= 0 
                     ? 'text-green-600 dark:text-green-400' 
                     : 'text-red-600 dark:text-red-400'
                 }`}
                 data-testid="text-pnl-pct"
               >
-                {brief.metrics.pnl_pct >= 0 ? '+' : ''}{brief.metrics.pnl_pct.toFixed(2)}%
+                {(brief.metrics.pnl_pct ?? 0) >= 0 ? '+' : ''}{(brief.metrics.pnl_pct ?? 0).toFixed(2)}%
               </p>
             </div>
           </div>
