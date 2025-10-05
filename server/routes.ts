@@ -1228,6 +1228,13 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Maintenance mode status
+  app.get('/api/maintenance/status', (req, res) => {
+    res.json({
+      isMaintenanceMode: process.env.MAINTENANCE_MODE === 'true'
+    });
+  });
+
   // Screener test endpoint for demonstrating different filter configurations
   app.post('/api/screener/test', async (req, res) => {
     try {

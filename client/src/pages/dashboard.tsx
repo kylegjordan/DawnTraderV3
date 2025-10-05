@@ -6,10 +6,14 @@ import RecentTrades from "@/components/trading/recent-trades";
 import Watchlist from "@/components/trading/watchlist";
 import AIInsights from "@/components/ai/ai-insights";
 import DatabaseAlert from "@/components/database/database-alert";
+import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 
 export default function Dashboard() {
   return (
     <div className="p-6 space-y-6" data-testid="dashboard-page">
+      {/* Maintenance Mode Banner */}
+      <MaintenanceBanner />
+      
       {/* Database Size Alert */}
       <DatabaseAlert />
 
