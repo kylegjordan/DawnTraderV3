@@ -270,9 +270,6 @@ export default function Analysis() {
 
         {/* Symbol Analysis Tab */}
         <TabsContent value="search" className="space-y-6">
-          {/* Debug logging for state */}
-          {console.log('Render state:', { currentQuery, noResultsQuery, hasResults: !!symbolAnalysis })}
-          
           {/* Search */}
           <Card>
             <CardHeader>
