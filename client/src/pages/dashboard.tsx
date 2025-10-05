@@ -18,13 +18,17 @@ export default function Dashboard() {
       {/* Database Size Alert */}
       <DatabaseAlert />
 
-      {/* Daily Trading Brief */}
-      <DailyBriefCard />
-
       {/* Portfolio Overview Section */}
       <section>
         <h2 className="text-2xl font-bold text-foreground mb-4">Portfolio Overview</h2>
         <PortfolioOverview />
+      </section>
+
+      {/* Daily Trading Brief */}
+      <DailyBriefCard />
+
+      {/* Portfolio Charts */}
+      <section>
         <PortfolioChart />
         <EarningsChart />
       </section>

@@ -58,6 +58,15 @@ export default function DailyBriefPage() {
     enabled: !!briefDate
   });
 
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="container mx-auto p-6 space-y-6" data-testid="daily-brief-page">
@@ -77,28 +86,26 @@ export default function DailyBriefPage() {
               Back to Dashboard
             </Button>
           </Link>
+          <Link href="/reports?tab=daily-briefs">
+            <Button variant="ghost" size="sm" data-testid="button-all-briefs">
+              View All Briefs
+            </Button>
+          </Link>
         </div>
         <Card>
           <CardContent className="p-12 text-center">
             <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Daily Brief Available</h3>
+            <h3 className="text-lg font-semibold mb-2">No Daily Briefing available for this date</h3>
             <p className="text-muted-foreground">
-              The daily brief is currently being generated. Please check back in a few minutes.
+              {dateParam 
+                ? `No briefing was generated for ${formatDate(dateParam)}. Try selecting a different date.`
+                : 'The daily brief is currently being generated. Please check back in a few minutes.'}
             </p>
           </CardContent>
         </Card>
       </div>
     );
   }
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
 
   const formatTime = (date: string) => {
     return new Date(date).toLocaleTimeString('en-US', { 
@@ -132,15 +139,14 @@ export default function DailyBriefPage() {
           </div>
           <div>
             <h1 className="text-3xl font-bold text-foreground" data-testid="text-page-title">
-              Daily Trading Brief
+              {dateParam && dateParam !== new Date().toISOString().split('T')[0] 
+                ? 'Viewing Historical Brief'
+                : 'Current Daily Briefing'}
             </h1>
             <div className="flex items-center gap-2 mt-1">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <p className="text-muted-foreground" data-testid="text-brief-date">
                 {formatDate(brief.date)}
-                {dateParam && dateParam !== new Date().toISOString().split('T')[0] && (
-                  <span className="ml-2 text-xs">(Historical)</span>
-                )}
               </p>
             </div>
           </div>

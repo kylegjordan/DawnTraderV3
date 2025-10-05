@@ -81,6 +81,9 @@ export default function DailyBriefCard() {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1">
+            <CardTitle className="text-xl mb-3" data-testid="text-card-title">
+              Current Daily Briefing
+            </CardTitle>
             <div className="flex items-center gap-2 mb-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <CardDescription data-testid="text-brief-date">
@@ -93,13 +96,13 @@ export default function DailyBriefCard() {
                 {brief.status === 'final' ? 'Final' : 'Live Updates'}
               </Badge>
             </div>
-            <CardTitle className="text-2xl" data-testid="text-brief-headline">
+            <p className="text-lg font-semibold" data-testid="text-brief-headline">
               {brief.headline}
-            </CardTitle>
+            </p>
           </div>
           <Link href="/daily-brief">
             <Button variant="ghost" size="sm" data-testid="button-view-full-brief">
-              View Full Brief
+              Read Full Briefing
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </Link>
