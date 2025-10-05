@@ -51,6 +51,17 @@ export class KrakenService {
     };
   }
 
+  private isMaintenanceMode(): boolean {
+    return process.env.MAINTENANCE_MODE === 'true';
+  }
+
+  private checkMaintenanceMode(): void {
+    if (this.isMaintenanceMode()) {
+      console.log('⚠️  Kraken API disabled – Maintenance Mode active.');
+      throw new Error('Kraken API is disabled during maintenance mode');
+    }
+  }
+
   private getMessageSignature(path: string, request: any, secret: string, nonce: number): string {
     const message = new URLSearchParams(request).toString();
     const hash = crypto.createHash('sha256');
@@ -63,6 +74,8 @@ export class KrakenService {
   }
 
   private async makePublicRequest(endpoint: string, params: any = {}): Promise<any> {
+    this.checkMaintenanceMode();
+    
     const url = new URL(`${this.config.baseUrl}/0/public/${endpoint}`);
     Object.keys(params).forEach(key => {
       if (params[key] !== undefined) {
@@ -81,6 +94,8 @@ export class KrakenService {
   }
 
   private async makePrivateRequest(endpoint: string, params: any = {}): Promise<any> {
+    this.checkMaintenanceMode();
+    
     if (!this.config.apiKey || !this.config.apiSecret) {
       throw new Error("Kraken API credentials not configured");
     }
