@@ -179,7 +179,7 @@ export default function DailyBriefCard() {
               <>
                 <AlertCircle className="h-4 w-4 text-yellow-500" />
                 <span className="text-sm text-muted-foreground" data-testid="text-system-health">
-                  {brief.systemHealth.issues.length} issue(s) detected
+                  {(brief.systemHealth.issues && brief.systemHealth.issues.length) || 0} issue(s) detected
                 </span>
               </>
             )}

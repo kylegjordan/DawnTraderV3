@@ -72,9 +72,9 @@ export default function PortfolioOverview() {
 
   const earnings: EarningsData = earningsData || { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0, thisYear: 0, lifetime: 0 };
 
-  const adeResult = calculateAverageDailyEarnings(dailyBriefs);
-  const sparklineData = getSparklineData(dailyBriefs, 7);
-  const hasPartialData = !briefsLoading && dailyBriefs.length > 0 && dailyBriefs.length < 5;
+  const adeResult = calculateAverageDailyEarnings(dailyBriefs || []);
+  const sparklineData = getSparklineData(dailyBriefs || [], 7);
+  const hasPartialData = !briefsLoading && dailyBriefs && dailyBriefs.length > 0 && dailyBriefs.length < 5;
 
   const formatSyncTime = (timestamp: number) => {
     const date = new Date(timestamp);
