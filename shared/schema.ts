@@ -310,6 +310,67 @@ export const dailyBriefs = pgTable("daily_briefs", {
   emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
 });
 
+// ===== PAPER TRADING TABLES (Isolated from Live) =====
+
+// Paper trades (simulated trades - completely isolated from live)
+export const paperTrades = pgTable("paper_trades", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  strategy: strategyTypeEnum("strategy").notNull(),
+  status: tradeStatusEnum("status").default("open"),
+  entryPrice: decimal("entry_price", { precision: 20, scale: 8 }).notNull(),
+  exitPrice: decimal("exit_price", { precision: 20, scale: 8 }),
+  quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
+  stopPrice: decimal("stop_price", { precision: 20, scale: 8 }).notNull(),
+  targetPrice: decimal("target_price", { precision: 20, scale: 8 }).notNull(),
+  simulatedOrderId: varchar("simulated_order_id"), // Internal simulation ID
+  entryFee: decimal("entry_fee", { precision: 10, scale: 4 }).default("0"),
+  exitFee: decimal("exit_fee", { precision: 10, scale: 4 }).default("0"),
+  entrySlippage: decimal("entry_slippage", { precision: 5, scale: 2 }).default("0"),
+  exitSlippage: decimal("exit_slippage", { precision: 5, scale: 2 }).default("0"),
+  simulatedLatencyMs: integer("simulated_latency_ms").default(250), // Simulated execution delay
+  riskAmount: decimal("risk_amount", { precision: 10, scale: 2 }).notNull(),
+  realizedPL: decimal("realized_pl", { precision: 10, scale: 2 }),
+  realizedPLPercent: decimal("realized_pl_percent", { precision: 8, scale: 4 }),
+  realizedPLR: decimal("realized_pl_r", { precision: 8, scale: 4 }),
+  entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
+  exitTime: timestamp("exit_time", { withTimezone: true }),
+  metadata: jsonb("metadata"), // Additional strategy-specific data
+});
+
+// Paper daily briefs (simulated trading day summaries)
+export const paperDailyBriefs = pgTable("paper_daily_briefs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  status: dailyBriefStatusEnum("status").default("in_progress"),
+  headline: varchar("headline", { length: 200 }),
+  summary: text("summary"),
+  narrative: text("narrative"),
+  metrics: jsonb("metrics"), // Same structure as live briefs
+  trades: jsonb("trades"), // {top_winners: [], top_losers: [], closed: [], open: []}
+  learnings: jsonb("learnings"),
+  systemHealth: jsonb("system_health"), // {status, issues: []}
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+  emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+});
+
+// Paper AI reports (simulated trading analysis)
+export const paperAIReports = pgTable("paper_ai_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  reportType: varchar("report_type", { length: 50 }).notNull(),
+  period: varchar("period", { length: 50 }).notNull(),
+  content: text("content").notNull(),
+  insights: jsonb("insights"),
+  recommendations: jsonb("recommendations"),
+  metrics: jsonb("metrics"),
+  generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -321,6 +382,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   opportunityRuns: many(aiOpportunityRuns),
   opportunities: many(aiOpportunities),
   dailyBriefs: many(dailyBriefs),
+  paperTrades: many(paperTrades),
+  paperDailyBriefs: many(paperDailyBriefs),
+  paperAIReports: many(paperAIReports),
 }));
 
 export const tradingSettingsRelations = relations(tradingSettings, ({ one }) => ({
@@ -404,6 +468,27 @@ export const dailyBriefsRelations = relations(dailyBriefs, ({ one }) => ({
   }),
 }));
 
+export const paperTradesRelations = relations(paperTrades, ({ one }) => ({
+  user: one(users, {
+    fields: [paperTrades.userId],
+    references: [users.id],
+  }),
+}));
+
+export const paperDailyBriefsRelations = relations(paperDailyBriefs, ({ one }) => ({
+  user: one(users, {
+    fields: [paperDailyBriefs.userId],
+    references: [users.id],
+  }),
+}));
+
+export const paperAIReportsRelations = relations(paperAIReports, ({ one }) => ({
+  user: one(users, {
+    fields: [paperAIReports.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -482,6 +567,23 @@ export const insertDailyBriefSchema = createInsertSchema(dailyBriefs).omit({
   updatedAt: true,
 });
 
+// Paper trading insert schemas
+export const insertPaperTradeSchema = createInsertSchema(paperTrades).omit({
+  id: true,
+  entryTime: true,
+});
+
+export const insertPaperDailyBriefSchema = createInsertSchema(paperDailyBriefs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPaperAIReportSchema = createInsertSchema(paperAIReports).omit({
+  id: true,
+  generatedAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -527,3 +629,12 @@ export type AIOpportunity = typeof aiOpportunities.$inferSelect;
 
 export type InsertDailyBrief = z.infer<typeof insertDailyBriefSchema>;
 export type DailyBrief = typeof dailyBriefs.$inferSelect;
+
+export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
+export type PaperTrade = typeof paperTrades.$inferSelect;
+
+export type InsertPaperDailyBrief = z.infer<typeof insertPaperDailyBriefSchema>;
+export type PaperDailyBrief = typeof paperDailyBriefs.$inferSelect;
+
+export type InsertPaperAIReport = z.infer<typeof insertPaperAIReportSchema>;
+export type PaperAIReport = typeof paperAIReports.$inferSelect;
