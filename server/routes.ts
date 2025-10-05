@@ -1102,6 +1102,83 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Test endpoint for Finnhub feed
+  app.get('/api/test/finnhub-feed', async (req, res) => {
+    try {
+      const testSymbol = 'AAPL';
+      const timestamp = new Date().toISOString();
+      
+      console.log(`[Test Finnhub Feed] Starting test for ${testSymbol} at ${timestamp}`);
+      
+      // Test search functionality
+      let searchResults;
+      try {
+        searchResults = await stockService.search(testSymbol);
+        console.log(`[Test Finnhub Feed] Search results:`, searchResults);
+      } catch (searchError: any) {
+        console.error(`[Test Finnhub Feed] Search failed:`, {
+          status: searchError.status || 'unknown',
+          message: searchError.message,
+          stack: searchError.stack
+        });
+        searchResults = { error: searchError.message };
+      }
+      
+      // Test quote functionality
+      let quoteData;
+      try {
+        quoteData = await stockService.getQuote(testSymbol);
+        console.log(`[Test Finnhub Feed] Quote data:`, quoteData);
+      } catch (quoteError: any) {
+        console.error(`[Test Finnhub Feed] Quote failed:`, {
+          status: quoteError.status || 'unknown',
+          message: quoteError.message,
+          stack: quoteError.stack
+        });
+        quoteData = { error: quoteError.message };
+      }
+      
+      // Test company profile functionality
+      let companyData;
+      try {
+        companyData = await stockService.getCompanyInfo(testSymbol);
+        console.log(`[Test Finnhub Feed] Company data:`, companyData);
+      } catch (companyError: any) {
+        console.error(`[Test Finnhub Feed] Company info failed:`, {
+          status: companyError.status || 'unknown',
+          message: companyError.message,
+          stack: companyError.stack
+        });
+        companyData = { error: companyError.message };
+      }
+      
+      // Return comprehensive test results
+      res.json({
+        testSymbol,
+        timestamp,
+        search: searchResults,
+        quote: quoteData,
+        company: companyData,
+        summary: {
+          searchSuccessful: !searchResults?.error,
+          quoteSuccessful: !quoteData?.error,
+          companySuccessful: !companyData?.error,
+          allTestsPassed: !searchResults?.error && !quoteData?.error && !companyData?.error
+        }
+      });
+    } catch (error: any) {
+      console.error('[Test Finnhub Feed] Unexpected error:', {
+        message: error.message,
+        stack: error.stack
+      });
+      res.status(500).json({ 
+        error: 'Test failed with unexpected error',
+        message: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Crypto search route
   app.get('/api/crypto/search/:query', async (req, res) => {
     try {
