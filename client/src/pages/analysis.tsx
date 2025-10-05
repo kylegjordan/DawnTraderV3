@@ -78,7 +78,6 @@ export default function Analysis() {
         clearPreviousAnalysis();
       }
     } catch (error) {
-      console.error('Search error:', error);
       setSearchResults([]);
       setShowDropdown(false);
       setNoResultsQuery(null);
@@ -138,13 +137,10 @@ export default function Analysis() {
       onSuccess: (data: any) => {
         // Clear "no results" flag BEFORE setting analysis data
         setNoResultsQuery('');
-        console.log('Analysis success:', { query: symbolToAnalyze, noResultsQuery: '', hasResults: !!data });
       },
       onError: (error: any) => {
-        console.error('Analysis error:', error);
         // Set "no results" state only on error
         setNoResultsQuery(symbolToAnalyze);
-        console.log('Analysis error:', { query: symbolToAnalyze, noResultsQuery: symbolToAnalyze, hasResults: false });
       }
     });
   };
@@ -164,13 +160,10 @@ export default function Analysis() {
       onSuccess: (data: any) => {
         // Clear "no results" flag BEFORE setting analysis data
         setNoResultsQuery('');
-        console.log('Analysis success:', { query: symbolToAnalyze, noResultsQuery: '', hasResults: !!data });
       },
       onError: (error: any) => {
-        console.error('Analysis error:', error);
         // Set "no results" state only on error
         setNoResultsQuery(symbolToAnalyze);
-        console.log('Analysis error:', { query: symbolToAnalyze, noResultsQuery: symbolToAnalyze, hasResults: false });
       }
     });
   };
@@ -208,7 +201,7 @@ export default function Analysis() {
         }
       }
     } catch (error) {
-      console.error('Error starting chat:', error);
+      // Error starting chat
     }
   };
 
