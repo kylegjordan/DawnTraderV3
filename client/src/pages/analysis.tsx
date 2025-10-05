@@ -476,7 +476,7 @@ export default function Analysis() {
           )}
 
           {/* Empty state when no symbol data available */}
-          {!isAnalyzingSymbol && symbolAnalysis && !symbolAnalysis.livePrice && !symbolAnalysis.symbolName && (
+          {!isAnalyzingSymbol && !noResultsQuery && symbolAnalysis && !symbolAnalysis.livePrice && !symbolAnalysis.symbolName && (
             <Card className="border-destructive/20">
               <CardContent className="p-8 text-center">
                 <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
