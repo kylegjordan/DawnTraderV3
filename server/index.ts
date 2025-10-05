@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { databaseMonitor } from "./services/database-monitor";
+import { marketDataHealthCheck } from "./services/market-data-health-check";
 
 const app = express();
 
@@ -52,6 +53,11 @@ app.use((req, res, next) => {
 
   // Start database monitoring
   databaseMonitor.startDailyChecks();
+
+  // Start market data health checks (async, non-blocking)
+  marketDataHealthCheck.startDailyHealthChecks().catch((error) => {
+    console.error('[Server] Failed to start Market Data Health Check service:', error);
+  });
 
   // Start AI Opportunities service (async, non-blocking)
   import('./services/ai-opportunities').then(({ aiOpportunitiesService }) => {
