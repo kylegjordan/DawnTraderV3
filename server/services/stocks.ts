@@ -1,7 +1,7 @@
 interface StockQuote {
   symbol: string;
   name: string;
-  price: number;
+  price: number | null;
   change: number;
   changePercent: number;
   high: number;
@@ -9,6 +9,7 @@ interface StockQuote {
   open: number;
   previousClose: number;
   timestamp: number;
+  note?: string;
 }
 
 interface CompanyInfo {
@@ -37,16 +38,59 @@ export class StockService {
   private quoteCache: Map<string, CacheEntry<StockQuote>> = new Map();
   private companyCache: Map<string, CacheEntry<CompanyInfo>> = new Map();
   private searchCache: Map<string, CacheEntry<StockSearchResult[]>> = new Map();
-  private readonly CACHE_TTL = 60000; // 60 seconds
+  private readonly CACHE_TTL = 120000; // 2 minutes (as per requirements)
   private readonly apiKey: string;
   private cacheHits = 0;
   private cacheMisses = 0;
+  private readonly MAX_RETRIES = 2;
+  private readonly RETRY_DELAY_BASE = 2000; // 2 seconds base delay
 
   constructor() {
     this.apiKey = process.env.FINNHUB_API_KEY || '';
     if (!this.apiKey) {
       console.warn('[StockService] FINNHUB_API_KEY not found in environment variables');
     }
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private async fetchWithRetry<T>(
+    url: string,
+    operation: string,
+    symbol: string
+  ): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = this.RETRY_DELAY_BASE * attempt;
+          console.log(`[StockService] Retry ${attempt}/${this.MAX_RETRIES} for ${operation} ${symbol} after ${delay}ms`);
+          await this.sleep(delay);
+        }
+
+        console.log(`[StockService] Fetching ${operation} from Finnhub: ${symbol} (attempt ${attempt + 1}/${this.MAX_RETRIES + 1})`);
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(`Finnhub API error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data as T;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.warn(`[StockService] ${operation} attempt ${attempt + 1} failed for ${symbol}:`, lastError.message);
+        
+        if (attempt === this.MAX_RETRIES) {
+          console.error(`[StockService] All ${this.MAX_RETRIES + 1} attempts failed for ${operation} ${symbol}`);
+        }
+      }
+    }
+
+    throw lastError || new Error(`Failed to fetch ${operation} for ${symbol}`);
   }
 
   async getQuote(symbol: string): Promise<StockQuote> {
@@ -67,44 +111,98 @@ export class StockService {
     }
 
     const url = `https://finnhub.io/api/v1/quote?symbol=${normalizedSymbol}&token=${this.apiKey}`;
-    
-    console.log(`[StockService] Fetching quote from Finnhub: ${normalizedSymbol}`);
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Finnhub API error: ${response.status} ${response.statusText}`);
-    }
 
-    const data = await response.json();
-
-    if (!data.c || data.c === 0) {
-      throw new Error(`No quote data available for ${normalizedSymbol}`);
-    }
-
-    // Fetch company name
-    let name = normalizedSymbol;
     try {
-      const companyInfo = await this.getCompanyInfo(normalizedSymbol);
-      name = companyInfo.name;
+      const data = await this.fetchWithRetry<any>(url, 'quote', normalizedSymbol);
+
+      if (!data.c || data.c === 0) {
+        console.warn(`[Finnhub] Warning: no valid quote for ${normalizedSymbol}, using fallback`);
+        return await this.getQuoteFallback(normalizedSymbol);
+      }
+
+      let name = normalizedSymbol;
+      try {
+        const companyInfo = await this.getCompanyInfo(normalizedSymbol);
+        name = companyInfo.name;
+      } catch (error) {
+        console.warn(`[StockService] Could not fetch company name for ${normalizedSymbol}:`, error);
+      }
+
+      const quote: StockQuote = {
+        symbol: normalizedSymbol,
+        name,
+        price: data.c,
+        change: data.d,
+        changePercent: data.dp,
+        high: data.h,
+        low: data.l,
+        open: data.o,
+        previousClose: data.pc,
+        timestamp: data.t * 1000 || Date.now()
+      };
+
+      this.setCachedData(this.quoteCache, normalizedSymbol, quote);
+      return quote;
     } catch (error) {
-      console.warn(`[StockService] Could not fetch company name for ${normalizedSymbol}:`, error);
+      console.warn(`[StockService] Quote fetch failed for ${normalizedSymbol}, attempting fallback:`, error);
+      return await this.getQuoteFallback(normalizedSymbol);
     }
+  }
 
-    const quote: StockQuote = {
-      symbol: normalizedSymbol,
-      name,
-      price: data.c, // current price
-      change: data.d, // change
-      changePercent: data.dp, // percent change
-      high: data.h, // high price of the day
-      low: data.l, // low price of the day
-      open: data.o, // open price of the day
-      previousClose: data.pc, // previous close price
-      timestamp: data.t * 1000 || Date.now() // timestamp in milliseconds
-    };
+  private async getQuoteFallback(symbol: string): Promise<StockQuote> {
+    console.log(`[StockService] Using fallback mechanism for ${symbol}`);
 
-    this.setCachedData(this.quoteCache, normalizedSymbol, quote);
-    return quote;
+    try {
+      const companyInfo = await this.getCompanyInfo(symbol);
+      
+      const fallbackQuote: StockQuote = {
+        symbol: symbol,
+        name: companyInfo.name,
+        price: null,
+        change: 0,
+        changePercent: 0,
+        high: 0,
+        low: 0,
+        open: 0,
+        previousClose: 0,
+        timestamp: Date.now(),
+        note: "Price temporarily unavailable — using fallback data"
+      };
+
+      console.log(`[StockService] Fallback successful for ${symbol}: company info available`);
+      return fallbackQuote;
+    } catch (companyError) {
+      console.warn(`[StockService] Company info fallback failed for ${symbol}, trying search:`, companyError);
+
+      try {
+        const searchResults = await this.search(symbol);
+        
+        if (searchResults.length > 0) {
+          const match = searchResults.find(r => r.symbol === symbol) || searchResults[0];
+          
+          const fallbackQuote: StockQuote = {
+            symbol: symbol,
+            name: match.description,
+            price: null,
+            change: 0,
+            changePercent: 0,
+            high: 0,
+            low: 0,
+            open: 0,
+            previousClose: 0,
+            timestamp: Date.now(),
+            note: "Price temporarily unavailable — using fallback data"
+          };
+
+          console.log(`[StockService] Fallback successful for ${symbol}: search result available`);
+          return fallbackQuote;
+        }
+      } catch (searchError) {
+        console.warn(`[StockService] Search fallback also failed for ${symbol}:`, searchError);
+      }
+
+      throw new Error(`No data available for ${symbol} from any source`);
+    }
   }
 
   async getCompanyInfo(symbol: string): Promise<CompanyInfo> {
@@ -126,14 +224,7 @@ export class StockService {
 
     const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${normalizedSymbol}&token=${this.apiKey}`;
     
-    console.log(`[StockService] Fetching company info from Finnhub: ${normalizedSymbol}`);
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Finnhub API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
+    const data = await this.fetchWithRetry<any>(url, 'company info', normalizedSymbol);
 
     if (!data || !data.name) {
       throw new Error(`No company data available for ${normalizedSymbol}`);
@@ -173,14 +264,7 @@ export class StockService {
 
     const url = `https://finnhub.io/api/v1/search?q=${encodeURIComponent(query)}&token=${this.apiKey}`;
     
-    console.log(`[StockService] Searching Finnhub for: "${query}"`);
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Finnhub API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
+    const data = await this.fetchWithRetry<any>(url, 'search', normalizedQuery);
 
     if (!data.result || !Array.isArray(data.result)) {
       console.warn(`[StockService] No results from Finnhub for "${query}"`);
@@ -188,12 +272,11 @@ export class StockService {
       return [];
     }
 
-    // Filter to only US stocks and limit to 5 results
     const results: StockSearchResult[] = data.result
       .filter((item: any) => 
         item.type === 'Common Stock' && 
-        !item.symbol.includes('.') && // Exclude foreign exchanges
-        item.symbol.length <= 5 // Typical US stock symbol length
+        !item.symbol.includes('.') && 
+        item.symbol.length <= 5
       )
       .slice(0, 5)
       .map((item: any) => ({
