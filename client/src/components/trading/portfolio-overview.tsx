@@ -5,6 +5,20 @@ import { useTrading } from "@/hooks/use-trading";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { EarningsData } from "@/lib/types";
+import { calculateAverageDailyEarnings, getSparklineData, formatADE } from "@/lib/earnings-utils";
+import EarningsSparkline from "./earnings-sparkline";
+
+interface DailyBrief {
+  date: string;
+  metrics: {
+    realized_pl?: number;
+    num_trades?: number;
+  } | null;
+  trades: {
+    closed?: any[];
+    open?: any[];
+  } | null;
+}
 
 export default function PortfolioOverview() {
   const { portfolioMetrics, portfolioLoading } = useTrading();
@@ -13,7 +27,11 @@ export default function PortfolioOverview() {
     queryKey: ['/api/portfolio/earnings'],
   });
 
-  const loading = portfolioLoading || earningsLoading;
+  const { data: dailyBriefs = [], isLoading: briefsLoading } = useQuery<DailyBrief[]>({
+    queryKey: ['/api/daily-briefs', { limit: 30 }],
+  });
+
+  const loading = portfolioLoading || earningsLoading || briefsLoading;
 
   if (loading) {
     return (
@@ -53,6 +71,10 @@ export default function PortfolioOverview() {
   };
 
   const earnings: EarningsData = earningsData || { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0, thisYear: 0, lifetime: 0 };
+
+  const adeResult = calculateAverageDailyEarnings(dailyBriefs);
+  const sparklineData = getSparklineData(dailyBriefs, 7);
+  const hasPartialData = !briefsLoading && dailyBriefs.length > 0 && dailyBriefs.length < 5;
 
   const formatSyncTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -164,18 +186,7 @@ export default function PortfolioOverview() {
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">Yesterday:</span>
-                    <span className={cn(
-                      "text-sm font-bold font-mono",
-                      getChangeType((metric as any).earningsData.yesterday) === "positive" && "text-success",
-                      getChangeType((metric as any).earningsData.yesterday) === "negative" && "text-destructive",
-                      getChangeType((metric as any).earningsData.yesterday) === "neutral" && "text-muted-foreground"
-                    )} data-testid="earnings-yesterday">
-                      {formatEarnings((metric as any).earningsData.yesterday)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">This Week:</span>
+                    <span className="text-xs text-muted-foreground">Weekly Total:</span>
                     <span className={cn(
                       "text-sm font-bold font-mono",
                       getChangeType((metric as any).earningsData.thisWeek) === "positive" && "text-success",
@@ -186,7 +197,7 @@ export default function PortfolioOverview() {
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">This Month:</span>
+                    <span className="text-xs text-muted-foreground">Monthly Total:</span>
                     <span className={cn(
                       "text-sm font-bold font-mono",
                       getChangeType((metric as any).earningsData.thisMonth) === "positive" && "text-success",
@@ -197,27 +208,27 @@ export default function PortfolioOverview() {
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">This Year:</span>
+                    <span className="text-xs text-muted-foreground">Average Daily:</span>
                     <span className={cn(
                       "text-sm font-bold font-mono",
-                      getChangeType((metric as any).earningsData.thisYear) === "positive" && "text-success",
-                      getChangeType((metric as any).earningsData.thisYear) === "negative" && "text-destructive",
-                      getChangeType((metric as any).earningsData.thisYear) === "neutral" && "text-muted-foreground"
-                    )} data-testid="earnings-year">
-                      {formatEarnings((metric as any).earningsData.thisYear)}
+                      adeResult.insufficientData && "text-muted-foreground",
+                      !adeResult.insufficientData && getChangeType(adeResult.value) === "positive" && "text-success",
+                      !adeResult.insufficientData && getChangeType(adeResult.value) === "negative" && "text-destructive"
+                    )} data-testid="earnings-average-daily">
+                      {formatADE(adeResult.value)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center pt-1 border-t">
-                    <span className="text-xs font-semibold text-foreground">Lifetime:</span>
-                    <span className={cn(
-                      "text-lg font-bold font-mono",
-                      getChangeType((metric as any).earningsData.lifetime) === "positive" && "text-success",
-                      getChangeType((metric as any).earningsData.lifetime) === "negative" && "text-destructive",
-                      getChangeType((metric as any).earningsData.lifetime) === "neutral" && "text-muted-foreground"
-                    )} data-testid="earnings-lifetime">
-                      {formatEarnings((metric as any).earningsData.lifetime)}
-                    </span>
+                  <div className="pt-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-muted-foreground">Trend (7 days):</span>
+                    </div>
+                    <EarningsSparkline data={sparklineData} />
                   </div>
+                  {hasPartialData && (
+                    <div className="text-[10px] text-muted-foreground italic pt-1">
+                      Some trading metrics are still updating.
+                    </div>
+                  )}
                 </div>
               ) : (metric as any).isCashCrypto ? (
                 <div className="space-y-3">
