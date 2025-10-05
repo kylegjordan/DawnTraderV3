@@ -2066,8 +2066,8 @@ function generateTradeJournalReport(trades: any[]): string {
       trade.symbol,
       trade.strategy,
       trade.entryPrice,
-      trade.stopLoss || '-',
-      trade.target || '-',
+      trade.stopPrice || '-',
+      trade.targetPrice || '-',
       trade.exitPrice || '-',
       trade.quantity,
       trade.riskAmount || '-',
@@ -2075,7 +2075,7 @@ function generateTradeJournalReport(trades: any[]): string {
       pl.toFixed(2),
       plPercent,
       holdTime,
-      trade.notes || '-'
+      (trade.metadata?.notes || '-')
     ].map(value => `"${value}"`).join(',');
   });
   
