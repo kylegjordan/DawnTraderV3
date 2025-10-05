@@ -22,6 +22,7 @@ export default function Analysis() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [noResultsQuery, setNoResultsQuery] = useState<string | null>(null);
+  const [currentQuery, setCurrentQuery] = useState<string>('');
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -116,8 +117,11 @@ export default function Analysis() {
   }, []);
 
   const handleSelectResult = (result: SearchResult) => {
+    const symbolToAnalyze = result.symbol.toUpperCase();
+    
     // Reset ALL states before starting new analysis
     setNoResultsQuery(null);
+    setCurrentQuery(symbolToAnalyze);
     clearPreviousAnalysis();
     
     const assetType = result.type === 'Stock' ? 'stock' : 'crypto';
@@ -130,15 +134,17 @@ export default function Analysis() {
     setShowDropdown(false);
     
     // Automatically analyze the selected asset
-    analyzeSymbol(result.symbol.toUpperCase(), {
+    analyzeSymbol(symbolToAnalyze, {
       onSuccess: (data: any) => {
-        // Data returned successfully - clear any "no results" state
-        setNoResultsQuery(null);
+        // Clear "no results" flag BEFORE setting analysis data
+        setNoResultsQuery('');
+        console.log('Analysis success:', { query: symbolToAnalyze, noResultsQuery: '', hasResults: !!data });
       },
       onError: (error: any) => {
         console.error('Analysis error:', error);
         // Set "no results" state only on error
-        setNoResultsQuery(result.symbol);
+        setNoResultsQuery(symbolToAnalyze);
+        console.log('Analysis error:', { query: symbolToAnalyze, noResultsQuery: symbolToAnalyze, hasResults: false });
       }
     });
   };
@@ -151,17 +157,20 @@ export default function Analysis() {
     
     // Reset ALL states at the start of every new search to prevent leftovers
     setNoResultsQuery(null);
+    setCurrentQuery(symbolToAnalyze);
     clearPreviousAnalysis();
     
     analyzeSymbol(symbolToAnalyze, {
       onSuccess: (data: any) => {
-        // Data returned successfully - clear any "no results" state
-        setNoResultsQuery(null);
+        // Clear "no results" flag BEFORE setting analysis data
+        setNoResultsQuery('');
+        console.log('Analysis success:', { query: symbolToAnalyze, noResultsQuery: '', hasResults: !!data });
       },
       onError: (error: any) => {
         console.error('Analysis error:', error);
         // Set "no results" state only on error
         setNoResultsQuery(symbolToAnalyze);
+        console.log('Analysis error:', { query: symbolToAnalyze, noResultsQuery: symbolToAnalyze, hasResults: false });
       }
     });
   };
@@ -261,6 +270,9 @@ export default function Analysis() {
 
         {/* Symbol Analysis Tab */}
         <TabsContent value="search" className="space-y-6">
+          {/* Debug logging for state */}
+          {console.log('Render state:', { currentQuery, noResultsQuery, hasResults: !!symbolAnalysis })}
+          
           {/* Search */}
           <Card>
             <CardHeader>
@@ -338,7 +350,7 @@ export default function Analysis() {
           </Card>
 
           {/* No Results Message - Only show if analysis failed and no data exists */}
-          {noResultsQuery && !isAnalyzingSymbol && !symbolAnalysis && (
+          {!symbolAnalysis && !isAnalyzingSymbol && noResultsQuery && (
             <Card className="border-destructive/20">
               <CardContent className="pt-6 pb-6 text-center">
                 <div className="flex flex-col items-center gap-3">
@@ -359,7 +371,7 @@ export default function Analysis() {
           )}
 
           {/* Analysis Results - Show if we have any valid data */}
-          {symbolAnalysis && (
+          {symbolAnalysis && !noResultsQuery && (
             <>
               {/* Symbol Header with Name and Start Chat Button */}
               {symbolAnalysis.symbolName && (
