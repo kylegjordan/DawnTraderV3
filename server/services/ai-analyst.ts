@@ -151,14 +151,36 @@ export class AIAnalyst {
     volume24h?: number;
     dataSource?: string;
     timestamp?: number;
+    assetType?: 'stock' | 'crypto';
   }> {
     try {
       let liveMarketData;
+      let assetType: 'stock' | 'crypto' = 'crypto';
+      
+      // Try crypto first (existing functionality)
       try {
         liveMarketData = await marketDataService.getMarketData(symbol);
-        console.log(`[AI Analyst] Live market data for ${symbol}:`, liveMarketData);
-      } catch (marketError) {
-        console.warn(`[AI Analyst] Failed to fetch live market data for ${symbol}:`, marketError);
+        assetType = 'crypto';
+        console.log(`[AI Analyst] Live crypto data for ${symbol}:`, liveMarketData);
+      } catch (cryptoError) {
+        // Try stock if crypto fails
+        try {
+          const { stockService } = await import('./stocks');
+          const stockQuote = await stockService.getQuote(symbol);
+          liveMarketData = {
+            symbol: stockQuote.symbol,
+            name: stockQuote.name,
+            price: stockQuote.price,
+            change24h: stockQuote.changePercent,
+            volume24h: undefined,
+            source: 'finnhub' as const,
+            timestamp: stockQuote.timestamp
+          };
+          assetType = 'stock';
+          console.log(`[AI Analyst] Live stock data for ${symbol}:`, liveMarketData);
+        } catch (stockError) {
+          console.warn(`[AI Analyst] Failed to fetch data for ${symbol} from both crypto and stock sources`);
+        }
       }
 
       const priceData = await storage.getPriceData(symbol);
@@ -166,6 +188,7 @@ export class AIAnalyst {
       
       const liveDataSection = liveMarketData ? `
         LIVE MARKET DATA (${liveMarketData.source}):
+        - Asset Type: ${assetType.toUpperCase()}
         - Current Price: $${liveMarketData.price.toLocaleString()}
         - 24h Change: ${liveMarketData.change24h.toFixed(2)}%
         - 24h Volume: $${liveMarketData.volume24h ? liveMarketData.volume24h.toLocaleString() : 'N/A'}
@@ -174,8 +197,10 @@ export class AIAnalyst {
         
       ` : '';
 
+      const assetTypeDescription = assetType === 'stock' ? 'stock' : 'cryptocurrency trading pair';
+      
       const prompt = `
-        Analyze the cryptocurrency trading pair ${symbol} with the following context:
+        Analyze the ${assetTypeDescription} ${symbol} with the following context:
         
         ${liveDataSection}Historical Performance:
         - User has made ${userTrades.length} trades on this symbol
@@ -217,7 +242,8 @@ export class AIAnalyst {
         change24h: liveMarketData?.change24h,
         volume24h: liveMarketData?.volume24h,
         dataSource: liveMarketData?.source,
-        timestamp: liveMarketData?.timestamp
+        timestamp: liveMarketData?.timestamp,
+        assetType
       };
     } catch (error) {
       console.error('Error analyzing symbol:', error);

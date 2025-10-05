@@ -159,4 +159,17 @@ export interface SymbolAnalysis {
   volume24h?: number;
   dataSource?: string;
   timestamp?: number;
+  assetType?: 'stock' | 'crypto';
+}
+
+export interface SearchResult {
+  symbol: string;
+  description: string;
+  type: string;
+}
+
+export interface AssetContext {
+  symbol: string;
+  name: string;
+  type: 'stock' | 'crypto';
 }
