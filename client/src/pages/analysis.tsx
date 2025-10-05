@@ -205,6 +205,9 @@ export default function Analysis() {
     }
   };
 
+  // Define flag to check if data is pending for the same query
+  const dataPending = isAnalyzingSymbol;
+
   return (
     <div className="p-6 space-y-6" data-testid="analysis-page">
       {/* Header */}
@@ -340,7 +343,7 @@ export default function Analysis() {
           </Card>
 
           {/* No Results Message - Only show if analysis failed and no data exists */}
-          {!symbolAnalysis && !isAnalyzingSymbol && noResultsQuery && (
+          {!isAnalyzingSymbol && !symbolAnalysis && !!noResultsQuery && !dataPending && (
             <Card className="border-destructive/20">
               <CardContent className="pt-6 pb-6 text-center">
                 <div className="flex flex-col items-center gap-3">
