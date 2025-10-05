@@ -168,7 +168,7 @@ export class AIAnalyst {
           const { stockService } = await import('./stocks');
           let stockQuote;
           
-          // Try fetching with retry (once after a short delay)
+          // Try fetching with retry (once after a 2-second delay)
           try {
             stockQuote = await stockService.getQuote(symbol);
           } catch (firstAttemptError: any) {
@@ -177,8 +177,9 @@ export class AIAnalyst {
               error: firstAttemptError
             });
             
-            // Wait 500ms and retry once
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Wait 2 seconds and retry once (gives time for API rate limits to reset)
+            console.log(`[AI Analyst] Fetching data for ${symbol}... Please wait...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             try {
               console.log(`[AI Analyst] Retrying stock quote for ${symbol}...`);
@@ -188,7 +189,7 @@ export class AIAnalyst {
                 status: retryError.message,
                 error: retryError
               });
-              throw new Error(`Live stock data unavailable — please try again later. ${retryError.message}`);
+              throw new Error(`Data temporarily unavailable (API delay). Please try again.`);
             }
           }
           
@@ -277,18 +278,20 @@ export class AIAnalyst {
       console.error('Error analyzing symbol:', error);
       
       // Provide more helpful error messages based on the error type
-      let errorMessage = "Unable to fetch market data for this symbol. ";
+      let errorMessage = "No results found for this symbol. ";
       
       if (error.message?.includes('API key') || error.message?.includes('FINNHUB_API_KEY')) {
-        errorMessage += "API credentials are not configured.";
+        errorMessage = "API credentials are not configured. Please contact support.";
       } else if (error.message?.includes('429') || error.message?.includes('rate limit')) {
-        errorMessage += "API rate limit reached. Please try again in a few moments.";
+        errorMessage = "Data temporarily unavailable (API delay). Please try again in a few moments.";
       } else if (error.message?.includes('404') || error.message?.includes('not found') || error.message?.includes('No quote data')) {
-        errorMessage += "This symbol was not found in our data sources.";
+        errorMessage = "No results found for this symbol. Try another keyword or symbol.";
       } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
-        errorMessage += "Network error. Please check your connection and try again.";
+        errorMessage = "Data temporarily unavailable (network error). Please try again.";
+      } else if (error.message?.includes('temporarily unavailable') || error.message?.includes('API delay')) {
+        errorMessage = error.message;
       } else {
-        errorMessage += "Please try again or search for a different symbol.";
+        errorMessage = "Data temporarily unavailable. Please try again or search for a different symbol.";
       }
       
       return {

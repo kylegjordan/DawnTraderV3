@@ -165,7 +165,21 @@ export function useAI() {
 
   const analyzeSymbolMutation = useMutation({
     mutationFn: async (symbol: string) => {
-      return await apiRequest('POST', '/api/ai/analyze-symbol', { symbol });
+      const response = await apiRequest('POST', '/api/ai/analyze-symbol', { symbol });
+      
+      // Check if response has any valid data
+      const hasValidData = response && (
+        response.symbolName || 
+        response.livePrice !== undefined ||
+        response.technicalAnalysis ||
+        response.strategyRecommendations
+      );
+      
+      if (!hasValidData) {
+        throw new Error('No data available for this symbol');
+      }
+      
+      return response;
     }
   });
 

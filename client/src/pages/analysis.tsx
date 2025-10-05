@@ -31,6 +31,14 @@ export default function Analysis() {
     isAnalyzingSymbol,
     symbolAnalysis
   } = useAI();
+  
+  // Clear analysis results when starting a new search
+  const clearPreviousAnalysis = () => {
+    queryClient.setMutationDefaults(['analyzeSymbol'], {
+      mutationFn: undefined
+    });
+    queryClient.resetQueries({ queryKey: ['analyzeSymbol'], exact: false });
+  };
 
   // Search for stocks and crypto
   const performSearch = async (query: string) => {
@@ -62,10 +70,7 @@ export default function Analysis() {
       if (combined.length === 0) {
         setNoResultsQuery(query);
         setSelectedAsset(null);
-        queryClient.setMutationDefaults(['analyzeSymbol'], {
-          mutationFn: undefined
-        });
-        queryClient.resetQueries({ queryKey: ['analyzeSymbol'], exact: false });
+        clearPreviousAnalysis();
       }
     } catch (error) {
       console.error('Search error:', error);
@@ -116,22 +121,32 @@ export default function Analysis() {
     setSearchQuery(`${result.symbol} - ${result.description}`);
     setShowDropdown(false);
     setNoResultsQuery(null);
+    clearPreviousAnalysis();
     
     // Automatically analyze the selected asset
-    analyzeSymbol(result.symbol.toUpperCase());
+    analyzeSymbol(result.symbol.toUpperCase(), {
+      onError: (error: any) => {
+        console.error('Analysis error:', error);
+        setNoResultsQuery(result.symbol);
+      }
+    });
   };
 
   const handleAnalyzeSymbol = () => {
-    // Clear any previous "no results" state when starting new analysis
+    // Clear any previous "no results" state and analysis when starting new analysis
     setNoResultsQuery(null);
+    clearPreviousAnalysis();
     
-    if (selectedAsset) {
-      analyzeSymbol(selectedAsset.symbol.toUpperCase());
-    } else if (searchQuery.trim()) {
-      // Fallback: try to analyze direct symbol input
-      const directSymbol = searchQuery.trim().split(' ')[0].toUpperCase();
-      analyzeSymbol(directSymbol);
-    }
+    const symbolToAnalyze = selectedAsset 
+      ? selectedAsset.symbol.toUpperCase() 
+      : searchQuery.trim().split(' ')[0].toUpperCase();
+    
+    analyzeSymbol(symbolToAnalyze, {
+      onError: (error: any) => {
+        console.error('Analysis error:', error);
+        setNoResultsQuery(symbolToAnalyze);
+      }
+    });
   };
 
   const handleStartChat = async () => {
@@ -305,8 +320,8 @@ export default function Analysis() {
             </CardContent>
           </Card>
 
-          {/* No Results Message - Centered */}
-          {noResultsQuery && !symbolAnalysis && (
+          {/* No Results Message - Only show if analysis failed and no data exists */}
+          {noResultsQuery && !isAnalyzingSymbol && !symbolAnalysis && (
             <Card className="border-destructive/20">
               <CardContent className="pt-6 pb-6 text-center">
                 <div className="flex flex-col items-center gap-3">
@@ -318,7 +333,7 @@ export default function Analysis() {
                       No results found for "{noResultsQuery}"
                     </h3>
                     <p className="text-muted-foreground">
-                      Try another keyword or symbol
+                      Data temporarily unavailable. Please try again or search for a different symbol.
                     </p>
                   </div>
                 </div>
@@ -326,8 +341,8 @@ export default function Analysis() {
             </Card>
           )}
 
-          {/* Analysis Results */}
-          {symbolAnalysis && !noResultsQuery && (
+          {/* Analysis Results - Show if we have any valid data */}
+          {symbolAnalysis && (
             <>
               {/* Symbol Header with Name and Start Chat Button */}
               {symbolAnalysis.symbolName && (
@@ -475,20 +490,6 @@ export default function Analysis() {
             </>
           )}
 
-          {/* Empty state when no symbol data available */}
-          {!isAnalyzingSymbol && !noResultsQuery && symbolAnalysis && !symbolAnalysis.livePrice && !symbolAnalysis.symbolName && (
-            <Card className="border-destructive/20">
-              <CardContent className="p-8 text-center">
-                <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-foreground mb-2" data-testid="text-no-data">
-                  No data available for this symbol
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  The symbol could not be found. Please check the symbol and try again, or use the search dropdown for suggestions.
-                </p>
-              </CardContent>
-            </Card>
-          )}
 
           {isAnalyzingSymbol && (
             <Card>
