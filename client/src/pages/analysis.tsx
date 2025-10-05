@@ -34,10 +34,14 @@ export default function Analysis() {
   
   // Clear analysis results when starting a new search
   const clearPreviousAnalysis = () => {
+    // Immediately reset the mutation state to clear symbolAnalysis data
     queryClient.setMutationDefaults(['analyzeSymbol'], {
       mutationFn: undefined
     });
     queryClient.resetQueries({ queryKey: ['analyzeSymbol'], exact: false });
+    // Reset mutation state to clear the data property
+    queryClient.setMutationDefaults(['analyzeSymbol'], { mutationFn: undefined });
+    queryClient.getMutationCache().clear();
   };
 
   // Search for stocks and crypto
@@ -112,6 +116,10 @@ export default function Analysis() {
   }, []);
 
   const handleSelectResult = (result: SearchResult) => {
+    // Reset ALL states before starting new analysis
+    setNoResultsQuery(null);
+    clearPreviousAnalysis();
+    
     const assetType = result.type === 'Stock' ? 'stock' : 'crypto';
     setSelectedAsset({
       symbol: result.symbol,
@@ -120,30 +128,39 @@ export default function Analysis() {
     });
     setSearchQuery(`${result.symbol} - ${result.description}`);
     setShowDropdown(false);
-    setNoResultsQuery(null);
-    clearPreviousAnalysis();
     
     // Automatically analyze the selected asset
     analyzeSymbol(result.symbol.toUpperCase(), {
+      onSuccess: (data: any) => {
+        // Data returned successfully - clear any "no results" state
+        setNoResultsQuery(null);
+      },
       onError: (error: any) => {
         console.error('Analysis error:', error);
+        // Set "no results" state only on error
         setNoResultsQuery(result.symbol);
       }
     });
   };
 
   const handleAnalyzeSymbol = () => {
-    // Clear any previous "no results" state and analysis when starting new analysis
-    setNoResultsQuery(null);
-    clearPreviousAnalysis();
-    
+    // Get symbol BEFORE clearing states
     const symbolToAnalyze = selectedAsset 
       ? selectedAsset.symbol.toUpperCase() 
       : searchQuery.trim().split(' ')[0].toUpperCase();
     
+    // Reset ALL states at the start of every new search to prevent leftovers
+    setNoResultsQuery(null);
+    clearPreviousAnalysis();
+    
     analyzeSymbol(symbolToAnalyze, {
+      onSuccess: (data: any) => {
+        // Data returned successfully - clear any "no results" state
+        setNoResultsQuery(null);
+      },
       onError: (error: any) => {
         console.error('Analysis error:', error);
+        // Set "no results" state only on error
         setNoResultsQuery(symbolToAnalyze);
       }
     });
