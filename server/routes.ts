@@ -2076,6 +2076,276 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // ===== STRATEGY METRICS ROUTES =====
+
+  // Get strategy-level metrics for Live trading
+  app.get('/api/metrics/strategies', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const days = parseInt(req.query.days as string) || 7;
+
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - days);
+
+      const trades = await storage.getTrades(userId, { mode: 'live' });
+      const recentTrades = trades.filter(t => 
+        t.entryTime && new Date(t.entryTime) >= fromDate
+      );
+
+      const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'] as const;
+      const strategyMetrics = [];
+
+      for (const strategy of strategies) {
+        const strategyTrades = recentTrades.filter(t => t.strategy === strategy);
+        const closedTrades = strategyTrades.filter(t => t.status === 'closed');
+
+        const wins = closedTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
+        const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0;
+
+        const totalPL = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+        const avgRMultiple = closedTrades.length > 0
+          ? closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPLR || '0'), 0) / closedTrades.length
+          : 0;
+
+        // Get prediction accuracy from Learning Feedback Engine
+        const predictionAccuracy = await storage.getPredictionAccuracy(userId, 'live', strategy, days);
+
+        // Get signal weights for this strategy
+        const signalWeights = await storage.getSignalWeights(userId, strategy, 'live');
+
+        const weightedConfidence = signalWeights.length > 0
+          ? signalWeights.reduce((sum, w) => sum + parseFloat(w.weight), 0) / signalWeights.length
+          : 1.0;
+
+        // Calculate 7-day trend (daily P/L)
+        const dailyPL: number[] = [];
+        for (let i = 0; i < days; i++) {
+          const dayStart = new Date();
+          dayStart.setDate(dayStart.getDate() - i);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(dayStart);
+          dayEnd.setHours(23, 59, 59, 999);
+
+          const dayTrades = closedTrades.filter(t => {
+            const exitTime = t.exitTime ? new Date(t.exitTime) : null;
+            return exitTime && exitTime >= dayStart && exitTime <= dayEnd;
+          });
+
+          const dayTotal = dayTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+          dailyPL.unshift(dayTotal);
+        }
+
+        strategyMetrics.push({
+          strategy,
+          strategyName: strategy.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+          winRate,
+          avgRMultiple,
+          totalPL,
+          predictionAccuracy: predictionAccuracy.accuracy,
+          confidence: weightedConfidence,
+          totalTrades: strategyTrades.length,
+          closedTrades: closedTrades.length,
+          openTrades: strategyTrades.length - closedTrades.length,
+          dailyPLTrend: dailyPL,
+          status: totalPL > 0 ? 'positive' : totalPL < 0 ? 'negative' : 'neutral'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: strategyMetrics,
+        period: `${days} days`
+      });
+    } catch (error: any) {
+      console.error('Error fetching strategy metrics:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get strategy-level metrics for Paper trading
+  app.get('/api/paper/metrics/strategies', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const days = parseInt(req.query.days as string) || 7;
+
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - days);
+
+      const trades = await storage.getTrades(userId, { mode: 'paper' });
+      const recentTrades = trades.filter(t => 
+        t.entryTime && new Date(t.entryTime) >= fromDate
+      );
+
+      const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'] as const;
+      const strategyMetrics = [];
+
+      for (const strategy of strategies) {
+        const strategyTrades = recentTrades.filter(t => t.strategy === strategy);
+        const closedTrades = strategyTrades.filter(t => t.status === 'closed');
+
+        const wins = closedTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
+        const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0;
+
+        const totalPL = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+        const avgRMultiple = closedTrades.length > 0
+          ? closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPLR || '0'), 0) / closedTrades.length
+          : 0;
+
+        const predictionAccuracy = await storage.getPredictionAccuracy(userId, 'paper', strategy, days);
+        const signalWeights = await storage.getSignalWeights(userId, strategy, 'paper');
+
+        const weightedConfidence = signalWeights.length > 0
+          ? signalWeights.reduce((sum, w) => sum + parseFloat(w.weight), 0) / signalWeights.length
+          : 1.0;
+
+        const dailyPL: number[] = [];
+        for (let i = 0; i < days; i++) {
+          const dayStart = new Date();
+          dayStart.setDate(dayStart.getDate() - i);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(dayStart);
+          dayEnd.setHours(23, 59, 59, 999);
+
+          const dayTrades = closedTrades.filter(t => {
+            const exitTime = t.exitTime ? new Date(t.exitTime) : null;
+            return exitTime && exitTime >= dayStart && exitTime <= dayEnd;
+          });
+
+          const dayTotal = dayTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+          dailyPL.unshift(dayTotal);
+        }
+
+        strategyMetrics.push({
+          strategy,
+          strategyName: strategy.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+          winRate,
+          avgRMultiple,
+          totalPL,
+          predictionAccuracy: predictionAccuracy.accuracy,
+          confidence: weightedConfidence,
+          totalTrades: strategyTrades.length,
+          closedTrades: closedTrades.length,
+          openTrades: strategyTrades.length - closedTrades.length,
+          dailyPLTrend: dailyPL,
+          status: totalPL > 0 ? 'positive' : totalPL < 0 ? 'negative' : 'neutral'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: strategyMetrics,
+        period: `${days} days`
+      });
+    } catch (error: any) {
+      console.error('Error fetching paper strategy metrics:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get detailed strategy view
+  app.get('/api/metrics/strategies/:strategy/details', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { strategy } = req.params;
+      const mode = (req.query.mode as string) || 'live';
+      const days = parseInt(req.query.days as string) || 30;
+
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - days);
+
+      const trades = await storage.getTrades(userId, { mode: mode as 'live' | 'paper', strategy });
+      const recentTrades = trades.filter(t => 
+        t.entryTime && new Date(t.entryTime) >= fromDate
+      );
+
+      const closedTrades = recentTrades.filter(t => t.status === 'closed');
+
+      // Overview metrics
+      const wins = closedTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
+      const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0;
+      const totalPL = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+      const avgRMultiple = closedTrades.length > 0
+        ? closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPLR || '0'), 0) / closedTrades.length
+        : 0;
+
+      const avgHoldingTime = closedTrades.length > 0
+        ? closedTrades.reduce((sum, t) => {
+            if (t.entryTime && t.exitTime) {
+              const diff = new Date(t.exitTime).getTime() - new Date(t.entryTime).getTime();
+              return sum + (diff / (1000 * 60 * 60));
+            }
+            return sum;
+          }, 0) / closedTrades.length
+        : 0;
+
+      // Signal insights
+      const signalWeights = await storage.getSignalWeights(userId, strategy, mode);
+
+      // Prediction diagnostics (confusion matrix)
+      const predictionOutcomes = await storage.getPredictionOutcomes(userId, {
+        mode,
+        strategy,
+        fromDate,
+        limit: 1000
+      });
+
+      const completed = predictionOutcomes.filter(p => p.completedAt);
+      const predictedLongCorrect = completed.filter(p => p.predictedDirection === 'long' && p.correct).length;
+      const predictedLongIncorrect = completed.filter(p => p.predictedDirection === 'long' && !p.correct).length;
+      const predictedShortCorrect = completed.filter(p => p.predictedDirection === 'short' && p.correct).length;
+      const predictedShortIncorrect = completed.filter(p => p.predictedDirection === 'short' && !p.correct).length;
+      const predictedNeutralCorrect = completed.filter(p => p.predictedDirection === 'neutral' && p.correct).length;
+      const predictedNeutralIncorrect = completed.filter(p => p.predictedDirection === 'neutral' && !p.correct).length;
+
+      // Equity curve
+      const equityCurve: Array<{ date: string; value: number }> = [];
+      let runningPL = 0;
+      const sortedTrades = closedTrades.sort((a, b) => 
+        new Date(a.exitTime!).getTime() - new Date(b.exitTime!).getTime()
+      );
+
+      for (const trade of sortedTrades) {
+        runningPL += parseFloat(trade.realizedPL || '0');
+        equityCurve.push({
+          date: new Date(trade.exitTime!).toISOString(),
+          value: runningPL
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          overview: {
+            totalTrades: recentTrades.length,
+            closedTrades: closedTrades.length,
+            openTrades: recentTrades.length - closedTrades.length,
+            winRate,
+            avgRMultiple,
+            avgHoldingTime,
+            totalPL
+          },
+          signalInsights: signalWeights.map(w => ({
+            signalType: w.signalType,
+            weight: parseFloat(w.weight),
+            lastUpdated: w.lastUpdated,
+            trend: parseFloat(w.weight) > 1.1 ? 'up' : parseFloat(w.weight) < 0.9 ? 'down' : 'stable'
+          })),
+          predictionDiagnostics: {
+            long: { correct: predictedLongCorrect, incorrect: predictedLongIncorrect },
+            short: { correct: predictedShortCorrect, incorrect: predictedShortIncorrect },
+            neutral: { correct: predictedNeutralCorrect, incorrect: predictedNeutralIncorrect },
+            totalPredictions: completed.length,
+            accuracy: completed.length > 0 ? (completed.filter(p => p.correct).length / completed.length) * 100 : 0
+          },
+          equityCurve
+        }
+      });
+    } catch (error: any) {
+      console.error('Error fetching strategy details:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ===== LEARNING FEEDBACK ENGINE ROUTES =====
 
   // Get prediction accuracy metrics
