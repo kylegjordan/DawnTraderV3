@@ -12,7 +12,7 @@ import StrategyPerformanceWidget from "@/components/strategy/strategy-performanc
 import PortfolioValueWidget from "@/components/goals/portfolio-value-widget";
 import EarningsWidget from "@/components/goals/earnings-widget";
 import TradingActivityWidget from "@/components/goals/trading-activity-widget";
-import AveragesWidget from "@/components/goals/averages-widget";
+import ResultsWidget from "@/components/goals/results-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 
 export default function Dashboard() {
@@ -27,14 +27,14 @@ export default function Dashboard() {
       {/* Trading Mode Banner */}
       <ModeBanner />
 
-      {/* Dashboard Widgets - New Structure */}
+      {/* Dashboard Widgets - 4-Widget Layout */}
       <section>
         <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-3 sm:mb-4">Dashboard Overview</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <PortfolioValueWidget />
           <EarningsWidget />
           <TradingActivityWidget />
-          <AveragesWidget />
+          <ResultsWidget />
         </div>
       </section>
 
