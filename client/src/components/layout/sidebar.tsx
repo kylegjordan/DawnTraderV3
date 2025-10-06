@@ -27,11 +27,11 @@ interface SidebarProps {
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Goals Engine", href: "/goals-engine", icon: Target },
+  { name: "AI Analysis", href: "/analysis", icon: Brain },
   { name: "Watchlist", href: "/watchlist", icon: Eye },
   { name: "Active Trades", href: "/active-trades", icon: BarChart3 },
   { name: "Trade History", href: "/history", icon: Clock },
   { name: "Reports", href: "/reports", icon: FileText },
-  { name: "AI Analysis", href: "/analysis", icon: Brain },
   { name: "Systems Monitoring", href: "/systems", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

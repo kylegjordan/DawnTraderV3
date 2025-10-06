@@ -149,10 +149,7 @@ export default function GoalsEngineTab() {
 
   return (
     <div className="space-y-6">
-      {/* Editable Goals Table */}
-      <GoalsTable />
-
-      {/* Performance Tracking Metrics */}
+      {/* Performance Tracking Metrics - Primary Goals Table */}
       <PerformanceTrackingMetrics />
 
       {/* AI Conversational Panel */}
