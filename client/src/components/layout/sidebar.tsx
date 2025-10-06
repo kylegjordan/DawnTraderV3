@@ -9,7 +9,8 @@ import {
   Settings,
   TrendingUp,
   User,
-  FileText
+  FileText,
+  Target
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 
@@ -26,6 +27,7 @@ const navigation = [
   { name: "Trade History", href: "/history", icon: Clock },
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "AI Analysis", href: "/analysis", icon: Brain },
+  { name: "Goals Engine", href: "/goals-engine", icon: Target },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
