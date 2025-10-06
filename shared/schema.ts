@@ -100,6 +100,34 @@ export const tradingSettings = pgTable("trading_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+// Strategy Settings (per mode, per user, per strategy)
+export const strategySettings = pgTable("strategy_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  strategy: strategyTypeEnum("strategy").notNull(),
+  params: jsonb("params").notNull(),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueUserModeStrategy: uniqueIndex("strategy_settings_user_mode_strategy_idx").on(table.userId, table.mode, table.strategy),
+}));
+
+// Strategy Settings Audit Log
+export const strategySettingsAudit = pgTable("strategy_settings_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  strategy: strategyTypeEnum("strategy").notNull(),
+  prevParams: jsonb("prev_params"),
+  nextParams: jsonb("next_params").notNull(),
+  actorType: text("actor_type").notNull(), // 'user' | 'ai'
+  actorId: text("actor_id"),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 // Watchlist pairs
 export const watchlistPairs = pgTable("watchlist_pairs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -635,6 +663,17 @@ export const insertTradingSettingsSchema = createInsertSchema(tradingSettings).o
   updatedAt: true,
 });
 
+export const insertStrategySettingsSchema = createInsertSchema(strategySettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStrategySettingsAuditSchema = createInsertSchema(strategySettingsAudit).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertWatchlistPairSchema = createInsertSchema(watchlistPairs).omit({
   id: true,
   addedAt: true,
@@ -768,6 +807,12 @@ export type User = typeof users.$inferSelect;
 
 export type InsertTradingSettings = z.infer<typeof insertTradingSettingsSchema>;
 export type TradingSettings = typeof tradingSettings.$inferSelect;
+
+export type InsertStrategySettings = z.infer<typeof insertStrategySettingsSchema>;
+export type StrategySettings = typeof strategySettings.$inferSelect;
+
+export type InsertStrategySettingsAudit = z.infer<typeof insertStrategySettingsAuditSchema>;
+export type StrategySettingsAudit = typeof strategySettingsAudit.$inferSelect;
 
 export type InsertWatchlistPair = z.infer<typeof insertWatchlistPairSchema>;
 export type WatchlistPair = typeof watchlistPairs.$inferSelect;
