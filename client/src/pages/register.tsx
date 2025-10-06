@@ -1,15 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, UserPlus, AlertCircle, Check, Fingerprint } from "lucide-react";
+import { Loader2, UserPlus, AlertCircle, Check } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { saveTokens } from "@/lib/auth";
-import { isBiometricAvailable, enableBiometricLogin } from "@/hooks/useBiometricAuth";
 
 export default function RegisterPage() {
   const [_, setLocation] = useLocation();
@@ -18,12 +16,6 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [enableBiometric, setEnableBiometric] = useState(false);
-
-  useEffect(() => {
-    isBiometricAvailable().then(setBiometricAvailable);
-  }, []);
 
   // Password strength indicators
   const hasLength = password.length >= 8;
@@ -58,17 +50,6 @@ export default function RegisterPage() {
       if (loginRes?.accessToken) {
         saveTokens(loginRes.accessToken, loginRes.refreshToken);
         localStorage.setItem("user", JSON.stringify(loginRes.user));
-
-        // Enroll biometric if requested and available
-        if (enableBiometric && biometricAvailable) {
-          try {
-            await enableBiometricLogin(username);
-          } catch (bioError) {
-            console.error("Biometric enrollment failed:", bioError);
-            // Continue login even if biometric enrollment fails
-          }
-        }
-
         setLocation("/");
       }
     } catch (err: any) {
@@ -156,30 +137,6 @@ export default function RegisterPage() {
                 </div>
               )}
             </div>
-
-            {biometricAvailable && (
-              <div className="space-y-2 bg-muted/50 p-3 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="biometric"
-                    checked={enableBiometric}
-                    onCheckedChange={(checked) => setEnableBiometric(checked as boolean)}
-                    disabled={isLoading}
-                    data-testid="checkbox-enable-biometric"
-                  />
-                  <label
-                    htmlFor="biometric"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
-                  >
-                    <Fingerprint className="h-4 w-4" />
-                    Enable biometric quick access
-                  </label>
-                </div>
-                <p className="text-xs text-muted-foreground ml-6">
-                  Use Face ID or Touch ID to quickly access your account (password still required)
-                </p>
-              </div>
-            )}
 
             {error && (
               <Alert variant="destructive">

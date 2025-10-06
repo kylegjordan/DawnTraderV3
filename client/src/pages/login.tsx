@@ -1,14 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, LogIn, AlertCircle, Fingerprint } from "lucide-react";
+import { Loader2, LogIn, AlertCircle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { saveTokens } from "@/lib/auth";
-import { tryBiometricLogin, isBiometricAvailable } from "@/hooks/useBiometricAuth";
 
 export default function LoginPage() {
   const [_, setLocation] = useLocation();
@@ -16,25 +15,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [tryingBiometric, setTryingBiometric] = useState(false);
-
-  useEffect(() => {
-    // Check if biometric is available
-    isBiometricAvailable().then(setBiometricAvailable);
-
-    // Check if biometric auto-login should be attempted
-    // Note: WebAuthn biometric is enrolled but still requires password for actual login
-    // This is a placeholder for future full WebAuthn implementation
-    const checkBiometric = async () => {
-      const storedUsername = await tryBiometricLogin();
-      if (storedUsername) {
-        setUsername(storedUsername); // Pre-fill username for convenience
-      }
-    };
-
-    checkBiometric();
-  }, [setLocation]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -53,25 +33,6 @@ export default function LoginPage() {
       setError(err?.message || "Login failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
-    }
-  }
-
-  async function handleBiometricLogin() {
-    setError("");
-    setTryingBiometric(true);
-
-    try {
-      const storedUsername = await tryBiometricLogin();
-      if (storedUsername) {
-        setUsername(storedUsername);
-        setError("Please enter your password to continue.");
-      } else {
-        setError("Biometric authentication failed. Please use password login.");
-      }
-    } catch (err: any) {
-      setError("Biometric login failed. Please use password login.");
-    } finally {
-      setTryingBiometric(false);
     }
   }
 
@@ -123,7 +84,7 @@ export default function LoginPage() {
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isLoading || tryingBiometric}
+              disabled={isLoading}
               data-testid="button-login"
             >
               {isLoading ? (
@@ -138,40 +99,6 @@ export default function LoginPage() {
                 </>
               )}
             </Button>
-
-            {biometricAvailable && localStorage.getItem("biometricEnabled") === "true" && (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or</span>
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleBiometricLogin}
-                  disabled={isLoading || tryingBiometric}
-                  data-testid="button-biometric-login"
-                >
-                  {tryingBiometric ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Verifying...
-                    </>
-                  ) : (
-                    <>
-                      <Fingerprint className="mr-2 h-4 w-4" />
-                      Use Biometric Quick Access
-                    </>
-                  )}
-                </Button>
-              </>
-            )}
 
             <div className="text-center text-sm text-muted-foreground">
               Don't have an account?{" "}

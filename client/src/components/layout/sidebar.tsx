@@ -16,7 +16,6 @@ import {
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
 import { clearTokens } from "@/lib/auth";
-import { disableBiometricLogin } from "@/hooks/useBiometricAuth";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -43,7 +42,6 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
   
   const handleLogout = () => {
     clearTokens();
-    disableBiometricLogin();
     setLocation("/login");
   };
 
