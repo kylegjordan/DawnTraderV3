@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTrading } from "@/hooks/use-trading";
-import { ArrowRight, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowRight, TrendingUp, TrendingDown, Beaker } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Trade } from "@/lib/types";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { formatTime } from "@/lib/timezone";
+import { useTradingMode } from "@/contexts/trading-mode-context";
 
 const strategyColors = {
   vwap_pullback: "bg-primary/10 text-primary",
@@ -133,7 +134,16 @@ function TradeRow({ trade }: { trade: Trade }) {
 }
 
 export default function RecentTrades() {
-  const { recentTrades, recentTradesLoading } = useTrading();
+  const { mode, isPaper } = useTradingMode();
+  const { recentTrades: liveRecentTrades, recentTradesLoading: liveRecentTradesLoading } = useTrading();
+  
+  const { data: paperRecentTrades = [], isLoading: paperRecentTradesLoading } = useQuery<Trade[]>({
+    queryKey: ['/api/paper/trades', { limit: 10 }],
+    enabled: isPaper,
+  });
+  
+  const recentTrades = isPaper ? paperRecentTrades : liveRecentTrades;
+  const recentTradesLoading = isPaper ? paperRecentTradesLoading : liveRecentTradesLoading;
 
   if (recentTradesLoading) {
     return (
@@ -156,7 +166,15 @@ export default function RecentTrades() {
   return (
     <section data-testid="recent-trades-section">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-foreground">Recent Trades (Last 10)</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Recent Trades (Last 10)</h2>
+          {isPaper && (
+            <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30">
+              <Beaker className="w-3 h-3 mr-1" />
+              SIMULATED
+            </Badge>
+          )}
+        </div>
         <Link href="/history">
           <Button 
             variant="ghost" 

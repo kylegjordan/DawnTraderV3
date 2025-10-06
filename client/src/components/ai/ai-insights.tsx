@@ -1,19 +1,31 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { useAI } from "@/hooks/use-trading";
-import { Lightbulb, Zap, ArrowRight, AlertTriangle } from "lucide-react";
+import { Lightbulb, Zap, ArrowRight, AlertTriangle, Beaker } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { formatTime } from "@/lib/timezone";
+import { useTradingMode } from "@/contexts/trading-mode-context";
+import { cn } from "@/lib/utils";
 
 export default function AIInsights() {
-  const { aiReports, reportsLoading } = useAI();
+  const { mode, isPaper } = useTradingMode();
+  const { aiReports: liveAIReports, reportsLoading: liveReportsLoading } = useAI();
+  
+  const { data: paperAIReports = [], isLoading: paperReportsLoading } = useQuery<any[]>({
+    queryKey: ['/api/paper/ai-reports'],
+    enabled: isPaper,
+  });
   
   // Fetch user settings for timezone conversion
   const { data: settings } = useQuery({ 
     queryKey: ['/api/settings'],
   });
+  
+  const aiReports = isPaper ? paperAIReports : liveAIReports;
+  const reportsLoading = isPaper ? paperReportsLoading : liveReportsLoading;
   
   // Get the most recent daily report
   const latestReport = aiReports.find(report => report.reportType === 'daily');
@@ -74,7 +86,15 @@ export default function AIInsights() {
   return (
     <section data-testid="ai-insights-section">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-foreground">AI Analyst Insights</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">AI Analyst Insights</h2>
+          {isPaper && (
+            <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30">
+              <Beaker className="w-3 h-3 mr-1" />
+              SIMULATED
+            </Badge>
+          )}
+        </div>
         <Link href="/analysis">
           <Button 
             variant="ghost" 

@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, Beaker } from 'lucide-react';
+import { useTradingMode } from '@/contexts/trading-mode-context';
+import { cn } from '@/lib/utils';
 
 type TimePeriod = '7D' | '30D' | 'ALL';
 
@@ -16,6 +19,7 @@ interface EarningsDataPoint {
 
 export default function EarningsChart() {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('30D');
+  const { mode, isPaper } = useTradingMode();
 
   const dayMapping = {
     '7D': 7,
@@ -23,9 +27,11 @@ export default function EarningsChart() {
     'ALL': 365
   };
 
+  const endpoint = isPaper ? '/api/paper/metrics/earnings-chart' : '/api/portfolio/earnings-chart';
+  
   const { data: chartData, isLoading } = useQuery<EarningsDataPoint[]>({
-    queryKey: ['/api/portfolio/earnings-chart', selectedPeriod],
-    queryFn: () => fetch(`/api/portfolio/earnings-chart?days=${dayMapping[selectedPeriod]}`).then(r => r.json()),
+    queryKey: [endpoint, selectedPeriod],
+    queryFn: () => fetch(`${endpoint}?days=${dayMapping[selectedPeriod]}`).then(r => r.json()),
   });
 
   const periods: TimePeriod[] = ['7D', '30D', 'ALL'];
@@ -84,12 +90,18 @@ export default function EarningsChart() {
   };
 
   return (
-    <Card className="mt-4" data-testid="card-earnings-chart">
+    <Card className={cn("mt-4", isPaper && "border-blue-500/30 bg-blue-500/5")} data-testid="card-earnings-chart">
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            <CardTitle>Earnings Over Time</CardTitle>
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+            <CardTitle className="text-base sm:text-lg">Earnings Over Time</CardTitle>
+            {isPaper && (
+              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30">
+                <Beaker className="w-3 h-3 mr-1" />
+                SIMULATED
+              </Badge>
+            )}
           </div>
           <div className="flex gap-2">
             {periods.map((period) => (

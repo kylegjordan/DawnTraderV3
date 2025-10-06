@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { Trade } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 import { formatTime } from "@/lib/timezone";
+import { useTradingMode } from "@/contexts/trading-mode-context";
+import { Beaker } from "lucide-react";
 
 const strategyColors = {
   vwap_pullback: "bg-primary/10 text-primary",
@@ -142,7 +144,16 @@ function TradeRow({ trade }: { trade: Trade }) {
 }
 
 export default function ActiveTrades() {
-  const { activeTrades, activeTradesLoading } = useTrading();
+  const { mode, isPaper } = useTradingMode();
+  const { activeTrades: liveActiveTrades, activeTradesLoading: liveActiveTradesLoading } = useTrading();
+  
+  const { data: paperActiveTrades = [], isLoading: paperActiveTradesLoading } = useQuery<Trade[]>({
+    queryKey: ['/api/paper/trades/active'],
+    enabled: isPaper,
+  });
+  
+  const activeTrades = isPaper ? paperActiveTrades : liveActiveTrades;
+  const activeTradesLoading = isPaper ? paperActiveTradesLoading : liveActiveTradesLoading;
 
   if (activeTradesLoading) {
     return (
@@ -167,10 +178,19 @@ export default function ActiveTrades() {
   return (
     <section data-testid="active-trades-section">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-foreground">Active Trades</h2>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-md">
-          <div className="w-2 h-2 bg-success rounded-full animate-pulse" />
-          <span className="text-sm font-medium text-primary">Live Monitoring</span>
+        <h2 className="text-xl sm:text-2xl font-bold text-foreground">Active Trades</h2>
+        <div className={cn(
+          "flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors",
+          isPaper ? "bg-blue-500/10" : "bg-primary/10"
+        )}>
+          {isPaper && <Beaker className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+          {!isPaper && <div className="w-2 h-2 bg-success rounded-full animate-pulse" />}
+          <span className={cn(
+            "text-sm font-medium",
+            isPaper ? "text-blue-600 dark:text-blue-400" : "text-primary"
+          )}>
+            {isPaper ? 'Simulated' : 'Live Monitoring'}
+          </span>
         </div>
       </div>
       

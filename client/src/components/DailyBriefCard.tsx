@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, Clock, TrendingUp, AlertCircle, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, TrendingUp, AlertCircle, ChevronRight, Beaker } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Link } from 'wouter';
+import { useTradingMode } from '@/contexts/trading-mode-context';
+import { cn } from '@/lib/utils';
 
 interface DailyBrief {
   id: string;
@@ -38,8 +40,10 @@ interface DailyBrief {
 }
 
 export default function DailyBriefCard() {
+  const { mode, isPaper } = useTradingMode();
+  
   const { data: brief, isLoading } = useQuery<DailyBrief | null>({
-    queryKey: ['/api/daily-briefs/today']
+    queryKey: isPaper ? ['/api/paper/briefs/today'] : ['/api/daily-briefs/today']
   });
 
   if (isLoading) {
@@ -77,13 +81,24 @@ export default function DailyBriefCard() {
   };
 
   return (
-    <Card className="border-2" data-testid="card-daily-brief">
+    <Card className={cn(
+      "border-2",
+      isPaper && "border-blue-500/30 bg-blue-500/5"
+    )} data-testid="card-daily-brief">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <CardTitle className="text-xl mb-3" data-testid="text-card-title">
-              Current Daily Briefing
-            </CardTitle>
+            <div className="flex items-center gap-2 mb-3">
+              <CardTitle className="text-lg sm:text-xl" data-testid="text-card-title">
+                Current Daily Briefing
+              </CardTitle>
+              {isPaper && (
+                <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30">
+                  <Beaker className="w-3 h-3 mr-1" />
+                  SIMULATED
+                </Badge>
+              )}
+            </div>
             <div className="flex items-center gap-2 mb-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <CardDescription data-testid="text-brief-date">
