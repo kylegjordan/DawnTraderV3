@@ -113,3 +113,82 @@ The Learning Feedback Engine maintains complete isolation between paper and live
 - **Conservative Defaults**: All signals start at 1.0x weight, adjusted based on evidence
 - **Paper-First Learning**: New users start with paper mode learning, optional copy to live after validation
 - **Mode Isolation**: Prevents cross-contamination between paper and live trading data
+
+## Trading Strategy Performance Visualization
+
+The Strategy Performance Visualization provides detailed strategy-level insights on the dashboard and reports panel, combining prediction accuracy metrics from the Learning Feedback Engine with trade performance data. It allows traders to analyze each trading strategy's effectiveness through multiple lenses: win rate, R-multiples, P/L, prediction diagnostics, signal weight evolution, and equity curves.
+
+### Components
+
+1. **StrategyPerformanceWidget** (`client/src/components/strategy/strategy-performance-widget.tsx`)
+   - Displays on the main dashboard below Portfolio Overview
+   - Shows top-performing strategies ranked by total P/L
+   - Metric cards include:
+     - Win Rate: Percentage of profitable trades
+     - Average R-Multiple: Risk-adjusted returns
+     - Total P/L: Cumulative profit/loss
+     - Prediction Accuracy: AI forecast correctness from Learning Engine
+   - Color-coded performance indicators (green for positive, red for negative)
+   - Click through to detailed strategy view
+
+2. **StrategyDetailView** (`client/src/components/strategy/strategy-detail-view.tsx`)
+   - Accessible from Reports panel
+   - Three tabbed views:
+     - **Equity Curve**: Line chart showing cumulative P/L over time
+     - **Signal Insights**: Adaptive signal weights from Learning Feedback Engine with trend indicators (up/down/stable)
+     - **Predictions**: Confusion matrix showing Long/Short/Neutral prediction accuracy
+   - Time range selector: 7 days, 30 days, 90 days
+   - Overview metrics:
+     - Total/Closed/Open trades count
+     - Win rate percentage
+     - Average R-multiple
+     - Average holding time in hours
+
+### API Endpoints
+
+Strategy-level metrics are aggregated from prediction outcomes and trade data:
+
+- `GET /api/metrics/strategies`: Get all strategy metrics for live mode
+  - Returns array of strategy metrics with win rate, R-multiple, P/L, prediction accuracy
+  - Filters by time period using `days` query parameter
+  - Mode-aware: respects current trading mode (live/paper)
+
+- `GET /api/paper/metrics/strategies`: Get all strategy metrics for paper mode
+  - Identical structure to live endpoint
+  - Sources data from paper trading tables
+
+- `GET /api/metrics/strategies/:strategyId/details`: Get detailed metrics for a specific strategy
+  - Overview: trade counts, win rate, R-multiple, holding time, total P/L
+  - Signal insights: weight history with trends
+  - Prediction diagnostics: confusion matrix (correct/incorrect by direction)
+  - Equity curve: cumulative P/L over time
+
+### Data Sources
+
+The visualization combines data from multiple sources:
+1. **Trades table**: Win rate, R-multiples, P/L, holding time
+2. **Prediction outcomes table**: AI accuracy, confidence scores, direction correctness
+3. **Signal weights table**: Adaptive weights and optimization history
+4. **Feature snapshots table**: Market context for each prediction
+
+### Mode Isolation
+
+Strategy performance maintains complete isolation between trading modes:
+- Separate API endpoints for live and paper strategies
+- Metrics calculated from mode-specific tables
+- Visual mode indicator on all components
+- Color-coded mode badges (green for live, blue for paper)
+
+### Prediction Outcome Classification
+
+Predictions are evaluated using a risk-based threshold:
+- **Long/Short**: Correct if P/L > 0, incorrect if P/L ≤ 0
+- **Neutral**: Correct if |P/L| < neutralThreshold (2% of riskAmount), incorrect otherwise
+- This aligns with the principle that neutral predictions should avoid significant losses
+
+### Integration Points
+
+- **Dashboard**: StrategyPerformanceWidget displays below Portfolio Overview section
+- **Reports Panel**: Strategy Detail View accessible via navigation
+- **Learning Engine**: Signal weight insights from nightly optimizer
+- **Trading Engine**: P/L and execution data from completed trades
