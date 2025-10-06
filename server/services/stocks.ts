@@ -273,16 +273,24 @@ export class StockService {
     }
 
     const results: StockSearchResult[] = data.result
-      .filter((item: any) => 
-        item.type === 'Common Stock' && 
-        !item.symbol.includes('.') && 
-        item.symbol.length <= 5
-      )
-      .slice(0, 5)
+      .filter((item: any) => {
+        // Allow stocks, ETFs, and other common security types
+        const allowedTypes = ['Common Stock', 'ETF', 'ADR', 'REIT', 'Preferred Stock', 'Fund'];
+        const hasValidType = !item.type || allowedTypes.includes(item.type);
+        
+        // Must have symbol and description
+        const hasBasicInfo = item.symbol && item.description;
+        
+        // Filter out overly complex symbols (e.g., warrants, options)
+        const isReasonableSymbol = item.symbol.length <= 10 && !item.symbol.includes('^');
+        
+        return hasBasicInfo && hasValidType && isReasonableSymbol;
+      })
+      .slice(0, 10) // Increased from 5 to 10 results
       .map((item: any) => ({
         symbol: item.symbol,
         description: item.description,
-        type: item.type
+        type: item.type || 'Stock'
       }));
 
     this.setCachedData(this.searchCache, normalizedQuery, results);
