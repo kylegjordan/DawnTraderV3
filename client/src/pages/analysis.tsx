@@ -116,7 +116,8 @@ export default function Analysis() {
   }, []);
 
   const handleSelectResult = (result: SearchResult) => {
-    const symbolToAnalyze = result.symbol.toUpperCase();
+    const cleanSymbol = result.symbol.match(/^([A-Z0-9\-_]+)/)?.[1] || result.symbol;
+    const symbolToAnalyze = cleanSymbol.toUpperCase();
     
     // Reset ALL states before starting new analysis
     setNoResultsQuery(null);
@@ -125,11 +126,11 @@ export default function Analysis() {
     
     const assetType = result.type === 'Stock' ? 'stock' : 'crypto';
     setSelectedAsset({
-      symbol: result.symbol,
+      symbol: symbolToAnalyze,
       name: result.description,
       type: assetType
     });
-    setSearchQuery(`${result.symbol} - ${result.description}`);
+    setSearchQuery(`${symbolToAnalyze} - ${result.description}`);
     setShowDropdown(false);
     
     // Automatically analyze the selected asset
@@ -146,10 +147,13 @@ export default function Analysis() {
   };
 
   const handleAnalyzeSymbol = () => {
-    // Get symbol BEFORE clearing states
-    const symbolToAnalyze = selectedAsset 
-      ? selectedAsset.symbol.toUpperCase() 
-      : searchQuery.trim().split(' ')[0].toUpperCase();
+    // Get symbol BEFORE clearing states - extract only ticker symbol
+    let rawSymbol = selectedAsset 
+      ? selectedAsset.symbol 
+      : searchQuery.trim().split(/[\s\-]/)[0];
+    
+    const cleanSymbol = rawSymbol.match(/^([A-Z0-9\-_]+)/i)?.[1] || rawSymbol;
+    const symbolToAnalyze = cleanSymbol.toUpperCase();
     
     // Reset ALL states at the start of every new search to prevent leftovers
     setNoResultsQuery(null);
