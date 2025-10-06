@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/hooks/use-trading";
@@ -14,7 +13,6 @@ import {
   Save,
   RotateCcw
 } from "lucide-react";
-import { timezones } from "@/lib/timezone";
 
 export default function Settings() {
   const { settings, settingsLoading, updateSettings, isUpdatingSettings } = useTrading();
@@ -22,23 +20,17 @@ export default function Settings() {
   
   const [formData, setFormData] = useState({
     // Notification Settings
-    emailNotifications: true,
-    pushNotifications: true,
-    telegramNotifications: false,
-    
-    // Display Settings
-    timezone: 'Asia/Dubai',
-    timeFormat: '12hr' as '12hr' | '24hr'
+    emailNotifications: settings?.emailNotifications ?? true,
+    pushNotifications: settings?.pushNotifications ?? true,
+    telegramNotifications: settings?.telegramNotifications ?? false
   });
 
   useEffect(() => {
     if (settings) {
       setFormData({
-        emailNotifications: true,
-        pushNotifications: true,
-        telegramNotifications: false,
-        timezone: settings.timezone || 'Asia/Dubai',
-        timeFormat: (settings.timeFormat as '12hr' | '24hr') || '12hr'
+        emailNotifications: settings.emailNotifications ?? true,
+        pushNotifications: settings.pushNotifications ?? true,
+        telegramNotifications: settings.telegramNotifications ?? false
       });
     }
   }, [settings]);
@@ -63,11 +55,9 @@ export default function Settings() {
   const handleReset = () => {
     if (settings) {
       setFormData({
-        emailNotifications: true,
-        pushNotifications: true,
-        telegramNotifications: false,
-        timezone: settings.timezone || 'Asia/Dubai',
-        timeFormat: (settings.timeFormat as '12hr' | '24hr') || '12hr'
+        emailNotifications: settings.emailNotifications ?? true,
+        pushNotifications: settings.pushNotifications ?? true,
+        telegramNotifications: settings.telegramNotifications ?? false
       });
       
       toast({
@@ -187,48 +177,6 @@ export default function Settings() {
               onCheckedChange={(checked) => setFormData({...formData, telegramNotifications: checked})}
               data-testid="switch-telegram-notifications"
             />
-          </div>
-
-          <Separator className="my-8" />
-
-          {/* Display Settings */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Display Settings</h3>
-            
-            {/* Timezone */}
-            <div className="space-y-2 mb-4">
-              <Label htmlFor="timezone" className="text-sm font-medium">
-                Timezone
-              </Label>
-              <Select value={formData.timezone} onValueChange={(value) => setFormData({...formData, timezone: value})}>
-                <SelectTrigger data-testid="select-timezone">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {timezones.map((tz) => (
-                    <SelectItem key={tz.value} value={tz.value}>
-                      {tz.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Time Format */}
-            <div className="space-y-2">
-              <Label htmlFor="timeFormat" className="text-sm font-medium">
-                Time Format
-              </Label>
-              <Select value={formData.timeFormat} onValueChange={(value: '12hr' | '24hr') => setFormData({...formData, timeFormat: value})}>
-                <SelectTrigger data-testid="select-time-format">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="12hr">12-hour (2:30 PM)</SelectItem>
-                  <SelectItem value="24hr">24-hour (14:30)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>

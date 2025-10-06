@@ -51,7 +51,7 @@ export default function GoalsTable() {
   const [values, setValues] = useState<Record<string, number>>({});
 
   const { data: goalsData, isLoading } = useQuery<{ success: boolean; data: UserGoal[]; mode: string }>({
-    queryKey: ['/api/goals/summary', { mode }],
+    queryKey: ['/api/goals/summary', mode],
   });
 
   useEffect(() => {
