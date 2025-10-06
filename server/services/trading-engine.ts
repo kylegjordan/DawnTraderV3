@@ -11,6 +11,8 @@ export interface TradeSignal {
   stopPrice: number;
   targetPrice: number;
   confidence: number;
+  goalAlignmentScore?: number;
+  finalScore?: number;
   metadata: any;
 }
 
@@ -49,6 +51,106 @@ export class TradingEngine {
     console.log(`Trading engine stopped for user ${this.userId}`);
   }
 
+  private async calculateGoalAlignmentScore(signal: TradeSignal, mode: 'live' | 'paper'): Promise<number> {
+    try {
+      // Get user goals for the specific mode
+      const goals = mode === 'live' 
+        ? await storage.getUserGoalsLive(this.userId)
+        : await storage.getUserGoalsPaper(this.userId);
+      
+      // Find profitability_vs_consistency goal
+      const profConsGoal = goals.find(g => g.metricName === 'profitability_vs_consistency');
+      
+      if (!profConsGoal || !profConsGoal.goalValue) {
+        // No goals set, return neutral score
+        console.log('[Goal Alignment] No profitability_vs_consistency goal found, using neutral score 0.5');
+        return 0.5;
+      }
+
+      // Validate and parse goalValue
+      const goalValueNum = parseFloat(profConsGoal.goalValue);
+      if (isNaN(goalValueNum) || goalValueNum < 1 || goalValueNum > 10) {
+        console.warn(`[Goal Alignment] Invalid goalValue: ${profConsGoal.goalValue}, using neutral score 0.5`);
+        return 0.5;
+      }
+
+      // profitability_vs_consistency: 1-10 scale where 1=consistency focused, 10=profitability focused
+      const profitabilityFocus = goalValueNum / 10;
+      const consistencyFocus = 1 - profitabilityFocus;
+
+      // Calculate trade characteristics with safety checks
+      const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
+      
+      // Guard against zero or near-zero stop distance (invalid trade setup)
+      if (stopDistance < 0.000001) {
+        console.warn(`[Goal Alignment] Invalid stop distance (${stopDistance}), using neutral score 0.5`);
+        return 0.5;
+      }
+
+      const profitDistance = Math.abs(signal.targetPrice - signal.entryPrice);
+      const riskRewardRatio = profitDistance / stopDistance;
+      
+      // Validate riskRewardRatio is a valid number
+      if (!isFinite(riskRewardRatio) || riskRewardRatio < 0) {
+        console.warn(`[Goal Alignment] Invalid risk/reward ratio (${riskRewardRatio}), using neutral score 0.5`);
+        return 0.5;
+      }
+
+      const isHighRiskReward = riskRewardRatio >= 2.0; // 2R or better
+      
+      // Strategy risk profiles
+      const strategyRiskProfile: { [key: string]: { risk: number; consistency: number } } = {
+        'vwap_pullback': { risk: 0.5, consistency: 0.8 }, // More consistent, lower risk
+        'abcd_long': { risk: 0.7, consistency: 0.6 }, // Moderate risk and consistency
+        'sma_trend_ride': { risk: 0.6, consistency: 0.7 }, // Good balance
+      };
+
+      const profile = strategyRiskProfile[signal.strategy] || { risk: 0.5, consistency: 0.5 };
+
+      // Calculate alignment components
+      let alignmentScore = 0;
+
+      // Component 1: Risk/Reward alignment (40% weight)
+      if (profitabilityFocus > 0.6 && isHighRiskReward) {
+        alignmentScore += 0.4; // High profitability focus + high R/R = aligned
+      } else if (consistencyFocus > 0.6 && riskRewardRatio < 2.0) {
+        alignmentScore += 0.4; // High consistency focus + moderate R/R = aligned
+      } else {
+        alignmentScore += 0.2; // Partial alignment
+      }
+
+      // Component 2: Strategy risk profile alignment (30% weight)
+      const strategyAlignment = (profitabilityFocus * profile.risk) + (consistencyFocus * profile.consistency);
+      alignmentScore += strategyAlignment * 0.3;
+
+      // Component 3: Signal confidence alignment (30% weight)
+      // Higher confidence signals align better with consistency goals
+      // Lower confidence but high R/R aligns with profitability goals
+      if (consistencyFocus > 0.6 && signal.confidence > 0.7) {
+        alignmentScore += 0.3;
+      } else if (profitabilityFocus > 0.6 && isHighRiskReward) {
+        alignmentScore += 0.3;
+      } else {
+        alignmentScore += signal.confidence * 0.3;
+      }
+
+      // Normalize to 0-1 range and validate
+      const finalAlignmentScore = Math.max(0, Math.min(1, alignmentScore));
+      
+      // Final safety check
+      if (!isFinite(finalAlignmentScore) || isNaN(finalAlignmentScore)) {
+        console.warn(`[Goal Alignment] Invalid final alignment score (${finalAlignmentScore}), using neutral score 0.5`);
+        return 0.5;
+      }
+      
+      return finalAlignmentScore;
+      
+    } catch (error) {
+      console.error('[Goal Alignment] Error calculating goal alignment score:', error);
+      return 0.5; // Return neutral score on error
+    }
+  }
+
   async processSignal(signal: TradeSignal, mode: 'live' | 'paper' = 'paper'): Promise<Trade | null> {
     if (!this.isRunning) {
       console.log('Trading engine is stopped, ignoring signal');
@@ -61,6 +163,16 @@ export class TradingEngine {
       if (!settings) {
         throw new Error('Trading settings not found');
       }
+
+      // Calculate goal alignment score and final score
+      const goalAlignmentScore = await this.calculateGoalAlignmentScore(signal, mode);
+      signal.goalAlignmentScore = goalAlignmentScore;
+      signal.finalScore = (signal.confidence * 0.7) + (goalAlignmentScore * 0.3);
+      
+      console.log(`[Goal Alignment] Signal: ${signal.symbol}, Strategy: ${signal.strategy}`);
+      console.log(`[Goal Alignment] Signal Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
+      console.log(`[Goal Alignment] Goal Alignment Score: ${(goalAlignmentScore * 100).toFixed(1)}%`);
+      console.log(`[Goal Alignment] Final Score: ${(signal.finalScore * 100).toFixed(1)}%`);
 
       // Pre-trade risk checks
       const riskCheck = await this.riskManager.checkPreTradeRisk(
@@ -208,7 +320,12 @@ export class TradingEngine {
       entryFee: entryFee.toString(),
       entrySlippage: entrySlippage.toString(),
       riskAmount: riskAmount.toString(),
-      metadata: signal.metadata
+      metadata: {
+        ...signal.metadata,
+        signalConfidence: signal.confidence,
+        goalAlignmentScore: signal.goalAlignmentScore,
+        finalScore: signal.finalScore
+      }
     };
 
     const trade = await storage.createTrade(tradeData);
