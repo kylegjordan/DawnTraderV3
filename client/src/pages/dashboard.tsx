@@ -1,4 +1,3 @@
-import PortfolioOverview from "@/components/trading/portfolio-overview";
 import PortfolioChart from "@/components/trading/portfolio-chart";
 import EarningsChart from "@/components/trading/earnings-chart";
 import ActiveTrades from "@/components/trading/active-trades";
@@ -10,6 +9,11 @@ import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import DailyBriefCard from "@/components/DailyBriefCard";
 import ModeBanner from "@/components/mode-banner";
 import StrategyPerformanceWidget from "@/components/strategy/strategy-performance-widget";
+import PortfolioValueWidget from "@/components/goals/portfolio-value-widget";
+import EarningsWidget from "@/components/goals/earnings-widget";
+import TradingActivityWidget from "@/components/goals/trading-activity-widget";
+import AveragesWidget from "@/components/goals/averages-widget";
+import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 
 export default function Dashboard() {
   return (
@@ -23,11 +27,19 @@ export default function Dashboard() {
       {/* Trading Mode Banner */}
       <ModeBanner />
 
-      {/* Portfolio Overview Section */}
+      {/* Dashboard Widgets - New Structure */}
       <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-3 sm:mb-4">Portfolio Overview</h2>
-        <PortfolioOverview />
+        <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-3 sm:mb-4">Dashboard Overview</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <PortfolioValueWidget />
+          <EarningsWidget />
+          <TradingActivityWidget />
+          <AveragesWidget />
+        </div>
       </section>
+
+      {/* Goals Summary Widget */}
+      <GoalsSummaryWidget />
 
       {/* Strategy Performance Section */}
       <StrategyPerformanceWidget />

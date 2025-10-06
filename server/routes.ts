@@ -2658,6 +2658,152 @@ Please:
     }
   });
 
+  // ===== TRADING ACTIVITY ROUTE =====
+
+  app.get('/api/trading/activity', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.query.mode as string) || 'live';
+      const period = (req.query.period as string) || '1d';
+
+      const periodMap: { [key: string]: number } = {
+        '1d': 1,
+        '1w': 7,
+        '1m': 30,
+        '3m': 90,
+        '6m': 180,
+        '1y': 365,
+      };
+
+      const days = periodMap[period] || 1;
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - days);
+
+      const trades = mode === 'live'
+        ? await storage.getTrades(userId, {})
+        : await storage.getAllPaperTrades(userId);
+      const periodTrades = trades.filter(t => 
+        t.entryTime && new Date(t.entryTime) >= fromDate && t.status === 'closed'
+      );
+
+      const profitableTrades = periodTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
+      const losingTrades = periodTrades.filter(t => parseFloat(t.realizedPL || '0') < 0);
+
+      const totalProfits = profitableTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+      const totalLosses = Math.abs(losingTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0));
+      const totalFees = periodTrades.reduce((sum, t) => 
+        sum + parseFloat(t.entryFee || '0') + parseFloat(t.exitFee || '0'), 0
+      );
+
+      const avgReturnPercent = profitableTrades.length > 0
+        ? profitableTrades.reduce((sum, t) => {
+            const entry = parseFloat(t.entryPrice) * parseFloat(t.quantity);
+            const pl = parseFloat(t.realizedPL || '0');
+            return sum + (pl / entry * 100);
+          }, 0) / profitableTrades.length
+        : 0;
+
+      const avgLossPercent = losingTrades.length > 0
+        ? losingTrades.reduce((sum, t) => {
+            const entry = parseFloat(t.entryPrice) * parseFloat(t.quantity);
+            const pl = parseFloat(t.realizedPL || '0');
+            return sum + (pl / entry * 100);
+          }, 0) / losingTrades.length
+        : 0;
+
+      res.json({
+        numberOfTrades: periodTrades.length,
+        profitableTrades: profitableTrades.length,
+        totalProfits,
+        avgReturnPercent,
+        losingTrades: losingTrades.length,
+        totalLosses,
+        avgLossPercent,
+        totalFeesPaid: totalFees,
+      });
+    } catch (error: any) {
+      console.error('Error fetching trading activity:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== TRADING AVERAGES ROUTE =====
+
+  app.get('/api/trading/averages', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.query.mode as string) || 'live';
+      const period = (req.query.period as string) || '1d';
+
+      const periodMap: { [key: string]: number } = {
+        '1d': 1,
+        '1w': 7,
+        '1m': 30,
+        '3m': 90,
+        '6m': 180,
+        '1y': 365,
+      };
+
+      const days = periodMap[period] || 1;
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - days);
+
+      const trades = mode === 'live'
+        ? await storage.getTrades(userId, {})
+        : await storage.getAllPaperTrades(userId);
+      const periodTrades = trades.filter(t => 
+        t.entryTime && new Date(t.entryTime) >= fromDate && t.status === 'closed'
+      );
+
+      const totalEarnings = periodTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+      const avgDailyEarnings = totalEarnings / days;
+      const avgTradesPerDay = periodTrades.length / days;
+      const avgEarningsPerTrade = periodTrades.length > 0 ? totalEarnings / periodTrades.length : 0;
+      
+      const totalInvested = periodTrades.reduce((sum, t) => 
+        sum + (parseFloat(t.entryPrice) * parseFloat(t.quantity)), 0
+      );
+      const avgAmountInvestedPerTrade = periodTrades.length > 0 ? totalInvested / periodTrades.length : 0;
+
+      const totalFees = periodTrades.reduce((sum, t) => 
+        sum + parseFloat(t.entryFee || '0') + parseFloat(t.exitFee || '0'), 0
+      );
+      const avgFeesPerTrade = periodTrades.length > 0 ? totalFees / periodTrades.length : 0;
+
+      const avgReturnPercent = periodTrades.length > 0
+        ? periodTrades.reduce((sum, t) => {
+            const entry = parseFloat(t.entryPrice) * parseFloat(t.quantity);
+            const pl = parseFloat(t.realizedPL || '0');
+            return sum + (pl / entry * 100);
+          }, 0) / periodTrades.length
+        : 0;
+
+      const totalCompletionTime = periodTrades.reduce((sum, t) => {
+        if (t.exitTime && t.entryTime) {
+          return sum + (new Date(t.exitTime).getTime() - new Date(t.entryTime).getTime());
+        }
+        return sum;
+      }, 0);
+      const avgCompletionTimeMs = periodTrades.length > 0 ? totalCompletionTime / periodTrades.length : 0;
+      const hours = Math.floor(avgCompletionTimeMs / (1000 * 60 * 60));
+      const minutes = Math.floor((avgCompletionTimeMs % (1000 * 60 * 60)) / (1000 * 60));
+      const avgTradeCompletionTime = `${hours}h ${minutes}m`;
+
+      res.json({
+        avgDailyEarnings,
+        avgTradesPerDay,
+        avgEarningsPerTrade,
+        avgAmountInvestedPerTrade,
+        avgFeesPerTrade,
+        avgReturnPercent,
+        avgTradeCompletionTime,
+      });
+    } catch (error: any) {
+      console.error('Error fetching trading averages:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ===== EARNINGS SUMMARY ROUTE =====
 
   // Get earnings summary for Earnings widget
@@ -2694,18 +2840,16 @@ Please:
         : now;
       const daysSinceStart = Math.max(1, Math.ceil((now.getTime() - firstTradeDate.getTime()) / (24 * 60 * 60 * 1000)));
       const avgDailyEarnings = allTime / daysSinceStart;
+      const avgDailyEarningsStatus = closedTrades.length < 5 ? 'insufficient_data' : 'ok';
 
       res.json({
-        success: true,
-        data: {
-          today,
-          thisWeek,
-          thisMonth,
-          thisYear,
-          allTime,
-          avgDailyEarnings,
-        },
-        mode,
+        today,
+        thisWeek,
+        thisMonth,
+        thisYear,
+        allTime,
+        avgDailyEarnings,
+        avgDailyEarningsStatus,
       });
     } catch (error: any) {
       console.error('Error fetching earnings summary:', error);
