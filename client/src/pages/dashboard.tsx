@@ -14,7 +14,6 @@ import EarningsWidget from "@/components/goals/earnings-widget";
 import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import ResultsWidget from "@/components/goals/results-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
-import MarketInsightsWidget from "@/components/goals/market-insights-widget";
 
 export default function Dashboard() {
   return (
@@ -39,17 +38,11 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Market Insights Widget (+1) */}
-      <MarketInsightsWidget />
+      {/* Daily Trading Brief (includes Market Insights) */}
+      <DailyBriefCard />
 
       {/* Goals Summary Widget */}
       <GoalsSummaryWidget />
-
-      {/* Strategy Performance Section */}
-      <StrategyPerformanceWidget />
-
-      {/* Daily Trading Brief */}
-      <DailyBriefCard />
 
       {/* Portfolio Charts */}
       <section className="space-y-4">
@@ -62,6 +55,9 @@ export default function Dashboard() {
 
       {/* Recent Trades Section */}
       <RecentTrades />
+
+      {/* Strategy Performance Section */}
+      <StrategyPerformanceWidget />
 
       {/* AI Analyst Preview Section */}
       <AIInsights />
