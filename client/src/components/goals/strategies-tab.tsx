@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -58,6 +59,7 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(true);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const [presets, setPresets] = useState<Record<string, any>>({});
@@ -204,6 +206,14 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     }
   };
 
+  const handleToggleEnabled = (enabled: boolean) => {
+    setIsEnabled(enabled);
+    toast({
+      title: enabled ? "Strategy Enabled" : "Strategy Disabled",
+      description: `${strategy.name} is now ${enabled ? 'active' : 'inactive'} in ${mode} mode`,
+    });
+  };
+
   const currentParams = editing ? formData : settings?.params || {};
   const paramKeys = Object.keys(currentParams);
 
@@ -231,8 +241,20 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     <Card className="border-2" data-testid={`strategy-card-${strategy.id}`}>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-lg">{strategy.name}</CardTitle>
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-lg">{strategy.name}</CardTitle>
+              <div className="flex items-center gap-2">
+                <Switch 
+                  checked={isEnabled}
+                  onCheckedChange={handleToggleEnabled}
+                  data-testid={`switch-enable-${strategy.id}`}
+                />
+                <Label className="text-xs text-muted-foreground cursor-pointer">
+                  {isEnabled ? 'Enabled' : 'Disabled'}
+                </Label>
+              </div>
+            </div>
             <CardDescription className="mt-1">
               {strategy.description}
             </CardDescription>
