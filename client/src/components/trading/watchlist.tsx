@@ -121,7 +121,7 @@ export default function Watchlist() {
     return (
       <section data-testid="watchlist-section">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-foreground">Monitored Pairs</h2>
+          <h2 className="text-2xl font-bold text-foreground">Symbols That Have Cleared the Screening Process</h2>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Next scan in:</span>
             <span className="font-mono text-sm font-semibold text-primary">--:--</span>
@@ -138,7 +138,7 @@ export default function Watchlist() {
   return (
     <section data-testid="watchlist-section">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-foreground">Monitored Pairs</h2>
+        <h2 className="text-2xl font-bold text-foreground">Symbols That Have Cleared the Screening Process</h2>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Next scan in:</span>
           <span className="font-mono text-sm font-semibold text-primary" data-testid="text-next-scan-time">

@@ -31,6 +31,17 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas: `users`, `tr
 - **Learning Feedback Engine**: Adaptive system for continuous improvement of trading accuracy by tracking prediction outcomes, optimizing signal weights, and enhancing GPT prompts. Maintains isolation between paper and live modes.
 - **Strategy Performance Visualization**: Detailed strategy-level insights on the dashboard and reports panel, combining prediction accuracy metrics from the Learning Feedback Engine with trade performance data.
 - **AI Market Context Layer**: Analyzes overall market conditions, classifies market regime using GPT-4o-mini, and adjusts trading strategy signal weights based on the detected regime.
+- **Dashboard Layout (Updated 2025-10-06)**: The Dashboard displays trading performance and insights in a logical order:
+  1. KPI widgets (Portfolio Value, Earnings, Trading Activity, Results)
+  2. Daily Brief (includes AI Market Insights)
+  3. Goals Summary
+  4. Portfolio & Earnings Over Time
+  5. Active Trades (with empty state: "No active trades")
+  6. Recent Trades (with empty state: "No recent trades")
+  7. Strategy Performance (with empty state: "No strategy data available yet")
+  8. Symbols That Have Cleared the Screening Process (filtered Kraken pairs passing all screening criteria)
+  - All data is isolated per mode (live/paper)
+  - Empty state placeholders ensure consistent layout when no data exists
 
 ## External Dependencies
 

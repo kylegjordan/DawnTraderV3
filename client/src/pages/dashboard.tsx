@@ -3,7 +3,6 @@ import EarningsChart from "@/components/trading/earnings-chart";
 import ActiveTrades from "@/components/trading/active-trades";
 import RecentTrades from "@/components/trading/recent-trades";
 import Watchlist from "@/components/trading/watchlist";
-import AIInsights from "@/components/ai/ai-insights";
 import DatabaseAlert from "@/components/database/database-alert";
 import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import DailyBriefCard from "@/components/DailyBriefCard";
@@ -59,10 +58,7 @@ export default function Dashboard() {
       {/* Strategy Performance Section */}
       <StrategyPerformanceWidget />
 
-      {/* AI Analyst Preview Section */}
-      <AIInsights />
-
-      {/* Watchlist Preview */}
+      {/* Symbols That Have Cleared the Screening Process */}
       <Watchlist />
     </div>
   );
