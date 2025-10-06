@@ -270,6 +270,13 @@ export class DailyBriefService {
     story: string;
     learnings: Array<{ insight: string; actionable: boolean }>;
   }> {
+    // Get user's trading mode to fetch the appropriate market analysis
+    const user = await storage.getUser(userId);
+    const mode = user?.tradingMode || 'paper';
+    
+    // Get latest market analysis for context
+    const marketAnalysis = await storage.getLatestAiMarketAnalysis(mode);
+    
     const systemPrompt = `You are a professional trading analyst creating a daily trading briefing. Your goal is to tell the story of the trading day in a clear, factual, and insightful way.
 
 Focus on:
@@ -280,8 +287,17 @@ Focus on:
 
 Write in a professional but conversational tone. Be honest about losses and wins. Provide actionable insights.`;
 
-    const userPrompt = `Generate a daily trading brief for ${new Date().toLocaleDateString()}:
+    const marketContextSection = marketAnalysis ? `
+**Market Context (AI Analysis):**
+- Regime: ${marketAnalysis.regime} (${marketAnalysis.confidence}% confidence)
+- Summary: ${marketAnalysis.summary}
+${marketAnalysis.recommendations && Array.isArray(marketAnalysis.recommendations) 
+  ? `- Recommendations: ${marketAnalysis.recommendations.slice(0, 3).join('; ')}`
+  : ''}
+` : '';
 
+    const userPrompt = `Generate a daily trading brief for ${new Date().toLocaleDateString()}:
+${marketContextSection}
 **Trading Activity:**
 - Closed trades: ${data.todayTrades.length}
 - Open positions: ${data.openTrades.length}
@@ -301,7 +317,7 @@ ${data.topLosers.map((t: any) => `- ${t.symbol}: $${t.pnl.toFixed(2)} (${t.pnl_p
 Provide:
 1. A compelling headline (max 100 chars)
 2. A one-sentence summary
-3. A narrative story (3-5 paragraphs)
+3. A narrative story (3-5 paragraphs) - incorporate the market context to explain trading outcomes
 4. 2-3 key learnings (genuine insights only)
 
 Return JSON:
