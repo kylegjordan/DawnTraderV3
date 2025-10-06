@@ -110,6 +110,7 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
       const response = await apiRequest('PUT', '/api/strategies/settings', {
         strategy: strategy.id,
         mode,
+        enabled: isEnabled,
         params,
         reason: 'user manual update',
       });
@@ -153,6 +154,13 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     };
     fetchPresets();
   }, [strategy.id, settings]);
+
+  // Sync enabled state from backend settings
+  useEffect(() => {
+    if (settings?.enabled !== undefined) {
+      setIsEnabled(settings.enabled);
+    }
+  }, [settings]);
 
   const handleEdit = () => {
     // Use existing settings or keep the auto-loaded Balanced preset
@@ -211,12 +219,34 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     }
   };
 
-  const handleToggleEnabled = (enabled: boolean) => {
+  const handleToggleEnabled = async (enabled: boolean) => {
     setIsEnabled(enabled);
-    toast({
-      title: enabled ? "Strategy Enabled" : "Strategy Disabled",
-      description: `${strategy.name} is now ${enabled ? 'active' : 'inactive'} in ${mode} mode`,
-    });
+    
+    // Persist toggle state to backend
+    try {
+      await apiRequest('PUT', '/api/strategies/settings', {
+        strategy: strategy.id,
+        mode,
+        enabled,
+        params: settings?.params || formData || {},
+        reason: `strategy ${enabled ? 'enabled' : 'disabled'}`,
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ['/api/strategies/settings'] });
+      
+      toast({
+        title: enabled ? "Strategy Enabled" : "Strategy Disabled",
+        description: `${strategy.name} is now ${enabled ? 'active' : 'inactive'} in ${mode} mode`,
+      });
+    } catch (error: any) {
+      // Revert on error
+      setIsEnabled(!enabled);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update strategy status",
+        variant: "destructive",
+      });
+    }
   };
 
   // Use Balanced preset values as fallback if no saved settings
