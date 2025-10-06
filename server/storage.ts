@@ -1,6 +1,8 @@
 import { 
   users, 
   tradingSettings,
+  strategySettings,
+  strategySettingsAudit,
   watchlistPairs,
   trades,
   aiReports,
@@ -29,6 +31,10 @@ import {
   type InsertUser,
   type TradingSettings,
   type InsertTradingSettings,
+  type StrategySettings,
+  type InsertStrategySettings,
+  type StrategySettingsAudit,
+  type InsertStrategySettingsAudit,
   type WatchlistPair,
   type InsertWatchlistPair,
   type Trade,
@@ -92,6 +98,12 @@ export interface IStorage {
   getTradingSettings(userId: string): Promise<TradingSettings | undefined>;
   createTradingSettings(settings: InsertTradingSettings): Promise<TradingSettings>;
   updateTradingSettings(userId: string, updates: Partial<TradingSettings>): Promise<TradingSettings>;
+
+  // Strategy settings methods
+  getStrategySettings(params: { userId: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null>;
+  listStrategySettings(params: { userId: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]>;
+  upsertStrategySettings(row: InsertStrategySettings): Promise<StrategySettings>;
+  insertStrategySettingsAudit(row: InsertStrategySettingsAudit): Promise<void>;
 
   // Watchlist methods
   getWatchlist(userId: string): Promise<WatchlistPair[]>;
@@ -286,6 +298,54 @@ export class DatabaseStorage implements IStorage {
       .where(eq(tradingSettings.userId, userId))
       .returning();
     return result;
+  }
+
+  // Strategy settings methods
+  async getStrategySettings(params: { userId: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null> {
+    const [result] = await db
+      .select()
+      .from(strategySettings)
+      .where(
+        and(
+          eq(strategySettings.userId, params.userId),
+          eq(strategySettings.mode, params.mode),
+          eq(strategySettings.strategy, params.strategy as any)
+        )
+      );
+    return result || null;
+  }
+
+  async listStrategySettings(params: { userId: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]> {
+    return await db
+      .select()
+      .from(strategySettings)
+      .where(
+        and(
+          eq(strategySettings.userId, params.userId),
+          eq(strategySettings.mode, params.mode)
+        )
+      )
+      .orderBy(strategySettings.strategy);
+  }
+
+  async upsertStrategySettings(row: InsertStrategySettings): Promise<StrategySettings> {
+    const [result] = await db
+      .insert(strategySettings)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [strategySettings.userId, strategySettings.mode, strategySettings.strategy],
+        set: {
+          params: row.params,
+          version: sql`${strategySettings.version} + 1`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async insertStrategySettingsAudit(row: InsertStrategySettingsAudit): Promise<void> {
+    await db.insert(strategySettingsAudit).values(row);
   }
 
   // Watchlist methods
