@@ -73,6 +73,13 @@ app.use((req, res, next) => {
     });
   });
 
+  // Start Market Analysis scheduler (async, non-blocking)
+  import('./services/market-analysis-scheduler').then(({ marketAnalysisScheduler }) => {
+    marketAnalysisScheduler.startDailyAnalysisScheduler().catch((error) => {
+      console.error('[Server] Failed to start Market Analysis Scheduler:', error);
+    });
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
