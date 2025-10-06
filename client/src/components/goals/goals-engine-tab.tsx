@@ -10,6 +10,7 @@ import { Save, Send, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import GoalsTable from "./goals-table";
 
 interface Goal {
   metric: string;
@@ -147,88 +148,8 @@ export default function GoalsEngineTab() {
 
   return (
     <div className="space-y-6">
-      {/* Goals Table */}
-      <Card data-testid="card-goals-table">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <span>Goals Configuration</span>
-          </CardTitle>
-          <Button 
-            onClick={handleSaveGoals} 
-            disabled={!hasEdits || updateMutation.isPending}
-            data-testid="button-save-goals"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {updateMutation.isPending ? 'Saving...' : 'Save Goals'}
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr className="border-b">
-                  <th className="text-left p-3 text-sm font-semibold">Metric</th>
-                  <th className="text-right p-3 text-sm font-semibold">Goal</th>
-                  <th className="text-right p-3 text-sm font-semibold">Actual</th>
-                  <th className="text-right p-3 text-sm font-semibold">% Achieved</th>
-                </tr>
-              </thead>
-              <tbody>
-                {goals.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                      No goals set. Enter your first goal below or chat with the AI to get started.
-                    </td>
-                  </tr>
-                ) : (
-                  goals.map((goal, index) => {
-                    const currentGoal = getGoalValue(goal.metric, goal.goal);
-                    const percentAchieved = currentGoal && currentGoal > 0
-                      ? (goal.actual / currentGoal) * 100
-                      : null;
-                    
-                    return (
-                      <tr key={index} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
-                        <td className="p-3 text-sm" data-testid={`goal-metric-${index}`}>
-                          {goal.metric}
-                        </td>
-                        <td className="p-3 text-right">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={formatValue(currentGoal)}
-                            onChange={(e) => handleGoalChange(goal.metric, e.target.value)}
-                            className="max-w-[150px] ml-auto text-right"
-                            data-testid={`input-goal-${index}`}
-                          />
-                        </td>
-                        <td className="p-3 text-sm font-mono text-right" data-testid={`goal-actual-${index}`}>
-                          ${goal.actual.toFixed(2)}
-                        </td>
-                        <td className={cn(
-                          "p-3 text-sm font-mono text-right font-semibold",
-                          percentAchieved !== null && percentAchieved >= 100 && "text-success",
-                          percentAchieved !== null && percentAchieved >= 75 && percentAchieved < 100 && "text-success/70",
-                          percentAchieved !== null && percentAchieved >= 50 && percentAchieved < 75 && "text-warning",
-                          percentAchieved !== null && percentAchieved < 50 && "text-destructive",
-                          percentAchieved === null && "text-muted-foreground"
-                        )} data-testid={`goal-percent-${index}`}>
-                          {percentAchieved !== null ? `${percentAchieved.toFixed(1)}%` : '—'}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          {hasEdits && (
-            <p className="text-xs text-muted-foreground mt-2">
-              You have unsaved changes. Click "Save Goals" to apply them.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Editable Goals Table */}
+      <GoalsTable />
 
       {/* AI Conversational Panel */}
       <Card data-testid="card-ai-chat">
