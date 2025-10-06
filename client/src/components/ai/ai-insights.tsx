@@ -20,7 +20,7 @@ export default function AIInsights() {
   });
   
   // Fetch user settings for timezone conversion
-  const { data: settings } = useQuery({ 
+  const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
     queryKey: ['/api/settings'],
   });
   
