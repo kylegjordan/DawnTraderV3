@@ -106,6 +106,7 @@ export const strategySettings = pgTable("strategy_settings", {
   userId: varchar("user_id").references(() => users.id).notNull(),
   mode: tradingModeEnum("mode").notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
   params: jsonb("params").notNull(),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
