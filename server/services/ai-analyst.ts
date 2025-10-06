@@ -157,59 +157,23 @@ export class AIAnalyst {
       let liveMarketData;
       let assetType: 'stock' | 'crypto' = 'crypto';
       
-      // Try crypto first (existing functionality)
-      try {
-        liveMarketData = await marketDataService.getMarketData(symbol);
-        assetType = 'crypto';
-        console.log(`[AI Analyst] Live crypto data for ${symbol}:`, liveMarketData);
-      } catch (cryptoError) {
-        // Try stock if crypto fails with retry logic
-        try {
-          const { stockService } = await import('./stocks');
-          let stockQuote;
-          
-          // Try fetching with retry (once after a 2-second delay)
-          try {
-            stockQuote = await stockService.getQuote(symbol);
-          } catch (firstAttemptError: any) {
-            console.warn(`[AI Analyst] First attempt failed for ${symbol}:`, {
-              status: firstAttemptError.message,
-              error: firstAttemptError
-            });
-            
-            // Wait 2 seconds and retry once (gives time for API rate limits to reset)
-            console.log(`[AI Analyst] Fetching data for ${symbol}... Please wait...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            try {
-              console.log(`[AI Analyst] Retrying stock quote for ${symbol}...`);
-              stockQuote = await stockService.getQuote(symbol);
-            } catch (retryError: any) {
-              console.error(`[AI Analyst] Retry failed for ${symbol}:`, {
-                status: retryError.message,
-                error: retryError
-              });
-              throw new Error(`Data temporarily unavailable (API delay). Please try again.`);
-            }
-          }
-          
-          liveMarketData = {
-            symbol: stockQuote.symbol,
-            name: stockQuote.name,
-            price: stockQuote.price,
-            change24h: stockQuote.changePercent,
-            volume24h: undefined,
-            source: 'finnhub' as const,
-            timestamp: stockQuote.timestamp
-          };
-          assetType = 'stock';
-          console.log(`[AI Analyst] Live stock data for ${symbol}:`, liveMarketData);
-        } catch (stockError: any) {
-          console.warn(`[AI Analyst] Failed to fetch data for ${symbol} from both crypto and stock sources:`, {
-            cryptoError: cryptoError instanceof Error ? cryptoError.message : String(cryptoError),
-            stockError: stockError instanceof Error ? stockError.message : String(stockError)
-          });
-        }
+      const { stockService } = await import('./stocks');
+      const symbolData = await stockService.getSymbolData(symbol);
+      
+      if (symbolData) {
+        liveMarketData = {
+          symbol: symbolData.symbol,
+          name: symbolData.name,
+          price: symbolData.currentPrice,
+          change24h: symbolData.change24h || 0,
+          volume24h: symbolData.volume24h,
+          source: symbolData.source.toLowerCase(),
+          timestamp: new Date(symbolData.lastUpdated).getTime()
+        };
+        assetType = symbolData.type;
+        console.log(`[AI Analyst] Live ${assetType} data for ${symbol} from ${symbolData.source}:`, liveMarketData);
+      } else {
+        console.warn(`[AI Analyst] No data available for ${symbol}`);
       }
 
       const priceData = await storage.getPriceData(symbol);
