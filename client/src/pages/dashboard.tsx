@@ -9,6 +9,7 @@ import DatabaseAlert from "@/components/database/database-alert";
 import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import DailyBriefCard from "@/components/DailyBriefCard";
 import ModeBanner from "@/components/mode-banner";
+import StrategyPerformanceWidget from "@/components/strategy/strategy-performance-widget";
 
 export default function Dashboard() {
   return (
@@ -27,6 +28,9 @@ export default function Dashboard() {
         <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-3 sm:mb-4">Portfolio Overview</h2>
         <PortfolioOverview />
       </section>
+
+      {/* Strategy Performance Section */}
+      <StrategyPerformanceWidget />
 
       {/* Daily Trading Brief */}
       <DailyBriefCard />
