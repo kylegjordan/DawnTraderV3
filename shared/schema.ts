@@ -8,7 +8,9 @@ import {
   integer, 
   boolean, 
   jsonb,
-  pgEnum
+  pgEnum,
+  date,
+  uniqueIndex
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -182,6 +184,22 @@ export const aiChatLogs = pgTable("ai_chat_logs", {
   model: varchar("model", { length: 50 }).default("gpt-4o"), // Model used
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 });
+
+// AI Market Analyses (market regime classification)
+export const aiMarketAnalyses = pgTable("ai_market_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: date("date", { mode: "string" }).notNull(), // UTC date of analysis (YYYY-MM-DD)
+  mode: tradingModeEnum("mode").notNull(), // 'live' | 'paper'
+  regime: text("regime").notNull(), // 'bullish' | 'bearish' | 'neutral' | 'accumulation' | 'distribution' | 'high_volatility' | 'low_volatility'
+  confidence: integer("confidence"), // 0–100
+  summary: text("summary"),
+  recommendations: jsonb("recommendations"), // string[]
+  snapshot: jsonb("snapshot"), // raw market metrics used
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniquePerDayMode: uniqueIndex("ai_market_analyses_date_mode_idx").on(table.date, table.mode),
+}));
 
 // Price data cache
 export const priceData = pgTable("price_data", {
@@ -643,6 +661,12 @@ export const insertAIChatLogSchema = createInsertSchema(aiChatLogs).omit({
   timestamp: true,
 });
 
+export const insertAiMarketAnalysisSchema = createInsertSchema(aiMarketAnalyses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertPriceDataSchema = createInsertSchema(priceData).omit({
   id: true,
 });
@@ -759,6 +783,9 @@ export type AIConversation = typeof aiConversations.$inferSelect;
 
 export type InsertAIChatLog = z.infer<typeof insertAIChatLogSchema>;
 export type AIChatLog = typeof aiChatLogs.$inferSelect;
+
+export type InsertAiMarketAnalysis = z.infer<typeof insertAiMarketAnalysisSchema>;
+export type AiMarketAnalysis = typeof aiMarketAnalyses.$inferSelect;
 
 export type InsertPriceData = z.infer<typeof insertPriceDataSchema>;
 export type PriceData = typeof priceData.$inferSelect;
