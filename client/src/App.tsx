@@ -22,7 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
-import { getAccessToken, refreshAccessToken } from "@/lib/auth";
+import { ensureValidToken } from "@/lib/auth";
 
 // Auth guard component with token refresh
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -31,15 +31,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   
   useEffect(() => {
     const checkAuth = async () => {
-      const token = getAccessToken();
+      // ensureValidToken checks expiry and refreshes if needed
+      const validToken = await ensureValidToken();
       
-      if (!token) {
-        // Try to refresh if we have a refresh token
-        const newToken = await refreshAccessToken();
-        if (!newToken) {
-          setLocation("/login");
-          return;
-        }
+      if (!validToken) {
+        setLocation("/login");
+        return;
       }
       
       setIsChecking(false);

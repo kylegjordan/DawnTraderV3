@@ -57,10 +57,31 @@ export async function refreshAccessToken(): Promise<string | null> {
   return null;
 }
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    
+    const payload = JSON.parse(atob(parts[1]));
+    if (!payload.exp) return true;
+    
+    // Check if token expires in less than 5 minutes
+    const expiryTime = payload.exp * 1000;
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+    
+    return expiryTime - now < fiveMinutes;
+  } catch {
+    return true;
+  }
+}
+
 export async function ensureValidToken(): Promise<string | null> {
   const token = getAccessToken();
-  if (!token) {
+  
+  if (!token || isTokenExpired(token)) {
     return await refreshAccessToken();
   }
+  
   return token;
 }
