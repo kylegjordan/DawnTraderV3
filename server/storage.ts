@@ -104,6 +104,7 @@ export interface IStorage {
   listStrategySettings(params: { userId: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]>;
   upsertStrategySettings(row: InsertStrategySettings): Promise<StrategySettings>;
   insertStrategySettingsAudit(row: InsertStrategySettingsAudit): Promise<void>;
+  listStrategySettingsAudit(params: { userId: string; limit?: number }): Promise<StrategySettingsAudit[]>;
 
   // Watchlist methods
   getWatchlist(userId: string): Promise<WatchlistPair[]>;
@@ -346,6 +347,16 @@ export class DatabaseStorage implements IStorage {
 
   async insertStrategySettingsAudit(row: InsertStrategySettingsAudit): Promise<void> {
     await db.insert(strategySettingsAudit).values(row);
+  }
+
+  async listStrategySettingsAudit(params: { userId: string; limit?: number }): Promise<StrategySettingsAudit[]> {
+    const limit = params.limit || 50;
+    return await db
+      .select()
+      .from(strategySettingsAudit)
+      .where(eq(strategySettingsAudit.userId, params.userId))
+      .orderBy(desc(strategySettingsAudit.createdAt))
+      .limit(limit);
   }
 
   // Watchlist methods
