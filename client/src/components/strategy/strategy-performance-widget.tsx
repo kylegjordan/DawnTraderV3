@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, TrendingDown, Activity, ChevronRight, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTradingMode } from "@/hooks/use-trading-mode";
+import { useTradingMode } from "@/contexts/trading-mode-context";
 import { Link } from "wouter";
 
 interface StrategyMetric {
