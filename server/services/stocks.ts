@@ -359,6 +359,93 @@ export class StockService {
     this.searchCache.clear();
     console.log('[StockService] All caches cleared');
   }
+
+  async getSymbolData(symbol: string): Promise<{
+    type: 'stock' | 'crypto';
+    symbol: string;
+    name: string;
+    currentPrice: number | null;
+    change24h?: number;
+    volume24h?: number;
+    lastUpdated: string;
+    source: string;
+  } | null> {
+    const cleanSymbol = symbol.match(/^([A-Z0-9\-_]+)/)?.[1]?.toUpperCase() || symbol.toUpperCase();
+    
+    console.log(`[StockService] Getting unified symbol data for: ${cleanSymbol}`);
+
+    const knownCryptoSymbols = ['BTC', 'ETH', 'SOL', 'SUI', 'ADA', 'DOT', 'MATIC', 'AVAX', 'LINK', 'UNI', 'ATOM', 'XRP', 'DOGE', 'LTC', 'BCH', 'XLM', 'ALGO', 'VET', 'FIL', 'TRX', 'ETC'];
+    
+    const isCrypto = knownCryptoSymbols.includes(cleanSymbol) || cleanSymbol.includes('USD');
+    
+    if (isCrypto) {
+      try {
+        const { marketDataService } = await import('./market-data');
+        const cryptoData = await marketDataService.getMarketData(cleanSymbol);
+        
+        console.log(`[SymbolLookup] ${cleanSymbol} resolved via ${cryptoData.source}`);
+        
+        return {
+          type: 'crypto',
+          symbol: cleanSymbol,
+          name: cryptoData.name || cleanSymbol,
+          currentPrice: cryptoData.price,
+          change24h: cryptoData.change24h,
+          volume24h: cryptoData.volume24h,
+          lastUpdated: new Date(cryptoData.timestamp).toISOString(),
+          source: cryptoData.source
+        };
+      } catch (cryptoError) {
+        console.warn(`[StockService] Crypto lookup failed for ${cleanSymbol}, trying stock fallback:`, cryptoError);
+      }
+    }
+    
+    try {
+      const stockQuote = await this.getQuote(cleanSymbol);
+      
+      console.log(`[SymbolLookup] ${cleanSymbol} resolved via Finnhub`);
+      
+      return {
+        type: 'stock',
+        symbol: cleanSymbol,
+        name: stockQuote.name,
+        currentPrice: stockQuote.price,
+        change24h: stockQuote.changePercent,
+        volume24h: undefined,
+        lastUpdated: new Date(stockQuote.timestamp).toISOString(),
+        source: 'Finnhub'
+      };
+    } catch (stockError) {
+      console.warn(`[StockService] Stock lookup failed for ${cleanSymbol}:`, stockError);
+      
+      if (!isCrypto) {
+        try {
+          const { marketDataService } = await import('./market-data');
+          const cryptoData = await marketDataService.getMarketData(cleanSymbol);
+          
+          console.log(`[SymbolLookup] ${cleanSymbol} resolved via ${cryptoData.source} (fallback)`);
+          
+          return {
+            type: 'crypto',
+            symbol: cleanSymbol,
+            name: cryptoData.name || cleanSymbol,
+            currentPrice: cryptoData.price,
+            change24h: cryptoData.change24h,
+            volume24h: cryptoData.volume24h,
+            lastUpdated: new Date(cryptoData.timestamp).toISOString(),
+            source: cryptoData.source
+          };
+        } catch (cryptoFallbackError) {
+          console.error(`[StockService] All lookups failed for ${cleanSymbol}:`, {
+            stockError: stockError instanceof Error ? stockError.message : String(stockError),
+            cryptoFallbackError: cryptoFallbackError instanceof Error ? cryptoFallbackError.message : String(cryptoFallbackError)
+          });
+        }
+      }
+    }
+    
+    return null;
+  }
 }
 
 export const stockService = new StockService();

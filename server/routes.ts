@@ -1341,6 +1341,32 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  app.get('/api/symbol/data', async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string)?.toUpperCase();
+      if (!symbol) {
+        return res.status(400).json({ error: 'Missing symbol parameter' });
+      }
+
+      const data = await stockService.getSymbolData(symbol);
+      
+      if (!data) {
+        return res.status(404).json({ 
+          error: `No data found for ${symbol}`,
+          retryable: true
+        });
+      }
+
+      res.json(data);
+    } catch (err: any) {
+      console.error('Symbol data fetch error:', err);
+      res.status(500).json({ 
+        error: 'Internal error fetching symbol data',
+        message: err.message
+      });
+    }
+  });
+
   // Test endpoint for Finnhub feed
   app.get('/api/test/finnhub-feed', async (req, res) => {
     try {
