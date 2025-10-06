@@ -6,6 +6,7 @@ import {
   aiReports,
   aiConversations,
   aiChatLogs,
+  aiMarketAnalyses,
   priceData,
   databaseSizeLogs,
   aiAuditLog,
@@ -38,6 +39,8 @@ import {
   type InsertAIConversation,
   type AIChatLog,
   type InsertAIChatLog,
+  type AiMarketAnalysis,
+  type InsertAiMarketAnalysis,
   type PriceData,
   type InsertPriceData,
   type DatabaseSizeLog,
@@ -76,7 +79,7 @@ import {
   type InsertGoalAnalysisHistoryPaper
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
+import { eq, desc, and, gte, lte, inArray, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -124,6 +127,12 @@ export interface IStorage {
     totalTokens: number;
     requestCount: number;
   }>;
+
+  // AI Market Analysis methods
+  getLatestAiMarketAnalysis(mode: 'live' | 'paper'): Promise<AiMarketAnalysis | null>;
+  getAiMarketAnalysesByRange(params: { mode: 'live' | 'paper'; from: string; to: string }): Promise<AiMarketAnalysis[]>;
+  insertAiMarketAnalysis(row: InsertAiMarketAnalysis): Promise<AiMarketAnalysis>;
+  upsertAiMarketAnalysisByDateMode(row: InsertAiMarketAnalysis): Promise<AiMarketAnalysis>;
 
   // Price data methods
   getPriceData(symbol: string, from?: Date, to?: Date): Promise<PriceData[]>;
@@ -557,6 +566,57 @@ export class DatabaseStorage implements IStorage {
       totalTokens: logs.reduce((sum, log) => sum + log.totalTokens, 0),
       requestCount: logs.length
     };
+  }
+
+  // AI Market Analysis methods
+  async getLatestAiMarketAnalysis(mode: 'live' | 'paper'): Promise<AiMarketAnalysis | null> {
+    const [result] = await db
+      .select()
+      .from(aiMarketAnalyses)
+      .where(eq(aiMarketAnalyses.mode, mode))
+      .orderBy(desc(aiMarketAnalyses.date), desc(aiMarketAnalyses.createdAt))
+      .limit(1);
+    
+    return result || null;
+  }
+
+  async getAiMarketAnalysesByRange(params: { mode: 'live' | 'paper'; from: string; to: string }): Promise<AiMarketAnalysis[]> {
+    return await db
+      .select()
+      .from(aiMarketAnalyses)
+      .where(
+        and(
+          eq(aiMarketAnalyses.mode, params.mode),
+          gte(aiMarketAnalyses.date, params.from),
+          lte(aiMarketAnalyses.date, params.to)
+        )
+      )
+      .orderBy(desc(aiMarketAnalyses.date));
+  }
+
+  async insertAiMarketAnalysis(row: InsertAiMarketAnalysis): Promise<AiMarketAnalysis> {
+    const [result] = await db.insert(aiMarketAnalyses).values(row).returning();
+    return result;
+  }
+
+  async upsertAiMarketAnalysisByDateMode(row: InsertAiMarketAnalysis): Promise<AiMarketAnalysis> {
+    const [result] = await db
+      .insert(aiMarketAnalyses)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [aiMarketAnalyses.date, aiMarketAnalyses.mode],
+        set: {
+          regime: row.regime,
+          confidence: row.confidence,
+          summary: row.summary,
+          recommendations: row.recommendations,
+          snapshot: row.snapshot,
+          updatedAt: sql`now()`,
+        },
+      })
+      .returning();
+    
+    return result;
   }
 
   // Price data methods
