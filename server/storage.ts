@@ -20,6 +20,10 @@ import {
   signalWeights,
   predictionOutcomes,
   featureSnapshots,
+  userGoalsLive,
+  userGoalsPaper,
+  goalAnalysisHistoryLive,
+  goalAnalysisHistoryPaper,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -61,7 +65,15 @@ import {
   type PredictionOutcome,
   type InsertPredictionOutcome,
   type FeatureSnapshot,
-  type InsertFeatureSnapshot
+  type InsertFeatureSnapshot,
+  type UserGoalLive,
+  type InsertUserGoalLive,
+  type UserGoalPaper,
+  type InsertUserGoalPaper,
+  type GoalAnalysisHistoryLive,
+  type InsertGoalAnalysisHistoryLive,
+  type GoalAnalysisHistoryPaper,
+  type InsertGoalAnalysisHistoryPaper
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
@@ -192,6 +204,30 @@ export interface IStorage {
   createFeatureSnapshot(snapshot: InsertFeatureSnapshot): Promise<FeatureSnapshot>;
   getFeatureSnapshots(symbol: string, fromDate?: Date, toDate?: Date, limit?: number): Promise<FeatureSnapshot[]>;
   getLatestFeatureSnapshot(symbol: string): Promise<FeatureSnapshot | undefined>;
+
+  // Goals Engine methods - Live mode
+  getUserGoalsLive(userId: string): Promise<UserGoalLive[]>;
+  getGoalLive(userId: string, metricName: string): Promise<UserGoalLive | undefined>;
+  createGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive>;
+  updateGoalLive(id: string, updates: Partial<UserGoalLive>): Promise<UserGoalLive>;
+  upsertGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive>;
+  deleteGoalLive(id: string): Promise<void>;
+
+  // Goals Engine methods - Paper mode
+  getUserGoalsPaper(userId: string): Promise<UserGoalPaper[]>;
+  getGoalPaper(userId: string, metricName: string): Promise<UserGoalPaper | undefined>;
+  createGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper>;
+  updateGoalPaper(id: string, updates: Partial<UserGoalPaper>): Promise<UserGoalPaper>;
+  upsertGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper>;
+  deleteGoalPaper(id: string): Promise<void>;
+
+  // Goal Analysis History - Live mode
+  createGoalAnalysisLive(analysis: InsertGoalAnalysisHistoryLive): Promise<GoalAnalysisHistoryLive>;
+  getGoalAnalysisHistoryLive(userId: string, limit?: number): Promise<GoalAnalysisHistoryLive[]>;
+
+  // Goal Analysis History - Paper mode
+  createGoalAnalysisPaper(analysis: InsertGoalAnalysisHistoryPaper): Promise<GoalAnalysisHistoryPaper>;
+  getGoalAnalysisHistoryPaper(userId: string, limit?: number): Promise<GoalAnalysisHistoryPaper[]>;
 
   // User utility methods
   getAllUsers(): Promise<User[]>;
@@ -1106,6 +1142,132 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(featureSnapshots.timestamp))
       .limit(1);
     return result || undefined;
+  }
+
+  // Goals Engine methods - Live mode
+  async getUserGoalsLive(userId: string): Promise<UserGoalLive[]> {
+    return await db
+      .select()
+      .from(userGoalsLive)
+      .where(eq(userGoalsLive.userId, userId))
+      .orderBy(userGoalsLive.metricName);
+  }
+
+  async getGoalLive(userId: string, metricName: string): Promise<UserGoalLive | undefined> {
+    const [result] = await db
+      .select()
+      .from(userGoalsLive)
+      .where(and(
+        eq(userGoalsLive.userId, userId),
+        eq(userGoalsLive.metricName, metricName)
+      ))
+      .limit(1);
+    return result || undefined;
+  }
+
+  async createGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive> {
+    const [result] = await db.insert(userGoalsLive).values(goal).returning();
+    return result;
+  }
+
+  async updateGoalLive(id: string, updates: Partial<UserGoalLive>): Promise<UserGoalLive> {
+    const [result] = await db
+      .update(userGoalsLive)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(eq(userGoalsLive.id, id))
+      .returning();
+    return result;
+  }
+
+  async upsertGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive> {
+    const existing = await this.getGoalLive(goal.userId, goal.metricName);
+    if (existing) {
+      return this.updateGoalLive(existing.id, goal);
+    } else {
+      return this.createGoalLive(goal);
+    }
+  }
+
+  async deleteGoalLive(id: string): Promise<void> {
+    await db.delete(userGoalsLive).where(eq(userGoalsLive.id, id));
+  }
+
+  // Goals Engine methods - Paper mode
+  async getUserGoalsPaper(userId: string): Promise<UserGoalPaper[]> {
+    return await db
+      .select()
+      .from(userGoalsPaper)
+      .where(eq(userGoalsPaper.userId, userId))
+      .orderBy(userGoalsPaper.metricName);
+  }
+
+  async getGoalPaper(userId: string, metricName: string): Promise<UserGoalPaper | undefined> {
+    const [result] = await db
+      .select()
+      .from(userGoalsPaper)
+      .where(and(
+        eq(userGoalsPaper.userId, userId),
+        eq(userGoalsPaper.metricName, metricName)
+      ))
+      .limit(1);
+    return result || undefined;
+  }
+
+  async createGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper> {
+    const [result] = await db.insert(userGoalsPaper).values(goal).returning();
+    return result;
+  }
+
+  async updateGoalPaper(id: string, updates: Partial<UserGoalPaper>): Promise<UserGoalPaper> {
+    const [result] = await db
+      .update(userGoalsPaper)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(eq(userGoalsPaper.id, id))
+      .returning();
+    return result;
+  }
+
+  async upsertGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper> {
+    const existing = await this.getGoalPaper(goal.userId, goal.metricName);
+    if (existing) {
+      return this.updateGoalPaper(existing.id, goal);
+    } else {
+      return this.createGoalPaper(goal);
+    }
+  }
+
+  async deleteGoalPaper(id: string): Promise<void> {
+    await db.delete(userGoalsPaper).where(eq(userGoalsPaper.id, id));
+  }
+
+  // Goal Analysis History - Live mode
+  async createGoalAnalysisLive(analysis: InsertGoalAnalysisHistoryLive): Promise<GoalAnalysisHistoryLive> {
+    const [result] = await db.insert(goalAnalysisHistoryLive).values(analysis).returning();
+    return result;
+  }
+
+  async getGoalAnalysisHistoryLive(userId: string, limit: number = 50): Promise<GoalAnalysisHistoryLive[]> {
+    return await db
+      .select()
+      .from(goalAnalysisHistoryLive)
+      .where(eq(goalAnalysisHistoryLive.userId, userId))
+      .orderBy(desc(goalAnalysisHistoryLive.createdAt))
+      .limit(limit);
+  }
+
+  // Goal Analysis History - Paper mode
+  async createGoalAnalysisPaper(analysis: InsertGoalAnalysisHistoryPaper): Promise<GoalAnalysisHistoryPaper> {
+    const [result] = await db.insert(goalAnalysisHistoryPaper).values(analysis).returning();
+    return result;
+  }
+
+  async getGoalAnalysisHistoryPaper(userId: string, limit: number = 50): Promise<GoalAnalysisHistoryPaper[]> {
+    return await db
+      .select()
+      .from(goalAnalysisHistoryPaper)
+      .where(eq(goalAnalysisHistoryPaper.userId, userId))
+      .orderBy(desc(goalAnalysisHistoryPaper.createdAt))
+      .limit(limit);
   }
 
   // User utility methods
