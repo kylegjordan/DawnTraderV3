@@ -8,8 +8,16 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
+### Authentication & Security
+- **User Authentication**: Username/password authentication with bcrypt hashing and JWT tokens (12-hour expiry)
+- **Password Policy**: Minimum 8 characters with uppercase, number, and special character requirements
+- **Route Protection**: Protected routes require valid JWT token, public routes (login/register) accessible without auth
+- **Biometric Support**: WebAuthn API integration for Face ID/fingerprint on supported mobile PWA devices
+- **Session Management**: JWT tokens stored in localStorage with server-side verification
+- **Logout**: Clear token and redirect to login
+
 ### Frontend Architecture
-React + TypeScript with Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, and TanStack Query for state management. Wouter for routing and WebSockets for real-time updates. Mobile-first responsive design with dynamic mode-aware UI for Live and Paper trading.
+React + TypeScript with Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, and TanStack Query for state management. Wouter for routing and WebSockets for real-time updates. Mobile-first responsive design with dynamic mode-aware UI for Live and Paper trading. Authentication-protected routes with login/register pages.
 
 ### Backend Architecture
 Node.js with Express, ESM-based. Features a RESTful API and WebSocket support, with core services including `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`. Supports both "live" and "paper" trading modes.

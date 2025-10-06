@@ -14,11 +14,16 @@ import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
 import OpenAI from "openai";
+import jwt from "jsonwebtoken";
+import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStrengthMessage } from "./services/auth-service";
 
 const tradingEngines = new Map<string, TradingEngine>();
 const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
 const riskManager = new RiskManager();
+
+// JWT secret for authentication
+const JWT_SECRET = process.env.JWT_SECRET || "development_secret_change_in_production";
 
 // TEMPORARILY DISABLED: Do not ping Kraken for 1 hour (maintenance mode)
 // marketScanner.startHourlyScanning();
@@ -60,6 +65,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
       uptime: process.uptime(),
       env: process.env.NODE_ENV || 'development'
     });
+  });
+
+  // Authentication Routes
+  
+  // REGISTER
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required' });
+      }
+      
+      // Check if username already exists
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ error: 'Username already exists' });
+      }
+      
+      // Validate password strength
+      if (!validatePasswordStrength(password)) {
+        return res.status(400).json({ 
+          error: getPasswordStrengthMessage(password)
+        });
+      }
+      
+      // Hash password and create user
+      const passwordHash = await hashPassword(password);
+      const user = await storage.createUser({ 
+        username, 
+        password: passwordHash,
+        tradingMode: 'paper',
+        tradingStatus: 'stopped'
+      });
+      
+      // Create default trading settings for the new user
+      await storage.createTradingSettings({ userId: user.id });
+      
+      res.json({ success: true, userId: user.id });
+    } catch (error) {
+      console.error('Registration error:', error);
+      res.status(500).json({ error: 'Registration failed' });
+    }
+  });
+
+  // LOGIN
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required' });
+      }
+      
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      if (!user.password) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      
+      const valid = await verifyPassword(password, user.password);
+      if (!valid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      
+      const token = jwt.sign(
+        { id: user.id, username: user.username }, 
+        JWT_SECRET, 
+        { expiresIn: '12h' }
+      );
+      
+      res.json({ token, user: { id: user.id, username: user.username } });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
+  // VERIFY TOKEN
+  app.get('/api/auth/verify', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ valid: false, error: 'No authorization header' });
+      }
+      
+      const token = authHeader.split(' ')[1];
+      if (!token) {
+        return res.status(401).json({ valid: false, error: 'No token provided' });
+      }
+      
+      const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+      res.json({ valid: true, user: decoded });
+    } catch (error) {
+      res.status(401).json({ valid: false, error: 'Invalid or expired token' });
+    }
   });
 
   // User and Authentication

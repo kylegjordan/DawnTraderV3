@@ -10,9 +10,11 @@ import {
   TrendingUp,
   User,
   FileText,
-  Target
+  Target,
+  LogOut
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
+import { Button } from "@/components/ui/button";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -32,8 +34,16 @@ const navigation = [
 ];
 
 export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { activeTrades } = useTrading();
+  
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setLocation("/login");
+  };
 
   return (
     <>
@@ -91,15 +101,27 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
           
           {/* Account Info */}
           <div className="mt-8 pt-6 border-t border-border">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                 <User className="w-5 h-5 text-primary" />
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">Trader_Pro</p>
-                <p className="text-xs text-muted-foreground">Kraken Account</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {user.username || "Trader"}
+                </p>
+                <p className="text-xs text-muted-foreground">Trading Account</p>
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={handleLogout}
+              data-testid="button-logout"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
           </div>
         </div>
       </aside>
