@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useLocation } from "wouter";
+import { AchievementPill } from "@/components/ui/achievement-pill";
 
 interface GoalSummary {
   metric: string;
@@ -50,19 +51,6 @@ export default function GoalsSummaryWidget() {
     if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
     if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
     return `$${value.toFixed(2)}`;
-  };
-
-  const formatPercent = (value: number | null) => {
-    if (value == null) return '—';
-    return `${value.toFixed(1)}%`;
-  };
-
-  const getProgressColor = (percent: number | null) => {
-    if (percent == null) return 'text-muted-foreground';
-    if (percent >= 100) return 'text-success';
-    if (percent >= 75) return 'text-success/70';
-    if (percent >= 50) return 'text-warning';
-    return 'text-destructive';
   };
 
   const goals = data?.goals || [];
@@ -113,7 +101,7 @@ export default function GoalsSummaryWidget() {
                   <th className="text-left p-3 text-sm font-semibold">Metric</th>
                   <th className="text-right p-3 text-sm font-semibold">Goal</th>
                   <th className="text-right p-3 text-sm font-semibold">Actual</th>
-                  <th className="text-right p-3 text-sm font-semibold">% Achieved</th>
+                  <th className="text-center p-3 text-sm font-semibold">% Achieved</th>
                 </tr>
               </thead>
               <tbody>
@@ -126,11 +114,8 @@ export default function GoalsSummaryWidget() {
                     <td className="p-3 text-sm font-mono text-right" data-testid={`goal-actual-${index}`}>
                       {formatValue(goal.actual)}
                     </td>
-                    <td className={cn(
-                      "p-3 text-sm font-mono text-right font-semibold",
-                      getProgressColor(goal.percentAchieved)
-                    )} data-testid={`goal-percent-${index}`}>
-                      {formatPercent(goal.percentAchieved)}
+                    <td className="p-3 text-center" data-testid={`goal-percent-${index}`}>
+                      <AchievementPill percent={goal.percentAchieved} />
                     </td>
                   </tr>
                 ))}

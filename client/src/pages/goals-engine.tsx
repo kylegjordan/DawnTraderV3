@@ -4,11 +4,15 @@ import PortfolioTab from "@/components/goals/portfolio-tab";
 import GuardrailsTab from "@/components/goals/guardrails-tab";
 import ScreenerFiltersTab from "@/components/goals/screener-filters-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
+import ModeBanner from "@/components/mode-banner";
 import { Target, PieChart, Shield, Filter, Layers } from "lucide-react";
 
 export default function GoalsEnginePage() {
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-testid="goals-engine-page">
+      {/* Trading Mode Banner */}
+      <ModeBanner />
+      
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Goals Engine</h1>
         <p className="text-muted-foreground text-sm">
