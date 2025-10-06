@@ -23,29 +23,17 @@ export default function LoginPage() {
     // Check if biometric is available
     isBiometricAvailable().then(setBiometricAvailable);
 
-    // Try biometric auto-login on mount
-    const attemptBiometricLogin = async () => {
+    // Check if biometric auto-login should be attempted
+    // Note: WebAuthn biometric is enrolled but still requires password for actual login
+    // This is a placeholder for future full WebAuthn implementation
+    const checkBiometric = async () => {
       const storedUsername = await tryBiometricLogin();
       if (storedUsername) {
-        setTryingBiometric(true);
-        try {
-          const res = await apiRequest("POST", "/api/auth/login", {
-            username: storedUsername,
-            password: localStorage.getItem(`biometric_${storedUsername}_password`) || "",
-          });
-          
-          if (res?.accessToken) {
-            saveTokens(res.accessToken, res.refreshToken);
-            localStorage.setItem("user", JSON.stringify(res.user));
-            setLocation("/");
-          }
-        } catch {
-          setTryingBiometric(false);
-        }
+        setUsername(storedUsername); // Pre-fill username for convenience
       }
     };
 
-    attemptBiometricLogin();
+    checkBiometric();
   }, [setLocation]);
 
   async function handleLogin(e: React.FormEvent) {
@@ -75,21 +63,13 @@ export default function LoginPage() {
     try {
       const storedUsername = await tryBiometricLogin();
       if (storedUsername) {
-        const res = await apiRequest("POST", "/api/auth/login", {
-          username: storedUsername,
-          password: localStorage.getItem(`biometric_${storedUsername}_password`) || "",
-        });
-        
-        if (res?.accessToken) {
-          saveTokens(res.accessToken, res.refreshToken);
-          localStorage.setItem("user", JSON.stringify(res.user));
-          setLocation("/");
-        }
+        setUsername(storedUsername);
+        setError("Please enter your password to continue.");
       } else {
         setError("Biometric authentication failed. Please use password login.");
       }
     } catch (err: any) {
-      setError(err?.message || "Biometric login failed. Please use password login.");
+      setError("Biometric login failed. Please use password login.");
     } finally {
       setTryingBiometric(false);
     }
@@ -181,12 +161,12 @@ export default function LoginPage() {
                   {tryingBiometric ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Authenticating...
+                      Verifying...
                     </>
                   ) : (
                     <>
                       <Fingerprint className="mr-2 h-4 w-4" />
-                      Use Biometric Login
+                      Use Biometric Quick Access
                     </>
                   )}
                 </Button>

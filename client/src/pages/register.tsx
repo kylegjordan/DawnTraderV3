@@ -62,11 +62,7 @@ export default function RegisterPage() {
         // Enroll biometric if requested and available
         if (enableBiometric && biometricAvailable) {
           try {
-            const enrolled = await enableBiometricLogin(username);
-            if (enrolled) {
-              // Store encrypted password for biometric login
-              localStorage.setItem(`biometric_${username}_password`, password);
-            }
+            await enableBiometricLogin(username);
           } catch (bioError) {
             console.error("Biometric enrollment failed:", bioError);
             // Continue login even if biometric enrollment fails
@@ -162,21 +158,26 @@ export default function RegisterPage() {
             </div>
 
             {biometricAvailable && (
-              <div className="flex items-center space-x-2 bg-muted/50 p-3 rounded-lg">
-                <Checkbox
-                  id="biometric"
-                  checked={enableBiometric}
-                  onCheckedChange={(checked) => setEnableBiometric(checked as boolean)}
-                  disabled={isLoading}
-                  data-testid="checkbox-enable-biometric"
-                />
-                <label
-                  htmlFor="biometric"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
-                >
-                  <Fingerprint className="h-4 w-4" />
-                  Enable biometric login (Face ID / Touch ID)
-                </label>
+              <div className="space-y-2 bg-muted/50 p-3 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="biometric"
+                    checked={enableBiometric}
+                    onCheckedChange={(checked) => setEnableBiometric(checked as boolean)}
+                    disabled={isLoading}
+                    data-testid="checkbox-enable-biometric"
+                  />
+                  <label
+                    htmlFor="biometric"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+                  >
+                    <Fingerprint className="h-4 w-4" />
+                    Enable biometric quick access
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">
+                  Use Face ID or Touch ID to quickly access your account (password still required)
+                </p>
               </div>
             )}
 

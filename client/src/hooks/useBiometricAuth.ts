@@ -94,6 +94,14 @@ export async function tryBiometricLogin(): Promise<string | null> {
 }
 
 export function disableBiometricLogin(): void {
+  const username = localStorage.getItem("biometricUser");
+  
+  // Clear biometric settings
   localStorage.removeItem("biometricUser");
   localStorage.removeItem("biometricEnabled");
+  
+  // SECURITY: Clear any legacy password storage (from older vulnerable implementation)
+  if (username) {
+    localStorage.removeItem(`biometric_${username}_password`);
+  }
 }
