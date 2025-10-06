@@ -248,6 +248,11 @@ export class StockService {
   async search(query: string): Promise<StockSearchResult[]> {
     const normalizedQuery = query.toLowerCase().trim();
     
+    // Return empty array for very short queries
+    if (normalizedQuery.length < 1) {
+      return [];
+    }
+    
     const cached = this.getCachedData(this.searchCache, normalizedQuery);
     if (cached) {
       this.cacheHits++;
@@ -259,42 +264,52 @@ export class StockService {
     console.log(`[StockService] Search cache MISS for "${normalizedQuery}"`);
 
     if (!this.apiKey) {
-      throw new Error('Finnhub API key not configured');
-    }
-
-    const url = `https://finnhub.io/api/v1/search?q=${encodeURIComponent(query)}&token=${this.apiKey}`;
-    
-    const data = await this.fetchWithRetry<any>(url, 'search', normalizedQuery);
-
-    if (!data.result || !Array.isArray(data.result)) {
-      console.warn(`[StockService] No results from Finnhub for "${query}"`);
-      this.setCachedData(this.searchCache, normalizedQuery, []);
+      console.error('[StockService] Finnhub API key not configured');
       return [];
     }
 
-    const results: StockSearchResult[] = data.result
-      .filter((item: any) => {
-        // Allow stocks, ETFs, and other common security types
-        const allowedTypes = ['Common Stock', 'ETF', 'ADR', 'REIT', 'Preferred Stock', 'Fund'];
-        const hasValidType = !item.type || allowedTypes.includes(item.type);
-        
-        // Must have symbol and description
-        const hasBasicInfo = item.symbol && item.description;
-        
-        // Filter out overly complex symbols (e.g., warrants, options)
-        const isReasonableSymbol = item.symbol.length <= 10 && !item.symbol.includes('^');
-        
-        return hasBasicInfo && hasValidType && isReasonableSymbol;
-      })
-      .slice(0, 10) // Increased from 5 to 10 results
-      .map((item: any) => ({
-        symbol: item.symbol,
-        description: item.description,
-        type: item.type || 'Stock'
-      }));
+    try {
+      const url = `https://finnhub.io/api/v1/search?q=${encodeURIComponent(query)}&token=${this.apiKey}`;
+      
+      const data = await this.fetchWithRetry<any>(url, 'search', normalizedQuery);
 
-    this.setCachedData(this.searchCache, normalizedQuery, results);
-    return results;
+      if (!data.result || !Array.isArray(data.result)) {
+        console.warn(`[StockService] No results from Finnhub for "${query}"`);
+        // Cache empty results to avoid repeated API calls for invalid queries
+        this.setCachedDataWithCustomTTL(this.searchCache, normalizedQuery, [], 300000); // 5 min for empty results
+        return [];
+      }
+
+      const results: StockSearchResult[] = data.result
+        .filter((item: any) => {
+          // Allow stocks, ETFs, and other common security types
+          const allowedTypes = ['Common Stock', 'ETF', 'ADR', 'REIT', 'Preferred Stock', 'Fund'];
+          const hasValidType = !item.type || allowedTypes.includes(item.type);
+          
+          // Must have symbol and description
+          const hasBasicInfo = item.symbol && item.description;
+          
+          // Filter out overly complex symbols (e.g., warrants, options)
+          const isReasonableSymbol = item.symbol.length <= 10 && !item.symbol.includes('^');
+          
+          return hasBasicInfo && hasValidType && isReasonableSymbol;
+        })
+        .slice(0, 10) // Increased from 5 to 10 results
+        .map((item: any) => ({
+          symbol: item.symbol,
+          description: item.description,
+          type: item.type || 'Stock'
+        }));
+
+      // Cache search results for 10 minutes (longer than quotes since they change less frequently)
+      this.setCachedDataWithCustomTTL(this.searchCache, normalizedQuery, results, 600000);
+      console.log(`[StockService] Search returned ${results.length} results for "${query}"`);
+      return results;
+    } catch (error) {
+      console.error(`[StockService] Search failed for "${query}":`, error);
+      // Return empty array on error instead of throwing
+      return [];
+    }
   }
 
   private getCachedData<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
@@ -317,6 +332,14 @@ export class StockService {
       expiresAt: Date.now() + this.CACHE_TTL
     });
     console.log(`[StockService] Cached ${key} until ${new Date(Date.now() + this.CACHE_TTL).toISOString()}`);
+  }
+
+  private setCachedDataWithCustomTTL<T>(cache: Map<string, CacheEntry<T>>, key: string, data: T, ttl: number): void {
+    cache.set(key, {
+      data,
+      expiresAt: Date.now() + ttl
+    });
+    console.log(`[StockService] Cached ${key} until ${new Date(Date.now() + ttl).toISOString()} (${ttl / 1000}s TTL)`);
   }
 
   getCacheStats(): { hits: number; misses: number; hitRate: string } {
