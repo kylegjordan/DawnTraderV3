@@ -2076,6 +2076,138 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // ===== LEARNING FEEDBACK ENGINE ROUTES =====
+
+  // Get prediction accuracy metrics
+  app.get('/api/learning/prediction-accuracy', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.query.mode as string) || 'paper';
+      const strategy = req.query.strategy as string;
+      const days = parseInt(req.query.days as string) || 30;
+
+      const accuracy = await storage.getPredictionAccuracy(userId, mode, strategy, days);
+      
+      res.json({
+        success: true,
+        data: accuracy,
+        period: `${days} days`,
+        mode,
+        strategy: strategy || 'all'
+      });
+    } catch (error: any) {
+      console.error('Error fetching prediction accuracy:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get signal weight insights
+  app.get('/api/learning/signal-insights', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.query.mode as string) || 'paper';
+
+      const { signalWeightOptimizerService } = await import('./services/signal-weight-optimizer');
+      const insights = await signalWeightOptimizerService.getWeightInsights(userId, mode);
+      
+      res.json({
+        success: true,
+        data: insights,
+        mode
+      });
+    } catch (error: any) {
+      console.error('Error fetching signal insights:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get signal weights
+  app.get('/api/learning/signal-weights', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const strategy = req.query.strategy as string;
+      const mode = req.query.mode as string;
+
+      const weights = await storage.getSignalWeights(userId, strategy, mode);
+      
+      res.json({
+        success: true,
+        data: weights,
+        count: weights.length
+      });
+    } catch (error: any) {
+      console.error('Error fetching signal weights:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get prediction outcomes
+  app.get('/api/learning/prediction-outcomes', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = req.query.mode as string;
+      const strategy = req.query.strategy as string;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const fromDate = req.query.fromDate ? new Date(req.query.fromDate as string) : undefined;
+      const toDate = req.query.toDate ? new Date(req.query.toDate as string) : undefined;
+
+      const outcomes = await storage.getPredictionOutcomes(userId, {
+        mode,
+        strategy,
+        fromDate,
+        toDate,
+        limit
+      });
+      
+      res.json({
+        success: true,
+        data: outcomes,
+        count: outcomes.length
+      });
+    } catch (error: any) {
+      console.error('Error fetching prediction outcomes:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Get enriched features for a symbol
+  app.get('/api/learning/features/:symbol', async (req, res) => {
+    try {
+      const { symbol } = req.params;
+      const { featureEnrichmentService } = await import('./services/feature-enrichment');
+      
+      const features = await featureEnrichmentService.enrichFeatures(symbol);
+      
+      res.json({
+        success: true,
+        data: features
+      });
+    } catch (error: any) {
+      console.error('Error fetching enriched features:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Trigger manual signal weight optimization
+  app.post('/api/learning/optimize-weights', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.body.mode as string) || 'paper';
+
+      const { signalWeightOptimizerService } = await import('./services/signal-weight-optimizer');
+      await signalWeightOptimizerService.optimizeUserWeights(userId, mode);
+      
+      res.json({
+        success: true,
+        message: `Signal weights optimized for ${mode} mode`
+      });
+    } catch (error: any) {
+      console.error('Error optimizing signal weights:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
