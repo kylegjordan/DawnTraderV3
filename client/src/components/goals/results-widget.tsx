@@ -7,12 +7,10 @@ import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useState } from "react";
 
-interface TradingActivityData {
-  numberOfTrades: number;
-  profitableTrades: number;
-  totalProfits: number;
-  losingTrades: number;
-  totalLosses: number;
+interface TradingResultsData {
+  totalPnL: number;
+  profitFactor: number;
+  maxDrawdown: number;
   avgReturnPercent: number;
 }
 
@@ -29,8 +27,9 @@ export default function ResultsWidget() {
   const { mode, isPaper } = useTradingMode();
   const [period, setPeriod] = useState('1d');
   
-  const { data: activity, isLoading } = useQuery<TradingActivityData>({
-    queryKey: ['/api/trading/activity', { mode, period }],
+  const { data: results, isLoading } = useQuery<TradingResultsData>({
+    queryKey: ['/api/trading/results', mode, period],
+    queryFn: () => fetch(`/api/trading/results?mode=${mode}&period=${period}`).then(r => r.json()),
   });
 
   if (isLoading) {
@@ -71,19 +70,12 @@ export default function ResultsWidget() {
     return 'neutral';
   };
 
-  const data = activity || {
-    numberOfTrades: 0,
-    profitableTrades: 0,
-    totalProfits: 0,
-    losingTrades: 0,
-    totalLosses: 0,
+  const data = results || {
+    totalPnL: 0,
+    profitFactor: 0,
+    maxDrawdown: 0,
     avgReturnPercent: 0,
   };
-
-  const totalPnL = data.totalProfits + data.totalLosses;
-  const profitFactor = Math.abs(data.totalLosses) > 0 ? data.totalProfits / Math.abs(data.totalLosses) : 0;
-  const maxDrawdown = totalPnL < 0 ? (totalPnL / (data.totalProfits || 1)) * 100 : 0;
-  const avgReturnPerTrade = data.avgReturnPercent;
 
   return (
     <Card className={cn("metric-card", isPaper && "border-blue-500/30 bg-blue-500/5")} data-testid="widget-results">
@@ -119,11 +111,11 @@ export default function ResultsWidget() {
             <span className="text-xs text-muted-foreground">Total P/L:</span>
             <span className={cn(
               "text-sm font-bold font-mono",
-              getChangeType(totalPnL) === "positive" && "text-success",
-              getChangeType(totalPnL) === "negative" && "text-destructive",
-              getChangeType(totalPnL) === "neutral" && "text-muted-foreground"
+              getChangeType(data.totalPnL) === "positive" && "text-success",
+              getChangeType(data.totalPnL) === "negative" && "text-destructive",
+              getChangeType(data.totalPnL) === "neutral" && "text-muted-foreground"
             )} data-testid="results-total-pnl">
-              {formatCurrency(totalPnL)}
+              {formatCurrency(data.totalPnL)}
             </span>
           </div>
           
@@ -131,10 +123,10 @@ export default function ResultsWidget() {
             <span className="text-xs text-muted-foreground">Profit Factor:</span>
             <span className={cn(
               "text-sm font-bold font-mono",
-              profitFactor >= 2 ? "text-success" : 
-              profitFactor >= 1 ? "text-warning" : "text-destructive"
+              data.profitFactor >= 2 ? "text-success" : 
+              data.profitFactor >= 1 ? "text-warning" : "text-destructive"
             )} data-testid="results-profit-factor">
-              {profitFactor.toFixed(2)}
+              {data.profitFactor.toFixed(2)}
             </span>
           </div>
           
@@ -142,10 +134,10 @@ export default function ResultsWidget() {
             <span className="text-xs text-muted-foreground">Max Drawdown:</span>
             <span className={cn(
               "text-sm font-bold font-mono",
-              Math.abs(maxDrawdown) > 20 ? "text-destructive" : 
-              Math.abs(maxDrawdown) > 10 ? "text-warning" : "text-muted-foreground"
+              Math.abs(data.maxDrawdown) > 20 ? "text-destructive" : 
+              Math.abs(data.maxDrawdown) > 10 ? "text-warning" : "text-muted-foreground"
             )} data-testid="results-max-drawdown">
-              {maxDrawdown.toFixed(2)}%
+              {data.maxDrawdown.toFixed(2)}%
             </span>
           </div>
           
@@ -153,11 +145,11 @@ export default function ResultsWidget() {
             <span className="text-xs text-muted-foreground">Avg Return/Trade:</span>
             <span className={cn(
               "text-sm font-bold font-mono",
-              getChangeType(avgReturnPerTrade) === "positive" && "text-success",
-              getChangeType(avgReturnPerTrade) === "negative" && "text-destructive",
-              getChangeType(avgReturnPerTrade) === "neutral" && "text-muted-foreground"
+              getChangeType(data.avgReturnPercent) === "positive" && "text-success",
+              getChangeType(data.avgReturnPercent) === "negative" && "text-destructive",
+              getChangeType(data.avgReturnPercent) === "neutral" && "text-muted-foreground"
             )} data-testid="results-avg-return">
-              {formatPercent(avgReturnPerTrade)}
+              {formatPercent(data.avgReturnPercent)}
             </span>
           </div>
         </div>

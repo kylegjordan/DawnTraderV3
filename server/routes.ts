@@ -2804,6 +2804,88 @@ Please:
     }
   });
 
+  // ===== TRADING RESULTS ROUTE =====
+
+  app.get('/api/trading/results', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.query.mode as string) || 'live';
+      const period = (req.query.period as string) || '1d';
+
+      const periodMap: { [key: string]: number } = {
+        '1d': 1,
+        '1w': 7,
+        '1m': 30,
+        '60d': 60,
+        '90d': 90,
+        '1y': 365,
+      };
+
+      const days = periodMap[period] || 1;
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - days);
+
+      const trades = mode === 'live'
+        ? await storage.getTrades(userId, {})
+        : await storage.getAllPaperTrades(userId);
+      const periodTrades = trades.filter(t => 
+        t.exitTime && new Date(t.exitTime) >= fromDate && t.status === 'closed'
+      );
+
+      const profitableTrades = periodTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
+      const losingTrades = periodTrades.filter(t => parseFloat(t.realizedPL || '0') < 0);
+      
+      const totalProfits = profitableTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+      const totalLosses = losingTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+      const totalPnL = totalProfits + totalLosses;
+      
+      const profitFactor = Math.abs(totalLosses) > 0 ? totalProfits / Math.abs(totalLosses) : 0;
+
+      const avgReturnPercent = periodTrades.length > 0
+        ? periodTrades.reduce((sum, t) => {
+            const entry = parseFloat(t.entryPrice) * parseFloat(t.quantity);
+            const pl = parseFloat(t.realizedPL || '0');
+            return sum + (pl / entry * 100);
+          }, 0) / periodTrades.length
+        : 0;
+
+      let maxDrawdown = 0;
+      if (periodTrades.length > 0) {
+        const sortedTrades = [...periodTrades].sort((a, b) => 
+          new Date(a.exitTime || 0).getTime() - new Date(b.exitTime || 0).getTime()
+        );
+        
+        let runningPL = 0;
+        let peak = 0;
+        
+        for (const trade of sortedTrades) {
+          runningPL += parseFloat(trade.realizedPL || '0');
+          if (runningPL > peak) {
+            peak = runningPL;
+          }
+          const drawdown = peak - runningPL;
+          if (drawdown > maxDrawdown) {
+            maxDrawdown = drawdown;
+          }
+        }
+        
+        if (peak > 0) {
+          maxDrawdown = (maxDrawdown / peak) * 100;
+        }
+      }
+
+      res.json({
+        totalPnL,
+        profitFactor,
+        maxDrawdown,
+        avgReturnPercent,
+      });
+    } catch (error: any) {
+      console.error('Error fetching trading results:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ===== EARNINGS SUMMARY ROUTE =====
 
   // Get earnings summary for Earnings widget
