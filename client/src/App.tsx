@@ -18,6 +18,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found";
+import { TradingModeProvider } from "@/contexts/trading-mode-context";
 
 function Router() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -78,12 +79,14 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <div className="min-h-screen bg-background text-foreground">
-          <Toaster />
-          <Router />
-        </div>
-      </TooltipProvider>
+      <TradingModeProvider>
+        <TooltipProvider>
+          <div className="min-h-screen bg-background text-foreground">
+            <Toaster />
+            <Router />
+          </div>
+        </TooltipProvider>
+      </TradingModeProvider>
     </QueryClientProvider>
   );
 }

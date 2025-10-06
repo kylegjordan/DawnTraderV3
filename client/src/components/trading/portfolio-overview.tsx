@@ -1,12 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, DollarSign, Target, PieChart } from "lucide-react";
+import { TrendingUp, DollarSign, Target, PieChart, Beaker } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { EarningsData } from "@/lib/types";
 import { calculateAverageDailyEarnings, getSparklineData, formatADE } from "@/lib/earnings-utils";
 import EarningsSparkline from "./earnings-sparkline";
+import { useTradingMode } from "@/contexts/trading-mode-context";
 
 interface DailyBrief {
   date: string;
@@ -20,16 +21,45 @@ interface DailyBrief {
   } | null;
 }
 
+interface PortfolioMetrics {
+  totalValue: number;
+  cash: number;
+  crypto: number;
+  cashPercent: number;
+  cryptoPercent: number;
+  unrealizedPL: number;
+  realizedPL: number;
+  openTradesCount: number;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  currentExposure: number;
+  balanceSource?: string;
+  balanceError?: string;
+  syncTimestamp?: number;
+}
+
 export default function PortfolioOverview() {
-  const { portfolioMetrics, portfolioLoading } = useTrading();
+  const { mode, isPaper } = useTradingMode();
+  
+  const { portfolioMetrics: livePortfolioMetrics, portfolioLoading: livePortfolioLoading } = useTrading();
+  
+  const { data: paperPortfolioMetrics, isLoading: paperPortfolioLoading } = useQuery<PortfolioMetrics>({
+    queryKey: ['/api/paper/metrics/portfolio'],
+    enabled: isPaper,
+  });
   
   const { data: earningsData, isLoading: earningsLoading } = useQuery<EarningsData>({
-    queryKey: ['/api/portfolio/earnings'],
+    queryKey: isPaper ? ['/api/paper/metrics/earnings'] : ['/api/portfolio/earnings'],
   });
 
   const { data: dailyBriefs = [], isLoading: briefsLoading } = useQuery<DailyBrief[]>({
-    queryKey: ['/api/daily-briefs', { limit: 30 }],
+    queryKey: isPaper ? ['/api/paper/briefs', { limit: 30 }] : ['/api/daily-briefs', { limit: 30 }],
   });
+
+  const portfolioMetrics = isPaper ? paperPortfolioMetrics : livePortfolioMetrics;
+  const portfolioLoading = isPaper ? paperPortfolioLoading : livePortfolioLoading;
 
   const loading = portfolioLoading || earningsLoading || briefsLoading;
 
@@ -153,18 +183,28 @@ export default function PortfolioOverview() {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4">
       {metrics.map((metric, index) => {
         const Icon = metric.icon;
         
         return (
-          <Card key={index} className="metric-card" data-testid={`metric-${metric.title.toLowerCase().replace(/\s+/g, '-')}`}>
-            <CardContent className="p-5">
+          <Card key={index} className={cn(
+            "metric-card transition-all duration-200",
+            isPaper && "border-blue-500/30 bg-blue-500/5"
+          )} data-testid={`metric-${metric.title.toLowerCase().replace(/\s+/g, '-')}`}>
+            <CardContent className="p-4 sm:p-5">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-muted-foreground">{metric.title}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm text-muted-foreground">{metric.title}</span>
+                  {isPaper && (
+                    <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">
+                      SIMULATED
+                    </span>
+                  )}
+                </div>
                 {!(metric as any).iconHidden && (
                   <Icon className={cn(
-                    "w-5 h-5",
+                    "w-4 h-4 sm:w-5 sm:h-5",
                     metric.changeType === "positive" && "text-success",
                     metric.changeType === "negative" && "text-destructive",
                     metric.changeType === "neutral" && "text-primary"

@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { formatUTCTimeWithDate, formatLocalTimeWithDate, getTimezoneAbbr } from "@/lib/timezone";
+import { useTradingMode } from "@/contexts/trading-mode-context";
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -94,21 +95,17 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   };
 
-  const handleModeChange = (mode: 'live' | 'paper') => {
-    if (tradingStatus?.tradingStatus === 'active') {
-      toast({
-        title: "Stop Trading First",
-        description: "Stop trading before changing modes",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    startTrading(mode);
+  const { mode: currentMode, setMode } = useTradingMode();
+
+  const handleModeChange = (newMode: 'live' | 'paper') => {
+    setMode(newMode);
+    toast({
+      title: "Mode Changed",
+      description: `Switched to ${newMode === 'live' ? 'Live' : 'Paper'} trading mode`,
+    });
   };
 
   const isActive = tradingStatus?.tradingStatus === 'active';
-  const currentMode = tradingStatus?.tradingMode || 'paper';
 
   return (
     <header 
