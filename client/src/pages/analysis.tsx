@@ -123,6 +123,7 @@ export default function Analysis() {
     setNoResultsQuery(null);
     setCurrentQuery(symbolToAnalyze);
     clearPreviousAnalysis();
+    setSearchResults([]);
     
     const assetType = result.type === 'Stock' ? 'stock' : 'crypto';
     setSelectedAsset({
@@ -337,7 +338,7 @@ export default function Analysis() {
                   </div>
                 )}
 
-                {showDropdown && searchResults.length === 0 && !isSearching && searchQuery.length >= 2 && (
+                {showDropdown && searchResults.length === 0 && !isSearching && searchQuery.length >= 2 && !selectedAsset && !symbolAnalysis && (
                   <div className="absolute z-50 w-full mt-2 bg-background border border-border rounded-md shadow-lg p-4 text-center text-muted-foreground" data-testid="message-no-results">
                     No results found for "{searchQuery}". Try another keyword.
                   </div>
@@ -524,7 +525,7 @@ export default function Analysis() {
                   <div className="w-4 h-4 bg-primary rounded-full animate-bounce" />
                   <div className="w-4 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
                   <div className="w-4 h-4 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                  <span className="ml-4 text-muted-foreground">Analyzing symbol...</span>
+                  <span className="ml-4 text-muted-foreground">Analyzing {selectedAsset?.symbol || currentQuery}...</span>
                 </div>
               </CardContent>
             </Card>
