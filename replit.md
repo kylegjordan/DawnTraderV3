@@ -50,8 +50,16 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas: `users`, `tr
   6. Recent Trades (with empty state: "No recent trades")
   7. Strategy Performance (with empty state: "No strategy data available yet")
   8. Symbols That Have Cleared the Screening Process (filtered Kraken pairs passing all screening criteria)
+  9. Systems Monitoring & Checks Panel
   - All data is isolated per mode (live/paper)
   - Empty state placeholders ensure consistent layout when no data exists
+- **Systems Monitoring & Checks Panel**: Centralized system-level monitoring with 6 tabs:
+  1. **System Health**: Real-time status of trading engine, AI scheduler, database, Kraken API, and system uptime
+  2. **Audit Viewer**: Strategy parameter change history with actor tracking (user/AI), timestamps, and parameter diffs
+  3. **System Logs**: Application-level logs showing engine heartbeat and operational messages
+  4. **Validation Reports**: Placeholder for future data validation and model drift reports
+  5. **AI Audit Log**: Detailed AI operation audit including decisions, recommendations, and actions taken
+  6. **Error Logs**: Centralized error tracking with resolution status and error type categorization
 
 ## External Dependencies
 
