@@ -252,4 +252,78 @@ export class SignalWeightOptimizerService {
   }
 }
 
+// Regime-based signal weight adjustment helper
+export async function adjustSignalWeightsByRegime(regime: string, mode: 'live' | 'paper'): Promise<void> {
+  console.log(`[SignalWeightOptimizer] Adjusting weights for ${regime} regime in ${mode} mode`);
+  
+  // Example conservative mapping - bounded nudges based on market regime
+  const regimeDeltas: Record<string, Record<'long' | 'short', number>> = {
+    bullish:        { long: +0.08, short: -0.06 },
+    bearish:        { long: -0.06, short: +0.08 },
+    neutral:        { long: +0.00, short: +0.00 },
+    accumulation:   { long: +0.05, short: -0.03 },
+    distribution:   { long: -0.03, short: +0.05 },
+    high_volatility:{ long: -0.02, short: -0.02 }, // reduce conviction globally
+    low_volatility: { long: +0.02, short: +0.02 },
+  };
+
+  const deltas = regimeDeltas[regime] || regimeDeltas.neutral;
+  
+  // Get all users and apply adjustments
+  const users = await storage.getAllUsers();
+  
+  for (const user of users) {
+    const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'] as const;
+    
+    for (const strategy of strategies) {
+      // Get existing weights for long and short signals
+      const longWeight = await storage.getSignalWeight(user.id, strategy, mode, 'long');
+      const shortWeight = await storage.getSignalWeight(user.id, strategy, mode, 'short');
+      
+      // Apply bounded adjustments
+      if (longWeight) {
+        const currentLong = parseFloat(longWeight.weight || '1.0');
+        const newLong = Math.max(0.1, Math.min(2.0, currentLong + deltas.long));
+        
+        await storage.upsertSignalWeight({
+          userId: user.id,
+          strategy: strategy as any,
+          mode: mode as any,
+          signalName: 'long',
+          weight: newLong.toString(),
+          correlationScore: longWeight.correlationScore || '0',
+          sampleSize: longWeight.sampleSize || 0,
+          metadata: {
+            ...(longWeight.metadata as any || {}),
+            regimeAdjustment: regime,
+            adjustmentDate: new Date().toISOString(),
+          },
+        });
+      }
+      
+      if (shortWeight) {
+        const currentShort = parseFloat(shortWeight.weight || '1.0');
+        const newShort = Math.max(0.1, Math.min(2.0, currentShort + deltas.short));
+        
+        await storage.upsertSignalWeight({
+          userId: user.id,
+          strategy: strategy as any,
+          mode: mode as any,
+          signalName: 'short',
+          weight: newShort.toString(),
+          correlationScore: shortWeight.correlationScore || '0',
+          sampleSize: shortWeight.sampleSize || 0,
+          metadata: {
+            ...(shortWeight.metadata as any || {}),
+            regimeAdjustment: regime,
+            adjustmentDate: new Date().toISOString(),
+          },
+        });
+      }
+    }
+  }
+  
+  console.log(`[SignalWeightOptimizer] Regime adjustment complete for ${mode} mode`);
+}
+
 export const signalWeightOptimizerService = new SignalWeightOptimizerService();
