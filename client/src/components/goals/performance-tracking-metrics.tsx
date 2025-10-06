@@ -58,12 +58,21 @@ export default function PerformanceTrackingMetrics() {
   };
 
   const autoCalculateEarnings = (sourceMetric: string, value: number, field: 'goal' | 'actual') => {
-    const earningsPerDay = sourceMetric === "Earnings per Day" ? value :
-                          sourceMetric === "Earnings per Week" ? value / 7 :
-                          sourceMetric === "Earnings per Month" ? value / 30 :
-                          sourceMetric === "Earnings per Year" ? value / 365 : null;
+    // Calculate base value (Day) from any source metric
+    // Week = Day × 5, Month = Week × 4, Year = Month × 12
+    let earningsPerDay: number;
     
-    if (earningsPerDay === null) return;
+    if (sourceMetric === "Earnings per Day") {
+      earningsPerDay = value;
+    } else if (sourceMetric === "Earnings per Week") {
+      earningsPerDay = value / 5;
+    } else if (sourceMetric === "Earnings per Month") {
+      earningsPerDay = value / 20; // Month = Week × 4 = Day × 5 × 4 = Day × 20
+    } else if (sourceMetric === "Earnings per Year") {
+      earningsPerDay = value / 240; // Year = Month × 12 = Day × 20 × 12 = Day × 240
+    } else {
+      return; // Not an earnings metric
+    }
     
     setMetrics(prev => prev.map(m => {
       if (m.metric === "Earnings per Day" && sourceMetric !== "Earnings per Day") {
@@ -72,17 +81,17 @@ export default function PerformanceTrackingMetrics() {
         return { ...m, [field]: newValue, percentAchieved };
       }
       if (m.metric === "Earnings per Week" && sourceMetric !== "Earnings per Week") {
-        const newValue = earningsPerDay * 7;
+        const newValue = earningsPerDay * 5; // Week = Day × 5
         const percentAchieved = field === 'goal' ? (m.actual > 0 ? (m.actual / newValue) * 100 : 0) : (newValue > 0 ? (newValue / m.goal) * 100 : 0);
         return { ...m, [field]: newValue, percentAchieved };
       }
       if (m.metric === "Earnings per Month" && sourceMetric !== "Earnings per Month") {
-        const newValue = earningsPerDay * 30;
+        const newValue = earningsPerDay * 20; // Month = Week × 4 = Day × 5 × 4 = Day × 20
         const percentAchieved = field === 'goal' ? (m.actual > 0 ? (m.actual / newValue) * 100 : 0) : (newValue > 0 ? (newValue / m.goal) * 100 : 0);
         return { ...m, [field]: newValue, percentAchieved };
       }
       if (m.metric === "Earnings per Year" && sourceMetric !== "Earnings per Year") {
-        const newValue = earningsPerDay * 365;
+        const newValue = earningsPerDay * 240; // Year = Month × 12 = Day × 20 × 12 = Day × 240
         const percentAchieved = field === 'goal' ? (m.actual > 0 ? (m.actual / newValue) * 100 : 0) : (newValue > 0 ? (newValue / m.goal) * 100 : 0);
         return { ...m, [field]: newValue, percentAchieved };
       }
