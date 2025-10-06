@@ -63,7 +63,7 @@ export const STRATEGY_PRESETS = {
       dBreakoutBufferPct: 0.007,
     },
   },
-  SMA_TREND: {
+  SMA_TREND_RIDE: {
     Conservative: {
       maxConcurrentPositions: 3,
       riskPerTrade: 0.005,
