@@ -22,8 +22,24 @@ const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
 const riskManager = new RiskManager();
 
-// JWT secret for authentication
+// JWT secrets for authentication
 const JWT_SECRET = process.env.JWT_SECRET || "development_secret_change_in_production";
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "development_refresh_secret_change_in_production";
+
+// Issue access and refresh tokens
+function issueTokens(user: { id: string; username: string }) {
+  const accessToken = jwt.sign(
+    { id: user.id, username: user.username }, 
+    JWT_SECRET, 
+    { expiresIn: '12h' }
+  );
+  const refreshToken = jwt.sign(
+    { id: user.id }, 
+    JWT_REFRESH_SECRET, 
+    { expiresIn: '7d' }
+  );
+  return { accessToken, refreshToken };
+}
 
 // TEMPORARILY DISABLED: Do not ping Kraken for 1 hour (maintenance mode)
 // marketScanner.startHourlyScanning();
@@ -133,13 +149,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
       
-      const token = jwt.sign(
-        { id: user.id, username: user.username }, 
-        JWT_SECRET, 
-        { expiresIn: '12h' }
-      );
+      const { accessToken, refreshToken } = issueTokens({ id: user.id, username: user.username });
       
-      res.json({ token, user: { id: user.id, username: user.username } });
+      res.json({ 
+        accessToken, 
+        refreshToken,
+        token: accessToken, // Keep for backward compatibility
+        user: { id: user.id, username: user.username } 
+      });
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ error: 'Login failed' });
@@ -163,6 +180,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ valid: true, user: decoded });
     } catch (error) {
       res.status(401).json({ valid: false, error: 'Invalid or expired token' });
+    }
+  });
+
+  // REFRESH TOKEN
+  app.post('/api/auth/refresh', async (req, res) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ error: 'Refresh token is required' });
+      }
+      
+      const decoded = jwt.verify(token, JWT_REFRESH_SECRET) as { id: string };
+      const user = await storage.getUser(decoded.id);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      const { accessToken, refreshToken } = issueTokens({ id: user.id, username: user.username });
+      
+      res.json({ 
+        accessToken, 
+        refreshToken,
+        user: { id: user.id, username: user.username }
+      });
+    } catch (error) {
+      res.status(401).json({ error: 'Invalid or expired refresh token' });
     }
   });
 

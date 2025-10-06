@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, LogIn, AlertCircle } from "lucide-react";
+import { Loader2, LogIn, AlertCircle, Fingerprint } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { saveTokens } from "@/lib/auth";
+import { tryBiometricLogin, isBiometricAvailable } from "@/hooks/useBiometricAuth";
 
 export default function LoginPage() {
   const [_, setLocation] = useLocation();
@@ -14,6 +16,37 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [tryingBiometric, setTryingBiometric] = useState(false);
+
+  useEffect(() => {
+    // Check if biometric is available
+    isBiometricAvailable().then(setBiometricAvailable);
+
+    // Try biometric auto-login on mount
+    const attemptBiometricLogin = async () => {
+      const storedUsername = await tryBiometricLogin();
+      if (storedUsername) {
+        setTryingBiometric(true);
+        try {
+          const res = await apiRequest("POST", "/api/auth/login", {
+            username: storedUsername,
+            password: localStorage.getItem(`biometric_${storedUsername}_password`) || "",
+          });
+          
+          if (res?.accessToken) {
+            saveTokens(res.accessToken, res.refreshToken);
+            localStorage.setItem("user", JSON.stringify(res.user));
+            setLocation("/");
+          }
+        } catch {
+          setTryingBiometric(false);
+        }
+      }
+    };
+
+    attemptBiometricLogin();
+  }, [setLocation]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -21,14 +54,44 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const res = await apiRequest("/api/auth/login", "POST", { username, password });
-      localStorage.setItem("token", res.token);
-      localStorage.setItem("user", JSON.stringify(res.user));
-      setLocation("/");
+      const res = await apiRequest("POST", "/api/auth/login", { username, password });
+      
+      if (res?.accessToken) {
+        saveTokens(res.accessToken, res.refreshToken);
+        localStorage.setItem("user", JSON.stringify(res.user));
+        setLocation("/");
+      }
     } catch (err: any) {
       setError(err?.message || "Login failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleBiometricLogin() {
+    setError("");
+    setTryingBiometric(true);
+
+    try {
+      const storedUsername = await tryBiometricLogin();
+      if (storedUsername) {
+        const res = await apiRequest("POST", "/api/auth/login", {
+          username: storedUsername,
+          password: localStorage.getItem(`biometric_${storedUsername}_password`) || "",
+        });
+        
+        if (res?.accessToken) {
+          saveTokens(res.accessToken, res.refreshToken);
+          localStorage.setItem("user", JSON.stringify(res.user));
+          setLocation("/");
+        }
+      } else {
+        setError("Biometric authentication failed. Please use password login.");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Biometric login failed. Please use password login.");
+    } finally {
+      setTryingBiometric(false);
     }
   }
 
@@ -80,7 +143,7 @@ export default function LoginPage() {
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isLoading}
+              disabled={isLoading || tryingBiometric}
               data-testid="button-login"
             >
               {isLoading ? (
@@ -95,6 +158,40 @@ export default function LoginPage() {
                 </>
               )}
             </Button>
+
+            {biometricAvailable && localStorage.getItem("biometricEnabled") === "true" && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or</span>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleBiometricLogin}
+                  disabled={isLoading || tryingBiometric}
+                  data-testid="button-biometric-login"
+                >
+                  {tryingBiometric ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Authenticating...
+                    </>
+                  ) : (
+                    <>
+                      <Fingerprint className="mr-2 h-4 w-4" />
+                      Use Biometric Login
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
 
             <div className="text-center text-sm text-muted-foreground">
               Don't have an account?{" "}

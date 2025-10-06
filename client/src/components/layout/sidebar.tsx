@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
+import { clearTokens } from "@/lib/auth";
+import { disableBiometricLogin } from "@/hooks/useBiometricAuth";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -40,8 +42,8 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearTokens();
+    disableBiometricLogin();
     setLocation("/login");
   };
 

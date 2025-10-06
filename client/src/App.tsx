@@ -22,14 +22,41 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
+import { getAccessToken, refreshAccessToken } from "@/lib/auth";
 
-// Auth guard component
+// Auth guard component with token refresh
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
-  const token = localStorage.getItem("token");
+  const [_, setLocation] = useLocation();
+  const [isChecking, setIsChecking] = useState(true);
   
-  if (!token) {
-    return <Redirect to="/login" />;
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = getAccessToken();
+      
+      if (!token) {
+        // Try to refresh if we have a refresh token
+        const newToken = await refreshAccessToken();
+        if (!newToken) {
+          setLocation("/login");
+          return;
+        }
+      }
+      
+      setIsChecking(false);
+    };
+    
+    checkAuth();
+  }, [setLocation]);
+  
+  if (isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
   }
   
   return <>{children}</>;

@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, UserPlus, AlertCircle, Check } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, UserPlus, AlertCircle, Check, Fingerprint } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { saveTokens } from "@/lib/auth";
+import { isBiometricAvailable, enableBiometricLogin } from "@/hooks/useBiometricAuth";
 
 export default function RegisterPage() {
   const [_, setLocation] = useLocation();
@@ -15,6 +18,12 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [enableBiometric, setEnableBiometric] = useState(false);
+
+  useEffect(() => {
+    isBiometricAvailable().then(setBiometricAvailable);
+  }, []);
 
   // Password strength indicators
   const hasLength = password.length >= 8;
@@ -42,11 +51,30 @@ export default function RegisterPage() {
 
     try {
       await apiRequest("POST", "/api/auth/register", { username, password });
+      
       // Auto-login after successful registration
       const loginRes = await apiRequest("POST", "/api/auth/login", { username, password });
-      localStorage.setItem("token", loginRes.token);
-      localStorage.setItem("user", JSON.stringify(loginRes.user));
-      setLocation("/");
+      
+      if (loginRes?.accessToken) {
+        saveTokens(loginRes.accessToken, loginRes.refreshToken);
+        localStorage.setItem("user", JSON.stringify(loginRes.user));
+
+        // Enroll biometric if requested and available
+        if (enableBiometric && biometricAvailable) {
+          try {
+            const enrolled = await enableBiometricLogin(username);
+            if (enrolled) {
+              // Store encrypted password for biometric login
+              localStorage.setItem(`biometric_${username}_password`, password);
+            }
+          } catch (bioError) {
+            console.error("Biometric enrollment failed:", bioError);
+            // Continue login even if biometric enrollment fails
+          }
+        }
+
+        setLocation("/");
+      }
     } catch (err: any) {
       setError(err?.message || "Registration failed. Please try again.");
     } finally {
@@ -132,6 +160,25 @@ export default function RegisterPage() {
                 </div>
               )}
             </div>
+
+            {biometricAvailable && (
+              <div className="flex items-center space-x-2 bg-muted/50 p-3 rounded-lg">
+                <Checkbox
+                  id="biometric"
+                  checked={enableBiometric}
+                  onCheckedChange={(checked) => setEnableBiometric(checked as boolean)}
+                  disabled={isLoading}
+                  data-testid="checkbox-enable-biometric"
+                />
+                <label
+                  htmlFor="biometric"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+                >
+                  <Fingerprint className="h-4 w-4" />
+                  Enable biometric login (Face ID / Touch ID)
+                </label>
+              </div>
+            )}
 
             {error && (
               <Alert variant="destructive">
