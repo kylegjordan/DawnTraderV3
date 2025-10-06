@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/hooks/use-trading";
@@ -13,6 +14,7 @@ import {
   Save,
   RotateCcw
 } from "lucide-react";
+import { timezones } from "@/lib/timezone";
 
 export default function Settings() {
   const { settings, settingsLoading, updateSettings, isUpdatingSettings } = useTrading();
@@ -20,17 +22,19 @@ export default function Settings() {
   
   const [formData, setFormData] = useState({
     // Notification Settings
-    emailNotifications: settings?.emailNotifications ?? true,
-    pushNotifications: settings?.pushNotifications ?? true,
-    telegramNotifications: settings?.telegramNotifications ?? false
+    emailNotifications: (settings as any)?.emailNotifications ?? true,
+    pushNotifications: (settings as any)?.pushNotifications ?? true,
+    telegramNotifications: (settings as any)?.telegramNotifications ?? false,
+    timezone: settings?.timezone || 'Asia/Dubai'
   });
 
   useEffect(() => {
     if (settings) {
       setFormData({
-        emailNotifications: settings.emailNotifications ?? true,
-        pushNotifications: settings.pushNotifications ?? true,
-        telegramNotifications: settings.telegramNotifications ?? false
+        emailNotifications: (settings as any).emailNotifications ?? true,
+        pushNotifications: (settings as any).pushNotifications ?? true,
+        telegramNotifications: (settings as any).telegramNotifications ?? false,
+        timezone: settings.timezone || 'Asia/Dubai'
       });
     }
   }, [settings]);
@@ -55,9 +59,10 @@ export default function Settings() {
   const handleReset = () => {
     if (settings) {
       setFormData({
-        emailNotifications: settings.emailNotifications ?? true,
-        pushNotifications: settings.pushNotifications ?? true,
-        telegramNotifications: settings.telegramNotifications ?? false
+        emailNotifications: (settings as any).emailNotifications ?? true,
+        pushNotifications: (settings as any).pushNotifications ?? true,
+        telegramNotifications: (settings as any).telegramNotifications ?? false,
+        timezone: settings.timezone || 'Asia/Dubai'
       });
       
       toast({
@@ -177,6 +182,33 @@ export default function Settings() {
               onCheckedChange={(checked) => setFormData({...formData, telegramNotifications: checked})}
               data-testid="switch-telegram-notifications"
             />
+          </div>
+
+          <Separator className="my-6" />
+
+          {/* Timezone Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="timezone" className="text-sm font-medium">
+              Preferred Timezone
+            </Label>
+            <Select 
+              value={formData.timezone} 
+              onValueChange={(value) => setFormData({...formData, timezone: value})}
+            >
+              <SelectTrigger data-testid="select-timezone">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {timezones.map((tz) => (
+                  <SelectItem key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              All times will be displayed in your selected timezone
+            </p>
           </div>
         </CardContent>
       </Card>

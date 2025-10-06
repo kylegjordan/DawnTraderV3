@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import GoalsTable from "./goals-table";
+import PerformanceTrackingMetrics from "./performance-tracking-metrics";
 
 interface Goal {
   metric: string;
@@ -150,6 +151,9 @@ export default function GoalsEngineTab() {
     <div className="space-y-6">
       {/* Editable Goals Table */}
       <GoalsTable />
+
+      {/* Performance Tracking Metrics */}
+      <PerformanceTrackingMetrics />
 
       {/* AI Conversational Panel */}
       <Card data-testid="card-ai-chat">

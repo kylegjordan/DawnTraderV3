@@ -3,11 +3,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Shield, Save } from "lucide-react";
+import { Shield, Save, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+
+const DEFAULTS = {
+  maxDailyLoss: 1000,
+  maxDrawdown: 10,
+  maxPositionSize: 5000,
+  maxOpenPositions: 5,
+  riskPerTrade: 1.5,
+};
 
 interface TradingSettings {
   maxDailyLoss: number;
@@ -19,8 +28,9 @@ interface TradingSettings {
 
 export default function GuardrailsTab() {
   const { toast } = useToast();
-  const [settings, setSettings] = useState<Partial<TradingSettings>>({});
+  const [settings, setSettings] = useState<Partial<TradingSettings>>(DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
+  const [aiCanAdjust, setAiCanAdjust] = useState(false);
 
   const { data: currentSettings, isLoading } = useQuery<TradingSettings>({
     queryKey: ['/api/settings'],
@@ -29,11 +39,11 @@ export default function GuardrailsTab() {
   useEffect(() => {
     if (currentSettings) {
       setSettings({
-        maxDailyLoss: currentSettings.maxDailyLoss,
-        maxPositionSize: currentSettings.maxPositionSize,
-        maxOpenPositions: currentSettings.maxOpenPositions,
-        maxDrawdown: currentSettings.maxDrawdown,
-        riskPerTrade: currentSettings.riskPerTrade,
+        maxDailyLoss: currentSettings.maxDailyLoss ?? DEFAULTS.maxDailyLoss,
+        maxPositionSize: currentSettings.maxPositionSize ?? DEFAULTS.maxPositionSize,
+        maxOpenPositions: currentSettings.maxOpenPositions ?? DEFAULTS.maxOpenPositions,
+        maxDrawdown: currentSettings.maxDrawdown ?? DEFAULTS.maxDrawdown,
+        riskPerTrade: currentSettings.riskPerTrade ?? DEFAULTS.riskPerTrade,
       });
     }
   }, [currentSettings]);
@@ -69,6 +79,15 @@ export default function GuardrailsTab() {
     updateMutation.mutate(settings);
   };
 
+  const handleReset = () => {
+    setSettings(DEFAULTS);
+    setHasChanges(true);
+    toast({
+      title: "Reset to Defaults",
+      description: "Guardrails have been reset to default values.",
+    });
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -94,14 +113,24 @@ export default function GuardrailsTab() {
             Portfolio-level risk parameters to protect your trading account
           </p>
         </div>
-        <Button 
-          onClick={handleSave} 
-          disabled={!hasChanges || updateMutation.isPending}
-          data-testid="button-save-guardrails"
-        >
-          <Save className="w-4 h-4 mr-2" />
-          {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={handleReset}
+            variant="outline"
+            data-testid="button-reset-guardrails"
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reset Defaults
+          </Button>
+          <Button 
+            onClick={handleSave} 
+            disabled={!hasChanges || updateMutation.isPending}
+            data-testid="button-save-guardrails"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -180,10 +209,21 @@ export default function GuardrailsTab() {
           </div>
         </div>
 
-        <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+        <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-3">
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="ai-adjust" 
+              checked={aiCanAdjust}
+              onCheckedChange={(checked) => setAiCanAdjust(checked as boolean)}
+              data-testid="checkbox-ai-adjust"
+            />
+            <Label htmlFor="ai-adjust" className="text-sm font-medium cursor-pointer">
+              AI may adjust guardrails automatically based on goals
+            </Label>
+          </div>
           <p className="text-sm text-muted-foreground">
             <Shield className="w-4 h-4 inline mr-2" />
-            The AI can modify these guardrails based on agreed goals to optimize risk/reward balance
+            When enabled, the AI can modify these guardrails to optimize risk/reward balance while staying within safe limits
           </p>
         </div>
       </CardContent>
