@@ -1224,6 +1224,85 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Market Context (AI Market Analysis) routes
+  app.get('/api/market-context/latest', async (req, res) => {
+    try {
+      const mode = (req.query.mode as string) || 'live';
+      
+      if (mode !== 'live' && mode !== 'paper') {
+        return res.status(400).json({ error: 'Invalid mode. Must be "live" or "paper"' });
+      }
+      
+      const analysis = await storage.getLatestAiMarketAnalysis(mode);
+      res.json(analysis || null);
+    } catch (error) {
+      console.error('Error fetching latest market analysis:', error);
+      res.status(500).json({ error: 'Failed to fetch market analysis' });
+    }
+  });
+
+  app.get('/api/market-context/history', async (req, res) => {
+    try {
+      const mode = (req.query.mode as string) || 'live';
+      const days = parseInt(req.query.days as string) || 7;
+      
+      if (mode !== 'live' && mode !== 'paper') {
+        return res.status(400).json({ error: 'Invalid mode. Must be "live" or "paper"' });
+      }
+      
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - days);
+      const toDate = new Date();
+      
+      const analyses = await storage.getAiMarketAnalysesByRange(mode, fromDate, toDate);
+      res.json(analyses);
+    } catch (error) {
+      console.error('Error fetching market analysis history:', error);
+      res.status(500).json({ error: 'Failed to fetch market analysis history' });
+    }
+  });
+
+  app.post('/api/market-context/analyze', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { mode = 'live' } = req.body;
+      
+      if (mode !== 'live' && mode !== 'paper') {
+        return res.status(400).json({ error: 'Invalid mode. Must be "live" or "paper"' });
+      }
+      
+      // Check if feature is enabled for this user
+      const settings = await storage.getTradingSettings(userId);
+      if (!settings?.aiOpportunitiesEnabled) {
+        return res.status(403).json({ error: 'AI features are disabled for this user' });
+      }
+      
+      // Manually trigger market analysis
+      const { runAiMarketAnalysis } = await import('./services/ai-market-analyzer');
+      const { adjustSignalWeightsByRegime } = await import('./services/signal-weight-optimizer');
+      
+      const analysis = await runAiMarketAnalysis(mode);
+      
+      // Apply regime-based adjustments if confidence is high enough
+      if (analysis.confidence && analysis.confidence >= 60) {
+        await adjustSignalWeightsByRegime(analysis.regime, mode);
+      }
+      
+      // Audit log the manual trigger
+      await storage.createAuditLog({
+        userId,
+        actionType: 'manual_market_analysis',
+        gptResponse: `User manually triggered ${mode} market analysis: ${analysis.regime} (${analysis.confidence}% confidence)`,
+        status: 'completed'
+      });
+      
+      res.json({ success: true, analysis });
+    } catch (error) {
+      console.error('Error running market analysis:', error);
+      res.status(500).json({ error: 'Failed to run market analysis' });
+    }
+  });
+
   // Stock API routes
   app.get('/api/stocks/quote/:symbol', async (req, res) => {
     try {
