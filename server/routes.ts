@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
@@ -39,6 +39,52 @@ function issueTokens(user: { id: string; username: string }) {
     { expiresIn: '7d' }
   );
   return { accessToken, refreshToken };
+}
+
+// Authentication Middleware
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    username: string;
+  };
+}
+
+function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  // Support both Authorization header (preferred) and user-id header (backward compatibility)
+  const authHeader = req.headers.authorization;
+  const userIdHeader = req.headers['user-id'] as string;
+  
+  // If authorization header is present, verify JWT
+  if (authHeader) {
+    const token = authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+      req.user = { id: decoded.id, username: decoded.username };
+      next();
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+  } 
+  // Backward compatibility: support user-id header with JWT token
+  else if (userIdHeader) {
+    try {
+      // If user-id is a JWT token, verify it
+      const decoded = jwt.verify(userIdHeader, JWT_SECRET) as { id: string; username: string };
+      req.user = { id: decoded.id, username: decoded.username };
+      next();
+    } catch (error) {
+      // If not a valid JWT, treat it as a plain user ID (backward compatibility)
+      req.user = { id: userIdHeader, username: userIdHeader };
+      next();
+    }
+  } else {
+    return res.status(401).json({ error: 'No authentication credentials provided' });
+  }
 }
 
 // TEMPORARILY DISABLED: Do not ping Kraken for 1 hour (maintenance mode)
