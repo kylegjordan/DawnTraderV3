@@ -336,6 +336,7 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({
         target: [strategySettings.userId, strategySettings.mode, strategySettings.strategy],
         set: {
+          enabled: row.enabled ?? true,
           params: row.params,
           version: sql`${strategySettings.version} + 1`,
           updatedAt: new Date(),

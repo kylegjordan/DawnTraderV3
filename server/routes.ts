@@ -3331,6 +3331,7 @@ Please:
       const userId = req.headers['user-id'] as string || 'default-user';
       const mode = (req.body?.mode === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       const strategy = String(req.body?.strategy);
+      const enabled = req.body?.enabled !== undefined ? Boolean(req.body.enabled) : true;
       
       const { getValidator } = await import('./services/strategy-validators');
       const schema = getValidator(strategy);
@@ -3345,6 +3346,7 @@ Please:
         userId,
         mode,
         strategy: strategy as any,
+        enabled,
         params: parse.data,
       });
 
