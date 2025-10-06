@@ -5,12 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAI } from "@/hooks/use-trading";
-import { Brain, Search, FileText, TrendingUp, Target, MessageSquare, History, AlertCircle, Loader2 } from "lucide-react";
+import { Brain, Search, FileText, Target, MessageSquare, AlertCircle, Loader2 } from "lucide-react";
 import { ChatContainer } from "@/components/ai/chat-container";
-import { AuditLogViewer } from "@/components/ai/audit-log-viewer";
-import { ErrorLogViewer } from "@/components/ai/error-log-viewer";
 import { AIOpportunitiesTab } from "@/components/ai/ai-opportunities-tab";
-import { ValidationReportsTab } from "@/components/ai/validation-reports-tab";
 import { apiRequest } from "@/lib/queryClient";
 import type { SearchResult, AssetContext } from "@/lib/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -227,7 +224,7 @@ export default function Analysis() {
       </div>
 
       <Tabs defaultValue="chat" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="chat" data-testid="tab-chat">
             <MessageSquare className="w-4 h-4 mr-2" />
             Chat Assistant
@@ -236,21 +233,9 @@ export default function Analysis() {
             <Target className="w-4 h-4 mr-2" />
             AI Opportunities
           </TabsTrigger>
-          <TabsTrigger value="validation" data-testid="tab-validation">
-            <TrendingUp className="w-4 h-4 mr-2" />
-            Validation Reports
-          </TabsTrigger>
           <TabsTrigger value="search" data-testid="tab-search">
             <Search className="w-4 h-4 mr-2" />
             Symbol Analysis
-          </TabsTrigger>
-          <TabsTrigger value="audit" data-testid="tab-audit">
-            <History className="w-4 h-4 mr-2" />
-            Audit Log
-          </TabsTrigger>
-          <TabsTrigger value="errors" data-testid="tab-errors">
-            <AlertCircle className="w-4 h-4 mr-2" />
-            Error Logs
           </TabsTrigger>
         </TabsList>
 
@@ -262,11 +247,6 @@ export default function Analysis() {
         {/* AI Opportunities Tab */}
         <TabsContent value="opportunities">
           <AIOpportunitiesTab />
-        </TabsContent>
-
-        {/* Validation Reports Tab */}
-        <TabsContent value="validation">
-          <ValidationReportsTab />
         </TabsContent>
 
         {/* Symbol Analysis Tab */}
@@ -530,16 +510,6 @@ export default function Analysis() {
               </CardContent>
             </Card>
           )}
-        </TabsContent>
-
-        {/* Audit Log Tab */}
-        <TabsContent value="audit">
-          <AuditLogViewer />
-        </TabsContent>
-
-        {/* Error Logs Tab */}
-        <TabsContent value="errors">
-          <ErrorLogViewer />
         </TabsContent>
       </Tabs>
     </div>
