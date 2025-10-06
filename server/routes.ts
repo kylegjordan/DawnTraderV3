@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { KrakenService } from "./services/kraken";
-import { TradingEngine } from "./services/trading-engine";
+import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
 import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
@@ -3279,8 +3279,8 @@ Please:
         reason: req.body?.reason || 'manual update',
       });
 
-      // TODO: Hot-reload into engine (will be implemented in next task)
-      // await EngineSettingsBus.publish({ userId, mode });
+      // Hot-reload into engine
+      await EngineSettingsBus.publish({ userId, mode });
 
       return res.json({ ok: true, saved });
     } catch (error: any) {

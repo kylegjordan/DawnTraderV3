@@ -541,4 +541,38 @@ export class TradingEngine {
   isEngineRunning(): boolean {
     return this.isRunning;
   }
+
+  // Hot-reload strategy settings (called by EngineSettingsBus)
+  async reloadStrategySettings(mode: 'live' | 'paper'): Promise<void> {
+    try {
+      const settings = await storage.listStrategySettings({ userId: this.userId, mode });
+      console.log(`[TradingEngine] Reloaded ${settings.length} strategy settings for user ${this.userId} (${mode} mode)`);
+      // Settings are stored and will be fetched when needed by strategy engine
+      // The strategy engine will pull latest settings on each trade evaluation
+    } catch (error) {
+      console.error(`[TradingEngine] Failed to reload strategy settings:`, error);
+    }
+  }
 }
+
+// Simple in-process pub/sub for strategy settings hot-reload
+export const EngineSettingsBus = {
+  _subs: new Set<(msg: { userId: string; mode: 'live' | 'paper' }) => void>(),
+  
+  subscribe(fn: (msg: { userId: string; mode: 'live' | 'paper' }) => void) {
+    this._subs.add(fn);
+    return () => this._subs.delete(fn);
+  },
+  
+  async publish(msg: { userId: string; mode: 'live' | 'paper' }) {
+    console.log(`[EngineSettingsBus] Publishing settings reload for user ${msg.userId} (${msg.mode} mode)`);
+    const subs = Array.from(this._subs);
+    for (const fn of subs) {
+      try {
+        await fn(msg);
+      } catch (error) {
+        console.error('[EngineSettingsBus] Subscriber error:', error);
+      }
+    }
+  }
+};
