@@ -28,6 +28,8 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas: `users`, `tr
 ### System Design Choices
 - **Trading Strategy Implementation**: Fixed rules for VWAP Pullback, ABCD Long, and SMA Trend Ride strategies with calculated entry, stop loss, and target prices.
 - **Risk Management System**: Multi-layered, including risk per trade, max exposure, max open trades, slippage tolerance, order book depth validation, and a daily loss kill switch.
+- **Strategy Parameters Configuration**: Mode-isolated (live/paper) parameter system with server-side validation, hot-reload capability via EngineSettingsBus, complete audit trail, and AI-ready architecture supporting both user and AI-driven changes.
+- **Strategy Presets & Defaults**: Quick-load preset system with Conservative, Balanced, and Aggressive configurations for each strategy. Presets are validated server-side and can be instantly loaded, modified, and saved through the same validation pipeline.
 - **AI Opportunities**: Hourly automated pipeline using GPT-4o mini to identify, validate, and store trading opportunities across five types.
 - **Live Kraken Balance Integration**: Portfolio Value widget displaying live account balances with caching and fallback.
 - **Comprehensive Reports Panel**: Canned Reports (Tax, Performance, Trade Journal), Custom Reports, and Quick Exports (CSV).
