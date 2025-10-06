@@ -3194,6 +3194,101 @@ Please:
     }
   });
 
+  // Strategy Settings Routes
+  
+  // GET current settings for a specific strategy
+  app.get('/api/strategies/settings', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
+      const strategy = String(req.query.strategy);
+      
+      const row = await storage.getStrategySettings({ userId, mode, strategy });
+      return res.json(row ?? {});
+    } catch (error: any) {
+      console.error('Error fetching strategy settings:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET all settings for a mode
+  app.get('/api/strategies/settings/all', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
+      
+      const rows = await storage.listStrategySettings({ userId, mode });
+      return res.json(rows);
+    } catch (error: any) {
+      console.error('Error fetching all strategy settings:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST validate settings (no save)
+  app.post('/api/strategies/settings/validate', async (req, res) => {
+    try {
+      const { strategy, params } = req.body || {};
+      const { getValidator } = await import('./services/strategy-validators');
+      
+      const schema = getValidator(strategy);
+      const parse = schema.safeParse(params);
+      
+      if (!parse.success) {
+        return res.status(400).json({ ok: false, errors: parse.error.flatten() });
+      }
+      
+      return res.json({ ok: true, normalized: parse.data });
+    } catch (error: any) {
+      console.error('Error validating strategy settings:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // PUT save settings (validated) + audit + hot-reload
+  app.put('/api/strategies/settings', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.body?.mode === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
+      const strategy = String(req.body?.strategy);
+      
+      const { getValidator } = await import('./services/strategy-validators');
+      const schema = getValidator(strategy);
+      const parse = schema.safeParse(req.body?.params);
+      
+      if (!parse.success) {
+        return res.status(400).json({ ok: false, errors: parse.error.flatten() });
+      }
+
+      const prev = await storage.getStrategySettings({ userId, mode, strategy });
+      const saved = await storage.upsertStrategySettings({
+        userId,
+        mode,
+        strategy: strategy as any,
+        params: parse.data,
+      });
+
+      await storage.insertStrategySettingsAudit({
+        userId,
+        mode,
+        strategy: strategy as any,
+        prevParams: prev?.params ?? null,
+        nextParams: saved.params,
+        actorType: 'user',
+        actorId: userId,
+        reason: req.body?.reason || 'manual update',
+      });
+
+      // TODO: Hot-reload into engine (will be implemented in next task)
+      // await EngineSettingsBus.publish({ userId, mode });
+
+      return res.json({ ok: true, saved });
+    } catch (error: any) {
+      console.error('Error saving strategy settings:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
