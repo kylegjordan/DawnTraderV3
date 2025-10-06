@@ -14,6 +14,7 @@ import DailyBriefPage from "@/pages/daily-brief";
 import GoalsEnginePage from "@/pages/goals-engine";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
+import SystemsPage from "@/pages/systems";
 import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
 import { useState, useEffect } from "react";
@@ -115,6 +116,7 @@ function Router() {
             <Route path="/daily-brief" component={DailyBriefPage} />
             <Route path="/analysis" component={Analysis} />
             <Route path="/goals-engine" component={GoalsEnginePage} />
+            <Route path="/systems" component={SystemsPage} />
             <Route path="/settings" component={Settings} />
             <Route path="/kill-switch" component={KillSwitchScreen} />
             <Route component={NotFound} />

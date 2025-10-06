@@ -11,7 +11,8 @@ import {
   User,
   FileText,
   Target,
-  LogOut
+  LogOut,
+  Activity
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ const navigation = [
   { name: "Trade History", href: "/history", icon: Clock },
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "AI Analysis", href: "/analysis", icon: Brain },
+  { name: "Systems Monitoring", href: "/systems", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
