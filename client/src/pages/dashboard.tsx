@@ -13,6 +13,7 @@ import EarningsWidget from "@/components/goals/earnings-widget";
 import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import ResultsWidget from "@/components/goals/results-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
+import SystemMonitoringPanel from "@/components/system/system-monitoring-panel";
 
 export default function Dashboard() {
   return (
@@ -60,6 +61,9 @@ export default function Dashboard() {
 
       {/* Symbols That Have Cleared the Screening Process */}
       <Watchlist />
+
+      {/* System Monitoring & Checks Panel */}
+      <SystemMonitoringPanel />
     </div>
   );
 }
