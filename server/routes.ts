@@ -13,6 +13,7 @@ import { insertTradingSettingsSchema, insertWatchlistPairSchema } from "@shared/
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
+import OpenAI from "openai";
 
 const tradingEngines = new Map<string, TradingEngine>();
 const marketScanner = new MarketScanner();
@@ -2087,7 +2088,7 @@ Provide specific, actionable recommendations.`,
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
-      const trades = await storage.getTrades(userId, { mode: 'live' });
+      const trades = await storage.getTrades(userId, {});
       const recentTrades = trades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate
       );
@@ -2171,7 +2172,7 @@ Provide specific, actionable recommendations.`,
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
-      const trades = await storage.getTrades(userId, { mode: 'paper' });
+      const trades = await storage.getAllPaperTrades(userId);
       const recentTrades = trades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate
       );
@@ -2253,9 +2254,11 @@ Provide specific, actionable recommendations.`,
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
-      const trades = await storage.getTrades(userId, { mode: mode as 'live' | 'paper', strategy });
+      const trades = mode === 'live'
+        ? await storage.getTrades(userId, { strategy })
+        : await storage.getAllPaperTrades(userId);
       const recentTrades = trades.filter(t => 
-        t.entryTime && new Date(t.entryTime) >= fromDate
+        t.entryTime && new Date(t.entryTime) >= fromDate && t.strategy === strategy
       );
 
       const closedTrades = recentTrades.filter(t => t.status === 'closed');
@@ -2474,6 +2477,238 @@ Provide specific, actionable recommendations.`,
       });
     } catch (error: any) {
       console.error('Error optimizing signal weights:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ===== GOALS ENGINE ROUTES =====
+
+  // Get goals summary (mode-aware)
+  app.get('/api/goals/summary', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.query.mode as string) || 'live';
+
+      const goals = mode === 'live' 
+        ? await storage.getUserGoalsLive(userId)
+        : await storage.getUserGoalsPaper(userId);
+
+      res.json({ success: true, data: goals, mode });
+    } catch (error: any) {
+      console.error('Error fetching goals summary:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Update goals (mode-aware)
+  app.post('/api/goals/update', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { goals, mode = 'live' } = req.body;
+
+      const updatedGoals = [];
+      
+      for (const goal of goals) {
+        const goalData = {
+          userId,
+          metricName: goal.metricName,
+          goalValue: goal.goalValue,
+          actualValue: goal.actualValue,
+          percentAchieved: goal.percentAchieved,
+          aiValidationNotes: goal.aiValidationNotes,
+        };
+
+        const result = mode === 'live'
+          ? await storage.upsertGoalLive(goalData)
+          : await storage.upsertGoalPaper(goalData);
+        
+        updatedGoals.push(result);
+      }
+
+      res.json({ success: true, data: updatedGoals, mode });
+    } catch (error: any) {
+      console.error('Error updating goals:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Analyze goals with AI (conversational goal-setting)
+  app.post('/api/goals/analyze', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { userMessage, mode = 'live' } = req.body;
+
+      const settings = await storage.getTradingSettings(userId);
+      if (!settings) {
+        return res.status(404).json({ success: false, error: 'Trading settings not found' });
+      }
+
+      const currentGoals = mode === 'live'
+        ? await storage.getUserGoalsLive(userId)
+        : await storage.getUserGoalsPaper(userId);
+
+      const trades = mode === 'live'
+        ? await storage.getTrades(userId, {})
+        : await storage.getAllPaperTrades(userId);
+      const closedTrades = trades.filter(t => t.status === 'closed');
+      
+      const totalPL = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+      const avgPLPerTrade = closedTrades.length > 0 ? totalPL / closedTrades.length : 0;
+      const winRate = closedTrades.length > 0 
+        ? (closedTrades.filter(t => parseFloat(t.realizedPL || '0') > 0).length / closedTrades.length) * 100
+        : 0;
+
+      const prompt = `You are an AI trading advisor helping a user set and optimize their trading goals.
+
+Current Trading Context:
+- Mode: ${mode}
+- Total Closed Trades: ${closedTrades.length}
+- Total P/L: $${totalPL.toFixed(2)}
+- Average P/L per Trade: $${avgPLPerTrade.toFixed(2)}
+- Win Rate: ${winRate.toFixed(1)}%
+- Risk per Trade: $${settings.riskPerTrade}
+- Max Open Trades: ${settings.maxOpenTrades}
+
+Current Goals:
+${currentGoals.map(g => `- ${g.metricName}: Target $${g.goalValue}, Current $${g.actualValue}, ${g.percentAchieved}% achieved`).join('\n') || 'No goals set'}
+
+User Request: "${userMessage}"
+
+Please:
+1. Evaluate the feasibility of the user's request based on current performance and risk parameters
+2. Propose specific numeric goals that are achievable but challenging
+3. Suggest specific strategy or guardrail adjustments to help achieve these goals
+4. Provide a feasibility score (0-100)
+5. Format your response as JSON with:
+   - aiResponse: string (your explanation)
+   - goalsProposed: array of { metricName, goalValue }
+   - configChangesProposed: object with suggested parameter changes
+   - feasibilityScore: number`;
+
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+      });
+
+      const aiAnalysis = JSON.parse(completion.choices[0].message.content || '{}');
+
+      const analysisRecord = {
+        userId,
+        userMessage,
+        aiResponse: aiAnalysis.aiResponse,
+        goalsProposed: aiAnalysis.goalsProposed,
+        configChangesProposed: aiAnalysis.configChangesProposed,
+        feasibilityScore: aiAnalysis.feasibilityScore?.toString(),
+      };
+
+      await (mode === 'live' 
+        ? storage.createGoalAnalysisLive(analysisRecord)
+        : storage.createGoalAnalysisPaper(analysisRecord));
+
+      res.json({ success: true, data: aiAnalysis, mode });
+    } catch (error: any) {
+      console.error('Error analyzing goals:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Apply goals and configuration changes
+  app.post('/api/goals/apply', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const { goals, configChanges, analysisId, mode = 'live' } = req.body;
+
+      const updatedGoals = [];
+      
+      for (const goal of goals) {
+        const goalData = {
+          userId,
+          metricName: goal.metricName,
+          goalValue: goal.goalValue,
+          actualValue: '0',
+          percentAchieved: '0',
+          aiValidationNotes: 'AI-validated and applied',
+        };
+
+        const result = mode === 'live'
+          ? await storage.upsertGoalLive(goalData)
+          : await storage.upsertGoalPaper(goalData);
+        
+        updatedGoals.push(result);
+      }
+
+      if (configChanges && Object.keys(configChanges).length > 0) {
+        await storage.updateTradingSettings(userId, configChanges);
+      }
+
+      res.json({ 
+        success: true, 
+        data: { 
+          goals: updatedGoals, 
+          configApplied: configChanges 
+        }, 
+        mode 
+      });
+    } catch (error: any) {
+      console.error('Error applying goals:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ===== EARNINGS SUMMARY ROUTE =====
+
+  // Get earnings summary for Earnings widget
+  app.get('/api/earnings/summary', async (req, res) => {
+    try {
+      const userId = req.headers['user-id'] as string || 'default-user';
+      const mode = (req.query.mode as string) || 'live';
+
+      const trades = mode === 'live'
+        ? await storage.getTrades(userId, {})
+        : await storage.getAllPaperTrades(userId);
+      const closedTrades = trades.filter(t => t.status === 'closed' && t.exitTime);
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const yearStart = new Date(now.getFullYear(), 0, 1);
+
+      const calculateEarnings = (fromDate: Date) => {
+        return closedTrades
+          .filter(t => t.exitTime && new Date(t.exitTime) >= fromDate)
+          .reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+      };
+
+      const today = calculateEarnings(todayStart);
+      const thisWeek = calculateEarnings(weekStart);
+      const thisMonth = calculateEarnings(monthStart);
+      const thisYear = calculateEarnings(yearStart);
+      const allTime = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+
+      const firstTradeDate = closedTrades.length > 0 
+        ? new Date(Math.min(...closedTrades.map(t => new Date(t.exitTime!).getTime())))
+        : now;
+      const daysSinceStart = Math.max(1, Math.ceil((now.getTime() - firstTradeDate.getTime()) / (24 * 60 * 60 * 1000)));
+      const avgDailyEarnings = allTime / daysSinceStart;
+
+      res.json({
+        success: true,
+        data: {
+          today,
+          thisWeek,
+          thisMonth,
+          thisYear,
+          allTime,
+          avgDailyEarnings,
+        },
+        mode,
+      });
+    } catch (error: any) {
+      console.error('Error fetching earnings summary:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
