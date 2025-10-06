@@ -348,6 +348,50 @@ export class DatabaseStorage implements IStorage {
       .where(eq(trades.id, id))
       .returning();
 
+    // Update prediction outcome for Learning Feedback Engine
+    try {
+      const [predictionOutcome] = await db
+        .select()
+        .from(predictionOutcomes)
+        .where(eq(predictionOutcomes.tradeId, id))
+        .limit(1);
+
+      if (predictionOutcome) {
+        // Define threshold for neutral predictions (2% of risk amount)
+        const neutralThreshold = parseFloat(trade.riskAmount) * 0.02;
+        
+        const actualDirection = realizedPL > neutralThreshold ? 'long' : 
+                                realizedPL < -neutralThreshold ? 'short' : 
+                                'neutral';
+        
+        // Check prediction correctness based on direction
+        let predictionCorrect = false;
+        if (predictionOutcome.predictedDirection === 'long') {
+          predictionCorrect = realizedPL > 0;
+        } else if (predictionOutcome.predictedDirection === 'short') {
+          predictionCorrect = realizedPL < 0;
+        } else if (predictionOutcome.predictedDirection === 'neutral') {
+          // Neutral prediction is correct if P&L is within threshold range
+          predictionCorrect = Math.abs(realizedPL) <= neutralThreshold;
+        }
+
+        await db
+          .update(predictionOutcomes)
+          .set({
+            actualDirection,
+            actualOutcome: realizedPL.toString(),
+            deltaPercent: realizedPLPercent.toString(),
+            correct: predictionCorrect,
+            completedAt: new Date()
+          })
+          .where(eq(predictionOutcomes.id, predictionOutcome.id));
+
+        console.log(`📊 Prediction outcome updated for trade ${id}: ${predictionCorrect ? '✅ Correct' : '❌ Incorrect'} (predicted: ${predictionOutcome.predictedDirection}, actual: ${actualDirection}, P/L: $${realizedPL.toFixed(2)})`);
+      }
+    } catch (error) {
+      console.error('Error updating prediction outcome:', error);
+    }
+
     return result;
   }
 

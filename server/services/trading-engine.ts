@@ -75,7 +75,7 @@ export class TradingEngine {
       }
 
       // Calculate position size
-      const riskAmount = parseFloat(settings.riskPerTrade);
+      const riskAmount = parseFloat(settings.riskPerTrade || '100');
       const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
       const quantity = riskAmount / stopDistance;
 
@@ -153,7 +153,7 @@ export class TradingEngine {
         console.log(`   Filled: ${filledQuantity.toFixed(8)} (${fillPercent.toFixed(1)}%)`);
         console.log(`   Threshold: ${settings.partialFillThreshold}%`);
         
-        const fillThreshold = parseFloat(settings.partialFillThreshold);
+        const fillThreshold = parseFloat(settings.partialFillThreshold || '90');
         
         if (fillPercent < fillThreshold) {
           // Handle based on configuration
@@ -211,7 +211,32 @@ export class TradingEngine {
       metadata: signal.metadata
     };
 
-    return await storage.createTrade(tradeData);
+    const trade = await storage.createTrade(tradeData);
+
+    // Capture prediction metadata for Learning Feedback Engine
+    if (signal.metadata?.signal_type || signal.metadata?.confidence) {
+      try {
+        const predictionData = {
+          userId: this.userId,
+          tradeId: trade.id,
+          strategy: signal.strategy,
+          mode,
+          symbol: signal.symbol,
+          signalType: signal.metadata.signal_type || signal.strategy,
+          predictionConfidence: (signal.metadata.confidence || signal.confidence || 0.5).toString(),
+          predictedDirection: signal.metadata.predicted_direction || 'long',
+          rationale: signal.metadata.rationale || '',
+          riskScore: (signal.metadata.risk_score || 0.5).toString()
+        };
+        
+        await storage.createPredictionOutcome(predictionData);
+        console.log(`📊 Prediction metadata captured for trade ${trade.id}`);
+      } catch (error) {
+        console.error('Error capturing prediction metadata:', error);
+      }
+    }
+
+    return trade;
   }
 
   private async placeStopAndTargetOrders(trade: Trade): Promise<void> {
@@ -229,7 +254,7 @@ export class TradingEngine {
       }
 
       // Apply stop buffer to protect against premature stop-outs
-      const stopBuffer = parseFloat(settings.stopBufferPercent) / 100; // Convert % to decimal
+      const stopBuffer = parseFloat(settings.stopBufferPercent || '5') / 100; // Convert % to decimal
       const baseStopPrice = parseFloat(trade.stopPrice);
       const bufferedStopPrice = baseStopPrice * (1 - stopBuffer); // Lower stop for long positions
       
@@ -352,10 +377,10 @@ export class TradingEngine {
     const isMajor = majorPairs.some(pair => symbol.includes(pair.slice(0, 3)));
     
     if (isMajor) {
-      return parseFloat(settings.slippageToleranceMajors);
+      return parseFloat(settings.slippageToleranceMajors || '0.5');
     } else {
       // For simplicity, treating all others as midcap
-      return parseFloat(settings.slippageToleranceMidcaps);
+      return parseFloat(settings.slippageToleranceMidcaps || '1.5');
     }
   }
 
