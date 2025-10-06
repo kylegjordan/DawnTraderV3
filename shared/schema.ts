@@ -428,6 +428,60 @@ export const featureSnapshots = pgTable("feature_snapshots", {
   normalizationWindow: integer("normalization_window").default(30),
 });
 
+// Goals Engine - Live Mode
+export const userGoalsLive = pgTable("user_goals_live", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  metricName: varchar("metric_name", { length: 100 }).notNull(),
+  goalValue: decimal("goal_value", { precision: 15, scale: 2 }),
+  actualValue: decimal("actual_value", { precision: 15, scale: 2 }),
+  percentAchieved: decimal("percent_achieved", { precision: 5, scale: 2 }),
+  aiValidationNotes: text("ai_validation_notes"),
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
+});
+
+// Goals Engine - Paper Mode
+export const userGoalsPaper = pgTable("user_goals_paper", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  metricName: varchar("metric_name", { length: 100 }).notNull(),
+  goalValue: decimal("goal_value", { precision: 15, scale: 2 }),
+  actualValue: decimal("actual_value", { precision: 15, scale: 2 }),
+  percentAchieved: decimal("percent_achieved", { precision: 5, scale: 2 }),
+  aiValidationNotes: text("ai_validation_notes"),
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
+});
+
+// Goal Analysis History - Live Mode
+export const goalAnalysisHistoryLive = pgTable("goal_analysis_history_live", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  conversationId: varchar("conversation_id"),
+  userMessage: text("user_message"),
+  aiResponse: text("ai_response"),
+  goalsProposed: jsonb("goals_proposed"),
+  goalsAccepted: jsonb("goals_accepted"),
+  configChangesProposed: jsonb("config_changes_proposed"),
+  configChangesApplied: jsonb("config_changes_applied"),
+  feasibilityScore: decimal("feasibility_score", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+// Goal Analysis History - Paper Mode
+export const goalAnalysisHistoryPaper = pgTable("goal_analysis_history_paper", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  conversationId: varchar("conversation_id"),
+  userMessage: text("user_message"),
+  aiResponse: text("ai_response"),
+  goalsProposed: jsonb("goals_proposed"),
+  goalsAccepted: jsonb("goals_accepted"),
+  configChangesProposed: jsonb("config_changes_proposed"),
+  configChangesApplied: jsonb("config_changes_applied"),
+  feasibilityScore: decimal("feasibility_score", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -444,6 +498,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   paperAIReports: many(paperAIReports),
   signalWeights: many(signalWeights),
   predictionOutcomes: many(predictionOutcomes),
+  goalsLive: many(userGoalsLive),
+  goalsPaper: many(userGoalsPaper),
+  goalAnalysisHistoryLive: many(goalAnalysisHistoryLive),
+  goalAnalysisHistoryPaper: many(goalAnalysisHistoryPaper),
 }));
 
 export const tradingSettingsRelations = relations(tradingSettings, ({ one }) => ({
@@ -659,6 +717,27 @@ export const insertFeatureSnapshotSchema = createInsertSchema(featureSnapshots).
   timestamp: true,
 });
 
+// Goals Engine insert schemas
+export const insertUserGoalLiveSchema = createInsertSchema(userGoalsLive).omit({
+  id: true,
+  lastUpdated: true,
+});
+
+export const insertUserGoalPaperSchema = createInsertSchema(userGoalsPaper).omit({
+  id: true,
+  lastUpdated: true,
+});
+
+export const insertGoalAnalysisHistoryLiveSchema = createInsertSchema(goalAnalysisHistoryLive).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertGoalAnalysisHistoryPaperSchema = createInsertSchema(goalAnalysisHistoryPaper).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -722,3 +801,15 @@ export type PredictionOutcome = typeof predictionOutcomes.$inferSelect;
 
 export type InsertFeatureSnapshot = z.infer<typeof insertFeatureSnapshotSchema>;
 export type FeatureSnapshot = typeof featureSnapshots.$inferSelect;
+
+export type InsertUserGoalLive = z.infer<typeof insertUserGoalLiveSchema>;
+export type UserGoalLive = typeof userGoalsLive.$inferSelect;
+
+export type InsertUserGoalPaper = z.infer<typeof insertUserGoalPaperSchema>;
+export type UserGoalPaper = typeof userGoalsPaper.$inferSelect;
+
+export type InsertGoalAnalysisHistoryLive = z.infer<typeof insertGoalAnalysisHistoryLiveSchema>;
+export type GoalAnalysisHistoryLive = typeof goalAnalysisHistoryLive.$inferSelect;
+
+export type InsertGoalAnalysisHistoryPaper = z.infer<typeof insertGoalAnalysisHistoryPaperSchema>;
+export type GoalAnalysisHistoryPaper = typeof goalAnalysisHistoryPaper.$inferSelect;
