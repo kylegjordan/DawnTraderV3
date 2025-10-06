@@ -362,8 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.headers['user-id'] as string || 'default-user';
       const period = (req.query.period as string) || '1M';
       
-      const user = await storage.getUser(userId);
-      const initialBalance = user?.initialBalance || 50000;
+      const initialBalance = 50000;
       
       const now = new Date();
       let startDate = new Date();
@@ -400,7 +399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       closedTrades.forEach(trade => {
         const tradeDate = new Date(trade.exitTime!);
         if (tradeDate < startDate) {
-          portfolioValueAtStart += trade.profitLoss || 0;
+          portfolioValueAtStart += Number(trade.realizedPL) || 0;
         } else {
           tradesInPeriod.push(trade);
         }
@@ -416,8 +415,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       tradesInPeriod.forEach(trade => {
-        if (trade.profitLoss) {
-          currentValue += trade.profitLoss;
+        if (trade.realizedPL) {
+          currentValue += Number(trade.realizedPL);
           dataPoints.push({
             date: new Date(trade.exitTime!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
             value: currentValue,
@@ -446,8 +445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.headers['user-id'] as string || 'default-user';
       const period = (req.query.period as string) || '30d';
       
-      const user = await storage.getUser(userId);
-      const initialBalance = user?.initialBalance || 50000;
+      const initialBalance = 50000;
       
       const now = new Date();
       let startDate = new Date();
@@ -481,7 +479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       closedTrades.forEach(trade => {
         const tradeDate = new Date(trade.exitTime!);
         if (tradeDate < startDate) {
-          portfolioValueAtStart += trade.profitLoss || 0;
+          portfolioValueAtStart += Number(trade.realizedPL) || 0;
         } else {
           tradesInPeriod.push(trade);
         }
@@ -496,8 +494,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       tradesInPeriod.forEach(trade => {
-        if (trade.profitLoss) {
-          currentValue += trade.profitLoss;
+        if (trade.realizedPL) {
+          currentValue += Number(trade.realizedPL);
           dataPoints.push({
             date: trade.exitTime!,
             value: currentValue
@@ -523,13 +521,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.headers['user-id'] as string || 'default-user';
       
-      const user = await storage.getUser(userId);
-      const initialBalance = user?.initialBalance || 50000;
+      const initialBalance = 50000;
       
       const allTrades = await storage.getTrades(userId, {});
       const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
       
-      const totalProfitLoss = closedTrades.reduce((sum, t) => sum + (t.profitLoss || 0), 0);
+      const totalProfitLoss = closedTrades.reduce((sum, t) => sum + (Number(t.realizedPL) || 0), 0);
       const currentValue = initialBalance + totalProfitLoss;
       
       const yesterday = new Date();
@@ -539,11 +536,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         t.exitTime && new Date(t.exitTime) >= yesterday
       );
       
-      const change24h = tradesLast24h.reduce((sum, t) => sum + (t.profitLoss || 0), 0);
+      const change24h = tradesLast24h.reduce((sum, t) => sum + (Number(t.realizedPL) || 0), 0);
       const valueYesterday = currentValue - change24h;
       const changePercent24h = valueYesterday !== 0 ? (change24h / valueYesterday) * 100 : 0;
       
-      const winningTrades = closedTrades.filter(t => (t.profitLoss || 0) > 0).length;
+      const winningTrades = closedTrades.filter(t => (Number(t.realizedPL) || 0) > 0).length;
       const winRate = closedTrades.length > 0 ? (winningTrades / closedTrades.length) * 100 : 0;
       
       res.json({
@@ -1109,8 +1106,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           strategy: t.strategy,
           entryPrice: t.entryPrice,
           exitPrice: t.exitPrice,
-          profitLoss: t.profitLoss,
-          rMultiple: t.rMultiple
+          profitLoss: Number(t.realizedPL),
+          rMultiple: Number(t.realizedPLR)
         })),
         currentSettings: {
           screener: {
@@ -1160,7 +1157,7 @@ TRADES CLOSED: ${closedTrades.length} positions
 ${closedTrades.map((t: any, i: number) => `
 ${i + 1}. ${t.symbol} (${t.strategy})
    Entry: $${t.entryPrice} → Exit: $${t.exitPrice}
-   P/L: $${t.profitLoss} (${t.rMultiple}R)`).join('')}
+   P/L: $${Number(t.realizedPL)} (${Number(t.realizedPLR)}R)`).join('')}
 
 CURRENT SETTINGS SNAPSHOT:
 - Screener: Min Volume $${settings.minVolume}, Min Range ${settings.minDailyRange}%
@@ -2093,8 +2090,8 @@ Provide specific, actionable recommendations.`,
         status: 'closed',
         exitPrice: (50000 - Math.abs(lossAmount) / (Math.abs(lossAmount) / 50000)).toFixed(2),
         exitTime: new Date(),
-        profitLoss: lossAmount.toString(),
-        rMultiple: '-1.0',
+        realizedPL: lossAmount.toString(),
+        realizedPLR: '-1.0',
         riskAmount: riskAmount.toString(),
         metadata: { test: true, scenario }
       });

@@ -41,9 +41,9 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      await apiRequest("/api/auth/register", "POST", { username, password });
+      await apiRequest("POST", "/api/auth/register", { username, password });
       // Auto-login after successful registration
-      const loginRes = await apiRequest("/api/auth/login", "POST", { username, password });
+      const loginRes = await apiRequest("POST", "/api/auth/login", { username, password });
       localStorage.setItem("token", loginRes.token);
       localStorage.setItem("user", JSON.stringify(loginRes.user));
       setLocation("/");
