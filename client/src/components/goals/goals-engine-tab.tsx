@@ -10,7 +10,6 @@ import { Save, Send, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import GoalsTable from "./goals-table";
 import PerformanceTrackingMetrics from "./performance-tracking-metrics";
 
 interface Goal {
