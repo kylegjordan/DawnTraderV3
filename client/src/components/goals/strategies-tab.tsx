@@ -132,7 +132,7 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     },
   });
 
-  // Fetch presets on mount
+  // Fetch presets on mount and auto-load Balanced if no settings exist
   useEffect(() => {
     const fetchPresets = async () => {
       try {
@@ -142,16 +142,21 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
         const data = await response.json();
         if (data.ok) {
           setPresets(data.presets);
+          // Auto-load Balanced preset if no settings exist
+          if (!settings?.params && data.presets.Balanced) {
+            setFormData(data.presets.Balanced);
+          }
         }
       } catch (error) {
         console.error('Error fetching presets:', error);
       }
     };
     fetchPresets();
-  }, [strategy.id]);
+  }, [strategy.id, settings]);
 
   const handleEdit = () => {
-    setFormData(settings?.params || {});
+    // Use existing settings or keep the auto-loaded Balanced preset
+    setFormData(settings?.params || formData);
     setEditing(true);
     setValidationErrors({});
   };
@@ -214,7 +219,8 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     });
   };
 
-  const currentParams = editing ? formData : settings?.params || {};
+  // Use Balanced preset values as fallback if no saved settings
+  const currentParams = editing ? formData : (settings?.params || formData || {});
   const paramKeys = Object.keys(currentParams);
 
   if (isLoading) {
@@ -249,6 +255,7 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
                   checked={isEnabled}
                   onCheckedChange={handleToggleEnabled}
                   data-testid={`switch-enable-${strategy.id}`}
+                  className={isEnabled ? "data-[state=checked]:bg-green-500" : ""}
                 />
                 <Label className="text-xs text-muted-foreground cursor-pointer">
                   {isEnabled ? 'Enabled' : 'Disabled'}
@@ -258,6 +265,17 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
             <CardDescription className="mt-1">
               {strategy.description}
             </CardDescription>
+            {paramKeys.length > 0 && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                {paramKeys.slice(0, 3).map((key, idx) => (
+                  <span key={key}>
+                    {PARAM_LABELS[key] || key}: <span className="font-mono font-semibold">{currentParams[key]}</span>
+                    {idx < Math.min(2, paramKeys.length - 1) ? " • " : ""}
+                  </span>
+                ))}
+                {paramKeys.length > 3 && <span> • +{paramKeys.length - 3} more</span>}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={hasSettings ? "default" : "secondary"} data-testid={`status-${strategy.id}`}>
@@ -303,55 +321,49 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
         </div>
       </CardHeader>
       <CardContent>
-        {paramKeys.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>No parameters configured. Click Edit to configure this strategy.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {paramKeys.map((key) => (
-              <div key={key} className="space-y-2">
-                <Label htmlFor={`${strategy.id}-${key}`} className="text-sm">
-                  {PARAM_LABELS[key] || key}
-                </Label>
-                {editing ? (
-                  <div>
-                    <Input
-                      id={`${strategy.id}-${key}`}
-                      type="number"
-                      step="any"
-                      value={currentParams[key] ?? ''}
-                      onChange={(e) => handleFieldChange(key, e.target.value)}
-                      className={validationErrors[key] ? "border-red-500" : ""}
-                      data-testid={`input-${strategy.id}-${key}`}
-                    />
-                    {PARAM_DESCRIPTIONS[key] && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {PARAM_DESCRIPTIONS[key]}
-                      </p>
-                    )}
-                    {validationErrors[key] && (
-                      <p className="text-xs text-red-500 mt-1">
-                        {validationErrors[key].join(', ')}
-                      </p>
-                    )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {paramKeys.map((key) => (
+            <div key={key} className="space-y-2">
+              <Label htmlFor={`${strategy.id}-${key}`} className="text-sm">
+                {PARAM_LABELS[key] || key}
+              </Label>
+              {editing ? (
+                <div>
+                  <Input
+                    id={`${strategy.id}-${key}`}
+                    type="number"
+                    step="any"
+                    value={currentParams[key] ?? ''}
+                    onChange={(e) => handleFieldChange(key, e.target.value)}
+                    className={validationErrors[key] ? "border-red-500" : ""}
+                    data-testid={`input-${strategy.id}-${key}`}
+                  />
+                  {PARAM_DESCRIPTIONS[key] && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {PARAM_DESCRIPTIONS[key]}
+                    </p>
+                  )}
+                  {validationErrors[key] && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {validationErrors[key].join(', ')}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div className="text-sm font-mono font-semibold" data-testid={`value-${strategy.id}-${key}`}>
+                    {currentParams[key]}
                   </div>
-                ) : (
-                  <div>
-                    <div className="text-sm font-mono font-semibold" data-testid={`value-${strategy.id}-${key}`}>
-                      {currentParams[key]}
-                    </div>
-                    {PARAM_DESCRIPTIONS[key] && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {PARAM_DESCRIPTIONS[key]}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+                  {PARAM_DESCRIPTIONS[key] && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {PARAM_DESCRIPTIONS[key]}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
         {editing && (
           <div className="mt-4 pt-4 border-t space-y-4">
             {Object.keys(presets).length > 0 && (
