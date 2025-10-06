@@ -1,11 +1,10 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GoalsEngineTab from "@/components/goals/goals-engine-tab";
-import PortfolioTab from "@/components/goals/portfolio-tab";
 import GuardrailsTab from "@/components/goals/guardrails-tab";
 import ScreenerFiltersTab from "@/components/goals/screener-filters-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
 import ModeBanner from "@/components/mode-banner";
-import { Target, PieChart, Shield, Filter, Layers } from "lucide-react";
+import { Target, Shield, Filter, Layers } from "lucide-react";
 
 export default function GoalsEnginePage() {
   return (
@@ -21,7 +20,7 @@ export default function GoalsEnginePage() {
       </div>
 
       <Tabs defaultValue="goals" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 h-auto gap-1 bg-muted p-1">
+        <TabsList className="grid w-full grid-cols-4 h-auto gap-1 bg-muted p-1">
           <TabsTrigger 
             value="goals" 
             className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
@@ -29,14 +28,6 @@ export default function GoalsEnginePage() {
           >
             <Target className="w-4 h-4" />
             <span className="text-xs sm:text-sm">Goals</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="portfolio" 
-            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
-            data-testid="tab-portfolio"
-          >
-            <PieChart className="w-4 h-4" />
-            <span className="text-xs sm:text-sm">Portfolio</span>
           </TabsTrigger>
           <TabsTrigger 
             value="guardrails" 
@@ -52,7 +43,7 @@ export default function GoalsEnginePage() {
             data-testid="tab-screener"
           >
             <Filter className="w-4 h-4" />
-            <span className="text-xs sm:text-sm">Screener</span>
+            <span className="text-xs sm:text-sm">Screeners</span>
           </TabsTrigger>
           <TabsTrigger 
             value="strategies" 
@@ -66,10 +57,6 @@ export default function GoalsEnginePage() {
 
         <TabsContent value="goals" className="mt-6">
           <GoalsEngineTab />
-        </TabsContent>
-
-        <TabsContent value="portfolio" className="mt-6">
-          <PortfolioTab />
         </TabsContent>
 
         <TabsContent value="guardrails" className="mt-6">
