@@ -104,39 +104,45 @@ export default function PortfolioValueWidget() {
           <DollarSign className="w-5 h-5 text-primary" />
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2.5">
+      <CardContent className="space-y-3">
         <div className="flex justify-between items-center">
           <span className="text-sm text-muted-foreground">Total:</span>
           <span className="text-xl font-bold font-mono text-foreground" data-testid="portfolio-total">
             {formatCurrency(portfolioMetrics.totalValue)}
           </span>
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">Cash:</span>
-          <span className="text-sm font-mono text-foreground" data-testid="portfolio-cash">
-            {formatCurrency(portfolioMetrics.cash)}
-          </span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">Crypto:</span>
-          <span className="text-sm font-mono text-foreground" data-testid="portfolio-crypto">
-            {formatCurrency(portfolioMetrics.crypto)}
-          </span>
-        </div>
+        
         <div className="h-px bg-border my-2" />
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">Available for Trading:</span>
-          <span className="text-sm font-mono text-success" data-testid="portfolio-available">
-            {formatCurrency(availableForTrading)}
-          </span>
+        
+        {/* Cash vs Crypto Allocation Bars */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-muted-foreground">Cash Allocation</span>
+            <span className="font-mono text-foreground">{portfolioMetrics.cashPercent?.toFixed(1) || 0}%</span>
+          </div>
+          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-green-500 dark:bg-green-600 transition-all duration-300"
+              style={{ width: `${portfolioMetrics.cashPercent || 0}%` }}
+              data-testid="cash-allocation-bar"
+            />
+          </div>
+          
+          <div className="flex justify-between items-center text-xs mt-2">
+            <span className="text-muted-foreground">Crypto Allocation</span>
+            <span className="font-mono text-foreground">{portfolioMetrics.cryptoPercent?.toFixed(1) || 0}%</span>
+          </div>
+          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-blue-500 dark:bg-blue-600 transition-all duration-300"
+              style={{ width: `${portfolioMetrics.cryptoPercent || 0}%` }}
+              data-testid="crypto-allocation-bar"
+            />
+          </div>
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-xs text-muted-foreground">In Open Trades:</span>
-          <span className="text-sm font-mono text-muted-foreground" data-testid="portfolio-in-trades">
-            {formatCurrency(inOpenTrades)}
-          </span>
-        </div>
+        
         <div className="h-px bg-border my-2" />
+        
         <div className="text-[10px] text-muted-foreground text-center" data-testid="portfolio-sync-time">
           {portfolioMetrics.syncTimestamp 
             ? `Last synced: ${formatTimestamp(portfolioMetrics.syncTimestamp)}`
