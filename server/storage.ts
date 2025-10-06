@@ -17,6 +17,9 @@ import {
   paperTrades,
   paperDailyBriefs,
   paperAIReports,
+  signalWeights,
+  predictionOutcomes,
+  featureSnapshots,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -52,7 +55,13 @@ import {
   type PaperDailyBrief,
   type InsertPaperDailyBrief,
   type PaperAIReport,
-  type InsertPaperAIReport
+  type InsertPaperAIReport,
+  type SignalWeight,
+  type InsertSignalWeight,
+  type PredictionOutcome,
+  type InsertPredictionOutcome,
+  type FeatureSnapshot,
+  type InsertFeatureSnapshot
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray } from "drizzle-orm";
@@ -165,6 +174,24 @@ export interface IStorage {
   // Paper AI report methods
   createPaperAIReport(report: InsertPaperAIReport): Promise<PaperAIReport>;
   getPaperAIReports(userId: string, type?: string, limit?: number): Promise<PaperAIReport[]>;
+
+  // Signal weight methods
+  getSignalWeights(userId: string, strategy?: string, mode?: string): Promise<SignalWeight[]>;
+  getSignalWeight(userId: string, strategy: string, mode: string, signalName: string): Promise<SignalWeight | undefined>;
+  createSignalWeight(weight: InsertSignalWeight): Promise<SignalWeight>;
+  updateSignalWeight(id: string, updates: Partial<SignalWeight>): Promise<SignalWeight>;
+  upsertSignalWeight(weight: InsertSignalWeight): Promise<SignalWeight>;
+
+  // Prediction outcome methods
+  createPredictionOutcome(outcome: InsertPredictionOutcome): Promise<PredictionOutcome>;
+  updatePredictionOutcome(id: string, updates: Partial<PredictionOutcome>): Promise<PredictionOutcome>;
+  getPredictionOutcomes(userId: string, filters?: { mode?: string; strategy?: string; fromDate?: Date; toDate?: Date; limit?: number }): Promise<PredictionOutcome[]>;
+  getPredictionAccuracy(userId: string, mode: string, strategy?: string, days?: number): Promise<{ accuracy: number; totalPredictions: number; correctPredictions: number }>;
+
+  // Feature snapshot methods
+  createFeatureSnapshot(snapshot: InsertFeatureSnapshot): Promise<FeatureSnapshot>;
+  getFeatureSnapshots(symbol: string, fromDate?: Date, toDate?: Date, limit?: number): Promise<FeatureSnapshot[]>;
+  getLatestFeatureSnapshot(symbol: string): Promise<FeatureSnapshot | undefined>;
 
   // User utility methods
   getAllUsers(): Promise<User[]>;
@@ -872,6 +899,169 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query;
+  }
+
+  // Signal weight methods
+  async getSignalWeights(userId: string, strategy?: string, mode?: string): Promise<SignalWeight[]> {
+    const conditions = [eq(signalWeights.userId, userId)];
+    
+    if (strategy) {
+      conditions.push(eq(signalWeights.strategy, strategy as any));
+    }
+    if (mode) {
+      conditions.push(eq(signalWeights.mode, mode as any));
+    }
+    
+    return await db
+      .select()
+      .from(signalWeights)
+      .where(and(...conditions))
+      .orderBy(desc(signalWeights.lastUpdated));
+  }
+
+  async getSignalWeight(userId: string, strategy: string, mode: string, signalName: string): Promise<SignalWeight | undefined> {
+    const [result] = await db
+      .select()
+      .from(signalWeights)
+      .where(and(
+        eq(signalWeights.userId, userId),
+        eq(signalWeights.strategy, strategy as any),
+        eq(signalWeights.mode, mode as any),
+        eq(signalWeights.signalName, signalName)
+      ));
+    return result || undefined;
+  }
+
+  async createSignalWeight(weight: InsertSignalWeight): Promise<SignalWeight> {
+    const [result] = await db.insert(signalWeights).values(weight).returning();
+    return result;
+  }
+
+  async updateSignalWeight(id: string, updates: Partial<SignalWeight>): Promise<SignalWeight> {
+    const [result] = await db
+      .update(signalWeights)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(eq(signalWeights.id, id))
+      .returning();
+    return result;
+  }
+
+  async upsertSignalWeight(weight: InsertSignalWeight): Promise<SignalWeight> {
+    const existing = await this.getSignalWeight(
+      weight.userId,
+      weight.strategy as string,
+      weight.mode as string,
+      weight.signalName
+    );
+
+    if (existing) {
+      return this.updateSignalWeight(existing.id, weight);
+    } else {
+      return this.createSignalWeight(weight);
+    }
+  }
+
+  // Prediction outcome methods
+  async createPredictionOutcome(outcome: InsertPredictionOutcome): Promise<PredictionOutcome> {
+    const [result] = await db.insert(predictionOutcomes).values(outcome).returning();
+    return result;
+  }
+
+  async updatePredictionOutcome(id: string, updates: Partial<PredictionOutcome>): Promise<PredictionOutcome> {
+    const [result] = await db
+      .update(predictionOutcomes)
+      .set(updates)
+      .where(eq(predictionOutcomes.id, id))
+      .returning();
+    return result;
+  }
+
+  async getPredictionOutcomes(userId: string, filters?: { mode?: string; strategy?: string; fromDate?: Date; toDate?: Date; limit?: number }): Promise<PredictionOutcome[]> {
+    const conditions = [eq(predictionOutcomes.userId, userId)];
+    
+    if (filters?.mode) {
+      conditions.push(eq(predictionOutcomes.mode, filters.mode as any));
+    }
+    if (filters?.strategy) {
+      conditions.push(eq(predictionOutcomes.strategy, filters.strategy as any));
+    }
+    if (filters?.fromDate) {
+      conditions.push(gte(predictionOutcomes.predictionTimestamp, filters.fromDate));
+    }
+    if (filters?.toDate) {
+      conditions.push(lte(predictionOutcomes.predictionTimestamp, filters.toDate));
+    }
+    
+    const query = db
+      .select()
+      .from(predictionOutcomes)
+      .where(and(...conditions))
+      .orderBy(desc(predictionOutcomes.predictionTimestamp));
+    
+    if (filters?.limit) {
+      query.limit(filters.limit);
+    }
+    
+    return await query;
+  }
+
+  async getPredictionAccuracy(userId: string, mode: string, strategy?: string, days: number = 30): Promise<{ accuracy: number; totalPredictions: number; correctPredictions: number }> {
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+
+    const outcomes = await this.getPredictionOutcomes(userId, {
+      mode,
+      strategy,
+      fromDate,
+    });
+
+    const completedOutcomes = outcomes.filter(o => o.correct !== null);
+    const correctOutcomes = completedOutcomes.filter(o => o.correct === true);
+
+    return {
+      accuracy: completedOutcomes.length > 0 ? (correctOutcomes.length / completedOutcomes.length) * 100 : 0,
+      totalPredictions: completedOutcomes.length,
+      correctPredictions: correctOutcomes.length,
+    };
+  }
+
+  // Feature snapshot methods
+  async createFeatureSnapshot(snapshot: InsertFeatureSnapshot): Promise<FeatureSnapshot> {
+    const [result] = await db.insert(featureSnapshots).values(snapshot).returning();
+    return result;
+  }
+
+  async getFeatureSnapshots(symbol: string, fromDate?: Date, toDate?: Date, limit?: number): Promise<FeatureSnapshot[]> {
+    const conditions = [eq(featureSnapshots.symbol, symbol)];
+    
+    if (fromDate) {
+      conditions.push(gte(featureSnapshots.timestamp, fromDate));
+    }
+    if (toDate) {
+      conditions.push(lte(featureSnapshots.timestamp, toDate));
+    }
+    
+    const query = db
+      .select()
+      .from(featureSnapshots)
+      .where(and(...conditions))
+      .orderBy(desc(featureSnapshots.timestamp));
+    
+    if (limit) {
+      query.limit(limit);
+    }
+    
+    return await query;
+  }
+
+  async getLatestFeatureSnapshot(symbol: string): Promise<FeatureSnapshot | undefined> {
+    const [result] = await db
+      .select()
+      .from(featureSnapshots)
+      .where(eq(featureSnapshots.symbol, symbol))
+      .orderBy(desc(featureSnapshots.timestamp))
+      .limit(1);
+    return result || undefined;
   }
 
   // User utility methods

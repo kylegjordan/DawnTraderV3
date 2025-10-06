@@ -371,6 +371,63 @@ export const paperAIReports = pgTable("paper_ai_reports", {
   generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow(),
 });
 
+// ===== LEARNING FEEDBACK ENGINE TABLES =====
+
+// Signal weights (adaptive weighting per user/strategy/mode)
+export const signalWeights = pgTable("signal_weights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  strategy: strategyTypeEnum("strategy").notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  signalName: varchar("signal_name", { length: 100 }).notNull(),
+  weight: decimal("weight", { precision: 8, scale: 4 }).default("1.0000"),
+  correlationScore: decimal("correlation_score", { precision: 8, scale: 4 }),
+  sampleSize: integer("sample_size").default(0),
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
+  metadata: jsonb("metadata"),
+});
+
+// Prediction outcomes (tracks AI predictions vs actual results)
+export const predictionOutcomes = pgTable("prediction_outcomes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  tradeId: varchar("trade_id"),
+  mode: tradingModeEnum("mode").notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  strategy: strategyTypeEnum("strategy").notNull(),
+  predictionTimestamp: timestamp("prediction_timestamp", { withTimezone: true }).defaultNow(),
+  predictedDirection: varchar("predicted_direction", { length: 10 }).notNull(),
+  predictionConfidence: decimal("prediction_confidence", { precision: 5, scale: 4 }).notNull(),
+  signalType: varchar("signal_type", { length: 100 }),
+  rationale: text("rationale"),
+  riskScore: decimal("risk_score", { precision: 5, scale: 4 }),
+  actualDirection: varchar("actual_direction", { length: 10 }),
+  actualOutcome: decimal("actual_outcome", { precision: 10, scale: 2 }),
+  deltaPercent: decimal("delta_percent", { precision: 8, scale: 4 }),
+  correct: boolean("correct"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  metadata: jsonb("metadata"),
+});
+
+// Feature snapshots (normalized and enriched market features)
+export const featureSnapshots = pgTable("feature_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+  priceNormalized: decimal("price_normalized", { precision: 10, scale: 4 }),
+  volumeNormalized: decimal("volume_normalized", { precision: 10, scale: 4 }),
+  momentumIndex: decimal("momentum_index", { precision: 10, scale: 4 }),
+  rsi: decimal("rsi", { precision: 5, scale: 2 }),
+  smaSlope: decimal("sma_slope", { precision: 10, scale: 6 }),
+  volumeDelta: decimal("volume_delta", { precision: 10, scale: 4 }),
+  volatilityScore: decimal("volatility_score", { precision: 10, scale: 4 }),
+  liquidityScore: decimal("liquidity_score", { precision: 10, scale: 4 }),
+  sentimentScore: decimal("sentiment_score", { precision: 5, scale: 4 }),
+  sectorCorrelation: decimal("sector_correlation", { precision: 5, scale: 4 }),
+  rawFeatures: jsonb("raw_features"),
+  normalizationWindow: integer("normalization_window").default(30),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -385,6 +442,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   paperTrades: many(paperTrades),
   paperDailyBriefs: many(paperDailyBriefs),
   paperAIReports: many(paperAIReports),
+  signalWeights: many(signalWeights),
+  predictionOutcomes: many(predictionOutcomes),
 }));
 
 export const tradingSettingsRelations = relations(tradingSettings, ({ one }) => ({
@@ -584,6 +643,22 @@ export const insertPaperAIReportSchema = createInsertSchema(paperAIReports).omit
   generatedAt: true,
 });
 
+// Learning Feedback Engine insert schemas
+export const insertSignalWeightSchema = createInsertSchema(signalWeights).omit({
+  id: true,
+  lastUpdated: true,
+});
+
+export const insertPredictionOutcomeSchema = createInsertSchema(predictionOutcomes).omit({
+  id: true,
+  predictionTimestamp: true,
+});
+
+export const insertFeatureSnapshotSchema = createInsertSchema(featureSnapshots).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -638,3 +713,12 @@ export type PaperDailyBrief = typeof paperDailyBriefs.$inferSelect;
 
 export type InsertPaperAIReport = z.infer<typeof insertPaperAIReportSchema>;
 export type PaperAIReport = typeof paperAIReports.$inferSelect;
+
+export type InsertSignalWeight = z.infer<typeof insertSignalWeightSchema>;
+export type SignalWeight = typeof signalWeights.$inferSelect;
+
+export type InsertPredictionOutcome = z.infer<typeof insertPredictionOutcomeSchema>;
+export type PredictionOutcome = typeof predictionOutcomes.$inferSelect;
+
+export type InsertFeatureSnapshot = z.infer<typeof insertFeatureSnapshotSchema>;
+export type FeatureSnapshot = typeof featureSnapshots.$inferSelect;
