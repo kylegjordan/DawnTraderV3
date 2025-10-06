@@ -30,10 +30,14 @@ export const dailyBriefStatusEnum = pgEnum("daily_brief_status", ["in_progress",
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
   password: text("password"),
+  displayName: text("display_name"),
+  timezone: varchar("timezone", { length: 50 }).default("UTC"),
   tradingMode: tradingModeEnum("trading_mode").default("paper"),
   tradingStatus: tradingStatusEnum("trading_status").default("stopped"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 // Trading settings
@@ -657,6 +661,7 @@ export const paperAIReportsRelations = relations(paperAIReports, ({ one }) => ({
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 
 export const insertTradingSettingsSchema = createInsertSchema(tradingSettings).omit({
