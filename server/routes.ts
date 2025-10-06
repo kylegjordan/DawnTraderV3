@@ -3289,6 +3289,41 @@ Please:
     }
   });
 
+  // GET list of presets for a strategy
+  app.get('/api/strategies/presets', authRequired, async (req, res) => {
+    try {
+      const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
+      const strategy = String(req.query.strategy || '');
+      
+      if (!STRATEGY_PRESETS[strategy]) {
+        return res.status(404).json({ ok: false, message: 'Strategy not found' });
+      }
+      
+      res.json({ ok: true, presets: STRATEGY_PRESETS[strategy] });
+    } catch (error: any) {
+      console.error('Error fetching presets:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET a specific preset
+  app.get('/api/strategies/presets/:strategy/:presetName', authRequired, async (req, res) => {
+    try {
+      const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
+      const { strategy, presetName } = req.params;
+      const presets = STRATEGY_PRESETS[strategy];
+      
+      if (!presets || !presets[presetName]) {
+        return res.status(404).json({ ok: false, message: 'Preset not found' });
+      }
+      
+      res.json({ ok: true, preset: presets[presetName] });
+    } catch (error: any) {
+      console.error('Error fetching preset:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
