@@ -157,6 +157,7 @@ export interface IStorage {
   // Kill switch methods
   createKillSwitchEvent(event: InsertKillSwitchEvent): Promise<KillSwitchEvent>;
   getKillSwitchEvents(userId: string, filters?: { resolved?: boolean; limit?: number }): Promise<KillSwitchEvent[]>;
+  getKillSwitchEventById(id: string): Promise<KillSwitchEvent | undefined>;
   getLatestKillSwitchEvent(userId: string): Promise<KillSwitchEvent | undefined>;
   resolveKillSwitchEvent(id: string, method: string, notes?: string): Promise<KillSwitchEvent>;
 
@@ -762,6 +763,15 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(killSwitchEvents.triggeredAt));
     
     return await (filters?.limit ? query.limit(filters.limit) : query);
+  }
+
+  async getKillSwitchEventById(id: string): Promise<KillSwitchEvent | undefined> {
+    const [result] = await db
+      .select()
+      .from(killSwitchEvents)
+      .where(eq(killSwitchEvents.id, id))
+      .limit(1);
+    return result || undefined;
   }
 
   async getLatestKillSwitchEvent(userId: string): Promise<KillSwitchEvent | undefined> {
