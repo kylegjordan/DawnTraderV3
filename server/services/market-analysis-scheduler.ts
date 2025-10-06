@@ -16,7 +16,7 @@ export class MarketAnalysisScheduler {
     // Run initial analysis
     await this.runDailyAnalysis();
     
-    // Schedule daily runs at 6 AM UTC
+    // Schedule daily runs at 2 AM UTC
     this.scheduleDailyAnalysis();
     
     console.log('[MarketAnalysisScheduler] Daily scheduler started successfully');
@@ -40,11 +40,15 @@ export class MarketAnalysisScheduler {
 
   private scheduleDailyAnalysis(): void {
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(6, 0, 0, 0); // 6 AM UTC
+    const nextRun = new Date(now);
+    nextRun.setUTCHours(2, 0, 0, 0); // 2 AM UTC
     
-    const timeUntilRun = tomorrow.getTime() - now.getTime();
+    // If we've already passed 2 AM today, schedule for tomorrow
+    if (nextRun <= now) {
+      nextRun.setUTCDate(nextRun.getUTCDate() + 1);
+    }
+    
+    const timeUntilRun = nextRun.getTime() - now.getTime();
     
     setTimeout(() => {
       this.runDailyAnalysis();
@@ -55,7 +59,7 @@ export class MarketAnalysisScheduler {
       }, 24 * 60 * 60 * 1000); // 24 hours
     }, timeUntilRun);
     
-    console.log(`[MarketAnalysisScheduler] Next daily analysis scheduled for ${tomorrow.toISOString()}`);
+    console.log(`[MarketAnalysisScheduler] Next daily analysis scheduled for ${nextRun.toISOString()}`);
   }
 
   private async runDailyAnalysis(): Promise<void> {
