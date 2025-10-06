@@ -3290,16 +3290,16 @@ Please:
   });
 
   // GET list of presets for a strategy
-  app.get('/api/strategies/presets', authRequired, async (req, res) => {
+  app.get('/api/strategies/presets', async (req, res) => {
     try {
       const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
       const strategy = String(req.query.strategy || '');
       
-      if (!STRATEGY_PRESETS[strategy]) {
+      if (!STRATEGY_PRESETS[strategy as keyof typeof STRATEGY_PRESETS]) {
         return res.status(404).json({ ok: false, message: 'Strategy not found' });
       }
       
-      res.json({ ok: true, presets: STRATEGY_PRESETS[strategy] });
+      res.json({ ok: true, presets: STRATEGY_PRESETS[strategy as keyof typeof STRATEGY_PRESETS] });
     } catch (error: any) {
       console.error('Error fetching presets:', error);
       res.status(500).json({ ok: false, error: error.message });
@@ -3307,17 +3307,17 @@ Please:
   });
 
   // GET a specific preset
-  app.get('/api/strategies/presets/:strategy/:presetName', authRequired, async (req, res) => {
+  app.get('/api/strategies/presets/:strategy/:presetName', async (req, res) => {
     try {
       const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
       const { strategy, presetName } = req.params;
-      const presets = STRATEGY_PRESETS[strategy];
+      const presets = STRATEGY_PRESETS[strategy as keyof typeof STRATEGY_PRESETS];
       
-      if (!presets || !presets[presetName]) {
+      if (!presets || !presets[presetName as keyof typeof presets]) {
         return res.status(404).json({ ok: false, message: 'Preset not found' });
       }
       
-      res.json({ ok: true, preset: presets[presetName] });
+      res.json({ ok: true, preset: presets[presetName as keyof typeof presets] });
     } catch (error: any) {
       console.error('Error fetching preset:', error);
       res.status(500).json({ ok: false, error: error.message });
