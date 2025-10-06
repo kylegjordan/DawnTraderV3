@@ -2313,7 +2313,7 @@ Provide specific, actionable recommendations.`,
   // ========================================
 
   // System Health Check
-  app.get('/api/system/health', authRequired, async (_req, res) => {
+  app.get('/api/system/health', async (_req, res) => {
     try {
       const uptime = process.uptime();
       const status = {
@@ -2332,7 +2332,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Strategy Settings Audit Log
-  app.get('/api/system/strategy-audit', authRequired, async (req, res) => {
+  app.get('/api/system/strategy-audit', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -2346,7 +2346,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // System Logs (simple in-memory log - placeholder)
-  app.get('/api/system/logs', authRequired, async (_req, res) => {
+  app.get('/api/system/logs', async (_req, res) => {
     try {
       // For now, return a simple message. In the future, could implement proper log aggregation
       const logs = [
@@ -2361,7 +2361,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // AI Audit Log
-  app.get('/api/system/ai-audit', authRequired, async (req, res) => {
+  app.get('/api/system/ai-audit', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -2375,7 +2375,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Error Logs
-  app.get('/api/system/error-logs', authRequired, async (req, res) => {
+  app.get('/api/system/error-logs', async (req, res) => {
     try {
       const userId = req.headers['user-id'] as string;
       const limit = parseInt(req.query.limit as string) || 100;
