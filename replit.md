@@ -60,6 +60,26 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas: `users`, `tr
   4. **Validation Reports**: Placeholder for future data validation and model drift reports
   5. **AI Audit Log**: Detailed AI operation audit including decisions, recommendations, and actions taken
   6. **Error Logs**: Centralized error tracking with resolution status and error type categorization
+- **Panel Consolidation (Milestone 8A, 2025-10-06)**: Streamlined UI organization to eliminate duplicates and improve user experience:
+  - **Settings Page**: Simplified to contain only Notifications tab (removed duplicate Screener Filters, Portfolio Guardrails, and Strategies tabs)
+  - **AI Analysis Panel**: Reduced to 3 core tabs - Chat Assistant, AI Opportunities, Symbol Analysis (removed Validation Reports, Audit Log, Error Logs - these now live in Systems Monitoring)
+  - **Goals Engine Panel**: Reorganized to 4 tabs - Goals | Guardrails | Screeners | Strategies (removed Portfolio tab)
+  - Design principle: Each configuration lives in exactly one place, preventing user confusion and maintenance overhead
+- **Editable Goals Table (Milestone 8A, 2025-10-06)**: Interactive trading goals configuration with 10 key metrics:
+  1. **Target Profit (%)**: Desired average monthly gain
+  2. **Max Drawdown (%)**: Max allowable account loss
+  3. **Daily Loss Limit (%)**: Max daily loss before trading stops
+  4. **Monthly Return Goal (%)**: Monthly target return
+  5. **Max Concurrent Trades**: Max open trades allowed
+  6. **Win Rate Target (%)**: Desired trade win ratio
+  7. **Average Risk/Reward Ratio**: Desired ratio between risk and reward
+  8. **Max Portfolio Exposure (%)**: Max % of balance in trades
+  9. **Stop Loss Strictness (%)**: How tight stop-losses should be
+  10. **Rebalancing Frequency (Days)**: Days between goal re-evaluations
+  - Mode-aware storage using existing userGoalsLive/Paper tables with upsertGoalLive/Paper methods
+  - Built-in validation with min/max ranges and step increments
+  - Real-time save with toast notifications and query invalidation
+  - Reset to defaults functionality for quick configuration
 
 ## External Dependencies
 
