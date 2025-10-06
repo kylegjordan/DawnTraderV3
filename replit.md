@@ -80,6 +80,17 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas: `users`, `tr
   - Built-in validation with min/max ranges and step increments
   - Real-time save with toast notifications and query invalidation
   - Reset to defaults functionality for quick configuration
+- **Milestone 8B (2025-10-06)**: Systems Monitoring relocation to standalone page
+  - Systems Monitoring & Checks Panel moved from Dashboard to dedicated `/systems` route
+  - Dashboard layout cleaned up to focus on trading metrics and insights
+  - Systems page accessible via sidebar navigation with 6 monitoring tabs
+- **Milestone 8C (2025-10-06)**: Full Goals Engine enhancement and comprehensive UI restoration
+  - **Performance Tracking Metrics**: New sub-table in Goals Engine with 6 earnings metrics (per Trade, Average Return, per Day/Week/Month/Year) with auto-calculation when any field changes, color-coded percent achievement, and recalculate button
+  - **Guardrails Enhancement**: Added default values (Max Daily Loss: $1000, Max Drawdown: 10%, Max Position: $5000, Max Open: 5, Risk: 1.5%) with Reset Defaults button and AI adjustment permission checkbox
+  - **Screeners Tab**: Converted from static display to fully editable filters across 6 categories (Volume, Price, Volatility, Technical, Risk, Market) with Save and Reset functionality
+  - **Strategies Tab**: Added Enable/Disable toggle switches for each strategy (VWAP Pullback, ABCD Long, SMA Trend Ride), complementing existing Edit modals, preset loading, and validation features
+  - **Settings Enhancement**: Re-added Timezone dropdown with full IANA timezone list, defaulting to Asia/Dubai, with persistence across save/reset operations
+  - All changes maintain mode-aware storage (live/paper isolation) and include comprehensive data-testid attributes for testing
 
 ## External Dependencies
 
