@@ -14,6 +14,7 @@ import EarningsWidget from "@/components/goals/earnings-widget";
 import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import ResultsWidget from "@/components/goals/results-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
+import MarketInsightsWidget from "@/components/goals/market-insights-widget";
 
 export default function Dashboard() {
   return (
@@ -37,6 +38,9 @@ export default function Dashboard() {
           <ResultsWidget />
         </div>
       </section>
+
+      {/* Market Insights Widget (+1) */}
+      <MarketInsightsWidget />
 
       {/* Goals Summary Widget */}
       <GoalsSummaryWidget />

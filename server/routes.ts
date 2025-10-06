@@ -1254,7 +1254,11 @@ Provide specific, actionable recommendations.`,
       fromDate.setDate(fromDate.getDate() - days);
       const toDate = new Date();
       
-      const analyses = await storage.getAiMarketAnalysesByRange(mode, fromDate, toDate);
+      const analyses = await storage.getAiMarketAnalysesByRange({
+        mode: mode as 'live' | 'paper',
+        from: fromDate.toISOString().split('T')[0],
+        to: toDate.toISOString().split('T')[0]
+      });
       res.json(analyses);
     } catch (error) {
       console.error('Error fetching market analysis history:', error);
