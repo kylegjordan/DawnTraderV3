@@ -50,40 +50,24 @@ export interface AuthenticatedRequest extends Request {
 }
 
 function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  // Support both Authorization header (preferred) and user-id header (backward compatibility)
   const authHeader = req.headers.authorization;
-  const userIdHeader = req.headers['user-id'] as string;
   
-  // If authorization header is present, verify JWT
-  if (authHeader) {
-    const token = authHeader.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-    
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
-      req.user = { id: decoded.id, username: decoded.username };
-      next();
-    } catch (error) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-  } 
-  // Backward compatibility: support user-id header with JWT token
-  else if (userIdHeader) {
-    try {
-      // If user-id is a JWT token, verify it
-      const decoded = jwt.verify(userIdHeader, JWT_SECRET) as { id: string; username: string };
-      req.user = { id: decoded.id, username: decoded.username };
-      next();
-    } catch (error) {
-      // If not a valid JWT, treat it as a plain user ID (backward compatibility)
-      req.user = { id: userIdHeader, username: userIdHeader };
-      next();
-    }
-  } else {
+  if (!authHeader) {
     return res.status(401).json({ error: 'No authentication credentials provided' });
+  }
+  
+  const token = authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+    req.user = { id: decoded.id, username: decoded.username };
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
 
@@ -1152,7 +1136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Kill Switch Incident Analysis Conversation
-  app.post('/api/kill-switch/create-analysis-chat', async (req: AuthenticatedRequest, res) => {
+  app.post('/api/kill-switch/create-analysis-chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { eventId } = req.body;
@@ -1288,7 +1272,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Chat cost tracking
-  app.get('/api/chat-logs', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/chat-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { conversationId, limit } = req.query;
@@ -1305,7 +1289,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/chat-costs', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/chat-costs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { fromDate, toDate } = req.query;
@@ -1562,7 +1546,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint for Finnhub feed
-  app.get('/api/test/finnhub-feed', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/test/finnhub-feed', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const testSymbol = 'AAPL';
       const timestamp = new Date().toISOString();
@@ -1790,7 +1774,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Export functionality
-  app.get('/api/export/trades', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/export/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { from, to, format } = req.query;
@@ -2041,7 +2025,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Kill Switch endpoints
-  app.get('/api/kill-switch/status', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/kill-switch/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
@@ -2090,7 +2074,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/kill-switch/reset', async (req: AuthenticatedRequest, res) => {
+  app.post('/api/kill-switch/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { notes } = req.body;
@@ -2124,7 +2108,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/kill-switch/events', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/kill-switch/events', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
@@ -2139,7 +2123,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint for simulating kill switch scenarios
-  app.post('/api/test/simulate-loss', async (req: AuthenticatedRequest, res) => {
+  app.post('/api/test/simulate-loss', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { scenario } = req.body; // 'warning', 'kill', or custom loss %
@@ -2208,7 +2192,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint to check if trade execution is blocked during suspension
-  app.post('/api/test/attempt-trade', async (req: AuthenticatedRequest, res) => {
+  app.post('/api/test/attempt-trade', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
@@ -2337,7 +2321,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // TEST ENDPOINT: Test Kraken credentials
-  app.get('/api/test/kraken-balance', async (_req, res) => {
+  app.get('/api/test/kraken-balance', authenticateToken, async (_req, res) => {
     try {
       const krakenService = new KrakenService();
       const balances = await krakenService.getAccountBalance();
@@ -2735,7 +2719,7 @@ Provide specific, actionable recommendations.`,
   // ===== LEARNING FEEDBACK ENGINE ROUTES =====
 
   // Get prediction accuracy metrics
-  app.get('/api/learning/prediction-accuracy', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/learning/prediction-accuracy', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'paper';
@@ -2758,7 +2742,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get signal weight insights
-  app.get('/api/learning/signal-insights', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/learning/signal-insights', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'paper';
@@ -2778,7 +2762,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get signal weights
-  app.get('/api/learning/signal-weights', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/learning/signal-weights', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const strategy = req.query.strategy as string;
@@ -2798,7 +2782,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get prediction outcomes
-  app.get('/api/learning/prediction-outcomes', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/learning/prediction-outcomes', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as string;
@@ -2828,7 +2812,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get enriched features for a symbol
-  app.get('/api/learning/features/:symbol', async (req: AuthenticatedRequest, res) => {
+  app.get('/api/learning/features/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const { featureEnrichmentService } = await import('./services/feature-enrichment');
@@ -2846,7 +2830,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Trigger manual signal weight optimization
-  app.post('/api/learning/optimize-weights', async (req: AuthenticatedRequest, res) => {
+  app.post('/api/learning/optimize-weights', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.body.mode as string) || 'paper';
