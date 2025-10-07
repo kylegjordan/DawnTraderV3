@@ -54,6 +54,11 @@ const PARAM_DESCRIPTIONS: Record<string, string> = {
   trendStrengthMin: "Minimum trend strength (0-1)",
 };
 
+interface StrategySettings {
+  enabled?: boolean;
+  params?: Record<string, any>;
+}
+
 function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   const { mode } = useTradingMode();
   const { toast } = useToast();
@@ -66,15 +71,12 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   const [selectedPreset, setSelectedPreset] = useState<string>("");
 
   // Fetch strategy settings
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['/api/strategies/settings', strategy.id, mode],
-    queryFn: async () => {
-      const response = await fetch(
-        `/api/strategies/settings?strategy=${strategy.id}&mode=${mode}`,
-        { headers: { 'user-id': localStorage.getItem('accessToken') || '' } }
-      );
-      return response.json();
-    },
+  const { data: settings, isLoading } = useQuery<StrategySettings>({
+    queryKey: [`/api/strategies/settings?strategy=${strategy.id}&mode=${mode}`],
+    staleTime: 60000,
+    refetchInterval: 60000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   // Validate mutation
@@ -137,8 +139,15 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   useEffect(() => {
     const fetchPresets = async () => {
       try {
+        const { ensureValidToken } = await import('@/lib/auth');
+        const token = await ensureValidToken();
+        
         const response = await fetch(`/api/strategies/presets?strategy=${strategy.id.toUpperCase()}`, {
-          headers: { 'user-id': localStorage.getItem('accessToken') || '' }
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
         });
         const data = await response.json();
         if (data.ok) {
@@ -253,7 +262,7 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   const currentParams = editing ? formData : (settings?.params || formData || {});
   const paramKeys = Object.keys(currentParams);
 
-  if (isLoading) {
+  if (isLoading && !settings) {
     return (
       <Card className="border-2">
         <CardHeader>
