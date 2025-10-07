@@ -17,7 +17,9 @@ export function useTrading() {
   // Trading status and control
   const { data: tradingStatus, isLoading: statusLoading } = useQuery<TradingStatus>({
     queryKey: ['/api/trading/status'],
-    refetchInterval: 5000
+    refetchInterval: 30000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false
   });
 
   const startTradingMutation = useMutation({
@@ -43,18 +45,24 @@ export function useTrading() {
   // Portfolio data
   const { data: portfolioMetrics, isLoading: portfolioLoading } = useQuery<PortfolioMetrics>({
     queryKey: ['/api/portfolio/overview'],
-    refetchInterval: 10000
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
   });
 
   // Trades
   const { data: activeTrades = [], isLoading: activeTradesLoading } = useQuery<Trade[]>({
     queryKey: ['/api/trades/active'],
-    refetchInterval: 5000
+    refetchInterval: 30000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false
   });
 
   const { data: recentTrades = [], isLoading: recentTradesLoading } = useQuery<Trade[]>({
     queryKey: ['/api/trades', { status: 'closed', limit: 10 }],
-    refetchInterval: 30000
+    refetchInterval: 30000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false
   });
 
   const closeTradeM = useMutation({
@@ -71,7 +79,10 @@ export function useTrading() {
 
   // Settings
   const { data: settings, isLoading: settingsLoading } = useQuery<TradingSettings>({
-    queryKey: ['/api/settings']
+    queryKey: ['/api/settings'],
+    refetchInterval: 300000,
+    staleTime: 300000,
+    refetchOnWindowFocus: false
   });
 
   const updateSettingsMutation = useMutation({
@@ -87,7 +98,9 @@ export function useTrading() {
   // Watchlist
   const { data: watchlist = [], isLoading: watchlistLoading } = useQuery<WatchlistPair[]>({
     queryKey: ['/api/watchlist'],
-    refetchInterval: 60000
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
   });
 
   const addToWatchlistMutation = useMutation({
@@ -151,7 +164,9 @@ export function useAI() {
 
   const { data: aiReports = [], isLoading: reportsLoading } = useQuery<AIReport[]>({
     queryKey: ['/api/ai/reports', { limit: 5 }],
-    refetchInterval: 300000 // 5 minutes
+    refetchInterval: 300000,
+    staleTime: 300000,
+    refetchOnWindowFocus: false
   });
 
   const generateReportMutation = useMutation({
@@ -206,7 +221,9 @@ export function useAI() {
 export function useMarket() {
   const { data: marketOverview, isLoading: marketLoading } = useQuery<MarketOverview>({
     queryKey: ['/api/market/overview'],
-    refetchInterval: 60000 // 1 minute
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
   });
 
   const exportTradesMutation = useMutation({

@@ -36,6 +36,9 @@ function TradeRow({ trade }: { trade: Trade }) {
   // Fetch user settings for timezone conversion
   const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
     queryKey: ['/api/settings'],
+    refetchInterval: 300000,
+    staleTime: 300000,
+    refetchOnWindowFocus: false
   });
   
   const handleClose = async () => {
@@ -75,7 +78,7 @@ function TradeRow({ trade }: { trade: Trade }) {
             <div className="text-xs text-muted-foreground">
               {settings && formatTime(trade.entryTime, {
                 timezone: settings.timezone || 'Asia/Dubai',
-                timeFormat: settings.timeFormat || '12hr'
+                timeFormat: (settings.timeFormat as '12hr' | '24hr') || '12hr'
               })}
             </div>
           </div>
@@ -150,12 +153,15 @@ export default function ActiveTrades() {
   const { data: paperActiveTrades = [], isLoading: paperActiveTradesLoading } = useQuery<Trade[]>({
     queryKey: ['/api/paper/trades/active'],
     enabled: isPaper,
+    refetchInterval: 30000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false
   });
   
   const activeTrades = isPaper ? paperActiveTrades : liveActiveTrades;
   const activeTradesLoading = isPaper ? paperActiveTradesLoading : liveActiveTradesLoading;
 
-  if (activeTradesLoading) {
+  if (activeTradesLoading && activeTrades.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -194,15 +200,15 @@ export default function ActiveTrades() {
         </div>
       </div>
       
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
+      <Card className="rounded-xl border shadow-sm overflow-hidden">
+        <div className="overflow-x-auto max-h-[600px]">
           {activeTrades.length === 0 ? (
-            <div className="p-8 text-center">
+            <div className="p-8 text-center min-h-[200px] flex items-center justify-center">
               <p className="text-muted-foreground">No active trades</p>
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-muted/50">
+              <thead className="bg-muted/50 sticky top-0">
                 <tr className="text-left">
                   <th className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Pair

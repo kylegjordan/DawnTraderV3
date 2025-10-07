@@ -33,12 +33,15 @@ export default function PortfolioValueWidget() {
   const { data: paperPortfolioMetrics, isLoading: paperPortfolioLoading } = useQuery<PortfolioMetrics>({
     queryKey: ['/api/paper/metrics/portfolio'],
     enabled: isPaper,
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
   });
   
   const portfolioMetrics = isPaper ? paperPortfolioMetrics : livePortfolioMetrics;
   const portfolioLoading = isPaper ? paperPortfolioLoading : livePortfolioLoading;
 
-  if (portfolioLoading) {
+  if (portfolioLoading && !portfolioMetrics) {
     return (
       <Card className={cn("metric-card", isPaper && "border-blue-500/30 bg-blue-500/5")} data-testid="widget-portfolio-value">
         <CardHeader>
