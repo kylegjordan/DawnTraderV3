@@ -134,16 +134,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // REGISTER
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const { username, password } = req.body;
+      const { username, email, password } = req.body;
       
-      if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password are required' });
+      if (!username || !email || !password) {
+        return res.status(400).json({ error: 'Username, email, and password are required' });
+      }
+      
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: 'Invalid email format' });
       }
       
       // Check if username already exists
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
         return res.status(400).json({ error: 'Username already exists' });
+      }
+      
+      // Check if email already exists
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(400).json({ error: 'Email already exists' });
       }
       
       // Validate password strength
@@ -156,8 +168,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password and create user
       const passwordHash = await hashPassword(password);
       const user = await storage.createUser({ 
-        username, 
+        username,
+        email,
         password: passwordHash,
+        displayName: username,
+        timezone: 'UTC',
         tradingMode: 'paper',
         tradingStatus: 'stopped'
       });
@@ -279,8 +294,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let user = await storage.getUser(userId);
       if (!user) {
         user = await storage.createUser({
-          id: userId,
           username: userId,
+          email: `${userId}@placeholder.local`,
           tradingStatus: 'stopped',
           tradingMode: 'paper'
         });
