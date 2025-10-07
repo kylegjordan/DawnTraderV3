@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { Shield, Save, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useTradingMode } from "@/contexts/trading-mode-context";
 
 const DEFAULTS = {
   maxDailyLoss: 1000,
@@ -16,24 +17,31 @@ const DEFAULTS = {
   maxPositionSize: 5000,
   maxOpenPositions: 5,
   riskPerTrade: 1.5,
+  aiCanAdjust: false,
 };
 
-interface TradingSettings {
+interface Guardrails {
   maxDailyLoss: number;
   maxPositionSize: number;
   maxOpenPositions: number;
   maxDrawdown: number;
   riskPerTrade: number;
+  aiCanAdjust: boolean;
 }
 
 export default function GuardrailsTab() {
   const { toast } = useToast();
-  const [settings, setSettings] = useState<Partial<TradingSettings>>(DEFAULTS);
+  const { mode } = useTradingMode();
+  const [settings, setSettings] = useState<Partial<Guardrails>>(DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
-  const [aiCanAdjust, setAiCanAdjust] = useState(false);
 
-  const { data: currentSettings, isLoading } = useQuery<TradingSettings>({
-    queryKey: ['/api/settings'],
+  const { data: currentSettings, isLoading } = useQuery<Guardrails>({
+    queryKey: ['/api/guardrails', mode],
+    queryFn: () => fetch(`/api/guardrails?mode=${mode}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
   });
 
   useEffect(() => {
@@ -44,19 +52,27 @@ export default function GuardrailsTab() {
         maxOpenPositions: currentSettings.maxOpenPositions ?? DEFAULTS.maxOpenPositions,
         maxDrawdown: currentSettings.maxDrawdown ?? DEFAULTS.maxDrawdown,
         riskPerTrade: currentSettings.riskPerTrade ?? DEFAULTS.riskPerTrade,
+        aiCanAdjust: currentSettings.aiCanAdjust ?? DEFAULTS.aiCanAdjust,
       });
     }
-  }, [currentSettings]);
+  }, [currentSettings, mode]);
 
   const updateMutation = useMutation({
-    mutationFn: async (updates: Partial<TradingSettings>) => {
-      return apiRequest('PATCH', '/api/settings', updates);
+    mutationFn: async (updates: Partial<Guardrails>) => {
+      return fetch(`/api/guardrails?mode=${mode}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(updates)
+      }).then(r => r.json());
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/guardrails', mode] });
       toast({
         title: "Guardrails updated",
-        description: "Risk parameters have been saved successfully.",
+        description: `Risk parameters have been saved successfully for ${mode} mode.`,
       });
       setHasChanges(false);
     },
@@ -69,9 +85,13 @@ export default function GuardrailsTab() {
     },
   });
 
-  const handleChange = (field: keyof TradingSettings, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setSettings(prev => ({ ...prev, [field]: numValue }));
+  const handleChange = (field: keyof Guardrails, value: string | boolean) => {
+    if (typeof value === 'boolean') {
+      setSettings(prev => ({ ...prev, [field]: value }));
+    } else {
+      const numValue = parseFloat(value) || 0;
+      setSettings(prev => ({ ...prev, [field]: numValue }));
+    }
     setHasChanges(true);
   };
 
@@ -213,8 +233,8 @@ export default function GuardrailsTab() {
           <div className="flex items-center space-x-2">
             <Checkbox 
               id="ai-adjust" 
-              checked={aiCanAdjust}
-              onCheckedChange={(checked) => setAiCanAdjust(checked as boolean)}
+              checked={settings.aiCanAdjust || false}
+              onCheckedChange={(checked) => handleChange('aiCanAdjust', checked as boolean)}
               data-testid="checkbox-ai-adjust"
             />
             <Label htmlFor="ai-adjust" className="text-sm font-medium cursor-pointer">
