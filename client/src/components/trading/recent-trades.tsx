@@ -36,6 +36,9 @@ function TradeRow({ trade }: { trade: Trade }) {
   // Fetch user settings for timezone conversion
   const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
     queryKey: ['/api/settings'],
+    refetchInterval: 300000,
+    staleTime: 300000,
+    refetchOnWindowFocus: false
   });
   
   const getSymbolColor = (symbol: string) => {
@@ -60,7 +63,7 @@ function TradeRow({ trade }: { trade: Trade }) {
         {trade.exitTime && settings
           ? formatTime(trade.exitTime, {
               timezone: settings.timezone || 'Asia/Dubai',
-              timeFormat: settings.timeFormat || '12hr'
+              timeFormat: (settings.timeFormat as '12hr' | '24hr') || '12hr'
             })
           : 'N/A'
         }
@@ -140,12 +143,15 @@ export default function RecentTrades() {
   const { data: paperRecentTrades = [], isLoading: paperRecentTradesLoading } = useQuery<Trade[]>({
     queryKey: ['/api/paper/trades', { limit: 10 }],
     enabled: isPaper,
+    refetchInterval: 30000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false
   });
   
   const recentTrades = isPaper ? paperRecentTrades : liveRecentTrades;
   const recentTradesLoading = isPaper ? paperRecentTradesLoading : liveRecentTradesLoading;
 
-  if (recentTradesLoading) {
+  if (recentTradesLoading && recentTrades.length === 0) {
     return (
       <section>
         <div className="flex items-center justify-between mb-4">

@@ -40,7 +40,9 @@ export default function StrategyPerformanceWidget() {
 
   const { data, isLoading } = useQuery<StrategyMetricsResponse>({
     queryKey: [endpoint],
-    refetchInterval: 60000
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
   });
 
   const getStatusColor = (status: string) => {
@@ -101,7 +103,7 @@ export default function StrategyPerformanceWidget() {
     );
   };
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <section data-testid="strategy-performance-widget">
         <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-3 sm:mb-4">

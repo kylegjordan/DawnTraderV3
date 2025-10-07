@@ -69,7 +69,9 @@ function Router() {
   // Check kill switch status and auto-redirect
   const { data: settings } = useQuery<{ tradingSuspended?: boolean }>({
     queryKey: ['/api/settings'],
-    refetchInterval: 5000 // Check every 5 seconds
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
   });
   
   useEffect(() => {
