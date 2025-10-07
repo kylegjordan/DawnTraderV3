@@ -30,11 +30,10 @@ export default function EarningsWidget() {
   
   const sparklineEndpoint = isPaper ? '/api/paper/metrics/earnings-chart' : '/api/portfolio/earnings-chart';
   const { data: sparklineData } = useQuery<EarningsDataPoint[]>({
-    queryKey: [sparklineEndpoint, '7days'],
-    queryFn: () => fetch(`${sparklineEndpoint}?days=7`).then(r => r.json()),
+    queryKey: [`${sparklineEndpoint}?days=7`],
   });
 
-  if (isLoading) {
+  if (isLoading && !earnings) {
     return (
       <Card className={cn("metric-card", isPaper && "border-blue-500/30 bg-blue-500/5")} data-testid="widget-earnings">
         <CardHeader>
@@ -56,10 +55,43 @@ export default function EarningsWidget() {
     return (
       <Card className={cn("metric-card", isPaper && "border-blue-500/30 bg-blue-500/5")} data-testid="widget-earnings">
         <CardHeader>
-          <CardTitle className="text-lg">Earnings</CardTitle>
+          <CardTitle className="text-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span>Earnings</span>
+              {isPaper && (
+                <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">
+                  SIMULATED
+                </span>
+              )}
+            </div>
+            <TrendingUp className="w-5 h-5 text-primary" />
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-sm">Earnings data unavailable</p>
+        <CardContent className="space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">Today:</span>
+            <span className="text-sm font-bold font-mono text-muted-foreground">$0.00</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">This Week:</span>
+            <span className="text-sm font-bold font-mono text-muted-foreground">$0.00</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">This Month:</span>
+            <span className="text-sm font-bold font-mono text-muted-foreground">$0.00</span>
+          </div>
+          
+          <div className="h-px bg-border my-2" />
+          
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">Avg Daily Earnings (ADE):</span>
+            <span className="text-sm font-bold font-mono text-muted-foreground">Pending</span>
+          </div>
+          
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">7-Day Trend:</div>
+            <div className="h-12 bg-muted/30 rounded" />
+          </div>
         </CardContent>
       </Card>
     );
