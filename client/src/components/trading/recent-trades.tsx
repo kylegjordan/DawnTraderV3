@@ -141,11 +141,12 @@ export default function RecentTrades() {
   const { recentTrades: liveRecentTrades, recentTradesLoading: liveRecentTradesLoading } = useTrading();
   
   const { data: paperRecentTrades = [], isLoading: paperRecentTradesLoading } = useQuery<Trade[]>({
-    queryKey: ['/api/paper/trades', { limit: 10 }],
+    queryKey: ['/api/paper/trades?limit=10'],
     enabled: isPaper,
-    refetchInterval: 30000,
-    staleTime: 30000,
-    refetchOnWindowFocus: false
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
+    retry: false
   });
   
   const recentTrades = isPaper ? paperRecentTrades : liveRecentTrades;

@@ -59,10 +59,11 @@ export function useTrading() {
   });
 
   const { data: recentTrades = [], isLoading: recentTradesLoading } = useQuery<Trade[]>({
-    queryKey: ['/api/trades', { status: 'closed', limit: 10 }],
-    refetchInterval: 30000,
-    staleTime: 30000,
-    refetchOnWindowFocus: false
+    queryKey: ['/api/trades?status=closed&limit=10'],
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
+    retry: false
   });
 
   const closeTradeM = useMutation({
