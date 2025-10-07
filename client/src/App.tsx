@@ -8,6 +8,7 @@ import History from "@/pages/history";
 import Analysis from "@/pages/analysis";
 import Settings from "@/pages/settings";
 import WatchlistPage from "@/pages/watchlist";
+import ActiveTradesPage from "@/pages/active-trades";
 import KillSwitchScreen from "@/pages/kill-switch";
 import ReportsPage from "@/pages/reports";
 import DailyBriefPage from "@/pages/daily-brief";
@@ -111,6 +112,7 @@ function Router() {
             <Route path="/" component={Dashboard} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/watchlist" component={WatchlistPage} />
+            <Route path="/active-trades" component={ActiveTradesPage} />
             <Route path="/history" component={History} />
             <Route path="/reports" component={ReportsPage} />
             <Route path="/daily-brief" component={DailyBriefPage} />
