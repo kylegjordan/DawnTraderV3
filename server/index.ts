@@ -8,7 +8,16 @@ import { marketDataHealthCheck } from "./services/market-data-health-check";
 const app = express();
 
 // CORS Configuration - restrict access to allowed origins only
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || ["http://localhost:3000", "http://localhost:5000"];
+// For Replit: automatically allow the current Replit dev/app domain + any custom ALLOWED_ORIGINS
+const replitDevDomain = process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null;
+const customOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [];
+const allowedOrigins = [
+  "http://localhost:3000", 
+  "http://localhost:5000",
+  ...(replitDevDomain ? [replitDevDomain] : []),
+  ...customOrigins
+].filter(Boolean);
+
 app.use(cors({
   origin: allowedOrigins,
   credentials: true
