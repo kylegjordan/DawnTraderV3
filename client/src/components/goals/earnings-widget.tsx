@@ -25,7 +25,7 @@ export default function EarningsWidget() {
   const { mode, isPaper } = useTradingMode();
   
   const { data: earnings, isLoading } = useQuery<EarningsSummary>({
-    queryKey: ['/api/earnings/summary', { mode }],
+    queryKey: [`/api/earnings/summary?mode=${mode}`],
   });
   
   const sparklineEndpoint = isPaper ? '/api/paper/metrics/earnings-chart' : '/api/portfolio/earnings-chart';
