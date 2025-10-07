@@ -115,8 +115,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Authentication Routes
   
-  // REGISTER
+  // REGISTER - DISABLED FOR SINGLE-USER MODE
+  // To enable registration, remove the error response below and uncomment the registration logic
   app.post('/api/auth/register', async (req: AuthenticatedRequest, res) => {
+    return res.status(403).json({ 
+      error: 'Registration is disabled. This is a single-user application.' 
+    });
+    
+    /* REGISTRATION CODE (uncomment to enable):
     try {
       const { username, email, password } = req.body;
       
@@ -169,6 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Registration error:', error);
       res.status(500).json({ error: 'Registration failed' });
     }
+    */
   });
 
   // LOGIN
