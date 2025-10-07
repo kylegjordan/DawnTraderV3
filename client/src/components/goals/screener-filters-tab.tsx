@@ -2,9 +2,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useState, useEffect } from "react";
 import { Filter, Save, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTradingMode } from "@/contexts/trading-mode-context";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 
 const DEFAULTS = {
   // Volume Filters
@@ -23,7 +27,6 @@ const DEFAULTS = {
   // Technical Filters
   rsiMin: 30,
   rsiMax: 70,
-  macdCrossover: true,
   
   // Risk Filters
   maxRMultiple: 3,
@@ -31,10 +34,82 @@ const DEFAULTS = {
   stopLossMax: 5,
 };
 
+interface ScreenerFilters {
+  minVolume24h: number;
+  avgVolumeRatio: number;
+  minPrice: number;
+  maxPrice: number;
+  minLiquidity: number;
+  atrThreshold: number;
+  maxSpread: number;
+  rsiMin: number;
+  rsiMax: number;
+  maxRMultiple: number;
+  stopLossMin: number;
+  stopLossMax: number;
+}
+
 export default function ScreenerFiltersTab() {
   const { toast } = useToast();
-  const [filters, setFilters] = useState(DEFAULTS);
+  const { mode } = useTradingMode();
+  const [filters, setFilters] = useState<Partial<ScreenerFilters>>(DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
+
+  const { data: currentFilters, isLoading } = useQuery<ScreenerFilters>({
+    queryKey: ['/api/screeners', mode],
+    queryFn: () => fetch(`/api/screeners?mode=${mode}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
+  });
+
+  useEffect(() => {
+    if (currentFilters) {
+      setFilters({
+        minVolume24h: currentFilters.minVolume24h ?? DEFAULTS.minVolume24h,
+        avgVolumeRatio: currentFilters.avgVolumeRatio ?? DEFAULTS.avgVolumeRatio,
+        minPrice: currentFilters.minPrice ?? DEFAULTS.minPrice,
+        maxPrice: currentFilters.maxPrice ?? DEFAULTS.maxPrice,
+        minLiquidity: currentFilters.minLiquidity ?? DEFAULTS.minLiquidity,
+        atrThreshold: currentFilters.atrThreshold ?? DEFAULTS.atrThreshold,
+        maxSpread: currentFilters.maxSpread ?? DEFAULTS.maxSpread,
+        rsiMin: currentFilters.rsiMin ?? DEFAULTS.rsiMin,
+        rsiMax: currentFilters.rsiMax ?? DEFAULTS.rsiMax,
+        maxRMultiple: currentFilters.maxRMultiple ?? DEFAULTS.maxRMultiple,
+        stopLossMin: currentFilters.stopLossMin ?? DEFAULTS.stopLossMin,
+        stopLossMax: currentFilters.stopLossMax ?? DEFAULTS.stopLossMax,
+      });
+    }
+  }, [currentFilters, mode]);
+
+  const updateMutation = useMutation({
+    mutationFn: async (updates: Partial<ScreenerFilters>) => {
+      return fetch(`/api/screeners?mode=${mode}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(updates)
+      }).then(r => r.json());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/screeners', mode] });
+      toast({
+        title: "Screener Filters Saved",
+        description: `Your screener configuration has been saved successfully for ${mode} mode.`,
+      });
+      setHasChanges(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update screener filters",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleChange = (field: string, value: number) => {
     setFilters(prev => ({ ...prev, [field]: value }));
@@ -42,11 +117,7 @@ export default function ScreenerFiltersTab() {
   };
 
   const handleSave = () => {
-    toast({
-      title: "Screener Filters Saved",
-      description: "Your screener configuration has been saved successfully.",
-    });
-    setHasChanges(false);
+    updateMutation.mutate(filters);
   };
 
   const handleReset = () => {
@@ -57,6 +128,24 @@ export default function ScreenerFiltersTab() {
       description: "Screener filters have been reset to default values.",
     });
   };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            Screener Filters Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
