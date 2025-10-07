@@ -132,7 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication Routes
   
   // REGISTER
-  app.post('/api/auth/register', async (req, res) => {
+  app.post('/api/auth/register', async (req: AuthenticatedRequest, res) => {
     try {
       const { username, email, password } = req.body;
       
@@ -188,7 +188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // LOGIN
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', async (req: AuthenticatedRequest, res) => {
     try {
       const { username, password } = req.body;
       
@@ -225,7 +225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // VERIFY TOKEN
-  app.get('/api/auth/verify', async (req, res) => {
+  app.get('/api/auth/verify', async (req: AuthenticatedRequest, res) => {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) {
@@ -245,7 +245,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // REFRESH TOKEN
-  app.post('/api/auth/refresh', async (req, res) => {
+  app.post('/api/auth/refresh', async (req: AuthenticatedRequest, res) => {
     try {
       const { token } = req.body;
       
@@ -273,10 +273,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User and Authentication
-  app.get('/api/user/profile', async (req, res) => {
-    // Simplified - in real app would have authentication
-    const userId = req.headers['user-id'] as string || 'default-user';
-    const user = await storage.getUser(userId);
+  app.get('/api/user/profile', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const user = await storage.getUser(req.user!.id);
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -286,20 +284,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trading Settings
-  app.get('/api/settings', async (req, res) => {
+  app.get('/api/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
-      
-      // Ensure user exists first
-      let user = await storage.getUser(userId);
-      if (!user) {
-        user = await storage.createUser({
-          username: userId,
-          email: `${userId}@placeholder.local`,
-          tradingStatus: 'stopped',
-          tradingMode: 'paper'
-        });
-      }
+      const userId = req.user!.id;
       
       let settings = await storage.getTradingSettings(userId);
       
@@ -325,9 +312,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/settings', async (req, res) => {
+  app.put('/api/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       
       // Update trading settings (credentials are now only stored in environment secrets)
       const validatedData = insertTradingSettingsSchema.omit({ userId: true }).parse(req.body);
@@ -341,9 +328,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trading Engine Control
-  app.post('/api/trading/start', async (req, res) => {
+  app.post('/api/trading/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { mode } = req.body; // 'live' or 'paper'
       
       // Get API credentials from environment secrets only
@@ -374,9 +361,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/trading/stop', async (req, res) => {
+  app.post('/api/trading/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       
       const engine = tradingEngines.get(userId);
       if (engine) {
@@ -392,9 +379,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trading/status', async (req, res) => {
+  app.get('/api/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const user = await storage.getUser(userId);
       const engine = tradingEngines.get(userId);
       
@@ -410,9 +397,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Portfolio and Metrics
-  app.get('/api/portfolio/overview', async (req, res) => {
+  app.get('/api/portfolio/overview', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       
       const liveBalance = await riskManager.getLiveKrakenBalance(userId);
       const metrics = await riskManager.getPortfolioMetrics(userId);
@@ -440,9 +427,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/earnings', async (req, res) => {
+  app.get('/api/portfolio/earnings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const earnings = await riskManager.getEarnings(userId);
       res.json(earnings);
     } catch (error) {
@@ -451,9 +438,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/earnings-chart', async (req, res) => {
+  app.get('/api/portfolio/earnings-chart', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 30;
       const chartData = await riskManager.getEarningsChartData(userId, days);
       res.json(chartData);
@@ -463,9 +450,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/history', async (req, res) => {
+  app.get('/api/portfolio/history', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const period = (req.query.period as string) || '1M';
       
       const initialBalance = 50000;
@@ -546,9 +533,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/value-history', async (req, res) => {
+  app.get('/api/portfolio/value-history', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const period = (req.query.period as string) || '30d';
       
       const initialBalance = 50000;
@@ -623,9 +610,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/stats', async (req, res) => {
+  app.get('/api/portfolio/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       
       const initialBalance = 50000;
       
@@ -662,9 +649,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trades
-  app.get('/api/trades', async (req, res) => {
+  app.get('/api/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { status, symbol, strategy, limit } = req.query;
       
       const trades = await storage.getTrades(userId, {
@@ -681,9 +668,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trades/active', async (req, res) => {
+  app.get('/api/trades/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const trades = await storage.getActiveTrades(userId);
       res.json(trades);
     } catch (error) {
@@ -692,9 +679,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/trades/:id/close', async (req, res) => {
+  app.post('/api/trades/:id/close', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { id } = req.params;
       
       const engine = tradingEngines.get(userId);
@@ -711,9 +698,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Watchlist
-  app.get('/api/watchlist', async (req, res) => {
+  app.get('/api/watchlist', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const watchlist = await storage.getWatchlist(userId);
       res.json(watchlist);
     } catch (error) {
@@ -722,9 +709,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/watchlist', async (req, res) => {
+  app.post('/api/watchlist', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const validatedData = insertWatchlistPairSchema.parse({ ...req.body, userId });
       
       const pair = await storage.addWatchlistPair(validatedData);
@@ -735,7 +722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/watchlist/:id', async (req, res) => {
+  app.delete('/api/watchlist/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       await storage.removeWatchlistPair(id);
@@ -747,7 +734,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Market Data
-  app.get('/api/market/overview', async (req, res) => {
+  app.get('/api/market/overview', async (req: AuthenticatedRequest, res) => {
     try {
       const overview = await marketScanner.getMarketOverview();
       res.json(overview);
@@ -757,7 +744,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/market/ticker/:symbol', async (req, res) => {
+  app.get('/api/market/ticker/:symbol', async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const kraken = new KrakenService();
@@ -770,9 +757,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI Features
-  app.get('/api/ai/reports', async (req, res) => {
+  app.get('/api/ai/reports', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { type, limit } = req.query;
       
       const reports = await storage.getAIReports(
@@ -788,9 +775,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/reports/generate', async (req, res) => {
+  app.post('/api/ai/reports/generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { type } = req.body; // 'daily', 'weekly', 'monthly'
       
       let report;
@@ -815,9 +802,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/analyze-symbol', async (req, res) => {
+  app.post('/api/ai/analyze-symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { symbol } = req.body;
       
       const analysis = await aiAnalyst.analyzeSymbol(symbol, userId);
@@ -829,9 +816,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Daily Briefs
-  app.get('/api/daily-briefs/today', async (req, res) => {
+  app.get('/api/daily-briefs/today', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const today = new Date().toISOString().split('T')[0];
       
       const brief = await storage.getDailyBrief(userId, today);
@@ -842,9 +829,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/daily-briefs', async (req, res) => {
+  app.get('/api/daily-briefs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { status, limit } = req.query;
       
       const briefs = await storage.getDailyBriefs(userId, {
@@ -859,9 +846,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/daily-briefs/:date', async (req, res) => {
+  app.get('/api/daily-briefs/:date', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { date } = req.params;
       
       const brief = await storage.getDailyBrief(userId, date);
@@ -872,9 +859,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/daily-briefs/update', async (req, res) => {
+  app.post('/api/daily-briefs/update', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       
       await dailyBriefService.updateDailyBrief(userId);
       res.json({ success: true, message: 'Brief updated successfully' });
@@ -885,9 +872,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Paper Trading Routes (Complete data isolation from live trading)
-  app.get('/api/paper/trades', async (req, res) => {
+  app.get('/api/paper/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const trades = await storage.getAllPaperTrades(userId);
       res.json(trades);
     } catch (error) {
@@ -896,9 +883,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/trades/open', async (req, res) => {
+  app.get('/api/paper/trades/open', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const trades = await storage.getOpenPaperTrades(userId);
       res.json(trades);
     } catch (error) {
@@ -907,9 +894,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/paper/trades/clear', async (req, res) => {
+  app.delete('/api/paper/trades/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       await storage.deleteAllPaperTrades(userId);
       res.json({ success: true, message: 'All paper trades cleared' });
     } catch (error) {
@@ -918,9 +905,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/briefs/today', async (req, res) => {
+  app.get('/api/paper/briefs/today', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const today = new Date().toISOString().split('T')[0];
       
       const brief = await storage.getPaperDailyBrief(userId, today);
@@ -931,9 +918,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/briefs', async (req, res) => {
+  app.get('/api/paper/briefs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { status, limit } = req.query;
       
       const briefs = await storage.getPaperDailyBriefs(userId, {
@@ -948,9 +935,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/metrics', async (req, res) => {
+  app.get('/api/paper/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { PaperMetricsService } = await import('./services/paper-metrics.js');
       const metricsService = new PaperMetricsService(userId);
       
@@ -979,9 +966,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/metrics/portfolio', async (req, res) => {
+  app.get('/api/paper/metrics/portfolio', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { PaperMetricsService } = await import('./services/paper-metrics.js');
       const metricsService = new PaperMetricsService(userId);
       
@@ -993,9 +980,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/ai/conversation', async (req, res) => {
+  app.get('/api/ai/conversation', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const conversation = await storage.getAIConversation(userId);
       res.json(conversation || { messages: [], context: {} });
     } catch (error) {
@@ -1004,9 +991,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/chat', async (req, res) => {
+  app.post('/api/ai/chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { message, context } = req.body;
       
       const result = await aiAnalyst.chatWithAssistant(userId, message, context);
@@ -1017,9 +1004,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/settings/apply', async (req, res) => {
+  app.post('/api/ai/settings/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { settingName, newValue, confirmation } = req.body;
       
       const result = await aiAnalyst.applySettingsChange(userId, settingName, newValue, confirmation);
@@ -1030,9 +1017,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/ai/audit-logs', async (req, res) => {
+  app.get('/api/ai/audit-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { limit } = req.query;
       
       const logs = await storage.getAuditLogs(userId, limit ? parseInt(limit as string) : 50);
@@ -1043,9 +1030,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/ai/error-logs', async (req, res) => {
+  app.get('/api/ai/error-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { resolved, errorType, limit } = req.query;
       
       const filters: any = {};
@@ -1061,9 +1048,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/diagnose-error', async (req, res) => {
+  app.post('/api/ai/diagnose-error', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { errorId } = req.body;
       
       const diagnosis = await aiAnalyst.diagnoseError(errorId, userId);
@@ -1075,9 +1062,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI Conversations - Multiple chats management
-  app.get('/api/conversations', async (req, res) => {
+  app.get('/api/conversations', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const conversations = await storage.getAIConversations(userId);
       res.json(conversations);
     } catch (error) {
@@ -1086,7 +1073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/conversations/:id', async (req, res) => {
+  app.get('/api/conversations/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const conversation = await storage.getAIConversationById(id);
@@ -1102,9 +1089,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/conversations', async (req, res) => {
+  app.post('/api/conversations', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { title } = req.body;
       
       const conversation = await storage.createAIConversation({
@@ -1122,7 +1109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/conversations/:id', async (req, res) => {
+  app.patch('/api/conversations/:id', async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { title, maxContextMessages } = req.body;
@@ -1139,7 +1126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/conversations/:id', async (req, res) => {
+  app.delete('/api/conversations/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       await storage.deleteAIConversation(id);
@@ -1150,9 +1137,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/conversations/:id/message', async (req, res) => {
+  app.post('/api/conversations/:id/message', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { id } = req.params;
       const { message, context } = req.body;
       
@@ -1165,9 +1152,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Kill Switch Incident Analysis Conversation
-  app.post('/api/kill-switch/create-analysis-chat', async (req, res) => {
+  app.post('/api/kill-switch/create-analysis-chat', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { eventId } = req.body;
       
       // Get kill switch event details
@@ -1301,9 +1288,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Chat cost tracking
-  app.get('/api/chat-logs', async (req, res) => {
+  app.get('/api/chat-logs', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { conversationId, limit } = req.query;
       
       const logs = await storage.getChatLogs(
@@ -1318,9 +1305,9 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/chat-costs', async (req, res) => {
+  app.get('/api/chat-costs', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { fromDate, toDate } = req.query;
       
       const summary = await storage.getChatCostSummary(
@@ -1335,7 +1322,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/ai/error-logs/:id/resolve', async (req, res) => {
+  app.post('/api/ai/error-logs/:id/resolve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { notes } = req.body;
@@ -1349,9 +1336,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // AI Opportunities routes
-  app.get('/api/ai/opportunities', async (req, res) => {
+  app.get('/api/ai/opportunities', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { status, type, minProbability } = req.query;
       
       const opportunities = await aiOpportunitiesService.getOpportunitiesForUser(userId, {
@@ -1367,9 +1354,9 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/ai/opportunities/latest-run', async (req, res) => {
+  app.get('/api/ai/opportunities/latest-run', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const latestRun = await aiOpportunitiesService.getLatestRun(userId);
       res.json(latestRun || null);
     } catch (error) {
@@ -1378,9 +1365,9 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/ai/opportunities/validation-report', async (req, res) => {
+  app.get('/api/ai/opportunities/validation-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const report = await aiOpportunitiesService.getValidationReport(userId);
       res.json(report);
     } catch (error) {
@@ -1389,7 +1376,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.patch('/api/ai/opportunities/:id/status', async (req, res) => {
+  app.patch('/api/ai/opportunities/:id/status', async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -1402,9 +1389,9 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/ai/opportunities/generate', async (req, res) => {
+  app.post('/api/ai/opportunities/generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       
       // Check if feature is enabled for this user
       const settings = await storage.getTradingSettings(userId);
@@ -1432,7 +1419,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Market Context (AI Market Analysis) routes
-  app.get('/api/market-context/latest', async (req, res) => {
+  app.get('/api/market-context/latest', async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as string) || 'live';
       
@@ -1448,7 +1435,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/market-context/history', async (req, res) => {
+  app.get('/api/market-context/history', async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as string) || 'live';
       const days = parseInt(req.query.days as string) || 7;
@@ -1473,9 +1460,9 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/market-context/analyze', async (req, res) => {
+  app.post('/api/market-context/analyze', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { mode = 'live' } = req.body;
       
       if (mode !== 'live' && mode !== 'paper') {
@@ -1515,7 +1502,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Stock API routes
-  app.get('/api/stocks/quote/:symbol', async (req, res) => {
+  app.get('/api/stocks/quote/:symbol', async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const quote = await stockService.getQuote(symbol);
@@ -1526,7 +1513,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/stocks/company/:symbol', async (req, res) => {
+  app.get('/api/stocks/company/:symbol', async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const company = await stockService.getCompanyInfo(symbol);
@@ -1537,7 +1524,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/stocks/search/:query', async (req, res) => {
+  app.get('/api/stocks/search/:query', async (req: AuthenticatedRequest, res) => {
     try {
       const { query } = req.params;
       const results = await stockService.search(query);
@@ -1548,7 +1535,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/symbol/data', async (req, res) => {
+  app.get('/api/symbol/data', async (req: AuthenticatedRequest, res) => {
     try {
       const symbol = (req.query.symbol as string)?.toUpperCase();
       if (!symbol) {
@@ -1575,7 +1562,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint for Finnhub feed
-  app.get('/api/test/finnhub-feed', async (req, res) => {
+  app.get('/api/test/finnhub-feed', async (req: AuthenticatedRequest, res) => {
     try {
       const testSymbol = 'AAPL';
       const timestamp = new Date().toISOString();
@@ -1655,7 +1642,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Crypto search route
-  app.get('/api/crypto/search/:query', async (req, res) => {
+  app.get('/api/crypto/search/:query', async (req: AuthenticatedRequest, res) => {
     try {
       const { query } = req.params;
       const normalizedQuery = query.toLowerCase().trim();
@@ -1705,9 +1692,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Reports Export API
-  app.get('/api/reports/export', async (req, res) => {
+  app.get('/api/reports/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { reportType, format, from, to, symbol, strategy, mode } = req.query;
       
       // Fetch all trades for the user
@@ -1803,9 +1790,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Export functionality
-  app.get('/api/export/trades', async (req, res) => {
+  app.get('/api/export/trades', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { from, to, format } = req.query;
       
       const trades = await storage.getTrades(userId, { 
@@ -1842,7 +1829,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Database monitoring
-  app.get('/api/database/status', async (req, res) => {
+  app.get('/api/database/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const currentStatus = await databaseMonitor.checkDatabaseSize();
       const history = await storage.getDatabaseSizeHistory(7); // Last 7 days
@@ -1874,7 +1861,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Screener test endpoint for demonstrating different filter configurations
-  app.post('/api/screener/test', async (req, res) => {
+  app.post('/api/screener/test', async (req: AuthenticatedRequest, res) => {
     try {
       const kraken = new KrakenService();
       const testSettings = req.body || {
@@ -1905,9 +1892,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Portfolio guardrails test endpoint - simulate multiple signals
-  app.post('/api/guardrails/test', async (req, res) => {
+  app.post('/api/guardrails/test', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) {
@@ -2054,9 +2041,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Kill Switch endpoints
-  app.get('/api/kill-switch/status', async (req, res) => {
+  app.get('/api/kill-switch/status', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) {
@@ -2079,9 +2066,9 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/kill-switch/check', async (req, res) => {
+  app.post('/api/kill-switch/check', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) {
@@ -2103,9 +2090,9 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/kill-switch/reset', async (req, res) => {
+  app.post('/api/kill-switch/reset', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { notes } = req.body;
       
       const settings = await storage.getTradingSettings(userId);
@@ -2137,9 +2124,9 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/kill-switch/events', async (req, res) => {
+  app.get('/api/kill-switch/events', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       
       const events = await storage.getKillSwitchEvents(userId, { limit });
@@ -2152,9 +2139,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint for simulating kill switch scenarios
-  app.post('/api/test/simulate-loss', async (req, res) => {
+  app.post('/api/test/simulate-loss', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { scenario } = req.body; // 'warning', 'kill', or custom loss %
       
       const settings = await storage.getTradingSettings(userId);
@@ -2221,9 +2208,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint to check if trade execution is blocked during suspension
-  app.post('/api/test/attempt-trade', async (req, res) => {
+  app.post('/api/test/attempt-trade', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) {
@@ -2257,9 +2244,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Strategy test endpoint - analyze watchlist pairs for signals
-  app.post('/api/strategies/test', async (req, res) => {
+  app.post('/api/strategies/test', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const watchlist = await storage.getWatchlist(userId);
       const settings = await storage.getTradingSettings(userId);
       
@@ -2393,9 +2380,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Strategy Settings Audit Log
-  app.get('/api/system/strategy-audit', async (req, res) => {
+  app.get('/api/system/strategy-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string;
+      const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
       
       const audits = await storage.listStrategySettingsAudit({ userId, limit });
@@ -2422,9 +2409,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // AI Audit Log
-  app.get('/api/system/ai-audit', async (req, res) => {
+  app.get('/api/system/ai-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string;
+      const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
       
       const logs = await storage.getAuditLogs(userId, limit);
@@ -2436,9 +2423,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Error Logs
-  app.get('/api/system/error-logs', async (req, res) => {
+  app.get('/api/system/error-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string;
+      const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 100;
       
       const errors = await storage.getErrorLogs(userId, { limit });
@@ -2476,9 +2463,9 @@ Provide specific, actionable recommendations.`,
   // ===== STRATEGY METRICS ROUTES =====
 
   // Get strategy-level metrics for Live trading
-  app.get('/api/metrics/strategies', async (req, res) => {
+  app.get('/api/metrics/strategies', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 7;
 
       const fromDate = new Date();
@@ -2560,9 +2547,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get strategy-level metrics for Paper trading
-  app.get('/api/paper/metrics/strategies', async (req, res) => {
+  app.get('/api/paper/metrics/strategies', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 7;
 
       const fromDate = new Date();
@@ -2640,9 +2627,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get detailed strategy view
-  app.get('/api/metrics/strategies/:strategy/details', async (req, res) => {
+  app.get('/api/metrics/strategies/:strategy/details', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { strategy } = req.params;
       const mode = (req.query.mode as string) || 'live';
       const days = parseInt(req.query.days as string) || 30;
@@ -2748,9 +2735,9 @@ Provide specific, actionable recommendations.`,
   // ===== LEARNING FEEDBACK ENGINE ROUTES =====
 
   // Get prediction accuracy metrics
-  app.get('/api/learning/prediction-accuracy', async (req, res) => {
+  app.get('/api/learning/prediction-accuracy', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'paper';
       const strategy = req.query.strategy as string;
       const days = parseInt(req.query.days as string) || 30;
@@ -2771,9 +2758,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get signal weight insights
-  app.get('/api/learning/signal-insights', async (req, res) => {
+  app.get('/api/learning/signal-insights', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'paper';
 
       const { signalWeightOptimizerService } = await import('./services/signal-weight-optimizer');
@@ -2791,9 +2778,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get signal weights
-  app.get('/api/learning/signal-weights', async (req, res) => {
+  app.get('/api/learning/signal-weights', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const strategy = req.query.strategy as string;
       const mode = req.query.mode as string;
 
@@ -2811,9 +2798,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get prediction outcomes
-  app.get('/api/learning/prediction-outcomes', async (req, res) => {
+  app.get('/api/learning/prediction-outcomes', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = req.query.mode as string;
       const strategy = req.query.strategy as string;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -2841,7 +2828,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get enriched features for a symbol
-  app.get('/api/learning/features/:symbol', async (req, res) => {
+  app.get('/api/learning/features/:symbol', async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const { featureEnrichmentService } = await import('./services/feature-enrichment');
@@ -2859,9 +2846,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Trigger manual signal weight optimization
-  app.post('/api/learning/optimize-weights', async (req, res) => {
+  app.post('/api/learning/optimize-weights', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.body.mode as string) || 'paper';
 
       const { signalWeightOptimizerService } = await import('./services/signal-weight-optimizer');
@@ -2880,9 +2867,9 @@ Provide specific, actionable recommendations.`,
   // ===== GOALS ENGINE ROUTES =====
 
   // Get goals summary (mode-aware)
-  app.get('/api/goals/summary', async (req, res) => {
+  app.get('/api/goals/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
 
       const goals = mode === 'live' 
@@ -2897,9 +2884,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Update goals (mode-aware)
-  app.post('/api/goals/update', async (req, res) => {
+  app.post('/api/goals/update', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { goals, mode = 'live' } = req.body;
 
       const updatedGoals = [];
@@ -2929,9 +2916,9 @@ Provide specific, actionable recommendations.`,
   });
 
   // Analyze goals with AI (conversational goal-setting)
-  app.post('/api/goals/analyze', async (req, res) => {
+  app.post('/api/goals/analyze', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { userMessage, mode = 'live' } = req.body;
 
       const settings = await storage.getTradingSettings(userId);
@@ -3012,9 +2999,9 @@ Please:
   });
 
   // Apply goals and configuration changes
-  app.post('/api/goals/apply', async (req, res) => {
+  app.post('/api/goals/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const { goals, configChanges, analysisId, mode = 'live' } = req.body;
 
       const updatedGoals = [];
@@ -3056,9 +3043,9 @@ Please:
 
   // ===== TRADING ACTIVITY ROUTE =====
 
-  app.get('/api/trading/activity', async (req, res) => {
+  app.get('/api/trading/activity', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
       const period = (req.query.period as string) || '1d';
 
@@ -3125,9 +3112,9 @@ Please:
 
   // ===== TRADING AVERAGES ROUTE =====
 
-  app.get('/api/trading/averages', async (req, res) => {
+  app.get('/api/trading/averages', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
       const period = (req.query.period as string) || '1d';
 
@@ -3202,9 +3189,9 @@ Please:
 
   // ===== TRADING RESULTS ROUTE =====
 
-  app.get('/api/trading/results', async (req, res) => {
+  app.get('/api/trading/results', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
       const period = (req.query.period as string) || '1d';
 
@@ -3285,9 +3272,9 @@ Please:
   // ===== EARNINGS SUMMARY ROUTE =====
 
   // Get earnings summary for Earnings widget
-  app.get('/api/earnings/summary', async (req, res) => {
+  app.get('/api/earnings/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
 
       const trades = mode === 'live'
@@ -3338,9 +3325,9 @@ Please:
   // Strategy Settings Routes
   
   // GET current settings for a specific strategy
-  app.get('/api/strategies/settings', async (req, res) => {
+  app.get('/api/strategies/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       const strategy = String(req.query.strategy);
       
@@ -3353,9 +3340,9 @@ Please:
   });
 
   // GET all settings for a mode
-  app.get('/api/strategies/settings/all', async (req, res) => {
+  app.get('/api/strategies/settings/all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       
       const rows = await storage.listStrategySettings({ userId, mode });
@@ -3367,7 +3354,7 @@ Please:
   });
 
   // POST validate settings (no save)
-  app.post('/api/strategies/settings/validate', async (req, res) => {
+  app.post('/api/strategies/settings/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { strategy, params } = req.body || {};
       const { getValidator } = await import('./services/strategy-validators');
@@ -3387,9 +3374,9 @@ Please:
   });
 
   // PUT save settings (validated) + audit + hot-reload
-  app.put('/api/strategies/settings', async (req, res) => {
+  app.put('/api/strategies/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.headers['user-id'] as string || 'default-user';
+      const userId = req.user!.id;
       const mode = (req.body?.mode === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       const strategy = String(req.body?.strategy);
       const enabled = req.body?.enabled !== undefined ? Boolean(req.body.enabled) : true;
@@ -3433,7 +3420,7 @@ Please:
   });
 
   // GET list of presets for a strategy
-  app.get('/api/strategies/presets', async (req, res) => {
+  app.get('/api/strategies/presets', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
       const strategy = String(req.query.strategy || '');
@@ -3450,7 +3437,7 @@ Please:
   });
 
   // GET a specific preset
-  app.get('/api/strategies/presets/:strategy/:presetName', async (req, res) => {
+  app.get('/api/strategies/presets/:strategy/:presetName', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
       const { strategy, presetName } = req.params;
