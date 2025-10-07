@@ -1,10 +1,18 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { databaseMonitor } from "./services/database-monitor";
 import { marketDataHealthCheck } from "./services/market-data-health-check";
 
 const app = express();
+
+// CORS Configuration - restrict access to allowed origins only
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || ["http://localhost:3000", "http://localhost:5000"];
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 
 declare module 'http' {
   interface IncomingMessage {

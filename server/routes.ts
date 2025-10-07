@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
@@ -16,6 +17,15 @@ import { marketDataService } from "./services/market-data";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
 import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStrengthMessage } from "./services/auth-service";
+
+// Rate Limiting for Authentication Endpoints - prevent brute force attacks
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // max 5 login attempts per window
+  message: { error: "Too many login attempts, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const tradingEngines = new Map<string, TradingEngine>();
 const marketScanner = new MarketScanner();
@@ -178,8 +188,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     */
   });
 
-  // LOGIN
-  app.post('/api/auth/login', async (req: AuthenticatedRequest, res) => {
+  // LOGIN - Rate limited to prevent brute force attacks
+  app.post('/api/auth/login', loginLimiter, async (req: AuthenticatedRequest, res) => {
     try {
       const { username, password } = req.body;
       
