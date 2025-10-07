@@ -10,7 +10,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -325,6 +325,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error updating settings:', error);
       res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Guardrails endpoints (mode-isolated)
+  app.get('/api/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      let guardrailsData = await storage.getGuardrails({ userId, mode });
+
+      if (!guardrailsData) {
+        // Return defaults if not found
+        guardrailsData = {
+          id: '',
+          userId,
+          mode,
+          maxDailyLoss: '1000.00',
+          maxDrawdown: '10.00',
+          maxPositionSize: '5000.00',
+          maxOpenPositions: 5,
+          riskPerTrade: '1.5',
+          aiCanAdjust: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
+
+      res.json(guardrailsData);
+    } catch (error) {
+      console.error('Error fetching guardrails:', error);
+      res.status(500).json({ error: 'Failed to fetch guardrails' });
+    }
+  });
+
+  app.put('/api/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const validatedData = insertGuardrailsSchema.parse({ ...req.body, userId, mode });
+      const guardrailsData = await storage.upsertGuardrails(validatedData);
+
+      console.info(`[Guardrails] User ${userId} updated guardrails for ${mode} mode`);
+
+      res.json(guardrailsData);
+    } catch (error) {
+      console.error('Error updating guardrails:', error);
+      res.status(500).json({ error: 'Failed to update guardrails' });
+    }
+  });
+
+  // Screener filters endpoints (mode-isolated)
+  app.get('/api/screeners', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      let screenerData = await storage.getScreenerFilters({ userId, mode });
+
+      if (!screenerData) {
+        // Return defaults if not found
+        screenerData = {
+          id: '',
+          userId,
+          mode,
+          minVolume: '1000000.00',
+          minPrice: '0.01',
+          maxPrice: '10000.00',
+          minMarketCap: '100000000.00',
+          maxBidAskSpread: '1.00',
+          rsiMin: 30,
+          rsiMax: 70,
+          volatilityMin: '0.50',
+          volatilityMax: '5.00',
+          excludeStablecoins: true,
+          minLiquidity: '500000.00',
+          allowRegulatedOnly: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
+
+      res.json(screenerData);
+    } catch (error) {
+      console.error('Error fetching screener filters:', error);
+      res.status(500).json({ error: 'Failed to fetch screener filters' });
+    }
+  });
+
+  app.put('/api/screeners', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const validatedData = insertScreenerFiltersSchema.parse({ ...req.body, userId, mode });
+      const screenerData = await storage.upsertScreenerFilters(validatedData);
+
+      console.info(`[Screeners] User ${userId} updated screener filters for ${mode} mode`);
+
+      res.json(screenerData);
+    } catch (error) {
+      console.error('Error updating screener filters:', error);
+      res.status(500).json({ error: 'Failed to update screener filters' });
     }
   });
 
