@@ -104,6 +104,46 @@ export const tradingSettings = pgTable("trading_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+// Guardrails (mode-isolated risk parameters)
+export const guardrails = pgTable("guardrails", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  maxDailyLoss: decimal("max_daily_loss", { precision: 10, scale: 2 }).default("1000.00"),
+  maxDrawdown: decimal("max_drawdown", { precision: 5, scale: 2 }).default("10.00"),
+  maxPositionSize: decimal("max_position_size", { precision: 10, scale: 2 }).default("5000.00"),
+  maxOpenPositions: integer("max_open_positions").default(5),
+  riskPerTrade: decimal("risk_per_trade", { precision: 5, scale: 2 }).default("1.5"),
+  aiCanAdjust: boolean("ai_can_adjust").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueUserMode: uniqueIndex("guardrails_user_mode_idx").on(table.userId, table.mode),
+}));
+
+// Screener Filters (mode-isolated screening criteria)
+export const screenerFilters = pgTable("screener_filters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  minVolume: decimal("min_volume", { precision: 15, scale: 2 }).default("1000000.00"),
+  minPrice: decimal("min_price", { precision: 10, scale: 8 }).default("0.01"),
+  maxPrice: decimal("max_price", { precision: 10, scale: 2 }).default("10000.00"),
+  minMarketCap: decimal("min_market_cap", { precision: 15, scale: 2 }).default("100000000.00"),
+  maxBidAskSpread: decimal("max_bid_ask_spread", { precision: 5, scale: 2 }).default("1.00"),
+  rsiMin: integer("rsi_min").default(30),
+  rsiMax: integer("rsi_max").default(70),
+  volatilityMin: decimal("volatility_min", { precision: 5, scale: 2 }).default("0.50"),
+  volatilityMax: decimal("volatility_max", { precision: 5, scale: 2 }).default("5.00"),
+  excludeStablecoins: boolean("exclude_stablecoins").default(true),
+  minLiquidity: decimal("min_liquidity", { precision: 15, scale: 2 }).default("500000.00"),
+  allowRegulatedOnly: boolean("allow_regulated_only").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueUserMode: uniqueIndex("screener_filters_user_mode_idx").on(table.userId, table.mode),
+}));
+
 // Strategy Settings (per mode, per user, per strategy)
 export const strategySettings = pgTable("strategy_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -669,6 +709,18 @@ export const insertTradingSettingsSchema = createInsertSchema(tradingSettings).o
   updatedAt: true,
 });
 
+export const insertGuardrailsSchema = createInsertSchema(guardrails).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertStrategySettingsSchema = createInsertSchema(strategySettings).omit({
   id: true,
   createdAt: true,
@@ -813,6 +865,12 @@ export type User = typeof users.$inferSelect;
 
 export type InsertTradingSettings = z.infer<typeof insertTradingSettingsSchema>;
 export type TradingSettings = typeof tradingSettings.$inferSelect;
+
+export type InsertGuardrails = z.infer<typeof insertGuardrailsSchema>;
+export type Guardrails = typeof guardrails.$inferSelect;
+
+export type InsertScreenerFilters = z.infer<typeof insertScreenerFiltersSchema>;
+export type ScreenerFilters = typeof screenerFilters.$inferSelect;
 
 export type InsertStrategySettings = z.infer<typeof insertStrategySettingsSchema>;
 export type StrategySettings = typeof strategySettings.$inferSelect;
