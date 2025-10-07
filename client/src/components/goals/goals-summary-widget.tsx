@@ -25,10 +25,10 @@ export default function GoalsSummaryWidget() {
   const [, setLocation] = useLocation();
   
   const { data, isLoading } = useQuery<GoalsSummaryData>({
-    queryKey: ['/api/goals/summary', { mode }],
+    queryKey: [`/api/goals/summary?mode=${mode}`],
   });
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <Card className={cn("w-full", isPaper && "border-blue-500/30 bg-blue-500/5")} data-testid="widget-goals-summary">
         <CardHeader>

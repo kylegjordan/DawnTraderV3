@@ -38,7 +38,7 @@ export default function GoalsEngineTab() {
   const [isChatting, setIsChatting] = useState(false);
 
   const { data, isLoading } = useQuery<GoalsSummary>({
-    queryKey: ['/api/goals/summary', { mode }],
+    queryKey: [`/api/goals/summary?mode=${mode}`],
   });
 
   const updateMutation = useMutation({
@@ -120,7 +120,7 @@ export default function GoalsEngineTab() {
     return editedGoals.hasOwnProperty(metric) ? editedGoals[metric] : defaultValue;
   };
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div className="space-y-6">
         <Card>

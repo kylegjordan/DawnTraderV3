@@ -31,10 +31,10 @@ export default function AveragesWidget() {
   const [period, setPeriod] = useState('1d');
   
   const { data: averages, isLoading } = useQuery<AveragesData>({
-    queryKey: ['/api/trading/averages', { mode, period }],
+    queryKey: [`/api/trading/averages?mode=${mode}&period=${period}`],
   });
 
-  if (isLoading) {
+  if (isLoading && !averages) {
     return (
       <Card className={cn("metric-card", isPaper && "border-blue-500/30 bg-blue-500/5")} data-testid="widget-averages">
         <CardHeader>
