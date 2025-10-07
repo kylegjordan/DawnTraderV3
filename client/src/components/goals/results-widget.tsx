@@ -70,11 +70,11 @@ export default function ResultsWidget() {
     return 'neutral';
   };
 
-  const data = results || {
-    totalPnL: 0,
-    profitFactor: 0,
-    maxDrawdown: 0,
-    avgReturnPercent: 0,
+  const data = {
+    totalPnL: results?.totalPnL ?? 0,
+    profitFactor: results?.profitFactor ?? 0,
+    maxDrawdown: results?.maxDrawdown ?? 0,
+    avgReturnPercent: results?.avgReturnPercent ?? 0,
   };
 
   return (
