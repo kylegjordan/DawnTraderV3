@@ -11,7 +11,7 @@ import StrategyPerformanceWidget from "@/components/strategy/strategy-performanc
 import PortfolioValueWidget from "@/components/goals/portfolio-value-widget";
 import EarningsWidget from "@/components/goals/earnings-widget";
 import TradingActivityWidget from "@/components/goals/trading-activity-widget";
-import ResultsWidget from "@/components/goals/results-widget";
+import AveragesWidget from "@/components/goals/averages-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 
 export default function Dashboard() {
@@ -33,7 +33,7 @@ export default function Dashboard() {
           <PortfolioValueWidget />
           <EarningsWidget />
           <TradingActivityWidget />
-          <ResultsWidget />
+          <AveragesWidget />
         </div>
       </section>
 

@@ -54,7 +54,7 @@ export default function TradingActivityWidget() {
       <Card className={cn("metric-card", isPaper && "border-blue-500/30 bg-blue-500/5")} data-testid="widget-trading-activity">
         <CardHeader>
           <CardTitle className="text-lg flex items-center justify-between">
-            <span>Trading Activity</span>
+            <span>Trading Activity and Results</span>
             <Activity className="w-5 h-5 text-primary" />
           </CardTitle>
         </CardHeader>
@@ -95,7 +95,7 @@ export default function TradingActivityWidget() {
       <CardHeader>
         <CardTitle className="text-lg flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span>Trading Activity</span>
+            <span>Trading Activity and Results</span>
             {isPaper && (
               <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">
                 SIMULATED
