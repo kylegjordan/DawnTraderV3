@@ -3,6 +3,8 @@ import {
   tradingSettings,
   guardrails,
   screenerFilters,
+  screenerResults,
+  filterCalibrationLog,
   strategySettings,
   strategySettingsAudit,
   watchlistPairs,
@@ -37,6 +39,10 @@ import {
   type InsertGuardrails,
   type ScreenerFilters,
   type InsertScreenerFilters,
+  type ScreenerResult,
+  type InsertScreenerResult,
+  type FilterCalibrationLog,
+  type InsertFilterCalibrationLog,
   type StrategySettings,
   type InsertStrategySettings,
   type StrategySettingsAudit,
@@ -113,6 +119,16 @@ export interface IStorage {
   // Screener filters methods
   getScreenerFilters(params: { userId: string; mode: 'live' | 'paper' }): Promise<ScreenerFilters | null>;
   upsertScreenerFilters(data: InsertScreenerFilters): Promise<ScreenerFilters>;
+
+  // Filter calibration methods
+  getLatestCalibration(params: { userId: string; mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null>;
+  getLatestPaperCalibration(userId: string): Promise<FilterCalibrationLog | null>;
+  createCalibration(data: InsertFilterCalibrationLog): Promise<FilterCalibrationLog>;
+
+  // Screener results methods
+  getScreenerResults(params: { userId: string; mode: 'live' | 'paper'; limit?: number }): Promise<ScreenerResult[]>;
+  createScreenerResults(data: InsertScreenerResult[]): Promise<void>;
+  deleteOldScreenerResults(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
 
   // Strategy settings methods
   getStrategySettings(params: { userId: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null>;
@@ -369,6 +385,83 @@ export class DatabaseStorage implements IStorage {
       const [result] = await db.insert(screenerFilters).values(data).returning();
       return result;
     }
+  }
+
+  // Filter calibration methods
+  async getLatestCalibration(params: { userId: string; mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null> {
+    const maxAgeHours = params.maxAgeHours || 24;
+    const cutoffTime = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+    
+    const [result] = await db
+      .select()
+      .from(filterCalibrationLog)
+      .where(
+        and(
+          eq(filterCalibrationLog.userId, params.userId),
+          eq(filterCalibrationLog.mode, params.mode),
+          gte(filterCalibrationLog.timestamp, cutoffTime)
+        )
+      )
+      .orderBy(desc(filterCalibrationLog.timestamp))
+      .limit(1);
+    
+    return result || null;
+  }
+
+  async getLatestPaperCalibration(userId: string): Promise<FilterCalibrationLog | null> {
+    const [result] = await db
+      .select()
+      .from(filterCalibrationLog)
+      .where(
+        and(
+          eq(filterCalibrationLog.userId, userId),
+          eq(filterCalibrationLog.mode, 'paper')
+        )
+      )
+      .orderBy(desc(filterCalibrationLog.timestamp))
+      .limit(1);
+    
+    return result || null;
+  }
+
+  async createCalibration(data: InsertFilterCalibrationLog): Promise<FilterCalibrationLog> {
+    const [result] = await db.insert(filterCalibrationLog).values(data).returning();
+    return result;
+  }
+
+  // Screener results methods
+  async getScreenerResults(params: { userId: string; mode: 'live' | 'paper'; limit?: number }): Promise<ScreenerResult[]> {
+    const results = await db
+      .select()
+      .from(screenerResults)
+      .where(
+        and(
+          eq(screenerResults.userId, params.userId),
+          eq(screenerResults.mode, params.mode)
+        )
+      )
+      .orderBy(desc(screenerResults.scannedAt))
+      .limit(params.limit || 50);
+    
+    return results;
+  }
+
+  async createScreenerResults(data: InsertScreenerResult[]): Promise<void> {
+    if (data.length > 0) {
+      await db.insert(screenerResults).values(data);
+    }
+  }
+
+  async deleteOldScreenerResults(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void> {
+    await db
+      .delete(screenerResults)
+      .where(
+        and(
+          eq(screenerResults.userId, params.userId),
+          eq(screenerResults.mode, params.mode),
+          lte(screenerResults.scannedAt, params.beforeDate)
+        )
+      );
   }
 
   // Strategy settings methods

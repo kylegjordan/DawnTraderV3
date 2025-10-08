@@ -408,6 +408,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Filter calibration endpoint - fetches latest with Paper→Live fallback
+  app.get('/api/screeners/calibration', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.mode!;
+
+      let calibration = await storage.getLatestCalibration({ userId, mode, maxAgeHours: 24 });
+      
+      if (!calibration && mode === 'live') {
+        console.log(`[Calibration] No recent Live calibration for user ${userId}, falling back to Paper mode`);
+        calibration = await storage.getLatestPaperCalibration(userId);
+        if (calibration) {
+          calibration = { ...calibration, source: 'paper_fallback' };
+        }
+      }
+
+      if (!calibration) {
+        return res.status(404).json({ error: 'No calibration data found' });
+      }
+
+      res.json(calibration);
+    } catch (error) {
+      console.error('Error fetching calibration:', error);
+      res.status(500).json({ error: 'Failed to fetch calibration data' });
+    }
+  });
+
   // Screener filters endpoints (mode-isolated)
   app.get('/api/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {

@@ -8,7 +8,7 @@ import { Filter, Save, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 const DEFAULTS = {
   // Volume Filters
@@ -49,6 +49,18 @@ interface ScreenerFilters {
   stopLossMax: number;
 }
 
+interface CalibrationData {
+  minVolume: string;
+  minPrice: string;
+  maxPrice: string;
+  minMarketCap: string;
+  maxBidAskSpread: string;
+  minDailyRange: string;
+  mode: string;
+  source: string;
+  timestamp: string;
+}
+
 export default function ScreenerFiltersTab() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
@@ -56,12 +68,11 @@ export default function ScreenerFiltersTab() {
   const [hasChanges, setHasChanges] = useState(false);
 
   const { data: currentFilters, isLoading } = useQuery<ScreenerFilters>({
-    queryKey: ['/api/screeners', mode],
-    queryFn: () => fetch(`/api/screeners?mode=${mode}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+    queryKey: ['/api/screeners'],
+  });
+
+  const { data: calibration } = useQuery<CalibrationData>({
+    queryKey: ['/api/screeners/calibration'],
   });
 
   useEffect(() => {
@@ -85,17 +96,10 @@ export default function ScreenerFiltersTab() {
 
   const updateMutation = useMutation({
     mutationFn: async (updates: Partial<ScreenerFilters>) => {
-      return fetch(`/api/screeners?mode=${mode}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(updates)
-      }).then(r => r.json());
+      return apiRequest('PUT', '/api/screeners', updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/screeners', mode] });
+      queryClient.invalidateQueries({ queryKey: ['/api/screeners'] });
       toast({
         title: "Screener Filters Saved",
         description: `Your screener configuration has been saved successfully for ${mode} mode.`,
@@ -178,6 +182,35 @@ export default function ScreenerFiltersTab() {
           </Button>
         </div>
       </CardHeader>
+      
+      {/* Calibration Info Strip */}
+      {calibration && (
+        <div className={`px-6 py-3 border-y ${
+          calibration.source === 'paper_fallback' 
+            ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800' 
+            : 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="text-sm">
+              <span className="font-semibold">Using Dynamic Thresholds</span>
+              {calibration.source === 'paper_fallback' && (
+                <span className="ml-2 text-xs bg-amber-200 dark:bg-amber-800 px-2 py-1 rounded">
+                  Using Paper Mode Calibration (Live data unavailable)
+                </span>
+              )}
+              {calibration.source !== 'paper_fallback' && (
+                <span className="ml-2 text-xs bg-blue-200 dark:bg-blue-800 px-2 py-1 rounded">
+                  {mode.charAt(0).toUpperCase() + mode.slice(1)} Mode
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Updated: {new Date(calibration.timestamp).toLocaleString()}
+            </div>
+          </div>
+        </div>
+      )}
+      
       <CardContent>
         <div className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
