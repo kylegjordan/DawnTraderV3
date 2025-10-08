@@ -65,7 +65,8 @@ async function runPhase1Tests() {
       entryPrice: 50000,
       stopPrice: 49000,
       targetPrice: 52000,
-      confidence: 0.8
+      confidence: 0.8,
+      metadata: {}
     };
 
     console.log('📊 Processing signal for BTCUSD...');

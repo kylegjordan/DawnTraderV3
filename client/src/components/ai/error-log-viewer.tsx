@@ -127,7 +127,7 @@ export function ErrorLogViewer() {
                           
                           {error.context && (
                             <p className="text-xs text-muted-foreground mb-2">
-                              Context: {JSON.stringify(error.context)}
+                              Context: {String(JSON.stringify(error.context))}
                             </p>
                           )}
                           

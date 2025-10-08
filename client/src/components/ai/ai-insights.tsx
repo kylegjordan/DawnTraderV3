@@ -120,7 +120,7 @@ export default function AIInsights() {
                 <p className="text-sm text-muted-foreground mt-1">
                   Updated {latestReport && settings ? formatTime(latestReport.generatedAt, {
                     timezone: settings.timezone || 'Asia/Dubai',
-                    timeFormat: settings.timeFormat || '12hr'
+                    timeFormat: (settings.timeFormat as '12hr' | '24hr') || '12hr'
                   }) : '5 minutes ago'}
                 </p>
               </div>

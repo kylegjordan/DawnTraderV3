@@ -21,13 +21,23 @@ import { formatTimestampWithTZ } from "@/lib/timezone";
 import { Link, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
+interface KillSwitchStatus {
+  tradingSuspended: boolean;
+  dailyLossKillSwitch: number;
+  current24hPL?: {
+    lossPercent: number;
+    totalPL: number;
+  };
+  latestEvent?: any;
+}
+
 export default function KillSwitchScreen() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [notes, setNotes] = useState("");
   
   // Fetch kill switch status
-  const { data: status, isLoading } = useQuery({
+  const { data: status, isLoading } = useQuery<KillSwitchStatus>({
     queryKey: ['/api/kill-switch/status'],
     refetchInterval: 5000 // Refresh every 5 seconds
   });
@@ -46,10 +56,7 @@ export default function KillSwitchScreen() {
   // Reset mutation
   const resetMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/kill-switch/reset', {
-        method: 'POST',
-        body: JSON.stringify({ notes })
-      });
+      return await apiRequest('POST', '/api/kill-switch/reset', { notes });
     },
     onSuccess: () => {
       toast({
@@ -72,10 +79,7 @@ export default function KillSwitchScreen() {
   // ChatGPT Analysis mutation
   const chatMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/kill-switch/create-analysis-chat', {
-        method: 'POST',
-        body: JSON.stringify({})
-      });
+      return await apiRequest('POST', '/api/kill-switch/create-analysis-chat', {});
     },
     onSuccess: (data: any) => {
       if (data.conversationId) {

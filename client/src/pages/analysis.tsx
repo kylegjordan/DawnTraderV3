@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAI } from "@/hooks/use-trading";
-import { Brain, Search, FileText, Target, MessageSquare, AlertCircle, Loader2 } from "lucide-react";
+import { Brain, Search, FileText, Target, MessageSquare, AlertCircle, Loader2, TrendingUp } from "lucide-react";
 import { ChatContainer } from "@/components/ai/chat-container";
 import { AIOpportunitiesTab } from "@/components/ai/ai-opportunities-tab";
 import { apiRequest } from "@/lib/queryClient";
@@ -32,13 +32,8 @@ export default function Analysis() {
   
   // Clear analysis results when starting a new search
   const clearPreviousAnalysis = () => {
-    // Immediately reset the mutation state to clear symbolAnalysis data
-    queryClient.setMutationDefaults(['analyzeSymbol'], {
-      mutationFn: undefined
-    });
+    // Reset queries and clear mutation cache
     queryClient.resetQueries({ queryKey: ['analyzeSymbol'], exact: false });
-    // Reset mutation state to clear the data property
-    queryClient.setMutationDefaults(['analyzeSymbol'], { mutationFn: undefined });
     queryClient.getMutationCache().clear();
   };
 

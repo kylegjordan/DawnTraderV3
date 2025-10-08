@@ -189,7 +189,8 @@ export class MarketScanner {
       if (!ohlcData.ohlc || ohlcData.ohlc.length < 20) return;
 
       // Convert to our PriceData format
-      const priceData = ohlcData.ohlc.map(candle => ({
+      const priceData = ohlcData.ohlc.map((candle, index) => ({
+        id: `${pair.symbol}-${candle.time}-${index}`,
         symbol: pair.symbol,
         timestamp: new Date(candle.time * 1000),
         open: candle.open,

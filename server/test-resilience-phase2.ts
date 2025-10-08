@@ -52,17 +52,19 @@ async function runPhase2Tests() {
     console.log(`   1. Calculate fill %: (${filledQty} / ${requestedQty}) × 100 = ${fillPercent.toFixed(1)}%`);
     console.log(`   2. Compare to threshold: ${fillPercent.toFixed(1)}% < ${settings.partialFillThreshold}%?`);
     
-    const isPartialFill = fillPercent < parseFloat(settings.partialFillThreshold);
+    const partialFillThreshold = settings.partialFillThreshold || '90';
+    const partialFillAction = settings.partialFillAction || 'scale';
+    const isPartialFill = fillPercent < parseFloat(partialFillThreshold);
     
     if (isPartialFill) {
       console.log(`   3. Result: ✅ PARTIAL FILL DETECTED\n`);
-      console.log(`   🔧 Recovery Action: ${settings.partialFillAction.toUpperCase()}`);
+      console.log(`   🔧 Recovery Action: ${partialFillAction.toUpperCase()}`);
       
-      if (settings.partialFillAction === 'scale') {
+      if (partialFillAction === 'scale') {
         console.log('   - Stop/target orders will match filled quantity (65 units)');
         console.log('   - Unfilled portion (35 units) is cancelled');
         console.log('   - Trade proceeds with reduced position size');
-      } else if (settings.partialFillAction === 'catchup') {
+      } else if (partialFillAction === 'catchup') {
         const remaining = requestedQty - filledQty;
         console.log(`   - Attempt catchup order for ${remaining} remaining units`);
         console.log('   - If successful, full position achieved');

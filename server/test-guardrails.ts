@@ -109,7 +109,8 @@ async function runTests() {
     console.log(`📊 Current Active Trades: ${activeTrades.length}`);
     console.log(`   Max Allowed: ${settings.maxOpenTrades}\n`);
 
-    if (activeTrades.length >= settings.maxOpenTrades) {
+    const maxOpenTrades = settings.maxOpenTrades || 3;
+    if (activeTrades.length >= maxOpenTrades) {
       console.log('⚠️  Already at max trades limit, testing rejection...\n');
       
       const signal3 = createTestSignal('SOLUSD', 'sma_trend_ride');
@@ -126,9 +127,9 @@ async function runTests() {
       }
     } else {
       // Create dummy trades to reach limit
-      console.log(`⚙️  Creating ${settings.maxOpenTrades - activeTrades.length} dummy trades to reach limit...\n`);
+      console.log(`⚙️  Creating ${maxOpenTrades - activeTrades.length} dummy trades to reach limit...\n`);
       
-      for (let i = activeTrades.length; i < settings.maxOpenTrades; i++) {
+      for (let i = activeTrades.length; i < maxOpenTrades; i++) {
         const dummySignal = createTestSignal(`TEST${i}USD`, 'vwap_pullback');
         await tradingEngine.processSignal(dummySignal, 'paper');
       }
@@ -164,7 +165,7 @@ async function runTests() {
     console.log('📊 Slippage Tolerance Settings:');
     console.log(`   Majors (BTC/ETH): ${settings.slippageToleranceMajors}%`);
     console.log(`   Midcaps: ${settings.slippageToleranceMidcaps}%`);
-    console.log(`   Small Caps: ${settings.slippageToleranceSmallCaps}%\n`);
+    console.log(`   Small Caps: ${settings.slippageToleranceSmall}%\n`);
 
     console.log('⚠️  SLIPPAGE TEST: Cannot simulate without live order book access');
     console.log('   In production, TradingEngine.processSignal() will:');

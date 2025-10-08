@@ -711,7 +711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (trade.realizedPL) {
           currentValue += Number(trade.realizedPL);
           dataPoints.push({
-            date: trade.exitTime!,
+            date: new Date(trade.exitTime!).toISOString(),
             value: currentValue
           });
         }
@@ -1297,7 +1297,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let closedTrades: any[] = [];
       if (event.tradesClosed) {
         try {
-          const parsed = JSON.parse(event.tradesClosed);
+          const parsed = typeof event.tradesClosed === 'string' 
+            ? JSON.parse(event.tradesClosed) 
+            : event.tradesClosed;
           closedTrades = Array.isArray(parsed) ? parsed : [];
         } catch (error) {
           console.error('Failed to parse tradesClosed:', error);
@@ -1310,10 +1312,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         triggeredAt: event.triggeredAt,
         lossPercent: event.lossPercent,
         lossAmount: event.lossAmount,
-        accountEquity: event.accountEquity,
-        portfolioValue: event.portfolioValue,
-        killSwitchLimit: event.killSwitchLimit,
-        warningTrigger: event.warningTrigger,
+        portfolioValueBefore: event.portfolioValueBefore,
+        portfolioValueAfter: event.portfolioValueAfter,
+        killSwitchThreshold: event.killSwitchThreshold,
         tradesCount: closedTrades.length,
         closedTrades: closedTrades.map((t: any) => ({
           symbol: t.symbol,
@@ -1360,12 +1361,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: `Kill Switch Incident Analysis Request
 
 INCIDENT SUMMARY:
-- Triggered: ${new Date(event.triggeredAt).toISOString()}
+- Triggered: ${event.triggeredAt ? new Date(event.triggeredAt).toISOString() : 'N/A'}
 - Loss: ${event.lossPercent}% ($${event.lossAmount})
-- Account Equity (before): $${event.accountEquity}
-- Portfolio Value (after): $${event.portfolioValue}
-- Kill Switch Limit: ${event.killSwitchLimit}%
-- Warning Trigger: ${event.warningTrigger}%
+- Portfolio Value (before): $${event.portfolioValueBefore}
+- Portfolio Value (after): $${event.portfolioValueAfter}
+- Kill Switch Threshold: ${event.killSwitchThreshold}%
 
 TRADES CLOSED: ${closedTrades.length} positions
 ${closedTrades.map((t: any, i: number) => `
@@ -1391,7 +1391,7 @@ Provide specific, actionable recommendations.`,
       // Create conversation with incident context
       const conversation = await storage.createAIConversation({
         userId,
-        title: `Kill Switch Analysis - ${new Date(event.triggeredAt).toLocaleDateString()}`,
+        title: `Kill Switch Analysis - ${event.triggeredAt ? new Date(event.triggeredAt).toLocaleDateString() : 'Recent'}`,
         messages: [initialMessage],
         context: incidentContext,
         maxContextMessages: 20
@@ -2319,8 +2319,7 @@ Provide specific, actionable recommendations.`,
         simulatedTrade,
         killSwitchResult: result,
         tradingSuspended: updatedSettings?.tradingSuspended || false,
-        targetLossPercent,
-        actualLossPercent: result.current24hPL
+        targetLossPercent
       });
     } catch (error: any) {
       console.error('Test simulate-loss error:', error);
@@ -2402,7 +2401,8 @@ Provide specific, actionable recommendations.`,
             continue;
           }
 
-          const priceData = ohlcData.ohlc.map(candle => ({
+          const priceData = ohlcData.ohlc.map((candle, index) => ({
+            id: `${pair.symbol}-${candle.time}-${index}`,
             symbol: pair.symbol,
             timestamp: new Date(candle.time * 1000),
             open: candle.open,
@@ -2619,7 +2619,7 @@ Provide specific, actionable recommendations.`,
         const signalWeights = await storage.getSignalWeights(userId, strategy, 'live');
 
         const weightedConfidence = signalWeights.length > 0
-          ? signalWeights.reduce((sum, w) => sum + parseFloat(w.weight), 0) / signalWeights.length
+          ? signalWeights.reduce((sum, w) => sum + parseFloat(w.weight || '1.0'), 0) / signalWeights.length
           : 1.0;
 
         // Calculate 7-day trend (daily P/L)
@@ -2700,7 +2700,7 @@ Provide specific, actionable recommendations.`,
         const signalWeights = await storage.getSignalWeights(userId, strategy, 'paper');
 
         const weightedConfidence = signalWeights.length > 0
-          ? signalWeights.reduce((sum, w) => sum + parseFloat(w.weight), 0) / signalWeights.length
+          ? signalWeights.reduce((sum, w) => sum + parseFloat(w.weight || '1.0'), 0) / signalWeights.length
           : 1.0;
 
         const dailyPL: number[] = [];
@@ -2832,10 +2832,10 @@ Provide specific, actionable recommendations.`,
             totalPL
           },
           signalInsights: signalWeights.map(w => ({
-            signalType: w.signalType,
-            weight: parseFloat(w.weight),
+            signalName: w.signalName,
+            weight: parseFloat(w.weight || '1.0'),
             lastUpdated: w.lastUpdated,
-            trend: parseFloat(w.weight) > 1.1 ? 'up' : parseFloat(w.weight) < 0.9 ? 'down' : 'stable'
+            trend: parseFloat(w.weight || '1.0') > 1.1 ? 'up' : parseFloat(w.weight || '1.0') < 0.9 ? 'down' : 'stable'
           })),
           predictionDiagnostics: {
             long: { correct: predictedLongCorrect, incorrect: predictedLongIncorrect },
@@ -2973,7 +2973,7 @@ Provide specific, actionable recommendations.`,
       const mode = (req.body.mode as string) || 'paper';
 
       const { signalWeightOptimizerService } = await import('./services/signal-weight-optimizer');
-      await signalWeightOptimizerService.optimizeUserWeights(userId, mode);
+      await signalWeightOptimizerService.optimizeUserWeights(userId, mode as 'live' | 'paper');
       
       res.json({
         success: true,
@@ -3523,8 +3523,8 @@ Please:
         userId,
         mode,
         strategy: strategy as any,
-        prevParams: prev?.params ?? null,
-        nextParams: saved.params,
+        prevParams: (prev?.params ?? null) as any,
+        nextParams: saved.params as any,
         actorType: 'user',
         actorId: userId,
         reason: req.body?.reason || 'manual update',

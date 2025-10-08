@@ -5,26 +5,38 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
 import History from "@/pages/history";
-import Analysis from "@/pages/analysis";
-import Settings from "@/pages/settings";
-import WatchlistPage from "@/pages/watchlist";
-import ActiveTradesPage from "@/pages/active-trades";
-import KillSwitchScreen from "@/pages/kill-switch";
-import ReportsPage from "@/pages/reports";
-import DailyBriefPage from "@/pages/daily-brief";
-import GoalsEnginePage from "@/pages/goals-engine";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
-import SystemsPage from "@/pages/systems";
 import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
 import { ensureValidToken } from "@/lib/auth";
+
+const Analysis = lazy(() => import("@/pages/analysis"));
+const Settings = lazy(() => import("@/pages/settings"));
+const WatchlistPage = lazy(() => import("@/pages/watchlist"));
+const ActiveTradesPage = lazy(() => import("@/pages/active-trades"));
+const KillSwitchScreen = lazy(() => import("@/pages/kill-switch"));
+const ReportsPage = lazy(() => import("@/pages/reports"));
+const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
+const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
+const SystemsPage = lazy(() => import("@/pages/systems"));
+
+function LoadingFallback() {
+  return (
+    <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 // Auth guard component with token refresh
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -110,21 +122,23 @@ function Router() {
             showMenuButton={isMobile}
           />
           
-          <Switch>
-            <Route path="/" component={Dashboard} />
-            <Route path="/dashboard" component={Dashboard} />
-            <Route path="/watchlist" component={WatchlistPage} />
-            <Route path="/active-trades" component={ActiveTradesPage} />
-            <Route path="/history" component={History} />
-            <Route path="/reports" component={ReportsPage} />
-            <Route path="/daily-brief" component={DailyBriefPage} />
-            <Route path="/analysis" component={Analysis} />
-            <Route path="/goals-engine" component={GoalsEnginePage} />
-            <Route path="/systems" component={SystemsPage} />
-            <Route path="/settings" component={Settings} />
-            <Route path="/kill-switch" component={KillSwitchScreen} />
-            <Route component={NotFound} />
-          </Switch>
+          <Suspense fallback={<LoadingFallback />}>
+            <Switch>
+              <Route path="/" component={Dashboard} />
+              <Route path="/dashboard" component={Dashboard} />
+              <Route path="/watchlist" component={WatchlistPage} />
+              <Route path="/active-trades" component={ActiveTradesPage} />
+              <Route path="/history" component={History} />
+              <Route path="/reports" component={ReportsPage} />
+              <Route path="/daily-brief" component={DailyBriefPage} />
+              <Route path="/analysis" component={Analysis} />
+              <Route path="/goals-engine" component={GoalsEnginePage} />
+              <Route path="/systems" component={SystemsPage} />
+              <Route path="/settings" component={Settings} />
+              <Route path="/kill-switch" component={KillSwitchScreen} />
+              <Route component={NotFound} />
+            </Switch>
+          </Suspense>
         </main>
         
         {isMobile && sidebarOpen && (

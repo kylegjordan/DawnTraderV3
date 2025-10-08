@@ -76,7 +76,7 @@ export function AuditLogViewer() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-medium text-sm">{log.actionType.replace(/_/g, ' ')}</span>
-                    {getStatusBadge(log.status)}
+                    {log.status && getStatusBadge(log.status)}
                   </div>
                   
                   {log.settingName && (
@@ -90,11 +90,11 @@ export function AuditLogViewer() {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <span className="opacity-60">Old:</span>{' '}
-                          <code>{JSON.stringify(log.oldValue)}</code>
+                          <code>{String(JSON.stringify(log.oldValue))}</code>
                         </div>
                         <div>
                           <span className="opacity-60">New:</span>{' '}
-                          <code>{JSON.stringify(log.newValue)}</code>
+                          <code>{String(JSON.stringify(log.newValue))}</code>
                         </div>
                       </div>
                     </div>
