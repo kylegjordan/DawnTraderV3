@@ -8,6 +8,17 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+// Global trading mode accessor - updated by TradingModeContext
+let currentTradingMode: 'live' | 'paper' = 'paper';
+
+export function setGlobalTradingMode(mode: 'live' | 'paper') {
+  currentTradingMode = mode;
+}
+
+export function getGlobalTradingMode(): 'live' | 'paper' {
+  return currentTradingMode;
+}
+
 export async function apiRequest<T = any>(
   method: string,
   url: string,
@@ -17,7 +28,8 @@ export async function apiRequest<T = any>(
   
   const headers: Record<string, string> = {
     ...(data ? { "Content-Type": "application/json" } : {}),
-    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    "x-app-mode": currentTradingMode
   };
 
   const res = await fetch(url, {
@@ -45,7 +57,10 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const token = await ensureValidToken();
     
-    const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
+    const headers: Record<string, string> = {
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      "x-app-mode": currentTradingMode
+    };
     
     const res = await fetch(queryKey.join("/") as string, {
       credentials: "include",

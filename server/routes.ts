@@ -57,6 +57,7 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     username: string;
   };
+  mode?: 'live' | 'paper';
 }
 
 function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -79,6 +80,28 @@ function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextF
   } catch (error) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+}
+
+// Mode Validation Middleware - enforces x-app-mode header for mode-isolated endpoints
+function validateMode(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  const modeHeader = req.headers['x-app-mode'] as string | undefined;
+  
+  if (!modeHeader) {
+    return res.status(400).json({ 
+      error: 'Missing x-app-mode header',
+      message: 'Trading mode (live or paper) must be specified via x-app-mode header'
+    });
+  }
+  
+  if (modeHeader !== 'live' && modeHeader !== 'paper') {
+    return res.status(400).json({ 
+      error: 'Invalid x-app-mode header',
+      message: 'x-app-mode must be either "live" or "paper"'
+    });
+  }
+  
+  req.mode = modeHeader;
+  next();
 }
 
 // TEMPORARILY DISABLED: Do not ping Kraken for 1 hour (maintenance mode)
@@ -819,10 +842,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Watchlist
-  app.get('/api/watchlist', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.get('/api/watchlist', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const watchlist = await storage.getWatchlist(userId);
+      const mode = req.mode!;
+      const watchlist = await storage.getWatchlist({ userId, mode });
       res.json(watchlist);
     } catch (error) {
       console.error('Error fetching watchlist:', error);
@@ -830,10 +854,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/watchlist', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/watchlist', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const validatedData = insertWatchlistPairSchema.parse({ ...req.body, userId });
+      const mode = req.mode!;
+      const validatedData = insertWatchlistPairSchema.parse({ ...req.body, userId, mode });
       
       const pair = await storage.addWatchlistPair(validatedData);
       res.json(pair);
@@ -2364,10 +2389,11 @@ Provide specific, actionable recommendations.`,
   });
 
   // Strategy test endpoint - analyze watchlist pairs for signals
-  app.post('/api/strategies/test', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/strategies/test', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const watchlist = await storage.getWatchlist(userId);
+      const mode = req.mode!;
+      const watchlist = await storage.getWatchlist({ userId, mode });
       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) {

@@ -122,7 +122,7 @@ export interface IStorage {
   listStrategySettingsAudit(params: { userId: string; limit?: number }): Promise<StrategySettingsAudit[]>;
 
   // Watchlist methods
-  getWatchlist(userId: string): Promise<WatchlistPair[]>;
+  getWatchlist(params: { userId: string; mode: 'live' | 'paper' }): Promise<WatchlistPair[]>;
   addWatchlistPair(pair: InsertWatchlistPair): Promise<WatchlistPair>;
   updateWatchlistPair(id: string, updates: Partial<WatchlistPair>): Promise<WatchlistPair>;
   removeWatchlistPair(id: string): Promise<void>;
@@ -431,11 +431,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Watchlist methods
-  async getWatchlist(userId: string): Promise<WatchlistPair[]> {
+  async getWatchlist(params: { userId: string; mode: 'live' | 'paper' }): Promise<WatchlistPair[]> {
     return await db
       .select()
       .from(watchlistPairs)
-      .where(and(eq(watchlistPairs.userId, userId), eq(watchlistPairs.isActive, true)))
+      .where(and(
+        eq(watchlistPairs.userId, params.userId), 
+        eq(watchlistPairs.mode, params.mode),
+        eq(watchlistPairs.isActive, true)
+      ))
       .orderBy(desc(watchlistPairs.addedAt));
   }
 

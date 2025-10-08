@@ -177,6 +177,7 @@ export const strategySettingsAudit = pgTable("strategy_settings_audit", {
 export const watchlistPairs = pgTable("watchlist_pairs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull().default("paper"),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
   quoteCurrency: varchar("quote_currency", { length: 10 }).notNull(),
@@ -189,7 +190,9 @@ export const watchlistPairs = pgTable("watchlist_pairs", {
   lastScanned: timestamp("last_scanned", { withTimezone: true }),
   isActive: boolean("is_active").default(true),
   addedAt: timestamp("added_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  uniqueUserModeSymbol: uniqueIndex("watchlist_pairs_user_mode_symbol_idx").on(table.userId, table.mode, table.symbol),
+}));
 
 // Trades
 export const trades = pgTable("trades", {

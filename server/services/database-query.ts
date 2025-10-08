@@ -18,8 +18,8 @@ export class DatabaseQueryService {
   /**
    * Get watchlist/scanner results
    */
-  async getWatchlist(userId: string): Promise<WatchlistPair[]> {
-    return await storage.getWatchlist(userId);
+  async getWatchlist(userId: string, mode: 'live' | 'paper' = 'paper'): Promise<WatchlistPair[]> {
+    return await storage.getWatchlist({ userId, mode });
   }
 
   /**

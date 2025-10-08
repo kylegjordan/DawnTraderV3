@@ -82,8 +82,13 @@ export class MarketScanner {
             minHistoryDays: settings.minDataHistoryDays || 90
           });
           
-          await this.updateUserWatchlist(user.id, eligiblePairs);
-          await this.scanForSignals(user.id);
+          // Update watchlists for both live and paper modes
+          await this.updateUserWatchlist(user.id, 'paper', eligiblePairs);
+          await this.updateUserWatchlist(user.id, 'live', eligiblePairs);
+          
+          // Scan for signals in both modes
+          await this.scanForSignals(user.id, 'paper');
+          await this.scanForSignals(user.id, 'live');
         }
       }
 
@@ -104,10 +109,10 @@ export class MarketScanner {
     return [];
   }
 
-  private async updateUserWatchlist(userId: string, eligiblePairs: any[]): Promise<void> {
+  private async updateUserWatchlist(userId: string, mode: 'live' | 'paper', eligiblePairs: any[]): Promise<void> {
     try {
-      // Get current user watchlist
-      const currentWatchlist = await storage.getWatchlist(userId);
+      // Get current user watchlist for this mode
+      const currentWatchlist = await storage.getWatchlist({ userId, mode });
       const currentSymbols = new Set(currentWatchlist.map(p => p.symbol));
 
       // Add new eligible pairs to watchlist
@@ -115,6 +120,7 @@ export class MarketScanner {
         if (!currentSymbols.has(pair.symbol)) {
           const watchlistPair: any = {
             userId,
+            mode,
             symbol: pair.symbol,
             baseCurrency: pair.baseCurrency,
             quoteCurrency: pair.quoteCurrency,
@@ -150,13 +156,13 @@ export class MarketScanner {
       }
 
     } catch (error) {
-      console.error(`Error updating watchlist for user ${userId}:`, error);
+      console.error(`Error updating ${mode} watchlist for user ${userId}:`, error);
     }
   }
 
-  private async scanForSignals(userId: string): Promise<void> {
+  private async scanForSignals(userId: string, mode: 'live' | 'paper'): Promise<void> {
     try {
-      const watchlist = await storage.getWatchlist(userId);
+      const watchlist = await storage.getWatchlist({ userId, mode });
       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) return;

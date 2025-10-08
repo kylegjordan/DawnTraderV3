@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { setGlobalTradingMode, queryClient } from '@/lib/queryClient';
 
 type TradingMode = 'live' | 'paper';
 
@@ -16,12 +17,19 @@ const MODE_STORAGE_KEY = 'trading_mode_preference';
 export function TradingModeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<TradingMode>(() => {
     const stored = localStorage.getItem(MODE_STORAGE_KEY);
-    return (stored === 'live' || stored === 'paper') ? stored : 'live';
+    const initialMode = (stored === 'live' || stored === 'paper') ? stored : 'live';
+    // Sync with global mode on init
+    setGlobalTradingMode(initialMode);
+    return initialMode;
   });
 
   const setMode = (newMode: TradingMode) => {
     setModeState(newMode);
     localStorage.setItem(MODE_STORAGE_KEY, newMode);
+    // Sync with global mode for API requests
+    setGlobalTradingMode(newMode);
+    // Invalidate all queries to fetch fresh data for the new mode
+    queryClient.invalidateQueries();
   };
 
   useEffect(() => {
@@ -30,6 +38,10 @@ export function TradingModeProvider({ children }: { children: ReactNode }) {
         const newMode = e.newValue as TradingMode;
         if (newMode === 'live' || newMode === 'paper') {
           setModeState(newMode);
+          // Sync with global mode
+          setGlobalTradingMode(newMode);
+          // Invalidate all queries to fetch fresh data for the new mode
+          queryClient.invalidateQueries();
         }
       }
     };
