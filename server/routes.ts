@@ -409,14 +409,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Screener filters endpoints (mode-isolated)
-  app.get('/api/screeners', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.get('/api/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const mode = req.query.mode as 'live' | 'paper';
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
-      }
+      const mode = req.mode!;
 
       let screenerData = await storage.getScreenerFilters({ userId, mode });
 
@@ -450,14 +446,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/screeners', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.put('/api/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const mode = req.query.mode as 'live' | 'paper';
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
-      }
+      const mode = req.mode!;
 
       const validatedData = insertScreenerFiltersSchema.parse({ ...req.body, userId, mode });
       const screenerData = await storage.upsertScreenerFilters(validatedData);
