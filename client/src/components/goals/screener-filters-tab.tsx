@@ -68,11 +68,11 @@ export default function ScreenerFiltersTab() {
   const [hasChanges, setHasChanges] = useState(false);
 
   const { data: currentFilters, isLoading } = useQuery<ScreenerFilters>({
-    queryKey: ['/api/screeners'],
+    queryKey: ['/api/screeners', mode],
   });
 
   const { data: calibration } = useQuery<CalibrationData>({
-    queryKey: ['/api/screeners/calibration'],
+    queryKey: ['/api/screeners/calibration', mode],
   });
 
   useEffect(() => {
@@ -99,7 +99,8 @@ export default function ScreenerFiltersTab() {
       return apiRequest('PUT', '/api/screeners', updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/screeners'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/screeners', mode] });
+      queryClient.invalidateQueries({ queryKey: ['/api/screeners/calibration', mode] });
       toast({
         title: "Screener Filters Saved",
         description: `Your screener configuration has been saved successfully for ${mode} mode.`,
