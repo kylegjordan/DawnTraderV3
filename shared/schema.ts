@@ -576,6 +576,121 @@ export const goalAnalysisHistoryPaper = pgTable("goal_analysis_history_paper", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+// Screener Results (operational data - mode isolated)
+export const screenerResults = pgTable("screener_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  exchange: varchar("exchange", { length: 20 }).default("kraken"),
+  score: decimal("score", { precision: 5, scale: 2 }),
+  passedFilters: text("passed_filters").array().default(sql`ARRAY[]::text[]`),
+  failedFilters: text("failed_filters").array().default(sql`ARRAY[]::text[]`),
+  marketCap: decimal("market_cap", { precision: 20, scale: 2 }),
+  volume24h: decimal("volume_24h", { precision: 20, scale: 2 }),
+  price: decimal("price", { precision: 20, scale: 8 }),
+  volatility: decimal("volatility", { precision: 5, scale: 2 }),
+  rsi: decimal("rsi", { precision: 5, scale: 2 }),
+  bidAskSpread: decimal("bid_ask_spread", { precision: 5, scale: 2 }),
+  scannedAt: timestamp("scanned_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userModeTimestampIdx: uniqueIndex("screener_results_user_mode_timestamp_idx").on(table.userId, table.mode, table.scannedAt),
+}));
+
+// Filter Calibration Log (learning data - mode-aware but shared via fallback)
+export const filterCalibrationLog = pgTable("filter_calibration_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  minVolume: decimal("min_volume", { precision: 15, scale: 2 }),
+  minPrice: decimal("min_price", { precision: 10, scale: 8 }),
+  maxPrice: decimal("max_price", { precision: 10, scale: 2 }),
+  minMarketCap: decimal("min_market_cap", { precision: 15, scale: 2 }),
+  maxBidAskSpread: decimal("max_bid_ask_spread", { precision: 5, scale: 2 }),
+  minDailyRange: decimal("min_daily_range", { precision: 5, scale: 2 }),
+  reason: text("reason"),
+  source: varchar("source", { length: 20 }).default("system"),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userModeTimestampIdx: uniqueIndex("filter_calibration_log_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+}));
+
+// Intraday Adjustments (learning data - mode-aware but shared via fallback)
+export const intradayAdjustments = pgTable("intraday_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  adjustmentType: varchar("adjustment_type", { length: 50 }).notNull(),
+  previousValue: decimal("previous_value", { precision: 20, scale: 8 }),
+  newValue: decimal("new_value", { precision: 20, scale: 8 }),
+  reason: text("reason"),
+  marketCondition: varchar("market_condition", { length: 50 }),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userModeTimestampIdx: uniqueIndex("intraday_adjustments_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+}));
+
+// AI Lessons (learning data - mode-aware but shared via fallback)
+export const aiLessons = pgTable("ai_lessons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  lessonType: varchar("lesson_type", { length: 50 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }),
+  strategy: strategyTypeEnum("strategy"),
+  lesson: text("lesson").notNull(),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  tradeId: varchar("trade_id"),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userModeTimestampIdx: uniqueIndex("ai_lessons_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+}));
+
+// Portfolio Adjustments (learning data - mode-aware but shared via fallback)
+export const portfolioAdjustments = pgTable("portfolio_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  adjustmentType: varchar("adjustment_type", { length: 50 }).notNull(),
+  parameter: varchar("parameter", { length: 100 }),
+  previousValue: decimal("previous_value", { precision: 20, scale: 8 }),
+  newValue: decimal("new_value", { precision: 20, scale: 8 }),
+  reason: text("reason"),
+  performanceImpact: decimal("performance_impact", { precision: 10, scale: 4 }),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userModeTimestampIdx: uniqueIndex("portfolio_adjustments_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+}));
+
+// System Alerts (operational data - mode isolated)
+export const systemAlerts = pgTable("system_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  alertType: varchar("alert_type", { length: 50 }).notNull(),
+  severity: varchar("severity", { length: 20 }).default("info"),
+  message: text("message").notNull(),
+  metadata: jsonb("metadata"),
+  acknowledged: boolean("acknowledged").default(false),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userModeTimestampIdx: uniqueIndex("system_alerts_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+}));
+
+// Strategy Parameters (shared global parameters - NO mode column)
+export const strategyParameters = pgTable("strategy_parameters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  parameterName: varchar("parameter_name", { length: 100 }).notNull(),
+  parameterValue: decimal("parameter_value", { precision: 20, scale: 8 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 50 }),
+  updatedBy: varchar("updated_by", { length: 20 }).default("user"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueUserParam: uniqueIndex("strategy_parameters_user_param_idx").on(table.userId, table.parameterName),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -862,6 +977,42 @@ export const insertGoalAnalysisHistoryPaperSchema = createInsertSchema(goalAnaly
   createdAt: true,
 });
 
+// Screener and Learning insert schemas
+export const insertScreenerResultSchema = createInsertSchema(screenerResults).omit({
+  id: true,
+  scannedAt: true,
+});
+
+export const insertFilterCalibrationLogSchema = createInsertSchema(filterCalibrationLog).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertIntradayAdjustmentSchema = createInsertSchema(intradayAdjustments).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertAILessonSchema = createInsertSchema(aiLessons).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertPortfolioAdjustmentSchema = createInsertSchema(portfolioAdjustments).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertSystemAlertSchema = createInsertSchema(systemAlerts).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertStrategyParameterSchema = createInsertSchema(strategyParameters).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -952,3 +1103,24 @@ export type GoalAnalysisHistoryLive = typeof goalAnalysisHistoryLive.$inferSelec
 
 export type InsertGoalAnalysisHistoryPaper = z.infer<typeof insertGoalAnalysisHistoryPaperSchema>;
 export type GoalAnalysisHistoryPaper = typeof goalAnalysisHistoryPaper.$inferSelect;
+
+export type InsertScreenerResult = z.infer<typeof insertScreenerResultSchema>;
+export type ScreenerResult = typeof screenerResults.$inferSelect;
+
+export type InsertFilterCalibrationLog = z.infer<typeof insertFilterCalibrationLogSchema>;
+export type FilterCalibrationLog = typeof filterCalibrationLog.$inferSelect;
+
+export type InsertIntradayAdjustment = z.infer<typeof insertIntradayAdjustmentSchema>;
+export type IntradayAdjustment = typeof intradayAdjustments.$inferSelect;
+
+export type InsertAILesson = z.infer<typeof insertAILessonSchema>;
+export type AILesson = typeof aiLessons.$inferSelect;
+
+export type InsertPortfolioAdjustment = z.infer<typeof insertPortfolioAdjustmentSchema>;
+export type PortfolioAdjustment = typeof portfolioAdjustments.$inferSelect;
+
+export type InsertSystemAlert = z.infer<typeof insertSystemAlertSchema>;
+export type SystemAlert = typeof systemAlerts.$inferSelect;
+
+export type InsertStrategyParameter = z.infer<typeof insertStrategyParameterSchema>;
+export type StrategyParameter = typeof strategyParameters.$inferSelect;
