@@ -576,7 +576,7 @@ const strategyNames = {
 function TradeHistoryTab() {
   const [filters, setFilters] = useState({
     symbol: '',
-    strategy: '',
+    strategy: 'all',
     status: 'closed',
     dateFrom: '',
     dateTo: ''
@@ -591,7 +591,7 @@ function TradeHistoryTab() {
     if (filters.symbol && !trade.symbol.toLowerCase().includes(filters.symbol.toLowerCase())) {
       return false;
     }
-    if (filters.strategy && trade.strategy !== filters.strategy) {
+    if (filters.strategy && filters.strategy !== 'all' && trade.strategy !== filters.strategy) {
       return false;
     }
     return true;
@@ -650,7 +650,7 @@ function TradeHistoryTab() {
                 <SelectValue placeholder="All strategies" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All strategies</SelectItem>
+                <SelectItem value="all">All strategies</SelectItem>
                 <SelectItem value="vwap_pullback">VWAP Pullback</SelectItem>
                 <SelectItem value="abcd_long">ABCD Long</SelectItem>
                 <SelectItem value="sma_trend_ride">SMA Trend Ride</SelectItem>
@@ -675,7 +675,7 @@ function TradeHistoryTab() {
               variant="outline"
               onClick={() => setFilters({
                 symbol: '',
-                strategy: '',
+                strategy: 'all',
                 status: 'closed',
                 dateFrom: '',
                 dateTo: ''
