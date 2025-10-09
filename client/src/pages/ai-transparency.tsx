@@ -31,9 +31,16 @@ export default function AITransparencyPage() {
     refetchInterval: 60000,
   });
 
+  // Fetch Autonomy Confidence Index
+  const { data: confidenceData } = useQuery<{ ok: boolean; autonomyConfidence: number; components: any }>({
+    queryKey: ['/api/learning/autonomy-confidence'],
+    refetchInterval: 60000,
+  });
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
+  const confidenceIndex = confidenceData?.autonomyConfidence ?? 0;
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -42,8 +49,17 @@ export default function AITransparencyPage() {
         <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center">
           <Sparkles className="w-7 h-7 text-purple-500" />
         </div>
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">AI Transparency</h1>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-foreground">AI Transparency</h1>
+            <Badge 
+              variant={confidenceIndex >= 50 ? "default" : "outline"}
+              className="text-sm px-3 py-1"
+              data-testid="badge-autonomy-confidence"
+            >
+              Confidence: {confidenceIndex}/100
+            </Badge>
+          </div>
           <p className="text-sm text-muted-foreground mt-1">Monitor automated scheduler activity, learning adjustments, and system health</p>
         </div>
       </div>
