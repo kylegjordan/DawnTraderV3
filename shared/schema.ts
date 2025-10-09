@@ -705,6 +705,21 @@ export const strategyParameters = pgTable("strategy_parameters", {
   uniqueUserParam: uniqueIndex("strategy_parameters_user_param_idx").on(table.userId, table.parameterName),
 }));
 
+// AI Transparency Log (scheduler and automation activity logs)
+export const aiTransparencyLog = pgTable("ai_transparency_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  taskName: varchar("task_name", { length: 100 }).notNull(),
+  mode: tradingModeEnum("mode"),
+  executedAt: timestamp("executed_at", { withTimezone: true }).defaultNow(),
+  duration: decimal("duration", { precision: 10, scale: 3 }),
+  resultSummary: text("result_summary"),
+  success: boolean("success").notNull(),
+  notes: text("notes"),
+}, (table) => ({
+  taskExecutedIdx: uniqueIndex("ai_transparency_log_task_executed_idx").on(table.taskName, table.executedAt),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -1027,6 +1042,11 @@ export const insertStrategyParameterSchema = createInsertSchema(strategyParamete
   updatedAt: true,
 });
 
+export const insertAITransparencyLogSchema = createInsertSchema(aiTransparencyLog).omit({
+  id: true,
+  executedAt: true,
+});
+
 export const insertFilterDiagnosticSchema = createInsertSchema(filterDiagnostics).omit({
   id: true,
   timestamp: true,
@@ -1143,6 +1163,9 @@ export type SystemAlert = typeof systemAlerts.$inferSelect;
 
 export type InsertStrategyParameter = z.infer<typeof insertStrategyParameterSchema>;
 export type StrategyParameter = typeof strategyParameters.$inferSelect;
+
+export type InsertAITransparencyLog = z.infer<typeof insertAITransparencyLogSchema>;
+export type AITransparencyLog = typeof aiTransparencyLog.$inferSelect;
 
 export type InsertFilterDiagnostic = z.infer<typeof insertFilterDiagnosticSchema>;
 export type FilterDiagnostic = typeof filterDiagnostics.$inferSelect;

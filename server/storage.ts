@@ -18,6 +18,7 @@ import {
   databaseSizeLogs,
   aiAuditLog,
   errorLogs,
+  aiTransparencyLog,
   killSwitchEvents,
   aiOpportunityRuns,
   aiOpportunities,
@@ -68,6 +69,8 @@ import {
   type InsertAIAuditLog,
   type ErrorLog,
   type InsertErrorLog,
+  type AITransparencyLog,
+  type InsertAITransparencyLog,
   type KillSwitchEvent,
   type InsertKillSwitchEvent,
   type AIOpportunityRun,
@@ -201,6 +204,11 @@ export interface IStorage {
   createErrorLog(log: InsertErrorLog): Promise<ErrorLog>;
   getErrorLogs(userId?: string, filters?: { resolved?: boolean; errorType?: string; limit?: number }): Promise<ErrorLog[]>;
   resolveErrorLog(id: string, notes?: string): Promise<ErrorLog>;
+
+  // AI Transparency log methods
+  createTransparencyLog(log: InsertAITransparencyLog): Promise<AITransparencyLog>;
+  getTransparencyLogs(filters?: { userId?: string; taskName?: string; mode?: 'live' | 'paper'; limit?: number }): Promise<AITransparencyLog[]>;
+  getRecentTransparencyLogs(limit?: number): Promise<AITransparencyLog[]>;
 
   // Kill switch methods
   createKillSwitchEvent(event: InsertKillSwitchEvent): Promise<KillSwitchEvent>;
@@ -1001,6 +1009,46 @@ export class DatabaseStorage implements IStorage {
       .where(eq(errorLogs.id, id))
       .returning();
     return result;
+  }
+
+  // AI Transparency log methods
+  async createTransparencyLog(log: InsertAITransparencyLog): Promise<AITransparencyLog> {
+    const [result] = await db.insert(aiTransparencyLog).values(log).returning();
+    return result;
+  }
+
+  async getTransparencyLogs(
+    filters?: { userId?: string; taskName?: string; mode?: 'live' | 'paper'; limit?: number }
+  ): Promise<AITransparencyLog[]> {
+    const conditions = [];
+    
+    if (filters?.userId) {
+      conditions.push(eq(aiTransparencyLog.userId, filters.userId));
+    }
+    if (filters?.taskName) {
+      conditions.push(eq(aiTransparencyLog.taskName, filters.taskName));
+    }
+    if (filters?.mode) {
+      conditions.push(eq(aiTransparencyLog.mode, filters.mode));
+    }
+    
+    const query = db.select().from(aiTransparencyLog)
+      .orderBy(desc(aiTransparencyLog.executedAt));
+    
+    if (conditions.length > 0) {
+      const limitedQuery = query.where(and(...conditions));
+      return await (filters?.limit ? limitedQuery.limit(filters.limit) : limitedQuery);
+    }
+    
+    return await (filters?.limit ? query.limit(filters.limit) : query);
+  }
+
+  async getRecentTransparencyLogs(limit = 50): Promise<AITransparencyLog[]> {
+    return await db
+      .select()
+      .from(aiTransparencyLog)
+      .orderBy(desc(aiTransparencyLog.executedAt))
+      .limit(limit);
   }
 
   // Kill switch methods
