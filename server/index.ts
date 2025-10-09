@@ -105,6 +105,7 @@ app.use((req, res, next) => {
       const { marketScanTask } = await import('./services/market-scan-task');
       const { aiSummaryTask } = await import('./services/ai-summary-task');
       const { systemHealthCheckTask } = await import('./services/system-health-check-task');
+      const { cleTask } = await import('./services/cle-task');
 
       // Register tasks
       schedulerRegistry.registerTask({
@@ -146,6 +147,17 @@ app.use((req, res, next) => {
         frequency: systemHealthCheckTask.frequency,
         intervalMs: systemHealthCheckTask.intervalMs,
         run: systemHealthCheckTask.run.bind(systemHealthCheckTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+      
+      schedulerRegistry.registerTask({
+        name: cleTask.name,
+        description: cleTask.description,
+        frequency: cleTask.frequency,
+        intervalMs: cleTask.intervalMs,
+        run: cleTask.run.bind(cleTask),
         lastRun: null,
         nextRun: null,
         status: 'idle'
