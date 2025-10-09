@@ -689,7 +689,7 @@ function TradeHistoryTab() {
   });
   
   const { data: trades = [], isLoading } = useQuery<any[]>({
-    queryKey: ['/api/trades', filters],
+    queryKey: ['/api/trades'],
     refetchInterval: 30000
   });
 
