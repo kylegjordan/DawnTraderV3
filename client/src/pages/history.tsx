@@ -208,7 +208,7 @@ export default function History() {
                         </td>
                         
                         <td className="p-3 font-mono text-sm">
-                          ${parseFloat(trade.entryPrice).toFixed(4)}
+                          {trade.entryPrice ? `$${parseFloat(trade.entryPrice).toFixed(4)}` : '-'}
                         </td>
                         
                         <td className="p-3 font-mono text-sm">
@@ -216,7 +216,7 @@ export default function History() {
                         </td>
                         
                         <td className="p-3 font-mono text-sm">
-                          {parseFloat(trade.quantity).toLocaleString()}
+                          {trade.quantity ? parseFloat(trade.quantity).toLocaleString() : '-'}
                         </td>
                         
                         <td className="p-3">
@@ -224,7 +224,8 @@ export default function History() {
                             {isProfit ? '+' : ''}${realizedPL.toFixed(2)}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {((realizedPL / (parseFloat(trade.entryPrice) * parseFloat(trade.quantity))) * 100).toFixed(2)}%
+                            {trade.entryPrice && trade.quantity ? 
+                              ((realizedPL / (parseFloat(trade.entryPrice) * parseFloat(trade.quantity))) * 100).toFixed(2) : '0.00'}%
                           </div>
                         </td>
                         

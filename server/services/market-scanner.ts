@@ -14,17 +14,17 @@ export class MarketScanner {
   }
 
   async startHourlyScanning(): Promise<void> {
-    console.log('Starting hourly market scanning...');
+    console.log('Starting 10-minute market scanning...');
     
     // Run initial scan
     await this.performScan();
     
-    // Schedule hourly scans
+    // Schedule 10-minute scans
     setInterval(async () => {
       if (!this.isScanning) {
         await this.performScan();
       }
-    }, 60 * 60 * 1000); // 1 hour
+    }, 10 * 60 * 1000); // 10 minutes
   }
 
   private async performScan(): Promise<void> {
