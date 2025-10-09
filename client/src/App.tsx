@@ -27,6 +27,7 @@ const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
 const BriefingsPage = lazy(() => import("@/pages/briefings"));
 const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
 const SystemsPage = lazy(() => import("@/pages/systems"));
+const AITransparencyPage = lazy(() => import("@/pages/ai-transparency"));
 const SearchPage = lazy(() => import("@/pages/search"));
 
 function LoadingFallback() {
@@ -137,6 +138,7 @@ function Router() {
               <Route path="/analysis" component={Analysis} />
               <Route path="/goals-engine" component={GoalsEnginePage} />
               <Route path="/systems" component={SystemsPage} />
+              <Route path="/ai-transparency" component={AITransparencyPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/kill-switch" component={KillSwitchScreen} />
               <Route component={NotFound} />

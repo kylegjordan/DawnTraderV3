@@ -97,6 +97,68 @@ app.use((req, res, next) => {
     });
   });
 
+  // Start Scheduler Registry with autonomous tasks (async, non-blocking)
+  import('./services/scheduler-registry').then(async ({ schedulerRegistry }) => {
+    try {
+      // Import and register all scheduler tasks
+      const { screenerRecalibrationTask } = await import('./services/screener-recalibration-task');
+      const { marketScanTask } = await import('./services/market-scan-task');
+      const { aiSummaryTask } = await import('./services/ai-summary-task');
+      const { systemHealthCheckTask } = await import('./services/system-health-check-task');
+
+      // Register tasks
+      schedulerRegistry.registerTask({
+        name: screenerRecalibrationTask.name,
+        description: screenerRecalibrationTask.description,
+        frequency: screenerRecalibrationTask.frequency,
+        intervalMs: screenerRecalibrationTask.intervalMs,
+        run: screenerRecalibrationTask.run.bind(screenerRecalibrationTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+      
+      schedulerRegistry.registerTask({
+        name: marketScanTask.name,
+        description: marketScanTask.description,
+        frequency: marketScanTask.frequency,
+        intervalMs: marketScanTask.intervalMs,
+        run: marketScanTask.run.bind(marketScanTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+      
+      schedulerRegistry.registerTask({
+        name: aiSummaryTask.name,
+        description: aiSummaryTask.description,
+        frequency: aiSummaryTask.frequency,
+        intervalMs: aiSummaryTask.intervalMs,
+        run: aiSummaryTask.run.bind(aiSummaryTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+      
+      schedulerRegistry.registerTask({
+        name: systemHealthCheckTask.name,
+        description: systemHealthCheckTask.description,
+        frequency: systemHealthCheckTask.frequency,
+        intervalMs: systemHealthCheckTask.intervalMs,
+        run: systemHealthCheckTask.run.bind(systemHealthCheckTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+
+      // Start all registered tasks
+      await schedulerRegistry.startAllTasks();
+      console.log('[SchedulerRegistry] All autonomous tasks started successfully');
+    } catch (error) {
+      console.error('[Server] Failed to start Scheduler Registry:', error);
+    }
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

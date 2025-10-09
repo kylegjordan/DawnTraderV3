@@ -157,10 +157,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     /* REGISTRATION CODE (uncomment to enable):
     try {
-      const { username, email, password } = req.body;
+      let { username, email, password } = req.body;
       
-      if (!username || !email || !password) {
-        return res.status(400).json({ error: 'Username, email, and password are required' });
+      if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required' });
+      }
+      
+      // Auto-generate email if not provided (for testing/single-user mode)
+      if (!email) {
+        email = `${username}@trading.local`;
       }
       
       // Basic email validation
@@ -2634,6 +2639,75 @@ Provide specific, actionable recommendations.`,
       res.json({ ok: true, errors });
     } catch (error: any) {
       console.error('Error logs fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== SCHEDULER ENDPOINTS =====
+  
+  // Get scheduler status for all tasks
+  app.get('/api/schedulers/status', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { schedulerRegistry } = await import('./services/scheduler-registry');
+      const tasks = schedulerRegistry.getAllTaskStatuses();
+      
+      res.json({ 
+        ok: true, 
+        tasks: tasks.map(task => ({
+          name: task.name,
+          description: task.description,
+          frequency: task.frequency,
+          lastRun: task.lastRun,
+          nextRun: task.nextRun,
+          status: task.status
+        }))
+      });
+    } catch (error: any) {
+      console.error('Scheduler status fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Manually trigger a specific scheduler task
+  app.post('/api/schedulers/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { taskName } = req.body;
+      
+      if (!taskName) {
+        return res.status(400).json({ error: 'taskName is required' });
+      }
+      
+      const { schedulerRegistry } = await import('./services/scheduler-registry');
+      
+      // Execute the task manually
+      await schedulerRegistry.executeTask(taskName);
+      
+      res.json({ 
+        ok: true, 
+        message: `Task ${taskName} executed successfully` 
+      });
+    } catch (error: any) {
+      console.error('Manual scheduler execution error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get transparency logs
+  app.get('/api/schedulers/transparency-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const taskName = req.query.taskName as string;
+      const mode = req.query.mode as 'live' | 'paper' | undefined;
+      
+      const logs = await storage.getTransparencyLogs({ 
+        taskName, 
+        mode, 
+        limit 
+      });
+      
+      res.json({ ok: true, logs });
+    } catch (error: any) {
+      console.error('Transparency logs fetch error:', error);
       res.status(500).json({ error: error.message });
     }
   });

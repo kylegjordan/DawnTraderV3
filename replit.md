@@ -18,7 +18,7 @@ Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, 
 Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting both "live" and "paper" trading modes.
 
 ### Data Storage Solutions
-PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, and `aiOpportunities`.
+PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, `aiOpportunities`, and `aiTransparencyLog`.
 
 ### System Design Choices
 - **Trading Strategies**: Implements fixed rules for VWAP Pullback, ABCD Long, and SMA Trend Ride with calculated entry, stop loss, and target prices.
@@ -40,7 +40,8 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `user
 - **Trading Panel**: Tabbed interface for Open Trades, Ready to Buy, and Filtered Pairs.
 - **Filter Diagnostics Infrastructure**: Tracks screener health metrics (pairs scanned, eligible pairs, top failure reasons) via a Filter Health Widget on the Dashboard.
 - **Watchlist Panel**: Tabbed interface for AI Opportunities and User Watchlists.
-- **Navigation**: Reorganized sidebar to reflect logical workflow hierarchy, including dedicated Briefings and Reporting panels.
+- **AI Transparency Panel**: Dedicated panel at `/ai-transparency` providing visibility into autonomous scheduler activity with three mode-aware tabs: Recent Automation Logs (mode-isolated scheduler execution logs), Learning Adjustments (filter calibrations with Paper→Live fallback), and System Health Alerts (system-wide error logs with color-coded severity). Features 60-second auto-refresh and proper mode isolation.
+- **Navigation**: Reorganized sidebar to reflect logical workflow hierarchy, including dedicated Briefings, Reporting, and AI Transparency panels.
 
 ## External Dependencies
 

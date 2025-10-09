@@ -15,7 +15,8 @@ import {
   Activity,
   Newspaper,
   MessageSquare,
-  Search
+  Search,
+  Sparkles
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ const navigation = [
   { name: "Search and Analysis", href: "/search", icon: Search },
   { name: "Reporting", href: "/reports", icon: FileText },
   { name: "Systems Monitoring", href: "/systems", icon: Activity },
+  { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
