@@ -106,6 +106,7 @@ app.use((req, res, next) => {
       const { aiSummaryTask } = await import('./services/ai-summary-task');
       const { systemHealthCheckTask } = await import('./services/system-health-check-task');
       const { cleTask } = await import('./services/cle-task');
+      const { cachePurgeTask } = await import('./services/cache-purge-task');
 
       // Register tasks
       schedulerRegistry.registerTask({
@@ -158,6 +159,17 @@ app.use((req, res, next) => {
         frequency: cleTask.frequency,
         intervalMs: cleTask.intervalMs,
         run: cleTask.run.bind(cleTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+      
+      schedulerRegistry.registerTask({
+        name: cachePurgeTask.name,
+        description: cachePurgeTask.description,
+        frequency: cachePurgeTask.frequency,
+        intervalMs: cachePurgeTask.intervalMs,
+        run: cachePurgeTask.run.bind(cachePurgeTask),
         lastRun: null,
         nextRun: null,
         status: 'idle'
