@@ -1337,6 +1337,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get conversation summaries (Milestone 14)
+  app.get('/api/conversations/:id/summaries', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { conversationSummarizationService } = await import('./services/conversation-summarization');
+      
+      const summaries = await conversationSummarizationService.getSummaries(id);
+      res.json({ success: true, summaries });
+    } catch (error) {
+      console.error('Error fetching conversation summaries:', error);
+      res.status(500).json({ error: 'Failed to fetch summaries' });
+    }
+  });
+
   app.post('/api/conversations/:id/message', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -3628,6 +3642,25 @@ Provide specific, actionable recommendations.`,
       });
     } catch (error: any) {
       console.error('Error optimizing signal weights:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ===== CACHE STATS (Milestone 14) =====
+  
+  // Get cache statistics
+  app.get('/api/cache/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { responseCacheService } = await import('./services/response-cache');
+      
+      const stats = await responseCacheService.getStats();
+      
+      res.json({
+        success: true,
+        stats
+      });
+    } catch (error: any) {
+      console.error('Error fetching cache stats:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
