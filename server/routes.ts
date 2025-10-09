@@ -2712,6 +2712,117 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // ===== LEARNING DATA ENDPOINTS =====
+
+  // Get filter calibration logs
+  app.get('/api/learning/calibration-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper' | undefined;
+      const hours = parseInt(req.query.hours as string) || 24;
+      
+      const cutoffTime = new Date();
+      cutoffTime.setHours(cutoffTime.getHours() - hours);
+      
+      // Get calibration logs using existing method
+      let logs;
+      if (mode) {
+        const latest = await storage.getLatestCalibration({ userId, mode, maxAgeHours: hours });
+        logs = latest ? [latest] : [];
+      } else {
+        // Get both modes
+        const [liveLogs, paperLogs] = await Promise.all([
+          storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: hours }),
+          storage.getLatestCalibration({ userId, mode: 'paper', maxAgeHours: hours })
+        ]);
+        logs = [liveLogs, paperLogs].filter(Boolean);
+      }
+      
+      res.json({ ok: true, logs });
+    } catch (error: any) {
+      console.error('Calibration logs fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get intraday adjustments
+  app.get('/api/learning/intraday-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper' | undefined;
+      const hours = parseInt(req.query.hours as string) || 24;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const adjustments = await storage.getIntradayAdjustments(userId, { mode, hours, limit });
+      
+      res.json({ ok: true, adjustments });
+    } catch (error: any) {
+      console.error('Intraday adjustments fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get AI lessons
+  app.get('/api/learning/ai-lessons', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper' | undefined;
+      const strategy = req.query.strategy as string | undefined;
+      const hours = parseInt(req.query.hours as string) || 168; // Default 7 days
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const lessons = await storage.getAILessons(userId, { mode, strategy, hours, limit });
+      
+      res.json({ ok: true, lessons });
+    } catch (error: any) {
+      console.error('AI lessons fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get portfolio adjustments
+  app.get('/api/learning/portfolio-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper' | undefined;
+      const hours = parseInt(req.query.hours as string) || 24;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const adjustments = await storage.getPortfolioAdjustments(userId, { mode, hours, limit });
+      
+      res.json({ ok: true, adjustments });
+    } catch (error: any) {
+      console.error('Portfolio adjustments fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get prediction outcomes
+  app.get('/api/learning/prediction-outcomes', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper' | undefined;
+      const strategy = req.query.strategy as string | undefined;
+      const hours = parseInt(req.query.hours as string) || 24;
+      const limit = parseInt(req.query.limit as string) || 100;
+      
+      const fromDate = new Date();
+      fromDate.setHours(fromDate.getHours() - hours);
+      
+      const outcomes = await storage.getPredictionOutcomes(userId, { 
+        mode, 
+        strategy, 
+        fromDate, 
+        limit 
+      });
+      
+      res.json({ ok: true, outcomes });
+    } catch (error: any) {
+      console.error('Prediction outcomes fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ENDPOINT: Get Kraken API cache statistics
   app.get('/api/kraken/cache-stats', async (_req, res) => {
     try {
