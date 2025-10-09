@@ -120,7 +120,7 @@ export default function ReportsPage() {
           <TabsTrigger value="custom" data-testid="tab-custom-reports">Custom Reports</TabsTrigger>
           <TabsTrigger value="exports" data-testid="tab-exports">Exports</TabsTrigger>
           <TabsTrigger value="ai-reports" data-testid="tab-ai-reports">AI Reports</TabsTrigger>
-          <TabsTrigger value="daily-briefs" data-testid="tab-daily-briefs">Daily Briefs</TabsTrigger>
+          <TabsTrigger value="trade-history" data-testid="tab-trade-history">Trade History</TabsTrigger>
         </TabsList>
 
         {/* Canned Reports Tab */}
@@ -658,153 +658,242 @@ export default function ReportsPage() {
           </div>
         </TabsContent>
 
-        {/* Daily Briefs Tab */}
-        <TabsContent value="daily-briefs" className="space-y-6">
-          <DailyBriefsTab />
+        {/* Trade History Tab */}
+        <TabsContent value="trade-history" className="space-y-6">
+          <TradeHistoryTab />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function DailyBriefsTab() {
-  const { data: briefs = [], isLoading } = useQuery<any[]>({
-    queryKey: ['/api/daily-briefs'],
+const strategyColors = {
+  vwap_pullback: "bg-primary/10 text-primary",
+  abcd_long: "bg-chart-2/10 text-chart-2",
+  sma_trend_ride: "bg-chart-3/10 text-chart-3"
+};
+
+const strategyNames = {
+  vwap_pullback: "VWAP Pullback",
+  abcd_long: "ABCD Long",
+  sma_trend_ride: "SMA Trend Ride"
+};
+
+function TradeHistoryTab() {
+  const [filters, setFilters] = useState({
+    symbol: '',
+    strategy: '',
+    status: 'closed',
+    dateFrom: '',
+    dateTo: ''
   });
+  
+  const { data: trades = [], isLoading } = useQuery<any[]>({
+    queryKey: ['/api/trades', filters],
+    refetchInterval: 30000
+  });
+
+  const filteredTrades = trades.filter((trade: any) => {
+    if (filters.symbol && !trade.symbol.toLowerCase().includes(filters.symbol.toLowerCase())) {
+      return false;
+    }
+    if (filters.strategy && trade.strategy !== filters.strategy) {
+      return false;
+    }
+    return true;
+  });
+
+  const getSymbolColor = (symbol: string) => {
+    if (symbol.includes('BTC')) return 'text-orange-500';
+    if (symbol.includes('ETH')) return 'text-blue-500';
+    return 'text-primary';
+  };
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-64 mt-2" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-20 w-full" />
-            </CardContent>
-          </Card>
-        ))}
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-24" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
-
-  if (briefs.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-12 text-center">
-          <Newspaper className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No Daily Briefs Yet</h3>
-          <p className="text-muted-foreground mb-4">
-            Daily briefs are automatically generated every day. Check back soon!
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Daily Trading Briefs</h2>
-          <p className="text-muted-foreground mt-1">
-            Review your daily trading performance summaries and insights
-          </p>
-        </div>
-        <Link href="/daily-brief">
-          <Button data-testid="button-view-today-brief">
-            <Newspaper className="h-4 w-4 mr-2" />
-            View Today's Brief
-          </Button>
-        </Link>
-      </div>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <div className="flex items-center gap-2 text-muted-foreground text-sm font-normal mb-2">
+              This tab displays historical trade data for Paper and Live modes.
+            </div>
+            <div className="text-2xl">Filters</div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <Input
+              placeholder="Search symbol..."
+              value={filters.symbol}
+              onChange={(e) => setFilters(prev => ({ ...prev, symbol: e.target.value }))}
+              data-testid="input-symbol-filter"
+            />
+            
+            <Select 
+              value={filters.strategy} 
+              onValueChange={(value) => setFilters(prev => ({ ...prev, strategy: value }))}
+            >
+              <SelectTrigger data-testid="select-strategy-filter">
+                <SelectValue placeholder="All strategies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All strategies</SelectItem>
+                <SelectItem value="vwap_pullback">VWAP Pullback</SelectItem>
+                <SelectItem value="abcd_long">ABCD Long</SelectItem>
+                <SelectItem value="sma_trend_ride">SMA Trend Ride</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <Input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+              data-testid="input-date-from"
+            />
+            
+            <Input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+              data-testid="input-date-to"
+            />
+            
+            <Button
+              variant="outline"
+              onClick={() => setFilters({
+                symbol: '',
+                strategy: '',
+                status: 'closed',
+                dateFrom: '',
+                dateTo: ''
+              })}
+              data-testid="button-clear-filters"
+            >
+              Clear
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="space-y-4">
-        {briefs.map((brief) => (
-          <Card key={brief.id} data-testid={`brief-${brief.id}`}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                    <CardDescription>
-                      {formatDate(brief.date)}
-                    </CardDescription>
-                    <Badge variant={brief.status === 'final' ? 'default' : 'secondary'}>
-                      {brief.status === 'final' ? 'Final' : 'In Progress'}
-                    </Badge>
-                  </div>
-                  <CardTitle data-testid={`brief-headline-${brief.id}`}>
-                    {brief.headline}
-                  </CardTitle>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground mb-4" data-testid={`brief-summary-${brief.id}`}>
-                {brief.summary}
-              </p>
-
-              {brief.metrics && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/30 rounded-lg">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-foreground">
-                      {brief.metrics.num_trades}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Trades</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-foreground">
-                      {brief.metrics.win_rate?.toFixed(1) ?? '0'}%
-                    </div>
-                    <div className="text-xs text-muted-foreground">Win Rate</div>
-                  </div>
-                  <div className="text-center">
-                    <div className={`text-2xl font-bold ${
-                      (brief.metrics.realized_pl + brief.metrics.unrealized_pl) >= 0
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      ${((brief.metrics.realized_pl + brief.metrics.unrealized_pl) >= 0 ? '+' : '')}
-                      {(brief.metrics.realized_pl + brief.metrics.unrealized_pl).toFixed(2)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Total P&L</div>
-                  </div>
-                  <div className="text-center">
-                    <div className={`text-2xl font-bold ${
-                      brief.metrics.pnl_pct >= 0
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      {brief.metrics.pnl_pct >= 0 ? '+' : ''}{brief.metrics.pnl_pct.toFixed(2)}%
-                    </div>
-                    <div className="text-xs text-muted-foreground">Portfolio %</div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end mt-4">
-                <Link href={`/daily-brief?date=${brief.date}`}>
-                  <Button variant="outline" size="sm" data-testid={`button-view-brief-${brief.id}`}>
-                    View Full Brief
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {filteredTrades.length} Trade{filteredTrades.length !== 1 ? 's' : ''}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {filteredTrades.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No trades match your filters</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Date</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Symbol</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Strategy</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Entry</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Exit</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Quantity</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">P/L</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">R</th>
+                    <th className="text-left p-3 text-sm font-semibold text-muted-foreground">Fees</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredTrades.map((trade: any) => {
+                    const realizedPL = parseFloat(trade.realizedPL || '0');
+                    const realizedPLR = parseFloat(trade.realizedPLR || '0');
+                    const isProfit = realizedPL > 0;
+                    const totalFees = parseFloat(trade.entryFee || '0') + parseFloat(trade.exitFee || '0');
+                    
+                    return (
+                      <tr key={trade.id} className="hover:bg-muted/50" data-testid={`trade-history-${trade.id}`}>
+                        <td className="p-3 text-sm">
+                          {trade.exitTime ? 
+                            new Date(trade.exitTime).toLocaleDateString() : 
+                            new Date(trade.entryTime).toLocaleDateString()
+                          }
+                        </td>
+                        
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <span className={cn("text-sm font-semibold", getSymbolColor(trade.symbol))}>
+                              {trade.symbol}
+                            </span>
+                            <Badge variant={trade.mode === 'live' ? 'default' : 'secondary'} className="text-xs">
+                              {trade.mode}
+                            </Badge>
+                          </div>
+                        </td>
+                        
+                        <td className="p-3">
+                          <Badge className={cn("text-xs", strategyColors[trade.strategy as keyof typeof strategyColors] || "bg-muted/10")}>
+                            {strategyNames[trade.strategy as keyof typeof strategyNames] || trade.strategy}
+                          </Badge>
+                        </td>
+                        
+                        <td className="p-3 font-mono text-sm">
+                          {trade.entryPrice ? `$${parseFloat(trade.entryPrice).toFixed(4)}` : '-'}
+                        </td>
+                        
+                        <td className="p-3 font-mono text-sm">
+                          {trade.exitPrice ? `$${parseFloat(trade.exitPrice).toFixed(4)}` : '-'}
+                        </td>
+                        
+                        <td className="p-3 font-mono text-sm">
+                          {trade.quantity ? parseFloat(trade.quantity).toLocaleString() : '-'}
+                        </td>
+                        
+                        <td className="p-3">
+                          <div className={cn("font-mono text-sm font-semibold", isProfit ? "text-success" : "text-destructive")}>
+                            {isProfit ? '+' : ''}${realizedPL.toFixed(2)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {trade.entryPrice && trade.quantity ? 
+                              ((realizedPL / (parseFloat(trade.entryPrice) * parseFloat(trade.quantity))) * 100).toFixed(2) : '0.00'}%
+                          </div>
+                        </td>
+                        
+                        <td className="p-3">
+                          <div className={cn("font-mono text-sm font-semibold", realizedPLR >= 0 ? "text-success" : "text-destructive")}>
+                            {realizedPLR >= 0 ? '+' : ''}{realizedPLR.toFixed(2)}R
+                          </div>
+                        </td>
+                        
+                        <td className="p-3 font-mono text-xs text-muted-foreground">
+                          ${totalFees.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -223,7 +223,7 @@ export interface IStorage {
   createDailyBrief(brief: InsertDailyBrief): Promise<DailyBrief>;
   updateDailyBrief(id: string, updates: Partial<DailyBrief>): Promise<DailyBrief>;
   getDailyBrief(userId: string, date: string): Promise<DailyBrief | undefined>;
-  getDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<DailyBrief[]>;
+  getDailyBriefs(userId: string, filters?: { status?: string; limit?: number; startDate?: string; endDate?: string }): Promise<DailyBrief[]>;
   finalizeDailyBrief(id: string): Promise<DailyBrief>;
 
   // Paper trading methods (simulated trades - isolated from live)
@@ -1156,11 +1156,19 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
-  async getDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<DailyBrief[]> {
+  async getDailyBriefs(userId: string, filters?: { status?: string; limit?: number; startDate?: string; endDate?: string }): Promise<DailyBrief[]> {
     const conditions = [eq(dailyBriefs.userId, userId)];
     
     if (filters?.status) {
       conditions.push(eq(dailyBriefs.status, filters.status as any));
+    }
+    
+    if (filters?.startDate) {
+      conditions.push(gte(dailyBriefs.date, filters.startDate));
+    }
+    
+    if (filters?.endDate) {
+      conditions.push(lte(dailyBriefs.date, filters.endDate));
     }
     
     const query = db

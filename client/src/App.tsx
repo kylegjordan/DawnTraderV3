@@ -24,6 +24,7 @@ const ActiveTradesPage = lazy(() => import("@/pages/active-trades"));
 const KillSwitchScreen = lazy(() => import("@/pages/kill-switch"));
 const ReportsPage = lazy(() => import("@/pages/reports"));
 const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
+const BriefingsPage = lazy(() => import("@/pages/briefings"));
 const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
 const SystemsPage = lazy(() => import("@/pages/systems"));
 const SearchPage = lazy(() => import("@/pages/search"));
@@ -130,9 +131,9 @@ function Router() {
               <Route path="/watchlist" component={WatchlistPage} />
               <Route path="/active-trades" component={ActiveTradesPage} />
               <Route path="/search" component={SearchPage} />
-              <Route path="/history" component={History} />
               <Route path="/reports" component={ReportsPage} />
               <Route path="/daily-brief" component={DailyBriefPage} />
+              <Route path="/briefings" component={BriefingsPage} />
               <Route path="/analysis" component={Analysis} />
               <Route path="/goals-engine" component={GoalsEnginePage} />
               <Route path="/systems" component={SystemsPage} />

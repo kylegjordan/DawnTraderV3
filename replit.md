@@ -110,6 +110,22 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas: `users`, `tr
     - Removed legacy redundant tabs to eliminate duplication
     - Full test coverage with data-testid on all dynamic elements
   - **Paper Engine Status**: PaperExecutionService exists with correct configuration (250ms latency, 0.10% slippage, 0.16% fees) but requires full integration with TradingEngine for automated paper trade execution - deferred to dedicated session
+- **Milestone 10.5 (2025-10-09)**: UI Refinement - Reporting, Briefings, and Navigation Alignment
+  - **Navigation Reorganization**: Updated sidebar order to reflect logical workflow hierarchy:
+    1. Dashboard \u2192 2. Goals Engine \u2192 3. Trading (moved up) \u2192 4. Briefings \u2192 5. GPT Chats \u2192 6. Watchlists \u2192 7. Search and Analysis \u2192 8. Reporting (moved up) \u2192 9. Systems Monitoring \u2192 10. Settings
+    - Removed standalone "Trade History" navigation link
+  - **Briefings Panel**: Created new dedicated panel at /briefings with 2 tabs:
+    - **Current Daily Brief**: Displays today's trading brief with headline, summary, metrics, narrative, and trade highlights
+    - **Daily Briefs History**: List view with date range selection (startDate/endDate) for custom period reports
+  - **Backend Enhancement**: Extended /api/daily-briefs endpoint to support optional query parameters:
+    - `?startDate=YYYY-MM-DD` and `?endDate=YYYY-MM-DD` for date range filtering
+    - Updated IStorage interface and getDailyBriefs implementation with gte/lte operators
+  - **Reporting Panel Updates**: 
+    - Removed "Daily Briefs" tab (moved to Briefings panel)
+    - Added "Trade History" as Tab 5 with full filtering capabilities (symbol, strategy, date range)
+    - Maintained existing tabs: Canned Reports, Custom Reports, Exports, AI Reports
+    - Trade History tab includes mode-aware display with Live/Paper badges and comprehensive trade data table
+  - **Route Updates**: Removed /history standalone route, added /briefings route to App.tsx
 
 ## External Dependencies
 

@@ -1031,11 +1031,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/daily-briefs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { status, limit } = req.query;
+      const { status, limit, startDate, endDate } = req.query;
       
       const briefs = await storage.getDailyBriefs(userId, {
         status: status as string,
-        limit: limit ? parseInt(limit as string) : 30
+        limit: limit ? parseInt(limit as string) : 30,
+        startDate: startDate as string,
+        endDate: endDate as string
       });
       
       res.json(briefs);
