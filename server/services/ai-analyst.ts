@@ -440,7 +440,10 @@ export class AIAnalyst {
               outputTokens: actualOutputTokens 
             };
             // Use shorter TTL (5 minutes) for chat responses
-            await responseCacheService.set(userId, endpoint, payload, responseData, { ttlSeconds: 300 });
+            await responseCacheService.set(userId, endpoint, payload, responseData, { 
+              ttlSeconds: 300,
+              logToTransparency: true  // Enable transparency logging for cache operations
+            });
           } catch (error) {
             console.error('Cache store failed:', error);
           }
