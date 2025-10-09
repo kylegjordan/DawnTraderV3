@@ -104,6 +104,97 @@ Milestone 12 validates the autonomous learning system's ability to continuously 
 ### System Registration
 Registration is disabled for single-user production mode. Temporarily enabled only for Milestone 12 verification testing, then re-locked (403) to ensure security.
 
+## Milestone 13: Continuous Learning Engine (CLE) Implementation
+
+### Overview
+Milestone 13 implements a fully autonomous Continuous Learning Engine that monitors trading performance, detects patterns, and optimizes parameters through Paper mode experimentation with controlled Live mode deployment. The CLE runs as a scheduled task every hour, ensuring continuous improvement without manual intervention.
+
+### CLE Architecture
+
+#### Core Components
+- **CLE Orchestrator** (`server/services/cle-orchestrator.ts`): Main learning pipeline coordinator
+  - Pattern detection from prediction_outcomes
+  - Autonomous calibration generation
+  - Paper→Live transfer logic
+  - Safety constraint validation
+  - Rollback mechanisms
+- **CLE Scheduler Task** (`server/services/cle-task.ts`): Hourly execution wrapper
+  - Registered with scheduler registry
+  - Runs every 1 hour
+  - Invokes single learning cycle per execution
+- **Autonomy Confidence Index**: Multi-factor confidence scoring
+  - Formula: CI = 0.5(Paper_Accuracy) + 0.3(Transfer_Success) + 0.2(Health_Uptime)
+  - Range: 0-100
+  - Tracks learning system reliability
+
+#### Learning Pipeline Flow
+1. **Pattern Detection** (from prediction_outcomes)
+   - Accuracy improvement ≥3%
+   - PnL variance reduction ≥5%
+   - Statistical significance validation
+2. **Autonomous Calibration** (Paper mode only)
+   - Generates filter_calibration_log entries
+   - Source: "autonomous-learning"
+   - Mode: "paper" only
+3. **AI Lessons** (GPT prompt refinement)
+   - Records pattern insights
+   - Enhances future predictions
+4. **Portfolio Adjustments** (position sizing)
+   - Optimizes risk parameters
+   - Mode-isolated adjustments
+5. **Paper→Live Transfer** (when Live data stale)
+   - Transfers only when Live calibrations >24h old
+   - Marks transfers with source: "paper-fallback"
+   - Preserves mode isolation
+
+#### Safety Mechanisms
+- **Rollback Trigger**: Confidence drop >15 points
+  - Reverts last 3 calibrations
+  - Logs rollback events to ai_transparency_log
+- **Learning Pause**: PnL variance increase >25%
+  - Temporarily halts autonomous updates
+  - Logs pause events for review
+- **Mode Isolation**: Live mode never generates autonomous calibrations
+  - Only Paper mode creates new learnings
+  - Live mode adopts via Paper→Live transfer only
+
+### Implementation Results (All Tests Passed ✓)
+
+#### Core Infrastructure
+- ✅ **CLE Orchestrator**: Learning pipeline operational
+- ✅ **Scheduler Integration**: Task runs every 1 hour as "Continuous Learning"
+- ✅ **Confidence Model**: Index calculation verified (baseline: 20/100)
+- ✅ **Pattern Detection**: Statistical thresholds configured (accuracy ≥3%, variance ≤5%)
+- ✅ **Safety Failsafes**: Rollback and pause mechanisms implemented
+
+#### API Endpoints
+- `/api/learning/autonomy-confidence`: Returns confidence index and components
+- `/api/schedulers/status`: Shows CLE task status and timing
+- `/api/learning/performance-snapshot`: Mode-isolated performance metrics
+
+#### UI Integration
+- **AI Transparency Panel** (`/ai-transparency`): Displays Autonomy Confidence badge
+  - Badge format: "Confidence: X/100"
+  - Test ID: `badge-autonomy-confidence`
+  - Auto-refresh: 60 seconds
+
+#### E2E Verification (Milestone 13)
+- ✅ Learning cycle execution via scheduler
+- ✅ Confidence index API and UI display
+- ✅ Paper→Live transfer contract enforcement
+- ✅ Rollback logic verification
+- ✅ Scheduler cadence validation (1h interval)
+
+### Key Features
+- **Autonomous Operation**: No manual intervention required
+- **Mode-Safe Learning**: Paper experimentation, Live adoption
+- **Confidence Tracking**: Multi-factor reliability scoring
+- **Safety First**: Rollback on degradation, pause on variance
+- **Full Transparency**: All learning logged to ai_transparency_log
+
+### Learning Infrastructure Enhancement
+The CLE leverages existing learning tables (filter_calibration_log, intraday_adjustments, ai_lessons, portfolio_adjustments, prediction_outcomes) and introduces autonomous orchestration with built-in safety guardrails. All learning activities are logged to ai_transparency_log for full auditability.
+
 ## External Dependencies
 
 - **Kraken Exchange API**: For market data, trade execution, and account management, with API load management and rate limiting.
