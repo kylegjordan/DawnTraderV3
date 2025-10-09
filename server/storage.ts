@@ -140,6 +140,7 @@ export interface IStorage {
   getLatestCalibration(params: { userId: string; mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null>;
   getLatestPaperCalibration(userId: string): Promise<FilterCalibrationLog | null>;
   getCalibrationWithFallback(userId: string, mode: 'live' | 'paper', maxAgeHours?: number): Promise<FilterCalibrationLog | null>;
+  getRecentCalibrations(params: { userId?: string; mode: 'live' | 'paper'; limit?: number; maxAgeHours?: number }): Promise<FilterCalibrationLog[]>;
   createCalibration(data: InsertFilterCalibrationLog): Promise<FilterCalibrationLog>;
 
   // Screener results methods
@@ -496,6 +497,29 @@ export class DatabaseStorage implements IStorage {
   async createCalibration(data: InsertFilterCalibrationLog): Promise<FilterCalibrationLog> {
     const [result] = await db.insert(filterCalibrationLog).values(data).returning();
     return result;
+  }
+
+  async getRecentCalibrations(params: { userId?: string; mode: 'live' | 'paper'; limit?: number; maxAgeHours?: number }): Promise<FilterCalibrationLog[]> {
+    const limit = params.limit || 10;
+    const conditions = [eq(filterCalibrationLog.mode, params.mode)];
+    
+    if (params.userId) {
+      conditions.push(eq(filterCalibrationLog.userId, params.userId));
+    }
+    
+    if (params.maxAgeHours) {
+      const cutoffTime = new Date(Date.now() - params.maxAgeHours * 60 * 60 * 1000);
+      conditions.push(gte(filterCalibrationLog.timestamp, cutoffTime));
+    }
+    
+    const results = await db
+      .select()
+      .from(filterCalibrationLog)
+      .where(and(...conditions))
+      .orderBy(desc(filterCalibrationLog.timestamp))
+      .limit(limit);
+    
+    return results;
   }
 
   // Screener results methods
