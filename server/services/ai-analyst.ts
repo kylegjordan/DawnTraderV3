@@ -393,11 +393,11 @@ export class AIAnalyst {
         try {
           const { responseCacheService } = await import('./response-cache');
           const endpoint = `/api/conversations/${conversation.id}/message`;
-          // Include conversationId and full trimmed context for collision prevention
+          // Simplified cache key: message + conversationId only (no context hash)
+          // Context hash caused false misses due to dynamic timestamps/trade stats
           const payload = { 
             message, 
-            conversationId: conversation.id,
-            contextHash: JSON.stringify(finalMessages) 
+            conversationId: conversation.id
           };
           const cached = await responseCacheService.get(userId, endpoint, payload);
           
@@ -432,8 +432,7 @@ export class AIAnalyst {
             const endpoint = `/api/conversations/${conversation.id}/message`;
             const payload = { 
               message, 
-              conversationId: conversation.id,
-              contextHash: JSON.stringify(finalMessages) 
+              conversationId: conversation.id
             };
             const responseData = { 
               response: assistantResponse, 
