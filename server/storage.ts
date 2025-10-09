@@ -29,6 +29,9 @@ import {
   signalWeights,
   predictionOutcomes,
   featureSnapshots,
+  intradayAdjustments,
+  aiLessons,
+  portfolioAdjustments,
   userGoalsLive,
   userGoalsPaper,
   goalAnalysisHistoryLive,
@@ -91,6 +94,12 @@ import {
   type InsertPredictionOutcome,
   type FeatureSnapshot,
   type InsertFeatureSnapshot,
+  type IntradayAdjustment,
+  type InsertIntradayAdjustment,
+  type AILesson,
+  type InsertAILesson,
+  type PortfolioAdjustment,
+  type InsertPortfolioAdjustment,
   type UserGoalLive,
   type InsertUserGoalLive,
   type UserGoalPaper,
@@ -265,6 +274,18 @@ export interface IStorage {
   updatePredictionOutcome(id: string, updates: Partial<PredictionOutcome>): Promise<PredictionOutcome>;
   getPredictionOutcomes(userId: string, filters?: { mode?: string; strategy?: string; fromDate?: Date; toDate?: Date; limit?: number }): Promise<PredictionOutcome[]>;
   getPredictionAccuracy(userId: string, mode: string, strategy?: string, days?: number): Promise<{ accuracy: number; totalPredictions: number; correctPredictions: number }>;
+
+  // Intraday adjustment methods
+  createIntradayAdjustment(adjustment: InsertIntradayAdjustment): Promise<IntradayAdjustment>;
+  getIntradayAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<IntradayAdjustment[]>;
+
+  // AI lesson methods
+  createAILesson(lesson: InsertAILesson): Promise<AILesson>;
+  getAILessons(userId: string, filters?: { mode?: string; strategy?: string; hours?: number; limit?: number }): Promise<AILesson[]>;
+
+  // Portfolio adjustment methods
+  createPortfolioAdjustment(adjustment: InsertPortfolioAdjustment): Promise<PortfolioAdjustment>;
+  getPortfolioAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]>;
 
   // Feature snapshot methods
   createFeatureSnapshot(snapshot: InsertFeatureSnapshot): Promise<FeatureSnapshot>;
@@ -1492,6 +1513,102 @@ export class DatabaseStorage implements IStorage {
       totalPredictions: completedOutcomes.length,
       correctPredictions: correctOutcomes.length,
     };
+  }
+
+  // Intraday adjustment methods
+  async createIntradayAdjustment(adjustment: InsertIntradayAdjustment): Promise<IntradayAdjustment> {
+    const [result] = await db.insert(intradayAdjustments).values(adjustment).returning();
+    return result;
+  }
+
+  async getIntradayAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<IntradayAdjustment[]> {
+    const conditions = [eq(intradayAdjustments.userId, userId)];
+    
+    if (filters?.mode) {
+      conditions.push(eq(intradayAdjustments.mode, filters.mode as any));
+    }
+    if (filters?.hours) {
+      const cutoffTime = new Date();
+      cutoffTime.setHours(cutoffTime.getHours() - filters.hours);
+      conditions.push(gte(intradayAdjustments.timestamp, cutoffTime));
+    }
+    
+    const query = db
+      .select()
+      .from(intradayAdjustments)
+      .where(and(...conditions))
+      .orderBy(desc(intradayAdjustments.timestamp));
+    
+    if (filters?.limit) {
+      query.limit(filters.limit);
+    }
+    
+    return await query;
+  }
+
+  // AI lesson methods
+  async createAILesson(lesson: InsertAILesson): Promise<AILesson> {
+    const [result] = await db.insert(aiLessons).values(lesson).returning();
+    return result;
+  }
+
+  async getAILessons(userId: string, filters?: { mode?: string; strategy?: string; hours?: number; limit?: number }): Promise<AILesson[]> {
+    const conditions = [eq(aiLessons.userId, userId)];
+    
+    if (filters?.mode) {
+      conditions.push(eq(aiLessons.mode, filters.mode as any));
+    }
+    if (filters?.strategy) {
+      conditions.push(eq(aiLessons.strategy, filters.strategy as any));
+    }
+    if (filters?.hours) {
+      const cutoffTime = new Date();
+      cutoffTime.setHours(cutoffTime.getHours() - filters.hours);
+      conditions.push(gte(aiLessons.timestamp, cutoffTime));
+    }
+    
+    const query = db
+      .select()
+      .from(aiLessons)
+      .where(and(...conditions))
+      .orderBy(desc(aiLessons.timestamp));
+    
+    if (filters?.limit) {
+      query.limit(filters.limit);
+    }
+    
+    return await query;
+  }
+
+  // Portfolio adjustment methods
+  async createPortfolioAdjustment(adjustment: InsertPortfolioAdjustment): Promise<PortfolioAdjustment> {
+    const [result] = await db.insert(portfolioAdjustments).values(adjustment).returning();
+    return result;
+  }
+
+  async getPortfolioAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]> {
+    const conditions = [eq(portfolioAdjustments.userId, userId)];
+    
+    if (filters?.mode) {
+      conditions.push(eq(portfolioAdjustments.mode, filters.mode as any));
+    }
+    if (filters?.hours) {
+      const cutoffTime = new Date();
+      cutoffTime.setHours(cutoffTime.getHours() - filters.hours);
+      conditions.push(gte(portfolioAdjustments.timestamp, cutoffTime));
+    }
+    
+    const query = db
+      .select()
+      .from(portfolioAdjustments)
+      .where(and(...conditions))
+      .orderBy(desc(portfolioAdjustments.timestamp));
+    
+    if (filters?.limit) {
+      query.limit(filters.limit);
+    }
+    
+    return await query;
   }
 
   // Feature snapshot methods
