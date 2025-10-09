@@ -10,7 +10,8 @@ import {
   jsonb,
   pgEnum,
   date,
-  uniqueIndex
+  uniqueIndex,
+  index
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -260,6 +261,43 @@ export const aiChatLogs = pgTable("ai_chat_logs", {
   model: varchar("model", { length: 50 }).default("gpt-4o"), // Model used
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 });
+
+// Conversation summaries (compressed conversation history for context retention)
+export const conversationSummaries = pgTable("conversation_summaries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").references(() => aiConversations.id, { onDelete: 'cascade' }).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  startMessageId: varchar("start_message_id"), // First message ID in this summary window
+  endMessageId: varchar("end_message_id"), // Last message ID in this summary window
+  startTimestamp: timestamp("start_timestamp", { withTimezone: true }).notNull(),
+  endTimestamp: timestamp("end_timestamp", { withTimezone: true }).notNull(),
+  messageCount: integer("message_count").notNull(), // Number of messages summarized
+  summaryText: text("summary_text").notNull(), // Compressed summary (≤200 tokens)
+  participantRoles: text("participant_roles").array().default(sql`ARRAY['user', 'assistant', 'system']::text[]`), // Roles in conversation
+  keyDecisions: jsonb("key_decisions"), // Important decisions made
+  actionItems: jsonb("action_items"), // Actions or tasks identified
+  userPreferences: jsonb("user_preferences"), // Extracted user preferences
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  conversationIdIdx: uniqueIndex("conversation_summaries_conversation_id_idx").on(table.conversationId, table.createdAt),
+}));
+
+// Response cache (stores API responses to reduce duplicate calls)
+export const responseCache = pgTable("response_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  cacheKey: varchar("cache_key", { length: 256 }).notNull(), // hash(user_id + endpoint + payload)
+  endpoint: varchar("endpoint", { length: 200 }).notNull(), // API endpoint or function name
+  requestPayload: jsonb("request_payload"), // Request parameters for transparency
+  responseData: jsonb("response_data").notNull(), // Cached response
+  hitCount: integer("hit_count").default(1), // Number of times this cache entry was used
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // TTL expiry time
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userCacheKeyIdx: uniqueIndex("response_cache_user_cache_key_idx").on(table.userId, table.cacheKey),
+  expiresAtIdx: index("response_cache_expires_at_idx").on(table.expiresAt),
+}));
 
 // AI Market Analyses (market regime classification)
 export const aiMarketAnalyses = pgTable("ai_market_analyses", {
@@ -905,6 +943,17 @@ export const insertAIChatLogSchema = createInsertSchema(aiChatLogs).omit({
   timestamp: true,
 });
 
+export const insertConversationSummarySchema = createInsertSchema(conversationSummaries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertResponseCacheSchema = createInsertSchema(responseCache).omit({
+  id: true,
+  createdAt: true,
+  lastAccessedAt: true,
+});
+
 export const insertAiMarketAnalysisSchema = createInsertSchema(aiMarketAnalyses).omit({
   id: true,
   createdAt: true,
@@ -1085,6 +1134,12 @@ export type AIConversation = typeof aiConversations.$inferSelect;
 
 export type InsertAIChatLog = z.infer<typeof insertAIChatLogSchema>;
 export type AIChatLog = typeof aiChatLogs.$inferSelect;
+
+export type InsertConversationSummary = z.infer<typeof insertConversationSummarySchema>;
+export type ConversationSummary = typeof conversationSummaries.$inferSelect;
+
+export type InsertResponseCache = z.infer<typeof insertResponseCacheSchema>;
+export type ResponseCache = typeof responseCache.$inferSelect;
 
 export type InsertAiMarketAnalysis = z.infer<typeof insertAiMarketAnalysisSchema>;
 export type AiMarketAnalysis = typeof aiMarketAnalyses.$inferSelect;
