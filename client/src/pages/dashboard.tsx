@@ -59,7 +59,7 @@ export default function Dashboard() {
       {/* Strategy Performance Section */}
       <StrategyPerformanceWidget />
 
-      {/* Symbols That Have Cleared the Screening Process */}
+      {/* Ready to Buy */}
       <Watchlist />
 
       {/* Filter Health Diagnostics */}

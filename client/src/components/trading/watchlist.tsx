@@ -127,7 +127,7 @@ export default function Watchlist() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-xl sm:text-2xl">
-              Symbols That Have Cleared the Screening Process
+              Ready to Buy
             </CardTitle>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Next scan in:</span>

@@ -1,25 +1,12 @@
 import { useState } from "react";
 import ActiveTrades from "@/components/trading/active-trades";
+import Watchlist from "@/components/trading/watchlist";
 import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import ModeBanner from "@/components/mode-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Filter } from "lucide-react";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
-
-function ReadyToBuyTab() {
-  return (
-    <Card>
-      <CardContent className="py-8 text-center">
-        <TrendingUp className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-        <h3 className="text-lg font-semibold mb-2">Ready to Buy Signals</h3>
-        <p className="text-muted-foreground">
-          Trading signals that meet all criteria will appear here
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function FilteredPairsTab() {
   return (
@@ -77,7 +64,7 @@ export default function TradingPage() {
         </TabsContent>
 
         <TabsContent value="ready" className="mt-6">
-          <ReadyToBuyTab />
+          <Watchlist />
         </TabsContent>
 
         <TabsContent value="filtered" className="mt-6">
