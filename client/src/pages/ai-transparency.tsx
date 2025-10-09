@@ -5,11 +5,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useTrading } from "@/hooks/use-trading";
+import { useTradingMode } from "@/contexts/trading-mode-context";
 
 export default function AITransparencyPage() {
   const [activeTab, setActiveTab] = useState("automation-logs");
-  const { mode } = useTrading();
+  const { mode } = useTradingMode();
 
   // Fetch transparency logs (mode-isolated - mode in URL triggers cache invalidation)
   const { data: transparencyData, isLoading: logsLoading } = useQuery<{ ok: boolean; logs: any[] }>({
