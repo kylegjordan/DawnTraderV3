@@ -404,6 +404,20 @@ export const dailyBriefs = pgTable("daily_briefs", {
   emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
 });
 
+// Filter diagnostics (screening health metrics)
+export const filterDiagnostics = pgTable("filter_diagnostics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+  pairsScanned: integer("pairs_scanned").notNull().default(0),
+  eligiblePairs: integer("eligible_pairs").notNull().default(0),
+  topFailureReason: varchar("top_failure_reason", { length: 100 }),
+  failurePercent: decimal("failure_percent", { precision: 5, scale: 2 }),
+  filterBreakdown: jsonb("filter_breakdown"), // {filter_name: count} for each filter failure
+  metadata: jsonb("metadata"), // Additional diagnostic data
+});
+
 // ===== PAPER TRADING TABLES (Isolated from Live) =====
 
 // Paper trades (simulated trades - completely isolated from live)
@@ -1013,6 +1027,11 @@ export const insertStrategyParameterSchema = createInsertSchema(strategyParamete
   updatedAt: true,
 });
 
+export const insertFilterDiagnosticSchema = createInsertSchema(filterDiagnostics).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -1124,3 +1143,6 @@ export type SystemAlert = typeof systemAlerts.$inferSelect;
 
 export type InsertStrategyParameter = z.infer<typeof insertStrategyParameterSchema>;
 export type StrategyParameter = typeof strategyParameters.$inferSelect;
+
+export type InsertFilterDiagnostic = z.infer<typeof insertFilterDiagnosticSchema>;
+export type FilterDiagnostic = typeof filterDiagnostics.$inferSelect;

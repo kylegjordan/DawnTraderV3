@@ -408,6 +408,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Filter diagnostics endpoint - fetches latest 24h metrics
+  app.get('/api/filters/diagnostics', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.mode!;
+
+      // Get diagnostics from last 24 hours
+      const diagnostics = await storage.getFilterDiagnostics({ userId, mode, hours: 24 });
+
+      if (!diagnostics || diagnostics.length === 0) {
+        return res.json({
+          pairsScanned: 0,
+          eligiblePairs: 0,
+          topFailureReason: 'No data',
+          failurePercent: 0,
+        });
+      }
+
+      // Get most recent diagnostic
+      const latest = diagnostics[0];
+
+      res.json({
+        pairsScanned: latest.pairsScanned,
+        eligiblePairs: latest.eligiblePairs,
+        topFailureReason: latest.topFailureReason || 'Unknown',
+        failurePercent: parseFloat(latest.failurePercent || '0'),
+        timestamp: latest.timestamp,
+      });
+    } catch (error) {
+      console.error('Error fetching filter diagnostics:', error);
+      res.status(500).json({ error: 'Failed to fetch filter diagnostics' });
+    }
+  });
+
   // Filter calibration endpoint - fetches latest with Paper→Live fallback
   app.get('/api/screeners/calibration', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {

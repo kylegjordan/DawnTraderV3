@@ -5,6 +5,7 @@ import {
   screenerFilters,
   screenerResults,
   filterCalibrationLog,
+  filterDiagnostics,
   strategySettings,
   strategySettingsAudit,
   watchlistPairs,
@@ -119,6 +120,9 @@ export interface IStorage {
   // Screener filters methods
   getScreenerFilters(params: { userId: string; mode: 'live' | 'paper' }): Promise<ScreenerFilters | null>;
   upsertScreenerFilters(data: InsertScreenerFilters): Promise<ScreenerFilters>;
+
+  // Filter diagnostics methods
+  getFilterDiagnostics(params: { userId: string; mode: 'live' | 'paper'; hours?: number }): Promise<any[]>;
 
   // Filter calibration methods
   getLatestCalibration(params: { userId: string; mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null>;
@@ -385,6 +389,26 @@ export class DatabaseStorage implements IStorage {
       const [result] = await db.insert(screenerFilters).values(data).returning();
       return result;
     }
+  }
+
+  // Filter diagnostics methods
+  async getFilterDiagnostics(params: { userId: string; mode: 'live' | 'paper'; hours?: number }): Promise<any[]> {
+    const hours = params.hours || 24;
+    const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    const results = await db
+      .select()
+      .from(filterDiagnostics)
+      .where(
+        and(
+          eq(filterDiagnostics.userId, params.userId),
+          eq(filterDiagnostics.mode, params.mode),
+          gte(filterDiagnostics.timestamp, cutoffTime)
+        )
+      )
+      .orderBy(desc(filterDiagnostics.timestamp));
+      
+    return results;
   }
 
   // Filter calibration methods

@@ -26,6 +26,7 @@ const ReportsPage = lazy(() => import("@/pages/reports"));
 const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
 const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
 const SystemsPage = lazy(() => import("@/pages/systems"));
+const SearchPage = lazy(() => import("@/pages/search"));
 
 function LoadingFallback() {
   return (
@@ -128,6 +129,7 @@ function Router() {
               <Route path="/dashboard" component={Dashboard} />
               <Route path="/watchlist" component={WatchlistPage} />
               <Route path="/active-trades" component={ActiveTradesPage} />
+              <Route path="/search" component={SearchPage} />
               <Route path="/history" component={History} />
               <Route path="/reports" component={ReportsPage} />
               <Route path="/daily-brief" component={DailyBriefPage} />

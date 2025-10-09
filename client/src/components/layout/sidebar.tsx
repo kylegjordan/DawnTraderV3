@@ -12,7 +12,10 @@ import {
   FileText,
   Target,
   LogOut,
-  Activity
+  Activity,
+  Newspaper,
+  MessageSquare,
+  Search
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -27,11 +30,13 @@ interface SidebarProps {
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Goals Engine", href: "/goals-engine", icon: Target },
-  { name: "AI Analysis", href: "/analysis", icon: Brain },
-  { name: "Watchlist", href: "/watchlist", icon: Eye },
-  { name: "Active Trades", href: "/active-trades", icon: BarChart3 },
+  { name: "Briefings", href: "/daily-brief", icon: Newspaper },
+  { name: "GPT Chats", href: "/analysis", icon: MessageSquare },
+  { name: "Watchlists", href: "/watchlist", icon: Eye },
+  { name: "Trading", href: "/active-trades", icon: BarChart3 },
+  { name: "Search and Analysis", href: "/search", icon: Search },
   { name: "Trade History", href: "/history", icon: Clock },
-  { name: "Reports", href: "/reports", icon: FileText },
+  { name: "Reporting", href: "/reports", icon: FileText },
   { name: "Systems Monitoring", href: "/systems", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
