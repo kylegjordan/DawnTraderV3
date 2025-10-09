@@ -91,6 +91,12 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas: `users`, `tr
   - **Strategies Tab**: Added Enable/Disable toggle switches for each strategy (VWAP Pullback, ABCD Long, SMA Trend Ride), complementing existing Edit modals, preset loading, and validation features
   - **Settings Enhancement**: Re-added Timezone dropdown with full IANA timezone list, defaulting to Asia/Dubai, with persistence across save/reset operations
   - All changes maintain mode-aware storage (live/paper isolation) and include comprehensive data-testid attributes for testing
+- **Milestone 9 (2025-10-09)**: UI reorganization and screener optimization
+  - **Trading Panel Enhancement**: Added tabbed interface with 3 tabs - Open Trades (active positions), Ready to Buy (trading signals), and Filtered Pairs (screened symbols)
+  - **Filter Diagnostics Infrastructure**: Created filterDiagnostics table, storage methods, and GET /api/filters/diagnostics endpoint for tracking screener health metrics (pairs scanned, eligible pairs, top failure reasons)
+  - **Scanner Optimization**: Updated market scanner interval from 1 hour to 10 minutes for more responsive pair discovery
+  - **Filter Defaults Relaxation**: Loosened default screener values for broader coverage - minVolume (1M→500K), minPrice (0.01→0.001), maxPrice (10K→50K), minMarketCap (100M→10M), maxBidAskSpread (1.00→2.50), RSI range (30-70→20-80), volatility range (0.50-5.00→0.20-10.00), minLiquidity (500K→250K)
+  - **Trade History Reliability**: Added defensive null checks for entryPrice, exitPrice, and quantity fields to prevent rendering crashes
 
 ## External Dependencies
 
