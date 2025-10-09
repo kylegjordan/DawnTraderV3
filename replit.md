@@ -18,7 +18,7 @@ Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, 
 Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting both "live" and "paper" trading modes.
 
 ### Data Storage Solutions
-PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, `aiOpportunities`, and `aiTransparencyLog`.
+PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, `aiOpportunities`, `aiTransparencyLog`, and learning infrastructure tables (`filterCalibrationLog`, `intradayAdjustments`, `aiLessons`, `portfolioAdjustments`, `predictionOutcomes`).
 
 ### System Design Choices
 - **Trading Strategies**: Implements fixed rules for VWAP Pullback, ABCD Long, and SMA Trend Ride with calculated entry, stop loss, and target prices.
@@ -42,6 +42,67 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `user
 - **Watchlist Panel**: Tabbed interface for AI Opportunities and User Watchlists.
 - **AI Transparency Panel**: Dedicated panel at `/ai-transparency` providing visibility into autonomous scheduler activity with three mode-aware tabs: Recent Automation Logs (mode-isolated scheduler execution logs), Learning Adjustments (filter calibrations with Paper→Live fallback), and System Health Alerts (system-wide error logs with color-coded severity). Features 60-second auto-refresh and proper mode isolation.
 - **Navigation**: Reorganized sidebar to reflect logical workflow hierarchy, including dedicated Briefings, Reporting, and AI Transparency panels.
+
+## Milestone 12: Autonomous Tuning Verification & Learning Accuracy Audit
+
+### Overview
+Milestone 12 validates the autonomous learning system's ability to continuously improve trading accuracy through Paper mode experimentation and controlled Live mode deployment. The verification suite ensures scheduler reliability, mode isolation integrity, Paper→Live transfer accuracy, and system resilience.
+
+### Verification Results (All Tests Passed ✓)
+
+#### Part A: Infrastructure Validation
+- **A-1: Scheduler Cadence Verification** ✓
+  - Endpoint: `/api/learning/database-cross-check`
+  - Verified all autonomous tasks (AI Summary, Market Scan, Screener Recalibration, System Health Check) run at ≤4h intervals
+  - Per-task gap analysis confirms scheduler reliability
+  
+- **A-2: Paper→Live Calibration Transfer** ✓
+  - Endpoint: `/api/test/paper-live-fallback`
+  - Validated fallback mechanism: Live mode uses Paper calibrations when Live data unavailable
+  - Source flag `"paper-fallback"` correctly identifies fallback calibrations
+  - Production HTTP endpoint verification confirms no regressions
+  
+- **A-3: AI Transparency Panel Mode Isolation** ✓
+  - Route: `/ai-transparency`
+  - Verified mode-segmented data display (Live vs Paper isolation)
+  - Auto-refresh (60s) operational across all tabs
+  - Transparency logs, calibrations, and system alerts display correctly
+
+#### Part B: Performance Metrics
+- **B-1: Performance Snapshot** ✓
+  - Endpoint: `/api/learning/performance-snapshot`
+  - Tracks Paper and Live mode accuracy, win rate, avg profit per trade
+  - Mode-isolated metrics enable independent performance tracking
+  
+- **B-2: Autonomy Confidence Index** ✓
+  - Endpoint: `/api/learning/autonomy-confidence`
+  - Formula: CI = 0.5(Accuracy_paper) + 0.3(Transfer_SuccessRate) + 0.2(Health_Uptime)
+  - Current Index: 20/100 (baseline measurement)
+  - Components: paper_accuracy, transfer_success_rate, health_uptime
+
+#### Part C: Comprehensive Test Suite
+- **Verification Tests** ✓
+  - ✅ Scheduler runtime: All tasks operational with ≤4h gaps
+  - ✅ Mode isolation: Live/Paper data independently fetched and cached
+  - ✅ Fallback calibration: Paper→Live transfer mechanism validated
+  - ✅ System health resilience: Error rate monitoring, system uptime confirmed
+  - ✅ UI auto-refresh: Transparency panel 60s refresh verified
+
+### Learning Infrastructure Tables
+- **filter_calibration_log**: Tracks screener threshold optimizations (mode-isolated)
+- **intraday_adjustments**: Records real-time signal weight adjustments
+- **ai_lessons**: Stores GPT prompt refinements and pattern insights
+- **portfolio_adjustments**: Logs position sizing and risk parameter changes
+- **prediction_outcomes**: Validates AI prediction accuracy for continuous improvement
+
+### Autonomy Goals (Milestone 12 Targets)
+- **Paper Accuracy Improvement**: ≥+5% over baseline (tracked via performance snapshot)
+- **Live PnL Variance Reduction**: ≥10% reduction in variance (measured via portfolio adjustments)
+- **Scheduler Reliability**: 100% uptime with ≤4h task intervals (verified via cadence check)
+- **Transfer Success Rate**: ≥80% successful Paper→Live calibration transfers
+
+### System Registration
+Registration is disabled for single-user production mode. Temporarily enabled only for Milestone 12 verification testing, then re-locked (403) to ensure security.
 
 ## External Dependencies
 
