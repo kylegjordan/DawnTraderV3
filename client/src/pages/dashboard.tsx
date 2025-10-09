@@ -13,6 +13,7 @@ import EarningsWidget from "@/components/goals/earnings-widget";
 import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import AveragesWidget from "@/components/goals/averages-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
+import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 
 export default function Dashboard() {
   return (
@@ -60,6 +61,9 @@ export default function Dashboard() {
 
       {/* Symbols That Have Cleared the Screening Process */}
       <Watchlist />
+
+      {/* Filter Health Diagnostics */}
+      <FilterHealthWidget />
     </div>
   );
 }

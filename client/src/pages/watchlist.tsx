@@ -5,12 +5,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/hooks/use-trading";
 import { useState } from "react";
-import { Plus, Trash2, TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { Plus, Trash2, TrendingUp, TrendingDown, Activity, Sparkles, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WatchlistPair } from "@/lib/types";
+import { useQuery } from "@tanstack/react-query";
 
 function WatchlistCard({ pair, onRemove }: { pair: WatchlistPair; onRemove: (id: string) => void }) {
   const currentPrice = parseFloat(pair.currentPrice);
@@ -220,91 +222,180 @@ export default function WatchlistPage() {
     );
   }
 
+  const [activeTab, setActiveTab] = useState("user-watchlist");
+
+  // Fetch AI opportunities
+  const { data: aiOpportunities = [], isLoading: aiOpportunitiesLoading } = useQuery<any[]>({
+    queryKey: ['/api/ai-opportunities'],
+    refetchInterval: 300000, // 5 minutes
+  });
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Watchlist</h1>
-          <p className="text-muted-foreground mt-1">
-            Monitor your favorite trading pairs and track real-time metrics
-          </p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-pair">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Pair
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Trading Pair to Watchlist</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="symbol">Symbol</Label>
-                <Input
-                  id="symbol"
-                  placeholder="e.g., XXBTZUSD"
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  data-testid="input-symbol"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="baseCurrency">Base Currency</Label>
-                <Input
-                  id="baseCurrency"
-                  placeholder="e.g., BTC"
-                  value={baseCurrency}
-                  onChange={(e) => setBaseCurrency(e.target.value)}
-                  data-testid="input-base-currency"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="quoteCurrency">Quote Currency</Label>
-                <Input
-                  id="quoteCurrency"
-                  placeholder="e.g., USD"
-                  value={quoteCurrency}
-                  onChange={(e) => setQuoteCurrency(e.target.value)}
-                  data-testid="input-quote-currency"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddPair} data-testid="button-confirm-add">
-                Add to Watchlist
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+    <div className="p-6 space-y-6" data-testid="watchlist-page">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Watchlist</h1>
+        <p className="text-muted-foreground mt-1">
+          Monitor AI-generated opportunities and your custom trading pairs
+        </p>
       </div>
 
-      {watchlist.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Activity className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">No Pairs in Watchlist</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              Add trading pairs to monitor their performance and receive signals
-            </p>
-            <Button onClick={() => setDialogOpen(true)} data-testid="button-add-first-pair">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Your First Pair
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {watchlist.map((pair) => (
-            <WatchlistCard key={pair.id} pair={pair} onRemove={handleRemovePair} />
-          ))}
-        </div>
-      )}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2" data-testid="watchlist-tabs">
+          <TabsTrigger value="ai-opportunities" className="flex items-center gap-2" data-testid="tab-ai-opportunities">
+            <Sparkles className="w-4 h-4" />
+            AI Opportunities
+          </TabsTrigger>
+          <TabsTrigger value="user-watchlist" className="flex items-center gap-2" data-testid="tab-user-watchlist">
+            <List className="w-4 h-4" />
+            User Watchlists
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ai-opportunities" className="mt-6">
+          {aiOpportunitiesLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i}>
+                  <CardContent className="p-4">
+                    <Skeleton className="h-32 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : aiOpportunities.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Sparkles className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                <h3 className="text-lg font-semibold mb-2">No AI Opportunities</h3>
+                <p className="text-muted-foreground">
+                  AI-generated trading opportunities will appear here
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {aiOpportunities.slice(0, 12).map((opp: any) => (
+                <Card 
+                  key={opp.id} 
+                  className="hover:border-primary/50 transition-colors"
+                  data-testid={`ai-opportunity-${opp.id}`}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <Badge 
+                        variant="outline" 
+                        className="text-xs"
+                        data-testid={`badge-type-${opp.id}`}
+                      >
+                        {opp.type}
+                      </Badge>
+                      <Badge 
+                        variant="secondary" 
+                        className="text-xs"
+                        data-testid={`badge-probability-${opp.id}`}
+                      >
+                        {opp.probabilityScore}%
+                      </Badge>
+                    </div>
+                    <h4 
+                      className="font-semibold text-lg mb-2"
+                      data-testid={`text-symbol-${opp.id}`}
+                    >
+                      {opp.symbol}
+                    </h4>
+                    <p 
+                      className="text-sm text-muted-foreground line-clamp-2"
+                      data-testid={`text-notes-${opp.id}`}
+                    >
+                      {opp.notes}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="user-watchlist" className="mt-6">
+          <div className="mb-4 flex justify-end">
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-pair">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Pair
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Trading Pair to Watchlist</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="symbol">Symbol</Label>
+                    <Input
+                      id="symbol"
+                      placeholder="e.g., XXBTZUSD"
+                      value={symbol}
+                      onChange={(e) => setSymbol(e.target.value)}
+                      data-testid="input-symbol"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="baseCurrency">Base Currency</Label>
+                    <Input
+                      id="baseCurrency"
+                      placeholder="e.g., BTC"
+                      value={baseCurrency}
+                      onChange={(e) => setBaseCurrency(e.target.value)}
+                      data-testid="input-base-currency"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="quoteCurrency">Quote Currency</Label>
+                    <Input
+                      id="quoteCurrency"
+                      placeholder="e.g., USD"
+                      value={quoteCurrency}
+                      onChange={(e) => setQuoteCurrency(e.target.value)}
+                      data-testid="input-quote-currency"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleAddPair} data-testid="button-confirm-add">
+                    Add to Watchlist
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {watchlist.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Activity className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">No Pairs in Watchlist</h3>
+                <p className="text-muted-foreground text-center mb-4">
+                  Add trading pairs to monitor their performance and receive signals
+                </p>
+                <Button onClick={() => setDialogOpen(true)} data-testid="button-add-first-pair">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Your First Pair
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {watchlist.map((pair) => (
+                <WatchlistCard key={pair.id} pair={pair} onRemove={handleRemovePair} />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

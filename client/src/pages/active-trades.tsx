@@ -5,6 +5,7 @@ import ModeBanner from "@/components/mode-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Filter } from "lucide-react";
+import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 
 function ReadyToBuyTab() {
   return (
@@ -22,15 +23,18 @@ function ReadyToBuyTab() {
 
 function FilteredPairsTab() {
   return (
-    <Card>
-      <CardContent className="py-8 text-center">
-        <Filter className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-        <h3 className="text-lg font-semibold mb-2">Filtered Pairs</h3>
-        <p className="text-muted-foreground">
-          Symbols that passed screening filters will appear here
-        </p>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <FilterHealthWidget />
+      <Card>
+        <CardContent className="py-8 text-center">
+          <Filter className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+          <h3 className="text-lg font-semibold mb-2">Filtered Pairs</h3>
+          <p className="text-muted-foreground">
+            Symbols that passed screening filters will appear here
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
