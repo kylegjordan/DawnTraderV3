@@ -455,15 +455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const mode = req.mode!;
 
-      let calibration = await storage.getLatestCalibration({ userId, mode, maxAgeHours: 24 });
-      
-      if (!calibration && mode === 'live') {
-        console.log(`[Calibration] No recent Live calibration for user ${userId}, falling back to Paper mode`);
-        calibration = await storage.getLatestPaperCalibration(userId);
-        if (calibration) {
-          calibration = { ...calibration, source: 'paper_fallback' };
-        }
-      }
+      const calibration = await storage.getCalibrationWithFallback(userId, mode, 24);
 
       if (!calibration) {
         return res.status(404).json({ error: 'No calibration data found' });
@@ -3097,6 +3089,117 @@ Provide specific, actionable recommendations.`,
       });
     } catch (error: any) {
       console.error('Autonomy confidence calculation error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Paper→Live Fallback Test for Milestone 12 verification (Part A-2)
+  app.get('/api/learning/fallback-test', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      
+      if (!token) {
+        return res.status(401).json({ error: 'No token provided' });
+      }
+      
+      // Check source data availability
+      const liveCalibration = await storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 24 });
+      const paperCalibration = await storage.getLatestPaperCalibration(userId);
+      
+      // Test the production HTTP endpoint by making an actual request
+      const protocol = req.protocol;
+      const host = req.get('host');
+      const baseUrl = `${protocol}://${host}`;
+      
+      let effectiveCalibration = null;
+      let endpointError = null;
+      let httpStatusCode = null;
+      
+      try {
+        const response = await fetch(`${baseUrl}/api/screeners/calibration`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-app-mode': 'live'
+          }
+        });
+        
+        httpStatusCode = response.status;
+        
+        if (response.ok) {
+          effectiveCalibration = await response.json();
+        } else if (response.status === 404) {
+          // Expected when no calibration data exists
+          endpointError = 'No calibration data found';
+        } else {
+          endpointError = `HTTP ${response.status}: ${await response.text()}`;
+        }
+      } catch (fetchError: any) {
+        endpointError = `Fetch failed: ${fetchError.message}`;
+      }
+      
+      // Determine if fallback was triggered
+      const fallbackTriggered = !liveCalibration && !!paperCalibration;
+      
+      // Test passes if:
+      // 1. Endpoint is reachable AND
+      //    a) Returns 404 when no calibration exists (both live and paper empty), OR
+      //    b) Returns 200 with live calibration (no fallback needed), OR
+      //    c) Returns 200 with fallback and source is 'paper-fallback'
+      const endpointReachable = httpStatusCode !== null;
+      const validResponse = httpStatusCode === 200 || httpStatusCode === 404;
+      
+      let testPassed = false;
+      let message = '';
+      
+      if (!endpointReachable) {
+        testPassed = false;
+        message = `FAILED: Cannot reach production endpoint - ${endpointError}`;
+      } else if (!validResponse) {
+        testPassed = false;
+        message = `FAILED: Unexpected HTTP ${httpStatusCode} - ${endpointError}`;
+      } else if (httpStatusCode === 404) {
+        // No calibration data found (expected when both live and paper are empty)
+        testPassed = !liveCalibration && !paperCalibration;
+        message = testPassed 
+          ? 'PASS: No calibration data (as expected)'
+          : 'FAILED: Endpoint returned 404 but calibration data exists';
+      } else if (!fallbackTriggered) {
+        // Live calibration exists, no fallback needed
+        testPassed = !!effectiveCalibration && !effectiveCalibration.source;
+        message = testPassed
+          ? 'PASS: Live calibration exists, no fallback needed'
+          : 'FAILED: Live calibration should exist without source field';
+      } else {
+        // Fallback triggered, verify source is 'paper-fallback'
+        testPassed = !!effectiveCalibration && effectiveCalibration.source === 'paper-fallback';
+        message = testPassed
+          ? 'PASS: Fallback successful with correct source flag "paper-fallback"'
+          : `FAILED: Fallback source is "${effectiveCalibration?.source}" (should be "paper-fallback")`;
+      }
+      
+      res.json({
+        ok: true,
+        fallbackTest: {
+          has_live_calibration: !!liveCalibration,
+          has_paper_calibration: !!paperCalibration,
+          fallback_triggered: fallbackTriggered,
+          endpoint_called: `/api/screeners/calibration`,
+          http_status: httpStatusCode,
+          endpoint_error: endpointError,
+          effective_calibration: effectiveCalibration ? {
+            mode: effectiveCalibration.mode,
+            source: effectiveCalibration.source,
+            timestamp: effectiveCalibration.timestamp,
+            rsiThreshold: effectiveCalibration.rsiThreshold,
+            volumeThreshold: effectiveCalibration.volumeThreshold,
+          } : null,
+          test_passed: testPassed,
+          message: message
+        }
+      });
+    } catch (error: any) {
+      console.error('Fallback test error:', error);
       res.status(500).json({ error: error.message });
     }
   });

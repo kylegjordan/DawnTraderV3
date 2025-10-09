@@ -139,6 +139,7 @@ export interface IStorage {
   // Filter calibration methods
   getLatestCalibration(params: { userId: string; mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null>;
   getLatestPaperCalibration(userId: string): Promise<FilterCalibrationLog | null>;
+  getCalibrationWithFallback(userId: string, mode: 'live' | 'paper', maxAgeHours?: number): Promise<FilterCalibrationLog | null>;
   createCalibration(data: InsertFilterCalibrationLog): Promise<FilterCalibrationLog>;
 
   // Screener results methods
@@ -476,6 +477,20 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     return result || null;
+  }
+
+  async getCalibrationWithFallback(userId: string, mode: 'live' | 'paper', maxAgeHours = 24): Promise<FilterCalibrationLog | null> {
+    let calibration = await this.getLatestCalibration({ userId, mode, maxAgeHours });
+    
+    if (!calibration && mode === 'live') {
+      console.log(`[Storage] No recent Live calibration for user ${userId}, falling back to Paper mode`);
+      calibration = await this.getLatestPaperCalibration(userId);
+      if (calibration) {
+        calibration = { ...calibration, source: 'paper-fallback' };
+      }
+    }
+    
+    return calibration;
   }
 
   async createCalibration(data: InsertFilterCalibrationLog): Promise<FilterCalibrationLog> {
