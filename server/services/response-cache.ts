@@ -17,18 +17,40 @@ interface CacheOptions {
 }
 
 class ResponseCacheService {
-  private readonly DEFAULT_TTL = 900; // 15 minutes in seconds
+  private readonly DEFAULT_TTL = 300; // 5 minutes in seconds (Milestone 14: reduced for chat responses)
   private hitCount = 0;
   private missCount = 0;
 
   /**
    * Generate a unique cache key from user ID, endpoint, and payload
+   * 
+   * Milestone 14 Design: Hybrid approach for chat responses
+   * Format: userId::endpoint::conversationId::SHA256(message)
+   * - Plain conversationId for scope visibility
+   * - Hashed message for collision-free uniqueness
+   * - Identical messages in same conversation always produce identical keys
+   * - Different messages never collide (no truncation risk)
    */
   private generateCacheKey(
     userId: string,
     endpoint: string,
     payload?: any
   ): string {
+    // For chat messages with conversationId, use hybrid composite key
+    if (payload && payload.conversationId && payload.message) {
+      const { conversationId, message } = payload;
+      // Hash the full message to guarantee uniqueness without truncation collisions
+      // Use full 64-char SHA256 hex digest (no truncation per Milestone 14 requirement)
+      const messageHash = crypto
+        .createHash("sha256")
+        .update(message)
+        .digest("hex"); // Full 64-character hash
+      
+      const compositeKey = `${userId}::${endpoint}::${conversationId}::${messageHash}`;
+      return compositeKey;
+    }
+    
+    // Fallback to hashed key for other use cases (backward compatibility)
     const dataToHash = JSON.stringify({
       userId,
       endpoint,
@@ -39,7 +61,7 @@ class ResponseCacheService {
       .createHash("sha256")
       .update(dataToHash)
       .digest("hex")
-      .substring(0, 64); // Limit to 64 chars for database
+      .substring(0, 64);
   }
 
   /**
@@ -261,12 +283,13 @@ class ResponseCacheService {
       await db.insert(aiTransparencyLog).values({
         userId,
         taskName: "cache-layer",
+        success: true,
+        resultSummary: `Cache ${action}`,
         details: {
           endpoint,
           action,
           ...details,
         },
-        status: "success",
       });
     } catch (error) {
       console.error("[ResponseCache] Error logging to transparency:", error);
