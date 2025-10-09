@@ -97,6 +97,19 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas: `users`, `tr
   - **Scanner Optimization**: Updated market scanner interval from 1 hour to 10 minutes for more responsive pair discovery
   - **Filter Defaults Relaxation**: Loosened default screener values for broader coverage - minVolume (1M→500K), minPrice (0.01→0.001), maxPrice (10K→50K), minMarketCap (100M→10M), maxBidAskSpread (1.00→2.50), RSI range (30-70→20-80), volatility range (0.50-5.00→0.20-10.00), minLiquidity (500K→250K)
   - **Trade History Reliability**: Added defensive null checks for entryPrice, exitPrice, and quantity fields to prevent rendering crashes
+- **Milestone 10 (2025-10-09)**: Paper Trading UI Readiness
+  - **Filter Health Widget**: Created compact diagnostic card displaying:
+    - Total pairs scanned (last 24h)
+    - Eligible pairs count and percentage with color-coded health indicator
+    - Top failure reason for filter rejections
+    - Placed on Dashboard (below Watchlist) and Trading panel's Filtered Pairs tab
+    - Auto-refreshes every minute via /api/filters/diagnostics endpoint
+  - **Watchlist Panel Restructure**: Clean tabbed interface with only:
+    - AI Opportunities tab: Displays AI-generated trading opportunities with type, probability, symbol, and notes
+    - User Watchlists tab: Custom user-added trading pairs with live metrics
+    - Removed legacy redundant tabs to eliminate duplication
+    - Full test coverage with data-testid on all dynamic elements
+  - **Paper Engine Status**: PaperExecutionService exists with correct configuration (250ms latency, 0.10% slippage, 0.16% fees) but requires full integration with TradingEngine for automated paper trade execution - deferred to dedicated session
 
 ## External Dependencies
 
