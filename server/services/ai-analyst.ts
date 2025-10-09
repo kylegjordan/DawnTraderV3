@@ -361,17 +361,94 @@ export class AIAnalyst {
       // Estimate input tokens
       const inputTokens = estimateMessagesTokens(finalMessages);
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: finalMessages as any,
-        max_completion_tokens: 1024
-      });
-
-      const assistantResponse = response.choices[0].message.content || "I'm sorry, I couldn't process that request.";
+      // Cache Layer Integration (Milestone 14)
+      // Only cache static informational queries (no live data dependency)
+      let assistantResponse: string = '';
+      let actualInputTokens: number = 0;
+      let actualOutputTokens: number = 0;
+      let cacheHit = false;
       
-      // Get actual token usage from response (or estimate if not available)
-      const actualInputTokens = response.usage?.prompt_tokens || inputTokens;
-      const actualOutputTokens = response.usage?.completion_tokens || estimateMessagesTokens([{ role: "assistant", content: assistantResponse }]);
+      // Detect dynamic queries that depend on live portfolio/trade data
+      const lowerMessage = message.toLowerCase();
+      const isDynamicQuery = lowerMessage.includes('trade') ||
+                            lowerMessage.includes('position') ||
+                            lowerMessage.includes('portfolio') ||
+                            lowerMessage.includes('balance') ||
+                            lowerMessage.includes('profit') ||
+                            lowerMessage.includes('loss') ||
+                            lowerMessage.includes('open') ||
+                            lowerMessage.includes('active') ||
+                            lowerMessage.includes('setting') ||
+                            lowerMessage.includes('watchlist') ||
+                            lowerMessage.includes('apply') ||
+                            lowerMessage.includes('update') ||
+                            lowerMessage.includes('change') ||
+                            lowerMessage.includes('execute') ||
+                            lowerMessage.includes('place') ||
+                            lowerMessage.includes('run') ||
+                            lowerMessage.includes('activate');
+      
+      // Only cache static informational queries (strategy explanations, documentation)
+      if (!isDynamicQuery) {
+        try {
+          const { responseCacheService } = await import('./response-cache');
+          const endpoint = `/api/conversations/${conversation.id}/message`;
+          // Include conversationId and full trimmed context for collision prevention
+          const payload = { 
+            message, 
+            conversationId: conversation.id,
+            contextHash: JSON.stringify(finalMessages) 
+          };
+          const cached = await responseCacheService.get(userId, endpoint, payload);
+          
+          if (cached) {
+            assistantResponse = cached.response || cached.content || cached;
+            actualInputTokens = cached.inputTokens || 0;
+            actualOutputTokens = cached.outputTokens || 0;
+            cacheHit = true;
+          }
+        } catch (error) {
+          console.error('Cache check failed:', error);
+          // Continue to API call
+        }
+      }
+      
+      // Make OpenAI API call if no cache hit
+      if (!cacheHit) {
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: finalMessages as any,
+          max_completion_tokens: 1024
+        });
+
+        assistantResponse = response.choices[0].message.content || "I'm sorry, I couldn't process that request.";
+        actualInputTokens = response.usage?.prompt_tokens || inputTokens;
+        actualOutputTokens = response.usage?.completion_tokens || estimateMessagesTokens([{ role: "assistant", content: assistantResponse }]);
+        
+        // Store in cache (non-blocking, static queries only)
+        if (!isDynamicQuery) {
+          try {
+            const { responseCacheService } = await import('./response-cache');
+            const endpoint = `/api/conversations/${conversation.id}/message`;
+            const payload = { 
+              message, 
+              conversationId: conversation.id,
+              contextHash: JSON.stringify(finalMessages) 
+            };
+            const responseData = { 
+              response: assistantResponse, 
+              inputTokens: actualInputTokens, 
+              outputTokens: actualOutputTokens 
+            };
+            // Use shorter TTL (5 minutes) for chat responses
+            await responseCacheService.set(userId, endpoint, payload, responseData, { ttlSeconds: 300 });
+          } catch (error) {
+            console.error('Cache store failed:', error);
+          }
+        }
+      }
+      
+      // Calculate total tokens and cost
       const totalTokens = actualInputTokens + actualOutputTokens;
       const estimatedCost = calculateCost(actualInputTokens, actualOutputTokens, 'gpt-4o');
       
