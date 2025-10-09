@@ -408,6 +408,18 @@ export class AIAnalyst {
         context: updatedContext
       });
 
+      // Auto-trigger summarization (Milestone 14)
+      // Compress conversation history when >20 messages
+      if (updatedMessages.length > 20) {
+        try {
+          const { conversationSummarizationService } = await import('./conversation-summarization');
+          await conversationSummarizationService.checkAndSummarize(conversation.id);
+        } catch (error) {
+          console.error('Error auto-triggering summarization:', error);
+          // Non-blocking: Continue even if summarization fails
+        }
+      }
+
       // Create audit log for analysis request
       await storage.createAuditLog({
         userId,
