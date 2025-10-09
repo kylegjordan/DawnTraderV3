@@ -218,6 +218,7 @@ export interface IStorage {
   createTransparencyLog(log: InsertAITransparencyLog): Promise<AITransparencyLog>;
   getTransparencyLogs(filters?: { userId?: string; taskName?: string; mode?: 'live' | 'paper'; limit?: number }): Promise<AITransparencyLog[]>;
   getRecentTransparencyLogs(limit?: number): Promise<AITransparencyLog[]>;
+  getSystemSchedulerLogs(limit?: number): Promise<AITransparencyLog[]>;
 
   // Kill switch methods
   createKillSwitchEvent(event: InsertKillSwitchEvent): Promise<KillSwitchEvent>;
@@ -1068,6 +1069,19 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(aiTransparencyLog)
+      .orderBy(desc(aiTransparencyLog.executedAt))
+      .limit(limit);
+  }
+
+  async getSystemSchedulerLogs(limit = 50): Promise<AITransparencyLog[]> {
+    // Fetch only system-wide scheduler logs from the scheduler registry
+    // Known scheduler tasks: AI Summary, Market Scan, Screener Recalibration, System Health Check
+    const schedulerTaskNames = ['AI Summary', 'Market Scan', 'Screener Recalibration', 'System Health Check'];
+    
+    return await db
+      .select()
+      .from(aiTransparencyLog)
+      .where(sql`${aiTransparencyLog.userId} IS NULL AND ${aiTransparencyLog.taskName} IN (${sql.join(schedulerTaskNames.map(name => sql`${name}`), sql`, `)})`)
       .orderBy(desc(aiTransparencyLog.executedAt))
       .limit(limit);
   }

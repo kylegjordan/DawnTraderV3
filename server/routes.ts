@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
@@ -2819,6 +2821,282 @@ Provide specific, actionable recommendations.`,
       res.json({ ok: true, outcomes });
     } catch (error: any) {
       console.error('Prediction outcomes fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Database cross-check for Milestone 12 verification (Part A-1)
+  app.get('/api/learning/database-cross-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get actual counts using raw SQL queries
+      const calibrationCountResult = (await db.execute(sql`
+        SELECT 
+          COUNT(*) FILTER (WHERE mode = 'live') as live_count,
+          COUNT(*) FILTER (WHERE mode = 'paper') as paper_count
+        FROM filter_calibration_log
+        WHERE user_id = ${userId}
+      `)).rows[0];
+      
+      const intradayCountResult = (await db.execute(sql`
+        SELECT COUNT(*) as count FROM intraday_adjustments WHERE user_id = ${userId}
+      `)).rows[0];
+      
+      const lessonsCountResult = (await db.execute(sql`
+        SELECT COUNT(*) as count FROM ai_lessons WHERE user_id = ${userId}
+      `)).rows[0];
+      
+      const portfolioCountResult = (await db.execute(sql`
+        SELECT COUNT(*) as count FROM portfolio_adjustments WHERE user_id = ${userId}
+      `)).rows[0];
+      
+      const transparencyCountResult = (await db.execute(sql`
+        SELECT 
+          COUNT(*) as total_count,
+          COUNT(*) FILTER (WHERE user_id = ${userId}) as user_count,
+          COUNT(*) FILTER (WHERE user_id IS NULL) as system_count
+        FROM ai_transparency_log
+      `)).rows[0];
+      
+      // Get sample data
+      const [
+        calibrationLive,
+        calibrationPaper,
+        intradayAdjustments,
+        aiLessons,
+        portfolioAdjustments,
+        transparencyLogs,
+      ] = await Promise.all([
+        storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 168 }),
+        storage.getLatestCalibration({ userId, mode: 'paper', maxAgeHours: 168 }),
+        storage.getIntradayAdjustments(userId, { hours: 168, limit: 3 }),
+        storage.getAILessons(userId, { hours: 168, limit: 3 }),
+        storage.getPortfolioAdjustments(userId, { hours: 168, limit: 3 }),
+        // Fetch recent system-wide scheduler logs (userId IS NULL)
+        storage.getSystemSchedulerLogs(10),
+      ]);
+      
+      const crossCheck = {
+        filter_calibration_log: {
+          live: {
+            count: Number((calibrationCountResult as any).live_count || 0),
+            latest: calibrationLive || null,
+          },
+          paper: {
+            count: Number((calibrationCountResult as any).paper_count || 0),
+            latest: calibrationPaper || null,
+          },
+        },
+        intraday_adjustments: {
+          count: Number((intradayCountResult as any).count || 0),
+          samples: intradayAdjustments,
+        },
+        ai_lessons: {
+          count: Number((lessonsCountResult as any).count || 0),
+          samples: aiLessons,
+        },
+        portfolio_adjustments: {
+          count: Number((portfolioCountResult as any).count || 0),
+          samples: portfolioAdjustments,
+        },
+        ai_transparency_log: {
+          total_count: Number((transparencyCountResult as any).total_count || 0),
+          user_count: Number((transparencyCountResult as any).user_count || 0),
+          system_count: Number((transparencyCountResult as any).system_count || 0),
+          samples: transparencyLogs,
+          // Verify scheduler cadence per task (Milestone 12: each task runs ≤ 4 hours)
+          scheduler_cadence: await (async () => {
+            const schedulerLogs = await storage.getSystemSchedulerLogs(200);
+            const taskNames = ['AI Summary', 'Market Scan', 'Screener Recalibration', 'System Health Check'];
+            const perTask: any[] = [];
+
+            for (const taskName of taskNames) {
+              const taskLogs = schedulerLogs.filter(log => log.taskName === taskName);
+              
+              if (taskLogs.length >= 2) {
+                const latestLog = new Date(taskLogs[0].executedAt);
+                const previousLog = new Date(taskLogs[1].executedAt);
+                const hoursBetween = (latestLog.getTime() - previousLog.getTime()) / (1000 * 60 * 60);
+                
+                perTask.push({
+                  task_name: taskName,
+                  total_logs: taskLogs.length,
+                  hours_between_runs: parseFloat(hoursBetween.toFixed(2)),
+                  meets_requirement: hoursBetween <= 4,
+                  last_run: taskLogs[0].executedAt
+                });
+              } else {
+                perTask.push({
+                  task_name: taskName,
+                  total_logs: taskLogs.length,
+                  hours_between_runs: null,
+                  meets_requirement: false,
+                  last_run: taskLogs[0]?.executedAt || null
+                });
+              }
+            }
+
+            return {
+              per_task: perTask,
+              all_tasks_compliant: perTask.every(t => t.meets_requirement)
+            };
+          })(),
+        },
+      };
+      
+      res.json({ ok: true, crossCheck });
+    } catch (error: any) {
+      console.error('Database cross-check error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Performance snapshot for Milestone 12 verification (Part B-1)
+  app.get('/api/learning/performance-snapshot', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const hours = parseInt(req.query.hours as string) || 24;
+      
+      // Define current and prior period dates
+      const currentPeriodEnd = new Date();
+      const currentPeriodStart = new Date();
+      currentPeriodStart.setHours(currentPeriodStart.getHours() - hours);
+      
+      const priorPeriodEnd = new Date(currentPeriodStart);
+      const priorPeriodStart = new Date(priorPeriodEnd);
+      priorPeriodStart.setHours(priorPeriodStart.getHours() - hours);
+      
+      // Get all trades
+      const [paperTrades, liveTrades] = await Promise.all([
+        storage.getAllPaperTrades(userId),
+        storage.getTrades(userId, {}),
+      ]);
+      
+      // Helper function to calculate metrics for a period
+      const calculatePeriodMetrics = (trades: any[], startDate: Date, endDate: Date) => {
+        const periodTrades = trades.filter(t => 
+          t.entryTime && 
+          new Date(t.entryTime) >= startDate && 
+          new Date(t.entryTime) < endDate && 
+          t.status === 'closed'
+        );
+        
+        const pnL = periodTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
+        const wins = periodTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
+        const accuracy = periodTrades.length > 0 ? (wins.length / periodTrades.length) * 100 : 0;
+        
+        const pnLValues = periodTrades.map(t => parseFloat(t.realizedPL || '0'));
+        const mean = pnLValues.length > 0 ? pnLValues.reduce((a, b) => a + b, 0) / pnLValues.length : 0;
+        const variance = pnLValues.length > 0
+          ? pnLValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / pnLValues.length
+          : 0;
+        
+        return {
+          accuracy: Number(accuracy.toFixed(2)),
+          total_trades: periodTrades.length,
+          winning_trades: wins.length,
+          total_pnl: Number(pnL.toFixed(2)),
+          avg_pnl: periodTrades.length > 0 ? Number((pnL / periodTrades.length).toFixed(2)) : 0,
+          variance: Number(variance.toFixed(2)),
+        };
+      };
+      
+      // Calculate current period metrics
+      const paperCurrent = calculatePeriodMetrics(paperTrades, currentPeriodStart, currentPeriodEnd);
+      const liveCurrent = calculatePeriodMetrics(liveTrades, currentPeriodStart, currentPeriodEnd);
+      
+      // Calculate prior period metrics
+      const paperPrior = calculatePeriodMetrics(paperTrades, priorPeriodStart, priorPeriodEnd);
+      const livePrior = calculatePeriodMetrics(liveTrades, priorPeriodStart, priorPeriodEnd);
+      
+      // Calculate improvement deltas
+      const paperAccuracyDelta = paperCurrent.accuracy - paperPrior.accuracy;
+      const liveVarianceReduction = livePrior.variance > 0 
+        ? ((livePrior.variance - liveCurrent.variance) / livePrior.variance) * 100 
+        : 0;
+      
+      const snapshot = {
+        period_hours: hours,
+        current_period: {
+          start: currentPeriodStart.toISOString(),
+          end: currentPeriodEnd.toISOString(),
+        },
+        prior_period: {
+          start: priorPeriodStart.toISOString(),
+          end: priorPeriodEnd.toISOString(),
+        },
+        paper_mode: {
+          current: paperCurrent,
+          prior: paperPrior,
+          accuracy_improvement: Number(paperAccuracyDelta.toFixed(2)),
+        },
+        live_mode: {
+          current: liveCurrent,
+          prior: livePrior,
+          variance_reduction_percent: Number(liveVarianceReduction.toFixed(2)),
+        },
+        milestone_12_goals: {
+          paper_accuracy_improvement_target: 5, // >= 5%
+          live_variance_reduction_target: 10, // >= 10%
+          paper_accuracy_goal_met: paperAccuracyDelta >= 5,
+          live_variance_goal_met: liveVarianceReduction >= 10,
+        },
+      };
+      
+      res.json({ ok: true, snapshot });
+    } catch (error: any) {
+      console.error('Performance snapshot error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Autonomy Confidence Index for Milestone 12 verification (Part B-2)
+  app.get('/api/learning/autonomy-confidence', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get Paper accuracy (last 24h)
+      const paperAccuracy = await storage.getPredictionAccuracy(userId, 'paper', undefined, 1);
+      
+      // Calculate transfer success rate (fallbacks in last 24h)
+      const calibrationLive = await storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 24 });
+      const hasFallback = calibrationLive && calibrationLive.source === 'paper-fallback';
+      const transferSuccessRate = hasFallback ? 100 : 0;
+      
+      // Get system health uptime (based on transparency logs)
+      const recentLogs = await storage.getTransparencyLogs({ limit: 50 });
+      const successfulLogs = recentLogs.filter(log => log.success);
+      const healthUptime = recentLogs.length > 0 
+        ? (successfulLogs.length / recentLogs.length) * 100 
+        : 100;
+      
+      // Calculate Autonomy Confidence Index
+      // CI = 0.5(Accuracy_paper) + 0.3(Transfer_SuccessRate) + 0.2(Health_Uptime)
+      const autonomyConfidence = Number((
+        0.5 * paperAccuracy.accuracy +
+        0.3 * transferSuccessRate +
+        0.2 * healthUptime
+      ).toFixed(2));
+      
+      res.json({ 
+        ok: true, 
+        autonomyConfidence,
+        components: {
+          paper_accuracy: Number(paperAccuracy.accuracy.toFixed(2)),
+          transfer_success_rate: Number(transferSuccessRate.toFixed(2)),
+          health_uptime: Number(healthUptime.toFixed(2)),
+        },
+        metrics: {
+          total_predictions: paperAccuracy.totalPredictions,
+          correct_predictions: paperAccuracy.correctPredictions,
+          successful_scheduler_runs: successfulLogs.length,
+          total_scheduler_runs: recentLogs.length,
+          has_paper_fallback: hasFallback,
+        }
+      });
+    } catch (error: any) {
+      console.error('Autonomy confidence calculation error:', error);
       res.status(500).json({ error: error.message });
     }
   });
