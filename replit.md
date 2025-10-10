@@ -1,35 +1,10 @@
 # Crypto Day Trading Web App
 
 ## Overview
-A long-only, spot-trading cryptocurrency day trading web application for Kraken. It automates VWAP Pullback, ABCD Long, and SMA Trend Ride strategies, offering real-time market scanning, disciplined risk management, and both live and paper trading capabilities. The application integrates OpenAI's GPT-5 for AI analysis, trade tracking, performance analytics, and error diagnosis, aiming to provide a comprehensive and resilient trading platform. Key features include robust execution with bracket order rollback, partial fill recovery, and a daily loss kill switch.
+A long-only, spot-trading cryptocurrency day trading web application for Kraken. It automates VWAP Pullback, ABCD Long, and SMA Trend Ride strategies, offering real-time market scanning, disciplined risk management, and both live and paper trading capabilities. The application integrates OpenAI's GPT-5 for AI analysis, trade tracking, performance analytics, and error diagnosis, aiming to provide a comprehensive and resilient trading platform. Key features include robust execution with bracket order rollback, partial fill recovery, and a daily loss kill switch. The project aims to provide a comprehensive and resilient trading platform with continuous improvement through an autonomous learning engine.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
-
-## Test Account Seeder
-- **Purpose**: Ensures automated milestone runners and Replit can test features without manual login
-- **Environment**: Non-production only (skipped when NODE_ENV=production)
-- **Credentials**:
-  - Username: `testuser`
-  - Email: `testuser@example.com` (from TEST_USER_EMAIL secret)
-  - Password: `TestPass123!` (from TEST_USER_PASSWORD secret)
-- **Startup Behavior**:
-  - Checks if test account exists on every server start
-  - Creates account with bcrypt-hashed password if missing
-  - Creates default trading settings for the test user
-  - Logs activity to AI Transparency Panel under "System Bootstrap" task
-- **Location**: `server/startup/test-user-seeder.ts`
-
-## Rate Limiter Auto-Reset
-- **Purpose**: Prevents 429 "Too Many Requests" errors during automated milestone execution
-- **Environment**: Non-production only (skipped when NODE_ENV=production)
-- **Implementation**:
-  - Automatically clears all login rate limit data on server startup
-  - Runs before test account seeding to ensure clean authentication state
-  - Uses `express-rate-limit` store's `resetAll()` method
-  - Logs reset activity to AI Transparency Panel under "System Bootstrap" task
-- **Protection**: Login endpoints still rate-limited during runtime (5 attempts per 15 minutes)
-- **Location**: `server/startup/rate-limiter-reset.ts`
 
 ## System Architecture
 
@@ -40,57 +15,22 @@ Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, 
 Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting both "live" and "paper" trading modes.
 
 ### Data Storage
-PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, `aiOpportunities`, `aiTransparencyLog`, `semanticMemory` (vector embeddings for knowledge recall), `learningSources` (intelligence refinement weights), and learning infrastructure tables (`filterCalibrationLog`, `intradayAdjustments`, `aiLessons`, `portfolioAdjustments`, `predictionOutcomes`).
+PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user data, trading settings, watchlist pairs, trades, AI reports, conversations, price data, AI opportunities, transparency logs, semantic memory (vector embeddings), and learning infrastructure.
 
 ### System Design
-- **Trading Strategies**: Implements fixed rules for VWAP Pullback, ABCD Long, and SMA Trend Ride with calculated entry, stop loss, and target prices.
+- **Trading Strategies**: Implements fixed rules for VWAP Pullback, ABCD Long, and SMA Trend Ride.
 - **Risk Management**: Multi-layered system covering risk per trade, max exposure, max open trades, slippage tolerance, order book depth validation, and a daily loss kill switch.
 - **AI Opportunities**: Hourly automated pipeline using GPT-4o mini to identify, validate, and store trading opportunities.
-- **Continuous Learning Engine (CLE)**: An autonomous engine that monitors trading performance, detects patterns, and optimizes parameters through Paper mode experimentation with controlled Live mode deployment, ensuring continuous improvement. It includes safety mechanisms like rollbacks and learning pauses.
-- **Context Optimization**: Reduces AI API costs by conversation summarization (after >20 messages, every 5 new messages compressed into ≤200 tokens) and response caching (300s TTL for static informational queries).
-- **Authentication & Security**: User authentication uses username/password with bcrypt and JWT tokens, supporting WebAuthn for biometrics. Routes are protected by JWT.
+- **Continuous Learning Engine (CLE)**: Monitors trading performance, detects patterns, and optimizes parameters through Paper mode experimentation and controlled Live mode deployment, with safety mechanisms like rollbacks.
+- **Context Optimization**: Reduces AI API costs via conversation summarization and response caching.
+- **Authentication & Security**: User authentication uses username/password with bcrypt and JWT tokens, supporting WebAuthn.
 - **Mode Isolation**: Data and functionalities are isolated between Live and Paper trading modes.
 - **AI Transparency Panel**: Provides visibility into autonomous scheduler activity, learning adjustments, semantic memory insights, and system health alerts.
-- **Learning Infrastructure**: Leverages tables like `filter_calibration_log`, `intraday_adjustments`, `ai_lessons`, `portfolio_adjustments`, and `prediction_outcomes` for continuous improvement.
-- **Dashboard & Reporting**: Comprehensive panels with KPI widgets, daily briefs, goals summaries, active/recent trades, strategy performance, and various reports (Canned, Custom, Quick Exports).
-- **Maintenance Mode**: System-wide control to block Kraken API calls and display frontend banners.
-- **Market Data Health Check**: Automated daily monitoring of market data service reliability.
-- **Goals Engine**: Interactive configuration for key trading goals with tracking and guardrails.
-- **Semantic Memory Layer (Milestone 15)**: Vector-based knowledge recall system using pgvector and OpenAI embeddings (text-embedding-3-small, 1536 dimensions). Automated ingestion runs every 6 hours to populate semantic memory from AI lessons, conversation summaries, portfolio adjustments, and filter calibrations. Provides similarity search and semantic boost to CLE confidence index (0-10 point boost based on relevant past learnings). Accessible via API endpoints (`/api/semantic/search`, `/api/semantic/latest`, `/api/semantic/tags`) and displayed in AI Transparency Panel's Semantic Insights tab.
-- **Intelligence Refinement Layer (Milestone 16)**: Self-optimizing Cognitive Weight Adjuster (CWA) that reviews prediction outcomes and dynamically adjusts learning source weights. Runs autonomously every 6 hours, tracking semantic_memory, external_api, and cache sources. Weight adjustments based on accuracy (correct: +0.05, incorrect: -0.1, no outcome: -0.01 decay), constrained between 0.1-2.0, requiring minimum 5 samples. Integrates with CLE confidence calculations through learning weight boost (0-10 points based on weighted average accuracy). API endpoint `/api/ai/learning-metrics` provides health metrics. UI displayed in AI Transparency Panel's Learning Health tab showing average accuracy, confidence variance, total sources, and top performing sources with weights and prediction counts.
-- **Autonomous Adjustments Actuation Policy (Milestone 17)**:
-  - **Part A - Actuation Policy Registry**: Governs which trading parameters AI can adjust autonomously. Enforces variable bounds (min/max/step), cooldown periods (6-48h), confidence thresholds (0.6-0.95), and daily change limits (default 3). Proposal workflow: pending → approved → rejected → applied. Parameters include entry_zone_width, stop_loss_distance, take_profit_ratio, position_size_pct, max_position_size, min_volume_24h, min_daily_range, max_bid_ask_spread.
-  - **Part B - Asset Capabilities Service**: Framework for venue-aware asset differentiation. **Current Status**: Kraken-only (crypto/forex, all fractional). Completed components:
-    - Database schema and storage layer for asset capabilities (asset_type, allows_fractional, lot_size, tick_size, etc.)
-    - Kraken sync integration (pulls trading pairs, extracts lot size and tick size)
-    - Forex detection logic (fiat/fiat pairs correctly identified)
-    - Fractional sizing logic with lot_size enforcement (works for crypto/forex)
-    - Whole-share sizing logic (code complete, never executes - see limitations)
-    - Venue-aware mapping system architecture (assetTypeMappings Map for explicit classification)
-  - **CLE Integration**: Extended orchestrator to propose parameter adjustments through actuation policy service. Proposals generated based on learning patterns with confidence scoring and safety validation.
-  - **Critical Limitations (Blocks Full Milestone 17 Completion)**: 
-    - **Equity/Commodity Detection Not Functional**: syncFromKraken() provides no venue metadata, causing all assets to default to 'crypto'. The venue-aware mapping system (assetTypeMappings) exists but is never populated during ingestion.
-    - **Whole-Share Sizing Never Triggers**: Because no assets are classified as 'equity', calculateWholeShareSize() is unreachable. The min 3-share requirement is coded but unverified.
-    - **Capability-Aware Filtering Inert**: Position sizing and filtering logic cannot apply asset-based rules since all assets appear as fractional crypto.
-    - **Stock Venue Integration Required**: Full functionality requires:
-      1. Integration with stock trading venue (Alpaca, Interactive Brokers, TD Ameritrade, etc.)
-      2. Venue metadata persistence (track which venue each symbol comes from)
-      3. Automated population of assetTypeMappings from venue data or authoritative symbol registry
-      4. Update syncFromKraken() and future sync methods to preserve venue context
-      5. End-to-end testing with real equity/commodity data to verify whole-share sizing and filtering
-  - **API Endpoints**: Complete REST API for managing actuation policies (`/api/actuation/policies`, `/api/actuation/policies/:id`), viewing/approving proposed adjustments (`/api/actuation/proposals`, `/api/actuation/proposals/:id/approve`, `/api/actuation/proposals/:id/reject`), and syncing asset capabilities (`/api/asset-capabilities/sync`, `/api/asset-capabilities/:symbol`)
-  - **Database Tables**: `actuation_policy_registry`, `proposed_adjustments`, `asset_capabilities`
-  - **Part C - Historic Signal Backfilling (Mini-Milestone 17D)**: 
-    - **Pagination-Enabled Backfill**: Automatically fetches multi-month historical OHLC data from Kraken by paging through sequential requests, bypassing the 720-candle limit
-    - **Capabilities**: Single command can backfill up to 90 days of hourly data per symbol (up to 5000 candles per symbol with configurable limits)
-    - **Configuration**: maxBatches=10, paginationDelayMs=500ms, maxCandlesTotal=5000
-    - **Rate Limiting**: 500ms delay between batches with automatic retry on first failure, graceful partial data return on subsequent errors
-    - **Symbol Mapping**: User-friendly input (BTCUSD) auto-converts to Kraken format (XBTUSD), handles normalized response keys (XXBTZUSD)
-    - **Integration**: Historic signals ingested into Semantic Memory every 6 hours with P/L-based relevance scoring (wins: 0.70-0.90, losses: 0.40-0.60)
-    - **Learning**: CWA automatically adjusts semantic_memory source weights based on historic signal prediction accuracy
-    - **API Cost**: $0 - uses free Kraken OHLC endpoint
-    - **Admin Command Example**: `POST /api/backfill/signals` with payload `{"symbols":["BTCUSD","ETHUSD","SOLUSD"],"interval":60,"startDate":"2024-07-10","endDate":"2024-10-10","strategies":["vwap_pullback","abcd_long","sma_trend_ride"]}`
-    - **UI**: Historic Signals tab in AI Transparency Panel displays total signals, win rate, average return, and per-strategy breakdown
+- **Semantic Memory Layer**: Vector-based knowledge recall system using pgvector and OpenAI embeddings, populating from AI lessons and conversation summaries for similarity search and CLE confidence boost.
+- **Intelligence Refinement Layer**: Self-optimizing Cognitive Weight Adjuster (CWA) reviews prediction outcomes and dynamically adjusts learning source weights (semantic_memory, external_api, cache) for continuous optimization.
+- **Autonomous Adjustments Actuation Policy**: Governs which trading parameters AI can autonomously adjust, enforcing variable bounds, cooldown periods, confidence thresholds, and daily change limits. Includes a framework for venue-aware asset differentiation, though currently limited to Kraken crypto/forex.
+- **Historic Signal Backfilling**: Fetches multi-month historical OHLC data from Kraken, ingesting it into Semantic Memory with P/L-based relevance scoring for CWA learning.
+- **Paper Trading Simulation Engine**: Provides real-time simulated trade execution with realistic order fill logic, slippage, fees, and risk control integration. Includes a Portfolio Manager for tracking positions, P/L, and performance metrics.
 
 ## External Dependencies
 
