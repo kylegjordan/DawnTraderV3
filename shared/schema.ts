@@ -536,6 +536,26 @@ export const paperAIReports = pgTable("paper_ai_reports", {
 
 // ===== LEARNING FEEDBACK ENGINE TABLES =====
 
+// Learning sources (tracks knowledge source weights and performance)
+export const learningSources = pgTable("learning_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  sourceName: varchar("source_name", { length: 100 }).notNull(),
+  sourceType: varchar("source_type", { length: 50 }).notNull(),
+  weight: decimal("weight", { precision: 8, scale: 4 }).default("1.0000"),
+  relevanceScore: decimal("relevance_score", { precision: 5, scale: 4 }).default("0.5000"),
+  accuracyScore: decimal("accuracy_score", { precision: 5, scale: 4 }).default("0.5000"),
+  totalPredictions: integer("total_predictions").default(0),
+  correctPredictions: integer("correct_predictions").default(0),
+  lastAccuracyUpdate: timestamp("last_accuracy_update", { withTimezone: true }),
+  lastRelevanceUpdate: timestamp("last_relevance_update", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  uniqueUserSource: uniqueIndex("learning_sources_user_source_idx").on(table.userId, table.sourceName),
+}));
+
 // Signal weights (adaptive weighting per user/strategy/mode)
 export const signalWeights = pgTable("signal_weights", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -789,6 +809,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   paperTrades: many(paperTrades),
   paperDailyBriefs: many(paperDailyBriefs),
   paperAIReports: many(paperAIReports),
+  learningSources: many(learningSources),
   signalWeights: many(signalWeights),
   predictionOutcomes: many(predictionOutcomes),
   goalsLive: many(userGoalsLive),
@@ -1041,6 +1062,12 @@ export const insertPaperAIReportSchema = createInsertSchema(paperAIReports).omit
 });
 
 // Learning Feedback Engine insert schemas
+export const insertLearningSourceSchema = createInsertSchema(learningSources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertSignalWeightSchema = createInsertSchema(signalWeights).omit({
   id: true,
   lastUpdated: true,
@@ -1201,6 +1228,9 @@ export type PaperDailyBrief = typeof paperDailyBriefs.$inferSelect;
 
 export type InsertPaperAIReport = z.infer<typeof insertPaperAIReportSchema>;
 export type PaperAIReport = typeof paperAIReports.$inferSelect;
+
+export type InsertLearningSource = z.infer<typeof insertLearningSourceSchema>;
+export type LearningSource = typeof learningSources.$inferSelect;
 
 export type InsertSignalWeight = z.infer<typeof insertSignalWeightSchema>;
 export type SignalWeight = typeof signalWeights.$inferSelect;
