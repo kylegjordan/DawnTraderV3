@@ -1,0 +1,85 @@
+🧩 Task: Improve AI Transparency Tab Layout (Multi-Row Wrapping)
+
+Goal:
+Fix the AI Transparency tab bar layout so all tabs are visible without horizontal scrolling. Tabs should automatically wrap into multiple rows on desktop and remain readable on all devices.
+
+🧠 Background
+
+The previous fix replaced overlapping tabs with horizontal scrolling (overflow-x-auto and .no-scrollbar), but this still forces users to drag to see hidden tabs on desktop.
+We want a multi-row wrapping layout instead — this ensures every tab is always visible without scrolling.
+
+🛠️ Implementation Steps
+
+Locate
+File:
+
+client/src/pages/ai-transparency.tsx
+
+
+Look for the <TabsList> element inside the AI Transparency Panel.
+
+Update Container Layout
+Replace any horizontal scrolling or nowrap behavior with wrapping and spacing:
+
+<TabsList className="flex flex-wrap gap-2 justify-start">
+  {/* Tab triggers here */}
+</TabsList>
+
+
+✅ Remove or comment out:
+
+overflow-x-auto
+
+.no-scrollbar
+
+whitespace-nowrap
+
+flex-nowrap
+
+Adjust Tab Items
+Give each <TabsTrigger> a consistent minimum width and compact text:
+
+<TabsTrigger className="min-w-[140px] text-sm px-3 py-1">
+  Paper Trading
+</TabsTrigger>
+
+
+Visual Enhancements
+
+Add gap-2 or gap-3 for breathing space.
+
+Maintain consistent alignment (justify-start or justify-center).
+
+Ensure wrapping doesn’t distort highlight or active states.
+
+Responsive Checks
+
+✅ Desktop (≥1024px): Tabs display in 2 rows (e.g., 4x2 grid).
+
+✅ Tablet (768–1023px): Tabs may wrap into 3 rows as needed.
+
+✅ Mobile (<768px): Tabs stack neatly in a single column.
+
+🧪 Testing Instructions
+
+Log in and open AI Transparency Panel.
+
+Resize the window and confirm:
+
+All tabs are visible without scrolling.
+
+The active tab highlights correctly.
+
+Wrapping behavior remains consistent at all screen sizes.
+
+Verify no console or CSS errors appear.
+
+✅ Acceptance Criteria
+
+No horizontal scrolling needed on any screen size.
+
+Tabs automatically wrap into multiple rows.
+
+Clean, evenly spaced layout.
+
+Maintains full click and highlight functionality.

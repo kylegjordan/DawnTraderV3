@@ -115,37 +115,37 @@ export default function AITransparencyPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="inline-flex flex-wrap md:flex-nowrap overflow-x-auto gap-2 w-full h-auto p-1 no-scrollbar" data-testid="tabs-ai-transparency">
-          <TabsTrigger value="automation-logs" data-testid="tab-automation-logs" className="whitespace-nowrap text-xs md:text-sm">
-            <Clock className="w-4 h-4 mr-1 md:mr-2" />
+        <TabsList className="flex flex-wrap gap-2 justify-start w-full h-auto p-2" data-testid="tabs-ai-transparency">
+          <TabsTrigger value="automation-logs" data-testid="tab-automation-logs" className="min-w-[140px] text-sm px-3 py-2">
+            <Clock className="w-4 h-4 mr-2" />
             Automation Logs
           </TabsTrigger>
-          <TabsTrigger value="learning-adjustments" data-testid="tab-learning-adjustments" className="whitespace-nowrap text-xs md:text-sm">
-            <TrendingUp className="w-4 h-4 mr-1 md:mr-2" />
+          <TabsTrigger value="learning-adjustments" data-testid="tab-learning-adjustments" className="min-w-[140px] text-sm px-3 py-2">
+            <TrendingUp className="w-4 h-4 mr-2" />
             Learning Adjustments
           </TabsTrigger>
-          <TabsTrigger value="autonomous-adjustments" data-testid="tab-autonomous-adjustments" className="whitespace-nowrap text-xs md:text-sm">
-            <Settings className="w-4 h-4 mr-1 md:mr-2" />
+          <TabsTrigger value="autonomous-adjustments" data-testid="tab-autonomous-adjustments" className="min-w-[140px] text-sm px-3 py-2">
+            <Settings className="w-4 h-4 mr-2" />
             Autonomous Adjustments
           </TabsTrigger>
-          <TabsTrigger value="historic-signals" data-testid="tab-historic-signals" className="whitespace-nowrap text-xs md:text-sm">
-            <TrendingUp className="w-4 h-4 mr-1 md:mr-2" />
+          <TabsTrigger value="historic-signals" data-testid="tab-historic-signals" className="min-w-[140px] text-sm px-3 py-2">
+            <TrendingUp className="w-4 h-4 mr-2" />
             Historic Signals
           </TabsTrigger>
-          <TabsTrigger value="semantic-insights" data-testid="tab-semantic-insights" className="whitespace-nowrap text-xs md:text-sm">
-            <Brain className="w-4 h-4 mr-1 md:mr-2" />
+          <TabsTrigger value="semantic-insights" data-testid="tab-semantic-insights" className="min-w-[140px] text-sm px-3 py-2">
+            <Brain className="w-4 h-4 mr-2" />
             Semantic Insights
           </TabsTrigger>
-          <TabsTrigger value="learning-health" data-testid="tab-learning-health" className="whitespace-nowrap text-xs md:text-sm">
-            <Target className="w-4 h-4 mr-1 md:mr-2" />
+          <TabsTrigger value="learning-health" data-testid="tab-learning-health" className="min-w-[140px] text-sm px-3 py-2">
+            <Target className="w-4 h-4 mr-2" />
             Learning Health
           </TabsTrigger>
-          <TabsTrigger value="paper-trading" data-testid="tab-paper-trading" className="whitespace-nowrap text-xs md:text-sm">
-            <LineChart className="w-4 h-4 mr-1 md:mr-2" />
+          <TabsTrigger value="paper-trading" data-testid="tab-paper-trading" className="min-w-[140px] text-sm px-3 py-2">
+            <LineChart className="w-4 h-4 mr-2" />
             Paper Trading
           </TabsTrigger>
-          <TabsTrigger value="health-alerts" data-testid="tab-health-alerts" className="whitespace-nowrap text-xs md:text-sm">
-            <AlertTriangle className="w-4 h-4 mr-1 md:mr-2" />
+          <TabsTrigger value="health-alerts" data-testid="tab-health-alerts" className="min-w-[140px] text-sm px-3 py-2">
+            <AlertTriangle className="w-4 h-4 mr-2" />
             System Health
           </TabsTrigger>
         </TabsList>
