@@ -12,7 +12,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -2920,7 +2920,7 @@ Provide specific, actionable recommendations.`,
             for (const taskName of taskNames) {
               const taskLogs = schedulerLogs.filter(log => log.taskName === taskName);
               
-              if (taskLogs.length >= 2) {
+              if (taskLogs.length >= 2 && taskLogs[0].executedAt && taskLogs[1].executedAt) {
                 const latestLog = new Date(taskLogs[0].executedAt);
                 const previousLog = new Date(taskLogs[1].executedAt);
                 const hoursBetween = (latestLog.getTime() - previousLog.getTime()) / (1000 * 60 * 60);
@@ -4251,6 +4251,92 @@ Please:
       res.json({ ok: true, preset: presets[presetName as keyof typeof presets] });
     } catch (error: any) {
       console.error('Error fetching preset:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ==================== Semantic Memory API (Milestone 15) ====================
+  
+  // Search semantic memories by similarity
+  app.post('/api/semantic/search', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { query, tags, limit = 10 } = req.body;
+      
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ ok: false, error: 'Query text required' });
+      }
+      
+      // Import embedding service and generate embedding for query
+      const { EmbeddingService } = await import('./services/embedding-service');
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (!openaiKey) {
+        return res.status(500).json({ ok: false, error: 'OpenAI API key not configured' });
+      }
+      const embeddingService = new EmbeddingService(openaiKey);
+      const queryEmbedding = await embeddingService.generateEmbedding(query);
+      
+      // Search by cosine similarity using pgvector
+      const results = await db.execute(sql`
+        SELECT 
+          id,
+          content,
+          source_table,
+          source_id,
+          tags,
+          relevance,
+          created_at,
+          1 - (embedding <=> ${JSON.stringify(queryEmbedding)}::vector) as similarity
+        FROM semantic_memory
+        ${tags && tags.length > 0 ? sql`WHERE tags && ${tags}::text[]` : sql``}
+        ORDER BY embedding <=> ${JSON.stringify(queryEmbedding)}::vector
+        LIMIT ${limit}
+      `);
+      
+      res.json({ ok: true, results: results.rows });
+    } catch (error: any) {
+      console.error('[SemanticSearch] Error searching memories:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // Get latest semantic memories
+  app.get('/api/semantic/latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const tags = req.query.tags as string | undefined;
+      
+      let query = db
+        .select()
+        .from(semanticMemory)
+        .orderBy(sql`created_at DESC`)
+        .limit(limit);
+      
+      if (tags) {
+        const tagArray = tags.split(',').map(t => t.trim());
+        query = query.where(sql`tags && ${tagArray}::text[]`) as any;
+      }
+      
+      const results = await query;
+      res.json({ ok: true, memories: results });
+    } catch (error: any) {
+      console.error('[SemanticMemory] Error fetching latest:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // Get all unique tags
+  app.get('/api/semantic/tags', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT DISTINCT unnest(tags) as tag
+        FROM semantic_memory
+        ORDER BY tag
+      `);
+      
+      const tags = result.rows.map((row: any) => row.tag);
+      res.json({ ok: true, tags });
+    } catch (error: any) {
+      console.error('[SemanticMemory] Error fetching tags:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });
