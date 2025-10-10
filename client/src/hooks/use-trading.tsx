@@ -34,12 +34,10 @@ export function useTrading() {
     mutationFn: async (mode: 'live' | 'paper') => {
       if (mode === 'paper') {
         // Start Paper Trading Simulation Engine
-        const response = await apiRequest('POST', '/api/paper-sim/start');
-        return response.json();
+        return await apiRequest('POST', '/api/paper-sim/start');
       } else {
         // Start Live Trading Engine
-        const response = await apiRequest('POST', '/api/trading/start', { mode });
-        return response.json();
+        return await apiRequest('POST', '/api/trading/start', { mode });
       }
     },
     onSuccess: () => {
@@ -53,12 +51,10 @@ export function useTrading() {
     mutationFn: async (mode: 'live' | 'paper') => {
       if (mode === 'paper') {
         // Stop Paper Trading Simulation Engine
-        const response = await apiRequest('POST', '/api/paper-sim/stop');
-        return response.json();
+        return await apiRequest('POST', '/api/paper-sim/stop');
       } else {
         // Stop Live Trading Engine
-        const response = await apiRequest('POST', '/api/trading/stop');
-        return response.json();
+        return await apiRequest('POST', '/api/trading/stop');
       }
     },
     onSuccess: () => {
