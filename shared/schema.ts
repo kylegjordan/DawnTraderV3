@@ -850,6 +850,30 @@ export const assetCapabilities = pgTable("asset_capabilities", {
   symbolIdx: uniqueIndex("asset_capabilities_symbol_idx").on(table.symbol),
 }));
 
+// Milestone 17C: Historic Signals (backfilled market signals for AI learning)
+export const historicSignals = pgTable("historic_signals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  exchange: varchar("exchange", { length: 50 }).default("Kraken").notNull(),
+  strategyId: strategyTypeEnum("strategy_id").notNull(),
+  triggerTime: timestamp("trigger_time", { withTimezone: true }).notNull(),
+  exitTime: timestamp("exit_time", { withTimezone: true }),
+  entryPrice: decimal("entry_price", { precision: 20, scale: 8 }).notNull(),
+  exitPrice: decimal("exit_price", { precision: 20, scale: 8 }),
+  pnlPercent: decimal("pnl_percent", { precision: 10, scale: 4 }),
+  filtersUsed: text("filters_used").array(),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  marketContext: jsonb("market_context"), // VWAP, SMA, volume, range at trigger time
+  evaluatedAt: timestamp("evaluated_at", { withTimezone: true }).defaultNow(),
+  source: varchar("source", { length: 20 }).default("historic"), // 'historic', 'live'
+}, (table) => ({
+  symbolIdx: index("historic_signals_symbol_idx").on(table.symbol),
+  strategyIdx: index("historic_signals_strategy_idx").on(table.strategyId),
+  triggerTimeIdx: index("historic_signals_trigger_time_idx").on(table.triggerTime),
+  userStrategyTimeIdx: index("historic_signals_user_strategy_time_idx").on(table.userId, table.strategyId, table.triggerTime),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -1222,6 +1246,11 @@ export const insertAssetCapabilitySchema = createInsertSchema(assetCapabilities)
   lastSynced: true,
 });
 
+export const insertHistoricSignalSchema = createInsertSchema(historicSignals).omit({
+  id: true,
+  evaluatedAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -1360,3 +1389,6 @@ export type ProposedAdjustment = typeof proposedAdjustments.$inferSelect;
 
 export type InsertAssetCapability = z.infer<typeof insertAssetCapabilitySchema>;
 export type AssetCapability = typeof assetCapabilities.$inferSelect;
+
+export type InsertHistoricSignal = z.infer<typeof insertHistoricSignalSchema>;
+export type HistoricSignal = typeof historicSignals.$inferSelect;

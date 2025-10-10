@@ -1,0 +1,187 @@
+🧭 Milestone 17C — Backfill Historic Signals
+
+Goal:
+Give the AI system a memory of past market conditions and strategy outcomes before starting paper trading, so it can learn what works and what doesn’t using historical data.
+
+🎯 Objectives
+
+Generate historic buy/sell signals from the existing strategy, screener, and risk-management logic using archived price data.
+
+Evaluate those historic signals (profit / loss, duration, volatility).
+
+Store them as structured learning records that the CWA (Weight Adjuster) and Semantic Memory Layer can use.
+
+Summarize performance by strategy, symbol, and timeframe.
+
+Verify that results appear in the Transparency and Learning Health panels without enabling any live trading.
+
+🧩 System Behavior Overview
+
+The backfill task runs once manually (or on demand) before simulation.
+
+It scans each active strategy across a chosen date range (default = last 90 days).
+
+It retrieves historical candles from the exchange (Kraken for crypto).
+
+For each candle sequence, it applies the existing screener + strategy logic to detect where a buy/sell signal would have occurred.
+
+It logs:
+
+Timestamp
+
+Symbol / pair
+
+Entry price
+
+Exit price (after target period or stop)
+
+Result (% gain / loss)
+
+Triggering filters and strategy ID
+
+Confidence score (if available)
+
+Those records are stored in a new historic_signals table.
+
+The Semantic Memory ingestion task then reads these results and updates weights and summaries.
+
+🧱 Implementation Steps (Developer-Facing, No Code)
+
+Database Preparation
+
+Add table historic_signals with columns:
+
+id, symbol, exchange, strategy_id, trigger_time, exit_time, entry_price, exit_price, pnl_percent, filters_used, confidence, evaluated_at.
+
+Index on symbol, strategy_id, and trigger_time.
+
+Optional: JSON column for market_context (summary of indicators at trigger).
+
+Service: Historical Signal Generator
+
+Create server/services/historic-signal-generator.ts.
+
+Inputs: start_date, end_date, symbols[], strategies[].
+
+For each symbol:
+
+Pull candles (hourly by default).
+
+Run existing screener + strategy rules.
+
+Emit synthetic trades (buy/sell points only).
+
+Output to historic_signals.
+
+Integration with Learning Layers
+
+After generation, trigger:
+
+Semantic Memory ingestion → store summaries as “historic learned insights.”
+
+CWA → update weights using historic accuracy.
+
+Mark these records as source='historic' for audit transparency.
+
+API & Scheduling
+
+Add endpoint POST /api/backfill/signals for manual invocation (admin only).
+
+Optional scheduler task (once per quarter) to refresh with new history.
+
+Add logging to AI Transparency Panel (“Backfill Historic Signals run at HH:MM”).
+
+Caching & Cost Controls
+
+Pull candles in batches (≤ 500 per call).
+
+Cache each symbol’s data in Redis or Postgres JSON for 24 hours.
+
+Limit initial backfill to 90 days per symbol (default) with configurable maximum of 180 days.
+
+Reuse previously stored results on re-runs (no duplicate calls).
+
+Reporting Integration
+
+Add tab under AI Transparency → “Historic Signals.”
+
+Show:
+
+Total signals generated
+
+Win rate %
+
+Average return
+
+Top 5 strategies by historical accuracy
+
+Data range covered
+
+Timestamp of last run
+
+🧪 Testing & Verification
+
+Functional Tests
+
+Run manual backfill for one symbol (BTCUSD, 30 days).
+
+Expect hundreds of historic signals logged.
+
+Check historic_signals table populated with non-zero records.
+
+Confirm AI Transparency Panel → Historic Signals tab shows summary stats.
+
+Verify Semantic Memory contains new insights tagged “historic.”
+
+Verify CWA weights adjust using historic accuracy.
+
+Performance Tests
+
+Measure runtime and API call volume.
+
+Expect 200–400 Kraken calls per 100 symbols for 90 days.
+
+Ensure no OpenAI API calls exceed 20 per backfill (batch summaries only).
+
+Validation Checks
+
+No duplicate entries for same symbol + trigger_time.
+
+Each record has computed pnl_percent.
+
+Transparency log entries exist for start + finish.
+
+Acceptance Criteria
+
+✅ Historic data successfully backfilled for at least 5 symbols without errors.
+
+✅ Learning Health and Transparency tabs reflect new metrics.
+
+✅ Average API cost under $2 per backfill run.
+
+✅ System stable with cached data verified.
+
+📦 Deliverables
+Deliverable	Description
+historic_signals table	New database table with indexes and example records.
+historic-signal-generator service	Core script that produces signals from past data.
+Admin API endpoint	/api/backfill/signals with status reporting.
+Transparency Panel tab	Displays historic signal results and summary metrics.
+Updated documentation	replit.md section “Milestone 17C — Backfill Historic Signals.”
+⚙️ Operational Policy Summary
+Setting	Default	Description
+Backfill range	90 days	Configurable (30–180 days max)
+Data resolution	1 hour	Adjust for performance
+Caching TTL	24 h	Cached candle data per symbol
+Summarization interval	After every 500 signals	Batches reduce OpenAI cost
+Scheduler interval	Manual (default) or quarterly	For future automation
+🧠 After Completion
+
+Once Replit confirms Milestone 17C is implemented and verified:
+
+The AI system will hold a complete set of learned historic signals in memory.
+
+Semantic and CWA layers will be fully initialized with experience.
+
+The system will be ready to begin Milestone 18 → Paper Trading Simulation Engine,
+already behaving like a seasoned analyst who has studied months of market patterns.
