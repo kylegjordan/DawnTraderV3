@@ -540,7 +540,7 @@ export class CLEOrchestratorService {
       
       // Build query text from recent outcomes (strategy + result pattern)
       const queryTexts = recentOutcomes.map(outcome => 
-        `${outcome.strategy} ${outcome.outcome === 'win' ? 'successful' : 'failed'} trade pattern`
+        `${outcome.strategy} ${outcome.correct ? 'successful' : 'failed'} trade pattern`
       );
       
       // Get OpenAI API key

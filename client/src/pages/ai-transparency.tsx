@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle } from "lucide-react";
+import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 
@@ -37,10 +37,24 @@ export default function AITransparencyPage() {
     refetchInterval: 60000,
   });
 
+  // Fetch semantic memories (Milestone 15)
+  const { data: semanticData, isLoading: semanticLoading } = useQuery<{ ok: boolean; memories: any[] }>({
+    queryKey: ['/api/semantic/latest?limit=20'],
+    refetchInterval: 60000,
+  });
+
+  // Fetch semantic tags (Milestone 15)
+  const { data: tagsData } = useQuery<{ ok: boolean; tags: string[] }>({
+    queryKey: ['/api/semantic/tags'],
+    refetchInterval: 60000,
+  });
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
   const confidenceIndex = confidenceData?.autonomyConfidence ?? 0;
+  const semanticMemories = semanticData?.memories || [];
+  const semanticTags = tagsData?.tags || [];
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -60,13 +74,13 @@ export default function AITransparencyPage() {
               Confidence: {confidenceIndex}/100
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">Monitor automated scheduler activity, learning adjustments, and system health</p>
+          <p className="text-sm text-muted-foreground mt-1">Monitor automated scheduler activity, learning adjustments, semantic insights, and system health</p>
         </div>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3" data-testid="tabs-ai-transparency">
+        <TabsList className="grid w-full grid-cols-4" data-testid="tabs-ai-transparency">
           <TabsTrigger value="automation-logs" data-testid="tab-automation-logs">
             <Clock className="w-4 h-4 mr-2" />
             Recent Automation Logs
@@ -74,6 +88,10 @@ export default function AITransparencyPage() {
           <TabsTrigger value="learning-adjustments" data-testid="tab-learning-adjustments">
             <TrendingUp className="w-4 h-4 mr-2" />
             Learning Adjustments
+          </TabsTrigger>
+          <TabsTrigger value="semantic-insights" data-testid="tab-semantic-insights">
+            <Brain className="w-4 h-4 mr-2" />
+            Semantic Insights
           </TabsTrigger>
           <TabsTrigger value="health-alerts" data-testid="tab-health-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -189,7 +207,74 @@ export default function AITransparencyPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab 3: System Health Alerts */}
+        {/* Tab 3: Semantic Insights (Milestone 15) */}
+        <TabsContent value="semantic-insights" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Semantic Memory Insights</CardTitle>
+              <CardDescription>
+                Vector-based knowledge recall from past learnings and experiences
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Tag filters */}
+              {semanticTags.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {semanticTags.map((tag: string) => (
+                    <Badge key={tag} variant="outline" className="text-xs" data-testid={`badge-tag-${tag}`}>
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Semantic memories list */}
+              {semanticLoading ? (
+                <div className="text-sm text-muted-foreground">Loading semantic memories...</div>
+              ) : semanticMemories.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No semantic memories found. Ingestion runs every 6 hours.</div>
+              ) : (
+                <div className="space-y-3">
+                  {semanticMemories.map((memory: any) => (
+                    <div 
+                      key={memory.id} 
+                      className="p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                      data-testid={`memory-${memory.id}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs" data-testid={`badge-source-${memory.id}`}>
+                            {memory.sourceTable}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs" data-testid={`badge-relevance-${memory.id}`}>
+                            Relevance: {parseFloat(memory.relevance || '0').toFixed(2)}
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground" data-testid={`text-memory-timestamp-${memory.id}`}>
+                          {formatDistanceToNow(new Date(memory.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-foreground mb-2" data-testid={`text-content-${memory.id}`}>
+                        {memory.content}
+                      </p>
+                      {memory.tags && memory.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {memory.tags.map((tag: string, idx: number) => (
+                            <span key={idx} className="text-xs px-2 py-0.5 bg-muted rounded" data-testid={`tag-${memory.id}-${idx}`}>
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 4: System Health Alerts */}
         <TabsContent value="health-alerts" className="space-y-4">
           <Card>
             <CardHeader>
