@@ -156,8 +156,8 @@ export function useTrading() {
     statusLoading,
     paperSimStatus,
     paperSimStatusLoading,
-    startTrading: startTradingMutation.mutate,
-    stopTrading: stopTradingMutation.mutate,
+    startTrading: startTradingMutation.mutateAsync,
+    stopTrading: stopTradingMutation.mutateAsync,
     isStarting: startTradingMutation.isPending,
     isStopping: stopTradingMutation.isPending,
 

@@ -11,6 +11,13 @@ Preferred communication style: Simple, everyday language.
 ### Frontend
 Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, and TanStack Query for state management. Wouter handles routing, and WebSockets provide real-time updates. The design is mobile-first, responsive, and features dynamic mode-aware UI for Live and Paper trading.
 
+**Trading Active Toggle**: Dashboard header includes a mode-aware toggle controller that starts/stops the appropriate trading engine:
+- Paper mode: Controls Paper Trading Simulation Engine via `/api/paper-sim/start` and `/api/paper-sim/stop` endpoints
+- Live mode: Controls Live Trading Engine via `/api/trading/start` and `/api/trading/stop` endpoints
+- Real-time status synchronization with 5-second query refresh intervals and aggressive cache invalidation
+- Dynamic visual indicators (status dot, labels, colors) reflect current engine state
+- Toast notifications provide immediate user feedback on successful/failed operations
+
 ### Backend
 Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting both "live" and "paper" trading modes.
 
