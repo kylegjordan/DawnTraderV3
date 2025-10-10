@@ -243,6 +243,86 @@ export class ActuationPolicyService {
   }
 
   /**
+   * Create a new proposed adjustment
+   */
+  async createProposal(params: {
+    userId: string;
+    variableName: string;
+    currentValue: number;
+    proposedValue: number;
+    mode: 'live' | 'paper';
+    confidenceScore: number;
+    rationale: string;
+  }): Promise<any> {
+    const { userId, variableName, currentValue, proposedValue, mode, confidenceScore, rationale } = params;
+    
+    // Create proposed adjustment
+    const proposal = await storage.createProposedAdjustment({
+      userId,
+      variableName,
+      currentValue: currentValue.toString(),
+      proposedValue: proposedValue.toString(),
+      mode,
+      confidenceScore,
+      rationale,
+      status: 'pending'
+    });
+    
+    return proposal;
+  }
+
+  /**
+   * Approve a proposed adjustment
+   */
+  async approveProposal(proposalId: string, approverNotes: string, approverId: string): Promise<void> {
+    await storage.updateProposedAdjustment(proposalId, {
+      status: 'approved',
+      reviewedBy: approverId,
+      reviewedAt: new Date(),
+      reviewNotes: approverNotes
+    });
+    
+    console.log(`[ActuationPolicy] Approved proposal ${proposalId}`);
+  }
+
+  /**
+   * Reject a proposed adjustment
+   */
+  async rejectProposal(proposalId: string, rejectReason: string, reviewerId: string): Promise<void> {
+    await storage.updateProposedAdjustment(proposalId, {
+      status: 'rejected',
+      reviewedBy: reviewerId,
+      reviewedAt: new Date(),
+      reviewNotes: rejectReason
+    });
+    
+    console.log(`[ActuationPolicy] Rejected proposal ${proposalId}`);
+  }
+
+  /**
+   * Apply an approved proposed adjustment
+   */
+  async applyProposal(proposalId: string): Promise<void> {
+    const proposal = await storage.getProposedAdjustment(proposalId);
+    
+    if (!proposal) {
+      throw new Error(`Proposal ${proposalId} not found`);
+    }
+    
+    if (proposal.status !== 'approved') {
+      throw new Error(`Proposal ${proposalId} must be approved before applying`);
+    }
+    
+    // Mark as applied
+    await storage.updateProposedAdjustment(proposalId, {
+      status: 'applied',
+      appliedAt: new Date()
+    });
+    
+    console.log(`[ActuationPolicy] Applied proposal ${proposalId}: ${proposal.variableName} = ${proposal.proposedValue}`);
+  }
+
+  /**
    * Get actuation metrics and summary
    */
   async getActuationMetrics(userId: string): Promise<{

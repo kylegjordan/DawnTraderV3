@@ -16,6 +16,8 @@ import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrail
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
+import { actuationPolicyService } from "./services/actuation-policy";
+import { assetCapabilitiesService } from "./services/asset-capabilities";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
 import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStrengthMessage } from "./services/auth-service";
@@ -4356,6 +4358,134 @@ Please:
       res.json({ ok: true, metrics });
     } catch (error: any) {
       console.error('[LearningMetrics] Error fetching metrics:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ==================== Actuation Policy API (Milestone 17A) ====================
+  
+  // Get actuation policies for user
+  app.get('/api/actuation-policies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const policies = await storage.getActuationPolicies(userId);
+      res.json({ ok: true, policies });
+    } catch (error: any) {
+      console.error('[ActuationPolicy] Error fetching policies:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // Get actuation metrics
+  app.get('/api/actuation-policies/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const metrics = await actuationPolicyService.getActuationMetrics(userId);
+      res.json({ ok: true, metrics });
+    } catch (error: any) {
+      console.error('[ActuationPolicy] Error fetching metrics:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // Get proposed adjustments
+  app.get('/api/proposed-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper' | undefined;
+      const hours = parseInt(req.query.hours as string) || 168; // Default 7 days
+      
+      const adjustments = mode === 'live' || mode === 'paper'
+        ? await storage.getPendingAdjustments(userId, mode)
+        : await storage.getAllProposedAdjustments(userId, hours);
+      
+      res.json({ ok: true, adjustments });
+    } catch (error: any) {
+      console.error('[ActuationPolicy] Error fetching adjustments:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // Approve proposed adjustment
+  app.post('/api/proposed-adjustments/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { notes } = req.body;
+      const userId = req.user!.id;
+      
+      await actuationPolicyService.approveProposal(id, notes || 'Approved', userId);
+      res.json({ ok: true, message: 'Proposal approved successfully' });
+    } catch (error: any) {
+      console.error('[ActuationPolicy] Error approving adjustment:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // Reject proposed adjustment
+  app.post('/api/proposed-adjustments/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const userId = req.user!.id;
+      
+      await actuationPolicyService.rejectProposal(id, reason || 'Rejected', userId);
+      res.json({ ok: true, message: 'Proposal rejected successfully' });
+    } catch (error: any) {
+      console.error('[ActuationPolicy] Error rejecting adjustment:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // Apply approved adjustment
+  app.post('/api/proposed-adjustments/:id/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      
+      await actuationPolicyService.applyProposal(id);
+      res.json({ ok: true, message: 'Adjustment applied successfully' });
+    } catch (error: any) {
+      console.error('[ActuationPolicy] Error applying adjustment:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ==================== Asset Capabilities API (Milestone 17B) ====================
+  
+  // Get asset capabilities
+  app.get('/api/asset-capabilities', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const capabilities = await storage.getAssetCapabilities();
+      res.json({ ok: true, capabilities });
+    } catch (error: any) {
+      console.error('[AssetCapabilities] Error fetching capabilities:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // Get specific asset capability
+  app.get('/api/asset-capabilities/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { symbol } = req.params;
+      const capability = await storage.getAssetCapability(symbol);
+      
+      if (!capability) {
+        return res.status(404).json({ ok: false, error: 'Asset capability not found' });
+      }
+      
+      res.json({ ok: true, capability });
+    } catch (error: any) {
+      console.error('[AssetCapabilities] Error fetching capability:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // Sync asset capabilities from Kraken
+  app.post('/api/asset-capabilities/sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const result = await assetCapabilitiesService.syncFromKraken();
+      res.json({ ok: true, result });
+    } catch (error: any) {
+      console.error('[AssetCapabilities] Error syncing capabilities:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });

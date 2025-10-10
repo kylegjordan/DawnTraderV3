@@ -1,4 +1,5 @@
 import { storage } from '../storage';
+import { actuationPolicyService } from './actuation-policy';
 
 interface LearningMetrics {
   paperAccuracy: number;
@@ -294,6 +295,118 @@ export class CLEOrchestratorService {
     });
     
     console.log(`[CLEOrchestrator] Recorded portfolio adjustment for ${mode} mode`);
+  }
+
+  /**
+   * Milestone 17A: Propose parameter adjustment through actuation policy
+   * This replaces direct calibration application with safe policy-based proposals
+   */
+  async proposeParameterAdjustment(params: {
+    userId: string;
+    variableName: string;
+    currentValue: number;
+    proposedValue: number;
+    mode: 'live' | 'paper';
+    confidenceScore: number;
+    rationale: string;
+  }): Promise<{ success: boolean; proposalId?: string; violations?: any[] }> {
+    const { userId, variableName, currentValue, proposedValue, mode, confidenceScore, rationale } = params;
+    
+    console.log(`[CLEOrchestrator] Proposing ${variableName} adjustment: ${currentValue} → ${proposedValue} (confidence: ${confidenceScore})`);
+    
+    // Validate through actuation policy
+    const validation = await actuationPolicyService.validateProposal(
+      userId,
+      variableName,
+      currentValue,
+      proposedValue,
+      confidenceScore
+    );
+    
+    if (!validation.valid) {
+      console.log(`[CLEOrchestrator] Proposal rejected:`, validation.violations);
+      
+      // Log rejection to transparency panel
+      await storage.createTransparencyLog({
+        taskName: 'parameter-adjustment-proposal',
+        mode,
+        success: false,
+        resultSummary: `Proposal rejected: ${variableName} ${currentValue} → ${proposedValue}`,
+        notes: JSON.stringify({
+          variableName,
+          currentValue,
+          proposedValue,
+          violations: validation.violations,
+          timestamp: new Date().toISOString()
+        })
+      });
+      
+      return {
+        success: false,
+        violations: validation.violations
+      };
+    }
+    
+    // Create proposed adjustment
+    const proposal = await actuationPolicyService.createProposal({
+      userId,
+      variableName,
+      currentValue,
+      proposedValue,
+      mode,
+      confidenceScore,
+      rationale
+    });
+    
+    console.log(`[CLEOrchestrator] Created proposal ${proposal.id} for ${variableName}`);
+    
+    // Log to transparency panel
+    await storage.createTransparencyLog({
+      taskName: 'parameter-adjustment-proposal',
+      mode,
+      success: true,
+      resultSummary: `Proposed ${variableName}: ${currentValue} → ${proposedValue} (confidence: ${confidenceScore})`,
+      notes: JSON.stringify({
+        proposalId: proposal.id,
+        variableName,
+        currentValue,
+        proposedValue,
+        confidenceScore,
+        rationale,
+        timestamp: new Date().toISOString()
+      })
+    });
+    
+    return {
+      success: true,
+      proposalId: proposal.id
+    };
+  }
+
+  /**
+   * Auto-approve and apply high-confidence proposals in Paper mode
+   * Live mode always requires manual review
+   */
+  async autoApplyPaperProposals(userId: string): Promise<number> {
+    const pendingProposals = await storage.getPendingAdjustments(userId, 'paper');
+    let appliedCount = 0;
+    
+    for (const proposal of pendingProposals) {
+      // Auto-approve if confidence >= 80
+      if (proposal.confidenceScore && proposal.confidenceScore >= 80) {
+        try {
+          await actuationPolicyService.approveProposal(proposal.id, 'auto-approved', userId);
+          await actuationPolicyService.applyProposal(proposal.id);
+          appliedCount++;
+          
+          console.log(`[CLEOrchestrator] Auto-applied Paper proposal ${proposal.id} (confidence: ${proposal.confidenceScore})`);
+        } catch (error) {
+          console.error(`[CLEOrchestrator] Error applying proposal ${proposal.id}:`, error);
+        }
+      }
+    }
+    
+    return appliedCount;
   }
 
   private async checkAndTransferPaperLearnings(userId: string): Promise<void> {
