@@ -13,6 +13,15 @@ Preferred communication style: Simple, everyday language.
 ### Frontend
 Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, and TanStack Query for state management. Wouter handles routing, and WebSockets provide real-time updates. The design is mobile-first, responsive, and features dynamic mode-aware UI for Live and Paper trading.
 
+**Voice Input Feature**: Microphone-based voice transcription for chat interfaces using OpenAI Whisper API:
+- Available in Goals Engine (/goals-engine), GPT Chats Panel (chat-panel.tsx), and Chat Container (/analysis)
+- Click mic button to start/stop recording
+- Audio transcribed via OpenAI Whisper (whisper-1 model)
+- Transcription appears in input field for editing before sending
+- Error handling for mic permissions, device not found, and transcription failures
+- Visual feedback: Mic icon (idle), MicOff icon (recording), Loader icon (transcribing)
+- Backend: POST /api/transcribe (JWT protected, 15MB file limit)
+
 **Trading Active Toggle**: Dashboard header includes a mode-aware toggle controller that starts/stops the appropriate trading engine:
 - Paper mode: Controls Paper Trading Simulation Engine via `/api/paper-sim/start` and `/api/paper-sim/stop` endpoints
   - Starts/stops immediately without confirmation

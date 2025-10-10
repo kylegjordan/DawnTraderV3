@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 
 interface UseAudioRecorderReturn {
   isRecording: boolean;
-  startRecording: () => Promise<void>;
+  startRecording: () => Promise<string | null>;
   stopRecording: () => Promise<Blob | null>;
   error: string | null;
   audioBlob: Blob | null;
@@ -15,7 +15,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  const startRecording = useCallback(async () => {
+  const startRecording = useCallback(async (): Promise<string | null> => {
     try {
       setError(null);
       setAudioBlob(null);
@@ -48,16 +48,22 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 
       mediaRecorder.start();
       setIsRecording(true);
+      return null; // Success, no error
     } catch (err: any) {
       console.error('Error starting recording:', err);
+      let errorMessage: string;
+      
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setError('Microphone access denied. Please enable microphone permissions in your browser.');
+        errorMessage = 'Microphone access denied. Please enable microphone permissions in your browser.';
       } else if (err.name === 'NotFoundError') {
-        setError('No microphone found. Please connect a microphone and try again.');
+        errorMessage = 'No microphone found. Please connect a microphone and try again.';
       } else {
-        setError('Failed to start recording. Please try again.');
+        errorMessage = 'Failed to start recording. Please try again.';
       }
+      
+      setError(errorMessage);
       setIsRecording(false);
+      return errorMessage; // Return error immediately
     }
   }, []);
 

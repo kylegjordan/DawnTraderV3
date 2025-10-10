@@ -123,11 +123,11 @@ export default function GoalsEngineTab() {
       }
     } else {
       // Start recording
-      await startRecording();
-      if (recorderError) {
+      const error = await startRecording();
+      if (error) {
         toast({
           title: "Microphone Error",
-          description: recorderError,
+          description: error,
           variant: "destructive",
         });
       }
