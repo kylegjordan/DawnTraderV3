@@ -899,7 +899,7 @@ export class AIAnalyst {
   private calculateMonthlyGrowth(trades: Trade[]): number {
     // Simplified growth calculation
     const totalPL = trades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
-    const assumedStartingBalance = 50000;
+    const assumedStartingBalance = 800;
     return Math.round((totalPL / assumedStartingBalance) * 100 * 100) / 100;
   }
 

@@ -47,8 +47,8 @@ export class PaperMetricsService {
       return total + (parseFloat(trade.realizedPL || '0'));
     }, 0);
 
-    // Starting paper balance (configurable, default $50,000)
-    const startingBalance = 50000;
+    // Starting paper balance (configurable, default $800)
+    const startingBalance = 800;
     const totalValue = startingBalance + realizedPL + unrealizedPL;
 
     return {
@@ -295,7 +295,7 @@ export class PaperMetricsService {
       new Date(a.exitTime!).getTime() - new Date(b.exitTime!).getTime()
     );
 
-    const startingBalance = 50000;
+    const startingBalance = 800;
     const equityCurve: { date: string; balance: number; dayPL: number }[] = [];
     
     // Group trades by day

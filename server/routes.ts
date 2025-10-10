@@ -798,7 +798,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const period = (req.query.period as string) || '1M';
       
-      const initialBalance = 50000;
+      const initialBalance = 800;
       
       const now = new Date();
       let startDate = new Date();
@@ -881,7 +881,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const period = (req.query.period as string) || '30d';
       
-      const initialBalance = 50000;
+      const initialBalance = 800;
       
       const now = new Date();
       let startDate = new Date();
@@ -957,7 +957,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.id;
       
-      const initialBalance = 50000;
+      const initialBalance = 800;
       
       const allTrades = await storage.getTrades(userId, {});
       const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
