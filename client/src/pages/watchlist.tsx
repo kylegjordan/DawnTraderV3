@@ -137,6 +137,13 @@ export default function WatchlistPage() {
   const [symbol, setSymbol] = useState('');
   const [baseCurrency, setBaseCurrency] = useState('');
   const [quoteCurrency, setQuoteCurrency] = useState('');
+  const [activeTab, setActiveTab] = useState("user-watchlist");
+
+  // Fetch AI opportunities - must be before any early returns to comply with React hooks rules
+  const { data: aiOpportunities = [], isLoading: aiOpportunitiesLoading } = useQuery<any[]>({
+    queryKey: ['/api/ai-opportunities'],
+    refetchInterval: 300000, // 5 minutes
+  });
 
   const handleAddPair = async () => {
     if (!symbol || !baseCurrency || !quoteCurrency) {
@@ -229,14 +236,6 @@ export default function WatchlistPage() {
       </div>
     );
   }
-
-  const [activeTab, setActiveTab] = useState("user-watchlist");
-
-  // Fetch AI opportunities
-  const { data: aiOpportunities = [], isLoading: aiOpportunitiesLoading } = useQuery<any[]>({
-    queryKey: ['/api/ai-opportunities'],
-    refetchInterval: 300000, // 5 minutes
-  });
 
   return (
     <div className="p-6 space-y-6" data-testid="watchlist-page">
