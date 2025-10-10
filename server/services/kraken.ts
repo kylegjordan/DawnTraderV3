@@ -256,7 +256,23 @@ export class KrakenService {
     if (since) params.since = since;
 
     const result = await this.makePublicRequest('OHLC', params);
-    const pairData = result[pair];
+    
+    // Kraken might return data under a different key than the input pair
+    // Try the exact pair first, then check all keys
+    let pairData = result[pair];
+    
+    if (!pairData) {
+      // Find the first non-'last' key (should be the pair data)
+      const keys = Object.keys(result).filter(k => k !== 'last');
+      if (keys.length > 0) {
+        pairData = result[keys[0]];
+        console.log(`[Kraken] OHLC data found under key '${keys[0]}' instead of '${pair}'`);
+      }
+    }
+    
+    if (!pairData || !Array.isArray(pairData)) {
+      throw new Error(`No OHLC data found for pair ${pair}. Response keys: ${Object.keys(result).join(', ')}`);
+    }
     
     return {
       ohlc: pairData.map((candle: any[]) => ({

@@ -3,6 +3,29 @@ import { StrategyEngine, type TechnicalIndicators, type StrategySignal } from '.
 import { storage } from '../storage';
 import type { TradingSettings, InsertHistoricSignal, PriceData } from '@shared/schema';
 
+// Simple symbol to Kraken pair mapping (for user convenience)
+// Kraken accepts simplified names (XBTUSD, ETHUSD) but returns data under normalized keys (XXBTZUSD, XETHZUSD)
+const SYMBOL_MAPPING: Record<string, string> = {
+  'BTCUSD': 'XBTUSD',      // Bitcoin uses XBT per ISO 4217
+  'ETHUSD': 'ETHUSD',
+  'SOLUSD': 'SOLUSD',
+  'ADAUSD': 'ADAUSD',
+  'DOTUSD': 'DOTUSD',
+  'AVAXUSD': 'AVAXUSD',
+  'LINKUSD': 'LINKUSD',
+  'UNIUSD': 'UNIUSD',
+  'ATOMUSD': 'ATOMUSD',
+  'XRPUSD': 'XRPUSD',
+  'DOGEUSD': 'DOGEUSD',
+  'LTCUSD': 'LTCUSD',
+  'BCHUSD': 'BCHUSD',
+  'XLMUSD': 'XLMUSD',
+  // Keep original if already in Kraken format
+  'XBTUSD': 'XBTUSD',
+  'XXBTZUSD': 'XBTUSD',
+  'XETHZUSD': 'ETHUSD',
+};
+
 interface BackfillOptions {
   startDate: Date;
   endDate: Date;
@@ -46,6 +69,14 @@ export class HistoricSignalGenerator {
   }
 
   /**
+   * Normalize symbol to Kraken format (e.g., BTCUSD → XBTUSD)
+   */
+  private normalizeSymbol(symbol: string): string {
+    const upperSymbol = symbol.toUpperCase();
+    return SYMBOL_MAPPING[upperSymbol] || upperSymbol;
+  }
+
+  /**
    * Generate historic signals for specified symbols and date range
    */
   async generateHistoricSignals(options: BackfillOptions): Promise<BackfillResult> {
@@ -79,16 +110,19 @@ export class HistoricSignalGenerator {
 
     // Process each symbol
     for (const symbol of symbols) {
+      // Normalize symbol to Kraken format (hoist outside try for catch access)
+      const krakenSymbol = this.normalizeSymbol(symbol);
+      
       try {
-        console.log(`📊 Processing ${symbol}...`);
+        console.log(`📊 Processing ${symbol} (${krakenSymbol})...`);
         
         // Fetch historical candles (check cache first)
-        const cacheKey = `${symbol}-${interval}-${startDate.getTime()}-${endDate.getTime()}`;
+        const cacheKey = `${krakenSymbol}-${interval}-${startDate.getTime()}-${endDate.getTime()}`;
         let candles = this.candleCache.get(cacheKey);
         
         if (!candles) {
           const sinceTimestamp = Math.floor(startDate.getTime() / 1000);
-          const ohlcData = await this.kraken.getOHLCData(symbol, interval, sinceTimestamp);
+          const ohlcData = await this.kraken.getOHLCData(krakenSymbol, interval, sinceTimestamp);
           candles = ohlcData.ohlc;
           apiCalls++;
           
@@ -111,7 +145,7 @@ export class HistoricSignalGenerator {
 
         // Generate signals for each candle window
         const signals = await this.detectSignalsInHistory(
-          symbol,
+          krakenSymbol,
           filteredCandles,
           strategies,
           userSettings
@@ -125,7 +159,7 @@ export class HistoricSignalGenerator {
           try {
             await storage.createHistoricSignal({
               userId,
-              symbol,
+              symbol: krakenSymbol,
               exchange: 'Kraken',
               strategyId: signal.strategy,
               triggerTime: signal.triggerTime,
@@ -150,10 +184,10 @@ export class HistoricSignalGenerator {
         }
 
         totalSignals += signals.length;
-        console.log(`  ✅ Generated ${signals.length} signals for ${symbol}`);
+        console.log(`  ✅ Generated ${signals.length} signals for ${symbol} (${krakenSymbol})`);
 
       } catch (error) {
-        console.error(`  ❌ Error processing ${symbol}:`, error);
+        console.error(`  ❌ Error processing ${symbol} (${krakenSymbol}):`, error);
         errorCount++;
       }
     }
