@@ -17,9 +17,30 @@ export interface AssetInfo {
   venue: string;
 }
 
+// Asset type mapping for explicit classification
+// This handles cases where venue metadata is unavailable or insufficient
+interface AssetTypeMapping {
+  symbol: string;
+  assetType: 'crypto' | 'equity' | 'forex' | 'commodity';
+  venue: string;
+}
+
 export class AssetCapabilitiesService {
   private krakenService: KrakenService;
   private syncInProgress: boolean = false;
+  
+  // Explicit asset type mappings for venues/symbols that need override
+  // This is the authoritative source when venue metadata is unavailable
+  private assetTypeMappings: Map<string, AssetTypeMapping> = new Map([
+    // Future stock trading venues (e.g., Alpaca, Interactive Brokers)
+    // Format: 'SYMBOL:VENUE' → { symbol, assetType, venue }
+    ['AAPL:ALPACA', { symbol: 'AAPL', assetType: 'equity', venue: 'ALPACA' }],
+    ['GOOGL:ALPACA', { symbol: 'GOOGL', assetType: 'equity', venue: 'ALPACA' }],
+    ['TSLA:ALPACA', { symbol: 'TSLA', assetType: 'equity', venue: 'ALPACA' }],
+    // Future commodity venues
+    ['GOLD:COMEX', { symbol: 'GOLD', assetType: 'commodity', venue: 'COMEX' }],
+    ['SILVER:COMEX', { symbol: 'SILVER', assetType: 'commodity', venue: 'COMEX' }],
+  ]);
 
   constructor() {
     this.krakenService = new KrakenService();
@@ -112,30 +133,58 @@ export class AssetCapabilitiesService {
   }
 
   /**
+   * Add or update asset type mapping for a specific symbol/venue combination
+   * This allows explicit classification when venue metadata is unavailable
+   */
+  addAssetTypeMapping(symbol: string, assetType: 'crypto' | 'equity' | 'forex' | 'commodity', venue: string): void {
+    const key = `${symbol}:${venue}`;
+    this.assetTypeMappings.set(key, { symbol, assetType, venue });
+    console.log(`[AssetCapabilities] Added mapping: ${key} → ${assetType}`);
+  }
+
+  /**
    * Detect asset type from symbol and pair info
+   * Uses venue-aware mapping system for deterministic classification
+   * 
+   * Priority order:
+   * 1. Explicit mapping (assetTypeMappings) - authoritative source
+   * 2. Forex detection (fiat/fiat pairs)
+   * 3. Venue-based defaults (Kraken → crypto)
    */
   private detectAssetType(symbol: string, pairInfo: any): 'crypto' | 'equity' | 'forex' | 'commodity' {
-    // Crypto detection patterns
-    const cryptoIndicators = [
-      'BTC', 'ETH', 'XRP', 'LTC', 'BCH', 'ADA', 'DOT', 'LINK', 'UNI',
-      'MATIC', 'SOL', 'AVAX', 'ATOM', 'XLM', 'ALGO', 'AAVE', 'COMP'
-    ];
+    const base = (pairInfo.base || '').replace(/^[XZ]/, '').toUpperCase();
+    const quote = (pairInfo.quote || '').replace(/^[XZ]/, '').toUpperCase();
+    const venue = pairInfo.venue || 'Kraken';
     
-    // Check if base or quote is a known crypto
-    const base = (pairInfo.base || '').replace(/^[XZ]/, ''); // Remove X/Z prefix
-    const quote = (pairInfo.quote || '').replace(/^[XZ]/, '');
-    
-    if (cryptoIndicators.some(c => base.includes(c) || symbol.includes(c))) {
-      return 'crypto';
+    // 1. Check explicit mapping first (authoritative)
+    const mappingKey = `${symbol}:${venue}`;
+    const mapping = this.assetTypeMappings.get(mappingKey);
+    if (mapping) {
+      return mapping.assetType;
     }
     
-    // Forex detection (currency pairs)
-    const forexCurrencies = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF'];
-    if (forexCurrencies.includes(base) && forexCurrencies.includes(quote)) {
+    // 2. Forex detection - both base and quote must be fiat currencies
+    const fiatCurrencies = new Set([
+      'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'NZD', 'SEK', 'NOK',
+      'DKK', 'PLN', 'CZK', 'HUF', 'TRY', 'ZAR', 'MXN', 'BRL', 'INR', 'CNY',
+      'HKD', 'SGD', 'KRW', 'RUB', 'AED', 'SAR'
+    ]);
+    
+    if (fiatCurrencies.has(base) && fiatCurrencies.has(quote)) {
       return 'forex';
     }
     
-    // Default to crypto for Kraken (crypto exchange)
+    // 3. Venue-based defaults
+    // Kraken: crypto exchange → all non-forex assets are crypto
+    // Future venues:
+    // - ALPACA, IB, etc. → would require explicit mappings or venue-provided asset class
+    // - COMEX, NYMEX → would default to commodity
+    if (venue === 'Kraken') {
+      return 'crypto';
+    }
+    
+    // Default fallback (should rarely be reached if mappings are maintained)
+    console.warn(`[AssetCapabilities] Unknown venue ${venue} for ${symbol}, defaulting to crypto`);
     return 'crypto';
   }
 
