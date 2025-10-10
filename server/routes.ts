@@ -1191,6 +1191,246 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Paper Trading Simulation Engine Routes (Milestone 18)
+  const paperPortfolioManagers = new Map<string, any>();
+  const paperSimOperationLocks = new Map<string, Promise<void>>();
+
+  app.post('/api/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const userId = req.user!.id;
+    
+    try {
+      // Check for existing manager
+      if (paperPortfolioManagers.has(userId)) {
+        return res.status(400).json({ error: 'Paper trading simulation already running' });
+      }
+
+      // Check for pending operation (prevent race condition)
+      if (paperSimOperationLocks.has(userId)) {
+        return res.status(409).json({ error: 'Paper trading operation already in progress' });
+      }
+
+      // Create lock to serialize all start/stop operations
+      const startPromise = (async () => {
+        try {
+          const { PaperPortfolioManager } = await import('./services/paper-portfolio-manager.js');
+          const manager = new PaperPortfolioManager(userId);
+          
+          // Reserve the slot before starting to prevent race condition
+          paperPortfolioManagers.set(userId, manager);
+          
+          await manager.start();
+        } catch (error) {
+          // Rollback on failure
+          paperPortfolioManagers.delete(userId);
+          throw error;
+        } finally {
+          paperSimOperationLocks.delete(userId);
+        }
+      })();
+
+      paperSimOperationLocks.set(userId, startPromise);
+      await startPromise;
+      
+      res.json({ success: true, message: 'Paper trading simulation started' });
+    } catch (error: any) {
+      console.error('Error starting paper trading simulation:', error);
+      paperSimOperationLocks.delete(userId);
+      res.status(500).json({ error: error.message || 'Failed to start paper trading simulation' });
+    }
+  });
+
+  app.post('/api/paper-sim/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const userId = req.user!.id;
+    
+    try {
+      const manager = paperPortfolioManagers.get(userId);
+      
+      if (!manager) {
+        return res.status(400).json({ error: 'Paper trading simulation not running' });
+      }
+
+      // Check for pending operation (prevent race condition)
+      if (paperSimOperationLocks.has(userId)) {
+        return res.status(409).json({ error: 'Paper trading operation already in progress' });
+      }
+
+      // Create lock to serialize all start/stop operations
+      const stopPromise = (async () => {
+        // Store reference to current manager for rollback
+        const currentManager = paperPortfolioManagers.get(userId);
+        
+        try {
+          // Remove from map first to prevent new operations
+          paperPortfolioManagers.delete(userId);
+          await currentManager.stop();
+        } catch (error) {
+          // Only restore if no newer manager was started
+          if (!paperPortfolioManagers.has(userId)) {
+            paperPortfolioManagers.set(userId, currentManager);
+          }
+          throw error;
+        } finally {
+          paperSimOperationLocks.delete(userId);
+        }
+      })();
+
+      paperSimOperationLocks.set(userId, stopPromise);
+      await stopPromise;
+      
+      res.json({ success: true, message: 'Paper trading simulation stopped' });
+    } catch (error: any) {
+      console.error('Error stopping paper trading simulation:', error);
+      paperSimOperationLocks.delete(userId);
+      res.status(500).json({ error: error.message || 'Failed to stop paper trading simulation' });
+    }
+  });
+
+  app.get('/api/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const isRunning = paperPortfolioManagers.has(userId);
+      
+      res.json({ isRunning });
+    } catch (error) {
+      console.error('Error checking paper trading status:', error);
+      res.status(500).json({ error: 'Failed to check status' });
+    }
+  });
+
+  app.get('/api/paper-sim/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { limit, closedOnly } = req.query;
+      
+      const options: any = {};
+      if (limit) options.limit = parseInt(limit as string);
+      if (closedOnly) options.closedOnly = closedOnly === 'true';
+      
+      const trades = await storage.getPaperSimTrades(userId, options);
+      res.json(trades);
+    } catch (error) {
+      console.error('Error fetching paper sim trades:', error);
+      res.status(500).json({ error: 'Failed to fetch trades' });
+    }
+  });
+
+  app.get('/api/paper-sim/positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const positions = await storage.getPaperSimOpenPositions(userId);
+      res.json(positions);
+    } catch (error) {
+      console.error('Error fetching paper sim positions:', error);
+      res.status(500).json({ error: 'Failed to fetch positions' });
+    }
+  });
+
+  app.get('/api/paper-sim/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const manager = paperPortfolioManagers.get(userId);
+      
+      if (!manager) {
+        const stats = await storage.getPaperSimStats(userId);
+        return res.json({
+          isRunning: false,
+          stats: {
+            totalTrades: stats.totalTrades,
+            openPositions: stats.openPositions,
+            closedTrades: stats.closedTrades,
+            totalPnl: stats.totalPnl,
+            totalPnlPercent: 0,
+            winRate: stats.winRate,
+            avgReturn: stats.avgReturn,
+            avgHoldingTime: stats.avgHoldingTime,
+            maxDrawdown: 0,
+            sharpeRatio: 0,
+            profitFactor: 0,
+            byStrategy: stats.byStrategy
+          }
+        });
+      }
+
+      const metrics = await manager.getPortfolioMetrics();
+      res.json({
+        isRunning: true,
+        stats: metrics
+      });
+    } catch (error) {
+      console.error('Error fetching paper sim metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch metrics' });
+    }
+  });
+
+  app.get('/api/paper-sim/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const manager = paperPortfolioManagers.get(userId);
+      
+      if (!manager) {
+        return res.status(400).json({ error: 'Paper trading simulation not running' });
+      }
+
+      const health = await manager.checkPortfolioHealth();
+      res.json(health);
+    } catch (error) {
+      console.error('Error checking paper sim health:', error);
+      res.status(500).json({ error: 'Failed to check health' });
+    }
+  });
+
+  app.post('/api/paper-sim/close-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const manager = paperPortfolioManagers.get(userId);
+      
+      if (!manager) {
+        return res.status(400).json({ error: 'Paper trading simulation not running' });
+      }
+
+      const { reason } = req.body;
+      await manager.closeAllPositions(reason || 'Manual close requested');
+      
+      res.json({ success: true, message: 'All positions closed' });
+    } catch (error) {
+      console.error('Error closing all positions:', error);
+      res.status(500).json({ error: 'Failed to close positions' });
+    }
+  });
+
+  app.post('/api/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const manager = paperPortfolioManagers.get(userId);
+      
+      if (!manager) {
+        return res.status(400).json({ error: 'Paper trading simulation not running' });
+      }
+
+      await manager.resetPortfolio();
+      
+      res.json({ success: true, message: 'Portfolio reset complete' });
+    } catch (error) {
+      console.error('Error resetting portfolio:', error);
+      res.status(500).json({ error: 'Failed to reset portfolio' });
+    }
+  });
+
+  app.get('/api/paper-sim/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { limit } = req.query;
+      
+      const logs = await storage.getPaperSimTradeLogs(userId, {
+        limit: limit ? parseInt(limit as string) : 100
+      });
+      res.json(logs);
+    } catch (error) {
+      console.error('Error fetching paper sim logs:', error);
+      res.status(500).json({ error: 'Failed to fetch logs' });
+    }
+  });
+
   app.get('/api/ai/conversation', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
