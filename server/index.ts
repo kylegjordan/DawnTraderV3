@@ -114,6 +114,7 @@ app.use((req, res, next) => {
       const { aiSummaryTask } = await import('./services/ai-summary-task');
       const { systemHealthCheckTask } = await import('./services/system-health-check-task');
       const { cleTask } = await import('./services/cle-task');
+      const { cwaTask } = await import('./services/cwa-task');
       const { cachePurgeTask } = await import('./services/cache-purge-task');
       const { semanticIngestionTask } = await import('./services/semantic-ingestion-task');
 
@@ -168,6 +169,17 @@ app.use((req, res, next) => {
         frequency: cleTask.frequency,
         intervalMs: cleTask.intervalMs,
         run: cleTask.run.bind(cleTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+      
+      schedulerRegistry.registerTask({
+        name: cwaTask.name,
+        description: cwaTask.description,
+        frequency: cwaTask.frequency,
+        intervalMs: cwaTask.intervalMs,
+        run: cwaTask.run.bind(cwaTask),
         lastRun: null,
         nextRun: null,
         status: 'idle'
