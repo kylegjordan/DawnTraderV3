@@ -11,7 +11,8 @@ import {
   pgEnum,
   date,
   uniqueIndex,
-  index
+  index,
+  vector
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -297,6 +298,22 @@ export const responseCache = pgTable("response_cache", {
 }, (table) => ({
   userCacheKeyIdx: uniqueIndex("response_cache_user_cache_key_idx").on(table.userId, table.cacheKey),
   expiresAtIdx: index("response_cache_expires_at_idx").on(table.expiresAt),
+}));
+
+// Semantic Memory (Milestone 15: vector-based learning recall)
+export const semanticMemory = pgTable("semantic_memory", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  embedding: vector("embedding", { dimensions: 1536 }).notNull(), // OpenAI text-embedding-3-small
+  content: text("content").notNull(), // Human-readable summary or lesson
+  sourceTable: varchar("source_table", { length: 100 }).notNull(), // e.g. "ai_lessons", "portfolio_adjustments"
+  sourceId: varchar("source_id").notNull(), // Reference ID from source table
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`), // e.g. ["BTC", "volatility", "paper-mode"]
+  relevance: decimal("relevance", { precision: 3, scale: 2 }).default("0.50"), // 0-1 score for ranking
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  embeddingIdx: index("semantic_memory_embedding_idx").using("hnsw", table.embedding.op("vector_cosine_ops")),
+  tagsIdx: index("semantic_memory_tags_idx").on(table.tags),
+  sourceIdx: uniqueIndex("semantic_memory_source_idx").on(table.sourceTable, table.sourceId),
 }));
 
 // AI Market Analyses (market regime classification)
@@ -954,6 +971,11 @@ export const insertResponseCacheSchema = createInsertSchema(responseCache).omit(
   lastAccessedAt: true,
 });
 
+export const insertSemanticMemorySchema = createInsertSchema(semanticMemory).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertAiMarketAnalysisSchema = createInsertSchema(aiMarketAnalyses).omit({
   id: true,
   createdAt: true,
@@ -1140,6 +1162,9 @@ export type ConversationSummary = typeof conversationSummaries.$inferSelect;
 
 export type InsertResponseCache = z.infer<typeof insertResponseCacheSchema>;
 export type ResponseCache = typeof responseCache.$inferSelect;
+
+export type InsertSemanticMemory = z.infer<typeof insertSemanticMemorySchema>;
+export type SemanticMemory = typeof semanticMemory.$inferSelect;
 
 export type InsertAiMarketAnalysis = z.infer<typeof insertAiMarketAnalysisSchema>;
 export type AiMarketAnalysis = typeof aiMarketAnalyses.$inferSelect;
