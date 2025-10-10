@@ -16,7 +16,7 @@ import { useTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatUTCTimeWithDate, formatLocalTimeWithDate, getTimezoneAbbr } from "@/lib/timezone";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 
@@ -35,6 +35,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     isStopping 
   } = useTrading();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [utcTimeDate, setUtcTimeDate] = useState<string>('');
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
@@ -112,6 +113,13 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         description: errorMessage,
         variant: "destructive",
       });
+      
+      // Refetch status to ensure UI reflects actual backend state
+      if (currentMode === 'paper') {
+        await queryClient.refetchQueries({ queryKey: ['/api/paper-sim/status'] });
+      } else {
+        await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
+      }
     }
   };
 
@@ -148,6 +156,9 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         description: errorMessage,
         variant: "destructive",
       });
+      
+      // Refetch status to ensure UI reflects actual backend state (Live mode only)
+      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };
 
