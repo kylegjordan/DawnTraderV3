@@ -54,6 +54,26 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user 
 - **Historic Signal Backfilling**: Fetches multi-month historical OHLC data from Kraken, ingesting it into Semantic Memory with P/L-based relevance scoring for CWA learning.
 - **Paper Trading Simulation Engine**: Provides real-time simulated trade execution with realistic order fill logic, slippage, fees, and risk control integration. Includes a Portfolio Manager for tracking positions, P/L, and performance metrics.
 
+## Configuration & Credentials
+
+### Admin Account
+- **Email**: kylegjordan@gmail.com
+- **Password**: Miami@6821 (bcrypt hashed with 10 salt rounds)
+- **Access**: Full admin privileges with user management capabilities
+
+### Paper Trading Configuration
+- **Starting Balance**: $800 (updated from previous $50,000)
+- **Allocation Display**: Shows 100% cash allocation when no open positions
+- **Portfolio Metrics**: Includes cash/crypto allocation percentages
+  - `cashPercent = (cash / totalValue) * 100`
+  - `cryptoPercent = (currentExposure / totalValue) * 100`
+  - When no positions: 100% cash, 0% crypto
+- **Configuration Files Updated**:
+  - `server/routes.ts`: initialBalance = 800
+  - `server/services/paper-metrics.ts`: startingBalance = 800
+  - `server/services/ai-analyst.ts`: assumedStartingBalance = 800
+  - `server/__tests__/smoke.test.ts`: test values updated
+
 ## External Dependencies
 
 - **Kraken Exchange API**: For market data, trade execution, and account management.
