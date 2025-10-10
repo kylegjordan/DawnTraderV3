@@ -1318,10 +1318,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.id;
       const positions = await storage.getPaperSimOpenPositions(userId);
-      res.json(positions);
+      res.json({ ok: true, positions });
     } catch (error) {
       console.error('Error fetching paper sim positions:', error);
-      res.status(500).json({ error: 'Failed to fetch positions' });
+      res.status(500).json({ ok: false, error: 'Failed to fetch positions' });
     }
   });
 

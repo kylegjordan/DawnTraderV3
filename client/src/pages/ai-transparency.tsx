@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target, Settings } from "lucide-react";
+import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target, Settings, LineChart } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 
@@ -67,6 +67,17 @@ export default function AITransparencyPage() {
     refetchInterval: 60000,
   });
 
+  // Fetch paper trading simulation data (Milestone 18)
+  const { data: paperSimData, isLoading: paperSimLoading } = useQuery<{ ok: boolean; isRunning: boolean; stats: any }>({
+    queryKey: ['/api/paper-sim/metrics'],
+    refetchInterval: 15000, // Refresh every 15 seconds for near-live monitoring
+  });
+
+  const { data: paperPositionsData, isLoading: paperPositionsLoading } = useQuery<{ ok: boolean; positions: any[] }>({
+    queryKey: ['/api/paper-sim/positions'],
+    refetchInterval: 15000, // Refresh every 15 seconds for near-live monitoring
+  });
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
@@ -76,6 +87,9 @@ export default function AITransparencyPage() {
   const learningMetrics = learningMetricsData?.metrics || null;
   const proposals = proposalsData?.proposals || [];
   const historicSignalsStats = historicSignalsData?.stats || null;
+  const paperSimMetrics = paperSimData?.stats || null;
+  const isSimRunning = paperSimData?.isRunning || false;
+  const paperPositions = paperPositionsData?.positions || [];
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -101,7 +115,7 @@ export default function AITransparencyPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-7" data-testid="tabs-ai-transparency">
+        <TabsList className="grid w-full grid-cols-8" data-testid="tabs-ai-transparency">
           <TabsTrigger value="automation-logs" data-testid="tab-automation-logs">
             <Clock className="w-4 h-4 mr-2" />
             Automation Logs
@@ -125,6 +139,10 @@ export default function AITransparencyPage() {
           <TabsTrigger value="learning-health" data-testid="tab-learning-health">
             <Target className="w-4 h-4 mr-2" />
             Learning Health
+          </TabsTrigger>
+          <TabsTrigger value="paper-trading" data-testid="tab-paper-trading">
+            <LineChart className="w-4 h-4 mr-2" />
+            Paper Trading
           </TabsTrigger>
           <TabsTrigger value="health-alerts" data-testid="tab-health-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -567,7 +585,207 @@ export default function AITransparencyPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab 5: System Health Alerts */}
+        {/* Tab 7: Paper Trading Simulation (Milestone 18) */}
+        <TabsContent value="paper-trading" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Paper Trading Simulation Engine</CardTitle>
+              <CardDescription>
+                Live paper trading simulation with real-time metrics and portfolio monitoring
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {paperSimLoading ? (
+                <div className="text-sm text-muted-foreground">Loading paper trading data...</div>
+              ) : !paperSimMetrics ? (
+                <div className="text-sm text-muted-foreground">
+                  No paper trading simulation data available. Start the simulation engine to begin paper trading.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Status and Control */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-card">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${isSimRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                      <span className="text-sm font-medium text-foreground" data-testid="text-sim-status">
+                        Engine Status: {isSimRunning ? 'Running' : 'Stopped'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Portfolio Metrics */}
+                  <div>
+                    <h4 className="text-sm font-medium text-foreground mb-3">Portfolio Performance</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="p-4 border rounded-lg bg-card" data-testid="card-total-trades">
+                        <div className="text-sm text-muted-foreground mb-1">Total Trades</div>
+                        <div className="text-2xl font-bold text-foreground" data-testid="text-total-trades">
+                          {paperSimMetrics.totalTrades || 0}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 border rounded-lg bg-card" data-testid="card-win-rate">
+                        <div className="text-sm text-muted-foreground mb-1">Win Rate</div>
+                        <div className="text-2xl font-bold text-foreground" data-testid="text-win-rate">
+                          {paperSimMetrics.winRate !== null && paperSimMetrics.winRate !== undefined 
+                            ? `${paperSimMetrics.winRate.toFixed(1)}%` 
+                            : 'N/A'}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 border rounded-lg bg-card" data-testid="card-total-pnl">
+                        <div className="text-sm text-muted-foreground mb-1">Total P/L</div>
+                        <div 
+                          className={`text-2xl font-bold ${
+                            paperSimMetrics.totalPnl > 0 ? 'text-green-500' : 
+                            paperSimMetrics.totalPnl < 0 ? 'text-red-500' : 
+                            'text-foreground'
+                          }`}
+                          data-testid="text-total-pnl"
+                        >
+                          ${paperSimMetrics.totalPnl?.toFixed(2) || '0.00'}
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 border rounded-lg bg-card" data-testid="card-sharpe-ratio">
+                        <div className="text-sm text-muted-foreground mb-1">Sharpe Ratio</div>
+                        <div className="text-2xl font-bold text-foreground" data-testid="text-sharpe-ratio">
+                          {paperSimMetrics.sharpeRatio?.toFixed(2) || 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Advanced Metrics */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-3 border rounded-lg bg-card">
+                      <div className="text-xs text-muted-foreground mb-1">Max Drawdown</div>
+                      <div 
+                        className={`text-lg font-bold ${paperSimMetrics.maxDrawdown >= 15 ? 'text-red-500' : 'text-foreground'}`}
+                        data-testid="text-max-drawdown"
+                      >
+                        {paperSimMetrics.maxDrawdown?.toFixed(2) || '0.00'}%
+                      </div>
+                    </div>
+                    
+                    <div className="p-3 border rounded-lg bg-card">
+                      <div className="text-xs text-muted-foreground mb-1">Profit Factor</div>
+                      <div className="text-lg font-bold text-foreground" data-testid="text-profit-factor">
+                        {paperSimMetrics.profitFactor?.toFixed(2) || 'N/A'}
+                      </div>
+                    </div>
+                    
+                    <div className="p-3 border rounded-lg bg-card">
+                      <div className="text-xs text-muted-foreground mb-1">Avg Return</div>
+                      <div 
+                        className={`text-lg font-bold ${
+                          paperSimMetrics.avgReturn > 0 ? 'text-green-500' : 
+                          paperSimMetrics.avgReturn < 0 ? 'text-red-500' : 
+                          'text-foreground'
+                        }`}
+                        data-testid="text-avg-return"
+                      >
+                        {paperSimMetrics.avgReturn !== null && paperSimMetrics.avgReturn !== undefined 
+                          ? `${paperSimMetrics.avgReturn > 0 ? '+' : ''}${paperSimMetrics.avgReturn.toFixed(2)}%` 
+                          : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Open Positions */}
+                  {paperPositions.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-foreground mb-3">
+                        Open Positions ({paperPositions.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {paperPositions.map((pos: any, idx: number) => (
+                          <div 
+                            key={idx} 
+                            className="p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                            data-testid={`position-${idx}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <Badge variant="secondary" className="text-xs" data-testid={`badge-symbol-${idx}`}>
+                                  {pos.symbol}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  {pos.strategy}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <div 
+                                  className={`text-sm font-medium ${
+                                    parseFloat(pos.unrealizedPnl || 0) > 0 ? 'text-green-500' : 
+                                    parseFloat(pos.unrealizedPnl || 0) < 0 ? 'text-red-500' : 
+                                    'text-foreground'
+                                  }`}
+                                  data-testid={`text-pnl-${idx}`}
+                                >
+                                  ${parseFloat(pos.unrealizedPnl || 0).toFixed(2)}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Entry: ${parseFloat(pos.avgPrice || 0).toFixed(4)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Strategy Breakdown */}
+                  {paperSimMetrics.byStrategy && paperSimMetrics.byStrategy.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-foreground mb-3">Performance by Strategy</h4>
+                      <div className="space-y-2">
+                        {paperSimMetrics.byStrategy.map((strategy: any, idx: number) => (
+                          <div 
+                            key={idx} 
+                            className="p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                            data-testid={`strategy-${idx}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs" data-testid={`badge-strategy-${idx}`}>
+                                  {strategy.strategyId?.replace(/_/g, ' ').toUpperCase() || 'Unknown'}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {strategy.count} trades
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <div 
+                                  className={`text-sm font-medium ${
+                                    strategy.totalPnl > 0 ? 'text-green-500' : 
+                                    strategy.totalPnl < 0 ? 'text-red-500' : 
+                                    'text-foreground'
+                                  }`}
+                                  data-testid={`text-strategy-pnl-${idx}`}
+                                >
+                                  ${strategy.totalPnl?.toFixed(2) || '0.00'}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {strategy.winRate !== null && strategy.winRate !== undefined 
+                                    ? `${strategy.winRate.toFixed(1)}% win rate` 
+                                    : 'N/A'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 8: System Health Alerts */}
         <TabsContent value="health-alerts" className="space-y-4">
           <Card>
             <CardHeader>
