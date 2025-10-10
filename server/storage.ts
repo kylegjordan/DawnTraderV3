@@ -122,7 +122,16 @@ import {
   assetCapabilities,
   type HistoricSignal,
   type InsertHistoricSignal,
-  historicSignals
+  historicSignals,
+  type PaperSimTrade,
+  type InsertPaperSimTrade,
+  paperSimTrades,
+  type PaperSimOpenPosition,
+  type InsertPaperSimOpenPosition,
+  paperSimOpenPositions,
+  type PaperSimTradeLog,
+  type InsertPaperSimTradeLog,
+  paperSimTradeLogs
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -378,6 +387,44 @@ export interface IStorage {
       count: number;
       winRate: number;
       avgReturn: number;
+    }>;
+  }>;
+
+  // Paper simulation methods (Milestone 18)
+  // Paper trades
+  createPaperSimTrade(trade: InsertPaperSimTrade): Promise<PaperSimTrade>;
+  updatePaperSimTrade(id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade>;
+  getPaperSimTrade(id: string): Promise<PaperSimTrade | undefined>;
+  getPaperSimTrades(userId: string, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>;
+  getPaperSimTradesBySymbol(userId: string, symbol: string): Promise<PaperSimTrade[]>;
+  
+  // Open positions
+  createPaperSimOpenPosition(position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition>;
+  updatePaperSimOpenPosition(id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition>;
+  getPaperSimOpenPosition(id: string): Promise<PaperSimOpenPosition | undefined>;
+  getPaperSimOpenPositionBySymbol(userId: string, symbol: string): Promise<PaperSimOpenPosition | undefined>;
+  getPaperSimOpenPositions(userId: string): Promise<PaperSimOpenPosition[]>;
+  deletePaperSimOpenPosition(id: string): Promise<void>;
+  
+  // Trade logs
+  createPaperSimTradeLog(log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog>;
+  getPaperSimTradeLogs(userId: string, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]>;
+  
+  // Stats
+  getPaperSimStats(userId: string): Promise<{
+    totalTrades: number;
+    openPositions: number;
+    closedTrades: number;
+    totalPnl: number;
+    winRate: number;
+    avgReturn: number;
+    avgHoldingTime: number; // in hours
+    byStrategy: Array<{
+      strategy: string;
+      count: number;
+      winRate: number;
+      avgReturn: number;
+      totalPnl: number;
     }>;
   }>;
 }
@@ -2150,6 +2197,201 @@ export class DatabaseStorage implements IStorage {
       totalSignals,
       winRate,
       avgReturn,
+      byStrategy
+    };
+  }
+
+  // Paper simulation methods (Milestone 18)
+  async createPaperSimTrade(trade: InsertPaperSimTrade): Promise<PaperSimTrade> {
+    const [result] = await db.insert(paperSimTrades).values(trade).returning();
+    return result;
+  }
+
+  async updatePaperSimTrade(id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade> {
+    const [result] = await db.update(paperSimTrades)
+      .set(updates)
+      .where(eq(paperSimTrades.id, id))
+      .returning();
+    return result;
+  }
+
+  async getPaperSimTrade(id: string): Promise<PaperSimTrade | undefined> {
+    const [trade] = await db.select()
+      .from(paperSimTrades)
+      .where(eq(paperSimTrades.id, id));
+    return trade || undefined;
+  }
+
+  async getPaperSimTrades(userId: string, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
+    const limit = filters?.limit || 100;
+    const closedOnly = filters?.closedOnly ?? false;
+    
+    const conditions = [eq(paperSimTrades.userId, userId)];
+    if (closedOnly) {
+      conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL` as any);
+    }
+    
+    return await db.select()
+      .from(paperSimTrades)
+      .where(and(...conditions))
+      .orderBy(desc(paperSimTrades.openedAt))
+      .limit(limit);
+  }
+
+  async getPaperSimTradesBySymbol(userId: string, symbol: string): Promise<PaperSimTrade[]> {
+    return await db.select()
+      .from(paperSimTrades)
+      .where(and(
+        eq(paperSimTrades.userId, userId),
+        eq(paperSimTrades.symbol, symbol)
+      ))
+      .orderBy(desc(paperSimTrades.openedAt));
+  }
+
+  async createPaperSimOpenPosition(position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition> {
+    const [result] = await db.insert(paperSimOpenPositions).values(position).returning();
+    return result;
+  }
+
+  async updatePaperSimOpenPosition(id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition> {
+    const [result] = await db.update(paperSimOpenPositions)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(eq(paperSimOpenPositions.id, id))
+      .returning();
+    return result;
+  }
+
+  async getPaperSimOpenPosition(id: string): Promise<PaperSimOpenPosition | undefined> {
+    const [position] = await db.select()
+      .from(paperSimOpenPositions)
+      .where(eq(paperSimOpenPositions.id, id));
+    return position || undefined;
+  }
+
+  async getPaperSimOpenPositionBySymbol(userId: string, symbol: string): Promise<PaperSimOpenPosition | undefined> {
+    const [position] = await db.select()
+      .from(paperSimOpenPositions)
+      .where(and(
+        eq(paperSimOpenPositions.userId, userId),
+        eq(paperSimOpenPositions.symbol, symbol)
+      ));
+    return position || undefined;
+  }
+
+  async getPaperSimOpenPositions(userId: string): Promise<PaperSimOpenPosition[]> {
+    return await db.select()
+      .from(paperSimOpenPositions)
+      .where(eq(paperSimOpenPositions.userId, userId))
+      .orderBy(desc(paperSimOpenPositions.openedAt));
+  }
+
+  async deletePaperSimOpenPosition(id: string): Promise<void> {
+    await db.delete(paperSimOpenPositions).where(eq(paperSimOpenPositions.id, id));
+  }
+
+  async createPaperSimTradeLog(log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog> {
+    const [result] = await db.insert(paperSimTradeLogs).values(log).returning();
+    return result;
+  }
+
+  async getPaperSimTradeLogs(userId: string, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]> {
+    const limit = filters?.limit || 100;
+    
+    const conditions = [eq(paperSimTradeLogs.userId, userId)];
+    if (filters?.tradeId) {
+      conditions.push(eq(paperSimTradeLogs.tradeId, filters.tradeId));
+    }
+    
+    return await db.select()
+      .from(paperSimTradeLogs)
+      .where(and(...conditions))
+      .orderBy(desc(paperSimTradeLogs.timestamp))
+      .limit(limit);
+  }
+
+  async getPaperSimStats(userId: string): Promise<{
+    totalTrades: number;
+    openPositions: number;
+    closedTrades: number;
+    totalPnl: number;
+    winRate: number;
+    avgReturn: number;
+    avgHoldingTime: number;
+    byStrategy: Array<{
+      strategy: string;
+      count: number;
+      winRate: number;
+      avgReturn: number;
+      totalPnl: number;
+    }>;
+  }> {
+    const trades = await db.select()
+      .from(paperSimTrades)
+      .where(eq(paperSimTrades.userId, userId));
+
+    const openPositions = await db.select()
+      .from(paperSimOpenPositions)
+      .where(eq(paperSimOpenPositions.userId, userId));
+
+    const totalTrades = trades.length;
+    const closedTrades = trades.filter(t => t.closedAt).length;
+    const openCount = openPositions.length;
+
+    const totalPnl = trades.reduce((acc, t) => 
+      acc + (t.pnl ? parseFloat(t.pnl) : 0), 0
+    );
+
+    const winning = trades.filter(t => t.pnl && parseFloat(t.pnl) > 0).length;
+    const winRate = closedTrades > 0 ? (winning / closedTrades) * 100 : 0;
+
+    const avgReturn = trades.reduce((acc, t) => 
+      acc + (t.pnlPercent ? parseFloat(t.pnlPercent) : 0), 0
+    ) / (closedTrades || 1);
+
+    // Calculate average holding time in hours
+    const holdingTimes = trades
+      .filter(t => t.openedAt && t.closedAt)
+      .map(t => {
+        const opened = new Date(t.openedAt).getTime();
+        const closed = new Date(t.closedAt!).getTime();
+        return (closed - opened) / (1000 * 60 * 60); // Convert to hours
+      });
+    const avgHoldingTime = holdingTimes.length > 0 
+      ? holdingTimes.reduce((a, b) => a + b, 0) / holdingTimes.length 
+      : 0;
+
+    // Group by strategy
+    const byStrategy = Array.from(
+      trades.reduce((map, trade) => {
+        const strategy = trade.strategyName;
+        if (!map.has(strategy)) {
+          map.set(strategy, []);
+        }
+        map.get(strategy)!.push(trade);
+        return map;
+      }, new Map<string, typeof trades>())
+    ).map(([strategy, strategyTrades]) => {
+      const count = strategyTrades.length;
+      const wins = strategyTrades.filter(t => t.pnl && parseFloat(t.pnl) > 0).length;
+      const winRate = count > 0 ? (wins / count) * 100 : 0;
+      const totalPnl = strategyTrades.reduce((acc, t) => 
+        acc + (t.pnl ? parseFloat(t.pnl) : 0), 0
+      );
+      const avgReturn = strategyTrades.reduce((acc, t) => 
+        acc + (t.pnlPercent ? parseFloat(t.pnlPercent) : 0), 0
+      ) / (count || 1);
+      
+      return { strategy, count, winRate, avgReturn, totalPnl };
+    });
+
+    return {
+      totalTrades,
+      openPositions: openCount,
+      closedTrades,
+      totalPnl,
+      winRate,
+      avgReturn,
+      avgHoldingTime,
       byStrategy
     };
   }

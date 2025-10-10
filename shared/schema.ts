@@ -875,6 +875,76 @@ export const historicSignals = pgTable("historic_signals", {
   userStrategyTimeIdx: index("historic_signals_user_strategy_time_idx").on(table.userId, table.strategyId, table.triggerTime),
 }));
 
+// Milestone 18: Paper Trading Simulation Engine Tables
+
+// Paper Trades - Historical record of closed simulated trades
+export const paperSimTrades = pgTable("paper_sim_trades", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  strategyName: strategyTypeEnum("strategy_name").notNull(),
+  side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
+  quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
+  entryPrice: decimal("entry_price", { precision: 20, scale: 8 }).notNull(),
+  exitPrice: decimal("exit_price", { precision: 20, scale: 8 }),
+  stopLoss: decimal("stop_loss", { precision: 20, scale: 8 }),
+  takeProfit: decimal("take_profit", { precision: 20, scale: 8 }),
+  pnl: decimal("pnl", { precision: 20, scale: 8 }),
+  pnlPercent: decimal("pnl_percent", { precision: 10, scale: 4 }),
+  fees: decimal("fees", { precision: 20, scale: 8 }).default("0"),
+  slippage: decimal("slippage", { precision: 20, scale: 8 }).default("0"),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  closeReason: varchar("close_reason", { length: 50 }), // 'target_hit', 'stop_hit', 'strategy_exit', 'manual', 'guardrail'
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  metadata: jsonb("metadata"), // Signal details, market context, etc.
+}, (table) => ({
+  userSymbolIdx: index("paper_sim_trades_user_symbol_idx").on(table.userId, table.symbol),
+  strategyIdx: index("paper_sim_trades_strategy_idx").on(table.strategyName),
+  openedAtIdx: index("paper_sim_trades_opened_at_idx").on(table.openedAt),
+  closedAtIdx: index("paper_sim_trades_closed_at_idx").on(table.closedAt),
+}));
+
+// Open Positions - Currently active simulated positions
+export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  strategyName: strategyTypeEnum("strategy_name").notNull(),
+  side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
+  quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
+  avgPrice: decimal("avg_price", { precision: 20, scale: 8 }).notNull(),
+  currentPrice: decimal("current_price", { precision: 20, scale: 8 }),
+  stopLoss: decimal("stop_loss", { precision: 20, scale: 8 }),
+  takeProfit: decimal("take_profit", { precision: 20, scale: 8 }),
+  unrealizedPnl: decimal("unrealized_pnl", { precision: 20, scale: 8 }),
+  unrealizedPnlPercent: decimal("unrealized_pnl_percent", { precision: 10, scale: 4 }),
+  openedAt: timestamp("opened_at", { withTimezone: true }).defaultNow(),
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
+}, (table) => ({
+  userSymbolIdx: uniqueIndex("paper_sim_open_positions_user_symbol_idx").on(table.userId, table.symbol),
+  userIdx: index("paper_sim_open_positions_user_idx").on(table.userId),
+  strategyIdx: index("paper_sim_open_positions_strategy_idx").on(table.strategyName),
+}));
+
+// Trade Logs - Chronological event log for paper trading transparency
+export const paperSimTradeLogs = pgTable("paper_sim_trade_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  tradeId: varchar("trade_id"), // References paper_sim_trades.id (nullable for system events)
+  positionId: varchar("position_id"), // References paper_sim_open_positions.id (nullable)
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // 'position_opened', 'position_closed', 'stop_triggered', 'target_hit', 'guardrail_triggered', 'error'
+  message: text("message").notNull(),
+  metadata: jsonb("metadata"), // Additional context (prices, quantities, reasons)
+}, (table) => ({
+  userTimestampIdx: index("paper_sim_trade_logs_user_timestamp_idx").on(table.userId, table.timestamp),
+  tradeIdIdx: index("paper_sim_trade_logs_trade_id_idx").on(table.tradeId),
+  eventTypeIdx: index("paper_sim_trade_logs_event_type_idx").on(table.eventType),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -1252,6 +1322,20 @@ export const insertHistoricSignalSchema = createInsertSchema(historicSignals).om
   evaluatedAt: true,
 });
 
+export const insertPaperSimTradeSchema = createInsertSchema(paperSimTrades).omit({
+  id: true,
+});
+
+export const insertPaperSimOpenPositionSchema = createInsertSchema(paperSimOpenPositions).omit({
+  id: true,
+  lastUpdated: true,
+});
+
+export const insertPaperSimTradeLogSchema = createInsertSchema(paperSimTradeLogs).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -1393,3 +1477,12 @@ export type AssetCapability = typeof assetCapabilities.$inferSelect;
 
 export type InsertHistoricSignal = z.infer<typeof insertHistoricSignalSchema>;
 export type HistoricSignal = typeof historicSignals.$inferSelect;
+
+export type InsertPaperSimTrade = z.infer<typeof insertPaperSimTradeSchema>;
+export type PaperSimTrade = typeof paperSimTrades.$inferSelect;
+
+export type InsertPaperSimOpenPosition = z.infer<typeof insertPaperSimOpenPositionSchema>;
+export type PaperSimOpenPosition = typeof paperSimOpenPositions.$inferSelect;
+
+export type InsertPaperSimTradeLog = z.infer<typeof insertPaperSimTradeLogSchema>;
+export type PaperSimTradeLog = typeof paperSimTradeLogs.$inferSelect;

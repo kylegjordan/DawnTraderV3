@@ -1,0 +1,272 @@
+⚙️ Milestone 18 – Paper-Trading Simulation Engine
+
+Objective:
+Transform the AI from a passive analyst into an active simulated trader — capable of executing, tracking, and learning from paper (virtual) trades in real time — without any connection to live funds or exchanges.
+
+🧩 1. Architecture Overview
+
+The Paper-Trading Simulation Engine (PTSE) sits between the strategy signal generators and the learning layer (CLE + CWA + Semantic Memory).
+
+Market Data → Strategy Engine → PTSE → Portfolio Ledger → Learning Feedback
+                                     ↓
+                               AI Transparency Panel
+
+
+Purpose:
+Provide a continuous “real-world rehearsal” loop using current market data so the AI can validate and refine strategies before live deployment.
+
+🔧 2. Core Components to Implement
+2.1 Paper Trading Ledger (Database Layer)
+
+Create three new tables:
+
+Table	Key Fields	Purpose
+paper_trades	trade_id, symbol, side, entry_price, exit_price, qty, pnl, opened_at, closed_at	Historical record of closed trades
+open_positions	position_id, symbol, qty, avg_price, stop_loss, take_profit, opened_at	Track currently active positions
+trade_logs	log_id, timestamp, trade_id, message, event_type	Chronological event log for transparency
+
+All tables include user_id and strategy_name for multi-user and per-strategy traceability.
+
+2.2 Execution Engine (Core Service)
+
+File: server/services/paper-execution-engine.ts
+
+Responsibilities:
+
+Subscribe to live Kraken OHLC or ticker stream (same data feed used in backfill).
+
+For each tick/candle:
+
+Query active strategies for signals (buy, sell, hold).
+
+Execute simulated trades according to signal type.
+
+Apply order-fill logic:
+
+Immediate fill at current price ± configurable slippage.
+
+Simulated fee (e.g., 0.1 % per trade).
+
+Update ledger tables accordingly.
+
+Safety:
+
+All trades are stored locally; no external API calls for execution.
+
+No private keys, no order placement, no network calls to brokers.
+
+2.3 Portfolio Manager (Risk & Guardrails Integration)
+
+File: server/services/paper-portfolio-manager.ts
+
+Handles:
+
+Position sizing using Milestone 17B rules (fractional vs. whole-unit logic).
+
+Portfolio constraints:
+
+max_positions
+
+max_drawdown
+
+max_position_size
+
+daily_loss_limit
+
+Automatic position closure when guardrails breached.
+
+Logs guardrail events to the Transparency Panel.
+
+2.4 Learning Feedback Hooks
+
+Each simulated trade outcome (pnl, duration, accuracy) → logged as PredictionOutcome event.
+
+CLE (Confidence Learning Engine) consumes these outcomes.
+
+CWA (Cognitive Weight Adjuster) adjusts source weights for:
+
+strategy_engine
+
+semantic_memory
+
+paper_trading_feedback
+
+Results appear in Learning Health tab metrics automatically.
+
+2.5 Transparency Integration (UI)
+
+Add new “Paper Trading” tab in AI Transparency Panel:
+
+Metrics displayed:
+
+Active positions
+
+Closed trades (count)
+
+Total P/L (daily, weekly, cumulative)
+
+Win rate %
+
+Average return per trade
+
+Strategy performance comparison (bar chart)
+
+Guardrail trigger count
+
+Last execution timestamp
+
+Each trade expands to show entry/exit, reason (from signal note), and confidence score.
+
+🧠 3. Simulation Logic
+Step	Description
+1	Load strategy signals for each symbol
+2	If buy signal & no position → open simulated position
+3	If sell signal & position exists → close simulated position
+4	Update ledger + Transparency Panel
+5	Send trade outcome to Learning Feedback queue
+6	Continue loop every candle/interval
+
+Timeframe: hourly (default) but configurable.
+
+🧰 4. Configuration Parameters
+
+Add to .env or config constants:
+
+Variable	Default	Description
+PAPER_TRADING_ENABLED	true	Enables simulation engine
+PAPER_TRADING_INTERVAL_MIN	60	Candle interval
+MAX_OPEN_POSITIONS	10	Portfolio guardrail
+MAX_BATCH_TRADES_PER_HOUR	50	Safety throttle
+TRADE_FEE_RATE	0.001	0.1 %
+SLIPPAGE_BPS	10	0.1 % slippage
+LEARNING_FEEDBACK_ENABLED	true	Sends outcomes to CLE/CWA
+🔒 5. Safety Controls (Simulation-Only Enforcement)
+
+Route separation:
+All trading endpoints under /api/paper/ namespace.
+No route ever calls external trade APIs.
+
+Environment enforcement:
+Paper trading starts only when NODE_ENV !== 'production' or ALLOW_LIVE_TRADING = false.
+
+Verification middleware:
+On startup, check:
+
+if (process.env.PAPER_TRADING_ENABLED && !process.env.ALLOW_LIVE_TRADING)
+    console.log("✅ Paper trading mode active, live trading disabled");
+
+
+Fail-safe lock:
+If any call attempts to reach an external broker API → system throws and logs a “Live Execution Blocked” event.
+
+🧾 6. Testing Plan
+6.1 Unit Tests
+
+Strategy → trade signal mapping.
+
+Position opening/closing logic.
+
+Guardrail enforcement (trigger stops, max loss, etc.).
+
+Trade P&L math correctness (fee + slippage).
+
+6.2 Integration Tests
+
+Full cycle: market data → signal → trade → ledger → learning feedback.
+
+Confirm all transactions appear in Transparency Panel.
+
+6.3 Regression Tests
+
+Verify semantic ingestion continues to work (historic + paper data).
+
+CWA adjusts correctly when fed paper-trading outcomes.
+
+6.4 Manual Tests
+
+Start engine, confirm:
+
+Console logs show simulated executions.
+
+No network calls to any live trading API.
+
+Transparency UI updates in real time.
+
+📊 7. Post-Implementation Verification Checklist
+Category	Check	Expected Result
+System Mode	PAPER_TRADING_ENABLED true	“Paper mode active” log visible
+Safety	No external order API calls	Confirmed via logs
+Database	Tables populated (paper_trades, etc.)	Counts increasing
+Learning	New outcomes appear in Learning Health tab	Yes
+Transparency	Paper Trading tab populates live metrics	Yes
+Logs	No 429s, unhandled errors, or 5xx	Clean
+Performance	CPU < 70 %, stable memory	Pass
+🧭 8. Transition & Integration Steps
+
+Before Activation:
+
+Re-run system diagnostics and functional tests (as you suggested).
+
+Verify historic data backfill exists and populated.
+
+Snapshot database & files for checkpoint backup.
+
+Activate Paper Trading Mode:
+
+Set PAPER_TRADING_ENABLED=true.
+
+Run engine manually or via scheduled task (e.g., every 60 min).
+
+Observe & Tune:
+
+Let it run for several days to collect simulated trades.
+
+Verify guardrails, logging, and learning metrics behave as expected.
+
+Checkpoint Backup:
+
+Export database (pg_dump or Prisma export).
+
+Archive /shared/, /server/services/, and /client/src/pages/ directories.
+
+Tag commit: checkpoint-pre-paper-trading.
+
+🧠 9. Optional Next Step: AI Context Priming Prompt
+
+After the system passes all diagnostics, add a context prompt in your in-app ChatGPT panel to align reasoning:
+
+“You are the Arcadia Trading Intelligence.
+You are now operating in Paper-Trading Simulation Mode.
+Your purpose is to test, learn, and refine strategies to maximize long-term portfolio performance within established guardrails.
+Base your decisions on historical learning, live data, and the goals engine.
+Every decision should contribute to improving consistency, reducing risk, and preparing for live deployment.”
+
+This primes the model to treat paper trading as its mission environment and align actions with system goals.
+
+✅ Completion Criteria
+
+Milestone 18 is considered complete when:
+
+ Paper-trading ledger and execution engine are operational.
+
+ No live trading endpoints reachable.
+
+ Transparency Panel displays simulated trades in real time.
+
+ Learning Health tab incorporates simulation results.
+
+ Safety & diagnostic tests all pass.
+
+ System backup and checkpoint created before activation.
+
+Outcome
+
+After implementation and system verification, your AI will have:
+
+A fully self-contained sandbox trading environment.
+
+Real-time learning capability from simulated market behavior.
+
+Safety guarantees that prevent any live trade execution.
+
+A clear transition path to live trading (Milestone 19) once consistent performance is demonstrated.
