@@ -6,11 +6,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useState } from "react";
-import { Save, Send, Sparkles } from "lucide-react";
+import { Save, Send, Sparkles, Mic, MicOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import PerformanceTrackingMetrics from "./performance-tracking-metrics";
+import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 
 interface Goal {
   metric: string;
@@ -36,6 +37,8 @@ export default function GoalsEngineTab() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder();
 
   const { data, isLoading } = useQuery<GoalsSummary>({
     queryKey: [`/api/goals/summary?mode=${mode}`],
@@ -109,6 +112,65 @@ export default function GoalsEngineTab() {
     setIsChatting(true);
     analyzeMutation.mutate(chatInput);
     setChatInput('');
+  };
+
+  const handleMicToggle = async () => {
+    if (isRecording) {
+      // Stop recording and transcribe
+      const audioBlob = await stopRecording();
+      if (audioBlob) {
+        await transcribeAudio(audioBlob);
+      }
+    } else {
+      // Start recording
+      await startRecording();
+      if (recorderError) {
+        toast({
+          title: "Microphone Error",
+          description: recorderError,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const transcribeAudio = async (audioBlob: Blob) => {
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Transcription failed');
+      }
+
+      const data = await response.json();
+      setChatInput(data.text);
+      
+      toast({
+        title: "Transcription complete",
+        description: "You can now edit and send your message",
+      });
+    } catch (error: any) {
+      console.error('Transcription error:', error);
+      toast({
+        title: "Transcription failed",
+        description: error.message || "Could not transcribe audio. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTranscribing(false);
+    }
   };
 
   const formatValue = (value: number | null) => {
@@ -217,12 +279,27 @@ export default function GoalsEngineTab() {
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                 placeholder="Ask the AI about your goals..."
-                disabled={isChatting}
+                disabled={isChatting || isTranscribing}
                 data-testid="input-ai-chat"
               />
               <Button 
+                onClick={handleMicToggle}
+                disabled={isChatting || isTranscribing}
+                variant={isRecording ? "destructive" : "outline"}
+                size="icon"
+                data-testid="button-voice-input"
+              >
+                {isTranscribing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isRecording ? (
+                  <MicOff className="w-4 h-4" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </Button>
+              <Button 
                 onClick={handleSendMessage} 
-                disabled={isChatting || !chatInput.trim()}
+                disabled={isChatting || !chatInput.trim() || isTranscribing}
                 data-testid="button-send-message"
               >
                 <Send className="w-4 h-4" />

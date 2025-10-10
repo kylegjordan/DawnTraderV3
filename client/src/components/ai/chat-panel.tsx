@@ -5,10 +5,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { AlertCircle, Bot, Send, User, CheckCircle } from 'lucide-react';
+import { AlertCircle, Bot, Send, User, CheckCircle, Mic, MicOff, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiRequest } from '@/lib/queryClient';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -35,8 +37,11 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [pendingProposal, setPendingProposal] = useState<SettingsProposal | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder();
 
   // Load conversation history
   const { data: conversation, isLoading: isLoadingHistory } = useQuery({
@@ -173,6 +178,65 @@ export function ChatPanel() {
     }
   };
 
+  const handleMicToggle = async () => {
+    if (isRecording) {
+      // Stop recording and transcribe
+      const audioBlob = await stopRecording();
+      if (audioBlob) {
+        await transcribeAudio(audioBlob);
+      }
+    } else {
+      // Start recording
+      await startRecording();
+      if (recorderError) {
+        toast({
+          title: "Microphone Error",
+          description: recorderError,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const transcribeAudio = async (audioBlob: Blob) => {
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Transcription failed');
+      }
+
+      const data = await response.json();
+      setInputMessage(data.text);
+      
+      toast({
+        title: "Transcription complete",
+        description: "You can now edit and send your message",
+      });
+    } catch (error: any) {
+      console.error('Transcription error:', error);
+      toast({
+        title: "Transcription failed",
+        description: error.message || "Could not transcribe audio. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   if (isLoadingHistory) {
     return (
       <Card className="flex flex-col h-[600px] items-center justify-center" data-testid="card-chat-panel">
@@ -290,26 +354,44 @@ export function ChatPanel() {
 
       {/* Input Area */}
       <Separator />
-      <div className="p-4 flex gap-2">
-        <Textarea
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          onKeyDown={handleKeyPress}
-          placeholder="Ask about your trades, strategies, or request analysis..."
-          className="resize-none"
-          rows={3}
-          disabled={chatMutation.isPending}
-          data-testid="input-chat-message"
-        />
-        <Button
-          onClick={handleSendMessage}
-          disabled={!inputMessage.trim() || chatMutation.isPending}
-          size="icon"
-          className="h-auto"
-          data-testid="button-send-message"
-        >
-          <Send className="w-4 h-4" />
-        </Button>
+      <div className="p-4">
+        <div className="flex gap-2">
+          <Textarea
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyDown={handleKeyPress}
+            placeholder="Ask about your trades, strategies, or request analysis..."
+            className="resize-none"
+            rows={3}
+            disabled={chatMutation.isPending || isTranscribing}
+            data-testid="input-chat-message"
+          />
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={handleMicToggle}
+              disabled={chatMutation.isPending || isTranscribing}
+              variant={isRecording ? "destructive" : "outline"}
+              size="icon"
+              data-testid="button-voice-input-gpt"
+            >
+              {isTranscribing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isRecording ? (
+                <MicOff className="w-4 h-4" />
+              ) : (
+                <Mic className="w-4 h-4" />
+              )}
+            </Button>
+            <Button
+              onClick={handleSendMessage}
+              disabled={!inputMessage.trim() || chatMutation.isPending || isTranscribing}
+              size="icon"
+              data-testid="button-send-message"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </Card>
   );
