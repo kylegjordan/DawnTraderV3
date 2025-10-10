@@ -68,6 +68,10 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // Seed test user for automated testing (non-production only)
+  const { seedTestUser } = await import('./startup/test-user-seeder');
+  await seedTestUser();
+
   // Start database monitoring
   databaseMonitor.startDailyChecks();
 

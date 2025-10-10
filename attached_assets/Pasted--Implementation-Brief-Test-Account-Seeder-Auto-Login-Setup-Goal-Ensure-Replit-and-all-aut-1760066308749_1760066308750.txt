@@ -1,0 +1,163 @@
+🧩 Implementation Brief — Test Account Seeder & Auto-Login Setup
+🎯 Goal
+
+Ensure Replit (and all automated milestone runners) can log in and run tasks automatically, without requiring manual intervention — even after restarts, schema pushes, or resets.
+
+🧱 Overview
+
+Replit occasionally pauses when trying to test or verify features because no valid user credentials exist after database resets.
+
+This fix introduces a startup seeder that guarantees a permanent test user always exists in non-production environments, and adds auto-login credentials that automated systems can use safely.
+
+⚙️ Implementation Tasks
+1. Create Seeder Script
+
+File: server/startup/test-user-seeder.ts
+(If your project already runs startup hooks in server/index.ts, you can integrate it there.)
+
+Logic:
+
+On server startup, check if a user with email = process.env.TEST_USER_EMAIL exists.
+
+If not, create it with:
+
+{
+  id: 'test-user-seed-001',
+  username: 'testuser',
+  email: process.env.TEST_USER_EMAIL,
+  password: bcrypt.hashSync(process.env.TEST_USER_PASSWORD, 10),
+  role: 'developer',
+  created_at: new Date()
+}
+
+
+Log this once:
+
+[Startup] Test account verified or created: testuser@example.com
+
+
+Skip this seeding step if:
+
+if (process.env.NODE_ENV === 'production') return;
+
+
+If registration/login tables change in future schema updates, this script must always use the same field names as the main user model.
+
+2. Add Environment Variables
+
+Add to both .env and .env.example files:
+
+# 🔐 Test account credentials (non-production only)
+TEST_USER_EMAIL=testuser@example.com
+TEST_USER_PASSWORD=TestPass123!
+
+
+💡 Note: TestPass123! satisfies most password validation rules — it includes uppercase, lowercase, numbers, and a special character.
+
+3. Integrate Seeder into App Startup
+
+In server/index.ts (or your equivalent main startup file):
+
+Import the seeder:
+
+import { seedTestUser } from './startup/test-user-seeder';
+
+
+Call it right after database initialization:
+
+await seedTestUser();
+
+
+Add a transparency log entry:
+
+await storage.createTransparencyLog({
+  task_name: 'system-bootstrap',
+  result_summary: 'Test account verified or created',
+  success: true,
+  executed_at: new Date()
+});
+
+4. Auto-Login for Automated Tests
+
+For automated milestone scripts or scheduler verifications:
+
+Use the environment credentials above for /api/login authentication.
+
+If login fails, rerun the seeder automatically before retrying.
+
+Store the JWT token in a short-lived in-memory cache or environment variable.
+
+✅ This ensures Replit and system tests can always proceed without human credentials.
+
+5. Verification Steps
+
+After implementation:
+
+Restart the application.
+
+Confirm log message:
+
+[Startup] Test account verified or created: testuser@example.com
+
+
+Verify test user exists:
+
+SELECT username, email FROM users WHERE email = 'testuser@example.com';
+
+
+Log in manually (once) via API or UI with:
+
+Email: testuser@example.com
+
+Password: TestPass123!
+Expected result → Login succeeds and returns JWT.
+
+Restart again — no interruption or “User not found” errors.
+
+6. Transparency Log Confirmation
+
+Check that this entry appears in ai_transparency_log:
+
+task_name: system-bootstrap
+result_summary: "Test account verified or created"
+success: true
+
+
+It will also display in the AI Transparency Panel under System Logs.
+
+7. Deliverables
+
+✅ test-user-seeder.ts created and integrated.
+
+✅ .env updated with TEST_USER_EMAIL and TEST_USER_PASSWORD.
+
+✅ Seeder runs automatically on every app start.
+
+✅ Auto-login enabled for automation.
+
+✅ Transparency log entry recorded on startup.
+
+✅ Verified that login works with TestPass123!.
+
+8. replit.md Update
+
+Add the following to your documentation file:
+
+### Milestone Pre-Step — Test Account Seeder
+- Added automated test account creation for non-production environments.
+- Ensures Replit can run milestones autonomously without manual login.
+- Username: testuser@example.com
+- Password: TestPass123!
+- Logs activity to AI Transparency Panel under “System Bootstrap”.
+
+✅ Expected Outcome
+
+After this update:
+
+Every environment automatically ensures a valid test account exists.
+
+Replit never pauses again for missing credentials.
+
+All milestone scripts (M16 onward) run continuously.
+
+Full visibility in transparency logs for audit and startup verification.
