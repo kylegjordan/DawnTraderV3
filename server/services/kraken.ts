@@ -446,6 +446,23 @@ export class KrakenService {
   }
 
   // Utility methods
+  /**
+   * Get eligible trading pairs based on screening criteria
+   * 
+   * Capability-Aware Filtering (Milestone 17):
+   * - Current Implementation: Optimized for crypto/forex (fractional assets)
+   *   - Volume filters work well for fractional crypto trading
+   *   - Price filters allow low-price crypto assets
+   *   - Spread filters critical for fractional execution quality
+   * 
+   * - Future Enhancement (Requires Stock Venue):
+   *   - Whole-share feasibility checks (min 3 shares for diversification)
+   *   - Share price ceiling filters (exclude stocks too expensive for position sizing)
+   *   - Lot size compatibility validation
+   * 
+   * All Kraken assets support fractional trading, making current filters appropriate.
+   * Equity-specific filters will be added when stock trading venue is integrated.
+   */
   async getEligiblePairs(settings: {
     minVolume: string;
     minDailyRange: string;
