@@ -68,6 +68,10 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // Reset rate limiter for clean test state (non-production only)
+  const { resetRateLimiter } = await import('./startup/rate-limiter-reset');
+  await resetRateLimiter();
+
   // Seed test user for automated testing (non-production only)
   const { seedTestUser } = await import('./startup/test-user-seeder');
   await seedTestUser();

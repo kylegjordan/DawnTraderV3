@@ -11,9 +11,9 @@ export async function resetRateLimiter(): Promise<void> {
     // Reset the login rate limiter store
     // express-rate-limit stores data in memory by default, which auto-clears on restart
     // But we explicitly reset it here to guarantee a clean state for automated testing
-    if (loginLimiter.resetKey) {
+    if (loginLimiter.store && loginLimiter.store.resetAll) {
       // Reset all keys in the store (clears all rate limit data)
-      await loginLimiter.resetKey('*');
+      await loginLimiter.store.resetAll();
       console.log('[Startup] Rate limiter cleared for test environment');
     }
 
