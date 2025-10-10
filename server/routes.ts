@@ -20,6 +20,7 @@ import { actuationPolicyService } from "./services/actuation-policy";
 import { assetCapabilitiesService } from "./services/asset-capabilities";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
+import multer from "multer";
 import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStrengthMessage } from "./services/auth-service";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -1885,6 +1886,61 @@ Provide specific, actionable recommendations.`,
     } catch (error: any) {
       console.error('Error creating kill switch analysis chat:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Voice transcription using OpenAI Whisper
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 15 * 1024 * 1024, // 15 MB limit
+    },
+  });
+
+  app.post('/api/transcribe', authenticateToken, upload.single('audio'), async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No audio file provided' });
+      }
+
+      const audioBuffer = req.file.buffer;
+      
+      if (audioBuffer.length === 0) {
+        return res.status(400).json({ error: 'Audio file is empty' });
+      }
+
+      console.log(`[Transcription] Processing audio: ${audioBuffer.length} bytes, type: ${req.file.mimetype}`);
+
+      // Create a File-like object for OpenAI API
+      const audioFile = new File([audioBuffer], 'audio.webm', { 
+        type: req.file.mimetype || 'audio/webm' 
+      });
+
+      const openai = new OpenAI({ 
+        apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR 
+      });
+
+      const transcription = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: 'whisper-1',
+        language: 'en',
+      });
+
+      console.log(`[Transcription] Success: "${transcription.text}"`);
+
+      res.json({ text: transcription.text });
+    } catch (error: any) {
+      console.error('[Transcription] Error:', error);
+      
+      if (error.status === 429) {
+        return res.status(429).json({ error: 'Rate limit exceeded. Please try again in a moment.' });
+      }
+      
+      if (error.message?.includes('format')) {
+        return res.status(400).json({ error: 'Unsupported audio format. Please use WebM or WAV.' });
+      }
+      
+      res.status(500).json({ error: 'Failed to transcribe audio. Please try again.' });
     }
   });
 
