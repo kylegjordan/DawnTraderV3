@@ -1,0 +1,78 @@
+🧩 Replit Prompt
+Title:
+
+Verify and Link Historic Backfill Data to AI Transparency Metrics
+
+Objective:
+Confirm that the 90-day backfill learning data has been loaded, that the AI signals service is returning summary data, and that the dashboard correctly displays it under Historic Signal Analysis.
+
+Tasks
+1️⃣ Verify Backfill Data Exists
+
+From the Replit file tree, check the following:
+
+/server/data/backfill/ folder or similar contains JSON or CSV files for recent 90 days (BTC/USD, ETH/USD, etc.).
+
+If data is stored in the DB, confirm table ai_signals, historic_signals, or similar exists and contains entries (count > 0).
+
+Checkpoints:
+✅ Files or DB rows exist for historical data.
+✅ File timestamps correspond to your intended backfill period.
+
+2️⃣ Check Signal Service Connection
+
+Locate the AI Transparency backend service that populates this dashboard section — likely named one of:
+
+server/services/ai-signals.ts
+
+server/services/ai-metrics.ts
+
+or referenced in /api/ai/historic-signals.
+
+Confirm it is being called on page load or refresh from the client (visible via browser console → Network tab → /api/ai/historic-signals or similar).
+
+Checkpoints:
+✅ API call returns data object, not { totalSignals: 0 }.
+✅ Response includes keys like winRate, avgReturn, signalCount.
+✅ No console or API errors like “cannot read property of undefined.”
+
+3️⃣ Refresh Metrics Cache
+
+If the service has data but the dashboard isn’t showing it:
+
+Go to the AI Transparency → System Health tab.
+
+Look for an option or log line showing Refetching AI Metrics or Rebuilding Historic Signals.
+
+If visible, trigger a manual refresh (click or toggle).
+
+If no button is visible:
+
+The system may automatically refresh every 15 minutes.
+
+You can manually restart your app or use the Replit Stop / Run buttons to trigger data reload.
+
+Checkpoints:
+✅ Console shows “Historic Signals Recalculated.”
+✅ Dashboard updates after a 5–10 second refresh.
+
+4️⃣ Verify Dashboard Updates
+
+Return to:
+
+AI Transparency → Paper Trading → Historic Signal Analysis
+
+Confirm:
+✅ Total Signals > 0
+✅ Win Rate shows realistic percentage (e.g., 48–62%)
+✅ Avg Return shows small positive/negative value
+
+If all values remain 0, note:
+
+“Historic Signal Data not yet bound to AI Metrics service; backfill data present but unlinked.”
+
+5️⃣ Log Results
+
+Once values populate correctly, record a short line in your log or replit.md:
+
+“Historic Signal Analysis verified — backfill learning metrics successfully linked to dashboard.”
