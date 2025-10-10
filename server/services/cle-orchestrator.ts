@@ -381,9 +381,13 @@ export class CLEOrchestratorService {
       
       // Apply semantic memory boost (Milestone 15)
       const semanticBoost = await this.calculateSemanticBoost(userId);
-      const confidenceIndex = Math.min(100, baseConfidence + semanticBoost); // Cap at 100
       
-      console.log(`[CLEOrchestrator] Confidence Index: ${confidenceIndex}/100 (Base: ${baseConfidence}, Semantic Boost: +${semanticBoost}) (Paper: ${(components.paperAccuracy * 100).toFixed(1)}%, Transfer: ${(components.transferSuccessRate * 100).toFixed(1)}%, Health: ${(components.healthUptime * 100).toFixed(1)}%)`);
+      // Apply learning source weight boost (Milestone 16 - Intelligence Refinement)
+      const learningWeightBoost = await this.calculateLearningWeightBoost(userId);
+      
+      const confidenceIndex = Math.min(100, baseConfidence + semanticBoost + learningWeightBoost); // Cap at 100
+      
+      console.log(`[CLEOrchestrator] Confidence Index: ${confidenceIndex}/100 (Base: ${baseConfidence}, Semantic Boost: +${semanticBoost}, Learning Weight: +${learningWeightBoost}) (Paper: ${(components.paperAccuracy * 100).toFixed(1)}%, Transfer: ${(components.transferSuccessRate * 100).toFixed(1)}%, Health: ${(components.healthUptime * 100).toFixed(1)}%)`);
       
       // Check for confidence drop > 15 points
       const confidenceDrop = this.previousConfidence - confidenceIndex;
@@ -602,6 +606,35 @@ export class CLEOrchestratorService {
     }
   }
 
+  /**
+   * Calculate learning source weight boost (Milestone 16 - Intelligence Refinement)
+   * Uses average weight of learning sources, normalized to 0-5 point boost
+   * Formula: boost = (avg_weight - 0.5) * 10, capped at 0-5
+   */
+  private async calculateLearningWeightBoost(userId: string): Promise<number> {
+    try {
+      const sources = await storage.getLearningSources(userId);
+      
+      if (sources.length === 0) {
+        return 0; // No boost if no learning sources
+      }
+
+      // Calculate average weight across all sources
+      const avgWeight = sources.reduce((sum: number, s: any) => sum + parseFloat(s.weight), 0) / sources.length;
+      
+      // Normalize: weight of 0.5 = no boost, weight of 1.0 = +5 boost
+      // Formula: (avgWeight - 0.5) * 10, capped at 0-5
+      const boost = Math.max(0, Math.min(5, Math.round((avgWeight - 0.5) * 10)));
+      
+      console.log(`[CLEOrchestrator] Learning weight boost: +${boost} (avg weight: ${avgWeight.toFixed(3)}, sources: ${sources.length})`);
+      
+      return boost;
+    } catch (error) {
+      console.error('[CLEOrchestrator] Error calculating learning weight boost:', error);
+      return 0; // Return 0 on error (no boost)
+    }
+  }
+
   async getConfidenceIndex(): Promise<{ 
     autonomyConfidence: number; 
     components: ConfidenceComponents 
@@ -631,7 +664,11 @@ export class CLEOrchestratorService {
     
     // Apply semantic memory boost (Milestone 15)
     const semanticBoost = await this.calculateSemanticBoost(userId);
-    const autonomyConfidence = Math.min(100, baseConfidence + semanticBoost);
+    
+    // Apply learning source weight boost (Milestone 16)
+    const learningWeightBoost = await this.calculateLearningWeightBoost(userId);
+    
+    const autonomyConfidence = Math.min(100, baseConfidence + semanticBoost + learningWeightBoost);
     
     return {
       autonomyConfidence,
