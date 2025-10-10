@@ -3,6 +3,8 @@
 ## Overview
 A long-only, spot-trading cryptocurrency day trading web application for Kraken. It automates VWAP Pullback, ABCD Long, and SMA Trend Ride strategies, offering real-time market scanning, disciplined risk management, and both live and paper trading capabilities. The application integrates OpenAI's GPT-5 for AI analysis, trade tracking, performance analytics, and error diagnosis, aiming to provide a comprehensive and resilient trading platform. Key features include robust execution with bracket order rollback, partial fill recovery, and a daily loss kill switch. The project aims to provide a comprehensive and resilient trading platform with continuous improvement through an autonomous learning engine.
 
+**Admin Access Control**: The application now includes an admin panel for secure user management. Public registration is disabled, and only administrators can create new user accounts and manage user roles. Admin privileges are enforced at both the UI and API levels.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
@@ -27,6 +29,12 @@ Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, 
 ### Backend
 Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting both "live" and "paper" trading modes.
 
+**Admin API Endpoints**:
+- `GET /api/admin/users` - List all users (admin only)
+- `POST /api/admin/users` - Create new user accounts (admin only)
+- `PATCH /api/admin/users/:userId` - Toggle admin status (admin only, self-demotion prevented)
+- All admin routes protected by `authenticateToken` and `requireAdmin` middleware
+
 ### Data Storage
 PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user data, trading settings, watchlist pairs, trades, AI reports, conversations, price data, AI opportunities, transparency logs, semantic memory (vector embeddings), and learning infrastructure.
 
@@ -36,7 +44,8 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user 
 - **AI Opportunities**: Hourly automated pipeline using GPT-4o mini to identify, validate, and store trading opportunities.
 - **Continuous Learning Engine (CLE)**: Monitors trading performance, detects patterns, and optimizes parameters through Paper mode experimentation and controlled Live mode deployment, with safety mechanisms like rollbacks.
 - **Context Optimization**: Reduces AI API costs via conversation summarization and response caching.
-- **Authentication & Security**: User authentication uses username/password with bcrypt and JWT tokens, supporting WebAuthn.
+- **Authentication & Security**: User authentication uses username/password (or email) with bcrypt and JWT tokens, supporting WebAuthn. Login endpoint supports both username and email authentication. Admin panel enforces role-based access control with secure user management.
+- **Admin Access Control**: Dedicated admin panel at `/admin` for user management. Features include user creation, role assignment, and admin status toggling. Public registration disabled; only admins can create accounts. Self-demotion prevention ensures at least one admin exists.
 - **Mode Isolation**: Data and functionalities are isolated between Live and Paper trading modes.
 - **AI Transparency Panel**: Provides visibility into autonomous scheduler activity, learning adjustments, semantic memory insights, and system health alerts.
 - **Semantic Memory Layer**: Vector-based knowledge recall system using pgvector and OpenAI embeddings, populating from AI lessons and conversation summaries for similarity search and CLE confidence boost.
