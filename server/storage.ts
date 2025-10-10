@@ -107,7 +107,10 @@ import {
   type GoalAnalysisHistoryLive,
   type InsertGoalAnalysisHistoryLive,
   type GoalAnalysisHistoryPaper,
-  type InsertGoalAnalysisHistoryPaper
+  type InsertGoalAnalysisHistoryPaper,
+  type LearningSource,
+  type InsertLearningSource,
+  learningSources
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -271,6 +274,12 @@ export interface IStorage {
   createSignalWeight(weight: InsertSignalWeight): Promise<SignalWeight>;
   updateSignalWeight(id: string, updates: Partial<SignalWeight>): Promise<SignalWeight>;
   upsertSignalWeight(weight: InsertSignalWeight): Promise<SignalWeight>;
+
+  // Learning source methods
+  getLearningSources(userId: string): Promise<LearningSource[]>;
+  getLearningSource(userId: string, sourceName: string): Promise<LearningSource | undefined>;
+  createLearningSource(source: InsertLearningSource): Promise<LearningSource>;
+  updateLearningSource(id: string, updates: Partial<LearningSource>): Promise<LearningSource>;
 
   // Prediction outcome methods
   createPredictionOutcome(outcome: InsertPredictionOutcome): Promise<PredictionOutcome>;
@@ -1502,6 +1511,40 @@ export class DatabaseStorage implements IStorage {
     } else {
       return this.createSignalWeight(weight);
     }
+  }
+
+  // Learning source methods
+  async getLearningSources(userId: string): Promise<LearningSource[]> {
+    return await db
+      .select()
+      .from(learningSources)
+      .where(eq(learningSources.userId, userId))
+      .orderBy(desc(learningSources.weight));
+  }
+
+  async getLearningSource(userId: string, sourceName: string): Promise<LearningSource | undefined> {
+    const [result] = await db
+      .select()
+      .from(learningSources)
+      .where(and(
+        eq(learningSources.userId, userId),
+        eq(learningSources.sourceName, sourceName)
+      ));
+    return result || undefined;
+  }
+
+  async createLearningSource(source: InsertLearningSource): Promise<LearningSource> {
+    const [result] = await db.insert(learningSources).values(source).returning();
+    return result;
+  }
+
+  async updateLearningSource(id: string, updates: Partial<LearningSource>): Promise<LearningSource> {
+    const [result] = await db
+      .update(learningSources)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(learningSources.id, id))
+      .returning();
+    return result;
   }
 
   // Prediction outcome methods
