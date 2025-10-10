@@ -15,7 +15,7 @@ Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, 
 Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting both "live" and "paper" trading modes.
 
 ### Data Storage
-PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, `aiOpportunities`, `aiTransparencyLog`, and learning infrastructure tables (`filterCalibrationLog`, `intradayAdjustments`, `aiLessons`, `portfolioAdjustments`, `predictionOutcomes`).
+PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, `aiOpportunities`, `aiTransparencyLog`, `semanticMemory` (vector embeddings for knowledge recall), and learning infrastructure tables (`filterCalibrationLog`, `intradayAdjustments`, `aiLessons`, `portfolioAdjustments`, `predictionOutcomes`).
 
 ### System Design
 - **Trading Strategies**: Implements fixed rules for VWAP Pullback, ABCD Long, and SMA Trend Ride with calculated entry, stop loss, and target prices.
@@ -25,12 +25,13 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `user
 - **Context Optimization**: Reduces AI API costs by conversation summarization (after >20 messages, every 5 new messages compressed into ≤200 tokens) and response caching (300s TTL for static informational queries).
 - **Authentication & Security**: User authentication uses username/password with bcrypt and JWT tokens, supporting WebAuthn for biometrics. Routes are protected by JWT.
 - **Mode Isolation**: Data and functionalities are isolated between Live and Paper trading modes.
-- **AI Transparency Panel**: Provides visibility into autonomous scheduler activity, learning adjustments, and system health alerts.
+- **AI Transparency Panel**: Provides visibility into autonomous scheduler activity, learning adjustments, semantic memory insights, and system health alerts.
 - **Learning Infrastructure**: Leverages tables like `filter_calibration_log`, `intraday_adjustments`, `ai_lessons`, `portfolio_adjustments`, and `prediction_outcomes` for continuous improvement.
 - **Dashboard & Reporting**: Comprehensive panels with KPI widgets, daily briefs, goals summaries, active/recent trades, strategy performance, and various reports (Canned, Custom, Quick Exports).
 - **Maintenance Mode**: System-wide control to block Kraken API calls and display frontend banners.
 - **Market Data Health Check**: Automated daily monitoring of market data service reliability.
 - **Goals Engine**: Interactive configuration for key trading goals with tracking and guardrails.
+- **Semantic Memory Layer (Milestone 15)**: Vector-based knowledge recall system using pgvector and OpenAI embeddings (text-embedding-3-small, 1536 dimensions). Automated ingestion runs every 6 hours to populate semantic memory from AI lessons, conversation summaries, portfolio adjustments, and filter calibrations. Provides similarity search and semantic boost to CLE confidence index (0-10 point boost based on relevant past learnings). Accessible via API endpoints (`/api/semantic/search`, `/api/semantic/latest`, `/api/semantic/tags`) and displayed in AI Transparency Panel's Semantic Insights tab.
 
 ## External Dependencies
 
