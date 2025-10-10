@@ -20,6 +20,17 @@ Preferred communication style: Simple, everyday language.
   - Logs activity to AI Transparency Panel under "System Bootstrap" task
 - **Location**: `server/startup/test-user-seeder.ts`
 
+## Rate Limiter Auto-Reset
+- **Purpose**: Prevents 429 "Too Many Requests" errors during automated milestone execution
+- **Environment**: Non-production only (skipped when NODE_ENV=production)
+- **Implementation**:
+  - Automatically clears all login rate limit data on server startup
+  - Runs before test account seeding to ensure clean authentication state
+  - Uses `express-rate-limit` store's `resetAll()` method
+  - Logs reset activity to AI Transparency Panel under "System Bootstrap" task
+- **Protection**: Login endpoints still rate-limited during runtime (5 attempts per 15 minutes)
+- **Location**: `server/startup/rate-limiter-reset.ts`
+
 ## System Architecture
 
 ### Frontend
