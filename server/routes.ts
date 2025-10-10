@@ -249,7 +249,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Username and password are required' });
       }
       
-      const user = await storage.getUserByUsername(username);
+      // Support both username and email login
+      let user = await storage.getUserByUsername(username);
+      if (!user) {
+        // Try email if username lookup failed
+        user = await storage.getUserByEmail(username);
+      }
+      
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -269,7 +275,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accessToken, 
         refreshToken,
         token: accessToken, // Keep for backward compatibility
-        user: { id: user.id, username: user.username } 
+        user: { 
+          id: user.id, 
+          username: user.username,
+          isAdmin: user.isAdmin || false
+        } 
       });
     } catch (error) {
       console.error('Login error:', error);
