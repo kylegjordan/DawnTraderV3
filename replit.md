@@ -6,6 +6,20 @@ A long-only, spot-trading cryptocurrency day trading web application for Kraken.
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Test Account Seeder
+- **Purpose**: Ensures automated milestone runners and Replit can test features without manual login
+- **Environment**: Non-production only (skipped when NODE_ENV=production)
+- **Credentials**:
+  - Username: `testuser`
+  - Email: `testuser@example.com` (from TEST_USER_EMAIL secret)
+  - Password: `TestPass123!` (from TEST_USER_PASSWORD secret)
+- **Startup Behavior**:
+  - Checks if test account exists on every server start
+  - Creates account with bcrypt-hashed password if missing
+  - Creates default trading settings for the test user
+  - Logs activity to AI Transparency Panel under "System Bootstrap" task
+- **Location**: `server/startup/test-user-seeder.ts`
+
 ## System Architecture
 
 ### Frontend

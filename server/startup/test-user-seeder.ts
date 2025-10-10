@@ -50,7 +50,6 @@ export async function seedTestUser(): Promise<void> {
       taskName: 'System Bootstrap',
       resultSummary: `Test account verified or created: ${testEmail}`,
       success: true,
-      executedAt: new Date(),
       duration: "0",
     });
   } catch (error) {
@@ -62,7 +61,6 @@ export async function seedTestUser(): Promise<void> {
         taskName: 'System Bootstrap',
         resultSummary: `Failed to seed test user: ${error instanceof Error ? error.message : String(error)}`,
         success: false,
-        executedAt: new Date(),
         duration: "0",
       });
     } catch (logError) {
