@@ -21,7 +21,7 @@ import jwt from "jsonwebtoken";
 import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStrengthMessage } from "./services/auth-service";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
-const loginLimiter = rateLimit({
+export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // max 5 login attempts per window
   message: { error: "Too many login attempts, please try again later." },

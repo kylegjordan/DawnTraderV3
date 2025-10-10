@@ -1,0 +1,83 @@
+Auto-Clear Rate Limiter at Startup
+🎯 Goal
+
+Prevent any future “429 Too Many Requests” or authentication lockouts during automated milestone execution by automatically clearing rate-limit data each time the server starts.
+
+⚙️ Implementation Instructions (No Code Copy)
+1. Locate the App Startup File
+
+Open server/index.ts — this is where the database connects and the test-user seeder runs.
+
+2. Insert the Rate-Limiter Reset Step
+
+Immediately after the database connection and before the test-user seeder call, add one short step to reset login throttling:
+
+Check that the method storage.resetRateLimiters() exists (some setups call it clearLoginAttempts() — use whichever your project has).
+
+Only run this in non-production environments.
+
+Log the result for visibility.
+
+This will look conceptually like:
+
+“When the server starts, if we’re not in production, clear all rate-limit data and write a system log entry.”
+
+3. Add Transparency Logging
+
+Right after the console message, add a transparency log entry:
+
+task_name: "system-bootstrap"
+result_summary: "Rate limiter cleared for test environment"
+success: true
+executed_at: new Date()
+
+
+This keeps it visible in the AI Transparency Panel under System Logs.
+
+4. Restart and Verify
+
+After deployment:
+
+Restart the app.
+
+Check logs for:
+
+[Startup] Rate limiter cleared for test environment
+[Startup] Test account verified or created: testuser@example.com
+
+
+Confirm transparency log entry exists in ai_transparency_log.
+
+5. Expected Behavior
+
+From now on, each restart will:
+
+✅ Clear any residual rate-limit or failed-login counters.
+
+✅ Re-create the test user if missing.
+
+✅ Log both actions to the AI Transparency Panel.
+
+✅ Guarantee uninterrupted milestone execution (no manual unblocking needed).
+
+6. Deliverables
+
+Added rate-limit reset call in server/index.ts.
+
+Verified startup logs for both rate-limit and test-user actions.
+
+Confirmed transparency log records “Rate limiter cleared”.
+
+Updated replit.md documentation.
+
+🧾 replit.md Entry
+### System Stability Add-On — Rate Limiter Reset
+- Added automatic clearing of login rate limits on server startup.
+- Runs only in non-production environments.
+- Ensures automated milestone runners never hit 429 errors.
+- Logs each reset under “System Bootstrap” in the AI Transparency Panel.
+
+
+✅ Outcome:
+Your environment now starts in a clean state every time — no lockouts, no login failures, no interruptions.
+You’re fully ready to proceed with Milestone 16: Intelligence Refinement Layer.
