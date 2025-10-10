@@ -795,6 +795,61 @@ export const aiTransparencyLog = pgTable("ai_transparency_log", {
   taskExecutedIdx: uniqueIndex("ai_transparency_log_task_executed_idx").on(table.taskName, table.executedAt),
 }));
 
+// Milestone 17A: Actuation Policy Registry (defines safe bounds for AI adjustments)
+export const actuationPolicies = pgTable("actuation_policies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  variableName: varchar("variable_name", { length: 100 }).notNull(),
+  variableCategory: varchar("variable_category", { length: 50 }).notNull(), // 'filter', 'strategy', 'guardrail'
+  minValue: decimal("min_value", { precision: 20, scale: 8 }).notNull(),
+  maxValue: decimal("max_value", { precision: 20, scale: 8 }).notNull(),
+  stepSize: decimal("step_size", { precision: 20, scale: 8 }).notNull(),
+  cooldownHours: integer("cooldown_hours").default(24),
+  maxDailyChanges: integer("max_daily_changes").default(3),
+  confidenceThreshold: integer("confidence_threshold").default(70), // 0-100
+  enabled: boolean("enabled").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueUserVariable: uniqueIndex("actuation_policies_user_variable_idx").on(table.userId, table.variableName),
+}));
+
+// Milestone 17A: Proposed Adjustments (AI-proposed parameter changes awaiting approval)
+export const proposedAdjustments = pgTable("proposed_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  variableName: varchar("variable_name", { length: 100 }).notNull(),
+  variableCategory: varchar("variable_category", { length: 50 }).notNull(),
+  oldValue: decimal("old_value", { precision: 20, scale: 8 }).notNull(),
+  proposedValue: decimal("proposed_value", { precision: 20, scale: 8 }).notNull(),
+  confidenceScore: integer("confidence_score").notNull(), // 0-100
+  reason: text("reason"),
+  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'approved', 'rejected', 'applied'
+  proposedAt: timestamp("proposed_at", { withTimezone: true }).defaultNow(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  reviewedBy: varchar("reviewed_by", { length: 50 }), // 'system', 'user', 'auto'
+}, (table) => ({
+  userModeProposedIdx: index("proposed_adjustments_user_mode_proposed_idx").on(table.userId, table.mode, table.proposedAt),
+}));
+
+// Milestone 17B: Asset Capabilities (crypto vs stock characteristics for sizing)
+export const assetCapabilities = pgTable("asset_capabilities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  symbol: varchar("symbol", { length: 20 }).notNull().unique(),
+  assetType: varchar("asset_type", { length: 20 }).notNull(), // 'crypto', 'equity', 'forex', 'commodity'
+  allowsFractional: boolean("allows_fractional").notNull().default(true),
+  lotSize: decimal("lot_size", { precision: 20, scale: 8 }).notNull(), // Minimum tradable unit
+  tickSize: decimal("tick_size", { precision: 20, scale: 8 }).notNull(), // Smallest price increment
+  minNotional: decimal("min_notional", { precision: 10, scale: 2 }).notNull(), // Minimum order value
+  feesModel: varchar("fees_model", { length: 50 }).default("maker_taker"), // 'maker_taker', 'fixed'
+  venue: varchar("venue", { length: 50 }).notNull(), // 'Kraken', 'Alpaca', etc.
+  lastSynced: timestamp("last_synced", { withTimezone: true }).defaultNow(),
+  metadata: jsonb("metadata"), // Additional exchange-specific data
+}, (table) => ({
+  symbolIdx: uniqueIndex("asset_capabilities_symbol_idx").on(table.symbol),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -1150,6 +1205,23 @@ export const insertFilterDiagnosticSchema = createInsertSchema(filterDiagnostics
   timestamp: true,
 });
 
+// Milestone 17 insert schemas
+export const insertActuationPolicySchema = createInsertSchema(actuationPolicies).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProposedAdjustmentSchema = createInsertSchema(proposedAdjustments).omit({
+  id: true,
+  proposedAt: true,
+});
+
+export const insertAssetCapabilitySchema = createInsertSchema(assetCapabilities).omit({
+  id: true,
+  lastSynced: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -1279,3 +1351,12 @@ export type AITransparencyLog = typeof aiTransparencyLog.$inferSelect;
 
 export type InsertFilterDiagnostic = z.infer<typeof insertFilterDiagnosticSchema>;
 export type FilterDiagnostic = typeof filterDiagnostics.$inferSelect;
+
+export type InsertActuationPolicy = z.infer<typeof insertActuationPolicySchema>;
+export type ActuationPolicy = typeof actuationPolicies.$inferSelect;
+
+export type InsertProposedAdjustment = z.infer<typeof insertProposedAdjustmentSchema>;
+export type ProposedAdjustment = typeof proposedAdjustments.$inferSelect;
+
+export type InsertAssetCapability = z.infer<typeof insertAssetCapabilitySchema>;
+export type AssetCapability = typeof assetCapabilities.$inferSelect;

@@ -1,0 +1,227 @@
+🧩 Overview
+
+The goal of these two linked milestones is to teach the system how to act safely on what it learns (adjusting filters, guardrails, and strategies) and ensure asset sizing logic correctly handles fractional crypto vs whole-share stocks — all without enabling live or paper trades yet.
+
+⚙️ PART (A): Autonomous Adjustments Actuation Policy
+🎯 Goal
+
+Allow the AI to apply its learnings to live filter parameters, guardrails, and strategy variables within safe, bounded limits.
+All changes remain within the simulation environment and appear as proposed changes in the Transparency panel.
+
+🧠 Concept (simple analogy)
+
+Think of it as giving the AI a thermostat it can adjust — but only a few degrees at a time, and only when it’s sure it’s making the room more comfortable.
+
+🔹 Implementation Plan (No Code)
+Step 1 — Create “Actuation Policy Registry”
+
+Define a structured registry (can be JSON or DB table) listing which variables the AI is allowed to change, their bounds, and rules for change frequency.
+
+Example fields:
+
+Field	Description	Example
+variable_name	Name of tunable parameter	RSI_LOW
+min_value / max_value	Absolute range	10 → 40
+step_size	Increment per adjustment	2
+cooldown_hours	Minimum time between changes	24
+max_daily_changes	Cap on total adjustments per day	3
+confidence_threshold	Min confidence index to act	70
+
+This ensures every actuation stays within pre-approved safety limits.
+
+Step 2 — Extend CLE (Continuous Learning Engine)
+
+Add a “propose change” phase after every refinement cycle (Milestone 16).
+
+Compare the latest accuracy and confidence metrics against policy thresholds.
+
+If thresholds are met:
+
+Propose a bounded adjustment (e.g., RSI_LOW = 15 → 17).
+
+Store it in ai_proposed_adjustments.
+
+Log to Transparency as:
+"Proposed auto-tune: RSI_LOW adjusted +2 (Confidence = 74, within bounds)."
+
+No live parameter changes yet — only proposals are recorded.
+
+Step 3 — Safe Actuation in Paper Mode (future)
+
+Once paper mode is active, the same system automatically applies approved proposals at runtime.
+In this milestone, Replit only needs to build the framework — not enable execution.
+
+Step 4 — Transparency Integration
+
+Add a new section to the AI Transparency Panel → Learning Health Tab:
+
+“Autonomous Adjustments” table showing:
+
+Variable, old → new value, confidence, date/time, approval status.
+
+Color coding:
+
+🟢 Within bounds & approved
+
+🟡 Pending approval
+
+🔴 Rejected / Out of bounds
+
+Step 5 — Testing & Verification
+
+Simulate 10 random filter variables.
+
+Run a refinement cycle (CWA).
+
+Verify:
+
+Proposals generated within defined bounds.
+
+Transparency entries appear with correct metadata.
+
+No runtime parameter changes occur (confirm via logs).
+
+Deliverables:
+✅ Actuation Policy Registry
+✅ CLE proposal logic (non-executing)
+✅ Transparency entries
+✅ Documentation of bounds & cooldown rules
+
+🪙 PART (B): Asset Capabilities & Sizing Rules
+🎯 Goal
+
+Make the sizing and screening logic asset-aware, so crypto (fractional) and stocks (whole shares) are handled correctly from the start — avoiding refactors when equities are added later.
+
+🔹 Implementation Plan (No Code)
+Step 1 — Add “Asset Capabilities” layer
+
+Create a new schema or object type: asset_capabilities.
+
+Field	Description	Example
+symbol	Trading symbol	BTC/USD
+asset_type	“crypto”, “equity”, “forex”, “commodity”	crypto
+allows_fractional	True if fractional units allowed	true
+lot_size	Minimum tradable unit	0.000001
+tick_size	Smallest price increment	0.01
+min_notional	Minimum order value	5 USD
+fees_model	“maker/taker” / “fixed”	maker/taker
+venue	Source exchange or broker	Kraken
+
+This will drive how the strategy and filter logic treat each asset.
+
+Step 2 — Define Capability-Aware Sizing Rules
+
+Create two sizing paths in the Portfolio & Strategy Engine:
+
+A. Crypto (fractional allowed)
+
+qty = round_to_step(max_investment / price, lot_size)
+
+Allow positions even if price > max_investment (fractional).
+
+Respect min_notional and tick_size.
+
+B. Stocks (whole shares only)
+
+qty = floor(max_investment / price)
+
+Exclude if qty < 1.
+
+Introduce derived limit:
+
+max_share_price = max_investment / target_min_shares
+
+Filter excludes stocks above this price to preserve diversification and liquidity.
+
+Step 3 — Screening Adjustments
+
+Modify the filtering logic to apply capability-based rules:
+
+If asset = crypto → allow fractional position sizing.
+
+If asset = stock → enforce max_share_price.
+
+If unknown → skip asset or tag for manual review.
+
+Step 4 — Transparency & Preview UI
+
+Update symbol cards in Watchlists / Opportunities:
+
+Display “Fractional allowed ✅/❌”.
+
+Show “Minimum investment” and “Estimated Qty”.
+
+Include calculation preview (based on strategy’s investment size).
+
+Step 5 — Testing
+
+Crypto Test:
+
+Input: BTC = $60 000, max investment = $500.
+
+Expect: position = 0.0083 BTC.
+
+Stock Test:
+
+Input: AAPL = $170, max investment = $500.
+
+Expect: position = 2 shares (total $340).
+
+TSLA = $700 → excluded (max_share_price = $500 / 3 ≈ $166).
+
+Transparency Check:
+
+Verify display shows fractional flag and notional breakdown.
+
+Deliverables:
+✅ Asset Capabilities table/model
+✅ Capability-aware sizing logic
+✅ Filter adaptation by asset type
+✅ UI display for fractional vs whole assets
+✅ Documentation in replit.md
+
+🔍 Detecting Crypto vs Stock (your question)
+1. Does the app already detect asset type?
+
+Partial: It knows which exchange or market source a symbol came from (e.g., Kraken → crypto).
+
+However, it does not yet have a formal asset-type field or capability map — that’s what this milestone adds.
+
+2. Can asset type be pulled from exchanges like Kraken?
+
+Yes ✅ Kraken and most exchanges expose it via API:
+
+Kraken’s /AssetPairs and /Assets endpoints include:
+
+"altname": "BTCUSD"
+
+"base": "XXBT", "quote": "ZUSD"
+
+"pair_decimals" and "lot_decimals" (these define tick/lot size).
+
+You can infer:
+
+If base starts with “X” or “Z” → crypto.
+
+lot_decimals > 0 → fractional trading supported.
+
+Stock brokers (e.g., Alpaca, Interactive Brokers) will return "fractionable": false for equities.
+
+So yes — this data can be automatically pulled and cached in the new asset_capabilities table, ensuring accuracy and easy expansion to new venues.
+
+🧾 Final Deliverables Summary
+Deliverable	Description
+Actuation Policy Registry	Defines safe bounds and cooldowns for all auto-tunable parameters.
+Proposed Adjustments System	CLE records proposed parameter changes (non-executing).
+Transparency Integration	Shows proposed adjustments with timestamps and confidence levels.
+Asset Capabilities Schema	Lists attributes like allows_fractional, lot_size, tick_size, etc.
+Capability-Aware Sizing Logic	Adjusts filters and position sizes per asset type.
+UI Enhancements	Displays fractional/whole-share info in symbol cards and Watchlists.
+Documentation & Testing	Updated replit.md with all rules, data fields, and examples.
+🧠 Next Steps (in order)
+
+✅ Implement this Milestone 17A + 17B brief.
+
+🔜 Verify both frameworks (auto-adjustment + asset capabilities) in isolation.
+
+⚙️ Only then enable Phase 8: Paper Trading Simulation, using these systems to dynamically guide strategy selection and position sizing.
