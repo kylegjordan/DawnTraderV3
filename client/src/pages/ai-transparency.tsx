@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target } from "lucide-react";
+import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target, Settings } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 
@@ -55,6 +55,12 @@ export default function AITransparencyPage() {
     refetchInterval: 60000,
   });
 
+  // Fetch actuation proposals (Milestone 17 - Autonomous Adjustments)
+  const { data: proposalsData, isLoading: proposalsLoading } = useQuery<{ ok: boolean; proposals: any[] }>({
+    queryKey: ['/api/actuation/proposals'],
+    refetchInterval: 60000,
+  });
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
@@ -62,6 +68,7 @@ export default function AITransparencyPage() {
   const semanticMemories = semanticData?.memories || [];
   const semanticTags = tagsData?.tags || [];
   const learningMetrics = learningMetricsData?.metrics || null;
+  const proposals = proposalsData?.proposals || [];
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -87,14 +94,18 @@ export default function AITransparencyPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5" data-testid="tabs-ai-transparency">
+        <TabsList className="grid w-full grid-cols-6" data-testid="tabs-ai-transparency">
           <TabsTrigger value="automation-logs" data-testid="tab-automation-logs">
             <Clock className="w-4 h-4 mr-2" />
-            Recent Automation Logs
+            Automation Logs
           </TabsTrigger>
           <TabsTrigger value="learning-adjustments" data-testid="tab-learning-adjustments">
             <TrendingUp className="w-4 h-4 mr-2" />
             Learning Adjustments
+          </TabsTrigger>
+          <TabsTrigger value="autonomous-adjustments" data-testid="tab-autonomous-adjustments">
+            <Settings className="w-4 h-4 mr-2" />
+            Autonomous Adjustments
           </TabsTrigger>
           <TabsTrigger value="semantic-insights" data-testid="tab-semantic-insights">
             <Brain className="w-4 h-4 mr-2" />
@@ -106,7 +117,7 @@ export default function AITransparencyPage() {
           </TabsTrigger>
           <TabsTrigger value="health-alerts" data-testid="tab-health-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
-            System Health Alerts
+            System Health
           </TabsTrigger>
         </TabsList>
 
@@ -218,7 +229,87 @@ export default function AITransparencyPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab 3: Semantic Insights (Milestone 15) */}
+        {/* Tab 3: Autonomous Adjustments (Milestone 17) */}
+        <TabsContent value="autonomous-adjustments" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Autonomous Adjustments</CardTitle>
+              <CardDescription>
+                AI-proposed parameter adjustments subject to policy constraints and approval
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {proposalsLoading ? (
+                <div className="text-sm text-muted-foreground">Loading proposals...</div>
+              ) : proposals.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  No actuation proposals found. CLE will generate proposals based on learning patterns.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {proposals.map((proposal: any) => (
+                    <div 
+                      key={proposal.id} 
+                      className="p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                      data-testid={`proposal-${proposal.id}`}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={
+                              proposal.status === 'approved' ? 'default' : 
+                              proposal.status === 'rejected' ? 'destructive' : 
+                              proposal.status === 'applied' ? 'outline' : 
+                              'secondary'
+                            }
+                            data-testid={`badge-status-${proposal.id}`}
+                          >
+                            {proposal.status}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs" data-testid={`badge-confidence-${proposal.id}`}>
+                            Confidence: {(parseFloat(proposal.confidenceScore || '0') * 100).toFixed(0)}%
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground" data-testid={`text-proposal-timestamp-${proposal.id}`}>
+                          {formatDistanceToNow(new Date(proposal.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Variable:</span>{" "}
+                            <span className="font-medium" data-testid={`text-variable-${proposal.id}`}>{proposal.variableName}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Change:</span>{" "}
+                            <span className="font-medium" data-testid={`text-value-${proposal.id}`}>
+                              {proposal.currentValue} → {proposal.proposedValue}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {proposal.reason && (
+                          <p className="text-sm text-foreground" data-testid={`text-proposal-reason-${proposal.id}`}>
+                            {proposal.reason}
+                          </p>
+                        )}
+                        
+                        {proposal.reviewedBy && (
+                          <div className="text-xs text-muted-foreground">
+                            Reviewed by: {proposal.reviewedBy}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 4: Semantic Insights (Milestone 15) */}
         <TabsContent value="semantic-insights" className="space-y-4">
           <Card>
             <CardHeader>
