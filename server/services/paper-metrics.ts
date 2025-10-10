@@ -22,6 +22,10 @@ export class PaperMetricsService {
     realizedPL: number;
     currentExposure: number;
     openTradesCount: number;
+    cash: number;
+    crypto: number;
+    cashPercent: number;
+    cryptoPercent: number;
   }> {
     const [allTrades, activeTrades] = await Promise.all([
       storage.getAllPaperTrades(this.userId),
@@ -50,13 +54,22 @@ export class PaperMetricsService {
     // Starting paper balance (configurable, default $800)
     const startingBalance = 800;
     const totalValue = startingBalance + realizedPL + unrealizedPL;
+    
+    // Calculate cash vs crypto allocation
+    const cash = totalValue - currentExposure;
+    const cashPercent = totalValue > 0 ? (cash / totalValue) * 100 : 100;
+    const cryptoPercent = totalValue > 0 ? (currentExposure / totalValue) * 100 : 0;
 
     return {
       totalValue,
       unrealizedPL,
       realizedPL,
       currentExposure,
-      openTradesCount: activeTrades.length
+      openTradesCount: activeTrades.length,
+      cash,
+      crypto: currentExposure,
+      cashPercent,
+      cryptoPercent
     };
   }
 

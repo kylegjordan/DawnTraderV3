@@ -13,8 +13,8 @@ describe('Smoke Tests - Server', () => {
   });
 
   it('should calculate percentages correctly for P/L', () => {
-    const initialBalance = 50000;
-    const currentBalance = 52500;
+    const initialBalance = 800;
+    const currentBalance = 840;
     const plPercent = ((currentBalance - initialBalance) / initialBalance) * 100;
     expect(plPercent).toBe(5);
   });
