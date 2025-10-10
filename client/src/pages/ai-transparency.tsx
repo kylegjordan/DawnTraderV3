@@ -61,6 +61,12 @@ export default function AITransparencyPage() {
     refetchInterval: 60000,
   });
 
+  // Fetch historic signals stats (Milestone 17C - Historic Signals)
+  const { data: historicSignalsData, isLoading: historicSignalsLoading } = useQuery<{ ok: boolean; stats: any }>({
+    queryKey: ['/api/historic-signals/stats'],
+    refetchInterval: 60000,
+  });
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
@@ -69,6 +75,7 @@ export default function AITransparencyPage() {
   const semanticTags = tagsData?.tags || [];
   const learningMetrics = learningMetricsData?.metrics || null;
   const proposals = proposalsData?.proposals || [];
+  const historicSignalsStats = historicSignalsData?.stats || null;
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -94,7 +101,7 @@ export default function AITransparencyPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6" data-testid="tabs-ai-transparency">
+        <TabsList className="grid w-full grid-cols-7" data-testid="tabs-ai-transparency">
           <TabsTrigger value="automation-logs" data-testid="tab-automation-logs">
             <Clock className="w-4 h-4 mr-2" />
             Automation Logs
@@ -106,6 +113,10 @@ export default function AITransparencyPage() {
           <TabsTrigger value="autonomous-adjustments" data-testid="tab-autonomous-adjustments">
             <Settings className="w-4 h-4 mr-2" />
             Autonomous Adjustments
+          </TabsTrigger>
+          <TabsTrigger value="historic-signals" data-testid="tab-historic-signals">
+            <TrendingUp className="w-4 h-4 mr-2" />
+            Historic Signals
           </TabsTrigger>
           <TabsTrigger value="semantic-insights" data-testid="tab-semantic-insights">
             <Brain className="w-4 h-4 mr-2" />
@@ -309,7 +320,97 @@ export default function AITransparencyPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab 4: Semantic Insights (Milestone 15) */}
+        {/* Tab 4: Historic Signals (Milestone 17C) */}
+        <TabsContent value="historic-signals" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Historic Signal Analysis</CardTitle>
+              <CardDescription>
+                Performance metrics from historical pattern backtesting for AI learning
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {historicSignalsLoading ? (
+                <div className="text-sm text-muted-foreground">Loading historic signals stats...</div>
+              ) : !historicSignalsStats ? (
+                <div className="text-sm text-muted-foreground">
+                  No historic signals found. Use the backfill API to generate signals from historical data.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Overall Stats */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-4 border rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">Total Signals</div>
+                      <div className="text-2xl font-bold" data-testid="text-total-signals">
+                        {historicSignalsStats.totalSignals || 0}
+                      </div>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">Win Rate</div>
+                      <div className="text-2xl font-bold" data-testid="text-win-rate">
+                        {historicSignalsStats.winRate !== null && historicSignalsStats.winRate !== undefined ? `${historicSignalsStats.winRate.toFixed(1)}%` : 'N/A'}
+                      </div>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <div className="text-sm text-muted-foreground mb-1">Avg Return</div>
+                      <div 
+                        className={`text-2xl font-bold ${historicSignalsStats.avgReturn > 0 ? 'text-green-500' : historicSignalsStats.avgReturn < 0 ? 'text-red-500' : ''}`}
+                        data-testid="text-avg-return"
+                      >
+                        {historicSignalsStats.avgReturn !== null && historicSignalsStats.avgReturn !== undefined ? `${historicSignalsStats.avgReturn > 0 ? '+' : ''}${historicSignalsStats.avgReturn.toFixed(2)}%` : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Strategy Breakdown */}
+                  {historicSignalsStats.byStrategy && historicSignalsStats.byStrategy.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3">Performance by Strategy</h3>
+                      <div className="space-y-3">
+                        {historicSignalsStats.byStrategy.map((strategy: any) => (
+                          <div 
+                            key={strategy.strategyId} 
+                            className="p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                            data-testid={`strategy-${strategy.strategyId}`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <Badge variant="secondary" data-testid={`badge-strategy-${strategy.strategyId}`}>
+                                {strategy.strategyId.replace(/_/g, ' ').toUpperCase()}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground" data-testid={`text-strategy-count-${strategy.strategyId}`}>
+                                {strategy.count} signals
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <span className="text-muted-foreground">Win Rate:</span>{" "}
+                                <span className="font-medium" data-testid={`text-strategy-winrate-${strategy.strategyId}`}>
+                                  {strategy.winRate !== null && strategy.winRate !== undefined ? `${strategy.winRate.toFixed(1)}%` : 'N/A'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Avg Return:</span>{" "}
+                                <span 
+                                  className={`font-medium ${strategy.avgReturn > 0 ? 'text-green-500' : strategy.avgReturn < 0 ? 'text-red-500' : ''}`}
+                                  data-testid={`text-strategy-return-${strategy.strategyId}`}
+                                >
+                                  {strategy.avgReturn !== null && strategy.avgReturn !== undefined ? `${strategy.avgReturn > 0 ? '+' : ''}${strategy.avgReturn.toFixed(2)}%` : 'N/A'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 5: Semantic Insights (Milestone 15) */}
         <TabsContent value="semantic-insights" className="space-y-4">
           <Card>
             <CardHeader>

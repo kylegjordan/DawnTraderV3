@@ -4373,6 +4373,31 @@ Please:
 
   // ==================== Historic Signals Backfill API (Milestone 17C) ====================
   
+  // Get historic signals statistics
+  app.get('/api/historic-signals/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const stats = await storage.getHistoricSignalStats(userId);
+      res.json({ ok: true, stats });
+    } catch (error: any) {
+      console.error('[HistoricSignals] Error fetching stats:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // Get recent historic signals
+  app.get('/api/historic-signals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const signals = await storage.getHistoricSignals(userId, limit);
+      res.json({ ok: true, signals });
+    } catch (error: any) {
+      console.error('[HistoricSignals] Error fetching signals:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
   // Backfill historic signals for learning (admin-only)
   app.post('/api/backfill/signals', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
