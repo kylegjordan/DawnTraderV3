@@ -119,7 +119,10 @@ import {
   proposedAdjustments,
   type AssetCapability,
   type InsertAssetCapability,
-  assetCapabilities
+  assetCapabilities,
+  type HistoricSignal,
+  type InsertHistoricSignal,
+  historicSignals
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -360,6 +363,23 @@ export interface IStorage {
   createAssetCapability(capability: InsertAssetCapability): Promise<AssetCapability>;
   updateAssetCapability(id: string, updates: Partial<AssetCapability>): Promise<AssetCapability>;
   upsertAssetCapability(capability: Omit<InsertAssetCapability, 'id'>): Promise<AssetCapability>;
+
+  // Historic signals methods (Milestone 17C)
+  createHistoricSignal(signal: InsertHistoricSignal): Promise<HistoricSignal>;
+  getHistoricSignals(userId: string, limit?: number): Promise<HistoricSignal[]>;
+  getHistoricSignalsBySymbol(userId: string, symbol: string): Promise<HistoricSignal[]>;
+  getHistoricSignalsByStrategy(userId: string, strategyId: string): Promise<HistoricSignal[]>;
+  getHistoricSignalStats(userId: string): Promise<{
+    totalSignals: number;
+    winRate: number;
+    avgReturn: number;
+    byStrategy: Array<{
+      strategy: string;
+      count: number;
+      winRate: number;
+      avgReturn: number;
+    }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2040,6 +2060,98 @@ export class DatabaseStorage implements IStorage {
     } else {
       return this.createAssetCapability(capability as InsertAssetCapability);
     }
+  }
+
+  // Historic signals methods (Milestone 17C)
+  async createHistoricSignal(signal: InsertHistoricSignal): Promise<HistoricSignal> {
+    const [result] = await db.insert(historicSignals).values(signal).returning();
+    return result;
+  }
+
+  async getHistoricSignals(userId: string, limit: number = 100): Promise<HistoricSignal[]> {
+    return await db
+      .select()
+      .from(historicSignals)
+      .where(eq(historicSignals.userId, userId))
+      .orderBy(desc(historicSignals.triggerTime))
+      .limit(limit);
+  }
+
+  async getHistoricSignalsBySymbol(userId: string, symbol: string): Promise<HistoricSignal[]> {
+    return await db
+      .select()
+      .from(historicSignals)
+      .where(and(
+        eq(historicSignals.userId, userId),
+        eq(historicSignals.symbol, symbol)
+      ))
+      .orderBy(desc(historicSignals.triggerTime));
+  }
+
+  async getHistoricSignalsByStrategy(userId: string, strategyId: string): Promise<HistoricSignal[]> {
+    return await db
+      .select()
+      .from(historicSignals)
+      .where(and(
+        eq(historicSignals.userId, userId),
+        eq(historicSignals.strategyId, strategyId as any)
+      ))
+      .orderBy(desc(historicSignals.triggerTime));
+  }
+
+  async getHistoricSignalStats(userId: string): Promise<{
+    totalSignals: number;
+    winRate: number;
+    avgReturn: number;
+    byStrategy: Array<{
+      strategy: string;
+      count: number;
+      winRate: number;
+      avgReturn: number;
+    }>;
+  }> {
+    const signals = await db
+      .select()
+      .from(historicSignals)
+      .where(eq(historicSignals.userId, userId));
+
+    const totalSignals = signals.length;
+    const winning = signals.filter(s => s.pnlPercent && parseFloat(s.pnlPercent) > 0).length;
+    const winRate = totalSignals > 0 ? (winning / totalSignals) * 100 : 0;
+    
+    const totalReturn = signals.reduce((acc, s) => 
+      acc + (s.pnlPercent ? parseFloat(s.pnlPercent) : 0), 0
+    );
+    const avgReturn = totalSignals > 0 ? totalReturn / totalSignals : 0;
+
+    // Group by strategy
+    const byStrategy = Array.from(
+      signals.reduce((map, signal) => {
+        const strategy = signal.strategyId;
+        if (!map.has(strategy)) {
+          map.set(strategy, []);
+        }
+        map.get(strategy)!.push(signal);
+        return map;
+      }, new Map<string, typeof signals>())
+    ).map(([strategy, strategySignals]) => {
+      const count = strategySignals.length;
+      const wins = strategySignals.filter(s => s.pnlPercent && parseFloat(s.pnlPercent) > 0).length;
+      const winRate = count > 0 ? (wins / count) * 100 : 0;
+      const totalReturn = strategySignals.reduce((acc, s) => 
+        acc + (s.pnlPercent ? parseFloat(s.pnlPercent) : 0), 0
+      );
+      const avgReturn = count > 0 ? totalReturn / count : 0;
+      
+      return { strategy, count, winRate, avgReturn };
+    });
+
+    return {
+      totalSignals,
+      winRate,
+      avgReturn,
+      byStrategy
+    };
   }
 }
 
