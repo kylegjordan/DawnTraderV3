@@ -43,6 +43,7 @@ export async function seedTestUser(): Promise<void> {
       password: passwordHash,
       displayName: "Test User",
       timezone: "UTC",
+      isAdmin: true, // Test user is admin for backfill and system operations
       tradingMode: "paper",
       tradingStatus: "stopped",
     });

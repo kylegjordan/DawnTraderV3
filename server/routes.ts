@@ -60,11 +60,12 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     username: string;
+    isAdmin?: boolean;
   };
   mode?: 'live' | 'paper';
 }
 
-function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+async function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   
   if (!authHeader) {
@@ -79,7 +80,15 @@ function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextF
   
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
-    req.user = { id: decoded.id, username: decoded.username };
+    
+    // Fetch user from database to get admin status
+    const user = await storage.getUser(decoded.id);
+    
+    req.user = { 
+      id: decoded.id, 
+      username: decoded.username,
+      isAdmin: user?.isAdmin || false
+    };
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Invalid or expired token' });
@@ -4358,6 +4367,137 @@ Please:
       res.json({ ok: true, metrics });
     } catch (error: any) {
       console.error('[LearningMetrics] Error fetching metrics:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ==================== Historic Signals Backfill API (Milestone 17C) ====================
+  
+  // Backfill historic signals for learning (admin-only)
+  app.post('/api/backfill/signals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      // Check if user is admin
+      if (!req.user?.isAdmin) {
+        return res.status(403).json({ 
+          ok: false, 
+          error: 'Admin access required for historic signal backfill' 
+        });
+      }
+      
+      const userId = req.user!.id;
+      const { 
+        startDate, 
+        endDate, 
+        symbols = [], 
+        strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'],
+        interval = 60 
+      } = req.body;
+      
+      // Validate required fields
+      if (!startDate || !endDate) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'startDate and endDate are required' 
+        });
+      }
+      
+      // Validate symbols is array
+      if (!Array.isArray(symbols)) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'symbols must be an array of strings' 
+        });
+      }
+      
+      if (symbols.length === 0) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'At least one symbol is required' 
+        });
+      }
+      
+      // Validate all symbols are strings
+      if (!symbols.every((s: any) => typeof s === 'string')) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'All symbols must be strings' 
+        });
+      }
+      
+      // Validate strategies is array
+      if (!Array.isArray(strategies)) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'strategies must be an array' 
+        });
+      }
+      
+      // Validate strategies
+      const validStrategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'];
+      const invalidStrategies = strategies.filter((s: string) => !validStrategies.includes(s));
+      
+      if (invalidStrategies.length > 0) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: `Invalid strategies: ${invalidStrategies.join(', ')}. Valid: ${validStrategies.join(', ')}` 
+        });
+      }
+      
+      // Validate interval
+      if (typeof interval !== 'number' || interval <= 0 || !Number.isInteger(interval)) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'interval must be a positive integer (minutes)' 
+        });
+      }
+      
+      // Validate date range
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'Invalid date format. Use ISO 8601 format' 
+        });
+      }
+      
+      if (start >= end) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'startDate must be before endDate' 
+        });
+      }
+      
+      // Import and run backfill
+      const { HistoricSignalGenerator } = await import('./services/historic-signal-generator');
+      const generator = new HistoricSignalGenerator();
+      
+      console.log(`[Backfill] Starting historic signal generation for user ${userId}`);
+      console.log(`  Date range: ${start.toISOString()} to ${end.toISOString()}`);
+      console.log(`  Symbols: ${symbols.join(', ')}`);
+      console.log(`  Strategies: ${strategies.join(', ')}`);
+      
+      const result = await generator.generateHistoricSignals({
+        userId,
+        startDate: start,
+        endDate: end,
+        symbols,
+        strategies,
+        interval
+      });
+      
+      console.log(`[Backfill] Complete: ${result.totalSignals} signals generated, ${result.successCount} stored`);
+      
+      res.json({ 
+        ok: true, 
+        result: {
+          ...result,
+          message: `Successfully generated ${result.totalSignals} historic signals (${result.successCount} stored, ${result.errorCount} errors)`
+        }
+      });
+    } catch (error: any) {
+      console.error('[Backfill] Error generating historic signals:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });

@@ -36,6 +36,7 @@ export const users = pgTable("users", {
   password: text("password"),
   displayName: text("display_name"),
   timezone: varchar("timezone", { length: 50 }).default("UTC"),
+  isAdmin: boolean("is_admin").default(false).notNull(),
   tradingMode: tradingModeEnum("trading_mode").default("paper"),
   tradingStatus: tradingStatusEnum("trading_status").default("stopped"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
