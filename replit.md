@@ -13,10 +13,16 @@ Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, 
 
 **Trading Active Toggle**: Dashboard header includes a mode-aware toggle controller that starts/stops the appropriate trading engine:
 - Paper mode: Controls Paper Trading Simulation Engine via `/api/paper-sim/start` and `/api/paper-sim/stop` endpoints
+  - Starts/stops immediately without confirmation
 - Live mode: Controls Live Trading Engine via `/api/trading/start` and `/api/trading/stop` endpoints
+  - **Safety confirmation modal**: Activating Live Trading requires explicit user confirmation via AlertDialog
+  - Modal displays warning about "real market orders" with actual funds
+  - Credentials validation: Backend validates KRAKEN_API_KEY and KRAKEN_API_SECRET before starting
+  - Returns 400 error with informative message if credentials missing
 - Real-time status synchronization with 5-second query refresh intervals and aggressive cache invalidation
 - Dynamic visual indicators (status dot, labels, colors) reflect current engine state
 - Toast notifications provide immediate user feedback on successful/failed operations
+- Error handling: Failed mutations trigger immediate status refetch to ensure UI reflects actual backend state
 
 ### Backend
 Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting both "live" and "paper" trading modes.
