@@ -22,6 +22,15 @@ export async function seedTestUser(): Promise<void> {
 
     if (existingUser) {
       console.log(`[Startup] Test account already exists: ${testEmail}`);
+      
+      // Log to transparency system
+      await storage.createTransparencyLog({
+        taskName: 'System Bootstrap',
+        resultSummary: `Test account already exists: ${testEmail}`,
+        success: true,
+        duration: "0",
+      });
+      
       return;
     }
 
