@@ -40,7 +40,7 @@ Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, 
 Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting both "live" and "paper" trading modes.
 
 ### Data Storage
-PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, `aiOpportunities`, `aiTransparencyLog`, `semanticMemory` (vector embeddings for knowledge recall), and learning infrastructure tables (`filterCalibrationLog`, `intradayAdjustments`, `aiLessons`, `portfolioAdjustments`, `predictionOutcomes`).
+PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `users`, `tradingSettings`, `watchlistPairs`, `trades`, `aiReports`, `aiConversations`, `aiChatLogs`, `priceData`, `aiOpportunityRuns`, `aiOpportunities`, `aiTransparencyLog`, `semanticMemory` (vector embeddings for knowledge recall), `learningSources` (intelligence refinement weights), and learning infrastructure tables (`filterCalibrationLog`, `intradayAdjustments`, `aiLessons`, `portfolioAdjustments`, `predictionOutcomes`).
 
 ### System Design
 - **Trading Strategies**: Implements fixed rules for VWAP Pullback, ABCD Long, and SMA Trend Ride with calculated entry, stop loss, and target prices.
@@ -57,6 +57,7 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `user
 - **Market Data Health Check**: Automated daily monitoring of market data service reliability.
 - **Goals Engine**: Interactive configuration for key trading goals with tracking and guardrails.
 - **Semantic Memory Layer (Milestone 15)**: Vector-based knowledge recall system using pgvector and OpenAI embeddings (text-embedding-3-small, 1536 dimensions). Automated ingestion runs every 6 hours to populate semantic memory from AI lessons, conversation summaries, portfolio adjustments, and filter calibrations. Provides similarity search and semantic boost to CLE confidence index (0-10 point boost based on relevant past learnings). Accessible via API endpoints (`/api/semantic/search`, `/api/semantic/latest`, `/api/semantic/tags`) and displayed in AI Transparency Panel's Semantic Insights tab.
+- **Intelligence Refinement Layer (Milestone 16)**: Self-optimizing Cognitive Weight Adjuster (CWA) that reviews prediction outcomes and dynamically adjusts learning source weights. Runs autonomously every 6 hours, tracking semantic_memory, external_api, and cache sources. Weight adjustments based on accuracy (correct: +0.05, incorrect: -0.1, no outcome: -0.01 decay), constrained between 0.1-2.0, requiring minimum 5 samples. Integrates with CLE confidence calculations through learning weight boost (0-10 points based on weighted average accuracy). API endpoint `/api/ai/learning-metrics` provides health metrics. UI displayed in AI Transparency Panel's Learning Health tab showing average accuracy, confidence variance, total sources, and top performing sources with weights and prediction counts.
 
 ## External Dependencies
 
