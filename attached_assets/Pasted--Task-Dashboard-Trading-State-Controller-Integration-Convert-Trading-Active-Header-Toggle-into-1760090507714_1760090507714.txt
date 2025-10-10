@@ -1,0 +1,135 @@
+🧩 Task: Dashboard Trading State Controller Integration
+(Convert “Trading Active” Header Toggle into Functional Start/Stop Control)
+🎯 Goal
+
+Transform the Trading Active toggle in the dashboard header into the primary control switch for starting and stopping trading operations — both for Paper Trading Simulation Engine and, later, the Live Trading Engine.
+
+This replaces the need for separate Start/Stop buttons in other panels and ensures a single, intuitive control for all trading states.
+
+🧠 Background
+
+Currently, the header widget labeled “Trading • Active” is purely visual — it shows a green dot but does not actually control any functionality.
+At the same time, the paper trading engine can only be started manually via API (POST /api/paper-sim/start).
+
+Users naturally expect that sliding the “Trading” switch would activate or pause trading.
+This task makes that expectation real.
+
+🪜 Implementation Plan (Conceptual)
+1. Locate and Extend the Toggle Component
+
+File: The trading mode toggle bar in the Dashboard header (Trading • Active | LIVE | PAPER).
+
+This will be converted into a functional state controller.
+
+2. Connect Toggle to Engine API
+
+When in Paper Mode, link the toggle actions to:
+
+POST /api/paper-sim/start
+
+POST /api/paper-sim/stop
+
+When in Live Mode (future-ready):
+
+Reserve placeholders for /api/live-trade/start and /api/live-trade/stop.
+
+Must include proper authentication via the user’s active JWT token.
+
+3. Status-Dependent Behavior
+
+When OFF (Stopped)
+
+Red dot 🔴
+
+Toggle positioned left
+
+Label: “Trading Stopped”
+
+Backend: calls /api/paper-sim/stop
+
+All trading activity halts immediately.
+
+When ON (Active)
+
+Green dot 🟢
+
+Toggle positioned right
+
+Label: “Trading Active”
+
+Backend: calls /api/paper-sim/start
+
+Engine begins simulated trade cycles within 15 seconds.
+
+4. Dynamic Label & Color Sync
+
+The toggle text and dot color reflect real-time backend state.
+
+On page reload, fetch current engine status via /api/paper-sim/status and sync the toggle position.
+
+Add subtle fade animations when toggling states for a clean transition.
+
+5. Notifications & Feedback
+
+On Start → display small toast:
+“✅ Paper Trading Engine Started Successfully.”
+
+On Stop → display small toast:
+“🛑 Paper Trading Engine Stopped.”
+
+On error (e.g., network or auth failure):
+“⚠️ Unable to change trading state. Please try again.”
+
+6. Refresh Behavior
+
+Auto-refresh dashboard metrics (Portfolio Value, Earnings, Trades) every 15 seconds while engine is active.
+
+When stopped, freeze metrics in their last state.
+
+Paper Trading tab in AI Transparency should automatically reflect “Engine Status: Running / Stopped.”
+
+7. Safety & Synchronization
+
+Use the same mutex lock from Milestone 18 to prevent race conditions.
+
+Block double activation or conflicting mode switches (e.g., can’t run both Live and Paper simultaneously).
+
+Maintain backend integrity: only one active trading engine at any time.
+
+🧪 Testing Checklist
+Test	Expected Outcome
+Toggle ON (Paper Mode)	Paper Trading Engine starts; “Trading Active” shows 🟢
+Toggle OFF (Paper Mode)	Engine stops; “Trading Stopped” shows 🔴
+Rapid toggling	No race conditions or multiple active managers
+Refresh Page	Toggle remains in correct state (status persisted)
+AI Transparency Panel	Reflects correct engine status instantly
+Dashboard Metrics	Update live every 15s while trading is active
+API Logs	Correct /start and /stop entries appear
+Unauthorized Request	Displays user-friendly error message
+✅ Acceptance Criteria
+
+Header toggle now serves as the master trading control.
+
+No separate Start/Stop buttons required elsewhere.
+
+Visual indicator (dot + text) dynamically updates with trading state.
+
+Fully synchronized across Dashboard and AI Transparency.
+
+Smooth transitions and clean user experience across desktop and mobile.
+
+Race conditions fully prevented.
+
+🧩 Deliverables
+
+Updated Dashboard header toggle with full backend linkage.
+
+Working start/stop functionality for Paper Trading.
+
+Sync with AI Transparency status and metrics.
+
+Updated replit.md documentation under:
+
+“Paper Trading Simulation Control (Dashboard Toggle)”
+
+Include API calls, status syncing, and testing procedure.
