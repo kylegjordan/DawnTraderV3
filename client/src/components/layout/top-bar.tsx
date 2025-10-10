@@ -17,7 +17,8 @@ interface TopBarProps {
 
 export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarProps) {
   const { 
-    tradingStatus, 
+    tradingStatus,
+    paperSimStatus,
     startTrading, 
     stopTrading, 
     isStarting, 
@@ -52,20 +53,21 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     return () => clearInterval(interval);
   }, [settings?.timezone, settings?.timeFormat]);
 
+  const { mode: currentMode, setMode } = useTradingMode();
+
   const handleTradingToggle = async (enabled: boolean) => {
     try {
       if (enabled) {
-        const mode = tradingStatus?.tradingMode || 'paper';
-        await startTrading(mode);
+        await startTrading(currentMode);
         toast({
           title: "Trading Started",
-          description: `Trading engine started in ${mode} mode`,
+          description: `${currentMode === 'paper' ? 'Paper Trading Simulation' : 'Live Trading'} engine started successfully`,
         });
       } else {
-        await stopTrading();
+        await stopTrading(currentMode);
         toast({
           title: "Trading Stopped",
-          description: "Trading engine has been stopped",
+          description: `${currentMode === 'paper' ? 'Paper Trading Simulation' : 'Live Trading'} engine has been stopped`,
         });
       }
     } catch (error: any) {
@@ -95,8 +97,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   };
 
-  const { mode: currentMode, setMode } = useTradingMode();
-
   const handleModeChange = (newMode: 'live' | 'paper') => {
     setMode(newMode);
     toast({
@@ -105,7 +105,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     });
   };
 
-  const isActive = tradingStatus?.tradingStatus === 'active';
+  // Determine if trading is active based on current mode
+  const isActive = currentMode === 'paper' 
+    ? paperSimStatus?.isRunning || false
+    : tradingStatus?.tradingStatus === 'active';
 
   return (
     <header 

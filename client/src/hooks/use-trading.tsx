@@ -22,23 +22,49 @@ export function useTrading() {
     refetchOnWindowFocus: false
   });
 
+  // Paper trading simulation status
+  const { data: paperSimStatus, isLoading: paperSimStatusLoading } = useQuery<{ isRunning: boolean }>({
+    queryKey: ['/api/paper-sim/status'],
+    refetchInterval: 15000,
+    staleTime: 15000,
+    refetchOnWindowFocus: false
+  });
+
   const startTradingMutation = useMutation({
     mutationFn: async (mode: 'live' | 'paper') => {
-      const response = await apiRequest('POST', '/api/trading/start', { mode });
-      return response.json();
+      if (mode === 'paper') {
+        // Start Paper Trading Simulation Engine
+        const response = await apiRequest('POST', '/api/paper-sim/start');
+        return response.json();
+      } else {
+        // Start Live Trading Engine
+        const response = await apiRequest('POST', '/api/trading/start', { mode });
+        return response.json();
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
     }
   });
 
   const stopTradingMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest('POST', '/api/trading/stop');
-      return response.json();
+    mutationFn: async (mode: 'live' | 'paper') => {
+      if (mode === 'paper') {
+        // Stop Paper Trading Simulation Engine
+        const response = await apiRequest('POST', '/api/paper-sim/stop');
+        return response.json();
+      } else {
+        // Stop Live Trading Engine
+        const response = await apiRequest('POST', '/api/trading/stop');
+        return response.json();
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
     }
   });
 
@@ -128,6 +154,8 @@ export function useTrading() {
     // Status and control
     tradingStatus,
     statusLoading,
+    paperSimStatus,
+    paperSimStatusLoading,
     startTrading: startTradingMutation.mutate,
     stopTrading: stopTradingMutation.mutate,
     isStarting: startTradingMutation.isPending,
