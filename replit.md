@@ -58,6 +58,28 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `user
 - **Goals Engine**: Interactive configuration for key trading goals with tracking and guardrails.
 - **Semantic Memory Layer (Milestone 15)**: Vector-based knowledge recall system using pgvector and OpenAI embeddings (text-embedding-3-small, 1536 dimensions). Automated ingestion runs every 6 hours to populate semantic memory from AI lessons, conversation summaries, portfolio adjustments, and filter calibrations. Provides similarity search and semantic boost to CLE confidence index (0-10 point boost based on relevant past learnings). Accessible via API endpoints (`/api/semantic/search`, `/api/semantic/latest`, `/api/semantic/tags`) and displayed in AI Transparency Panel's Semantic Insights tab.
 - **Intelligence Refinement Layer (Milestone 16)**: Self-optimizing Cognitive Weight Adjuster (CWA) that reviews prediction outcomes and dynamically adjusts learning source weights. Runs autonomously every 6 hours, tracking semantic_memory, external_api, and cache sources. Weight adjustments based on accuracy (correct: +0.05, incorrect: -0.1, no outcome: -0.01 decay), constrained between 0.1-2.0, requiring minimum 5 samples. Integrates with CLE confidence calculations through learning weight boost (0-10 points based on weighted average accuracy). API endpoint `/api/ai/learning-metrics` provides health metrics. UI displayed in AI Transparency Panel's Learning Health tab showing average accuracy, confidence variance, total sources, and top performing sources with weights and prediction counts.
+- **Autonomous Adjustments Actuation Policy (Milestone 17)**:
+  - **Part A - Actuation Policy Registry**: Governs which trading parameters AI can adjust autonomously. Enforces variable bounds (min/max/step), cooldown periods (6-48h), confidence thresholds (0.6-0.95), and daily change limits (default 3). Proposal workflow: pending → approved → rejected → applied. Parameters include entry_zone_width, stop_loss_distance, take_profit_ratio, position_size_pct, max_position_size, min_volume_24h, min_daily_range, max_bid_ask_spread.
+  - **Part B - Asset Capabilities Service**: Framework for venue-aware asset differentiation. **Current Status**: Kraken-only (crypto/forex, all fractional). Completed components:
+    - Database schema and storage layer for asset capabilities (asset_type, allows_fractional, lot_size, tick_size, etc.)
+    - Kraken sync integration (pulls trading pairs, extracts lot size and tick size)
+    - Forex detection logic (fiat/fiat pairs correctly identified)
+    - Fractional sizing logic with lot_size enforcement (works for crypto/forex)
+    - Whole-share sizing logic (code complete, never executes - see limitations)
+    - Venue-aware mapping system architecture (assetTypeMappings Map for explicit classification)
+  - **CLE Integration**: Extended orchestrator to propose parameter adjustments through actuation policy service. Proposals generated based on learning patterns with confidence scoring and safety validation.
+  - **Critical Limitations (Blocks Full Milestone 17 Completion)**: 
+    - **Equity/Commodity Detection Not Functional**: syncFromKraken() provides no venue metadata, causing all assets to default to 'crypto'. The venue-aware mapping system (assetTypeMappings) exists but is never populated during ingestion.
+    - **Whole-Share Sizing Never Triggers**: Because no assets are classified as 'equity', calculateWholeShareSize() is unreachable. The min 3-share requirement is coded but unverified.
+    - **Capability-Aware Filtering Inert**: Position sizing and filtering logic cannot apply asset-based rules since all assets appear as fractional crypto.
+    - **Stock Venue Integration Required**: Full functionality requires:
+      1. Integration with stock trading venue (Alpaca, Interactive Brokers, TD Ameritrade, etc.)
+      2. Venue metadata persistence (track which venue each symbol comes from)
+      3. Automated population of assetTypeMappings from venue data or authoritative symbol registry
+      4. Update syncFromKraken() and future sync methods to preserve venue context
+      5. End-to-end testing with real equity/commodity data to verify whole-share sizing and filtering
+  - **API Endpoints**: Complete REST API for managing actuation policies (`/api/actuation/policies`, `/api/actuation/policies/:id`), viewing/approving proposed adjustments (`/api/actuation/proposals`, `/api/actuation/proposals/:id/approve`, `/api/actuation/proposals/:id/reject`), and syncing asset capabilities (`/api/asset-capabilities/sync`, `/api/asset-capabilities/:symbol`)
+  - **Database Tables**: `actuation_policy_registry`, `proposed_adjustments`, `asset_capabilities`
 
 ## External Dependencies
 
