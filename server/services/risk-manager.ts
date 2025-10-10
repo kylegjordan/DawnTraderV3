@@ -3,6 +3,7 @@ import { TradingSettings } from '@shared/schema';
 import { TradeSignal } from './trading-engine';
 import { KrakenService } from './kraken';
 import { marketDataService } from './market-data';
+import { AssetCapabilitiesService } from './asset-capabilities';
 
 export interface RiskCheckResult {
   approved: boolean;
@@ -20,11 +21,13 @@ interface BalanceCache {
 
 export class RiskManager {
   private krakenService: KrakenService;
+  private assetCapabilitiesService: AssetCapabilitiesService;
   private balanceCacheMap: Map<string, BalanceCache> = new Map();
   private readonly BALANCE_CACHE_TTL = 45000;
 
   constructor() {
     this.krakenService = new KrakenService();
+    this.assetCapabilitiesService = new AssetCapabilitiesService();
   }
 
   /**
@@ -263,7 +266,71 @@ export class RiskManager {
     return { approved: true };
   }
 
-  calculatePositionSize(
+  /**
+   * Calculate position size based on risk amount and asset capabilities
+   * Uses capability-aware sizing for fractional vs whole shares
+   * @param symbol Trading pair symbol (e.g., 'BTC/USD', 'AAPL/USD')
+   * @param riskAmount Risk amount in USD
+   * @param entryPrice Entry price
+   * @param stopPrice Stop loss price
+   * @returns Position size object with quantity, notional value, and capability info
+   */
+  async calculatePositionSize(
+    symbol: string,
+    riskAmount: number,
+    entryPrice: number,
+    stopPrice: number
+  ): Promise<{
+    quantity: number;
+    notionalValue: number;
+    isFractional: boolean;
+    meetsMinimum: boolean;
+    reason?: string;
+  }> {
+    const stopDistance = Math.abs(entryPrice - stopPrice);
+    if (stopDistance === 0) {
+      return {
+        quantity: 0,
+        notionalValue: 0,
+        isFractional: true,
+        meetsMinimum: false,
+        reason: 'Stop distance is zero'
+      };
+    }
+    
+    // Calculate position size in units based on risk
+    // Formula: quantity = riskAmount / stopDistance
+    const quantity = riskAmount / stopDistance;
+    
+    // Calculate notional value (max investment in USD)
+    const maxInvestment = quantity * entryPrice;
+    
+    // Try to get asset capabilities for sizing rules
+    try {
+      const sizing = await this.assetCapabilitiesService.calculatePositionSize({
+        symbol,
+        maxInvestment,
+        price: entryPrice
+      });
+      return sizing;
+    } catch (error) {
+      // Fallback: use basic calculation if capabilities not available
+      console.warn(`[RiskManager] Asset capabilities not available for ${symbol}, using basic sizing:`, error);
+      return {
+        quantity,
+        notionalValue: maxInvestment,
+        isFractional: true,
+        meetsMinimum: true,
+        reason: 'Using basic sizing (capabilities unavailable)'
+      };
+    }
+  }
+  
+  /**
+   * Legacy method for backward compatibility
+   * @deprecated Use calculatePositionSize with symbol parameter instead
+   */
+  calculatePositionSizeBasic(
     riskAmount: number,
     entryPrice: number,
     stopPrice: number
