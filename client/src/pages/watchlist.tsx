@@ -116,6 +116,14 @@ function WatchlistCard({ pair, onRemove }: { pair: WatchlistPair; onRemove: (id:
               {dailyRange.toFixed(1)}%
             </Badge>
           </div>
+          
+          {/* Asset Capability Info (Milestone 17) - All Kraken assets support fractional trading */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Trading Type</span>
+            <Badge variant="secondary" className="text-xs" data-testid={`badge-capability-${pair.symbol}`}>
+              Fractional
+            </Badge>
+          </div>
         </div>
       </CardContent>
     </Card>
