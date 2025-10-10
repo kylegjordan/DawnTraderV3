@@ -372,14 +372,18 @@ export class CLEOrchestratorService {
       
       const components = await this.calculateConfidenceComponents(userId);
       
-      // Formula: CI = 0.5(Accuracy_paper) + 0.3(Transfer_SuccessRate) + 0.2(Health_Uptime)
-      const confidenceIndex = Math.round(
+      // Base Formula: CI = 0.5(Accuracy_paper) + 0.3(Transfer_SuccessRate) + 0.2(Health_Uptime)
+      const baseConfidence = Math.round(
         (components.paperAccuracy * 50) +
         (components.transferSuccessRate * 30) +
         (components.healthUptime * 20)
       );
       
-      console.log(`[CLEOrchestrator] Confidence Index: ${confidenceIndex}/100 (Paper: ${(components.paperAccuracy * 100).toFixed(1)}%, Transfer: ${(components.transferSuccessRate * 100).toFixed(1)}%, Health: ${(components.healthUptime * 100).toFixed(1)}%)`);
+      // Apply semantic memory boost (Milestone 15)
+      const semanticBoost = await this.calculateSemanticBoost(userId);
+      const confidenceIndex = Math.min(100, baseConfidence + semanticBoost); // Cap at 100
+      
+      console.log(`[CLEOrchestrator] Confidence Index: ${confidenceIndex}/100 (Base: ${baseConfidence}, Semantic Boost: +${semanticBoost}) (Paper: ${(components.paperAccuracy * 100).toFixed(1)}%, Transfer: ${(components.transferSuccessRate * 100).toFixed(1)}%, Health: ${(components.healthUptime * 100).toFixed(1)}%)`);
       
       // Check for confidence drop > 15 points
       const confidenceDrop = this.previousConfidence - confidenceIndex;
@@ -512,6 +516,92 @@ export class CLEOrchestratorService {
     console.log(`[CLEOrchestrator] Rollback complete: ${autonomousCalibrations.length} calibrations affected`);
   }
 
+  /**
+   * Calculate semantic memory boost (Milestone 15)
+   * Formula: CI_new = CI_old + (0.1 × semantic_relevance_mean × 100), capped at +10
+   */
+  private async calculateSemanticBoost(userId: string): Promise<number> {
+    try {
+      // Import database and schema
+      const { db } = await import('../db');
+      const { sql } = await import('drizzle-orm');
+      const { EmbeddingService } = await import('./embedding-service');
+      
+      // Query recent prediction outcomes to use as context
+      const recentOutcomes = await storage.getPredictionOutcomes(userId, {
+        mode: 'paper',
+        fromDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        limit: 10,
+      });
+      
+      if (recentOutcomes.length === 0) {
+        return 0; // No boost if no recent outcomes
+      }
+      
+      // Build query text from recent outcomes (strategy + result pattern)
+      const queryTexts = recentOutcomes.map(outcome => 
+        `${outcome.strategy} ${outcome.outcome === 'win' ? 'successful' : 'failed'} trade pattern`
+      );
+      
+      // Get OpenAI API key
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (!openaiKey) {
+        console.log('[CLEOrchestrator] OpenAI API key not available, skipping semantic boost');
+        return 0;
+      }
+      
+      // Generate embeddings for queries
+      const embeddingService = new EmbeddingService(openaiKey);
+      const embeddings = await embeddingService.generateEmbeddings(queryTexts);
+      
+      // Query semantic memory for each embedding and collect weighted scores
+      let sumWeightedRelevance = 0;
+      let sumWeights = 0;
+      
+      for (const embedding of embeddings) {
+        const results = await db.execute(sql`
+          SELECT 
+            relevance,
+            1 - (embedding <=> ${JSON.stringify(embedding)}::vector) as similarity
+          FROM semantic_memory
+          WHERE tags && ARRAY['learning', 'strategy', 'filter']::text[]
+          ORDER BY embedding <=> ${JSON.stringify(embedding)}::vector
+          LIMIT 5
+        `);
+        
+        // Accumulate weighted relevance scores
+        for (const row of results.rows) {
+          const relevance = parseFloat((row as any).relevance || '0');
+          const rawSimilarity = parseFloat((row as any).similarity || '0');
+          
+          // Clamp similarity to >= 0 to prevent negative boosts
+          const similarity = Math.max(0, rawSimilarity);
+          
+          sumWeightedRelevance += relevance * similarity;
+          sumWeights += similarity;
+        }
+      }
+      
+      if (sumWeights === 0) {
+        return 0; // No relevant memories found
+      }
+      
+      // Calculate properly weighted mean relevance
+      const meanRelevance = sumWeightedRelevance / sumWeights;
+      
+      // Apply boost formula: 0.1 × semantic_relevance_mean × 100, capped at +10
+      // Add lower bound to ensure boost is always non-negative
+      const boost = Math.max(0, Math.min(10, Math.round(0.1 * meanRelevance * 100)));
+      
+      console.log(`[CLEOrchestrator] Semantic boost: +${boost} (weighted mean relevance: ${meanRelevance.toFixed(3)}, sum weights: ${sumWeights.toFixed(2)})`);
+      
+      return boost;
+    } catch (error) {
+      console.error('[CLEOrchestrator] Error calculating semantic boost:', error);
+      return 0; // Return 0 on error (no boost)
+    }
+  }
+
   async getConfidenceIndex(): Promise<{ 
     autonomyConfidence: number; 
     components: ConfidenceComponents 
@@ -532,11 +622,16 @@ export class CLEOrchestratorService {
     const userId = users[0].id;
     const components = await this.calculateConfidenceComponents(userId);
     
-    const autonomyConfidence = Math.round(
+    // Base confidence calculation
+    const baseConfidence = Math.round(
       (components.paperAccuracy * 50) +
       (components.transferSuccessRate * 30) +
       (components.healthUptime * 20)
     );
+    
+    // Apply semantic memory boost (Milestone 15)
+    const semanticBoost = await this.calculateSemanticBoost(userId);
+    const autonomyConfidence = Math.min(100, baseConfidence + semanticBoost);
     
     return {
       autonomyConfidence,
