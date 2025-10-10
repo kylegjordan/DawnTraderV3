@@ -1,0 +1,112 @@
+🧱 Implementation Brief
+Title: UI Fix – AI Transparency Tab Bar Overflow
+🎯 Purpose
+
+Fix the overlapping tab labels in the AI Transparency Panel (client/src/pages/ai-transparency.tsx) so that all tabs display clearly, remain clickable, and adapt gracefully to smaller or zoomed-in screens.
+
+This issue occurs because the tab container currently lacks proper overflow handling and responsive wrapping. When new tabs (like Paper Trading and System Health) were added, the fixed-width layout caused overlap instead of scrolling or wrapping.
+
+🧩 Scope
+
+This task only affects frontend layout and styling inside the AI Transparency page.
+No backend or API changes are required.
+
+🧠 Design Goals
+Goal	Description
+✅ Clean, readable layout	Tabs should never overlap regardless of screen width or zoom level
+✅ Responsive design	On wide screens → single scrollable row; on narrow screens → wrap into multiple rows
+✅ Accessible & scrollable	Allow keyboard/tab navigation and horizontal scrolling for smaller viewports
+✅ Lightweight	Use Tailwind utilities — no heavy CSS or external libraries
+🛠️ Implementation Steps
+
+Locate File
+
+client/src/pages/ai-transparency.tsx
+
+Find the Tabs Container
+
+Look for the section that defines the tab list.
+Example:
+
+<div className="flex border-b mb-4">
+  {tabs.map((tab) => (...))}
+</div>
+
+
+Replace the Container Class with Responsive Layout
+
+Change that container <div> to the following:
+
+<div className="flex flex-wrap md:flex-nowrap overflow-x-auto space-x-2 md:space-x-4 gap-y-2 scrollbar-hide no-scrollbar px-2">
+  {tabs.map((tab) => (
+    <button
+      key={tab.id}
+      onClick={() => setActiveTab(tab.id)}
+      className={`px-3 py-2 rounded-md text-sm md:text-base font-medium whitespace-nowrap ${
+        activeTab === tab.id
+          ? 'bg-primary text-white shadow'
+          : 'bg-muted hover:bg-accent text-muted-foreground'
+      }`}
+    >
+      {tab.label}
+    </button>
+  ))}
+</div>
+
+
+What’s new:
+
+flex-wrap md:flex-nowrap → allows wrapping only on small screens
+
+overflow-x-auto → enables sideways scroll on narrow viewports
+
+space-x-2 md:space-x-4 + gap-y-2 → consistent horizontal and vertical spacing
+
+text-sm md:text-base → responsive font sizing
+
+whitespace-nowrap → keeps each label together
+
+scrollbar-hide (optional Tailwind plugin) or no-scrollbar → hides scrollbar for sleek look
+
+Add Custom Utility (Optional but Recommended)
+
+If not already present, add this in client/src/index.css or globals.css:
+
+/* Hide scrollbar for Chrome, Safari, Edge */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Hide scrollbar for Firefox */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+
+Save and Run the App
+
+Verify layout at 100%, 90%, and 125% zoom.
+
+🧪 Testing & Verification Checklist
+Test	Expected Result
+Open AI Transparency tab on desktop (full width)	Tabs display in one clean row — no overlap
+Resize window to 1024px and below	Tabs wrap neatly to two lines, still readable
+Try 125% browser zoom	Tabs scroll horizontally; all remain visible
+Hover and click	Each tab highlights and loads content normally
+Mobile emulator view	Tabs form scrollable carousel (horizontal swipe works)
+Accessibility test	Tabs navigable by keyboard (Tab/Shift+Tab)
+Visual test	No scrollbars visible (optional aesthetic)
+💾 Deliverables
+
+Updated client/src/pages/ai-transparency.tsx
+
+Optional CSS utility in globals.css
+
+Verified UI responsive behavior in preview
+
+📘 Notes
+
+This fix should not affect the function of each tab (only layout and readability).
+
+Keep the current color theme, hover states, and active highlighting.
+
+After implementation, confirm that no overflow-hidden ancestors are blocking scroll events.
