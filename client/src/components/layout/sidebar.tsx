@@ -16,7 +16,8 @@ import {
   Newspaper,
   MessageSquare,
   Search,
-  Sparkles
+  Sparkles,
+  Shield
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ const navigation = [
   { name: "Systems Monitoring", href: "/systems", icon: Activity },
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Admin Panel", href: "/admin", icon: Shield, adminOnly: true },
 ];
 
 export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
@@ -79,6 +81,11 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
           {/* Navigation */}
           <nav className="space-y-1">
             {navigation.map((item) => {
+              // Hide admin-only items from non-admin users
+              if ((item as any).adminOnly && !user.isAdmin) {
+                return null;
+              }
+              
               const isActive = location === item.href || (item.href === '/dashboard' && location === '/');
               const Icon = item.icon;
               
@@ -92,7 +99,7 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
-                  data-testid={`nav-${item.name.toLowerCase().replace(' ', '-')}`}
+                  data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                   onClick={() => onClose()}
                 >
                   <Icon className="w-5 h-5" />

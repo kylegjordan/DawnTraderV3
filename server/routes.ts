@@ -95,6 +95,17 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
   }
 }
 
+// Admin Authorization Middleware - requires admin privileges
+function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (!req.user?.isAdmin) {
+    return res.status(403).json({ 
+      error: 'Access denied',
+      message: 'Admin privileges required'
+    });
+  }
+  next();
+}
+
 // Mode Validation Middleware - enforces x-app-mode header for mode-isolated endpoints
 function validateMode(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const modeHeader = req.headers['x-app-mode'] as string | undefined;
@@ -323,6 +334,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     res.json(user);
+  });
+
+  // Admin Routes - User Management
+  app.get('/api/admin/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      
+      // Return sanitized user list (exclude passwords)
+      const sanitizedUsers = users.map(user => ({
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        displayName: user.displayName,
+        isAdmin: user.isAdmin,
+        createdAt: user.createdAt
+      }));
+      
+      res.json(sanitizedUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ error: 'Failed to fetch users' });
+    }
+  });
+
+  app.post('/api/admin/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { email, username, password, isAdmin } = req.body;
+      
+      if (!email || !username || !password) {
+        return res.status(400).json({ error: 'Email, username, and password are required' });
+      }
+      
+      // Check if username already exists
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ error: 'Username already exists' });
+      }
+      
+      // Check if email already exists
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(400).json({ error: 'Email already exists' });
+      }
+      
+      // Validate password strength
+      if (!validatePasswordStrength(password)) {
+        return res.status(400).json({ 
+          error: getPasswordStrengthMessage(password)
+        });
+      }
+      
+      // Hash password and create user
+      const passwordHash = await hashPassword(password);
+      const user = await storage.createUser({ 
+        username,
+        email,
+        password: passwordHash,
+        displayName: username,
+        timezone: 'UTC',
+        isAdmin: isAdmin || false,
+        tradingMode: 'paper',
+        tradingStatus: 'stopped'
+      });
+      
+      // Create default trading settings for the new user
+      await storage.createTradingSettings({ userId: user.id });
+      
+      res.json({ 
+        success: true, 
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          isAdmin: user.isAdmin
+        }
+      });
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ error: 'Failed to create user' });
+    }
+  });
+
+  app.patch('/api/admin/users/:userId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const { isAdmin } = req.body;
+      
+      if (typeof isAdmin !== 'boolean') {
+        return res.status(400).json({ error: 'isAdmin must be a boolean' });
+      }
+      
+      // Prevent users from removing their own admin status
+      if (userId === req.user!.id && !isAdmin) {
+        return res.status(400).json({ error: 'Cannot remove your own admin privileges' });
+      }
+      
+      const updatedUser = await storage.updateUser(userId, { isAdmin });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      res.json({ 
+        success: true, 
+        user: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          username: updatedUser.username,
+          isAdmin: updatedUser.isAdmin
+        }
+      });
+    } catch (error) {
+      console.error('Error updating user:', error);
+      res.status(500).json({ error: 'Failed to update user' });
+    }
   });
 
   // Trading Settings

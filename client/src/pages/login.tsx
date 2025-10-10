@@ -100,6 +100,8 @@ export default function LoginPage() {
               )}
             </Button>
 
+            {/* Public registration disabled - Admin-only user management */}
+            {/* 
             <div className="text-center text-sm text-muted-foreground">
               Don't have an account?{" "}
               <button
@@ -111,6 +113,7 @@ export default function LoginPage() {
                 Create one
               </button>
             </div>
+            */}
           </form>
         </CardContent>
       </Card>
