@@ -4,12 +4,14 @@ import {
   conversationSummaries, 
   portfolioAdjustments, 
   filterCalibrationLog,
+  historicSignals,
   semanticMemory,
   aiTransparencyLog,
   type AILesson,
   type ConversationSummary,
   type PortfolioAdjustment,
-  type FilterCalibrationLog
+  type FilterCalibrationLog,
+  type HistoricSignal
 } from "@shared/schema";
 import { EmbeddingService } from "./embedding-service";
 import { sql } from "drizzle-orm";
@@ -17,9 +19,10 @@ import { sql } from "drizzle-orm";
 /**
  * Semantic Ingestion Task
  * Milestone 15: Feeds insights from learning systems into semantic memory
+ * Milestone 17C: Added historic_signals for historical pattern learning
  * 
  * Runs every 6 hours to:
- * - Pull new records from ai_lessons, conversation_summaries, portfolio_adjustments, filter_calibration_log
+ * - Pull new records from ai_lessons, conversation_summaries, portfolio_adjustments, filter_calibration_log, historic_signals
  * - Generate embeddings using OpenAI text-embedding-3-small
  * - Insert into semantic_memory with appropriate tags
  * - Skip duplicates based on source_id
@@ -58,6 +61,7 @@ export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'n
       totalIngested += await this.ingestFromConversationSummaries();
       totalIngested += await this.ingestFromPortfolioAdjustments();
       totalIngested += await this.ingestFromFilterCalibration();
+      totalIngested += await this.ingestFromHistoricSignals();
 
       const duration = (Date.now() - startTime) / 1000;
 
@@ -324,6 +328,96 @@ export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'n
     }
 
     console.log(`[SemanticIngestion] Ingested ${ingested} filter calibrations`);
+    return ingested;
+  }
+
+  /**
+   * Ingest from historic_signals table (Milestone 17C)
+   */
+  private async ingestFromHistoricSignals(): Promise<number> {
+    // Find historic signals not yet in semantic_memory (successful trades only for learning)
+    const signals = await db
+      .select()
+      .from(historicSignals)
+      .where(
+        sql`${historicSignals.pnlPercent} IS NOT NULL 
+        AND NOT EXISTS (
+          SELECT 1 FROM ${semanticMemory} 
+          WHERE ${semanticMemory.sourceTable} = 'historic_signals' 
+          AND ${semanticMemory.sourceId} = ${historicSignals.id}
+        )`
+      );
+
+    if (signals.length === 0) {
+      return 0;
+    }
+
+    const contents = signals.map((signal: HistoricSignal) => {
+      const parts = [
+        `${signal.strategyId.replace(/_/g, ' ')} signal on ${signal.symbol}`,
+        `Entry: ${signal.entryPrice}`,
+      ];
+      
+      if (signal.exitPrice) {
+        parts.push(`Exit: ${signal.exitPrice}`);
+      }
+      
+      if (signal.pnlPercent) {
+        const pnl = parseFloat(signal.pnlPercent);
+        parts.push(`P/L: ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}%`);
+      }
+      
+      if (signal.filtersUsed && signal.filtersUsed.length > 0) {
+        parts.push(`Filters: ${signal.filtersUsed.join(', ')}`);
+      }
+      
+      if (signal.marketContext) {
+        const context = signal.marketContext as any;
+        if (context.vwap) parts.push(`VWAP: ${context.vwap}`);
+        if (context.sma) parts.push(`SMA: ${context.sma}`);
+      }
+      
+      return parts.join(" | ");
+    });
+
+    const embeddings = await this.embeddingService.generateEmbeddings(contents);
+
+    let ingested = 0;
+    for (let i = 0; i < signals.length; i++) {
+      const signal = signals[i];
+      const isWin = signal.pnlPercent && parseFloat(signal.pnlPercent) > 0;
+      
+      const tags = [
+        signal.strategyId,
+        "historic",
+        "backtest",
+        isWin ? "win" : "loss",
+        signal.symbol,
+      ].filter(Boolean) as string[];
+
+      try {
+        // Use P/L as relevance indicator (wins are more relevant for learning)
+        const pnl = signal.pnlPercent ? parseFloat(signal.pnlPercent) : 0;
+        const relevance = isWin 
+          ? Math.min(0.9, 0.7 + (pnl / 100)).toFixed(2)  // Wins: 0.70-0.90 based on P/L
+          : Math.max(0.4, 0.6 - (Math.abs(pnl) / 100)).toFixed(2); // Losses: 0.40-0.60 based on loss size
+        
+        await db.insert(semanticMemory).values({
+          embedding: embeddings[i],
+          content: contents[i],
+          sourceTable: "historic_signals",
+          sourceId: signal.id,
+          tags,
+          relevance,
+        });
+        ingested++;
+      } catch (error) {
+        if ((error as any).code === "23505") continue;
+        throw error;
+      }
+    }
+
+    console.log(`[SemanticIngestion] Ingested ${ingested} historic signals`);
     return ingested;
   }
 
