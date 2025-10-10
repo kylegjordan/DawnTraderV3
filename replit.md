@@ -61,6 +61,9 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user 
 - **Intelligence Refinement Layer**: Self-optimizing Cognitive Weight Adjuster (CWA) reviews prediction outcomes and dynamically adjusts learning source weights (semantic_memory, external_api, cache) for continuous optimization.
 - **Autonomous Adjustments Actuation Policy**: Governs which trading parameters AI can autonomously adjust, enforcing variable bounds, cooldown periods, confidence thresholds, and daily change limits. Includes a framework for venue-aware asset differentiation, though currently limited to Kraken crypto/forex.
 - **Historic Signal Backfilling**: Fetches multi-month historical OHLC data from Kraken, ingesting it into Semantic Memory with P/L-based relevance scoring for CWA learning.
+  - **Recent Fix (Oct 2025)**: Fixed critical VWAP Pullback volume confirmation bug where `avgVolume = volume` made volume multiplier check mathematically impossible
+  - **Improved Logic**: Now calculates avgVolume from 10-20 prior candles with proper validation (filters invalid/zero volumes, requires minimum 10 candles)
+  - **Backfill Results**: Successfully generated 152 historic signals (VWAP Pullback, 26.3% win rate, -0.25% avg P/L) from BTCUSD/ETHUSD (Sep-Oct 2025)
 - **Paper Trading Simulation Engine**: Provides real-time simulated trade execution with realistic order fill logic, slippage, fees, and risk control integration. Includes a Portfolio Manager for tracking positions, P/L, and performance metrics.
 
 ## Configuration & Credentials

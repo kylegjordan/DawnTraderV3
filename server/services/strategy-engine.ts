@@ -43,14 +43,29 @@ export class StrategyEngine {
     const hasReversalPattern = this.detectBullishReversal(indicators);
     
     // ✅ Volume confirmation using user setting (volumeMultiplier)
-    // Calculate average volume from prior 20 candles (or available history)
-    let avgVolume = volume; // Fallback if no history available
-    if (priceHistory && priceHistory.length >= 20) {
-      const recentCandles = priceHistory.slice(-20);
-      const totalVolume = recentCandles.reduce((sum, candle) => sum + parseFloat(candle.volume || '0'), 0);
-      avgVolume = totalVolume / recentCandles.length;
+    // Calculate average volume from prior candles (minimum 10 required for reliable comparison)
+    if (!priceHistory || priceHistory.length < 10) {
+      console.log('[VWAP Strategy] ❌ Insufficient history for volume confirmation (need 10+ candles)');
+      return null;
     }
+    
+    // Use up to 20 prior candles for average volume calculation
+    const lookbackPeriod = Math.min(20, priceHistory.length);
+    const recentCandles = priceHistory.slice(-lookbackPeriod);
+    const totalVolume = recentCandles.reduce((sum, candle) => {
+      const vol = parseFloat(candle.volume || '0');
+      return sum + (isFinite(vol) && vol > 0 ? vol : 0);
+    }, 0);
+    
+    if (totalVolume === 0) {
+      console.log('[VWAP Strategy] ❌ Invalid volume data in history');
+      return null;
+    }
+    
+    const avgVolume = totalVolume / lookbackPeriod;
     const hasVolumeConfirmation = volume >= avgVolume * volumeMultiplier;
+    
+    console.log(`[VWAP Strategy] Volume check: current=${volume.toFixed(0)}, avg=${avgVolume.toFixed(0)}, multiplier=${volumeMultiplier}x, confirmed=${hasVolumeConfirmation}`);
     
     if (priceAboveVWAP && nearVWAP && hasReversalPattern && hasVolumeConfirmation) {
       const entryPrice = currentPrice * 1.001; // Slight premium for entry
