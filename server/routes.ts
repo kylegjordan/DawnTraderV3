@@ -4341,6 +4341,25 @@ Please:
     }
   });
 
+  // ==================== Learning Metrics API (Milestone 16 - Intelligence Refinement) ====================
+  
+  // Get learning health metrics from Cognitive Weight Adjuster
+  app.get('/api/ai/learning-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { cognitiveWeightAdjuster } = await import('./services/cognitive-weight-adjuster');
+      
+      if (!req.userId) {
+        return res.status(401).json({ ok: false, error: 'User ID not found' });
+      }
+      
+      const metrics = await cognitiveWeightAdjuster.getHealthMetrics(req.userId);
+      res.json({ ok: true, metrics });
+    } catch (error: any) {
+      console.error('[LearningMetrics] Error fetching metrics:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
