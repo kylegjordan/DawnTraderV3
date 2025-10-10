@@ -12,7 +12,7 @@ import {
   type FilterCalibrationLog
 } from "@shared/schema";
 import { EmbeddingService } from "./embedding-service";
-import { sql, gt } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 /**
  * Semantic Ingestion Task
@@ -34,7 +34,6 @@ export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'n
   frequency = "Every 6 hours";
   intervalMs = 6 * 60 * 60 * 1000; // 6 hours
   private embeddingService: EmbeddingService;
-  private lastRunTimestamp: Date | null = null;
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -72,8 +71,6 @@ export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'n
       console.log(
         `[SemanticIngestion] Complete: ${totalIngested} records ingested in ${duration.toFixed(2)}s`
       );
-
-      this.lastRunTimestamp = new Date();
     } catch (error) {
       const duration = (Date.now() - startTime) / 1000;
       console.error("[SemanticIngestion] Error during ingestion:", error);
@@ -93,12 +90,17 @@ export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'n
    * Ingest from ai_lessons table
    */
   private async ingestFromAILessons(): Promise<number> {
-    const cutoffDate = this.lastRunTimestamp || new Date(Date.now() - 6 * 60 * 60 * 1000);
-
+    // Find lessons not yet in semantic_memory
     const lessons = await db
       .select()
       .from(aiLessons)
-      .where(gt(aiLessons.timestamp, cutoffDate));
+      .where(
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${semanticMemory} 
+          WHERE ${semanticMemory.sourceTable} = 'ai_lessons' 
+          AND ${semanticMemory.sourceId} = ${aiLessons.id}
+        )`
+      );
 
     if (lessons.length === 0) {
       return 0;
@@ -149,12 +151,17 @@ export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'n
    * Ingest from conversation_summaries table
    */
   private async ingestFromConversationSummaries(): Promise<number> {
-    const cutoffDate = this.lastRunTimestamp || new Date(Date.now() - 6 * 60 * 60 * 1000);
-
+    // Find summaries not yet in semantic_memory
     const summaries = await db
       .select()
       .from(conversationSummaries)
-      .where(gt(conversationSummaries.createdAt, cutoffDate));
+      .where(
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${semanticMemory} 
+          WHERE ${semanticMemory.sourceTable} = 'conversation_summaries' 
+          AND ${semanticMemory.sourceId} = ${conversationSummaries.id}
+        )`
+      );
 
     if (summaries.length === 0) {
       return 0;
@@ -198,12 +205,17 @@ export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'n
    * Ingest from portfolio_adjustments table
    */
   private async ingestFromPortfolioAdjustments(): Promise<number> {
-    const cutoffDate = this.lastRunTimestamp || new Date(Date.now() - 6 * 60 * 60 * 1000);
-
+    // Find adjustments not yet in semantic_memory
     const adjustments = await db
       .select()
       .from(portfolioAdjustments)
-      .where(gt(portfolioAdjustments.timestamp, cutoffDate));
+      .where(
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${semanticMemory} 
+          WHERE ${semanticMemory.sourceTable} = 'portfolio_adjustments' 
+          AND ${semanticMemory.sourceId} = ${portfolioAdjustments.id}
+        )`
+      );
 
     if (adjustments.length === 0) {
       return 0;
@@ -255,12 +267,17 @@ export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'n
    * Ingest from filter_calibration_log table
    */
   private async ingestFromFilterCalibration(): Promise<number> {
-    const cutoffDate = this.lastRunTimestamp || new Date(Date.now() - 6 * 60 * 60 * 1000);
-
+    // Find calibrations not yet in semantic_memory
     const calibrations = await db
       .select()
       .from(filterCalibrationLog)
-      .where(gt(filterCalibrationLog.timestamp, cutoffDate));
+      .where(
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${semanticMemory} 
+          WHERE ${semanticMemory.sourceTable} = 'filter_calibration_log' 
+          AND ${semanticMemory.sourceId} = ${filterCalibrationLog.id}
+        )`
+      );
 
     if (calibrations.length === 0) {
       return 0;
