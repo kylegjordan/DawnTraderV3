@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain } from "lucide-react";
+import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 
@@ -49,12 +49,19 @@ export default function AITransparencyPage() {
     refetchInterval: 60000,
   });
 
+  // Fetch learning health metrics (Milestone 16 - Intelligence Refinement)
+  const { data: learningMetricsData, isLoading: learningMetricsLoading } = useQuery<{ ok: boolean; metrics: any }>({
+    queryKey: ['/api/ai/learning-metrics'],
+    refetchInterval: 60000,
+  });
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
   const confidenceIndex = confidenceData?.autonomyConfidence ?? 0;
   const semanticMemories = semanticData?.memories || [];
   const semanticTags = tagsData?.tags || [];
+  const learningMetrics = learningMetricsData?.metrics || null;
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -80,7 +87,7 @@ export default function AITransparencyPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4" data-testid="tabs-ai-transparency">
+        <TabsList className="grid w-full grid-cols-5" data-testid="tabs-ai-transparency">
           <TabsTrigger value="automation-logs" data-testid="tab-automation-logs">
             <Clock className="w-4 h-4 mr-2" />
             Recent Automation Logs
@@ -92,6 +99,10 @@ export default function AITransparencyPage() {
           <TabsTrigger value="semantic-insights" data-testid="tab-semantic-insights">
             <Brain className="w-4 h-4 mr-2" />
             Semantic Insights
+          </TabsTrigger>
+          <TabsTrigger value="learning-health" data-testid="tab-learning-health">
+            <Target className="w-4 h-4 mr-2" />
+            Learning Health
           </TabsTrigger>
           <TabsTrigger value="health-alerts" data-testid="tab-health-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -274,7 +285,97 @@ export default function AITransparencyPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab 4: System Health Alerts */}
+        {/* Tab 4: Learning Health (Milestone 16 - Intelligence Refinement) */}
+        <TabsContent value="learning-health" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Learning Health Metrics</CardTitle>
+              <CardDescription>
+                Intelligence Refinement Layer - Cognitive Weight Adjuster performance and learning source reliability
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {learningMetricsLoading ? (
+                <div className="text-sm text-muted-foreground">Loading learning metrics...</div>
+              ) : !learningMetrics ? (
+                <div className="text-sm text-muted-foreground">
+                  No learning metrics available. Refinement runs every 6 hours.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 border rounded-lg bg-card" data-testid="card-avg-accuracy">
+                      <div className="text-sm text-muted-foreground mb-1">Average Accuracy</div>
+                      <div className="text-2xl font-bold text-foreground" data-testid="text-avg-accuracy">
+                        {(learningMetrics.averageAccuracy * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 border rounded-lg bg-card" data-testid="card-confidence-variance">
+                      <div className="text-sm text-muted-foreground mb-1">Confidence Variance</div>
+                      <div className="text-2xl font-bold text-foreground" data-testid="text-confidence-variance">
+                        {learningMetrics.confidenceVariance.toFixed(3)}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 border rounded-lg bg-card" data-testid="card-total-sources">
+                      <div className="text-sm text-muted-foreground mb-1">Total Sources</div>
+                      <div className="text-2xl font-bold text-foreground" data-testid="text-total-sources">
+                        {learningMetrics.totalSources}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Last Refinement */}
+                  {learningMetrics.lastRefinement && (
+                    <div className="text-sm text-muted-foreground" data-testid="text-last-refinement">
+                      Last refinement: {formatDistanceToNow(new Date(learningMetrics.lastRefinement), { addSuffix: true })}
+                    </div>
+                  )}
+
+                  {/* Top Learning Sources */}
+                  {learningMetrics.topSources && learningMetrics.topSources.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-foreground mb-3">Top Learning Sources</h4>
+                      <div className="space-y-2">
+                        {learningMetrics.topSources.map((source: any, idx: number) => (
+                          <div 
+                            key={idx}
+                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                            data-testid={`source-${idx}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Badge variant="secondary" className="text-xs" data-testid={`badge-source-type-${idx}`}>
+                                {source.type}
+                              </Badge>
+                              <span className="text-sm font-medium text-foreground" data-testid={`text-source-name-${idx}`}>
+                                {source.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-xs text-muted-foreground">
+                                Weight: <span className="font-medium text-foreground" data-testid={`text-weight-${idx}`}>{source.weight.toFixed(3)}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Accuracy: <span className="font-medium text-foreground" data-testid={`text-accuracy-${idx}`}>{(source.accuracy * 100).toFixed(1)}%</span>
+                              </div>
+                              <Badge variant="outline" className="text-xs" data-testid={`badge-predictions-${idx}`}>
+                                {source.predictions} predictions
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 5: System Health Alerts */}
         <TabsContent value="health-alerts" className="space-y-4">
           <Card>
             <CardHeader>
