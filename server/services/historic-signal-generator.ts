@@ -53,6 +53,12 @@ export class HistoricSignalGenerator {
   private strategyEngine: StrategyEngine;
   private candleCache: Map<string, any[]>; // Cache candles for 24h TTL
   private cacheTimers: Map<string, NodeJS.Timeout>; // Track timers for cleanup
+  
+  // Pagination configuration
+  private readonly PAGINATION_ENABLED = true;
+  private readonly MAX_BATCHES = 10;
+  private readonly PAGINATION_DELAY_MS = 500;
+  private readonly MAX_CANDLES_TOTAL = 5000;
 
   constructor() {
     this.kraken = new KrakenService();
@@ -122,7 +128,20 @@ export class HistoricSignalGenerator {
         
         if (!candles) {
           const sinceTimestamp = Math.floor(startDate.getTime() / 1000);
-          const ohlcData = await this.kraken.getOHLCData(krakenSymbol, interval, sinceTimestamp);
+          const endTimestamp = Math.floor(endDate.getTime() / 1000);
+          
+          const ohlcData = await this.kraken.getOHLCData(
+            krakenSymbol, 
+            interval, 
+            sinceTimestamp,
+            {
+              paginationEnabled: this.PAGINATION_ENABLED,
+              maxBatches: this.MAX_BATCHES,
+              paginationDelayMs: this.PAGINATION_DELAY_MS,
+              maxCandlesTotal: this.MAX_CANDLES_TOTAL,
+              endTimestamp
+            }
+          );
           candles = ohlcData.ohlc;
           apiCalls++;
           

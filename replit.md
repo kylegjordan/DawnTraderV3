@@ -80,6 +80,17 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas include `user
       5. End-to-end testing with real equity/commodity data to verify whole-share sizing and filtering
   - **API Endpoints**: Complete REST API for managing actuation policies (`/api/actuation/policies`, `/api/actuation/policies/:id`), viewing/approving proposed adjustments (`/api/actuation/proposals`, `/api/actuation/proposals/:id/approve`, `/api/actuation/proposals/:id/reject`), and syncing asset capabilities (`/api/asset-capabilities/sync`, `/api/asset-capabilities/:symbol`)
   - **Database Tables**: `actuation_policy_registry`, `proposed_adjustments`, `asset_capabilities`
+  - **Part C - Historic Signal Backfilling (Mini-Milestone 17D)**: 
+    - **Pagination-Enabled Backfill**: Automatically fetches multi-month historical OHLC data from Kraken by paging through sequential requests, bypassing the 720-candle limit
+    - **Capabilities**: Single command can backfill up to 90 days of hourly data per symbol (up to 5000 candles per symbol with configurable limits)
+    - **Configuration**: maxBatches=10, paginationDelayMs=500ms, maxCandlesTotal=5000
+    - **Rate Limiting**: 500ms delay between batches with automatic retry on first failure, graceful partial data return on subsequent errors
+    - **Symbol Mapping**: User-friendly input (BTCUSD) auto-converts to Kraken format (XBTUSD), handles normalized response keys (XXBTZUSD)
+    - **Integration**: Historic signals ingested into Semantic Memory every 6 hours with P/L-based relevance scoring (wins: 0.70-0.90, losses: 0.40-0.60)
+    - **Learning**: CWA automatically adjusts semantic_memory source weights based on historic signal prediction accuracy
+    - **API Cost**: $0 - uses free Kraken OHLC endpoint
+    - **Admin Command Example**: `POST /api/backfill/signals` with payload `{"symbols":["BTCUSD","ETHUSD","SOLUSD"],"interval":60,"startDate":"2024-07-10","endDate":"2024-10-10","strategies":["vwap_pullback","abcd_long","sma_trend_ride"]}`
+    - **UI**: Historic Signals tab in AI Transparency Panel displays total signals, win rate, average return, and per-strategy breakdown
 
 ## External Dependencies
 

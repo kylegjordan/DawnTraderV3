@@ -248,34 +248,56 @@ export class KrakenService {
     return await this.getTicker();
   }
 
-  async getOHLCData(pair: string, interval = 60, since?: number): Promise<{
+  async getOHLCData(
+    pair: string, 
+    interval = 60, 
+    since?: number,
+    options?: {
+      paginationEnabled?: boolean;
+      maxBatches?: number;
+      paginationDelayMs?: number;
+      maxCandlesTotal?: number;
+      endTimestamp?: number;
+    }
+  ): Promise<{
     ohlc: KrakenOHLCData[];
     last: number;
   }> {
-    const params: any = { pair, interval };
-    if (since) params.since = since;
+    const {
+      paginationEnabled = false,
+      maxBatches = 10,
+      paginationDelayMs = 500,
+      maxCandlesTotal = 5000,
+      endTimestamp
+    } = options || {};
 
-    const result = await this.makePublicRequest('OHLC', params);
-    
-    // Kraken might return data under a different key than the input pair
-    // Try the exact pair first, then check all keys
-    let pairData = result[pair];
-    
-    if (!pairData) {
-      // Find the first non-'last' key (should be the pair data)
-      const keys = Object.keys(result).filter(k => k !== 'last');
-      if (keys.length > 0) {
-        pairData = result[keys[0]];
-        console.log(`[Kraken] OHLC data found under key '${keys[0]}' instead of '${pair}'`);
+    // Helper function to delay between requests
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Helper function to fetch a single batch
+    const fetchBatch = async (batchSince?: number) => {
+      const params: any = { pair, interval };
+      if (batchSince) params.since = batchSince;
+
+      const result = await this.makePublicRequest('OHLC', params);
+      
+      // Kraken might return data under a different key than the input pair
+      let pairData = result[pair];
+      
+      if (!pairData) {
+        // Find the first non-'last' key (should be the pair data)
+        const keys = Object.keys(result).filter(k => k !== 'last');
+        if (keys.length > 0) {
+          pairData = result[keys[0]];
+          console.log(`[Kraken] OHLC data found under key '${keys[0]}' instead of '${pair}'`);
+        }
       }
-    }
-    
-    if (!pairData || !Array.isArray(pairData)) {
-      throw new Error(`No OHLC data found for pair ${pair}. Response keys: ${Object.keys(result).join(', ')}`);
-    }
-    
-    return {
-      ohlc: pairData.map((candle: any[]) => ({
+      
+      if (!pairData || !Array.isArray(pairData)) {
+        throw new Error(`No OHLC data found for pair ${pair}. Response keys: ${Object.keys(result).join(', ')}`);
+      }
+
+      const ohlc = pairData.map((candle: any[]) => ({
         time: candle[0],
         open: candle[1],
         high: candle[2],
@@ -284,8 +306,107 @@ export class KrakenService {
         vwap: candle[5],
         volume: candle[6],
         count: candle[7]
-      })),
-      last: result.last
+      }));
+
+      return { ohlc, last: result.last };
+    };
+
+    // If pagination is not enabled, use original single-request behavior
+    if (!paginationEnabled) {
+      return await fetchBatch(since);
+    }
+
+    // Pagination logic
+    let currentSince = since;
+    let allCandles: KrakenOHLCData[] = [];
+    let batch = 1;
+    let lastTimestamp = 0;
+
+    console.log(`[Backfill] Starting paginated fetch for ${pair} (interval: ${interval}min)`);
+
+    while (batch <= maxBatches) {
+      try {
+        console.log(`[Backfill] Fetching batch ${batch} for ${pair}${currentSince ? ` (since ${new Date(currentSince * 1000).toISOString()})` : ''}`);
+        
+        const { ohlc, last } = await fetchBatch(currentSince);
+        
+        if (!ohlc || ohlc.length === 0) {
+          console.log(`[Backfill] No more candles available for ${pair} - stopping pagination`);
+          break;
+        }
+
+        // Filter candles if endTimestamp is specified
+        const filteredCandles = endTimestamp 
+          ? ohlc.filter(c => c.time <= endTimestamp)
+          : ohlc;
+
+        allCandles.push(...filteredCandles);
+        console.log(`[Backfill] Fetched ${filteredCandles.length} candles – total ${allCandles.length}`);
+
+        lastTimestamp = last;
+
+        // Stop conditions
+        if (ohlc.length < 720) {
+          console.log(`[Backfill] Received fewer than 720 candles (${ohlc.length}) - reached end of available data`);
+          break;
+        }
+
+        if (allCandles.length >= maxCandlesTotal) {
+          console.log(`[Backfill] Reached maximum candle limit (${maxCandlesTotal}) - stopping pagination`);
+          break;
+        }
+
+        if (endTimestamp && last >= endTimestamp) {
+          console.log(`[Backfill] Reached end timestamp - stopping pagination`);
+          break;
+        }
+
+        if (!last || last === currentSince) {
+          console.log(`[Backfill] No new 'last' timestamp - stopping pagination`);
+          break;
+        }
+
+        // Prepare for next batch
+        currentSince = last;
+        batch++;
+
+        // Delay before next request (rate limiting)
+        if (batch <= maxBatches) {
+          await delay(paginationDelayMs);
+        }
+      } catch (error) {
+        console.error(`[Backfill] Error fetching batch ${batch} for ${pair}:`, error);
+        
+        // Retry once after delay
+        if (batch === 1) {
+          console.log(`[Backfill] Retrying after ${paginationDelayMs}ms...`);
+          await delay(paginationDelayMs);
+          try {
+            const { ohlc, last } = await fetchBatch(currentSince);
+            allCandles.push(...ohlc);
+            lastTimestamp = last;
+            console.log(`[Backfill] Retry successful - fetched ${ohlc.length} candles`);
+          } catch (retryError) {
+            console.error(`[Backfill] Retry failed for ${pair}:`, retryError);
+            throw retryError;
+          }
+        } else {
+          // If not first batch, we have partial data - return what we have
+          console.log(`[Backfill] Returning partial data (${allCandles.length} candles) due to error`);
+          break;
+        }
+      }
+    }
+
+    if (batch > maxBatches) {
+      console.log(`[Backfill] Stopping pagination after ${maxBatches} batches`);
+    }
+
+    console.log(`[Backfill] Completed ${pair}: ${allCandles.length} total candles in ${batch} batch(es)`);
+
+    return {
+      ohlc: allCandles,
+      last: lastTimestamp
     };
   }
 
