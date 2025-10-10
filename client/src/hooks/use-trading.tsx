@@ -90,8 +90,7 @@ export function useTrading() {
 
   const closeTradeM = useMutation({
     mutationFn: async (tradeId: string) => {
-      const response = await apiRequest('POST', `/api/trades/${tradeId}/close`);
-      return response.json();
+      return await apiRequest('POST', `/api/trades/${tradeId}/close`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trades/active'] });
@@ -110,8 +109,7 @@ export function useTrading() {
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (updates: Partial<TradingSettings>) => {
-      const response = await apiRequest('PUT', '/api/settings', updates);
-      return response.json();
+      return await apiRequest('PUT', '/api/settings', updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
@@ -128,8 +126,7 @@ export function useTrading() {
 
   const addToWatchlistMutation = useMutation({
     mutationFn: async (pair: Partial<WatchlistPair>) => {
-      const response = await apiRequest('POST', '/api/watchlist', pair);
-      return response.json();
+      return await apiRequest('POST', '/api/watchlist', pair);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/watchlist'] });
@@ -138,8 +135,7 @@ export function useTrading() {
 
   const removeFromWatchlistMutation = useMutation({
     mutationFn: async (pairId: string) => {
-      const response = await apiRequest('DELETE', `/api/watchlist/${pairId}`);
-      return response.json();
+      return await apiRequest('DELETE', `/api/watchlist/${pairId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/watchlist'] });
