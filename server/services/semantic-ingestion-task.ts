@@ -26,7 +26,13 @@ import { sql, gt } from "drizzle-orm";
  * - Log to ai_transparency_log
  */
 
-export class SemanticIngestionTask {
+import type { ScheduledTask } from "./scheduler-registry";
+
+export class SemanticIngestionTask implements Omit<ScheduledTask, 'lastRun' | 'nextRun' | 'status'> {
+  name = "Semantic Ingestion";
+  description = "Feeds learning insights into semantic memory via vector embeddings";
+  frequency = "Every 6 hours";
+  intervalMs = 6 * 60 * 60 * 1000; // 6 hours
   private embeddingService: EmbeddingService;
   private lastRunTimestamp: Date | null = null;
 
@@ -323,16 +329,4 @@ export class SemanticIngestionTask {
 }
 
 // Export singleton instance
-let ingestionTask: SemanticIngestionTask | null = null;
-
-export function getSemanticIngestionTask(): SemanticIngestionTask {
-  if (!ingestionTask) {
-    ingestionTask = new SemanticIngestionTask();
-  }
-  return ingestionTask;
-}
-
-export async function runSemanticIngestion(): Promise<void> {
-  const task = getSemanticIngestionTask();
-  await task.run();
-}
+export const semanticIngestionTask = new SemanticIngestionTask();
