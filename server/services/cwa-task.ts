@@ -21,8 +21,8 @@ export class CWATask implements Omit<ScheduledTask, 'lastRun' | 'nextRun' | 'sta
       for (const user of users) {
         console.log(`[CWATask] Running refinement for user ${user.username}...`);
         
-        // Adjust weights based on recent prediction outcomes
-        await cognitiveWeightAdjuster.adjustWeights(user.id);
+        // Run refinement cycle based on recent prediction outcomes
+        await cognitiveWeightAdjuster.runRefinementCycle(user.id);
         
         console.log(`[CWATask] Refinement complete for user ${user.username}`);
       }

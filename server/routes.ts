@@ -4348,11 +4348,11 @@ Please:
     try {
       const { cognitiveWeightAdjuster } = await import('./services/cognitive-weight-adjuster');
       
-      if (!req.userId) {
+      if (!req.user?.id) {
         return res.status(401).json({ ok: false, error: 'User ID not found' });
       }
       
-      const metrics = await cognitiveWeightAdjuster.getHealthMetrics(req.userId);
+      const metrics = await cognitiveWeightAdjuster.getHealthMetrics(req.user.id);
       res.json({ ok: true, metrics });
     } catch (error: any) {
       console.error('[LearningMetrics] Error fetching metrics:', error);
