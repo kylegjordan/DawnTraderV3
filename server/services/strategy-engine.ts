@@ -25,7 +25,8 @@ export class StrategyEngine {
   // VWAP Pullback Strategy
   detectVWAPPullback(
     indicators: TechnicalIndicators, 
-    settings: TradingSettings
+    settings: TradingSettings,
+    priceHistory?: PriceData[]
   ): StrategySignal | null {
     const { currentPrice, vwap, high24h, low24h, volume } = indicators;
     
@@ -42,8 +43,13 @@ export class StrategyEngine {
     const hasReversalPattern = this.detectBullishReversal(indicators);
     
     // ✅ Volume confirmation using user setting (volumeMultiplier)
-    // Note: Would need average volume for proper comparison, using placeholder for now
-    const avgVolume = volume; // In real implementation, would calculate from historical data
+    // Calculate average volume from prior 20 candles (or available history)
+    let avgVolume = volume; // Fallback if no history available
+    if (priceHistory && priceHistory.length >= 20) {
+      const recentCandles = priceHistory.slice(-20);
+      const totalVolume = recentCandles.reduce((sum, candle) => sum + parseFloat(candle.volume || '0'), 0);
+      avgVolume = totalVolume / recentCandles.length;
+    }
     const hasVolumeConfirmation = volume >= avgVolume * volumeMultiplier;
     
     if (priceAboveVWAP && nearVWAP && hasReversalPattern && hasVolumeConfirmation) {

@@ -161,6 +161,7 @@ export class HistoricSignalGenerator {
         // Filter candles by end date
         const endTimestamp = Math.floor(endDate.getTime() / 1000);
         const filteredCandles = candles.filter((c: any) => c.time <= endTimestamp);
+        console.log(`  Filtered to ${filteredCandles.length} candles within date range`);
 
         // Generate signals for each candle window
         const signals = await this.detectSignalsInHistory(
@@ -169,6 +170,7 @@ export class HistoricSignalGenerator {
           strategies,
           userSettings
         );
+        console.log(`  Detected ${signals.length} signals from ${filteredCandles.length} candles`);
 
         // Simulate trades and calculate P/L
         const evaluatedSignals = this.evaluateSignals(signals, filteredCandles);
@@ -244,9 +246,12 @@ export class HistoricSignalGenerator {
 
     // Need minimum 50 candles for pattern detection
     if (candles.length < 50) {
-      console.log(`  ⚠️  Insufficient candles (${candles.length}) for signal detection`);
+      console.log(`  ⚠️  Insufficient candles (${candles.length}) for signal detection (minimum 50 required)`);
+      console.log(`  Suggestion: Increase date range or decrease interval to get more candles`);
       return signals;
     }
+    
+    console.log(`  Processing ${candles.length} candles with ${strategies.length} strategies`);
 
     // Convert candles to proper PriceData format for strategy detection
     const priceHistory = candles.map((c: any, idx: number) => ({
@@ -282,7 +287,7 @@ export class HistoricSignalGenerator {
         let signal: StrategySignal | null = null;
 
         if (strategy === 'vwap_pullback') {
-          signal = this.strategyEngine.detectVWAPPullback(indicators, settings);
+          signal = this.strategyEngine.detectVWAPPullback(indicators, settings, windowHistory as PriceData[]);
         } else if (strategy === 'abcd_long') {
           signal = this.strategyEngine.detectABCDLong(windowHistory as PriceData[], settings);
         } else if (strategy === 'sma_trend_ride') {

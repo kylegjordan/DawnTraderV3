@@ -225,7 +225,7 @@ export class MarketScanner {
       // Check each strategy for signals - ✅ Now passing settings to all strategies
       console.log(`\n🔍 Analyzing ${pair.symbol} for strategy signals...`);
       const signals = [
-        this.strategyEngine.detectVWAPPullback(indicators, settings),
+        this.strategyEngine.detectVWAPPullback(indicators, settings, priceData),
         this.strategyEngine.detectABCDLong(priceData, settings),
         this.strategyEngine.detectSMATrendRide(indicators, priceData, settings)
       ].filter(signal => signal !== null);

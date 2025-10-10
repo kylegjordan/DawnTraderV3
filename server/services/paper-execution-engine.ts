@@ -387,7 +387,7 @@ export class PaperExecutionEngine {
     const signals: StrategySignal[] = [];
 
     // VWAP Pullback
-    const vwapSignal = this.strategyEngine.detectVWAPPullback(indicators, settings);
+    const vwapSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData);
     if (vwapSignal) {
       vwapSignal.symbol = symbol;
       signals.push(vwapSignal);
