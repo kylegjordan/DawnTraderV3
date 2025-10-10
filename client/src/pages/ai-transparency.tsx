@@ -70,12 +70,14 @@ export default function AITransparencyPage() {
   // Fetch paper trading simulation data (Milestone 18)
   const { data: paperSimData, isLoading: paperSimLoading } = useQuery<{ ok: boolean; isRunning: boolean; stats: any }>({
     queryKey: ['/api/paper-sim/metrics'],
-    refetchInterval: 15000, // Refresh every 15 seconds for near-live monitoring
+    refetchInterval: 5000, // More frequent refresh for responsive status updates
+    staleTime: 0, // Always consider data stale for immediate updates
   });
 
   const { data: paperPositionsData, isLoading: paperPositionsLoading } = useQuery<{ ok: boolean; positions: any[] }>({
     queryKey: ['/api/paper-sim/positions'],
-    refetchInterval: 15000, // Refresh every 15 seconds for near-live monitoring
+    refetchInterval: 5000, // More frequent refresh for responsive status updates
+    staleTime: 0, // Always consider data stale for immediate updates
   });
 
   const logs = transparencyData?.logs || [];
