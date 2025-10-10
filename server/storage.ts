@@ -110,7 +110,16 @@ import {
   type InsertGoalAnalysisHistoryPaper,
   type LearningSource,
   type InsertLearningSource,
-  learningSources
+  learningSources,
+  type ActuationPolicy,
+  type InsertActuationPolicy,
+  actuationPolicies,
+  type ProposedAdjustment,
+  type InsertProposedAdjustment,
+  proposedAdjustments,
+  type AssetCapability,
+  type InsertAssetCapability,
+  assetCapabilities
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -330,6 +339,27 @@ export interface IStorage {
 
   // User utility methods
   getAllUsers(): Promise<User[]>;
+
+  // Actuation policy methods (Milestone 17A)
+  getActuationPolicy(userId: string, variableName: string): Promise<ActuationPolicy | undefined>;
+  getActuationPolicies(userId: string): Promise<ActuationPolicy[]>;
+  createActuationPolicy(policy: InsertActuationPolicy): Promise<ActuationPolicy>;
+  updateActuationPolicy(id: string, updates: Partial<ActuationPolicy>): Promise<ActuationPolicy>;
+
+  // Proposed adjustments methods (Milestone 17A)
+  createProposedAdjustment(adjustment: InsertProposedAdjustment): Promise<ProposedAdjustment>;
+  updateProposedAdjustment(id: string, updates: Partial<ProposedAdjustment>): Promise<ProposedAdjustment>;
+  getProposedAdjustment(id: string): Promise<ProposedAdjustment | undefined>;
+  getRecentProposedAdjustments(userId: string, variableName: string, hours: number): Promise<ProposedAdjustment[]>;
+  getAllProposedAdjustments(userId: string, hours?: number): Promise<ProposedAdjustment[]>;
+  getPendingAdjustments(userId: string, mode: 'live' | 'paper'): Promise<ProposedAdjustment[]>;
+
+  // Asset capabilities methods (Milestone 17B)
+  getAssetCapability(symbol: string): Promise<AssetCapability | undefined>;
+  getAssetCapabilities(): Promise<AssetCapability[]>;
+  createAssetCapability(capability: InsertAssetCapability): Promise<AssetCapability>;
+  updateAssetCapability(id: string, updates: Partial<AssetCapability>): Promise<AssetCapability>;
+  upsertAssetCapability(capability: Omit<InsertAssetCapability, 'id'>): Promise<AssetCapability>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1875,6 +1905,141 @@ export class DatabaseStorage implements IStorage {
   // User utility methods
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users);
+  }
+
+  // Actuation policy methods (Milestone 17A)
+  async getActuationPolicy(userId: string, variableName: string): Promise<ActuationPolicy | undefined> {
+    const [policy] = await db
+      .select()
+      .from(actuationPolicies)
+      .where(and(
+        eq(actuationPolicies.userId, userId),
+        eq(actuationPolicies.variableName, variableName)
+      ));
+    return policy || undefined;
+  }
+
+  async getActuationPolicies(userId: string): Promise<ActuationPolicy[]> {
+    return await db
+      .select()
+      .from(actuationPolicies)
+      .where(eq(actuationPolicies.userId, userId));
+  }
+
+  async createActuationPolicy(policy: InsertActuationPolicy): Promise<ActuationPolicy> {
+    const [result] = await db.insert(actuationPolicies).values(policy).returning();
+    return result;
+  }
+
+  async updateActuationPolicy(id: string, updates: Partial<ActuationPolicy>): Promise<ActuationPolicy> {
+    const [result] = await db
+      .update(actuationPolicies)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(actuationPolicies.id, id))
+      .returning();
+    return result;
+  }
+
+  // Proposed adjustments methods (Milestone 17A)
+  async createProposedAdjustment(adjustment: InsertProposedAdjustment): Promise<ProposedAdjustment> {
+    const [result] = await db.insert(proposedAdjustments).values(adjustment).returning();
+    return result;
+  }
+
+  async updateProposedAdjustment(id: string, updates: Partial<ProposedAdjustment>): Promise<ProposedAdjustment> {
+    const [result] = await db
+      .update(proposedAdjustments)
+      .set(updates)
+      .where(eq(proposedAdjustments.id, id))
+      .returning();
+    return result;
+  }
+
+  async getProposedAdjustment(id: string): Promise<ProposedAdjustment | undefined> {
+    const [result] = await db
+      .select()
+      .from(proposedAdjustments)
+      .where(eq(proposedAdjustments.id, id));
+    return result || undefined;
+  }
+
+  async getRecentProposedAdjustments(userId: string, variableName: string, hours: number): Promise<ProposedAdjustment[]> {
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - hours);
+    
+    return await db
+      .select()
+      .from(proposedAdjustments)
+      .where(and(
+        eq(proposedAdjustments.userId, userId),
+        eq(proposedAdjustments.variableName, variableName),
+        gte(proposedAdjustments.proposedAt, cutoffDate)
+      ))
+      .orderBy(desc(proposedAdjustments.proposedAt));
+  }
+
+  async getAllProposedAdjustments(userId: string, hours?: number): Promise<ProposedAdjustment[]> {
+    const conditions = [eq(proposedAdjustments.userId, userId)];
+    
+    if (hours) {
+      const cutoffDate = new Date();
+      cutoffDate.setHours(cutoffDate.getHours() - hours);
+      conditions.push(gte(proposedAdjustments.proposedAt, cutoffDate));
+    }
+    
+    return await db
+      .select()
+      .from(proposedAdjustments)
+      .where(and(...conditions))
+      .orderBy(desc(proposedAdjustments.proposedAt));
+  }
+
+  async getPendingAdjustments(userId: string, mode: 'live' | 'paper'): Promise<ProposedAdjustment[]> {
+    return await db
+      .select()
+      .from(proposedAdjustments)
+      .where(and(
+        eq(proposedAdjustments.userId, userId),
+        eq(proposedAdjustments.mode, mode),
+        eq(proposedAdjustments.status, 'pending')
+      ))
+      .orderBy(desc(proposedAdjustments.proposedAt));
+  }
+
+  // Asset capabilities methods (Milestone 17B)
+  async getAssetCapability(symbol: string): Promise<AssetCapability | undefined> {
+    const [capability] = await db
+      .select()
+      .from(assetCapabilities)
+      .where(eq(assetCapabilities.symbol, symbol));
+    return capability || undefined;
+  }
+
+  async getAssetCapabilities(): Promise<AssetCapability[]> {
+    return await db.select().from(assetCapabilities);
+  }
+
+  async createAssetCapability(capability: InsertAssetCapability): Promise<AssetCapability> {
+    const [result] = await db.insert(assetCapabilities).values(capability).returning();
+    return result;
+  }
+
+  async updateAssetCapability(id: string, updates: Partial<AssetCapability>): Promise<AssetCapability> {
+    const [result] = await db
+      .update(assetCapabilities)
+      .set({ ...updates, lastSynced: new Date() })
+      .where(eq(assetCapabilities.id, id))
+      .returning();
+    return result;
+  }
+
+  async upsertAssetCapability(capability: Omit<InsertAssetCapability, 'id'>): Promise<AssetCapability> {
+    const existing = await this.getAssetCapability(capability.symbol);
+    if (existing) {
+      return this.updateAssetCapability(existing.id, capability);
+    } else {
+      return this.createAssetCapability(capability as InsertAssetCapability);
+    }
   }
 }
 
