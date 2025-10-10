@@ -1,7 +1,17 @@
-import { Menu, Bell, Clock, Globe } from "lucide-react";
+import { Menu, Bell, Clock, Globe, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
@@ -28,6 +38,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [utcTimeDate, setUtcTimeDate] = useState<string>('');
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
+  const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
 
   // Fetch user settings for timezone and time format
   const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
@@ -56,6 +67,13 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const { mode: currentMode, setMode } = useTradingMode();
 
   const handleTradingToggle = async (enabled: boolean) => {
+    // If turning ON in Live mode, show confirmation modal first
+    if (enabled && currentMode === 'live') {
+      setShowLiveConfirmation(true);
+      return;
+    }
+    
+    // For Paper mode or turning OFF, proceed directly
     try {
       if (enabled) {
         await startTrading(currentMode);
@@ -72,6 +90,42 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       }
     } catch (error: any) {
       let errorMessage = "Failed to toggle trading status";
+      
+      // Parse error message from API response
+      if (error?.message) {
+        try {
+          // Extract JSON from error message (format: "400: {json}")
+          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
+          if (jsonMatch) {
+            const errorData = JSON.parse(jsonMatch[1]);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            errorMessage = error.message;
+          }
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConfirmLiveTrading = async () => {
+    setShowLiveConfirmation(false);
+    
+    try {
+      await startTrading('live');
+      toast({
+        title: "Trading Started",
+        description: "Live Trading engine started successfully",
+      });
+    } catch (error: any) {
+      let errorMessage = "Failed to start Live Trading";
       
       // Parse error message from API response
       if (error?.message) {
@@ -226,6 +280,38 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
           </Button>
         </div>
       </div>
+
+      {/* Live Trading Confirmation Modal */}
+      <AlertDialog open={showLiveConfirmation} onOpenChange={setShowLiveConfirmation}>
+        <AlertDialogContent data-testid="dialog-live-confirmation">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-orange-500" />
+              </div>
+              <AlertDialogTitle className="text-lg font-semibold">
+                Confirm Live Trading Activation
+              </AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-base pt-4">
+              <span className="font-semibold text-orange-600 dark:text-orange-400">⚠️ Warning:</span> You are about to activate Live Trading. 
+              This will place <span className="font-semibold">real market orders</span> with actual funds.
+              <br /><br />
+              Please confirm that you wish to proceed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-live">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmLiveTrading}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              data-testid="button-confirm-live"
+            >
+              Confirm & Start Live Trading
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 }

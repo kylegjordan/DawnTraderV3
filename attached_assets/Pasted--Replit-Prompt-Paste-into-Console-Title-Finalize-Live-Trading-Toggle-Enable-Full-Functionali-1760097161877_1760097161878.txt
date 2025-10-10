@@ -1,0 +1,114 @@
+🧩 Replit Prompt (Paste into Console)
+
+Title:
+Finalize Live Trading Toggle — Enable Full Functionality + Safety Confirmation
+
+Objective:
+Make the Live Trading toggle on the Dashboard fully functional so that it actually starts and stops the Live Trading Engine, and add a confirmation pop-up whenever a user tries to activate Live Trading.
+
+Tasks
+1️⃣ Verify Live Mode API Endpoints Exist
+
+Check that backend API endpoints are ready for Live Trading control:
+
+/api/live/start
+
+/api/live/stop
+
+If they exist, confirm they perform the correct logic (activating and stopping the Live Trading engine service).
+
+If not yet connected, mirror the same structure used for Paper Trading endpoints (/api/paper-sim/start and /api/paper-sim/stop) but point to the live execution engine.
+
+2️⃣ Connect the Toggle to the Live Trading Engine
+
+Ensure the Live side of the toggle calls these endpoints directly:
+
+When turned ON → send a POST to /api/live/start
+
+When turned OFF → send a POST to /api/live/stop
+
+Confirm the system updates the engine state internally (Running / Stopped) and broadcasts that status to the UI.
+
+3️⃣ Add the Confirmation Pop-Up (for Safety)
+
+When the toggle is switched to Active while in Live mode:
+
+Display a modal or confirmation dialog before executing any API call.
+
+Header: “Confirm Live Trading Activation”
+
+Body Message:
+
+“⚠️ You are about to activate Live Trading. This will place real market orders.
+Please confirm that you wish to proceed.”
+
+Buttons:
+
+Cancel → close the modal, do not start Live Trading.
+
+Confirm → call /api/live/start and show success message once response is received.
+
+When turning OFF Live Trading, no modal should appear — it should stop immediately for safety.
+
+4️⃣ Synchronize Visuals and Toasts
+
+Keep the same visual and feedback behavior as Paper mode:
+
+Green dot = ACTIVE
+
+Gray dot = STOPPED
+
+Toast messages:
+
+“✅ Live Trading started successfully.”
+
+“🛑 Live Trading stopped.”
+
+Make sure the AI Transparency → Live tab reflects the same status update within 5 seconds.
+
+5️⃣ Add Safety & Validation Logic
+
+Prevent activation if required Live Trading credentials (API key/secret) are missing.
+
+In that case, show:
+
+“Live Trading cannot start — missing exchange credentials.”
+
+Disable the toggle temporarily during API call to prevent double clicks or race conditions.
+
+Confirm error messages display correctly if any issue occurs.
+
+6️⃣ Testing Checklist
+
+Perform these checks carefully after the feature is implemented:
+
+✅ Log in as testuser123@example.com or your admin account.
+✅ Switch to Live Mode.
+✅ Toggle to “Active.”
+→ Confirm confirmation modal appears with Cancel / Confirm options.
+✅ Click Cancel → stays stopped, no status change.
+✅ Toggle again → click Confirm →
+
+Toast appears: “Live Trading started successfully.”
+
+Green dot turns ON.
+
+AI Transparency → Live tab shows “Engine Status: Running.”
+✅ Toggle to “Stopped” →
+
+Toast appears: “Live Trading stopped.”
+
+Gray dot appears.
+
+AI Transparency → Live tab shows “Engine Status: Stopped.”
+✅ Check Replit logs to ensure /api/live/start and /api/live/stop were both called with 200 OK responses.
+✅ Confirm no JSON or WebSocket errors appear in the console.
+
+7️⃣ Checkpoint & Verification
+
+Once verified, record a checkpoint with this note:
+
+“Live Trading toggle connected to backend and safety modal implemented — full start/stop functionality verified, status synchronized, and risk controls active.”
+
+Next Step After Completion:
+Proceed to 2.5️⃣ – Create & Verify Kyle G. Jordan Admin Account (Mini-Milestone 18C) before loading the trading goals and context prompt.
