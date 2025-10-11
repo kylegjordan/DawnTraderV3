@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-11T17:21:14.278Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential overutilization or a bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has not generated any learning cycles, opportunities, or adjustments, suggesting it might be inactive or misconfigured."
+    },
+    {
+      "severity": "medium",
+      "message": "No active or closed trades, and trading metrics like totalPL, winRate, and roi are all zero, indicating potential issues with trading operations or strategy execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by analyzing running processes and workloads to identify and address bottlenecks."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially reconfigure AI system settings to ensure it is actively learning and generating trading opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness and configuration of active trading strategies to ensure they are functioning as intended."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and mitigate the cause of high load averages.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Check AI system logs and configurations to ensure it is properly set up and capable of generating insights and opportunities.",
+      "rationale": "The AI system is essential for identifying trading opportunities and optimizing strategies; its inactivity could hinder trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review trading strategy configurations and logs to diagnose why no trades are being executed or closed.",
+      "rationale": "Trading inactivity could be due to misconfigured strategies or system issues, affecting profitability and platform reliability."
+    }
+  ],
+  "urgencyLevel": "high"
+}

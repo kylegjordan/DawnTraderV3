@@ -1,4 +1,5 @@
 import EnhancedSystemMonitoring from "@/components/system/enhanced-system-monitoring";
+import AlertBanner from "@/components/alerts/alert-banner";
 import { Activity } from "lucide-react";
 
 export default function SystemsPage() {
@@ -13,6 +14,11 @@ export default function SystemsPage() {
           <h1 className="text-3xl font-bold text-foreground">System Monitoring</h1>
           <p className="text-sm text-muted-foreground mt-1">Real-time performance metrics, trading engine status, and system health diagnostics</p>
         </div>
+      </div>
+
+      {/* System Alerts Banner */}
+      <div className="mb-6">
+        <AlertBanner />
       </div>
 
       {/* Enhanced System Monitoring */}

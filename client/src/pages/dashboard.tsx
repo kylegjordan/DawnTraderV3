@@ -14,6 +14,7 @@ import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import AveragesWidget from "@/components/goals/averages-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
+import AlertBanner from "@/components/alerts/alert-banner";
 
 export default function Dashboard() {
   return (
@@ -26,6 +27,9 @@ export default function Dashboard() {
 
       {/* Trading Mode Banner */}
       <ModeBanner />
+
+      {/* System Alerts Banner */}
+      <AlertBanner />
 
       {/* Dashboard Widgets - 4-Widget Layout */}
       <section>
