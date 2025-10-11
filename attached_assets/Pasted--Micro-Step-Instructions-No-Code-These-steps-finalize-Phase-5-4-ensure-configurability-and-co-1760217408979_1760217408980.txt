@@ -1,0 +1,79 @@
+🧩 Micro-Step Instructions (No-Code)
+
+These steps finalize Phase 5.4, ensure configurability, and complete documentation and stability checks — no coding from you required.
+
+Step 1 – Make Risk Threshold Configurable
+
+Files involved (Replit handles this):
+client/src/pages/settings.tsx, server/routes.ts, server/storage.ts
+
+Instructions to Replit:
+
+🔧 Update the risk evaluation system so that the 20 % threshold is read from the Walter Approvals settings, not hard-coded.
+
+Add a field riskThresholdPercent in Settings → Walter Approvals.
+
+Save it to the settings table in the database.
+
+When /api/strategies/settings runs, fetch this value and use it as the comparison point for creating approvals.
+
+Default = 20 % if missing.
+
+Display the current threshold in the Approvals tab with a tooltip (“Any strategy change exceeding this % requires approval”).
+
+Step 2 – Add Summarization Hook Placeholder
+
+Goal: prepare for future OpenAI integration, but don’t activate it yet.
+
+🧠 In the Walter chat message-handling service, add a commented placeholder:
+
+// TODO: Implement AI summarization here when OpenAI API integrated
+// summarizeChatSession(chatId)
+
+
+and note it in documentation so the summarizer can be added easily later.
+
+Step 3 – Update replit.md Documentation
+
+🗒️ Add or update the following sections:
+
+Walter Tables ERD: list all four tables and their relationships.
+
+Risk Evaluation: explain that the threshold is adjustable in Walter Approvals.
+
+Approval Workflow Diagram:
+Edit → Risk Check → Pending Approval → Walter Chat → Decision → Execution.
+
+Chat Memory & Summarization: describe how message windowing and the Memory-Depth setting work.
+
+Deferred Features: note that summarization and AI-based insight tagging are planned enhancements.
+
+Step 4 – Quick Stability Check
+
+Ask Replit to confirm:
+
+✅ Stability Verification Checklist
+
+Login works for all test users and admin.
+
+Changing the risk threshold in Settings updates backend behavior (verify with a ≥ threshold change creating an approval).
+
+New chat creation and approvals still work.
+
+Notification badge count correct.
+
+Database < 30 MB, CPU < 70 %.
+
+Browser console clean (only Vite WebSocket warning acceptable).
+
+Step 5 – Final Architect Sign-Off
+
+👷 Request the architect to review:
+
+Configurable risk-threshold logic
+
+Documentation accuracy
+
+Stability-check results
+When approved, log the event:
+"Phase 5.4 — Complete and Verified ✅"

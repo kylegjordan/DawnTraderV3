@@ -4896,10 +4896,12 @@ Please:
       const newRisk = (newParams.maxConcurrentPositions || 0) * (newParams.riskPerTrade || 0);
       const projectedRisk = newRisk; // Total portfolio exposure
       
-      // Risk threshold: 20% of portfolio
-      const RISK_APPROVAL_THRESHOLD = 20.0;
+      // Get risk threshold from user's approval matrix settings (configurable in Walter Approvals)
+      const userProfile = await storage.getUserById(userId);
+      const approvalMatrix = userProfile?.approvalMatrix as any;
+      const riskThreshold = approvalMatrix?.policyConstraints?.maxPortfolioRiskPercent || 20.0;
       
-      if (projectedRisk >= RISK_APPROVAL_THRESHOLD) {
+      if (projectedRisk >= riskThreshold) {
         // Create approval record instead of executing immediately
         const approval = await storage.createWalterPendingApproval({
           userId,
@@ -4916,7 +4918,7 @@ Please:
             newRiskPerTrade: newParams.riskPerTrade || 0,
             oldTotalRisk: oldRisk,
             newTotalRisk: newRisk,
-            threshold: RISK_APPROVAL_THRESHOLD,
+            threshold: riskThreshold,
           },
           status: 'pending',
         });
@@ -4937,7 +4939,7 @@ Please:
         
         // Create initial message explaining the approval
         const initialMessage = `⚠️ **Approval Required**\n\n` +
-          `Strategy ${strategy} change requires your approval because the projected portfolio risk (${projectedRisk}%) exceeds the ${RISK_APPROVAL_THRESHOLD}% threshold.\n\n` +
+          `Strategy ${strategy} change requires your approval because the projected portfolio risk (${projectedRisk}%) exceeds the ${riskThreshold}% threshold.\n\n` +
           `**Risk Breakdown:**\n` +
           `- Max Concurrent Positions: ${newParams.maxConcurrentPositions || 0} (was ${oldParams.maxConcurrentPositions || 0})\n` +
           `- Risk Per Trade: ${newParams.riskPerTrade || 0}% (was ${oldParams.riskPerTrade || 0}%)\n` +
@@ -5363,6 +5365,15 @@ Please:
         messageCount: chat.messageCount + 2,
         lastMessageAt: new Date(),
       });
+      
+      // TODO: Implement AI summarization when message count exceeds threshold (Task 13 - Phase 5.4)
+      // if (chat.messageCount + 2 >= 50) {
+      //   await summarizeChatSession(id, userId);
+      //   // Summarization would:
+      //   // 1. Call OpenAI API to summarize last 50 messages
+      //   // 2. Store summary in chat metadata or separate table
+      //   // 3. Optionally prune old messages while keeping recent N messages
+      // }
       
       res.json({ ok: true, userMessage, assistantMessage });
     } catch (error: any) {

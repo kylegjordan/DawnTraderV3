@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-11T21:23:46.249Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "No active or closed trades, and trading metrics such as totalPL, winRate, and roi are all zero, which is unusual for a trading platform."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, opportunities generated, or adjustments made, which may indicate a malfunction or misconfiguration."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes or consider scaling resources to handle the load."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart trading strategies to ensure they are functioning and generating trades."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate AI system configuration and logs to ensure it is correctly set up to learn and generate trading opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough investigation of the CPU usage to identify and resolve any bottlenecks or inefficiencies.",
+      "rationale": "High CPU load can lead to degraded system performance and impact the platform's ability to execute trades effectively."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Audit the trading strategies and ensure they are correctly configured and active.",
+      "rationale": "Trading strategies not generating trades could indicate a configuration issue or a need for strategy adjustment."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Check AI system logs and settings to ensure it is operational and capable of generating trading opportunities.",
+      "rationale": "AI inactivity suggests potential issues that could prevent the system from identifying and acting on profitable trades."
+    }
+  ],
+  "urgencyLevel": "high"
+}

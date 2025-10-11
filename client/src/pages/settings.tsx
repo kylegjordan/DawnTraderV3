@@ -103,7 +103,7 @@ export default function Settings() {
     killSwitchOverride: true
   });
 
-  const [maxPortfolioRiskPercent, setMaxPortfolioRiskPercent] = useState<number>(5.0);
+  const [maxPortfolioRiskPercent, setMaxPortfolioRiskPercent] = useState<number>(20.0);
 
   useEffect(() => {
     if (userProfile?.approvalMatrix) {
@@ -116,6 +116,8 @@ export default function Settings() {
       }
       if (matrix.policyConstraints?.maxPortfolioRiskPercent !== undefined) {
         setMaxPortfolioRiskPercent(matrix.policyConstraints.maxPortfolioRiskPercent);
+      } else {
+        setMaxPortfolioRiskPercent(20.0); // Default to 20% if not set
       }
     }
   }, [userProfile]);
@@ -287,6 +289,8 @@ export default function Settings() {
       }
       if (matrix.policyConstraints?.maxPortfolioRiskPercent !== undefined) {
         setMaxPortfolioRiskPercent(matrix.policyConstraints.maxPortfolioRiskPercent);
+      } else {
+        setMaxPortfolioRiskPercent(20.0); // Default to 20% if not set
       }
       toast({
         title: "Reset Complete",
@@ -728,9 +732,23 @@ export default function Settings() {
                 </div>
 
                 <div className="bg-muted/50 rounded-lg p-4 space-y-3">
-                  <Label className="text-sm font-medium">
-                    Maximum Portfolio Risk % Before Manual Approval Required
-                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium">
+                      Risk Approval Threshold
+                    </Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="cursor-help">
+                            <HelpCircle className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>Any strategy change exceeding this percentage of portfolio risk will require manual approval, regardless of toggle settings above.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="flex items-center gap-3">
                     <Input
                       type="number"
@@ -743,6 +761,9 @@ export default function Settings() {
                       data-testid="input-risk-threshold"
                     />
                     <span className="text-sm text-muted-foreground">%</span>
+                    <Badge variant="outline" className="text-xs">
+                      Current: {maxPortfolioRiskPercent}%
+                    </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     If a proposed change projects portfolio risk above this threshold, Walter will always request approval even if the action toggle is enabled.
