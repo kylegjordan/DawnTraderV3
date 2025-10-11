@@ -149,7 +149,10 @@ import {
   walterChatLogs,
   type WalterApprovalsAudit,
   type InsertWalterApprovalsAudit,
-  walterApprovalsAudit
+  walterApprovalsAudit,
+  type WalterMemory,
+  type InsertWalterMemory,
+  walterMemory
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -472,6 +475,13 @@ export interface IStorage {
   
   createWalterApprovalsAudit(audit: InsertWalterApprovalsAudit): Promise<WalterApprovalsAudit>;
   getWalterApprovalsAudit(approvalId: string): Promise<WalterApprovalsAudit[]>;
+  
+  // Walter Memory methods
+  createWalterMemory(memory: InsertWalterMemory): Promise<WalterMemory>;
+  getWalterMemories(userId: string): Promise<WalterMemory[]>;
+  getWalterMemory(id: string): Promise<WalterMemory | undefined>;
+  updateWalterMemory(id: string, updates: Partial<WalterMemory>): Promise<WalterMemory>;
+  deleteWalterMemory(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2517,7 +2527,7 @@ export class DatabaseStorage implements IStorage {
   
   // Walter AI Assistant methods
   async createWalterPendingApproval(data: InsertWalterPendingApproval): Promise<WalterPendingApproval> {
-    const [approval] = await db.insert(walterPendingApprovals).values(data).returning();
+    const [approval] = await db.insert(walterPendingApprovals).values(data).returning() as any;
     return approval;
   }
   
@@ -2544,7 +2554,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createWalterChat(data: InsertWalterChat): Promise<WalterChat> {
-    const [chat] = await db.insert(walterChats).values(data).returning();
+    const [chat] = await db.insert(walterChats).values(data).returning() as any;
     return chat;
   }
   
@@ -2596,6 +2606,35 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(walterApprovalsAudit)
       .where(eq(walterApprovalsAudit.approvalId, approvalId))
       .orderBy(desc(walterApprovalsAudit.timestamp));
+  }
+  
+  // Walter Memory methods
+  async createWalterMemory(memory: InsertWalterMemory): Promise<WalterMemory> {
+    const [created] = await db.insert(walterMemory).values(memory).returning();
+    return created;
+  }
+  
+  async getWalterMemories(userId: string): Promise<WalterMemory[]> {
+    return await db.select().from(walterMemory)
+      .where(eq(walterMemory.userId, userId))
+      .orderBy(desc(walterMemory.timestamp));
+  }
+  
+  async getWalterMemory(id: string): Promise<WalterMemory | undefined> {
+    const [memory] = await db.select().from(walterMemory).where(eq(walterMemory.id, id));
+    return memory || undefined;
+  }
+  
+  async updateWalterMemory(id: string, updates: Partial<WalterMemory>): Promise<WalterMemory> {
+    const [memory] = await db.update(walterMemory)
+      .set(updates)
+      .where(eq(walterMemory.id, id))
+      .returning();
+    return memory;
+  }
+  
+  async deleteWalterMemory(id: string): Promise<void> {
+    await db.delete(walterMemory).where(eq(walterMemory.id, id));
   }
 }
 

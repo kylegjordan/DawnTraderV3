@@ -4,6 +4,7 @@ import { Trade, TradingSettings, AIReport, InsertAIAuditLog, InsertErrorLog } fr
 import { databaseQueryService } from './database-query';
 import { marketDataService } from './market-data';
 import { getWalterPurpose, createPurposePromptSection, logPurposeUsage } from './walter-purpose';
+import { createMemoryPromptSection } from './walter-memory';
 import { 
   estimateMessagesTokens, 
   calculateCost, 
@@ -180,9 +181,10 @@ export class AIAnalyst {
       const priceData = await storage.getPriceData(symbol);
       const userTrades = await storage.getTrades(userId, { symbol, limit: 50 });
       
-      // Fetch Walter's purpose for this user
+      // Fetch Walter's purpose and memory for this user
       const walterPurpose = await getWalterPurpose(userId);
       const purposeSection = createPurposePromptSection(walterPurpose);
+      const memorySection = await createMemoryPromptSection(userId, 5); // Get top 5 high-importance memories
       
       const liveDataSection = liveMarketData ? `
         LIVE MARKET DATA (${liveMarketData.source}):
@@ -197,7 +199,7 @@ export class AIAnalyst {
 
       const assetTypeDescription = assetType === 'stock' ? 'stock' : 'cryptocurrency trading pair';
       
-      const prompt = `${purposeSection}
+      const prompt = `${purposeSection}${memorySection}
         
         Analyze the ${assetTypeDescription} ${symbol} with the following context:
         
