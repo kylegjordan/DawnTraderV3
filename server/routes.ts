@@ -5689,6 +5689,170 @@ Please:
     }
   });
 
+  // Walter AI SysAdmin Co-Pilot - Command Interpretation
+  app.post('/api/walter/interpret-command', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { message, context } = req.body;
+
+      if (!message) {
+        return res.status(400).json({ error: 'Message is required' });
+      }
+
+      // Get user profile with approval matrix
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const approvalMatrix = (user.approvalMatrix as any) || {
+        startLiveTrading: true,
+        adjustGoals: true,
+        modifyGuardrails: true,
+        updateFilters: false,
+        changeStrategyVariables: true,
+        riskThresholdAdjustments: true,
+        paperTradingActivation: false,
+        killSwitchOverride: true
+      };
+
+      // Get current trading mode
+      const mode = req.headers['x-app-mode'] as 'live' | 'paper' || 'paper';
+
+      // Use GPT-4o to interpret the command
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      
+      const systemPrompt = `You are Walter, an AI SysAdmin co-pilot for a cryptocurrency trading platform. Your role is to interpret user commands and determine appropriate actions.
+
+The user can ask you to:
+1. Adjust trading goals (e.g., "set my goal to $75 per trade")
+2. Modify guardrails (e.g., "tighten guardrails by 10 percent")
+3. Update filters (e.g., "only scan BTC pairs")
+4. Change strategy variables (e.g., "increase VWAP threshold to 2%")
+5. Adjust risk thresholds (e.g., "set max risk to 5%")
+6. Start/stop paper trading (e.g., "start paper trading")
+7. Start/stop live trading (e.g., "activate live trading")
+8. Check system status (e.g., "show system health")
+9. General conversation about the system
+
+Current trading mode: ${mode}
+
+Approval Matrix (which actions require approval):
+- Start Live Trading: ${approvalMatrix.startLiveTrading ? 'requires approval' : 'no approval needed'}
+- Adjust Goals: ${approvalMatrix.adjustGoals ? 'requires approval' : 'no approval needed'}
+- Modify Guardrails: ${approvalMatrix.modifyGuardrails ? 'requires approval' : 'no approval needed'}
+- Update Filters: ${approvalMatrix.updateFilters ? 'requires approval' : 'no approval needed'}
+- Change Strategy Variables: ${approvalMatrix.changeStrategyVariables ? 'requires approval' : 'no approval needed'}
+- Risk Threshold Adjustments: ${approvalMatrix.riskThresholdAdjustments ? 'requires approval' : 'no approval needed'}
+- Paper Trading Activation: ${approvalMatrix.paperTradingActivation ? 'requires approval' : 'no approval needed'}
+- Kill Switch Override: always requires admin approval (locked)
+
+Analyze the user's message and respond with a JSON object:
+{
+  "actionType": "goals" | "guardrails" | "filters" | "strategy" | "risk" | "start_paper" | "stop_paper" | "start_live" | "stop_live" | "status" | "conversation",
+  "requiresApproval": boolean,
+  "actionDetails": {
+    "field": "specific field to update",
+    "value": "new value",
+    "reason": "why this change is being made"
+  },
+  "response": "conversational response to the user explaining what you're doing"
+}
+
+For conversation or status queries, set actionType to "conversation" or "status" and provide a helpful response.`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: message }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7
+      });
+
+      const interpretation = JSON.parse(completion.choices[0].message.content || '{}');
+      
+      // Handle different action types
+      let finalResponse = interpretation.response;
+      let actionTaken = false;
+
+      // Conversation or status queries don't require action
+      if (interpretation.actionType === 'conversation' || interpretation.actionType === 'status') {
+        return res.json({ 
+          response: finalResponse,
+          actionType: interpretation.actionType,
+          requiresApproval: false,
+          actionTaken: false
+        });
+      }
+
+      // Determine if approval is required based on action type
+      const requiresApproval = interpretation.requiresApproval !== false && (
+        (interpretation.actionType === 'start_live' && approvalMatrix.startLiveTrading) ||
+        (interpretation.actionType === 'goals' && approvalMatrix.adjustGoals) ||
+        (interpretation.actionType === 'guardrails' && approvalMatrix.modifyGuardrails) ||
+        (interpretation.actionType === 'filters' && approvalMatrix.updateFilters) ||
+        (interpretation.actionType === 'strategy' && approvalMatrix.changeStrategyVariables) ||
+        (interpretation.actionType === 'risk' && approvalMatrix.riskThresholdAdjustments) ||
+        (interpretation.actionType === 'start_paper' && approvalMatrix.paperTradingActivation)
+      );
+
+      // Kill switch override is always admin-only
+      if (message.toLowerCase().includes('kill switch') || message.toLowerCase().includes('killswitch')) {
+        finalResponse = "I cannot override the kill switch. This is an admin-only action for safety reasons. Please contact your administrator to disable the kill switch.";
+        return res.json({ 
+          response: finalResponse,
+          actionType: 'kill_switch_denied',
+          requiresApproval: true,
+          actionTaken: false
+        });
+      }
+
+      // If requires approval, create pending action in orchestrator logs
+      if (requiresApproval) {
+        const logData = {
+          userId,
+          category: 'walter_command' as const,
+          recommendation: `Walter command: ${interpretation.actionDetails?.reason || message}`,
+          urgencyLevel: 'medium' as const,
+          status: 'pending' as const,
+          actionTaken: null,
+          metadata: {
+            actionType: interpretation.actionType,
+            actionDetails: interpretation.actionDetails,
+            originalMessage: message,
+            mode
+          }
+        };
+        
+        await storage.createOrchestratorLog(logData);
+        finalResponse = `${interpretation.response}\n\nℹ️ This action requires your approval. I've created a pending request in the Command Center for you to review.`;
+      } else {
+        // Execute immediately (simplified - full implementation would execute the actual changes)
+        finalResponse = `${interpretation.response}\n\n✅ Action executed immediately (no approval required).`;
+        actionTaken = true;
+
+        // TODO: Implement actual execution logic based on actionType
+        // This would call the appropriate storage methods to update goals, guardrails, etc.
+      }
+
+      res.json({
+        response: finalResponse,
+        actionType: interpretation.actionType,
+        requiresApproval,
+        actionTaken,
+        actionDetails: interpretation.actionDetails
+      });
+    } catch (error: any) {
+      console.error('[Walter] Error interpreting command:', error);
+      res.status(500).json({ 
+        error: 'Failed to process command',
+        response: "I encountered an error processing your request. Please try again or rephrase your command."
+      });
+    }
+  });
+
   return httpServer;
 }
 

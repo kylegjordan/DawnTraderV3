@@ -20,6 +20,7 @@ import { ensureValidToken } from "@/lib/auth";
 const Analysis = lazy(() => import("@/pages/analysis"));
 const Settings = lazy(() => import("@/pages/settings"));
 const WalterApprovals = lazy(() => import("@/pages/walter-approvals"));
+const WalterPage = lazy(() => import("@/pages/walter"));
 const WatchlistPage = lazy(() => import("@/pages/watchlist"));
 const ActiveTradesPage = lazy(() => import("@/pages/active-trades"));
 const KillSwitchScreen = lazy(() => import("@/pages/kill-switch"));
@@ -132,6 +133,7 @@ function Router() {
             <Switch>
               <Route path="/" component={Dashboard} />
               <Route path="/dashboard" component={Dashboard} />
+              <Route path="/walter" component={WalterPage} />
               <Route path="/watchlist" component={WatchlistPage} />
               <Route path="/active-trades" component={ActiveTradesPage} />
               <Route path="/search" component={SearchPage} />

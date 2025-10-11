@@ -18,7 +18,8 @@ import {
   Search,
   Sparkles,
   Shield,
-  Terminal
+  Terminal,
+  Bot
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ interface SidebarProps {
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Walter", href: "/walter", icon: Bot },
   { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
   { name: "Goals Engine", href: "/goals-engine", icon: Target },
   { name: "Trading", href: "/active-trades", icon: BarChart3 },
