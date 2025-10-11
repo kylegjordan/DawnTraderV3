@@ -78,6 +78,7 @@ export default function CommandCenter() {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("overview");
+  const [approvingLogId, setApprovingLogId] = useState<number | null>(null);
 
   // Check if current user is admin
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -140,15 +141,97 @@ export default function CommandCenter() {
     }
   });
 
-  // Update log status (approve/reject)
+  // Approve recommendation and execute change
+  const approveRecommendation = async (log: OrchestratorLog) => {
+    setApprovingLogId(log.id);
+    try {
+      // Determine which endpoint to call based on category
+      let endpoint = '';
+      let payload: any = {};
+
+      if (log.category === 'goal_update' && log.metadata) {
+        endpoint = '/api/orchestrator/updateGoal';
+        payload = {
+          mode: log.metadata.mode,
+          metricName: log.metadata.metricName,
+          goalValue: log.metadata.goalValue,
+          approved: true,
+          reason: 'Approved by admin via Command Center'
+        };
+      } else if (log.category === 'guardrail_update' && log.metadata) {
+        endpoint = '/api/orchestrator/updateGuardrail';
+        payload = {
+          mode: log.metadata.mode,
+          field: log.metadata.field,
+          value: log.metadata.value,
+          approved: true,
+          reason: 'Approved by admin via Command Center'
+        };
+      } else if (log.category === 'strategy_update' && log.metadata) {
+        endpoint = '/api/orchestrator/updateStrategy';
+        payload = {
+          mode: log.metadata.mode,
+          strategy: log.metadata.strategy,
+          field: log.metadata.field,
+          value: log.metadata.value,
+          approved: true,
+          reason: 'Approved by admin via Command Center'
+        };
+      } else {
+        // For other categories, just update the log status
+        await apiRequest('PATCH', `/api/orchestrator/logs/${log.id}`, { 
+          status: 'approved', 
+          actionTaken: 'Approved by admin' 
+        });
+        
+        toast({
+          title: "Recommendation Approved",
+          description: "The recommendation has been approved",
+        });
+        
+        queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/logs?limit=50'] });
+        return;
+      }
+
+      // Execute the configuration change
+      await apiRequest('POST', endpoint, payload);
+
+      // Update log status
+      await apiRequest('PATCH', `/api/orchestrator/logs/${log.id}`, { 
+        status: 'approved', 
+        actionTaken: 'Approved and applied by admin' 
+      });
+
+      toast({
+        title: "Recommendation Approved",
+        description: "Configuration has been updated successfully",
+      });
+
+      // Invalidate all relevant caches
+      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/logs?limit=50'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/guardrails'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/strategy-settings'] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to approve recommendation",
+        variant: "destructive",
+      });
+    } finally {
+      setApprovingLogId(null);
+    }
+  };
+
+  // Update log status (reject)
   const updateLogMutation = useMutation({
     mutationFn: async ({ id, status, actionTaken }: { id: number; status: string; actionTaken?: string }) => {
       return await apiRequest('PATCH', `/api/orchestrator/logs/${id}`, { status, actionTaken });
     },
     onSuccess: () => {
       toast({
-        title: "Log Updated",
-        description: "Recommendation status has been updated",
+        title: "Recommendation Rejected",
+        description: "The recommendation has been rejected",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/logs?limit=50'] });
     },
@@ -497,18 +580,22 @@ export default function CommandCenter() {
                         <Button
                           size="sm"
                           variant="default"
-                          onClick={() => updateLogMutation.mutate({ id: log.id, status: 'approved', actionTaken: 'Approved by admin' })}
-                          disabled={updateLogMutation.isPending}
+                          onClick={() => approveRecommendation(log)}
+                          disabled={approvingLogId === log.id || updateLogMutation.isPending}
                           data-testid={`button-approve-${log.id}`}
                         >
-                          <CheckCircle className="w-4 h-4 mr-1" />
+                          {approvingLogId === log.id ? (
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                          )}
                           Approve
                         </Button>
                         <Button
                           size="sm"
                           variant="destructive"
                           onClick={() => updateLogMutation.mutate({ id: log.id, status: 'rejected', actionTaken: 'Rejected by admin' })}
-                          disabled={updateLogMutation.isPending}
+                          disabled={approvingLogId === log.id || updateLogMutation.isPending}
                           data-testid={`button-reject-${log.id}`}
                         >
                           <XCircle className="w-4 h-4 mr-1" />
