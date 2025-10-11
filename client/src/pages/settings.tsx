@@ -252,21 +252,19 @@ export default function Settings() {
   };
 
   const handleResetGeneral = () => {
-    if (settings) {
-      setGeneralFormData({
-        emailNotifications: (settings as any).emailNotifications ?? true,
-        pushNotifications: (settings as any).pushNotifications ?? true,
-        telegramNotifications: (settings as any).telegramNotifications ?? false,
-        timezone: settings.timezone || 'Asia/Dubai',
-        walterMemoryDepth: settings.walterMemoryDepth || 20,
-        walterMemoryLimit: (settings as any).walterMemoryLimit ?? 500,
-        walterAutoSummarize: (settings as any).walterAutoSummarize ?? true
-      });
-      toast({
-        title: "Reset Complete",
-        description: "Settings have been reset to last saved values.",
-      });
-    }
+    setGeneralFormData({
+      emailNotifications: true,
+      pushNotifications: true,
+      telegramNotifications: false,
+      timezone: 'Asia/Dubai',
+      walterMemoryDepth: 20,
+      walterMemoryLimit: 200,
+      walterAutoSummarize: true
+    });
+    toast({
+      title: "Reset Complete",
+      description: "Settings have been reset to factory defaults.",
+    });
   };
 
   const handleSaveWalter = async () => {

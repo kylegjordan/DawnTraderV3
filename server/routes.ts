@@ -5244,7 +5244,7 @@ Please:
       }
       
       // Get user's Walter memory depth setting for context windowing
-      const settings = await storage.getSettings(userId);
+      const settings = await storage.getTradingSettings(userId);
       const memoryDepth = settings?.walterMemoryDepth || 20;
       
       // Apply context windowing: return only last N messages
