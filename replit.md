@@ -49,3 +49,16 @@ PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, tra
 
 ### Database Cleanup Notes
 Successfully cleaned up database: All development/test users removed except for the two required accounts. Cleanup included deleting thousands of related records across all dependent tables (ai_opportunities, ai_opportunity_runs, ai_orchestrator_logs, daily_briefs, trading_settings, learning_sources, context_chats, ai_conversations, ai_reports, watchlist_pairs, trades, ai_audit_log, filter_calibration_log).
+
+**Note**: Startup script automatically verifies/creates a test account (testuser@example.com) - this is expected system behavior for development/testing.
+
+## Recent Changes
+
+### Phase 4.5: System Consolidation & UI Cleanup (Completed)
+- **Command Center Improvements**: Added clear labeling for Walter recommendations (prefix), improved category labels with icons
+- **GPT Chats Removal**: Removed duplicate "GPT Chats" page - consolidated AI chat functionality into Command Center and Analysis pages
+- **AI Opportunities Reorganization**: Moved AI Opportunities from removed GPT Chats to Watch Lists page as new tab
+- **Walter Approvals**: Restored visibility in Settings with "Advanced Settings" card linking to /settings/walter-approvals
+- **Kill Switch Hard-Lock**: Enforced in both UI (disabled toggle) and data layer (killSwitchOverride always true)
+- **Navigation Verification**: All routes tested and working correctly (/analysis removed, /settings/walter-approvals added)
+- **Browser Console**: Clean runtime (no React errors, only non-critical Vite WebSocket warnings)
