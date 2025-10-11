@@ -21,6 +21,19 @@ Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS) for UI, 
 - Error handling for mic permissions, device not found, and transcription failures
 - Visual feedback: Mic icon (idle), MicOff icon (recording), Loader icon (transcribing)
 - Backend: POST /api/transcribe (JWT protected, 15MB file limit)
+- Transcription success notifications disabled (silent completion)
+
+**Chat Persistence System**: Context-based persistent chat history across conversational interfaces:
+- **Database Schema**: `context_chats` table stores messages by context (e.g., "goals", "guardrails")
+  - Fields: user_id, context, role (user/assistant), message, timestamp
+- **API Endpoints**:
+  - GET /api/chats?context={context} - Retrieves chat history for specific context
+  - POST /api/chats/save - Saves chat message (body: {role, message, context})
+- **Implementation**:
+  - Goals Engine (goals-engine-tab.tsx): Auto-loads chat history on mount, auto-saves on send
+  - Messages persist across page refreshes and sessions
+  - Separate from main AI conversations (which use conversations table)
+- **AI Response Format**: Goals Engine analyze endpoint returns {success, response, data, mode} with direct response field
 
 **Trading Active Toggle**: Dashboard header includes a mode-aware toggle controller that starts/stops the appropriate trading engine:
 - Paper mode: Controls Paper Trading Simulation Engine via `/api/paper-sim/start` and `/api/paper-sim/stop` endpoints
