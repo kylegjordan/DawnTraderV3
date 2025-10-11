@@ -17,7 +17,8 @@ import {
   MessageSquare,
   Search,
   Sparkles,
-  Shield
+  Shield,
+  Terminal
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ const navigation = [
   { name: "Systems Monitoring", href: "/systems", icon: Activity },
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
   { name: "Admin Panel", href: "/admin", icon: Shield, adminOnly: true },
 ];
 

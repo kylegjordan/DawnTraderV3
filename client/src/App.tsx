@@ -30,6 +30,7 @@ const SystemsPage = lazy(() => import("@/pages/systems"));
 const AITransparencyPage = lazy(() => import("@/pages/ai-transparency"));
 const SearchPage = lazy(() => import("@/pages/search"));
 const AdminPage = lazy(() => import("@/pages/admin"));
+const CommandCenter = lazy(() => import("@/pages/command-center"));
 
 function LoadingFallback() {
   return (
@@ -141,6 +142,7 @@ function Router() {
               <Route path="/systems" component={SystemsPage} />
               <Route path="/ai-transparency" component={AITransparencyPage} />
               <Route path="/settings" component={Settings} />
+              <Route path="/command-center" component={CommandCenter} />
               <Route path="/admin" component={AdminPage} />
               <Route path="/kill-switch" component={KillSwitchScreen} />
               <Route component={NotFound} />
