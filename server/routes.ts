@@ -18,6 +18,7 @@ import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
 import { actuationPolicyService } from "./services/actuation-policy";
 import { assetCapabilitiesService } from "./services/asset-capabilities";
+import { manageChatLifecycle, summarizeChatSession } from "./services/walter-chat-lifecycle";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
 import multer from "multer";
@@ -5314,6 +5315,13 @@ Please:
       
       console.log(`[Walter] Updated chat ${id}: ${JSON.stringify(updates)}`);
       
+      // Trigger lifecycle management if status changed to archived
+      if (status === 'archived') {
+        manageChatLifecycle(id, userId).catch(err => 
+          console.error('[Walter] Lifecycle management error:', err)
+        );
+      }
+      
       res.json({ ok: true, chat: updated });
     } catch (error: any) {
       console.error('[Walter] Error updating chat:', error);
@@ -5361,19 +5369,18 @@ Please:
       });
       
       // Update chat metadata
+      const newMessageCount = chat.messageCount + 2;
       await storage.updateWalterChat(id, {
-        messageCount: chat.messageCount + 2,
+        messageCount: newMessageCount,
         lastMessageAt: new Date(),
       });
       
-      // TODO: Implement AI summarization when message count exceeds threshold (Task 13 - Phase 5.4)
-      // if (chat.messageCount + 2 >= 50) {
-      //   await summarizeChatSession(id, userId);
-      //   // Summarization would:
-      //   // 1. Call OpenAI API to summarize last 50 messages
-      //   // 2. Store summary in chat metadata or separate table
-      //   // 3. Optionally prune old messages while keeping recent N messages
-      // }
+      // Auto-summarization when chat exceeds threshold (Phase 5.5 Task 6)
+      if (newMessageCount >= 50 && newMessageCount % 50 === 0) {
+        summarizeChatSession(id, userId).catch(err => 
+          console.error('[Walter] Auto-summarization error:', err)
+        );
+      }
       
       res.json({ ok: true, userMessage, assistantMessage });
     } catch (error: any) {
