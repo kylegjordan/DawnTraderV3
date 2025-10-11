@@ -125,6 +125,8 @@ export const tradingSettings = pgTable("trading_settings", {
   
   // Walter AI Assistant Settings
   walterMemoryDepth: integer("walter_memory_depth").default(20), // Number of messages to keep in context window
+  walterMemoryLimit: integer("walter_memory_limit").default(500), // Max persistent memories (-1 for unlimited)
+  walterAutoSummarize: boolean("walter_auto_summarize").default(true), // Auto-summarize chats every 50 messages
   
   // AI Opportunities Settings
   aiOpportunitiesEnabled: boolean("ai_opportunities_enabled").default(true),

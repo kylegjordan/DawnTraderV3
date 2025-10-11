@@ -72,7 +72,9 @@ export default function Settings() {
     pushNotifications: (settings as any)?.pushNotifications ?? true,
     telegramNotifications: (settings as any)?.telegramNotifications ?? false,
     timezone: settings?.timezone || 'Asia/Dubai',
-    walterMemoryDepth: settings?.walterMemoryDepth || 20
+    walterMemoryDepth: settings?.walterMemoryDepth || 20,
+    walterMemoryLimit: (settings as any)?.walterMemoryLimit ?? 500,
+    walterAutoSummarize: (settings as any)?.walterAutoSummarize ?? true
   });
 
   useEffect(() => {
@@ -82,7 +84,9 @@ export default function Settings() {
         pushNotifications: (settings as any).pushNotifications ?? true,
         telegramNotifications: (settings as any).telegramNotifications ?? false,
         timezone: settings.timezone || 'Asia/Dubai',
-        walterMemoryDepth: (settings as any).walterMemoryDepth || 20
+        walterMemoryDepth: (settings as any).walterMemoryDepth || 20,
+        walterMemoryLimit: (settings as any).walterMemoryLimit ?? 500,
+        walterAutoSummarize: (settings as any).walterAutoSummarize ?? true
       });
     }
   }, [settings]);
@@ -254,7 +258,9 @@ export default function Settings() {
         pushNotifications: (settings as any).pushNotifications ?? true,
         telegramNotifications: (settings as any).telegramNotifications ?? false,
         timezone: settings.timezone || 'Asia/Dubai',
-        walterMemoryDepth: settings.walterMemoryDepth || 20
+        walterMemoryDepth: settings.walterMemoryDepth || 20,
+        walterMemoryLimit: (settings as any).walterMemoryLimit ?? 500,
+        walterAutoSummarize: (settings as any).walterAutoSummarize ?? true
       });
       toast({
         title: "Reset Complete",
@@ -544,6 +550,49 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">
                   Number of recent messages Walter will remember in each chat session. Older messages are stored but not shown by default.
                 </p>
+              </div>
+
+              <Separator className="my-6" />
+
+              <div className="space-y-2">
+                <Label htmlFor="walter-memory-limit" className="text-sm font-medium">
+                  Memory Persistence Limit
+                </Label>
+                <Select 
+                  value={generalFormData.walterMemoryLimit === -1 ? 'unlimited' : String(generalFormData.walterMemoryLimit)} 
+                  onValueChange={(value) => setGeneralFormData({...generalFormData, walterMemoryLimit: value === 'unlimited' ? -1 : parseInt(value)})}
+                >
+                  <SelectTrigger data-testid="select-walter-memory-limit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="50">50 memories</SelectItem>
+                    <SelectItem value="100">100 memories</SelectItem>
+                    <SelectItem value="200">200 memories</SelectItem>
+                    <SelectItem value="500">500 memories (Default)</SelectItem>
+                    <SelectItem value="1000">1,000 memories</SelectItem>
+                    <SelectItem value="unlimited">Unlimited</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Maximum number of persistent memories Walter can store. Older memories will be archived when limit is reached.
+                </p>
+              </div>
+
+              <Separator className="my-6" />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Auto-Summarization</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically summarize Walter chats every 50 messages to maintain context efficiency
+                  </p>
+                </div>
+                <Switch
+                  checked={generalFormData.walterAutoSummarize}
+                  onCheckedChange={(checked) => setGeneralFormData({...generalFormData, walterAutoSummarize: checked})}
+                  data-testid="switch-walter-auto-summarize"
+                />
               </div>
             </CardContent>
           </Card>

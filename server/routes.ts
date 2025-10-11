@@ -5375,8 +5375,12 @@ Please:
         lastMessageAt: new Date(),
       });
       
-      // Auto-summarization when chat exceeds threshold (Phase 5.5 Task 6)
-      if (newMessageCount >= 50 && newMessageCount % 50 === 0) {
+      // Auto-summarization when chat exceeds threshold (Phase 5.5 Task 6/7)
+      // Check if auto-summarization is enabled in settings
+      const userSettings = await storage.getTradingSettings(userId);
+      const autoSummarizeEnabled = (userSettings as any)?.walterAutoSummarize ?? true;
+      
+      if (autoSummarizeEnabled && newMessageCount >= 50 && newMessageCount % 50 === 0) {
         summarizeChatSession(id, userId).catch(err => 
           console.error('[Walter] Auto-summarization error:', err)
         );

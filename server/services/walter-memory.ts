@@ -43,6 +43,9 @@ export async function createMemory(
 
   await storage.createWalterMemory(memory);
   console.log(`💭 Walter memory created: [${type}] importance=${importance}`);
+  
+  // Enforce memory limit (Phase 5.5 Task 7)
+  await enforceMemoryLimit(userId);
 }
 
 /**
@@ -251,4 +254,49 @@ export async function pruneOldMemories(
   }
 
   return deletedCount;
+}
+
+/**
+ * Enforce memory limit for user (Phase 5.5 Task 7)
+ * Deletes oldest, least important memories when limit is exceeded
+ */
+async function enforceMemoryLimit(userId: string): Promise<void> {
+  // Get user settings
+  const settings = await storage.getTradingSettings(userId);
+  const memoryLimit = (settings as any)?.walterMemoryLimit ?? 500;
+  
+  // -1 means unlimited
+  if (memoryLimit === -1) {
+    return;
+  }
+  
+  // Get all memories for user
+  const memories = await storage.getWalterMemories(userId);
+  
+  // Check if limit exceeded
+  if (memories.length <= memoryLimit) {
+    return;
+  }
+  
+  // Calculate how many to delete
+  const toDelete = memories.length - memoryLimit;
+  
+  // Sort by importance (ASC) then timestamp (ASC) - delete least important and oldest first
+  const sorted = [...memories].sort((a, b) => {
+    if (a.importance !== b.importance) {
+      return a.importance - b.importance;
+    }
+    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return timeA - timeB;
+  });
+  
+  // Delete oldest/least important memories
+  const toDeleteMemories = sorted.slice(0, toDelete);
+  
+  for (const memory of toDeleteMemories) {
+    await storage.deleteWalterMemory(memory.id);
+  }
+  
+  console.log(`🗑️ Memory limit enforced: deleted ${toDelete} oldest/least important memories (limit: ${memoryLimit})`);
 }
