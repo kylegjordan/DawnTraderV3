@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target, Settings, LineChart } from "lucide-react";
+import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target, Settings, LineChart, Terminal } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 
@@ -80,6 +80,12 @@ export default function AITransparencyPage() {
     staleTime: 0, // Always consider data stale for immediate updates
   });
 
+  // Fetch AI Orchestrator logs
+  const { data: orchestratorLogsData, isLoading: orchestratorLogsLoading } = useQuery<{ ok: boolean; logs: any[] }>({
+    queryKey: ['/api/orchestrator/logs?limit=50'],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
@@ -92,6 +98,7 @@ export default function AITransparencyPage() {
   const paperSimMetrics = paperSimData?.stats || null;
   const isSimRunning = paperSimData?.isRunning || false;
   const paperPositions = paperPositionsData?.positions || [];
+  const orchestratorLogs = orchestratorLogsData?.logs ?? [];
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -121,6 +128,10 @@ export default function AITransparencyPage() {
           <TabsTrigger value="automation-logs" data-testid="tab-automation-logs" className="min-w-[140px] text-sm px-3 py-2">
             <Clock className="w-4 h-4 mr-2" />
             Automation Logs
+          </TabsTrigger>
+          <TabsTrigger value="orchestrator-activity" data-testid="tab-orchestrator-activity" className="min-w-[140px] text-sm px-3 py-2">
+            <Terminal className="w-4 h-4 mr-2" />
+            Orchestrator
           </TabsTrigger>
           <TabsTrigger value="learning-adjustments" data-testid="tab-learning-adjustments" className="min-w-[140px] text-sm px-3 py-2">
             <TrendingUp className="w-4 h-4 mr-2" />
@@ -204,6 +215,84 @@ export default function AITransparencyPage() {
                           </Badge>
                         )}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Orchestrator Activity Tab */}
+        <TabsContent value="orchestrator-activity" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Orchestrator Activity</CardTitle>
+              <CardDescription>
+                System monitoring insights and AI recommendations from the orchestrator
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {orchestratorLogsLoading ? (
+                <div className="text-sm text-muted-foreground">Loading orchestrator logs...</div>
+              ) : orchestratorLogs.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No orchestrator activity found</div>
+              ) : (
+                <div className="space-y-3">
+                  {orchestratorLogs.map((log: any) => (
+                    <div 
+                      key={log.id} 
+                      className="p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                      data-testid={`orchestrator-log-${log.id}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={
+                              log.urgencyLevel === 'critical' ? 'destructive' : 
+                              log.urgencyLevel === 'high' ? 'default' : 
+                              'secondary'
+                            }
+                            data-testid={`badge-urgency-${log.id}`}
+                          >
+                            {log.urgencyLevel}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs" data-testid={`badge-category-${log.id}`}>
+                            {log.category}
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground" data-testid={`text-orchestrator-timestamp-${log.id}`}>
+                          {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                        </span>
+                      </div>
+                      
+                      <p className="text-sm text-foreground mb-2" data-testid={`text-orchestrator-message-${log.id}`}>
+                        {log.message}
+                      </p>
+                      
+                      {log.aiInsight && (
+                        <div className="mt-2 p-3 bg-muted/50 rounded-md">
+                          <p className="text-xs text-muted-foreground mb-1">AI Insight:</p>
+                          <p className="text-sm text-foreground" data-testid={`text-ai-insight-${log.id}`}>
+                            {log.aiInsight}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {log.status && (
+                        <Badge 
+                          variant={
+                            log.status === 'approved' ? 'default' : 
+                            log.status === 'rejected' ? 'destructive' : 
+                            log.status === 'applied' ? 'outline' : 
+                            'secondary'
+                          }
+                          className="mt-2"
+                          data-testid={`badge-status-${log.id}`}
+                        >
+                          {log.status}
+                        </Badge>
+                      )}
                     </div>
                   ))}
                 </div>
