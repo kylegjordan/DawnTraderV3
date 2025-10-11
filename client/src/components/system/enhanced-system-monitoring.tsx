@@ -79,6 +79,32 @@ interface ErrorLog {
   resolved: boolean;
 }
 
+interface DiagnosticAnalysis {
+  id: string;
+  timestamp: string;
+  recommendation: string;
+  urgencyLevel: 'low' | 'medium' | 'high';
+  metadata: {
+    anomalies?: {
+      detected: boolean;
+      anomalies: Array<{
+        type: string;
+        severity: string;
+        metric: string;
+        value: number;
+        description: string;
+      }>;
+    };
+    trends?: {
+      cpuTrend: string;
+      memoryTrend: string;
+      latencyTrend: string;
+      errorTrend: string;
+    };
+    recommendations?: string[];
+  };
+}
+
 export default function EnhancedSystemMonitoring() {
   const [activeTab, setActiveTab] = useState("performance");
   const { toast } = useToast();
@@ -102,6 +128,27 @@ export default function EnhancedSystemMonitoring() {
       toast({
         title: "Error",
         description: error.message || "Failed to acknowledge alert",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Run diagnostic analysis mutation
+  const runAnalysisMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/diagnostics/analyze', 'POST', {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/diagnostics/analysis-history'] });
+      toast({
+        title: "Analysis Complete",
+        description: "System diagnostic analysis completed successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to run diagnostic analysis",
         variant: "destructive",
       });
     }
@@ -137,11 +184,21 @@ export default function EnhancedSystemMonitoring() {
     refetchInterval,
   });
 
+  // Fetch diagnostic analysis history
+  const { data: analysisData, isLoading: analysisLoading } = useQuery<{ ok: boolean; analyses: DiagnosticAnalysis[] }>({
+    queryKey: ['/api/diagnostics/analysis-history'],
+    refetchInterval,
+  });
+
   const metrics = metricsData?.metrics;
   const engineStatus = engineData?.status;
   const walterActivity = walterData?.activity;
   const dbHealth = dbHealthData?.health;
   const errors = errorData?.errors || [];
+  const analyses = analysisData?.analyses || [];
+  
+  // Latest AI insight
+  const latestAnalysis = analyses.length > 0 ? analyses[0] : null;
 
   // Format bytes to GB
   const formatBytes = (bytes: number) => {
@@ -200,16 +257,103 @@ export default function EnhancedSystemMonitoring() {
           </Badge>
           <span className="text-sm text-muted-foreground">Auto-refreshing every 10s</span>
         </div>
-        <Button 
-          onClick={handleExportReport}
-          variant="outline"
-          size="sm"
-          data-testid="button-export-report"
-        >
-          <Download className="w-4 h-4 mr-2" />
-          Export Report
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => runAnalysisMutation.mutate()}
+            variant="outline"
+            size="sm"
+            disabled={runAnalysisMutation.isPending}
+            data-testid="button-run-analysis"
+          >
+            <Activity className="w-4 h-4 mr-2" />
+            {runAnalysisMutation.isPending ? 'Analyzing...' : 'Run Analysis'}
+          </Button>
+          <Button 
+            onClick={handleExportReport}
+            variant="outline"
+            size="sm"
+            data-testid="button-export-report"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Report
+          </Button>
+        </div>
       </div>
+
+      {/* AI Diagnostic Insights Banner */}
+      {!analysisLoading && latestAnalysis && (
+        <Card 
+          className={`border-l-4 ${
+            latestAnalysis.urgencyLevel === 'high' ? 'border-l-red-500 bg-red-50 dark:bg-red-950' :
+            latestAnalysis.urgencyLevel === 'medium' ? 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
+            'border-l-blue-500 bg-blue-50 dark:bg-blue-950'
+          }`}
+          data-testid="card-ai-diagnostic-insights"
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Bot className="w-5 h-5" />
+                AI Diagnostic Insights
+              </CardTitle>
+              <Badge 
+                variant={
+                  latestAnalysis.urgencyLevel === 'high' ? 'destructive' :
+                  latestAnalysis.urgencyLevel === 'medium' ? 'secondary' :
+                  'default'
+                }
+                data-testid="badge-diagnostic-urgency"
+              >
+                {latestAnalysis.urgencyLevel} priority
+              </Badge>
+            </div>
+            <CardDescription className="text-xs">
+              Last analyzed: {new Date(latestAnalysis.timestamp).toLocaleString()}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm mb-2" data-testid="text-diagnostic-summary">
+              {latestAnalysis.recommendation}
+            </p>
+            {latestAnalysis.metadata?.anomalies?.detected && (
+              <div className="mt-2 mb-3">
+                <p className="text-xs font-medium mb-1">Detected Anomalies:</p>
+                <div className="space-y-1">
+                  {latestAnalysis.metadata.anomalies.anomalies.map((anomaly, idx) => (
+                    <div 
+                      key={idx} 
+                      className="text-xs flex items-start gap-2 text-muted-foreground"
+                      data-testid={`text-anomaly-${idx}`}
+                    >
+                      <Badge variant={
+                        anomaly.severity === 'high' ? 'destructive' :
+                        anomaly.severity === 'medium' ? 'secondary' :
+                        'outline'
+                      } className="text-xs px-1 py-0">
+                        {anomaly.severity}
+                      </Badge>
+                      <span>{anomaly.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {latestAnalysis.metadata?.recommendations && latestAnalysis.metadata.recommendations.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-medium mb-1">Recommendations:</p>
+                <ul className="text-xs space-y-1 text-muted-foreground">
+                  {latestAnalysis.metadata.recommendations.map((rec, idx) => (
+                    <li key={idx} className="flex items-start gap-2" data-testid={`text-diagnostic-rec-${idx}`}>
+                      <span>•</span>
+                      <span>{rec}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

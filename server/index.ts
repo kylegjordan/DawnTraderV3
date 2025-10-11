@@ -124,6 +124,7 @@ app.use((req, res, next) => {
       const { cwaTask } = await import('./services/cwa-task');
       const { cachePurgeTask } = await import('./services/cache-purge-task');
       const { semanticIngestionTask } = await import('./services/semantic-ingestion-task');
+      const { diagnosticAnalysisTask } = await import('./services/diagnostic-analysis-task');
 
       // Register tasks
       schedulerRegistry.registerTask({
@@ -209,6 +210,17 @@ app.use((req, res, next) => {
         frequency: semanticIngestionTask.frequency,
         intervalMs: semanticIngestionTask.intervalMs,
         run: semanticIngestionTask.run.bind(semanticIngestionTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+
+      schedulerRegistry.registerTask({
+        name: diagnosticAnalysisTask.name,
+        description: diagnosticAnalysisTask.description,
+        frequency: diagnosticAnalysisTask.frequency,
+        intervalMs: diagnosticAnalysisTask.intervalMs,
+        run: diagnosticAnalysisTask.run.bind(diagnosticAnalysisTask),
         lastRun: null,
         nextRun: null,
         status: 'idle'

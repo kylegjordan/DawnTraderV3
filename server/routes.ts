@@ -3259,6 +3259,29 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Run Diagnostic Analysis (on-demand)
+  app.post('/api/diagnostics/analyze', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { diagnosticsAnalyzer } = await import('./diagnostics/analyzer.js');
+      const analysis = await diagnosticsAnalyzer.runDiagnosticAnalysis();
+      res.json({ ok: true, analysis });
+    } catch (error: any) {
+      console.error('Diagnostic analysis error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get Diagnostic Analysis History
+  app.get('/api/diagnostics/analysis-history', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const analyses = await storage.getOrchestratorLogsByCategory(null, 'diagnostics', 20);
+      res.json({ ok: true, analyses });
+    } catch (error: any) {
+      console.error('Get analysis history error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ===== SCHEDULER ENDPOINTS =====
   
   // Get scheduler status for all tasks

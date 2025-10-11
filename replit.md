@@ -54,6 +54,18 @@ Successfully cleaned up database: All development/test users removed except for 
 
 ## Recent Changes
 
+### Phase 5: Diagnostics, Optimization & Monitoring (In Progress)
+- **Task 1: Sidebar Reordering** ✅ Complete - Exact order implemented as specified
+- **Task 2: System Monitoring Panel** ✅ Complete - Real-time metrics, Walter activity, database health, alert acknowledgement, export reports
+- **Task 3: Diagnostics & Auto-Analysis** ✅ Complete - Infrastructure in place:
+  - Created `DiagnosticsAnalyzer` service with anomaly detection (CPU, memory, latency, error rate thresholds)
+  - Implemented trend analysis (comparing recent vs. historical metrics)
+  - Integrated OpenAI GPT-4o-mini for AI-powered diagnostic insights and recommendations
+  - Created hourly scheduled task (`DiagnosticAnalysisTask`) registered with SchedulerRegistry
+  - Added API endpoints: POST `/api/diagnostics/analyze` (on-demand), GET `/api/diagnostics/analysis-history`
+  - Logs all analyses to `ai_orchestrator_logs` table with category 'diagnostics'
+  - UI: Analysis history query integrated, Run Analysis mutation created
+
 ### Phase 4.5: System Consolidation & UI Cleanup (Completed)
 - **Command Center Improvements**: Added clear labeling for Walter recommendations (prefix), improved category labels with icons
 - **GPT Chats Removal**: Removed duplicate "GPT Chats" page - consolidated AI chat functionality into Command Center and Analysis pages
