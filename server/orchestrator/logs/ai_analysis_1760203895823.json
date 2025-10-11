@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-11T17:31:35.822Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, confidence, opportunities generated, or adjustments made, suggesting it might be inactive or malfunctioning."
+    },
+    {
+      "severity": "low",
+      "message": "Trading metrics show no active or closed trades, which might be expected if the market is inactive, but could also indicate a system issue if unexpected."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by analyzing running processes and load distribution."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI module's configuration and logs to ensure it is active and correctly processing data."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Evaluate trading strategy effectiveness and market conditions to ensure alignment with current trading goals."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and resolve any bottlenecks or inefficient processes.",
+      "rationale": "High CPU load can lead to degraded system performance and potential downtime, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Check the AI module's operational status and logs to ensure it is functioning as expected.",
+      "rationale": "AI inactivity could result in missed trading opportunities and reduced platform competitiveness."
+    },
+    {
+      "urgencyLevel": "low",
+      "action": "Review trading strategies and market conditions to ensure they are still relevant and effective.",
+      "rationale": "Aligning strategies with current market conditions can improve trading performance and profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}
