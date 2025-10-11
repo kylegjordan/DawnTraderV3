@@ -32,6 +32,7 @@ interface SidebarProps {
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
   { name: "Goals Engine", href: "/goals-engine", icon: Target },
   { name: "Trading", href: "/active-trades", icon: BarChart3 },
   { name: "Briefings", href: "/briefings", icon: Newspaper },
@@ -42,7 +43,6 @@ const navigation = [
   { name: "Systems Monitoring", href: "/systems", icon: Activity },
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "Settings", href: "/settings", icon: Settings },
-  { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
   { name: "Admin Panel", href: "/admin", icon: Shield, adminOnly: true },
 ];
 
