@@ -5178,6 +5178,198 @@ Please:
       res.status(500).json({ ok: false, error: error.message });
     }
   });
+  
+  // GET all Walter chats for current user
+  app.get('/api/walter/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const status = req.query.status as string | undefined;
+      const search = req.query.search as string | undefined;
+      
+      // If searching, fetch ALL chats (including archived) for comprehensive results
+      let chats = await storage.getWalterChats(userId, search ? undefined : status);
+      
+      // Full-text search across chat titles and messages (all messages, not limited)
+      if (search && search.trim()) {
+        const searchLower = search.toLowerCase();
+        const matchingChatIds = new Set<string>();
+        
+        // Search in titles
+        chats.forEach(chat => {
+          if (chat.title.toLowerCase().includes(searchLower)) {
+            matchingChatIds.add(chat.id);
+          }
+        });
+        
+        // Search in message contents (fetch all messages, no limit)
+        for (const chat of chats) {
+          if (!matchingChatIds.has(chat.id)) {
+            const messages = await storage.getWalterChatLogs(chat.id, 10000); // Increased limit for comprehensive search
+            const hasMatch = messages.some(msg => 
+              msg.content.toLowerCase().includes(searchLower)
+            );
+            if (hasMatch) {
+              matchingChatIds.add(chat.id);
+            }
+          }
+        }
+        
+        chats = chats.filter(chat => matchingChatIds.has(chat.id));
+      }
+      
+      res.json({ ok: true, chats });
+    } catch (error: any) {
+      console.error('[Walter] Error fetching chats:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // GET specific Walter chat with messages
+  app.get('/api/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      
+      const chat = await storage.getWalterChatById(id);
+      
+      if (!chat) {
+        return res.status(404).json({ ok: false, error: 'Chat not found' });
+      }
+      
+      if (chat.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      // Get user's Walter memory depth setting for context windowing
+      const settings = await storage.getSettings(userId);
+      const memoryDepth = settings?.walterMemoryDepth || 20;
+      
+      // Apply context windowing: return only last N messages
+      const messages = await storage.getWalterChatLogs(id, memoryDepth);
+      
+      // If this is an approval thread, fetch the full approval data (not just pending)
+      let approval = null;
+      if (chat.isApprovalThread && chat.approvalId) {
+        // Fetch approval with any status (pending, approved, rejected)
+        const allApprovals = await storage.getPendingApprovals(userId); // Gets all approvals
+        approval = allApprovals.find(a => a.id === chat.approvalId) || null;
+      }
+      
+      res.json({ ok: true, chat, messages, approval });
+    } catch (error: any) {
+      console.error('[Walter] Error fetching chat:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // POST create new Walter chat
+  app.post('/api/walter/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { title } = req.body;
+      
+      const chat = await storage.createWalterChat({
+        userId,
+        title: title || 'New Chat',
+        status: 'active',
+        isApprovalThread: false,
+        messageCount: 0,
+        lastMessageAt: new Date(),
+      });
+      
+      console.log(`[Walter] Created new chat ${chat.id} for user ${userId}`);
+      
+      res.json({ ok: true, chat });
+    } catch (error: any) {
+      console.error('[Walter] Error creating chat:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // PATCH update Walter chat (archive, rename, etc.)
+  app.patch('/api/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const { title, status, archivedAt } = req.body;
+      
+      const chat = await storage.getWalterChatById(id);
+      
+      if (!chat) {
+        return res.status(404).json({ ok: false, error: 'Chat not found' });
+      }
+      
+      if (chat.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (status !== undefined) updates.status = status;
+      if (archivedAt !== undefined) updates.archivedAt = archivedAt;
+      
+      const updated = await storage.updateWalterChat(id, updates);
+      
+      console.log(`[Walter] Updated chat ${id}: ${JSON.stringify(updates)}`);
+      
+      res.json({ ok: true, chat: updated });
+    } catch (error: any) {
+      console.error('[Walter] Error updating chat:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // POST send message to Walter chat
+  app.post('/api/walter/chats/:id/messages', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const { content } = req.body;
+      
+      if (!content || !content.trim()) {
+        return res.status(400).json({ ok: false, error: 'Message content is required' });
+      }
+      
+      const chat = await storage.getWalterChatById(id);
+      
+      if (!chat) {
+        return res.status(404).json({ ok: false, error: 'Chat not found' });
+      }
+      
+      if (chat.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      // Save user message
+      const userMessage = await storage.createWalterChatLog({
+        chatSessionId: id,
+        userId,
+        role: 'user',
+        content: content.trim(),
+      });
+      
+      // TODO: Send to Walter AI for processing (integrate with OpenAI or existing chat service)
+      // For now, just save a placeholder response
+      const assistantMessage = await storage.createWalterChatLog({
+        chatSessionId: id,
+        userId,
+        role: 'assistant',
+        content: "I'm processing your request...",
+        metadata: { placeholder: true },
+      });
+      
+      // Update chat metadata
+      await storage.updateWalterChat(id, {
+        messageCount: chat.messageCount + 2,
+        lastMessageAt: new Date(),
+      });
+      
+      res.json({ ok: true, userMessage, assistantMessage });
+    } catch (error: any) {
+      console.error('[Walter] Error sending message:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
 
   // ==================== Semantic Memory API (Milestone 15) ====================
   

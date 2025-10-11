@@ -19,6 +19,16 @@ import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatUTCTimeWithDate, formatLocalTimeWithDate, getTimezoneAbbr } from "@/lib/timezone";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -40,10 +50,27 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
   const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
+  const [, setLocation] = useLocation();
 
   // Fetch user settings for timezone and time format
   const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
     queryKey: ['/api/settings'],
+  });
+
+  // Fetch Walter approvals (recent 20, including resolved ones)
+  const { data: approvalsData } = useQuery({
+    queryKey: ['/api/walter/pending-approvals'],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest('GET', '/api/walter/pending-approvals');
+        // Get all approvals, sort by most recent first, take last 20
+        const allApprovals = response.approvals || [];
+        return allApprovals.slice(0, 20); // Show recent 20 approvals
+      } catch (error) {
+        return [];
+      }
+    },
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 
   // Update dual time display (UTC + Local)
@@ -276,19 +303,94 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
             </div>
           </div>
           
-          {/* Notifications */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="relative p-2 hover:bg-muted"
-            data-testid="button-notifications"
-          >
-            <Bell className="w-5 h-5 text-foreground" />
-            <Badge 
-              variant="destructive" 
-              className="absolute -top-1 -right-1 w-2 h-2 p-0 rounded-full"
-            />
-          </Button>
+          {/* Walter Approvals Notifications */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="relative p-2 hover:bg-muted"
+                data-testid="button-notifications"
+              >
+                <Bell className="w-5 h-5 text-foreground" />
+                {approvalsData && approvalsData.filter((a: any) => a.status === 'pending').length > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] p-0 px-1 text-[10px] font-semibold flex items-center justify-center rounded-full"
+                  >
+                    {approvalsData.filter((a: any) => a.status === 'pending').length}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+              <DropdownMenuLabel>Walter Approvals (Recent 20)</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {approvalsData && approvalsData.length > 0 ? (
+                <>
+                  {/* Pending approvals first */}
+                  {approvalsData.filter((a: any) => a.status === 'pending').map((approval: any) => (
+                    <DropdownMenuItem
+                      key={approval.id}
+                      onClick={() => setLocation('/walter')}
+                      className="cursor-pointer"
+                      data-testid={`approval-${approval.id}`}
+                    >
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive" className="text-xs">
+                            PENDING
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {approval.projectedRisk}% risk
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{approval.mode}</span>
+                        </div>
+                        <p className="text-sm font-medium">
+                          {approval.strategyName || approval.parameterName}
+                        </p>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                  
+                  {/* Then show recent resolved approvals */}
+                  {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => (
+                    <DropdownMenuItem
+                      key={approval.id}
+                      onClick={() => setLocation('/walter')}
+                      className="cursor-pointer opacity-70"
+                      data-testid={`approval-resolved-${approval.id}`}
+                    >
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={approval.status === 'approved' ? 'default' : 'secondary'} 
+                            className="text-xs"
+                          >
+                            {approval.status === 'approved' ? 'APPROVED' : 'REJECTED'}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {approval.projectedRisk}% risk
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{approval.mode}</span>
+                        </div>
+                        <p className="text-sm font-medium">
+                          {approval.strategyName || approval.parameterName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(approval.status === 'approved' ? approval.approvedAt! : approval.rejectedAt!).toLocaleString()}
+                        </p>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              ) : (
+                <div className="px-2 py-6 text-center">
+                  <p className="text-sm text-muted-foreground">No approvals</p>
+                </div>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

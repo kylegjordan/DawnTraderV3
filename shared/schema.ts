@@ -122,6 +122,9 @@ export const tradingSettings = pgTable("trading_settings", {
   partialFillThreshold: decimal("partial_fill_threshold", { precision: 5, scale: 2 }).default("90.00"), // % threshold
   partialFillAction: varchar("partial_fill_action", { length: 20 }).default("scale"), // 'scale' or 'catchup'
   
+  // Walter AI Assistant Settings
+  walterMemoryDepth: integer("walter_memory_depth").default(20), // Number of messages to keep in context window
+  
   // AI Opportunities Settings
   aiOpportunitiesEnabled: boolean("ai_opportunities_enabled").default(true),
   aiOpportunitiesFrequency: integer("ai_opportunities_frequency").default(60), // minutes

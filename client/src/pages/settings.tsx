@@ -71,7 +71,8 @@ export default function Settings() {
     emailNotifications: (settings as any)?.emailNotifications ?? true,
     pushNotifications: (settings as any)?.pushNotifications ?? true,
     telegramNotifications: (settings as any)?.telegramNotifications ?? false,
-    timezone: settings?.timezone || 'Asia/Dubai'
+    timezone: settings?.timezone || 'Asia/Dubai',
+    walterMemoryDepth: settings?.walterMemoryDepth || 20
   });
 
   useEffect(() => {
@@ -80,7 +81,8 @@ export default function Settings() {
         emailNotifications: (settings as any).emailNotifications ?? true,
         pushNotifications: (settings as any).pushNotifications ?? true,
         telegramNotifications: (settings as any).telegramNotifications ?? false,
-        timezone: settings.timezone || 'Asia/Dubai'
+        timezone: settings.timezone || 'Asia/Dubai',
+        walterMemoryDepth: (settings as any).walterMemoryDepth || 20
       });
     }
   }, [settings]);
@@ -249,7 +251,8 @@ export default function Settings() {
         emailNotifications: (settings as any).emailNotifications ?? true,
         pushNotifications: (settings as any).pushNotifications ?? true,
         telegramNotifications: (settings as any).telegramNotifications ?? false,
-        timezone: settings.timezone || 'Asia/Dubai'
+        timezone: settings.timezone || 'Asia/Dubai',
+        walterMemoryDepth: settings.walterMemoryDepth || 20
       });
       toast({
         title: "Reset Complete",
@@ -510,6 +513,32 @@ export default function Settings() {
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   All times will be displayed in your selected timezone
+                </p>
+              </div>
+
+              <Separator className="my-6" />
+
+              <div className="space-y-2">
+                <Label htmlFor="walter-memory-depth" className="text-sm font-medium">
+                  Walter Memory Depth
+                </Label>
+                <Select 
+                  value={String(generalFormData.walterMemoryDepth)} 
+                  onValueChange={(value) => setGeneralFormData({...generalFormData, walterMemoryDepth: parseInt(value)})}
+                >
+                  <SelectTrigger data-testid="select-walter-memory-depth">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10 messages</SelectItem>
+                    <SelectItem value="20">20 messages (Default)</SelectItem>
+                    <SelectItem value="30">30 messages</SelectItem>
+                    <SelectItem value="50">50 messages</SelectItem>
+                    <SelectItem value="100">100 messages</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Number of recent messages Walter will remember in each chat session. Older messages are stored but not shown by default.
                 </p>
               </div>
             </CardContent>
