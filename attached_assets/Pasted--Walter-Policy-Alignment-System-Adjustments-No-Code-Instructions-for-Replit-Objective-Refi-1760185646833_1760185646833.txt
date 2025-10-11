@@ -1,0 +1,138 @@
+🧠 Walter Policy Alignment & System Adjustments (No-Code Instructions for Replit)
+🎯 Objective
+
+Refine Walter’s permissions and trading-safety behavior so they fully match Kyle’s intent:
+
+Walter can freely modify strategies, guardrails, goals, and filters whenever needed to meet performance objectives.
+
+Kyle’s manual approval is only required when a requested change conflicts with preset policy constraints (e.g., risk thresholds, capital limits, or ethical rules).
+
+The kill-switch protection must automatically halt all trading on a severe loss event and require manual confirmation from Kyle to resume.
+
+The legacy GPT chat interface must be disabled or removed to avoid confusion.
+
+Kyle can still manually review or edit the approval-rule matrix inside the UI at any time.
+
+⚙️ Task 1 — Adjust Walter’s Approval Logic
+
+Goal: Allow Walter to make autonomous tactical changes, requiring approval only when conflicts arise.
+
+Instructions
+
+Update the approval-matrix logic so that:
+
+By default, all operational categories (strategies, guardrails, goals, filters) are set to “auto-execute”.
+
+Approval is only triggered if the change would:
+
+Exceed defined risk thresholds,
+
+Breach guardrail limits,
+
+Conflict with Kyle’s explicit policy entries, or
+
+Affect the kill-switch state.
+
+Ensure these conditions are clearly described in the approval-matrix editor within /settings/walter-approvals.
+
+Walter’s responses should now explicitly state when a change is blocked due to a policy rule rather than requiring blanket approval.
+
+Verification Checklist
+✅ Strategy/goal/guardrail/filter updates run automatically when safe.
+✅ Conflicting changes appear as pending with clear reason.
+✅ Matrix editor allows Kyle to review or edit policies manually.
+
+🧭 Task 2 — Surface the Approval-Matrix Settings
+
+Goal: Give Kyle a clear place in the UI to review and modify approval or policy triggers.
+
+Instructions
+
+Add a direct navigation link labeled “Approval Rules” or “Policy Matrix” under the main Settings menu.
+
+Display all current rules with toggles for:
+
+Auto-execute vs Require approval
+
+Editable thresholds (e.g., max daily loss %, max position size)
+
+Include a “Restore Defaults” button that resets to the current secure baseline.
+
+Verification Checklist
+✅ Page visible in Settings menu.
+✅ All rules listed with editable toggles.
+✅ Save and restore functions work.
+
+🔒 Task 3 — Kill-Switch Enforcement & Recovery
+
+Goal: Reinforce the safety logic exactly as Kyle described.
+
+Instructions
+
+Ensure the kill switch automatically:
+
+Monitors total portfolio drawdown.
+
+Triggers when loss ≥ defined threshold (e.g., X %).
+
+Immediately closes all open trades and prevents new ones.
+
+Walter must then:
+
+Announce: “Trading has been halted due to portfolio losses reaching the threshold.”
+
+Block any restart commands.
+
+Require Kyle’s manual confirmation or explicit voice/text approval before resuming.
+
+When Kyle approves restart, system resets the loss counter and re-enables trading.
+
+Verification Checklist
+✅ Trigger halts trading at threshold.
+✅ Walter refuses restart until manual confirmation.
+✅ Manual start (toggle or “Walter, resume trading”) works after approval.
+
+🧹 Task 4 — Remove or Disable Legacy GPT Chat
+
+Goal: Simplify the interface and avoid confusion between the main AI operator (Walter) and legacy chat modules.
+
+Instructions
+
+Identify all “GPT chat” or “AI Chat Playground” components still present.
+
+Disable their routes and sidebar entries, or remove the components entirely.
+
+Ensure Walter is the sole conversational interface for AI operations.
+
+Verification Checklist
+✅ No GPT-chat buttons or routes visible.
+✅ Only “Walter” appears in sidebar or floating icon.
+
+🔊 Task 5 — Verify Voice-to-Text Functionality
+
+Goal: Confirm that the voice-input pipeline works properly on both the main and floating Walter interfaces.
+
+Instructions
+
+Use manual microphone testing per the documented steps.
+
+Verify transcription populates text input and executes as normal.
+
+Confirm that transcribed messages follow the same command logic and approval pathways as typed ones.
+
+Verification Checklist
+✅ Mic button toggles correctly.
+✅ Speech → text transcription reliable.
+✅ Voice commands trigger correct actions.
+
+✅ Success Criteria
+
+Walter autonomously adjusts operational parameters within safe policy limits.
+
+Approval requests appear only when policy conflicts occur.
+
+Kill switch halts and locks trading until Kyle manually restarts.
+
+Legacy GPT chat fully removed.
+
+Voice-to-text verified working.
