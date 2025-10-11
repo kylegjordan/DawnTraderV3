@@ -86,6 +86,20 @@ Keep the summary under 200 words.`;
     });
     
     console.log(`✅ Chat ${chatId} summarized successfully`);
+    
+    // Dashboard notification for summarization (Phase 5.5 Task 8)
+    const AlertsService = (await import('./alerts-service')).default;
+    const user = await storage.getUserById(userId);
+    const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+    
+    await AlertsService.createAlert({
+      userId,
+      mode,
+      alertType: 'walter_chat_summary',
+      severity: 'info',
+      message: `Chat session summarized for efficiency (${messages.length} messages condensed).`,
+      metadata: { chatId, messageCount: messages.length }
+    }).catch(err => console.error('[Walter Lifecycle] Summary alert failed:', err));
   } catch (error) {
     console.error('Error summarizing chat:', error);
   }
@@ -167,6 +181,23 @@ Only extract truly valuable information. Maximum 5 memories per chat.`;
     }
     
     console.log(`✅ Extracted ${createdCount} memories from chat ${chatId}`);
+    
+    // Dashboard notification for memory extraction (Phase 5.5 Task 8)
+    if (createdCount > 0) {
+      const AlertsService = (await import('./alerts-service')).default;
+      const user = await storage.getUserById(userId);
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+      
+      await AlertsService.createAlert({
+        userId,
+        mode,
+        alertType: 'walter_memory_extraction',
+        severity: 'info',
+        message: `${createdCount} valuable memories extracted from archived chat session.`,
+        metadata: { chatId, memoryCount: createdCount }
+      }).catch(err => console.error('[Walter Lifecycle] Extraction alert failed:', err));
+    }
+    
     return createdCount;
   } catch (error) {
     console.error('Error extracting chat memories:', error);

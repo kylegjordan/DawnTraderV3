@@ -44,6 +44,22 @@ export async function createMemory(
   await storage.createWalterMemory(memory);
   console.log(`💭 Walter memory created: [${type}] importance=${importance}`);
   
+  // Dashboard notification for high-importance memories (Phase 5.5 Task 8)
+  if (importance >= 4) {
+    const AlertsService = (await import('./alerts-service')).default;
+    const user = await storage.getUserById(userId);
+    const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+    
+    await AlertsService.createAlert({
+      userId,
+      mode,
+      alertType: 'walter_memory',
+      severity: importance === 5 ? 'warning' : 'info',
+      message: `New ${importance === 5 ? 'critical' : 'important'} memory stored: ${content.substring(0, 80)}${content.length > 80 ? '...' : ''}`,
+      metadata: { type, importance, chatId }
+    }).catch(err => console.error('[Walter Memory] Alert creation failed:', err));
+  }
+  
   // Enforce memory limit (Phase 5.5 Task 7)
   await enforceMemoryLimit(userId);
 }
@@ -299,4 +315,18 @@ async function enforceMemoryLimit(userId: string): Promise<void> {
   }
   
   console.log(`🗑️ Memory limit enforced: deleted ${toDelete} oldest/least important memories (limit: ${memoryLimit})`);
+  
+  // Dashboard notification for memory limit enforcement (Phase 5.5 Task 8)
+  const AlertsService = (await import('./alerts-service')).default;
+  const user = await storage.getUserById(userId);
+  const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+  
+  await AlertsService.createAlert({
+    userId,
+    mode,
+    alertType: 'walter_memory_limit',
+    severity: 'warning',
+    message: `Memory limit reached: ${toDelete} low-priority memories archived to maintain ${memoryLimit} memory limit.`,
+    metadata: { deleted: toDelete, limit: memoryLimit }
+  }).catch(err => console.error('[Walter Memory] Limit alert creation failed:', err));
 }

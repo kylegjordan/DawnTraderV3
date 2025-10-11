@@ -5433,7 +5433,9 @@ Please:
         .limit(1);
       
       let purpose;
-      if (existing.length > 0) {
+      const isUpdate = existing.length > 0;
+      
+      if (isUpdate) {
         // Update existing purpose
         const updated = await db.update(walterPurpose)
           .set({
@@ -5455,6 +5457,21 @@ Please:
           .returning();
         purpose = created[0];
       }
+      
+      // Create dashboard notification (Phase 5.5 Task 8)
+      const AlertsService = (await import('./services/alerts-service')).default;
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      
+      await AlertsService.createAlert({
+        userId,
+        mode,
+        alertType: 'walter_purpose',
+        severity: 'info',
+        message: isUpdate 
+          ? "Walter's purpose has been updated. New guidance is now active."
+          : "Walter's purpose has been defined. AI decisions will now align with your stated objectives.",
+        metadata: { purposeLength: content.length }
+      });
       
       res.json({ ok: true, purpose });
     } catch (error: any) {
