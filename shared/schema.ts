@@ -1502,7 +1502,12 @@ export const aiOrchestratorLogs = pgTable("ai_orchestrator_logs", {
 });
 
 export const insertAIOrchestratorLogSchema = createInsertSchema(aiOrchestratorLogs).omit({ id: true, timestamp: true });
+export const updateAIOrchestratorLogSchema = z.object({
+  status: z.enum(['pending', 'approved', 'rejected', 'executed']),
+  actionTaken: z.string().nullable().optional(),
+});
 export type InsertAIOrchestratorLog = z.infer<typeof insertAIOrchestratorLogSchema>;
+export type UpdateAIOrchestratorLog = z.infer<typeof updateAIOrchestratorLogSchema>;
 export type AIOrchestratorLog = typeof aiOrchestratorLogs.$inferSelect;
 
 // Context-specific chat history (for Goals, Guardrails, Screener, Strategies tabs)

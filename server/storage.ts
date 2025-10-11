@@ -37,6 +37,7 @@ import {
   goalAnalysisHistoryLive,
   goalAnalysisHistoryPaper,
   contextChats,
+  aiOrchestratorLogs,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -76,6 +77,8 @@ import {
   type AITransparencyLog,
   type InsertContextChat,
   type ContextChat,
+  type AIOrchestratorLog,
+  type InsertAIOrchestratorLog,
   type InsertAITransparencyLog,
   type KillSwitchEvent,
   type InsertKillSwitchEvent,
@@ -211,6 +214,13 @@ export interface IStorage {
   // Context-specific chats (Goals, Guardrails, Screener, Strategies)
   getContextChats(userId: string, context: string): Promise<ContextChat[]>;
   saveContextChat(chat: InsertContextChat): Promise<ContextChat>;
+  
+  // AI Orchestrator Logs
+  createOrchestratorLog(log: InsertAIOrchestratorLog): Promise<AIOrchestratorLog>;
+  getOrchestratorLogs(userId: string, limit?: number): Promise<AIOrchestratorLog[]>;
+  getOrchestratorLogsByCategory(userId: string, category: string, limit?: number): Promise<AIOrchestratorLog[]>;
+  getOrchestratorLogsByStatus(userId: string, status: string, limit?: number): Promise<AIOrchestratorLog[]>;
+  updateOrchestratorLog(id: number, updates: Partial<AIOrchestratorLog>): Promise<AIOrchestratorLog>;
   
   // AI Chat Logs - cost tracking
   createChatLog(log: InsertAIChatLog): Promise<AIChatLog>;
@@ -978,6 +988,57 @@ export class DatabaseStorage implements IStorage {
 
   async saveContextChat(chat: InsertContextChat): Promise<ContextChat> {
     const [result] = await db.insert(contextChats).values(chat).returning();
+    return result;
+  }
+
+  // AI Orchestrator Logs
+  async createOrchestratorLog(log: InsertAIOrchestratorLog): Promise<AIOrchestratorLog> {
+    const [result] = await db.insert(aiOrchestratorLogs).values(log).returning();
+    return result;
+  }
+
+  async getOrchestratorLogs(userId: string, limit: number = 50): Promise<AIOrchestratorLog[]> {
+    return await db
+      .select()
+      .from(aiOrchestratorLogs)
+      .where(eq(aiOrchestratorLogs.userId, userId))
+      .orderBy(desc(aiOrchestratorLogs.timestamp))
+      .limit(limit);
+  }
+
+  async getOrchestratorLogsByCategory(userId: string, category: string, limit: number = 50): Promise<AIOrchestratorLog[]> {
+    return await db
+      .select()
+      .from(aiOrchestratorLogs)
+      .where(and(
+        eq(aiOrchestratorLogs.userId, userId),
+        eq(aiOrchestratorLogs.category, category)
+      ))
+      .orderBy(desc(aiOrchestratorLogs.timestamp))
+      .limit(limit);
+  }
+
+  async getOrchestratorLogsByStatus(userId: string, status: string, limit: number = 50): Promise<AIOrchestratorLog[]> {
+    return await db
+      .select()
+      .from(aiOrchestratorLogs)
+      .where(and(
+        eq(aiOrchestratorLogs.userId, userId),
+        eq(aiOrchestratorLogs.status, status)
+      ))
+      .orderBy(desc(aiOrchestratorLogs.timestamp))
+      .limit(limit);
+  }
+
+  async updateOrchestratorLog(id: number, updates: Partial<AIOrchestratorLog>): Promise<AIOrchestratorLog> {
+    // Remove timestamp from updates to preserve original creation time
+    const { timestamp, ...safeUpdates } = updates;
+    
+    const [result] = await db
+      .update(aiOrchestratorLogs)
+      .set(safeUpdates)
+      .where(eq(aiOrchestratorLogs.id, id))
+      .returning();
     return result;
   }
 

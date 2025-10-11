@@ -5130,6 +5130,129 @@ Please:
     }
   });
 
+  // ==================== AI Orchestrator / Command Center API ====================
+  
+  // Get latest telemetry snapshot
+  app.get('/api/orchestrator/telemetry', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aiOrchestrator } = await import('./orchestrator/orchestrator');
+      const telemetry = await aiOrchestrator.getLatestTelemetry();
+      
+      if (!telemetry) {
+        return res.status(404).json({ error: 'No telemetry data available' });
+      }
+      
+      res.json(telemetry);
+    } catch (error: any) {
+      console.error('[Orchestrator] Error fetching telemetry:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get latest AI analysis
+  app.get('/api/orchestrator/analysis', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aiOrchestrator } = await import('./orchestrator/orchestrator');
+      const analysis = await aiOrchestrator.getLatestAnalysis();
+      
+      if (!analysis) {
+        return res.status(404).json({ error: 'No analysis data available' });
+      }
+      
+      res.json(analysis);
+    } catch (error: any) {
+      console.error('[Orchestrator] Error fetching analysis:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trigger immediate diagnostic analysis (admin only)
+  app.post('/api/orchestrator/analyze', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aiOrchestrator } = await import('./orchestrator/orchestrator');
+      await aiOrchestrator.triggerImmediateAnalysis();
+      
+      res.json({ success: true, message: 'Analysis triggered successfully' });
+    } catch (error: any) {
+      console.error('[Orchestrator] Error triggering analysis:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get orchestrator logs
+  app.get('/api/orchestrator/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const category = req.query.category as string;
+      const status = req.query.status as string;
+
+      let logs;
+      if (category) {
+        logs = await storage.getOrchestratorLogsByCategory(userId, category, limit);
+      } else if (status) {
+        logs = await storage.getOrchestratorLogsByStatus(userId, status, limit);
+      } else {
+        logs = await storage.getOrchestratorLogs(userId, limit);
+      }
+
+      res.json({ logs });
+    } catch (error: any) {
+      console.error('[Orchestrator] Error fetching logs:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create orchestrator log (admin only - for storing AI recommendations)
+  app.post('/api/orchestrator/logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Validate request body using Zod schema
+      const { insertAIOrchestratorLogSchema } = await import('@shared/schema');
+      const validated = insertAIOrchestratorLogSchema.parse({
+        userId,
+        category: req.body.category,
+        recommendation: req.body.recommendation,
+        urgencyLevel: req.body.urgencyLevel || 'low',
+        metadata: req.body.metadata || null,
+        status: 'pending',
+        actionTaken: null
+      });
+
+      const log = await storage.createOrchestratorLog(validated);
+
+      res.json({ success: true, log });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      }
+      console.error('[Orchestrator] Error creating log:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update orchestrator log (admin only - approve/reject recommendation)
+  app.patch('/api/orchestrator/logs/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validate request body using Zod schema
+      const { updateAIOrchestratorLogSchema } = await import('@shared/schema');
+      const validated = updateAIOrchestratorLogSchema.parse(req.body);
+
+      const log = await storage.updateOrchestratorLog(parseInt(id), validated);
+
+      res.json({ success: true, log });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      }
+      console.error('[Orchestrator] Error updating log:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 

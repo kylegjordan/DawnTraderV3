@@ -410,6 +410,14 @@ Format your response as JSON with this structure:
 
   async triggerImmediateAnalysis(): Promise<void> {
     console.log('[AI Orchestrator] Manual diagnostic triggered');
+    
+    if (!this.openai) {
+      console.warn('[AI Orchestrator] OpenAI API key not configured, skipping AI analysis');
+      // Still generate telemetry without AI analysis
+      await this.generateTelemetry();
+      return;
+    }
+    
     await this.generateTelemetry();
   }
 }
