@@ -4885,6 +4885,53 @@ Please:
       }
 
       const prev = await storage.getStrategySettings({ userId, mode, strategy });
+      
+      // RISK EVALUATION LOGIC (Phase 5.4 Part 2)
+      // Calculate projected portfolio risk
+      const newParams = parse.data as any;
+      const oldParams = prev?.params as any || {};
+      
+      // Risk calculation: maxConcurrentPositions × riskPerTrade = total portfolio risk
+      const oldRisk = (oldParams.maxConcurrentPositions || 0) * (oldParams.riskPerTrade || 0);
+      const newRisk = (newParams.maxConcurrentPositions || 0) * (newParams.riskPerTrade || 0);
+      const projectedRisk = newRisk; // Total portfolio exposure
+      
+      // Risk threshold: 20% of portfolio
+      const RISK_APPROVAL_THRESHOLD = 20.0;
+      
+      if (projectedRisk >= RISK_APPROVAL_THRESHOLD) {
+        // Create approval record instead of executing immediately
+        const approval = await storage.createWalterPendingApproval({
+          userId,
+          strategyName: strategy,
+          parameterName: 'strategy_parameters',
+          currentValue: oldParams,
+          proposedValue: newParams,
+          projectedRisk: String(projectedRisk),
+          riskDetails: {
+            oldMaxPositions: oldParams.maxConcurrentPositions || 0,
+            newMaxPositions: newParams.maxConcurrentPositions || 0,
+            oldRiskPerTrade: oldParams.riskPerTrade || 0,
+            newRiskPerTrade: newParams.riskPerTrade || 0,
+            oldTotalRisk: oldRisk,
+            newTotalRisk: newRisk,
+            threshold: RISK_APPROVAL_THRESHOLD,
+          },
+          status: 'pending',
+        });
+        
+        console.log(`[Walter Approval] Created approval ${approval.id} for ${strategy} (risk: ${projectedRisk}%)`);
+        
+        return res.json({ 
+          ok: true, 
+          approvalRequired: true,
+          approvalId: approval.id,
+          projectedRisk,
+          message: `Change requires approval: projected portfolio risk is ${projectedRisk}% (threshold: ${RISK_APPROVAL_THRESHOLD}%)`,
+        });
+      }
+      
+      // Risk < 20%: Execute immediately (existing behavior)
       const saved = await storage.upsertStrategySettings({
         userId,
         mode,
@@ -4907,7 +4954,7 @@ Please:
       // Hot-reload into engine
       await EngineSettingsBus.publish({ userId, mode });
 
-      return res.json({ ok: true, saved });
+      return res.json({ ok: true, saved, approvalRequired: false });
     } catch (error: any) {
       console.error('Error saving strategy settings:', error);
       res.status(500).json({ ok: false, error: error.message });
