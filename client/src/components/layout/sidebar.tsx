@@ -33,17 +33,16 @@ interface SidebarProps {
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Walter", href: "/walter", icon: Bot },
   { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
-  { name: "Goals Engine", href: "/goals-engine", icon: Target },
+  { name: "Walter", href: "/walter", icon: Bot },
+  { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "Trading", href: "/active-trades", icon: BarChart3 },
-  { name: "Briefings", href: "/briefings", icon: Newspaper },
-  { name: "GPT Chats", href: "/analysis", icon: MessageSquare },
   { name: "Watchlists", href: "/watchlist", icon: Eye },
   { name: "Search and Analysis", href: "/search", icon: Search },
+  { name: "Goals Engine", href: "/goals-engine", icon: Target },
+  { name: "Briefings", href: "/briefings", icon: Newspaper },
   { name: "Reporting", href: "/reports", icon: FileText },
   { name: "Systems Monitoring", href: "/systems", icon: Activity },
-  { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "Settings", href: "/settings", icon: Settings },
   { name: "Admin Panel", href: "/admin", icon: Shield, adminOnly: true },
 ];

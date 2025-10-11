@@ -18,7 +18,6 @@ import { TradingModeProvider } from "@/contexts/trading-mode-context";
 import { ensureValidToken } from "@/lib/auth";
 import WalterFloatingAssistant from "@/components/walter-floating-assistant";
 
-const Analysis = lazy(() => import("@/pages/analysis"));
 const Settings = lazy(() => import("@/pages/settings"));
 const WalterApprovals = lazy(() => import("@/pages/walter-approvals"));
 const WalterPage = lazy(() => import("@/pages/walter"));
@@ -92,7 +91,6 @@ function getPageContext(location: string): string {
     '/reports': 'Reports',
     '/daily-brief': 'Daily Brief',
     '/briefings': 'Briefings',
-    '/analysis': 'Analysis',
     '/goals-engine': 'Goals Engine',
     '/systems': 'Systems',
     '/ai-transparency': 'AI Transparency',
@@ -167,7 +165,6 @@ function Router() {
               <Route path="/reports" component={ReportsPage} />
               <Route path="/daily-brief" component={DailyBriefPage} />
               <Route path="/briefings" component={BriefingsPage} />
-              <Route path="/analysis" component={Analysis} />
               <Route path="/goals-engine" component={GoalsEnginePage} />
               <Route path="/systems" component={SystemsPage} />
               <Route path="/ai-transparency" component={AITransparencyPage} />
