@@ -10,6 +10,10 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 export default function AITransparencyPage() {
   const [activeTab, setActiveTab] = useState("automation-logs");
   const { mode } = useTradingMode();
+  
+  // Check if current user is admin
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const isAdmin = currentUser.isAdmin || false;
 
   // Fetch transparency logs (mode-isolated - mode in URL triggers cache invalidation)
   const { data: transparencyData, isLoading: logsLoading } = useQuery<{ ok: boolean; logs: any[] }>({
@@ -121,6 +125,47 @@ export default function AITransparencyPage() {
           <p className="text-sm text-muted-foreground mt-1">Monitor automated scheduler activity, learning adjustments, semantic insights, and system health</p>
         </div>
       </div>
+
+      {/* Debug Panel (Admin Only) */}
+      {isAdmin && (
+        <Card className="mb-6 border-blue-500/50" data-testid="card-debug-panel">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Terminal className="w-4 h-4" />
+              Debug Panel (Admin Only)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="grid grid-cols-3 gap-4 text-xs">
+              <div>
+                <span className="text-muted-foreground">Last Fetch:</span>{" "}
+                <span className="font-mono" data-testid="text-debug-timestamp">
+                  {orchestratorLogsData ? new Date().toLocaleTimeString() : 'N/A'}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Logs Fetched:</span>{" "}
+                <span className="font-mono font-semibold" data-testid="text-debug-count">
+                  {orchestratorLogsData?.logs?.length || 0}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Status:</span>{" "}
+                <Badge 
+                  variant={orchestratorLogsLoading ? "secondary" : orchestratorLogsData ? "default" : "destructive"}
+                  className="text-xs"
+                  data-testid="badge-debug-status"
+                >
+                  {orchestratorLogsLoading ? "Loading" : orchestratorLogsData ? "Connected" : "Error"}
+                </Badge>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Endpoint: <code className="bg-muted px-1 py-0.5 rounded">/api/orchestrator/logs?limit=50</code>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -235,8 +280,8 @@ export default function AITransparencyPage() {
             <CardContent>
               {orchestratorLogsLoading ? (
                 <div className="text-sm text-muted-foreground">Loading orchestrator logs...</div>
-              ) : orchestratorLogs.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No orchestrator activity found</div>
+              ) : !orchestratorLogsData || !orchestratorLogsData.logs || orchestratorLogs.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No orchestrator activity found or AI activity data is unavailable.</div>
               ) : (
                 <div className="space-y-3">
                   {orchestratorLogs.map((log: any) => (
@@ -260,39 +305,28 @@ export default function AITransparencyPage() {
                           <Badge variant="outline" className="text-xs" data-testid={`badge-category-${log.id}`}>
                             {log.category}
                           </Badge>
+                          {log.status && (
+                            <Badge 
+                              variant={
+                                log.status === 'approved' ? 'default' : 
+                                log.status === 'rejected' ? 'destructive' : 
+                                log.status === 'applied' ? 'outline' : 
+                                'secondary'
+                              }
+                              data-testid={`badge-status-${log.id}`}
+                            >
+                              {log.status}
+                            </Badge>
+                          )}
                         </div>
                         <span className="text-xs text-muted-foreground" data-testid={`text-orchestrator-timestamp-${log.id}`}>
                           {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
                         </span>
                       </div>
                       
-                      <p className="text-sm text-foreground mb-2" data-testid={`text-orchestrator-message-${log.id}`}>
-                        {log.message}
+                      <p className="text-sm text-foreground" data-testid={`text-orchestrator-recommendation-${log.id}`}>
+                        {log.recommendation}
                       </p>
-                      
-                      {log.aiInsight && (
-                        <div className="mt-2 p-3 bg-muted/50 rounded-md">
-                          <p className="text-xs text-muted-foreground mb-1">AI Insight:</p>
-                          <p className="text-sm text-foreground" data-testid={`text-ai-insight-${log.id}`}>
-                            {log.aiInsight}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {log.status && (
-                        <Badge 
-                          variant={
-                            log.status === 'approved' ? 'default' : 
-                            log.status === 'rejected' ? 'destructive' : 
-                            log.status === 'applied' ? 'outline' : 
-                            'secondary'
-                          }
-                          className="mt-2"
-                          data-testid={`badge-status-${log.id}`}
-                        >
-                          {log.status}
-                        </Badge>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -485,7 +519,7 @@ export default function AITransparencyPage() {
                           >
                             <div className="flex items-center justify-between mb-2">
                               <Badge variant="secondary" data-testid={`badge-strategy-${strategy.strategyId}`}>
-                                {strategy.strategyId.replace(/_/g, ' ').toUpperCase()}
+                                {strategy.strategyId?.replace(/_/g, ' ').toUpperCase() || 'Unknown'}
                               </Badge>
                               <span className="text-xs text-muted-foreground" data-testid={`text-strategy-count-${strategy.strategyId}`}>
                                 {strategy.count} signals
