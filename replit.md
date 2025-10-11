@@ -40,3 +40,12 @@ PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, tra
 - **OpenAI GPT-4o / GPT-4o mini API**: Powers AI analysis, conversational assistance, and AI Opportunities generation.
 - **Neon Database**: Serverless PostgreSQL database.
 - **WebSocket Infrastructure**: Custom WebSocket server for real-time data push.
+
+## Database Status
+
+### Active Users
+- **kylegjordan** (ID: 14e0809e-3ca8-413d-878f-c55f9d837fae): Admin user (kylegjordan@gmail.com)
+- **testuser123** (ID: 6c591801-3072-431d-b192-30aaf426f15e): Test user (test@example.com)
+
+### Database Cleanup Notes
+Successfully cleaned up database: All development/test users removed except for the two required accounts. Cleanup included deleting thousands of related records across all dependent tables (ai_opportunities, ai_opportunity_runs, ai_orchestrator_logs, daily_briefs, trading_settings, learning_sources, context_chats, ai_conversations, ai_reports, watchlist_pairs, trades, ai_audit_log, filter_calibration_log).
