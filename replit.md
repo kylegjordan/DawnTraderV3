@@ -81,11 +81,18 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user 
 - **AI Orchestrator & Command Center**: Autonomous system monitoring with GPT-4o-powered insights and admin-controlled recommendations.
   - **Telemetry Collection**: 5-minute interval system metrics (CPU, memory, uptime), trading performance (P/L, win rate, ROI), AI activity (learning cycles, opportunities, adjustments)
   - **AI Analysis**: GPT-4o evaluates telemetry data for anomalies, optimizations, and recommendations with urgency levels (low/medium/high/critical)
-  - **Recommendation Workflow**: Admin approval required for all AI suggestions before application
+  - **Continuous Learning Cycle**: Every 5 minutes, GPT-4o analyzes system telemetry and automatically creates recommendation logs (category='ai_insight', status='pending') for admin approval
+  - **Recommendation Workflow**: All AI-generated recommendations appear in Command Center Logs tab for human-in-the-loop approval
+    - Approve: Executes configuration change via /api/orchestrator/update* endpoints based on recommendation metadata
+    - Reject: Updates log status without executing changes
+  - **Approval Endpoints** (admin-only):
+    - POST /api/orchestrator/updateGoal - Updates goal configuration when approved
+    - POST /api/orchestrator/updateGuardrail - Updates guardrail settings when approved
+    - POST /api/orchestrator/updateStrategy - Updates strategy parameters when approved
   - **Command Center UI** (admin-only at `/command-center`):
     - Overview Tab: Live system health, trading performance, AI activity metrics
     - AI Analysis Tab: Anomalies, optimizations, and strategic recommendations
-    - Logs Tab: Recommendation approval/rejection workflow with timestamp tracking
+    - Logs/Recommendations Tab: Human-in-the-loop approval/rejection workflow with real-time execution
     - AI Chat Tab: Conversational interface for system queries
   - **Security**: All orchestrator endpoints protected by `requireAdmin` middleware with Zod validation
   - **Data Storage**: `ai_orchestrator_logs` table tracks all recommendations with status (pending/approved/rejected/applied)

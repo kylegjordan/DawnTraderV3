@@ -333,17 +333,23 @@ System Telemetry:
 ${JSON.stringify(telemetry, null, 2)}
 
 Provide a structured analysis with:
-1. Anomalies: Any unusual patterns, errors, or concerning metrics
-2. Optimizations: Opportunities to improve performance or efficiency
-3. Recommendations: Specific actions to take, with rationale
-4. Urgency Level: low, medium, or high
+1. Anomalies: Any unusual patterns, errors, or concerning metrics (include severity level)
+2. Optimizations: Opportunities to improve performance or efficiency (include impact level)
+3. Recommendations: Specific actionable recommendations with rationale (include urgencyLevel, action, and rationale for each)
+4. Overall Urgency Level: low, medium, high, or critical
 
 Format your response as JSON with this structure:
 {
-  "anomalies": ["description of anomaly 1", "description of anomaly 2"],
-  "optimizations": ["optimization suggestion 1", "optimization suggestion 2"],
-  "recommendations": ["recommendation 1", "recommendation 2"],
-  "urgencyLevel": "low|medium|high"
+  "anomalies": [
+    {"severity": "high|medium|low", "message": "description of anomaly"}
+  ],
+  "optimizations": [
+    {"impact": "high|medium|low", "recommendation": "optimization suggestion"}
+  ],
+  "recommendations": [
+    {"urgencyLevel": "critical|high|medium|low", "action": "specific action to take", "rationale": "why this action is recommended"}
+  ],
+  "urgencyLevel": "critical|high|medium|low"
 }`;
 
       const completion = await this.openai.chat.completions.create({
@@ -357,6 +363,22 @@ Format your response as JSON with this structure:
       console.log(`[AI Orchestrator] OpenAI analysis received (${latency}ms)`);
 
       const analysisData = JSON.parse(completion.choices[0].message.content || '{}');
+      
+      // Enhanced analysis with structured recommendations
+      interface StructuredRecommendation {
+        severity: string;
+        message: string;
+      }
+      interface StructuredOptimization {
+        impact: string;
+        recommendation: string;
+      }
+      interface StructuredAIRecommendation {
+        urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
+        action: string;
+        rationale: string;
+      }
+
       const analysis: OrchestratorAnalysis = {
         timestamp: new Date().toISOString(),
         anomalies: analysisData.anomalies || [],
@@ -372,6 +394,48 @@ Format your response as JSON with this structure:
       await fs.writeFile(logPath, JSON.stringify(analysis, null, 2));
 
       console.log(`[AI Orchestrator] Analysis saved to ${logPath}`);
+
+      // Save recommendations to orchestrator logs for approval workflow
+      console.log(`[AI Orchestrator] Checking recommendations: ${analysis.recommendations?.length || 0} found`);
+      
+      if (analysis.recommendations && analysis.recommendations.length > 0) {
+        console.log(`[AI Orchestrator] Getting users for recommendation logging...`);
+        const users = await storage.getAllUsers();
+        console.log(`[AI Orchestrator] Found ${users.length} users`);
+        
+        if (users.length > 0) {
+          const adminUser = users.find(u => u.isAdmin) || users[0];
+          console.log(`[AI Orchestrator] Using user ${adminUser.id} for recommendations`);
+          
+          for (const recommendation of analysis.recommendations) {
+            try {
+              const rec = recommendation as any;
+              const recommendationText = typeof rec === 'string' ? rec : (rec.action || JSON.stringify(rec));
+              const recUrgency = (typeof rec === 'object' && rec.urgencyLevel) ? rec.urgencyLevel : analysis.urgencyLevel;
+              
+              await storage.createOrchestratorLog({
+                userId: adminUser.id,
+                category: 'ai_insight',
+                recommendation: recommendationText,
+                urgencyLevel: recUrgency,
+                status: 'pending',
+                actionTaken: null,
+                metadata: {
+                  source: 'gpt4o_analysis',
+                  timestamp: analysis.timestamp,
+                  rationale: typeof rec === 'object' && rec ? rec.rationale : null
+                }
+              });
+              
+              console.log(`[AI Orchestrator] Created recommendation log: ${recommendationText.substring(0, 50)}...`);
+            } catch (error) {
+              console.error('[AI Orchestrator] Error creating recommendation log:', error);
+            }
+          }
+          
+          console.log(`[AI Orchestrator] Created ${analysis.recommendations.length} recommendation logs for approval`);
+        }
+      }
 
       return analysis;
     } catch (error: any) {
