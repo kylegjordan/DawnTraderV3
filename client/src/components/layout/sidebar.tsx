@@ -17,7 +17,6 @@ import {
   MessageSquare,
   Search,
   Sparkles,
-  Shield,
   Terminal,
   Bot
 } from "lucide-react";
@@ -43,7 +42,6 @@ const navigation = [
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "System Monitoring", href: "/systems", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
-  { name: "Admin Panel", href: "/admin", icon: Shield, adminOnly: true },
 ];
 
 export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {

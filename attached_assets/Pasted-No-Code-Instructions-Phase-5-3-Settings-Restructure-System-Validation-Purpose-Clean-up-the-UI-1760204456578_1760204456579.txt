@@ -1,0 +1,149 @@
+No-Code Instructions — Phase 5.3: Settings Restructure + System Validation
+
+Purpose: Clean up the UI, merge Admin Panel into Settings, finalize the Walter Approvals structure, and verify all system-level diagnostics and alert logic.
+
+🧭 Step 1 — Sidebar Cleanup
+
+Remove Admin Panel completely from the sidebar navigation.
+
+Confirm there are no routes, buttons, or links pointing to /admin.
+
+The final sidebar order should remain:
+
+Dashboard  
+Walter  
+Trading  
+Briefings  
+Goals Engine  
+Watch List  
+Search and Analysis  
+Command Center  
+AI Transparency  
+System Monitoring  
+Settings
+
+⚙️ Step 2 — Restructure the Settings Page
+
+Convert the /settings page into a tabbed interface with three tabs:
+
+Tab 1 — General Settings (default)
+
+Keep the Notification Settings (email / push / Telegram).
+
+Include the Time Zone Selector.
+
+Heading:
+
+“General Preferences — Manage your notification options and regional settings.”
+
+Tab 2 — Walter Approvals
+
+Move all existing approval toggles and the risk-threshold field here.
+
+Heading:
+
+“Walter Approvals — Manage what actions Walter can perform automatically and where approval is required.”
+
+Retain all toggle functionality:
+
+Start Live Trading
+
+Adjust Goals
+
+Update Filters
+
+Modify Strategy Variables
+
+Risk Threshold Adjustments
+
+Paper Trading
+
+Threshold logic: if a change would exceed the manually set portfolio-loss limit, prompt for approval.
+
+Tab 3 — Users
+
+Move all Admin Panel user-management features here.
+
+Display current user list (name, email, role).
+
+Allow add / remove / update users.
+
+Visible only to Kyle G. Jordan (admin).
+
+Heading:
+
+“User Management — Add, remove, or modify system users.”
+
+🧱 Step 3 — Tab Navigation & Behavior
+
+Use the same <Tabs> UI component pattern as in Watch List or Command Center.
+
+Default open tab = General Settings.
+
+Switch tabs dynamically — no page reload.
+
+Persist the last-opened tab in localStorage.
+
+Validation checklist
+
+Sidebar = no Admin Panel.
+
+/settings shows three tabs.
+
+General = notifications + timezone.
+
+Walter Approvals = all toggles + threshold.
+
+Users = user management (admin-only).
+
+URL stays /settings regardless of active tab.
+
+No console or routing errors.
+
+🧠 Step 4 — Phase 5.3 System Validation & Stress Tests
+
+Once the UI is updated, run a full validation to ensure backend and monitoring systems are stable:
+
+Normal Load: No alerts triggered.
+
+High CPU Test: Expect critical alert + Walter verbal notice.
+
+API Latency Simulation: Expect warning alert.
+
+Risk Threshold Breach: Approval required alert appears.
+
+Acknowledge / Mute: Verify UI + DB sync.
+
+Reload: Acknowledged alerts remain hidden.
+
+Monitoring Refresh: Metrics update every minute.
+
+✅ If all pass → Phase 5.3 validated.
+
+🗂 Step 5 — Help & Tutorial Overlay
+
+Add a lightweight contextual help system:
+
+Add a small “?” icon in the Settings page header.
+
+On click, open a tooltip / popover explaining each tab:
+
+General Settings: Notifications and regional preferences.
+
+Walter Approvals: Automation permissions and threshold rules.
+
+Users: System user management.
+
+Allow closing or dismissing overlay persistently.
+
+✅ Completion Criteria
+
+Sidebar = clean (Admin Panel removed).
+
+Settings = three fully functional tabs.
+
+All alerts and diagnostic logic confirmed working.
+
+No auth or UI errors.
+
+Help overlay operational.
