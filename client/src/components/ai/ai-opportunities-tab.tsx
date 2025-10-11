@@ -164,10 +164,10 @@ export function AIOpportunitiesTab() {
       });
     },
     onSuccess: (conversation) => {
-      setLocation(`/analysis?conversation_id=${conversation.id}#chat`);
+      setLocation(`/walter?conversation_id=${conversation.id}`);
       toast({
         title: "Chat opened",
-        description: "Opening conversation about this opportunity",
+        description: "Opening Walter to discuss this opportunity",
       });
     },
     onError: () => {

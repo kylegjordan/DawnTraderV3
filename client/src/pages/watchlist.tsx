@@ -12,7 +12,7 @@ import { useState } from "react";
 import { Plus, Trash2, TrendingUp, TrendingDown, Activity, Sparkles, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WatchlistPair } from "@/lib/types";
-import { useQuery } from "@tanstack/react-query";
+import { AIOpportunitiesTab } from "@/components/ai/ai-opportunities-tab";
 
 function WatchlistCard({ pair, onRemove }: { pair: WatchlistPair; onRemove: (id: string) => void }) {
   const currentPrice = parseFloat(pair.currentPrice);
@@ -139,12 +139,6 @@ export default function WatchlistPage() {
   const [quoteCurrency, setQuoteCurrency] = useState('');
   const [activeTab, setActiveTab] = useState("user-watchlist");
 
-  // Fetch AI opportunities - must be before any early returns to comply with React hooks rules
-  const { data: aiOpportunities = [], isLoading: aiOpportunitiesLoading } = useQuery<any[]>({
-    queryKey: ['/api/ai-opportunities'],
-    refetchInterval: 300000, // 5 minutes
-  });
-
   const handleAddPair = async () => {
     if (!symbol || !baseCurrency || !quoteCurrency) {
       toast({
@@ -259,68 +253,7 @@ export default function WatchlistPage() {
         </TabsList>
 
         <TabsContent value="ai-opportunities" className="mt-6">
-          {aiOpportunitiesLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Card key={i}>
-                  <CardContent className="p-4">
-                    <Skeleton className="h-32 w-full" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : aiOpportunities.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Sparkles className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                <h3 className="text-lg font-semibold mb-2">No AI Opportunities</h3>
-                <p className="text-muted-foreground">
-                  AI-generated trading opportunities will appear here
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {aiOpportunities.slice(0, 12).map((opp: any) => (
-                <Card 
-                  key={opp.id} 
-                  className="hover:border-primary/50 transition-colors"
-                  data-testid={`ai-opportunity-${opp.id}`}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs"
-                        data-testid={`badge-type-${opp.id}`}
-                      >
-                        {opp.type}
-                      </Badge>
-                      <Badge 
-                        variant="secondary" 
-                        className="text-xs"
-                        data-testid={`badge-probability-${opp.id}`}
-                      >
-                        {opp.probabilityScore}%
-                      </Badge>
-                    </div>
-                    <h4 
-                      className="font-semibold text-lg mb-2"
-                      data-testid={`text-symbol-${opp.id}`}
-                    >
-                      {opp.symbol}
-                    </h4>
-                    <p 
-                      className="text-sm text-muted-foreground line-clamp-2"
-                      data-testid={`text-notes-${opp.id}`}
-                    >
-                      {opp.notes}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+          <AIOpportunitiesTab />
         </TabsContent>
 
         <TabsContent value="user-watchlist" className="mt-6">
