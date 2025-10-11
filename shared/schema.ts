@@ -30,6 +30,7 @@ export const opportunityStatusEnum = pgEnum("opportunity_status", ["new", "watch
 export const dailyBriefStatusEnum = pgEnum("daily_brief_status", ["in_progress", "final"]);
 export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected", "cancelled"]);
 export const walterChatStatusEnum = pgEnum("walter_chat_status", ["active", "archived"]);
+export const walterMemoryTypeEnum = pgEnum("walter_memory_type", ["observation", "decision", "result", "goal", "lesson"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -555,6 +556,36 @@ export const walterApprovalsAudit = pgTable("walter_approvals_audit", {
   approvalIdx: index("walter_approvals_audit_approval_idx").on(table.approvalId),
   userIdx: index("walter_approvals_audit_user_idx").on(table.userId),
   timestampIdx: index("walter_approvals_audit_timestamp_idx").on(table.timestamp),
+}));
+
+// Walter purpose (Phase 5.5 - stores Walter's guiding purpose statement)
+export const walterPurpose = pgTable("walter_purpose", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(), // One purpose per user (enforced via unique index)
+  content: text("content").notNull(), // The purpose statement
+  updatedBy: varchar("updated_by").references(() => users.id), // Who last updated it
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userUniqueIdx: uniqueIndex("walter_purpose_user_unique_idx").on(table.userId),
+}));
+
+// Walter memory (Phase 5.5 - persistent memory for continuity across sessions)
+export const walterMemory = pgTable("walter_memory", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  type: walterMemoryTypeEnum("type").notNull(), // observation, decision, result, goal, lesson
+  content: text("content").notNull(), // Memory content
+  importance: integer("importance").default(3).notNull(), // 1-5 scale for recall weighting
+  chatId: varchar("chat_id").references(() => walterChats.id), // Optional link to source chat
+  metadata: jsonb("metadata"), // Additional context (strategy name, symbols, etc.)
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userTypeIdx: index("walter_memory_user_type_idx").on(table.userId, table.type),
+  importanceIdx: index("walter_memory_importance_idx").on(table.importance),
+  timestampIdx: index("walter_memory_timestamp_idx").on(table.timestamp),
+  // Check constraint for importance range 1-5
+  importanceCheck: sql`CHECK (importance >= 1 AND importance <= 5)`,
 }));
 
 // Filter diagnostics (screening health metrics)
@@ -1504,6 +1535,17 @@ export const insertWalterApprovalsAuditSchema = createInsertSchema(walterApprova
   timestamp: true,
 });
 
+export const insertWalterPurposeSchema = createInsertSchema(walterPurpose).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWalterMemorySchema = createInsertSchema(walterMemory).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -1734,3 +1776,9 @@ export type WalterChatLog = typeof walterChatLogs.$inferSelect;
 
 export type InsertWalterApprovalsAudit = z.infer<typeof insertWalterApprovalsAuditSchema>;
 export type WalterApprovalsAudit = typeof walterApprovalsAudit.$inferSelect;
+
+export type InsertWalterPurpose = z.infer<typeof insertWalterPurposeSchema>;
+export type WalterPurpose = typeof walterPurpose.$inferSelect;
+
+export type InsertWalterMemory = z.infer<typeof insertWalterMemorySchema>;
+export type WalterMemory = typeof walterMemory.$inferSelect;
