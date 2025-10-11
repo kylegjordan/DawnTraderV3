@@ -5253,6 +5253,172 @@ Please:
     }
   });
 
+  // Update Goal (admin only - AI-proposed configuration change)
+  app.post('/api/orchestrator/updateGoal', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Validate request body using Zod schema
+      const { orchestratorUpdateGoalSchema } = await import('@shared/schema');
+      const validated = orchestratorUpdateGoalSchema.parse(req.body);
+
+      // Log the recommendation
+      const logData = {
+        userId,
+        category: 'goal_update',
+        recommendation: `Update ${validated.metricName} goal to ${validated.goalValue} in ${validated.mode} mode`,
+        urgencyLevel: 'medium' as const,
+        status: validated.approved ? 'approved' as const : 'pending' as const,
+        actionTaken: validated.reason || null,
+        metadata: { mode: validated.mode, metricName: validated.metricName, goalValue: validated.goalValue }
+      };
+      
+      await storage.createOrchestratorLog(logData);
+
+      // Only execute if approved
+      if (validated.approved) {
+        const goalData = {
+          userId,
+          metricName: validated.metricName,
+          goalValue: validated.goalValue,
+          actualValue: '0',
+          percentAchieved: '0',
+          aiValidationNotes: validated.reason || 'AI-recommended update',
+        };
+
+        const result = validated.mode === 'live'
+          ? await storage.upsertGoalLive(goalData)
+          : await storage.upsertGoalPaper(goalData);
+
+        console.info(`[Orchestrator] Goal updated: ${validated.metricName} = ${validated.goalValue} (${validated.mode} mode)`);
+        res.json({ success: true, message: 'Goal updated successfully', data: result });
+      } else {
+        res.json({ success: true, message: 'Goal update proposal logged for review' });
+      }
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      }
+      console.error('[Orchestrator] Error updating goal:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update Guardrail (admin only - AI-proposed configuration change)
+  app.post('/api/orchestrator/updateGuardrail', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Validate request body using Zod schema
+      const { orchestratorUpdateGuardrailSchema } = await import('@shared/schema');
+      const validated = orchestratorUpdateGuardrailSchema.parse(req.body);
+
+      // Log the recommendation
+      const logData = {
+        userId,
+        category: 'guardrail_update',
+        recommendation: `Update ${validated.field} to ${validated.value} in ${validated.mode} mode`,
+        urgencyLevel: 'high' as const,
+        status: validated.approved ? 'approved' as const : 'pending' as const,
+        actionTaken: validated.reason || null,
+        metadata: { mode: validated.mode, field: validated.field, value: validated.value }
+      };
+      
+      await storage.createOrchestratorLog(logData);
+
+      // Only execute if approved
+      if (validated.approved) {
+        // Get current guardrails
+        const currentGuardrails = await storage.getGuardrails({ userId, mode: validated.mode });
+        
+        if (!currentGuardrails) {
+          return res.status(404).json({ error: 'Guardrails not found. Please initialize guardrails first.' });
+        }
+
+        // Update the specific field
+        const updateData = {
+          ...currentGuardrails,
+          [validated.field]: validated.value,
+          userId,
+          mode: validated.mode
+        };
+
+        const result = await storage.upsertGuardrails(updateData);
+
+        console.info(`[Orchestrator] Guardrail updated: ${validated.field} = ${validated.value} (${validated.mode} mode)`);
+        res.json({ success: true, message: 'Guardrail updated successfully', data: result });
+      } else {
+        res.json({ success: true, message: 'Guardrail update proposal logged for review' });
+      }
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      }
+      console.error('[Orchestrator] Error updating guardrail:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update Strategy (admin only - AI-proposed configuration change)
+  app.post('/api/orchestrator/updateStrategy', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Validate request body using Zod schema
+      const { orchestratorUpdateStrategySchema } = await import('@shared/schema');
+      const validated = orchestratorUpdateStrategySchema.parse(req.body);
+
+      // Log the recommendation
+      const logData = {
+        userId,
+        category: 'strategy_update',
+        recommendation: `Update ${validated.strategy} ${validated.field} to ${JSON.stringify(validated.value)} in ${validated.mode} mode`,
+        urgencyLevel: 'medium' as const,
+        status: validated.approved ? 'approved' as const : 'pending' as const,
+        actionTaken: validated.reason || null,
+        metadata: { mode: validated.mode, strategy: validated.strategy, field: validated.field, value: validated.value }
+      };
+      
+      await storage.createOrchestratorLog(logData);
+
+      // Only execute if approved
+      if (validated.approved) {
+        // Get current strategy settings
+        const currentSettings = await storage.getStrategySettings({ 
+          userId, 
+          mode: validated.mode, 
+          strategy: validated.strategy 
+        });
+        
+        if (!currentSettings) {
+          return res.status(404).json({ error: 'Strategy settings not found' });
+        }
+
+        // Update the specific field
+        const updateData = {
+          userId,
+          mode: validated.mode,
+          strategy: validated.strategy,
+          enabled: validated.field === 'enabled' ? validated.value as boolean : currentSettings.enabled,
+          params: validated.field === 'params' ? validated.value as any : currentSettings.params
+        };
+
+        const result = await storage.upsertStrategySettings(updateData);
+
+        console.info(`[Orchestrator] Strategy updated: ${validated.strategy}.${validated.field} (${validated.mode} mode)`);
+        res.json({ success: true, message: 'Strategy updated successfully', data: result });
+      } else {
+        res.json({ success: true, message: 'Strategy update proposal logged for review' });
+      }
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      }
+      console.error('[Orchestrator] Error updating strategy:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 

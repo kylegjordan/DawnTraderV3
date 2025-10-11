@@ -1523,3 +1523,34 @@ export const contextChats = pgTable("context_chats", {
 export const insertContextChatSchema = createInsertSchema(contextChats).omit({ id: true, timestamp: true });
 export type InsertContextChat = z.infer<typeof insertContextChatSchema>;
 export type ContextChat = typeof contextChats.$inferSelect;
+
+// Orchestrator configuration update schemas
+export const orchestratorUpdateGoalSchema = z.object({
+  mode: z.enum(['live', 'paper']),
+  goalId: z.string().optional(),
+  metricName: z.string(),
+  goalValue: z.string(),
+  approved: z.boolean(),
+  reason: z.string().optional(),
+});
+
+export const orchestratorUpdateGuardrailSchema = z.object({
+  mode: z.enum(['live', 'paper']),
+  field: z.enum(['maxDailyLoss', 'maxDrawdown', 'maxPositionSize', 'maxOpenPositions', 'riskPerTrade', 'aiCanAdjust']),
+  value: z.union([z.string(), z.number(), z.boolean()]),
+  approved: z.boolean(),
+  reason: z.string().optional(),
+});
+
+export const orchestratorUpdateStrategySchema = z.object({
+  mode: z.enum(['live', 'paper']),
+  strategy: z.enum(['vwap_pullback', 'abcd_long', 'sma_trend_ride']),
+  field: z.enum(['enabled', 'params']),
+  value: z.union([z.boolean(), z.record(z.any())]),
+  approved: z.boolean(),
+  reason: z.string().optional(),
+});
+
+export type OrchestratorUpdateGoal = z.infer<typeof orchestratorUpdateGoalSchema>;
+export type OrchestratorUpdateGuardrail = z.infer<typeof orchestratorUpdateGuardrailSchema>;
+export type OrchestratorUpdateStrategy = z.infer<typeof orchestratorUpdateStrategySchema>;
