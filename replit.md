@@ -102,6 +102,7 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user 
   - **Security**: All orchestrator endpoints protected by `requireAdmin` middleware with Zod validation
   - **Data Storage**: `ai_orchestrator_logs` table tracks all recommendations with status (pending/approved/rejected/applied)
   - **Admin Log Visibility** (Oct 2025 fix): Admins can view ALL system-wide orchestrator logs regardless of which user they were created for. GET /api/orchestrator/logs passes `null` userId for admins (vs regular userId for non-admins), enabling oversight of AI-generated recommendations across the entire system. Storage layer handles nullable userIds with conditional Drizzle queries.
+  - **AI Transparency Page** (Oct 2025 fix): Fixed runtime error that caused blank screen. Orchestrator tab now correctly displays logs using `recommendation` field (not `message`), includes admin-only debug panel showing fetch diagnostics (last fetch time, logs count, connection status), and uses optional chaining to prevent crashes when data fields are undefined.
 
 ## Configuration & Credentials
 
