@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-10-11T17:06:17.207Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high (11.72, 15.01, 14.19) for an 8-core system, indicating potential performance bottlenecks."
+    },
+    {
+      "severity": "medium",
+      "message": "No trading activity detected (totalPL, activeTrades, closedTrades, winRate, roi all at 0), which is unusual for a trading platform."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, opportunities generated, or adjustments made, suggesting it is not actively functioning."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI processes to ensure they are functioning and contributing to trading strategies."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate the cause of high CPU load and address any underlying issues such as inefficient algorithms or resource-heavy processes.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting the platform's reliability."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Verify the trading system's status and ensure that trading strategies are correctly configured and operational.",
+      "rationale": "The absence of trading activity could indicate a misconfiguration or a system issue that needs immediate attention to resume normal operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Restart or troubleshoot the AI module to ensure it is actively learning and generating trading opportunities.",
+      "rationale": "AI inactivity can hinder the platform's ability to adapt and optimize trading strategies, impacting overall performance."
+    }
+  ],
+  "urgencyLevel": "high"
+}

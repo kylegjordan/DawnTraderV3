@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-11T17:11:15.258Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals, indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "No active or closed trades, and trading metrics such as totalPL, winRate, and roi are all zero, suggesting a potential issue with trading activity or strategy execution."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, confidence, opportunities generated, or adjustments made, indicating it may not be functioning or integrated properly."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent performance degradation or system instability."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially adjust trading strategies or system configurations to ensure trades are being executed."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate AI system integration and functionality to ensure it is contributing to trading strategy and decision-making."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Perform a detailed analysis of CPU usage and identify processes or services causing high load. Consider scaling resources or optimizing code.",
+      "rationale": "High CPU load can lead to system slowdowns or crashes, affecting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Investigate why there are no active or closed trades and ensure trading algorithms are functioning correctly.",
+      "rationale": "Trading inactivity could lead to missed opportunities and financial loss for the platform and its users."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Assess and troubleshoot the AI system to ensure it is learning and generating trading opportunities.",
+      "rationale": "The AI system is crucial for identifying trading opportunities and improving strategy effectiveness."
+    }
+  ],
+  "urgencyLevel": "high"
+}
