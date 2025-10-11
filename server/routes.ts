@@ -347,6 +347,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(user);
   });
 
+  // Update user approval matrix
+  app.patch('/api/user/approval-matrix', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { approvalMatrix } = req.body;
+      
+      if (!approvalMatrix || typeof approvalMatrix !== 'object') {
+        return res.status(400).json({ error: 'Valid approval matrix is required' });
+      }
+      
+      // SECURITY: Force killSwitchOverride to always be true (admin-only action)
+      const sanitizedMatrix = {
+        ...approvalMatrix,
+        killSwitchOverride: true
+      };
+      
+      const updatedUser = await storage.updateUser(req.user!.id, { approvalMatrix: sanitizedMatrix });
+      
+      res.json({ 
+        approvalMatrix: updatedUser.approvalMatrix,
+        message: 'Approval matrix updated successfully'
+      });
+    } catch (error: any) {
+      console.error('Error updating approval matrix:', error);
+      res.status(500).json({ error: 'Failed to update approval matrix' });
+    }
+  });
+
   // Admin Routes - User Management
   app.get('/api/admin/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
