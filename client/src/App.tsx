@@ -16,6 +16,7 @@ import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
 import { ensureValidToken } from "@/lib/auth";
+import WalterFloatingAssistant from "@/components/walter-floating-assistant";
 
 const Analysis = lazy(() => import("@/pages/analysis"));
 const Settings = lazy(() => import("@/pages/settings"));
@@ -78,6 +79,32 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }
   
   return <>{children}</>;
+}
+
+// Map routes to page contexts for Walter
+function getPageContext(location: string): string {
+  const contextMap: Record<string, string> = {
+    '/': 'Dashboard',
+    '/dashboard': 'Dashboard',
+    '/watchlist': 'Watchlist',
+    '/active-trades': 'Active Trades',
+    '/search': 'Search',
+    '/reports': 'Reports',
+    '/daily-brief': 'Daily Brief',
+    '/briefings': 'Briefings',
+    '/analysis': 'Analysis',
+    '/goals-engine': 'Goals Engine',
+    '/systems': 'Systems',
+    '/ai-transparency': 'AI Transparency',
+    '/settings': 'Settings',
+    '/settings/walter-approvals': 'Walter Approvals',
+    '/command-center': 'Command Center',
+    '/admin': 'Admin Panel',
+    '/kill-switch': 'Kill Switch',
+    '/walter': 'Walter Chat'
+  };
+  
+  return contextMap[location] || 'Dashboard';
 }
 
 function Router() {
@@ -159,6 +186,11 @@ function Router() {
             className="fixed inset-0 bg-black/50 z-30"
             onClick={() => setSidebarOpen(false)}
           />
+        )}
+        
+        {/* Floating Walter Assistant - appears on all pages except /walter */}
+        {location !== '/walter' && (
+          <WalterFloatingAssistant pageContext={getPageContext(location)} />
         )}
       </div>
     </RequireAuth>

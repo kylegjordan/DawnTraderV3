@@ -1,0 +1,198 @@
+Walter Phase 4.3 — Operational Integration & Control (No-Code Instructions for Replit)
+🎯 Objective
+
+Finish connecting Walter to the full system: floating access icon, parameter control, trading control, full transparency logging, and end-to-end testing.
+Walter must behave as a fully embedded AI SysAdmin with both conversational and operational control.
+
+⚙️ Task 2 | Add the Floating Walter Assistant Icon
+
+Goal: Enable access to Walter from any page.
+
+Instructions
+
+Add a small Walter icon (🤖) in the lower-right corner of every page.
+
+Clicking the icon opens a mini chat overlay that uses the same input and voice controls as the main Walter chat page.
+
+The overlay automatically includes context from the active page (for example, “Goals Engine” or “Guardrails”).
+
+The overlay closes cleanly or minimizes when dismissed.
+
+Deliverables / Checks
+✅ Icon visible on all pages
+✅ Click → opens mini chat overlay
+✅ Walter responds contextually to the active page
+✅ Overlay opens and closes smoothly without layout errors
+
+🧩 Task 3 | Connect Walter to the Approval Matrix
+
+Goal: Ensure every Walter command checks the user’s approval rules before acting.
+
+Instructions
+
+All Walter commands must reference the existing Approval Matrix in user preferences.
+
+If an action is marked “Requires Approval,” Walter should:
+
+Log it as Pending under Command Center → Recommendations.
+
+Notify Kyle in chat: “This change requires your approval.”
+
+If approval is not required, Walter executes immediately and logs as Approved.
+
+All outcomes (Pending / Approved) are stored in orchestrator logs.
+
+Deliverables / Checks
+✅ Pending items appear when approval required
+✅ Immediate actions execute when allowed
+✅ All entries visible in AI Transparency → Orchestrator Activity
+✅ No bypass of approval logic
+
+🧱 Task 4 | Parameter Control Integration
+
+Goal: Allow Walter to adjust the same configuration areas Kyle can modify manually.
+
+Instructions
+
+Confirm Walter can view and change:
+
+Goals
+
+Guardrails
+
+Filters
+
+Strategy variables
+
+Manual and Walter changes must stay synchronized.
+
+Each update records source (Manual / Walter), timestamp, and approval status.
+
+Example verification:
+
+Kyle → “Walter, tighten guardrails by 10 percent.”
+
+Walter confirms, checks approval, and updates values.
+
+Deliverables / Checks
+✅ Manual updates unaffected
+✅ Walter executes equivalent changes correctly
+✅ Synchronization confirmed in UI and database
+✅ Logs show correct source and time
+
+💡 Task 5 | Trading Activation Control
+
+Goal: Dual control for starting, stopping, and monitoring trading.
+
+Instructions
+
+Walter must be able to start or stop trading by voice or text commands:
+
+“Start paper trading”
+
+“Start live trading” (approval check applies)
+
+“Stop trading”
+
+Manual UI toggles must remain fully functional and synchronized with Walter.
+
+If the kill switch triggers, Walter halts all trading immediately and notifies Kyle.
+
+Only Kyle (admin) can override the kill switch manually or by confirmation command.
+
+Deliverables / Checks
+✅ Walter commands change trading state
+✅ Manual toggles remain synchronized
+✅ Kill switch enforcement verified
+✅ Live-mode start requires approval
+
+🔎 Task 6 | Transparency & Logging
+
+Goal: Ensure total visibility of Walter’s actions.
+
+Instructions
+
+Every Walter-initiated action—chat message, parameter change, approval, or trade—must be logged.
+
+Log entries include:
+
+Action Type
+
+Source (Walter / Manual)
+
+Approval Status
+
+Timestamp
+
+In AI Transparency → Orchestrator Activity, add a filter to show only “Walter Actions.”
+
+Deliverables / Checks
+✅ All Walter actions logged
+✅ Correct source / approval status displayed
+✅ “Walter Actions” filter works
+✅ No missing or duplicate entries
+
+🔄 Task 7 | End-to-End Testing
+
+Have Replit perform these scenario tests to validate the entire integration:
+
+Approval Flow Test
+
+Turn “Adjust Goals” = Requires Approval.
+
+Command: “Walter, set my goal to $75 per trade.”
+
+Expect: Pending approval status → manual approval → value updates.
+
+Immediate Execution Test
+
+Turn “Modify Guardrails” = No Approval Required.
+
+Command: “Walter, tighten guardrails by 10 percent.”
+
+Expect: Immediate execution and log entry.
+
+Voice Interaction Test
+
+Speak: “Walter, show system health.”
+
+Expect: Transcription and response display.
+
+Kill Switch Test
+
+Speak: “Walter, disable kill switch.”
+
+Expect: Walter refuses; confirms admin-only control.
+
+Trading Sync Test
+
+Toggle Paper ↔ Live ↔ Stopped in UI and via Walter commands.
+
+Expect: State sync in both directions.
+
+Chat Persistence Test
+
+Close and reopen Walter panel.
+
+Expect: Last messages reload automatically.
+
+Deliverables / Checks
+✅ All six tests pass without errors
+✅ Logs show complete trace of each action
+✅ No security warnings or runtime failures
+
+✅ Completion Criteria
+
+Walter accessible via sidebar and floating icon
+
+Voice + text chat operational
+
+Approval matrix enforced
+
+Full parameter control confirmed
+
+Trading state dual-controlled
+
+Kill switch secure
+
+All actions logged and transparent
