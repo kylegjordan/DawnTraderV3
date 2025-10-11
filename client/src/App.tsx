@@ -19,7 +19,6 @@ import { ensureValidToken } from "@/lib/auth";
 import WalterFloatingAssistant from "@/components/walter-floating-assistant";
 
 const Settings = lazy(() => import("@/pages/settings"));
-const WalterApprovals = lazy(() => import("@/pages/walter-approvals"));
 const WalterPage = lazy(() => import("@/pages/walter"));
 const WatchlistPage = lazy(() => import("@/pages/watchlist"));
 const ActiveTradesPage = lazy(() => import("@/pages/active-trades"));
@@ -31,7 +30,6 @@ const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
 const SystemsPage = lazy(() => import("@/pages/systems"));
 const AITransparencyPage = lazy(() => import("@/pages/ai-transparency"));
 const SearchPage = lazy(() => import("@/pages/search"));
-const AdminPage = lazy(() => import("@/pages/admin"));
 const CommandCenter = lazy(() => import("@/pages/command-center"));
 
 function LoadingFallback() {
@@ -95,9 +93,7 @@ function getPageContext(location: string): string {
     '/systems': 'System Monitoring',
     '/ai-transparency': 'AI Transparency',
     '/settings': 'Settings',
-    '/settings/walter-approvals': 'Walter Approvals',
     '/command-center': 'Command Center',
-    '/admin': 'Admin Panel',
     '/kill-switch': 'Kill Switch',
     '/walter': 'Walter Chat'
   };
@@ -169,9 +165,7 @@ function Router() {
               <Route path="/systems" component={SystemsPage} />
               <Route path="/ai-transparency" component={AITransparencyPage} />
               <Route path="/settings" component={Settings} />
-              <Route path="/settings/walter-approvals" component={WalterApprovals} />
               <Route path="/command-center" component={CommandCenter} />
-              <Route path="/admin" component={AdminPage} />
               <Route path="/kill-switch" component={KillSwitchScreen} />
               <Route component={NotFound} />
             </Switch>
