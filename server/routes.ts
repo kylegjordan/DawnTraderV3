@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
@@ -12,7 +12,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -5378,6 +5378,132 @@ Please:
       res.json({ ok: true, userMessage, assistantMessage });
     } catch (error: any) {
       console.error('[Walter] Error sending message:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ==================== Walter Purpose & Memory API (Phase 5.5) ====================
+  
+  // GET current user's Walter purpose
+  app.get('/api/walter/purpose', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      const purpose = await db.select()
+        .from(walterPurpose)
+        .where(eq(walterPurpose.userId, userId))
+        .limit(1);
+      
+      if (purpose.length === 0) {
+        return res.json({ ok: true, purpose: null });
+      }
+      
+      res.json({ ok: true, purpose: purpose[0] });
+    } catch (error: any) {
+      console.error('[Walter] Error fetching purpose:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // POST create or update Walter purpose
+  app.post('/api/walter/purpose', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { content } = req.body;
+      
+      if (!content || typeof content !== 'string') {
+        return res.status(400).json({ ok: false, error: 'Purpose content is required' });
+      }
+      
+      // Check if purpose already exists
+      const existing = await db.select()
+        .from(walterPurpose)
+        .where(eq(walterPurpose.userId, userId))
+        .limit(1);
+      
+      let purpose;
+      if (existing.length > 0) {
+        // Update existing purpose
+        const updated = await db.update(walterPurpose)
+          .set({
+            content,
+            updatedBy: userId,
+            updatedAt: new Date(),
+          })
+          .where(eq(walterPurpose.userId, userId))
+          .returning();
+        purpose = updated[0];
+      } else {
+        // Create new purpose
+        const created = await db.insert(walterPurpose)
+          .values({
+            userId,
+            content,
+            updatedBy: userId,
+          })
+          .returning();
+        purpose = created[0];
+      }
+      
+      res.json({ ok: true, purpose });
+    } catch (error: any) {
+      console.error('[Walter] Error saving purpose:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // GET Walter memories for current user
+  app.get('/api/walter/memory', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const type = req.query.type as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const importance = req.query.importance as string | undefined;
+      
+      let query = db.select()
+        .from(walterMemory)
+        .where(eq(walterMemory.userId, userId))
+        .orderBy(sql`timestamp DESC`)
+        .limit(limit);
+      
+      if (type) {
+        query = query.where(eq(walterMemory.type, type)) as any;
+      }
+      
+      if (importance) {
+        const minImportance = parseInt(importance);
+        query = query.where(sql`importance >= ${minImportance}`) as any;
+      }
+      
+      const memories = await query;
+      res.json({ ok: true, memories });
+    } catch (error: any) {
+      console.error('[Walter] Error fetching memories:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // POST create Walter memory entry
+  app.post('/api/walter/memory', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const data = insertWalterMemorySchema.parse(req.body);
+      
+      // Ensure importance is within 1-5 range
+      if (data.importance && (data.importance < 1 || data.importance > 5)) {
+        return res.status(400).json({ ok: false, error: 'Importance must be between 1 and 5' });
+      }
+      
+      const memory = await db.insert(walterMemory)
+        .values({
+          ...data,
+          userId,
+        })
+        .returning();
+      
+      res.json({ ok: true, memory: memory[0] });
+    } catch (error: any) {
+      console.error('[Walter] Error creating memory:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });
