@@ -1,0 +1,144 @@
+⚙️ Phase 5.4 — Walter Chat Expansion + Approval Integration + User Fixes (Completion Plan)
+
+Goal: Finish all 10 tasks in 5.4 so Walter’s approval workflow, notification system, multi-chat functionality, and memory optimization are complete.
+
+✅ Part 1 — User Credential Corrections (DONE)
+
+Passwords for test@example.com and testuser@example.com → SecurePass123!
+
+Admin password-reset modal in Settings → Users tab.
+
+Verified logins and secure hashing.
+
+🧩 Part 2 — Risk Evaluation and Approval Logic
+
+Add risk-evaluation logic in Goals Engine → Strategies tab:
+
+Each parameter edit runs a portfolio-risk calculation.
+
+If projectedDrawdown ≥ 20 %, mark “Approval Required”.
+
+Otherwise execute automatically and log.
+
+Store pending approvals in table walter_pending_approvals
+(id, strategy_id, risk, details, status, created_at).
+
+Emit an event to Walter’s chat API when a new approval is created.
+
+💬 Part 3 — Walter Chat Approval Threads
+
+When an approval is created:
+
+Auto-generate new Walter chat session:
+Title → “Approval Required – [StrategyName] ( Risk: X %)”
+First message → Walter’s rationale + risk summary.
+
+Insert two buttons: Approve / Reject.
+
+Approve → execute change and close thread.
+
+Reject → mark thread “Closed – Rejected”.
+
+Record decision in walter_pending_approvals.status.
+
+🔔 Part 4 — Dashboard Notification Badge
+
+Add a 🔔 icon to top dashboard header (right side).
+
+Display Pending Approvals: [x].
+
+Click → dropdown of pending approvals with links to their chat threads.
+
+After approval resolution, badge auto-decrements and disappears at zero.
+
+Persist state in DB so badge remains accurate after reload.
+
+🧠 Part 5 — Multi-Chat and Session Management
+
+In Walter panel sidebar:
+
+Add “New Chat ( + )” button.
+
+Each chat session stored in walter_chats with metadata: id, title, created_at, last_message, archived.
+
+Include “Archive Chat” button (per-session).
+
+Chats displayed in list order by last_activity.
+
+Restore previous session state on reload.
+
+⚙️ Part 6 — Walter Memory Optimization
+
+Maintain active context window of last 20 messages per session.
+
+Auto-summarize older content into a compressed message after 50 messages.
+
+Store summary and original full transcript in DB for retrieval.
+
+Add toggle in Settings → General for “Memory Depth” (10–50 messages).
+
+🔍 Part 7 — Chat Search and Recall
+
+Add search bar to Walter panel header.
+
+Searches title and message text fields across all chats.
+
+Show results in scrollable dropdown → click to open chat.
+
+Add filters: Active / Archived / Approvals Only.
+
+🧾 Part 8 — Logging and Persistence
+
+All chat messages and decisions persist to DB (walter_chat_logs).
+
+Each approval decision creates audit entry in walter_approvals_audit.
+
+Include timestamps, user, decision, and notes for full traceability.
+
+Expose read-only API endpoint /api/walter/audit for export if needed.
+
+🧪 Part 9 — End-to-End Testing
+
+Perform these manual verifications in sequence:
+
+Step	Action	Expected Result
+1	Log in as Kyle	Access dashboard successfully
+2	Edit a strategy < 20 % risk	Executes immediately
+3	Edit a strategy ≥ 20 % risk	Triggers approval chat
+4	Dashboard badge appears	Shows 1 pending approval
+5	Open chat → Approve	Executes change + badge disappears
+6	Open chat → Reject	Marks Rejected + no execution
+7	Create manual new chat	Visible in sidebar
+8	Exceed 50 messages	Summary message inserted
+9	Search for keyword	Correct chats listed
+10	Reload app	State and badges persist
+
+✅ All tests must pass before marking Phase 5.4 complete.
+
+📘 Part 10 — Documentation and Verification
+
+Update replit.md to reflect new tables, APIs, and UI flows:
+
+walter_pending_approvals, walter_chats, walter_chat_logs, walter_approvals_audit.
+
+Dashboard badge behavior.
+
+Chat summarization and search.
+
+Confirm no console or server errors.
+
+Database integrity check for new tables.
+
+UI review with architect sign-off.
+
+🎯 Expected Deliverables After Completion
+
+✅ Admin password reset UI (complete)
+✅ Strategy risk evaluation + approval triggers
+✅ Auto-created Walter approval threads
+✅ Dashboard approval notifications
+✅ Multi-chat management (+ new chat button)
+✅ Context summarization and memory limits
+✅ Chat search + archiving
+✅ Audit logging and traceability
+✅ All tests passing, no runtime errors

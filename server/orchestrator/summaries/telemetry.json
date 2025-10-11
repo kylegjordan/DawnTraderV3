@@ -1,19 +1,19 @@
 {
-  "timestamp": "2025-10-11T19:07:04.837Z",
+  "timestamp": "2025-10-11T19:43:58.644Z",
   "system": {
-    "uptime": 63172.27,
+    "uptime": 65384.18,
     "memory": {
       "total": 67436748800,
-      "free": 30423158784,
-      "used": 37013590016,
-      "usagePercent": 54.88637971823458
+      "free": 31183601664,
+      "used": 36253147136,
+      "usagePercent": 53.75874101451345
     },
     "cpu": {
       "cores": 8,
       "loadAverage": [
-        23.25,
-        17.21,
-        14.85
+        10.14,
+        9.32,
+        10.68
       ]
     }
   },
@@ -36,26 +36,6 @@
     "adjustmentsMade": 0
   },
   "goals": [],
-  "guardrails": {
-    "maxOpenTrades": 3,
-    "riskPerTrade": "150.00"
-  },
-  "recentChats": [
-    {
-      "id": 1,
-      "userId": "14e0809e-3ca8-413d-878f-c55f9d837fae",
-      "context": "goals",
-      "role": "user",
-      "message": "What are my trading goals?",
-      "timestamp": "2025-10-11T03:44:07.566Z"
-    },
-    {
-      "id": 2,
-      "userId": "14e0809e-3ca8-413d-878f-c55f9d837fae",
-      "context": "goals",
-      "role": "assistant",
-      "message": "Given that the user has no closed trades and a win rate of 0%, it's crucial to establish a foundation before setting overly ambitious trading goals. The current risk per trade of $150 allows for some potential gains, but the user will need to demonstrate aptitude in trading before achieving more significant targets. The goals proposed aim to build confidence and experience while ensuring the user can manage risk effectively.",
-      "timestamp": "2025-10-11T03:44:13.109Z"
-    }
-  ]
+  "guardrails": {},
+  "recentChats": []
 }

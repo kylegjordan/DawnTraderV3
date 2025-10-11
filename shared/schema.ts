@@ -28,6 +28,8 @@ export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);
 export const opportunityTypeEnum = pgEnum("opportunity_type", ["long_term_hold", "moonshot", "momentum", "breakout", "mean_reversion"]);
 export const opportunityStatusEnum = pgEnum("opportunity_status", ["new", "watchlist", "executed", "dismissed", "expired"]);
 export const dailyBriefStatusEnum = pgEnum("daily_brief_status", ["in_progress", "final"]);
+export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected", "cancelled"]);
+export const walterChatStatusEnum = pgEnum("walter_chat_status", ["active", "archived"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -481,6 +483,75 @@ export const dailyBriefs = pgTable("daily_briefs", {
   finalizedAt: timestamp("finalized_at", { withTimezone: true }),
   emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
 });
+
+// ===== WALTER AI ASSISTANT TABLES =====
+
+// Walter pending approvals (tracks parameter changes requiring approval)
+export const walterPendingApprovals = pgTable("walter_pending_approvals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  strategyName: varchar("strategy_name", { length: 100 }), // Strategy being modified (if applicable)
+  parameterName: varchar("parameter_name", { length: 100 }).notNull(), // Parameter being changed
+  currentValue: jsonb("current_value").notNull(), // Current value
+  proposedValue: jsonb("proposed_value").notNull(), // Proposed new value
+  projectedRisk: decimal("projected_risk", { precision: 5, scale: 2 }).notNull(), // Risk percentage
+  riskDetails: jsonb("risk_details"), // Additional risk breakdown
+  status: approvalStatusEnum("status").default("pending"),
+  chatSessionId: varchar("chat_session_id").references(() => walterChats.id, { onDelete: 'set null' }), // Links to walter chat session if auto-created
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userStatusIdx: index("walter_pending_approvals_user_status_idx").on(table.userId, table.status),
+}));
+
+// Walter chats (multi-chat session management)
+export const walterChats = pgTable("walter_chats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  title: text("title").default("New Chat"), // Chat session title
+  status: walterChatStatusEnum("status").default("active"),
+  isApprovalThread: boolean("is_approval_thread").default(false), // True if auto-created for approval
+  approvalId: varchar("approval_id").references(() => walterPendingApprovals.id), // Links to approval if applicable
+  messageCount: integer("message_count").default(0), // Total messages in session
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+}, (table) => ({
+  userStatusIdx: index("walter_chats_user_status_idx").on(table.userId, table.status),
+  lastMessageIdx: index("walter_chats_last_message_idx").on(table.lastMessageAt),
+}));
+
+// Walter chat logs (all messages and interactions)
+export const walterChatLogs = pgTable("walter_chat_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chatSessionId: varchar("chat_session_id").references(() => walterChats.id, { onDelete: 'cascade' }).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  role: varchar("role", { length: 20 }).notNull(), // 'user', 'assistant', 'system'
+  content: text("content").notNull(), // Message content
+  metadata: jsonb("metadata"), // Additional data (buttons, actions, etc.)
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  chatSessionIdx: index("walter_chat_logs_session_idx").on(table.chatSessionId),
+  timestampIdx: index("walter_chat_logs_timestamp_idx").on(table.timestamp),
+}));
+
+// Walter approvals audit (tracks all approval decisions)
+export const walterApprovalsAudit = pgTable("walter_approvals_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  approvalId: varchar("approval_id").references(() => walterPendingApprovals.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  decision: varchar("decision", { length: 20 }).notNull(), // 'approved', 'rejected'
+  decisionMethod: varchar("decision_method", { length: 50 }), // 'ui_button', 'voice_command', 'chat_command'
+  notes: text("notes"), // Optional user notes
+  executionResult: jsonb("execution_result"), // Results of the approved action (if executed)
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  approvalIdx: index("walter_approvals_audit_approval_idx").on(table.approvalId),
+  userIdx: index("walter_approvals_audit_user_idx").on(table.userId),
+  timestampIdx: index("walter_approvals_audit_timestamp_idx").on(table.timestamp),
+}));
 
 // Filter diagnostics (screening health metrics)
 export const filterDiagnostics = pgTable("filter_diagnostics", {
@@ -988,6 +1059,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   goalsPaper: many(userGoalsPaper),
   goalAnalysisHistoryLive: many(goalAnalysisHistoryLive),
   goalAnalysisHistoryPaper: many(goalAnalysisHistoryPaper),
+  walterPendingApprovals: many(walterPendingApprovals),
+  walterChats: many(walterChats),
+  walterChatLogs: many(walterChatLogs),
+  walterApprovalsAudit: many(walterApprovalsAudit),
 }));
 
 export const tradingSettingsRelations = relations(tradingSettings, ({ one }) => ({
@@ -1089,6 +1164,52 @@ export const paperAIReportsRelations = relations(paperAIReports, ({ one }) => ({
   user: one(users, {
     fields: [paperAIReports.userId],
     references: [users.id],
+  }),
+}));
+
+export const walterPendingApprovalsRelations = relations(walterPendingApprovals, ({ one, many }) => ({
+  user: one(users, {
+    fields: [walterPendingApprovals.userId],
+    references: [users.id],
+  }),
+  chatSession: one(walterChats, {
+    fields: [walterPendingApprovals.chatSessionId],
+    references: [walterChats.id],
+  }),
+  auditEntries: many(walterApprovalsAudit),
+}));
+
+export const walterChatsRelations = relations(walterChats, ({ one, many }) => ({
+  user: one(users, {
+    fields: [walterChats.userId],
+    references: [users.id],
+  }),
+  approval: one(walterPendingApprovals, {
+    fields: [walterChats.approvalId],
+    references: [walterPendingApprovals.id],
+  }),
+  chatLogs: many(walterChatLogs),
+}));
+
+export const walterChatLogsRelations = relations(walterChatLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [walterChatLogs.userId],
+    references: [users.id],
+  }),
+  chatSession: one(walterChats, {
+    fields: [walterChatLogs.chatSessionId],
+    references: [walterChats.id],
+  }),
+}));
+
+export const walterApprovalsAuditRelations = relations(walterApprovalsAudit, ({ one }) => ({
+  user: one(users, {
+    fields: [walterApprovalsAudit.userId],
+    references: [users.id],
+  }),
+  approval: one(walterPendingApprovals, {
+    fields: [walterApprovalsAudit.approvalId],
+    references: [walterPendingApprovals.id],
   }),
 }));
 
@@ -1358,6 +1479,27 @@ export const insertPaperSimTradeLogSchema = createInsertSchema(paperSimTradeLogs
   timestamp: true,
 });
 
+// Walter insert schemas
+export const insertWalterPendingApprovalSchema = createInsertSchema(walterPendingApprovals).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWalterChatSchema = createInsertSchema(walterChats).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWalterChatLogSchema = createInsertSchema(walterChatLogs).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertWalterApprovalsAuditSchema = createInsertSchema(walterApprovalsAudit).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -1575,3 +1717,16 @@ export const orchestratorUpdateStrategySchema = z.object({
 export type OrchestratorUpdateGoal = z.infer<typeof orchestratorUpdateGoalSchema>;
 export type OrchestratorUpdateGuardrail = z.infer<typeof orchestratorUpdateGuardrailSchema>;
 export type OrchestratorUpdateStrategy = z.infer<typeof orchestratorUpdateStrategySchema>;
+
+// Walter types
+export type InsertWalterPendingApproval = z.infer<typeof insertWalterPendingApprovalSchema>;
+export type WalterPendingApproval = typeof walterPendingApprovals.$inferSelect;
+
+export type InsertWalterChat = z.infer<typeof insertWalterChatSchema>;
+export type WalterChat = typeof walterChats.$inferSelect;
+
+export type InsertWalterChatLog = z.infer<typeof insertWalterChatLogSchema>;
+export type WalterChatLog = typeof walterChatLogs.$inferSelect;
+
+export type InsertWalterApprovalsAudit = z.infer<typeof insertWalterApprovalsAuditSchema>;
+export type WalterApprovalsAudit = typeof walterApprovalsAudit.$inferSelect;
