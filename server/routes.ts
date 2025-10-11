@@ -4903,6 +4903,7 @@ Please:
         // Create approval record instead of executing immediately
         const approval = await storage.createWalterPendingApproval({
           userId,
+          mode, // Include the trading mode
           strategyName: strategy,
           parameterName: 'strategy_parameters',
           currentValue: oldParams,
@@ -4992,6 +4993,145 @@ Please:
       res.json({ ok: true, preset: presets[presetName as keyof typeof presets] });
     } catch (error: any) {
       console.error('Error fetching preset:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ==================== Walter AI Assistant API (Phase 5.4) ====================
+  
+  // GET pending approvals for current user
+  app.get('/api/walter/pending-approvals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const status = req.query.status as string | undefined;
+      
+      const approvals = await storage.getPendingApprovals(userId, status || 'pending');
+      
+      res.json({ ok: true, approvals });
+    } catch (error: any) {
+      console.error('[Walter] Error fetching pending approvals:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // POST approve a pending approval
+  app.post('/api/walter/approvals/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const { notes } = req.body;
+      
+      // Get the approval (only pending status)
+      const approvals = await storage.getPendingApprovals(userId, 'pending');
+      const approval = approvals.find(a => a.id === id);
+      
+      if (!approval) {
+        return res.status(404).json({ ok: false, error: 'Approval not found or already processed' });
+      }
+      
+      if (approval.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      // Verify approval is still pending (prevent replay attacks)
+      if (approval.status !== 'pending') {
+        return res.status(400).json({ ok: false, error: 'Approval already processed' });
+      }
+      
+      // Execute the approved change (apply the proposed strategy settings)
+      if (approval.strategyName && approval.proposedValue) {
+        await storage.upsertStrategySettings({
+          userId,
+          mode: approval.mode as any, // Use the approval's stored mode
+          strategy: approval.strategyName as any,
+          enabled: true,
+          params: approval.proposedValue as any,
+        });
+        
+        await storage.insertStrategySettingsAudit({
+          userId,
+          mode: approval.mode as any, // Use the approval's stored mode
+          strategy: approval.strategyName as any,
+          prevParams: approval.currentValue as any,
+          nextParams: approval.proposedValue as any,
+          actorType: 'user',
+          actorId: userId,
+          reason: `Approved via Walter (Approval ID: ${id})`,
+        });
+        
+        // Hot-reload into engine with the correct mode
+        await EngineSettingsBus.publish({ userId, mode: approval.mode as any });
+      }
+      
+      // Update approval status
+      const updated = await storage.updateApprovalStatus(id, 'approved', {
+        approvedAt: new Date() as any,
+        approvedBy: userId,
+      });
+      
+      // Create audit log
+      await storage.createWalterApprovalsAudit({
+        approvalId: id,
+        userId,
+        decision: 'approved',
+        decisionMethod: 'ui_button',
+        notes: notes || null,
+        executionResult: { success: true, appliedAt: new Date(), mode: approval.mode },
+      });
+      
+      console.log(`[Walter Approval] Approved ${id} by user ${userId} (mode: ${approval.mode})`);
+      
+      res.json({ ok: true, approval: updated });
+    } catch (error: any) {
+      console.error('[Walter] Error approving:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // POST reject a pending approval
+  app.post('/api/walter/approvals/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const { notes } = req.body;
+      
+      // Get the approval (only pending status)
+      const approvals = await storage.getPendingApprovals(userId, 'pending');
+      const approval = approvals.find(a => a.id === id);
+      
+      if (!approval) {
+        return res.status(404).json({ ok: false, error: 'Approval not found or already processed' });
+      }
+      
+      if (approval.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      // Verify approval is still pending (prevent replay)
+      if (approval.status !== 'pending') {
+        return res.status(400).json({ ok: false, error: 'Approval already processed' });
+      }
+      
+      // Update approval status
+      const updated = await storage.updateApprovalStatus(id, 'rejected', {
+        rejectedAt: new Date() as any,
+      });
+      
+      // Create audit log
+      await storage.createWalterApprovalsAudit({
+        approvalId: id,
+        userId,
+        decision: 'rejected',
+        decisionMethod: 'ui_button',
+        notes: notes || null,
+        executionResult: { success: false, reason: 'User rejected', mode: approval.mode },
+      });
+      
+      console.log(`[Walter Approval] Rejected ${id} by user ${userId} (mode: ${approval.mode})`);
+      
+      res.json({ ok: true, approval: updated });
+    } catch (error: any) {
+      console.error('[Walter] Error rejecting approval:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });

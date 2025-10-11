@@ -490,6 +490,7 @@ export const dailyBriefs = pgTable("daily_briefs", {
 export const walterPendingApprovals = pgTable("walter_pending_approvals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(), // Trading mode (live/paper)
   strategyName: varchar("strategy_name", { length: 100 }), // Strategy being modified (if applicable)
   parameterName: varchar("parameter_name", { length: 100 }).notNull(), // Parameter being changed
   currentValue: jsonb("current_value").notNull(), // Current value

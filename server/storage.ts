@@ -137,7 +137,19 @@ import {
   paperSimOpenPositions,
   type PaperSimTradeLog,
   type InsertPaperSimTradeLog,
-  paperSimTradeLogs
+  paperSimTradeLogs,
+  type WalterPendingApproval,
+  type InsertWalterPendingApproval,
+  walterPendingApprovals,
+  type WalterChat,
+  type InsertWalterChat,
+  walterChats,
+  type WalterChatLog,
+  type InsertWalterChatLog,
+  walterChatLogs,
+  type WalterApprovalsAudit,
+  type InsertWalterApprovalsAudit,
+  walterApprovalsAudit
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -444,6 +456,22 @@ export interface IStorage {
       totalPnl: number;
     }>;
   }>;
+  
+  // Walter AI Assistant methods
+  createWalterPendingApproval(data: InsertWalterPendingApproval): Promise<WalterPendingApproval>;
+  getPendingApprovals(userId: string, status?: string): Promise<WalterPendingApproval[]>;
+  updateApprovalStatus(id: string, status: string, updates: Partial<WalterPendingApproval>): Promise<WalterPendingApproval>;
+  
+  createWalterChat(data: InsertWalterChat): Promise<WalterChat>;
+  getWalterChats(userId: string, status?: string): Promise<WalterChat[]>;
+  getWalterChatById(id: string): Promise<WalterChat | undefined>;
+  updateWalterChat(id: string, updates: Partial<WalterChat>): Promise<WalterChat>;
+  
+  createWalterChatLog(log: InsertWalterChatLog): Promise<WalterChatLog>;
+  getWalterChatLogs(chatSessionId: string, limit?: number): Promise<WalterChatLog[]>;
+  
+  createWalterApprovalsAudit(audit: InsertWalterApprovalsAudit): Promise<WalterApprovalsAudit>;
+  getWalterApprovalsAudit(approvalId: string): Promise<WalterApprovalsAudit[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2485,6 +2513,89 @@ export class DatabaseStorage implements IStorage {
       avgHoldingTime,
       byStrategy
     };
+  }
+  
+  // Walter AI Assistant methods
+  async createWalterPendingApproval(data: InsertWalterPendingApproval): Promise<WalterPendingApproval> {
+    const [approval] = await db.insert(walterPendingApprovals).values(data).returning();
+    return approval;
+  }
+  
+  async getPendingApprovals(userId: string, status?: string): Promise<WalterPendingApproval[]> {
+    if (status) {
+      return await db.select().from(walterPendingApprovals)
+        .where(and(
+          eq(walterPendingApprovals.userId, userId),
+          eq(walterPendingApprovals.status, status as any)
+        ))
+        .orderBy(desc(walterPendingApprovals.createdAt));
+    }
+    return await db.select().from(walterPendingApprovals)
+      .where(eq(walterPendingApprovals.userId, userId))
+      .orderBy(desc(walterPendingApprovals.createdAt));
+  }
+  
+  async updateApprovalStatus(id: string, status: string, updates: Partial<WalterPendingApproval>): Promise<WalterPendingApproval> {
+    const [approval] = await db.update(walterPendingApprovals)
+      .set({ ...updates, status: status as any })
+      .where(eq(walterPendingApprovals.id, id))
+      .returning();
+    return approval;
+  }
+  
+  async createWalterChat(data: InsertWalterChat): Promise<WalterChat> {
+    const [chat] = await db.insert(walterChats).values(data).returning();
+    return chat;
+  }
+  
+  async getWalterChats(userId: string, status?: string): Promise<WalterChat[]> {
+    if (status) {
+      return await db.select().from(walterChats)
+        .where(and(
+          eq(walterChats.userId, userId),
+          eq(walterChats.status, status as any)
+        ))
+        .orderBy(desc(walterChats.lastMessageAt));
+    }
+    return await db.select().from(walterChats)
+      .where(eq(walterChats.userId, userId))
+      .orderBy(desc(walterChats.lastMessageAt));
+  }
+  
+  async getWalterChatById(id: string): Promise<WalterChat | undefined> {
+    const [chat] = await db.select().from(walterChats).where(eq(walterChats.id, id));
+    return chat || undefined;
+  }
+  
+  async updateWalterChat(id: string, updates: Partial<WalterChat>): Promise<WalterChat> {
+    const [chat] = await db.update(walterChats)
+      .set(updates)
+      .where(eq(walterChats.id, id))
+      .returning();
+    return chat;
+  }
+  
+  async createWalterChatLog(log: InsertWalterChatLog): Promise<WalterChatLog> {
+    const [chatLog] = await db.insert(walterChatLogs).values(log).returning();
+    return chatLog;
+  }
+  
+  async getWalterChatLogs(chatSessionId: string, limit: number = 50): Promise<WalterChatLog[]> {
+    return await db.select().from(walterChatLogs)
+      .where(eq(walterChatLogs.chatSessionId, chatSessionId))
+      .orderBy(asc(walterChatLogs.timestamp))
+      .limit(limit);
+  }
+  
+  async createWalterApprovalsAudit(audit: InsertWalterApprovalsAudit): Promise<WalterApprovalsAudit> {
+    const [auditEntry] = await db.insert(walterApprovalsAudit).values(audit).returning();
+    return auditEntry;
+  }
+  
+  async getWalterApprovalsAudit(approvalId: string): Promise<WalterApprovalsAudit[]> {
+    return await db.select().from(walterApprovalsAudit)
+      .where(eq(walterApprovalsAudit.approvalId, approvalId))
+      .orderBy(desc(walterApprovalsAudit.timestamp));
   }
 }
 
