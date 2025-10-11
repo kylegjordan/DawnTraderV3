@@ -5333,17 +5333,26 @@ Please:
   app.get('/api/orchestrator/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const isAdmin = req.user!.isAdmin;
       const limit = parseInt(req.query.limit as string) || 50;
       const category = req.query.category as string;
       const status = req.query.status as string;
 
       let logs;
+      
+      // Admins see ALL logs (system-wide recommendations), regular users see only their logs
       if (category) {
-        logs = await storage.getOrchestratorLogsByCategory(userId, category, limit);
+        logs = isAdmin 
+          ? await storage.getOrchestratorLogsByCategory(null, category, limit)
+          : await storage.getOrchestratorLogsByCategory(userId, category, limit);
       } else if (status) {
-        logs = await storage.getOrchestratorLogsByStatus(userId, status, limit);
+        logs = isAdmin
+          ? await storage.getOrchestratorLogsByStatus(null, status, limit)
+          : await storage.getOrchestratorLogsByStatus(userId, status, limit);
       } else {
-        logs = await storage.getOrchestratorLogs(userId, limit);
+        logs = isAdmin
+          ? await storage.getOrchestratorLogs(null, limit)
+          : await storage.getOrchestratorLogs(userId, limit);
       }
 
       res.json({ logs });

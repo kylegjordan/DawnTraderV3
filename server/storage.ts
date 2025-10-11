@@ -217,9 +217,9 @@ export interface IStorage {
   
   // AI Orchestrator Logs
   createOrchestratorLog(log: InsertAIOrchestratorLog): Promise<AIOrchestratorLog>;
-  getOrchestratorLogs(userId: string, limit?: number): Promise<AIOrchestratorLog[]>;
-  getOrchestratorLogsByCategory(userId: string, category: string, limit?: number): Promise<AIOrchestratorLog[]>;
-  getOrchestratorLogsByStatus(userId: string, status: string, limit?: number): Promise<AIOrchestratorLog[]>;
+  getOrchestratorLogs(userId: string | null, limit?: number): Promise<AIOrchestratorLog[]>;
+  getOrchestratorLogsByCategory(userId: string | null, category: string, limit?: number): Promise<AIOrchestratorLog[]>;
+  getOrchestratorLogsByStatus(userId: string | null, status: string, limit?: number): Promise<AIOrchestratorLog[]>;
   updateOrchestratorLog(id: number, updates: Partial<AIOrchestratorLog>): Promise<AIOrchestratorLog>;
   
   // AI Chat Logs - cost tracking
@@ -997,35 +997,44 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getOrchestratorLogs(userId: string, limit: number = 50): Promise<AIOrchestratorLog[]> {
-    return await db
-      .select()
-      .from(aiOrchestratorLogs)
-      .where(eq(aiOrchestratorLogs.userId, userId))
+  async getOrchestratorLogs(userId: string | null, limit: number = 50): Promise<AIOrchestratorLog[]> {
+    const baseQuery = db.select().from(aiOrchestratorLogs);
+    
+    const finalQuery = userId 
+      ? baseQuery.where(eq(aiOrchestratorLogs.userId, userId))
+      : baseQuery;
+    
+    return await finalQuery
       .orderBy(desc(aiOrchestratorLogs.timestamp))
       .limit(limit);
   }
 
-  async getOrchestratorLogsByCategory(userId: string, category: string, limit: number = 50): Promise<AIOrchestratorLog[]> {
+  async getOrchestratorLogsByCategory(userId: string | null, category: string, limit: number = 50): Promise<AIOrchestratorLog[]> {
+    const conditions = [eq(aiOrchestratorLogs.category, category)];
+    
+    if (userId) {
+      conditions.push(eq(aiOrchestratorLogs.userId, userId));
+    }
+    
     return await db
       .select()
       .from(aiOrchestratorLogs)
-      .where(and(
-        eq(aiOrchestratorLogs.userId, userId),
-        eq(aiOrchestratorLogs.category, category)
-      ))
+      .where(and(...conditions))
       .orderBy(desc(aiOrchestratorLogs.timestamp))
       .limit(limit);
   }
 
-  async getOrchestratorLogsByStatus(userId: string, status: string, limit: number = 50): Promise<AIOrchestratorLog[]> {
+  async getOrchestratorLogsByStatus(userId: string | null, status: string, limit: number = 50): Promise<AIOrchestratorLog[]> {
+    const conditions = [eq(aiOrchestratorLogs.status, status)];
+    
+    if (userId) {
+      conditions.push(eq(aiOrchestratorLogs.userId, userId));
+    }
+    
     return await db
       .select()
       .from(aiOrchestratorLogs)
-      .where(and(
-        eq(aiOrchestratorLogs.userId, userId),
-        eq(aiOrchestratorLogs.status, status)
-      ))
+      .where(and(...conditions))
       .orderBy(desc(aiOrchestratorLogs.timestamp))
       .limit(limit);
   }
