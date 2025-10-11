@@ -1,0 +1,184 @@
+Phase 5.4 — Walter Chat Expansion + Approval Integration + User Fixes
+
+Objective:
+Streamline approvals into Walter’s conversational system, enable manual and automated multi-chat management, add approval notifications, and ensure user accounts and authentication are working correctly.
+
+🧱 PART 1 — User Credential Corrections & Admin Password Control
+
+1️⃣ Reset Credentials for Testing
+
+Locate users in the database:
+
+test@ example.com / username: testuser123
+
+testuser@ example.com / username: testuser
+
+Keep the same emails and usernames.
+
+Set both passwords to → SecurePass123!
+
+Keep roles: User for testuser123, Admin for testuser.
+
+Confirm login works for:
+
+kylegjordan@gmail.com (unchanged)
+
+test@ example.com (SecurePass123!)
+
+testuser@ example.com (SecurePass123!)
+
+2️⃣ Admin-Side Password Reset Feature
+
+In Settings → Users tab:
+
+Add a “Reset Password” button beside each user (visible to admins only).
+
+Clicking opens a small modal: New Password + Confirm Password.
+
+On confirmation, update the user’s password securely (BCrypt/Argon2).
+
+Show toast: “✅ Password updated successfully for [user].”
+
+Validation
+
+Verify all three accounts can log in through UI and API.
+
+Ensure password resets work instantly without restart.
+
+Confirm password hashes stored securely (no plaintext).
+
+🤖 PART 2 — Walter-Integrated Approval System (Replacing Separate Tab)
+
+1️⃣ Retain Strategy Management in Goals Engine
+
+The Goals Engine → Strategies tab remains the sole location for strategy setup and variable editing.
+
+Each change triggers a risk evaluation.
+
+If estimated portfolio drawdown ≥ 20 %, mark as “Approval Required.”
+
+If < 20 %, auto-execute and log.
+
+2️⃣ Approval-to-Chat Flow
+
+When an approval is required:
+
+Automatically create a new chat thread in Walter with title:
+“Approval Required — [Strategy Name] Adjustment ( X % Risk )”
+
+Populate the first message with:
+
+Strategy name and variables affected
+
+Walter’s rationale for the change
+
+Projected impact on portfolio value
+
+Include two action buttons in the chat:
+Approve / Reject
+
+When you approve → Walter executes, logs, and closes thread.
+
+When you reject → thread marked “Closed — Rejected by User.”
+
+All approvals remain searchable and auditable.
+
+3️⃣ Global Approval Notification
+
+Add a small notification badge (🔔 Approvals [x]) in the dashboard header.
+
+Badge count = number of open approvals (status = pending).
+
+Clicking the badge shows a dropdown list of approvals → each item links directly to its Walter chat thread.
+
+When all approvals resolved → badge disappears.
+
+💬 PART 3 — Walter Chat Enhancements & Memory Efficiency
+
+1️⃣ New Chat Creation
+
+In the Walter panel:
+
+Add a “New Chat” button (+ icon) above the chat list.
+
+On click, create a new session with title: “Chat [date/time]” or a user-entered custom title.
+
+New chats appear in the sidebar under Sessions, similar to the Goals Engine style.
+
+2️⃣ Session Management
+
+Each chat = individual session stored in the context_chats table.
+
+Store minimal metadata: title, created _at, last _message, status (active/archived).
+
+Allow archiving: “Archive Chat” option removes it from active list but keeps it retrievable.
+
+3️⃣ Walter’s Chat Memory Optimization
+
+Implement context windowing to limit token usage:
+
+Keep only the last 15–20 messages in active memory for response generation.
+
+Persist all messages to DB for long-term history.
+
+Introduce summary nodes:
+
+When a chat exceeds ~50 messages, auto-summarize the first 30 and replace them with a “Summary Message” (“Walter summarized earlier discussion for context efficiency”).
+
+Store full original in DB for retrieval if needed.
+
+Use metadata indexing (e.g., chat_id, topics, entities) so Walter can recall prior discussions without re-embedding full logs.
+
+Ensure summaries are referenced in memory when reopening older chats.
+
+4️⃣ Search & Recall
+
+Add simple search bar within Walter panel → filters chats by keyword or tag.
+
+Example: typing “strategy approval” lists only approval-related threads.
+
+🧪 PART 4 — Testing & Validation
+
+Log in as Kyle (admin).
+
+Trigger a strategy change > 20 % risk → verify new Walter chat created.
+
+See notification badge appear → click → chat opens.
+
+Approve → Walter executes and badge count decreases.
+
+Create manual new chat → test message flow.
+
+Exceed 50 messages → verify summary compression applied.
+
+Search for archived chat → ensure retrievable.
+
+Confirm all states persist after reload.
+
+✅ All pass → Phase 5.4 Complete.
+
+📘 PART 5 — Documentation
+
+Update replit.md to include:
+
+User credential reset procedure
+
+Admin password-reset workflow
+
+Walter integrated approval system (20 % threshold logic)
+
+Notification badge behavior
+
+New chat/session management features
+
+Summary + context-window memory model
+
+⚙️ Expected Outcomes
+
+✅ Working test accounts
+✅ Admin can change passwords
+✅ Strategy changes trigger conversational approvals
+✅ Dashboard shows pending-approval badge
+✅ Walter chat supports multiple sessions
+✅ Efficient memory + summarization prevents token bloat
+✅ Full persistence + search across all chats
