@@ -33,16 +33,15 @@ interface SidebarProps {
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
   { name: "Walter", href: "/walter", icon: Bot },
-  { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "Trading", href: "/active-trades", icon: BarChart3 },
-  { name: "Watchlists", href: "/watchlist", icon: Eye },
-  { name: "Search and Analysis", href: "/search", icon: Search },
-  { name: "Goals Engine", href: "/goals-engine", icon: Target },
   { name: "Briefings", href: "/briefings", icon: Newspaper },
-  { name: "Reporting", href: "/reports", icon: FileText },
-  { name: "Systems Monitoring", href: "/systems", icon: Activity },
+  { name: "Go Engine", href: "/goals-engine", icon: Target },
+  { name: "Watch List", href: "/watchlist", icon: Eye },
+  { name: "Search and Analysis", href: "/search", icon: Search },
+  { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
+  { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
+  { name: "System Monitoring", href: "/systems", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
   { name: "Admin Panel", href: "/admin", icon: Shield, adminOnly: true },
 ];
@@ -107,7 +106,7 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
                 >
                   <Icon className="w-5 h-5" />
                   <span>{item.name}</span>
-                  {item.name === "Active Trades" && activeTrades.length > 0 && (
+                  {item.name === "Trading" && activeTrades.length > 0 && (
                     <span className="ml-auto bg-primary text-primary-foreground text-xs font-semibold px-2 py-0.5 rounded-full">
                       {activeTrades.length}
                     </span>

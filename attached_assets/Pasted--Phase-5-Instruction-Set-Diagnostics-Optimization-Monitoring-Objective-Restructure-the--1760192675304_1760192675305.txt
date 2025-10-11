@@ -1,0 +1,268 @@
+⚙️ Phase 5 Instruction Set – “Diagnostics, Optimization & Monitoring”
+🎯 Objective
+
+Restructure the navigation sidebar as specified and introduce a new System Monitoring panel plus an underlying diagnostics layer that continuously tracks performance, detects anomalies, provides real-time health visualization, and generates optimization insights for Walter and you.
+
+🧭 Task 1 – Sidebar Reordering and Verification
+
+Goal: Match exact order and ensure all routes remain valid.
+
+Target Order:
+
+Dashboard
+Walter
+Trading
+Briefings
+Go Engine
+Watch List
+Search and Analysis
+Command Center
+AI Transparency
+System Monitoring
+Settings
+Admin Panel
+
+
+Instructions
+
+Open sidebar component (client/src/components/layout/sidebar.tsx or equivalent).
+
+Reorder menu items to match sequence above.
+
+Verify icons and routes correspond correctly.
+
+Confirm every route in App.tsx exists and loads.
+
+Remove any duplicates or legacy routes (e.g., old “Analysis” or “GPT Chats”).
+
+Run local navigation test to confirm:
+
+No broken links or missing icons.
+
+Hover and active states behave consistently.
+
+Floating Walter assistant still appears on all pages.
+
+Verification Checklist
+
+✅ Sidebar visually matches order.
+
+✅ Clicking each link loads expected page.
+
+✅ No console 404s or warnings.
+
+✅ Floating assistant functions on every page.
+
+🩺 Task 2 – Create “System Monitoring” Panel
+
+Goal: Add a central hub for diagnostics and system health.
+
+Instructions
+
+Add new page /system-monitoring.
+
+Include top-level cards or tabs:
+
+Real-Time Performance: CPU / Memory / Latency / API Health.
+
+Trading Engine Status: Active Mode (Live/Paper), Orders Queue, Execution Latency.
+
+Walter Activity: Requests per Minute, Success Rate, Pending Approvals.
+
+Database Health: Connection Status, Record Count Stats, Error Rate.
+
+Alert Log: Most recent alerts (warnings, failures, policy violations).
+
+Use existing orchestrator logs and health endpoints where possible.
+
+Enable live refresh (5-10 seconds) using lightweight polling or WebSocket.
+
+Integrate “Acknowledge Alert” and “Export Report” buttons.
+
+Verification Checklist
+
+✅ Page loads without errors.
+
+✅ Metrics update in real time.
+
+✅ Alert log populates dynamically.
+
+✅ Export produces JSON/CSV snapshot.
+
+📊 Task 3 – Add Diagnostics & Auto-Analysis Layer
+
+Goal: Give Walter self-awareness of performance and behavior.
+
+Instructions
+
+Create backend module /server/diagnostics/metrics.ts to:
+
+Aggregate key metrics (response time, trading latency, DB queries, memory usage).
+
+Compare live metrics against baseline averages.
+
+Flag anomalies exceeding 2 σ (standard deviations).
+
+Feed summarized results to the System Monitoring page and to Walter’s knowledge context.
+
+Generate an AI Summary every hour:
+
+Overall System Status (green/yellow/red)
+
+Key Anomalies found
+
+Recommendations for optimization
+
+Log all results into diagnostics_log table.
+
+Verification Checklist
+
+✅ Metrics endpoint returns valid JSON.
+
+✅ Hourly summaries appear in logs.
+
+✅ System Monitoring displays status color.
+
+✅ Walter can answer “How is the system performing?”
+
+🧠 Task 4 – Self-Optimization & Recommendations Engine
+
+Goal: Allow Walter to identify and propose or apply optimizations autonomously.
+
+Instructions
+
+Add module /server/optimization/engine.ts:
+
+Continuously read diagnostics data.
+
+Detect bottlenecks or recurring inefficiencies.
+
+Generate human-readable recommendations (e.g., “Reduce API poll interval to 5 s”).
+
+Classify recommendations as Informational, Advisory, or Actionable.
+
+Display these on both the Command Center and System Monitoring → Optimization tab.
+
+Allow Kyle to approve or auto-apply certain actions via Walter.
+
+Log every optimization applied (who/what/when/impact).
+
+Verification Checklist
+
+✅ Recommendations appear under both panels.
+
+✅ Actions requiring approval respect approval matrix.
+
+✅ Execution logs record parameter changes.
+
+✅ Walter responds coherently when asked about optimization history.
+
+🔔 Task 5 – Alerts & Health Dashboard Integration
+
+Goal: Unified alert pipeline and notification UI.
+
+Instructions
+
+Extend diagnostics layer to trigger alerts when thresholds breached.
+
+e.g., > 10 % error rate = “Warning” → yellow.
+
+e.g., DB disconnect = “Critical” → red.
+
+Store alerts in alerts table with severity, message, timestamp.
+
+Display real-time alerts banner at top of System Monitoring and Dashboard.
+
+Add “Acknowledge All” and “Mute Low Severity” controls.
+
+Ensure Walter announces critical alerts verbally or via chat message (e.g., “Trading latency spike detected”).
+
+Verification Checklist
+
+✅ Alerts visible in System Monitoring and Dashboard.
+
+✅ Color codes match severity.
+
+✅ Walter mentions critical alerts automatically.
+
+✅ Alerts can be acknowledged and cleared.
+
+🧩 Task 6 – Testing & Validation Suite
+
+Goal: Confirm stability, accuracy, and UI consistency.
+
+Tests
+
+Navigation test:
+
+Verify all sidebar links.
+
+Confirm floating Walter assistant loads.
+
+Metrics test:
+
+Simulate CPU/memory load spike → check alert trigger.
+
+Verify Dashboard shows yellow/red indicator.
+
+Self-Optimization test:
+
+Introduce delayed API response → see if Walter recommends reduced interval.
+
+Kill-Switch consistency:
+
+Ensure diagnostics cannot override kill switch.
+
+UI consistency:
+
+Verify no overlapping cards or scroll issues across panels.
+
+Verification Checklist
+
+✅ All diagnostics metrics populate correctly.
+
+✅ Alerts trigger and reset as expected.
+
+✅ Optimization recommendations log properly.
+
+✅ Sidebar order finalized and working.
+
+📘 Documentation & Handover
+
+Goal: Ensure maintainability and usability.
+
+Instructions
+
+Update replit.md with:
+
+Phase 5 overview & objectives.
+
+Instructions for using System Monitoring and Diagnostics.
+
+Explanation of color codes and recommendation categories.
+
+Add “Help & Tutorial” button linking to this doc from System Monitoring page.
+
+Confirm Walter can summarize the system’s current status on voice command (“Walter, give me a health report”).
+
+Verification Checklist
+
+✅ replit.md updated with Phase 5 content.
+
+✅ Help button visible and linked.
+
+✅ Walter answers health queries accurately.
+
+🏁 Success Criteria for Phase 5
+
+Sidebar Order Matches Specified Layout.
+
+System Monitoring Panel fully operational.
+
+Diagnostics layer collects metrics and updates in real time.
+
+Alerts and optimization recommendations function correctly.
+
+All routes intact and UI stable (no React errors).
+
+Documentation & help available in app.
