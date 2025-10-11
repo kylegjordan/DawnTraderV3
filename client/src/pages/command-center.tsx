@@ -133,6 +133,21 @@ interface SystemAudit {
   };
 }
 
+// Helper function to format category labels
+const getCategoryLabel = (category: string): string => {
+  const categoryLabels: Record<string, string> = {
+    'system': 'System Health',
+    'trading': 'Trading Strategy',
+    'optimization': 'Performance Optimization',
+    'ai_analysis': 'AI Analysis',
+    'walter_command': 'Walter Command',
+    'walter_action': 'Walter Action',
+    'risk_management': 'Risk Management',
+    'market_analysis': 'Market Analysis'
+  };
+  return categoryLabels[category] || category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+};
+
 export default function CommandCenter() {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
@@ -810,7 +825,7 @@ export default function CommandCenter() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline" data-testid={`badge-category-${log.id}`}>{log.category}</Badge>
+                          <Badge variant="outline" data-testid={`badge-category-${log.id}`}>{getCategoryLabel(log.category)}</Badge>
                           <Badge variant={getUrgencyColor(log.urgencyLevel)} data-testid={`badge-urgency-${log.id}`}>
                             {log.urgencyLevel}
                           </Badge>
@@ -828,7 +843,13 @@ export default function CommandCenter() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm mb-3" data-testid={`text-recommendation-${log.id}`}>{log.recommendation}</p>
+                    {/* Recommendation with Walter prefix if applicable */}
+                    <p className="text-sm mb-3" data-testid={`text-recommendation-${log.id}`}>
+                      {(log.metadata as any)?.source === 'Walter' && (
+                        <span className="font-semibold text-primary">Walter Recommends: </span>
+                      )}
+                      {log.recommendation}
+                    </p>
                     {log.actionTaken && (
                       <div className="bg-muted p-3 rounded-md">
                         <p className="text-xs text-muted-foreground mb-1">Action Taken:</p>

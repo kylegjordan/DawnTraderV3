@@ -1,0 +1,110 @@
+🧹 Phase 4.5 – System Consolidation & UI Cleanup (No-Code Instructions for Replit)
+🎯 Objective
+
+Eliminate outdated modules, merge duplicated features, clarify recommendations, and clean user/admin data so the platform reflects a single, coherent structure before diagnostic and optimization features are added.
+
+⚙️ Task 1 – Clarify Recommendations in Command Center
+
+Goal: Make the Command Center’s purpose explicit and useful.
+Instructions
+
+In the Command Center dashboard, review any widgets or cards showing “Recommendations.”
+
+Add short labels or sub-headers so each clearly states what it represents (e.g., “Trading Strategy Insights,” “System Health Suggestions,” or “Performance Adjustments”).
+
+If a recommendation originates from Walter, prefix it with “Walter Recommends:” for clarity.
+
+Ensure no placeholder or empty cards remain.
+
+🧩 Task 2 – Remove GPT Chats and Symbol Analysis Duplicates
+
+Goal: Decommission redundant interfaces and relocate their useful parts.
+Instructions
+
+Delete/disable GPT Chats completely (sidebar entry, routes, and related files).
+
+Delete Symbol Analysis tab under GPT Chats — the full version already exists under Search & Analysis.
+
+Confirm sidebar order after removal:
+
+Dashboard → Command Center → Walter → AI Transparency → Trading → Watch Lists → Settings
+
+📊 Task 3 – Move AI Opportunities to Watch Lists
+
+Goal: Relocate the populated AI Opportunities tab from GPT Chats to Watch Lists.
+Instructions
+
+Identify the populated AI Opportunities component currently inside GPT Chats.
+
+Move or reference that same data/component under the Watch Lists page, replacing the empty one there.
+
+Remove any “Chat Assistant” or prompt elements that accompany AI Opportunities in GPT Chats — not needed in Watch Lists.
+
+Verify the relocated AI Opportunities tab loads historical data and displays properly.
+
+🧭 Task 4 – Restore Walter Approvals Visibility in Settings
+
+Goal: Make the Walter Approval Rules page discoverable and functional.
+Instructions
+
+Ensure route /settings/walter-approvals exists and is linked inside Settings.
+
+Add a visible menu entry labeled “Walter Approvals” under Settings.
+
+Confirm that the page loads Kyle’s approval-matrix JSON (from users.approval_matrix) and allows editing.
+
+Verify the hard-lock for killSwitchOverride = true is still enforced.
+
+Test saving / resetting the approval matrix to confirm API connection.
+
+👥 Task 5 – Clean Admin and User Database
+
+Goal: Retain only required users for clarity and security.
+Instructions
+
+In the Admin Panel (or via SQL):
+
+Keep only these user records:
+
+kylegjordan@gmail.com
+
+testuser@example.com
+
+Test User 123
+
+testuser_vmrsxr (if used by the system)
+
+Delete all others (including unused “rainbow playroom” accounts).
+
+Verify that remaining users have correct roles:
+
+Kyle → isAdmin: true
+
+Test accounts → isAdmin: false.
+
+Confirm login and token generation still function after cleanup.
+
+🔒 Task 6 – Final Integrity and Navigation Check
+
+Goal: Confirm the system is cohesive and all routes function.
+Instructions
+
+Run through each sidebar page and verify there are no 404s or blank screens.
+
+Confirm floating Walter assistant still loads context on every page.
+
+Ensure that Settings, Trading, and Watch Lists pages share consistent layout and header design.
+
+✅ Success Criteria
+
+GPT Chats and its sub-tabs are fully removed.
+
+AI Opportunities successfully appears under Watch Lists (with data).
+
+Command Center recommendations are clearly labeled.
+
+Walter Approvals visible and editable under Settings.
+
+Only authorized user accounts remain.
+
+No 404s, blank screens, or duplicate content.
