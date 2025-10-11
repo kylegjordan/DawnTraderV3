@@ -5179,6 +5179,156 @@ Please:
     }
   });
 
+  // Run comprehensive system audit (admin only)
+  app.post('/api/orchestrator/audit', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const os = await import('os');
+      
+      // 1. System Metrics
+      const cpus = os.cpus();
+      const loadAvg = os.loadavg();
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const uptime = process.uptime();
+      
+      const systemMetrics = {
+        cpu: {
+          cores: cpus.length,
+          model: cpus[0]?.model || 'Unknown',
+          loadAverage: {
+            '1min': loadAvg[0].toFixed(2),
+            '5min': loadAvg[1].toFixed(2),
+            '15min': loadAvg[2].toFixed(2)
+          }
+        },
+        memory: {
+          total: `${(totalMem / 1024 / 1024 / 1024).toFixed(2)} GB`,
+          free: `${(freeMem / 1024 / 1024 / 1024).toFixed(2)} GB`,
+          used: `${((totalMem - freeMem) / 1024 / 1024 / 1024).toFixed(2)} GB`,
+          usagePercent: `${(((totalMem - freeMem) / totalMem) * 100).toFixed(1)}%`
+        },
+        uptime: {
+          seconds: Math.floor(uptime),
+          formatted: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`
+        }
+      };
+
+      // 2. Database Status
+      const dbStatus = await storage.getDatabaseStatus?.() || { current: { sizeMb: 0, sizeGb: 0 }, history: [] };
+
+      // 3. Trading Engine Status
+      const settings = await storage.getTradingSettings(userId);
+      const tradingMode = settings?.tradingMode || 'paper';
+      
+      const liveEngine = tradingEngines.get(userId);
+      const liveEngineStatus = liveEngine?.getStatus?.() || { tradingStatus: 'stopped' };
+      
+      const paperIsRunning = paperPortfolioManagers.has(userId);
+      const paperEngineStatus = { 
+        isRunning: paperIsRunning,
+        status: paperIsRunning ? 'running' : 'stopped'
+      };
+
+      // 4. AI Systems Status
+      const { aiOrchestrator } = await import('./orchestrator/orchestrator');
+      const telemetryPath = './server/orchestrator/summaries/telemetry.json';
+      let aiMetrics = { learningCycles: 0, opportunities: 0, adjustments: 0 };
+      
+      try {
+        const fs = await import('fs/promises');
+        const telemetryData = await fs.readFile(telemetryPath, 'utf-8');
+        const telemetry = JSON.parse(telemetryData);
+        aiMetrics = telemetry.ai || aiMetrics;
+      } catch (error) {
+        console.log('[Audit] Could not load AI metrics');
+      }
+
+      // 5. Configuration Validation
+      const hasKrakenApiKey = !!process.env.KRAKEN_API_KEY;
+      const hasKrakenApiSecret = !!process.env.KRAKEN_API_SECRET;
+      const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
+
+      // 6. Recent Errors (last 24 hours)
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentErrors = await storage.getAIErrorLogs?.(userId, yesterday) || [];
+
+      // 7. Construct comprehensive audit report
+      const auditReport = {
+        timestamp: new Date().toISOString(),
+        system: systemMetrics,
+        database: {
+          size: dbStatus.current.sizeMb,
+          sizeFormatted: `${dbStatus.current.sizeMb.toFixed(2)} MB (${dbStatus.current.sizeGb.toFixed(4)} GB)`,
+          status: dbStatus.current.sizeMb < 100 ? 'healthy' : dbStatus.current.sizeMb < 250 ? 'warning' : 'critical'
+        },
+        trading: {
+          mode: tradingMode,
+          liveEngine: {
+            status: liveEngineStatus.tradingStatus,
+            isRunning: liveEngineStatus.tradingStatus === 'running'
+          },
+          paperEngine: {
+            status: paperEngineStatus.isRunning ? 'running' : 'stopped',
+            isRunning: paperEngineStatus.isRunning
+          }
+        },
+        ai: {
+          orchestrator: {
+            status: 'running',
+            learningCycles: aiMetrics.learningCycles || 0,
+            opportunities: aiMetrics.opportunities || 0,
+            adjustments: aiMetrics.adjustments || 0
+          }
+        },
+        configuration: {
+          krakenApiKey: hasKrakenApiKey ? 'configured' : 'missing',
+          krakenApiSecret: hasKrakenApiSecret ? 'configured' : 'missing',
+          openAIKey: hasOpenAIKey ? 'configured' : 'missing',
+          allConfigured: hasKrakenApiKey && hasKrakenApiSecret && hasOpenAIKey
+        },
+        errors: {
+          last24Hours: recentErrors.length,
+          recentErrors: recentErrors.slice(0, 5).map(err => ({
+            timestamp: err.timestamp,
+            errorType: err.errorType,
+            resolved: err.resolved
+          }))
+        },
+        health: {
+          overall: 'healthy', // Will be computed based on checks
+          checks: {
+            cpu: loadAvg[0] < cpus.length ? 'pass' : 'warning',
+            memory: ((totalMem - freeMem) / totalMem) < 0.9 ? 'pass' : 'warning',
+            database: dbStatus.current.sizeMb < 100 ? 'pass' : 'warning',
+            configuration: (hasKrakenApiKey && hasKrakenApiSecret && hasOpenAIKey) ? 'pass' : 'fail',
+            errors: recentErrors.length < 10 ? 'pass' : 'warning'
+          }
+        }
+      };
+
+      // Compute overall health
+      const failedChecks = Object.values(auditReport.health.checks).filter(c => c === 'fail').length;
+      const warningChecks = Object.values(auditReport.health.checks).filter(c => c === 'warning').length;
+      
+      if (failedChecks > 0) {
+        auditReport.health.overall = 'critical';
+      } else if (warningChecks > 2) {
+        auditReport.health.overall = 'degraded';
+      } else if (warningChecks > 0) {
+        auditReport.health.overall = 'fair';
+      }
+
+      res.json({ 
+        success: true, 
+        audit: auditReport 
+      });
+    } catch (error: any) {
+      console.error('[Orchestrator] Error running system audit:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get orchestrator logs
   app.get('/api/orchestrator/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

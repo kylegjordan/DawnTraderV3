@@ -90,10 +90,15 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user 
     - POST /api/orchestrator/updateGuardrail - Updates guardrail settings when approved
     - POST /api/orchestrator/updateStrategy - Updates strategy parameters when approved
   - **Command Center UI** (admin-only at `/command-center`):
-    - Overview Tab: Live system health, trading performance, AI activity metrics
+    - Overview Tab: Live system health, trading performance, AI activity metrics, **System Audit tool**
     - AI Analysis Tab: Anomalies, optimizations, and strategic recommendations
     - Logs/Recommendations Tab: Human-in-the-loop approval/rejection workflow with real-time execution
     - AI Chat Tab: Conversational interface for system queries
+  - **System Audit Tool** (POST /api/orchestrator/audit, admin-only):
+    - Comprehensive diagnostic snapshot triggered via "Run System Audit" button in Command Center
+    - Collects: System metrics (CPU cores/load, memory usage, uptime), database size/health, trading engine status (live/paper), AI systems status, configuration validation (API keys), recent errors (24h)
+    - Health assessment: Individual checks (CPU, memory, database, configuration, errors) → overall health rating (healthy/fair/degraded/critical)
+    - Displays detailed audit report card with health checks grid, system details, database status, trading engines, configuration, and recent errors
   - **Security**: All orchestrator endpoints protected by `requireAdmin` middleware with Zod validation
   - **Data Storage**: `ai_orchestrator_logs` table tracks all recommendations with status (pending/approved/rejected/applied)
 

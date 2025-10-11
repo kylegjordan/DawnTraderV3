@@ -74,11 +74,71 @@ interface OrchestratorLog {
   metadata: any;
 }
 
+interface SystemAudit {
+  timestamp: string;
+  system: {
+    cpu: {
+      cores: number;
+      model: string;
+      loadAverage: { '1min': string; '5min': string; '15min': string };
+    };
+    memory: {
+      total: string;
+      free: string;
+      used: string;
+      usagePercent: string;
+    };
+    uptime: {
+      seconds: number;
+      formatted: string;
+    };
+  };
+  database: {
+    size: number;
+    sizeFormatted: string;
+    status: 'healthy' | 'warning' | 'critical';
+  };
+  trading: {
+    mode: 'live' | 'paper';
+    liveEngine: { status: string; isRunning: boolean };
+    paperEngine: { status: string; isRunning: boolean };
+  };
+  ai: {
+    orchestrator: {
+      status: string;
+      learningCycles: number;
+      opportunities: number;
+      adjustments: number;
+    };
+  };
+  configuration: {
+    krakenApiKey: string;
+    krakenApiSecret: string;
+    openAIKey: string;
+    allConfigured: boolean;
+  };
+  errors: {
+    last24Hours: number;
+    recentErrors: Array<{ timestamp: string; errorType: string; resolved: boolean }>;
+  };
+  health: {
+    overall: 'healthy' | 'fair' | 'degraded' | 'critical';
+    checks: {
+      cpu: 'pass' | 'warning' | 'fail';
+      memory: 'pass' | 'warning' | 'fail';
+      database: 'pass' | 'warning' | 'fail';
+      configuration: 'pass' | 'warning' | 'fail';
+      errors: 'pass' | 'warning' | 'fail';
+    };
+  };
+}
+
 export default function CommandCenter() {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("overview");
   const [approvingLogId, setApprovingLogId] = useState<number | null>(null);
+  const [auditReport, setAuditReport] = useState<SystemAudit | null>(null);
 
   // Check if current user is admin
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -136,6 +196,27 @@ export default function CommandCenter() {
       toast({
         title: "Error",
         description: error?.message || "Failed to trigger analysis",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // System audit trigger
+  const runSystemAuditMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/orchestrator/audit', {});
+    },
+    onSuccess: (response: any) => {
+      setAuditReport(response.audit);
+      toast({
+        title: "System Audit Complete",
+        description: `Overall health: ${response.audit.health.overall.toUpperCase()}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to run system audit",
         variant: "destructive",
       });
     }
@@ -290,24 +371,45 @@ export default function CommandCenter() {
             </p>
           </div>
         </div>
-        <Button
-          onClick={() => triggerAnalysisMutation.mutate()}
-          disabled={triggerAnalysisMutation.isPending}
-          data-testid="button-trigger-analysis"
-          className="flex items-center gap-2"
-        >
-          {triggerAnalysisMutation.isPending ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4" />
-              Trigger Analysis
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => runSystemAuditMutation.mutate()}
+            disabled={runSystemAuditMutation.isPending}
+            data-testid="button-run-audit"
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            {runSystemAuditMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Running Audit...
+              </>
+            ) : (
+              <>
+                <Activity className="w-4 h-4" />
+                Run System Audit
+              </>
+            )}
+          </Button>
+          <Button
+            onClick={() => triggerAnalysisMutation.mutate()}
+            disabled={triggerAnalysisMutation.isPending}
+            data-testid="button-trigger-analysis"
+            className="flex items-center gap-2"
+          >
+            {triggerAnalysisMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Trigger Analysis
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -455,6 +557,164 @@ export default function CommandCenter() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* System Audit Report */}
+              {auditReport && (
+                <Card data-testid="card-audit-report">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          System Audit Report
+                          <Badge 
+                            variant={
+                              auditReport.health.overall === 'healthy' ? 'default' :
+                              auditReport.health.overall === 'fair' ? 'outline' :
+                              auditReport.health.overall === 'degraded' ? 'secondary' : 'destructive'
+                            }
+                            data-testid={`badge-health-${auditReport.health.overall}`}
+                          >
+                            {auditReport.health.overall.toUpperCase()}
+                          </Badge>
+                        </CardTitle>
+                        <CardDescription>
+                          Generated {formatDistanceToNow(new Date(auditReport.timestamp))} ago
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Health Checks */}
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3">Health Checks</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        {Object.entries(auditReport.health.checks).map(([check, status]) => (
+                          <div key={check} className="flex items-center gap-2" data-testid={`check-${check}`}>
+                            {status === 'pass' ? (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            ) : status === 'warning' ? (
+                              <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            )}
+                            <span className="text-sm capitalize">{check}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* System Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <h3 className="text-sm font-semibold mb-2">System</h3>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">CPU Cores</span>
+                            <span data-testid="text-audit-cpu-cores">{auditReport.system.cpu.cores}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Load Avg (1m)</span>
+                            <span data-testid="text-audit-load">{auditReport.system.cpu.loadAverage['1min']}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Memory Usage</span>
+                            <span data-testid="text-audit-memory">{auditReport.system.memory.usagePercent}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Uptime</span>
+                            <span data-testid="text-audit-uptime">{auditReport.system.uptime.formatted}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-sm font-semibold mb-2">Database</h3>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Size</span>
+                            <span data-testid="text-audit-db-size">{auditReport.database.sizeFormatted}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Status</span>
+                            <Badge 
+                              variant={auditReport.database.status === 'healthy' ? 'default' : auditReport.database.status === 'warning' ? 'secondary' : 'destructive'}
+                              data-testid={`badge-db-${auditReport.database.status}`}
+                            >
+                              {auditReport.database.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-sm font-semibold mb-2">Trading Engines</h3>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Mode</span>
+                            <Badge variant="outline" data-testid="badge-trading-mode">{auditReport.trading.mode}</Badge>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Live Engine</span>
+                            <span data-testid="text-audit-live">{auditReport.trading.liveEngine.status}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Paper Engine</span>
+                            <span data-testid="text-audit-paper">{auditReport.trading.paperEngine.status}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-sm font-semibold mb-2">Configuration</h3>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Kraken API</span>
+                            <span data-testid="text-audit-kraken">{auditReport.configuration.krakenApiKey}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">OpenAI API</span>
+                            <span data-testid="text-audit-openai">{auditReport.configuration.openAIKey}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">All Configured</span>
+                            <span data-testid="text-audit-all-config">
+                              {auditReport.configuration.allConfigured ? (
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-500" />
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Recent Errors */}
+                    {auditReport.errors.last24Hours > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold mb-2">Recent Errors (Last 24h)</h3>
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground" data-testid="text-audit-error-count">
+                            Total: {auditReport.errors.last24Hours} errors
+                          </p>
+                          {auditReport.errors.recentErrors.map((error, idx) => (
+                            <div key={idx} className="text-sm flex items-start gap-2 p-2 bg-muted rounded">
+                              <XCircle className="w-4 h-4 text-red-500 mt-0.5" />
+                              <div className="flex-1">
+                                <div>{error.errorType}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {formatDistanceToNow(new Date(error.timestamp))} ago
+                                  {error.resolved && ' • Resolved'}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </>
           ) : (
             <Alert>
