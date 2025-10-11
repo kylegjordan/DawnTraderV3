@@ -5931,34 +5931,32 @@ Important: Extract the exact field names and numeric values from the user's requ
               if (settings?.tradingSuspended) {
                 finalResponse = `${interpretation.response}\n\n⚠️ Cannot start trading: Kill switch is active. Trading has been suspended due to excessive losses. Please review your kill switch events and reset manually before resuming trading.`;
                 actionTaken = false;
-                break;
+              } else {
+                // Check for Kraken API credentials
+                const apiKey = process.env.KRAKEN_API_KEY;
+                const apiSecret = process.env.KRAKEN_API_SECRET;
+                
+                if (!apiKey || !apiSecret) {
+                  finalResponse = `${interpretation.response}\n\n⚠️ Cannot start trading: Kraken API credentials not configured. Please add KRAKEN_API_KEY and KRAKEN_API_SECRET to Replit Secrets.`;
+                  actionTaken = false;
+                } else {
+                  // Determine mode
+                  const targetMode = interpretation.actionType === 'start_live' ? 'live' : 'paper';
+                  
+                  // Start trading engine
+                  let engine = tradingEngines.get(userId);
+                  if (!engine) {
+                    engine = new TradingEngine(userId, apiKey, apiSecret);
+                    tradingEngines.set(userId, engine);
+                  }
+                  
+                  await engine.start();
+                  await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: targetMode });
+                  
+                  console.info(`[Walter] Started ${targetMode} trading for user ${userId}`);
+                  finalResponse = `${interpretation.response}\n\n✅ ${targetMode.charAt(0).toUpperCase() + targetMode.slice(1)} trading started successfully.`;
+                }
               }
-
-              // Check for Kraken API credentials
-              const apiKey = process.env.KRAKEN_API_KEY;
-              const apiSecret = process.env.KRAKEN_API_SECRET;
-              
-              if (!apiKey || !apiSecret) {
-                finalResponse = `${interpretation.response}\n\n⚠️ Cannot start trading: Kraken API credentials not configured. Please add KRAKEN_API_KEY and KRAKEN_API_SECRET to Replit Secrets.`;
-                actionTaken = false;
-                break;
-              }
-
-              // Determine mode
-              const targetMode = interpretation.actionType === 'start_live' ? 'live' : 'paper';
-              
-              // Start trading engine
-              let engine = tradingEngines.get(userId);
-              if (!engine) {
-                engine = new TradingEngine(userId, apiKey, apiSecret);
-                tradingEngines.set(userId, engine);
-              }
-              
-              await engine.start();
-              await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: targetMode });
-              
-              console.info(`[Walter] Started ${targetMode} trading for user ${userId}`);
-              finalResponse = `${interpretation.response}\n\n✅ ${targetMode.charAt(0).toUpperCase() + targetMode.slice(1)} trading started successfully.`;
               break;
 
             case 'stop_paper':

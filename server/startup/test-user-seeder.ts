@@ -21,12 +21,16 @@ export async function seedTestUser(): Promise<void> {
     const existingUser = await storage.getUserByEmail(testEmail);
 
     if (existingUser) {
-      console.log(`[Startup] Test account already exists: ${testEmail}`);
+      // Update password to match current environment variable (in case it changed)
+      const passwordHash = bcrypt.hashSync(testPassword, 10);
+      await storage.updateUser(existingUser.id, { password: passwordHash });
+      
+      console.log(`[Startup] Test account verified and password updated: ${testEmail}`);
       
       // Log to transparency system
       await storage.createTransparencyLog({
         taskName: 'System Bootstrap',
-        resultSummary: `Test account already exists: ${testEmail}`,
+        resultSummary: `Test account verified and password updated: ${testEmail}`,
         success: true,
         duration: "0",
       });
