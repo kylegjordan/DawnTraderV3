@@ -36,7 +36,11 @@ export default function WalterApprovals() {
 
   useEffect(() => {
     if (userProfile?.approvalMatrix) {
-      setApprovalMatrix(userProfile.approvalMatrix);
+      // Always enforce kill switch hard-lock regardless of stored value
+      setApprovalMatrix({
+        ...userProfile.approvalMatrix,
+        killSwitchOverride: true
+      });
     }
   }, [userProfile]);
 
@@ -65,12 +69,21 @@ export default function WalterApprovals() {
   });
 
   const handleSave = async () => {
-    updateApprovalMatrixMutation.mutate(approvalMatrix);
+    // Always enforce kill switch hard-lock before saving
+    const matrixToSave = {
+      ...approvalMatrix,
+      killSwitchOverride: true
+    };
+    updateApprovalMatrixMutation.mutate(matrixToSave);
   };
 
   const handleReset = () => {
     if (userProfile?.approvalMatrix) {
-      setApprovalMatrix(userProfile.approvalMatrix);
+      // Always enforce kill switch hard-lock on reset
+      setApprovalMatrix({
+        ...userProfile.approvalMatrix,
+        killSwitchOverride: true
+      });
       
       toast({
         title: "Reset Complete",
