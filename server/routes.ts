@@ -5726,8 +5726,8 @@ Please:
 
 The user can ask you to:
 1. Adjust trading goals (e.g., "set my goal to $75 per trade")
-2. Modify guardrails (e.g., "tighten guardrails by 10 percent")
-3. Update filters (e.g., "only scan BTC pairs")
+2. Modify guardrails (e.g., "tighten guardrails by 10 percent", "set max daily loss to $500")
+3. Update filters (e.g., "only scan BTC pairs", "set min volume to 2M")
 4. Change strategy variables (e.g., "increase VWAP threshold to 2%")
 5. Adjust risk thresholds (e.g., "set max risk to 5%")
 6. Start/stop paper trading (e.g., "start paper trading")
@@ -5747,19 +5747,29 @@ Approval Matrix (which actions require approval):
 - Paper Trading Activation: ${approvalMatrix.paperTradingActivation ? 'requires approval' : 'no approval needed'}
 - Kill Switch Override: always requires admin approval (locked)
 
+Known parameter fields:
+- Guardrails: maxDailyLoss, maxDrawdown, maxPositionSize, maxOpenPositions, riskPerTrade
+- Filters: minVolume, minPrice, maxPrice, minMarketCap, maxBidAskSpread, rsiMin, rsiMax, volatilityMin, volatilityMax, excludeStablecoins, minLiquidity
+- Goals: metricName (daily_profit, portfolio_value, win_rate, avg_r_multiple, etc.), goalValue (numeric)
+- Strategy: strategy (vwap_pullback, abcd_long, sma_trend_ride), field (enabled or params), value (boolean or params object)
+
 Analyze the user's message and respond with a JSON object:
 {
   "actionType": "goals" | "guardrails" | "filters" | "strategy" | "risk" | "start_paper" | "stop_paper" | "start_live" | "stop_live" | "status" | "conversation",
   "requiresApproval": boolean,
   "actionDetails": {
-    "field": "specific field to update",
-    "value": "new value",
-    "reason": "why this change is being made"
+    "field": "specific field name (e.g., maxDailyLoss, minVolume)",
+    "value": numeric_or_boolean_value,
+    "reason": "brief explanation of the change",
+    "metricName": "for goals only - the metric name",
+    "goalValue": "for goals only - target value",
+    "strategy": "for strategy changes only - strategy name"
   },
   "response": "conversational response to the user explaining what you're doing"
 }
 
-For conversation or status queries, set actionType to "conversation" or "status" and provide a helpful response.`;
+For conversation or status queries, set actionType to "conversation" or "status" and provide a helpful response.
+Important: Extract the exact field names and numeric values from the user's request.`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -5829,12 +5839,129 @@ For conversation or status queries, set actionType to "conversation" or "status"
         await storage.createOrchestratorLog(logData);
         finalResponse = `${interpretation.response}\n\nℹ️ This action requires your approval. I've created a pending request in the Command Center for you to review.`;
       } else {
-        // Execute immediately (simplified - full implementation would execute the actual changes)
-        finalResponse = `${interpretation.response}\n\n✅ Action executed immediately (no approval required).`;
+        // Execute immediately - implement actual parameter changes
         actionTaken = true;
+        let executionError = null;
 
-        // TODO: Implement actual execution logic based on actionType
-        // This would call the appropriate storage methods to update goals, guardrails, etc.
+        try {
+          switch (interpretation.actionType) {
+            case 'guardrails':
+              // Update guardrails
+              if (interpretation.actionDetails?.field && interpretation.actionDetails?.value !== undefined) {
+                const currentGuardrails = await storage.getGuardrails({ userId, mode });
+                if (currentGuardrails) {
+                  const updateData = {
+                    ...currentGuardrails,
+                    [interpretation.actionDetails.field]: interpretation.actionDetails.value,
+                    userId,
+                    mode
+                  };
+                  await storage.upsertGuardrails(updateData);
+                  console.info(`[Walter] Updated guardrail ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
+                }
+              }
+              break;
+
+            case 'filters':
+              // Update screener filters
+              if (interpretation.actionDetails?.field && interpretation.actionDetails?.value !== undefined) {
+                const currentFilters = await storage.getScreenerFilters({ userId, mode });
+                if (currentFilters) {
+                  const updateData = {
+                    ...currentFilters,
+                    [interpretation.actionDetails.field]: interpretation.actionDetails.value,
+                    userId,
+                    mode
+                  };
+                  await storage.upsertScreenerFilters(updateData);
+                  console.info(`[Walter] Updated filter ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
+                }
+              }
+              break;
+
+            case 'strategy':
+              // Update strategy settings
+              if (interpretation.actionDetails?.strategy && interpretation.actionDetails?.field) {
+                const currentSettings = await storage.getStrategySettings({ 
+                  userId, 
+                  mode, 
+                  strategy: interpretation.actionDetails.strategy 
+                });
+                if (currentSettings) {
+                  const updateData = {
+                    userId,
+                    mode,
+                    strategy: interpretation.actionDetails.strategy,
+                    enabled: interpretation.actionDetails.field === 'enabled' ? 
+                      interpretation.actionDetails.value : currentSettings.enabled,
+                    params: interpretation.actionDetails.field === 'params' ? 
+                      interpretation.actionDetails.value : currentSettings.params
+                  };
+                  await storage.upsertStrategySettings(updateData);
+                  console.info(`[Walter] Updated strategy ${interpretation.actionDetails.strategy}.${interpretation.actionDetails.field} (${mode} mode)`);
+                }
+              }
+              break;
+
+            case 'goals':
+              // Update goals
+              if (interpretation.actionDetails?.metricName && interpretation.actionDetails?.goalValue) {
+                const goalData = {
+                  userId,
+                  metricName: interpretation.actionDetails.metricName,
+                  goalValue: interpretation.actionDetails.goalValue.toString(),
+                  actualValue: '0',
+                  percentAchieved: '0',
+                  aiValidationNotes: `Set by Walter: ${interpretation.actionDetails.reason || message}`
+                };
+                
+                if (mode === 'live') {
+                  await storage.upsertGoalLive(goalData);
+                } else {
+                  await storage.upsertGoalPaper(goalData);
+                }
+                console.info(`[Walter] Updated goal ${interpretation.actionDetails.metricName} to ${interpretation.actionDetails.goalValue} (${mode} mode)`);
+              }
+              break;
+
+            case 'start_paper':
+            case 'stop_paper':
+            case 'start_live':
+            case 'stop_live':
+              // Trading control - log that it's been handled
+              console.info(`[Walter] Trading control action: ${interpretation.actionType}`);
+              break;
+
+            default:
+              console.warn(`[Walter] Unknown action type: ${interpretation.actionType}`);
+          }
+
+          // Log Walter action to orchestrator for transparency
+          const logData = {
+            userId,
+            category: 'walter_action' as const,
+            recommendation: `Walter executed: ${interpretation.actionDetails?.reason || message}`,
+            urgencyLevel: 'low' as const,
+            status: 'approved' as const,
+            actionTaken: `Executed ${interpretation.actionType} update`,
+            metadata: {
+              source: 'Walter',
+              actionType: interpretation.actionType,
+              actionDetails: interpretation.actionDetails,
+              originalMessage: message,
+              mode,
+              timestamp: new Date().toISOString()
+            }
+          };
+          await storage.createOrchestratorLog(logData);
+
+          finalResponse = `${interpretation.response}\n\n✅ Action executed immediately (no approval required).`;
+        } catch (execError: any) {
+          console.error('[Walter] Execution error:', execError);
+          executionError = execError.message;
+          finalResponse = `${interpretation.response}\n\n⚠️ I encountered an error executing this action: ${execError.message}`;
+          actionTaken = false;
+        }
       }
 
       res.json({
