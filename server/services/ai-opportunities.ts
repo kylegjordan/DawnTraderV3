@@ -3,6 +3,7 @@ import { KrakenService } from './kraken';
 import { storage } from '../storage';
 import { InsertAIOpportunity, InsertAIOpportunityRun, InsertAIAuditLog } from '@shared/schema';
 import { estimateMessagesTokens, calculateCost } from '../utils/token-counter';
+import { getWalterPurpose, createPurposePromptSection, logPurposeUsage } from './walter-purpose';
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || ""
@@ -148,7 +149,7 @@ export class AIOpportunitiesService {
       }
 
       // Step 4: Call GPT-4o mini for opportunity generation
-      const opportunities = await this.callAIForOpportunities(filteredPairs, settings.aiOpportunitiesMaxSaved || 40);
+      const opportunities = await this.callAIForOpportunities(filteredPairs, settings.aiOpportunitiesMaxSaved || 40, userId);
       console.log(`💡 AI generated ${opportunities.length} opportunities`);
 
       // Step 5: Validate and store opportunities
@@ -252,7 +253,7 @@ export class AIOpportunitiesService {
     return pairs;
   }
 
-  private async callAIForOpportunities(pairs: PairData[], maxOpportunities: number): Promise<OpportunityCandidate[]> {
+  private async callAIForOpportunities(pairs: PairData[], maxOpportunities: number, userId?: string): Promise<OpportunityCandidate[]> {
     try {
       // Prepare compact payload
       const payload = pairs.map(p => ({
@@ -264,7 +265,14 @@ export class AIOpportunitiesService {
         trend: p.trendMarkers
       }));
 
-      const systemPrompt = `You are a cryptocurrency trading analyst. Analyze the provided market data and identify trading opportunities.
+      // Fetch Walter's purpose if userId is provided
+      let purposeSection = '';
+      if (userId) {
+        const walterPurpose = await getWalterPurpose(userId);
+        purposeSection = createPurposePromptSection(walterPurpose);
+      }
+
+      const systemPrompt = `${purposeSection}You are a cryptocurrency trading analyst. Analyze the provided market data and identify trading opportunities.
 
 IMPORTANT CONSTRAINTS:
 - You are ONLY proposing opportunities, NOT placing orders
@@ -320,6 +328,11 @@ Return ONLY a JSON array of opportunities, no other text. Maximum ${maxOpportuni
       const cost = calculateCost(inputTokens, outputTokens, 'gpt-4o-mini');
 
       console.log(`💰 API call cost: $${cost.toFixed(4)} (${totalTokens} tokens)`);
+
+      // Log purpose usage if userId was provided
+      if (userId) {
+        await logPurposeUsage(userId, 'ai_opportunities', { pairCount: pairs.length });
+      }
 
       const responseText = completion.choices[0].message.content || '{"opportunities": []}';
       const parsed = JSON.parse(responseText);

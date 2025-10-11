@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { Trade, TradingSettings, AIReport, InsertAIAuditLog, InsertErrorLog } from '@shared/schema';
 import { databaseQueryService } from './database-query';
 import { marketDataService } from './market-data';
+import { getWalterPurpose, createPurposePromptSection, logPurposeUsage } from './walter-purpose';
 import { 
   estimateMessagesTokens, 
   calculateCost, 
@@ -179,6 +180,10 @@ export class AIAnalyst {
       const priceData = await storage.getPriceData(symbol);
       const userTrades = await storage.getTrades(userId, { symbol, limit: 50 });
       
+      // Fetch Walter's purpose for this user
+      const walterPurpose = await getWalterPurpose(userId);
+      const purposeSection = createPurposePromptSection(walterPurpose);
+      
       const liveDataSection = liveMarketData ? `
         LIVE MARKET DATA (${liveMarketData.source}):
         - Asset Type: ${assetType.toUpperCase()}
@@ -192,7 +197,8 @@ export class AIAnalyst {
 
       const assetTypeDescription = assetType === 'stock' ? 'stock' : 'cryptocurrency trading pair';
       
-      const prompt = `
+      const prompt = `${purposeSection}
+        
         Analyze the ${assetTypeDescription} ${symbol} with the following context:
         
         ${liveDataSection}Historical Performance:
@@ -225,6 +231,9 @@ export class AIAnalyst {
         response_format: { type: "json_object" },
         max_completion_tokens: 2048
       });
+
+      // Log purpose usage for transparency
+      await logPurposeUsage(userId, 'trade_recommendation', { symbol, assetType });
 
       const analysis = JSON.parse(response.choices[0].message.content || '{}');
 
