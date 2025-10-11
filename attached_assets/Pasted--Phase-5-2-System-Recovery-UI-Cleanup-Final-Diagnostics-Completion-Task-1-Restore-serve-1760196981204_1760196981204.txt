@@ -1,0 +1,221 @@
+⚙️ Phase 5.2 – System Recovery + UI Cleanup + Final Diagnostics Completion
+🩹 Task 1 – Restore server/routes.ts
+
+Goal: Recover full API routing and reintegrate diagnostic + optimization endpoints.
+
+Instructions
+
+Roll back server/routes.ts to the last known stable checkpoint (pre-overwrite) — ~6000 lines.
+
+Re-add only these sections at the bottom:
+
+GET /api/diagnostics/metrics → returns live metrics snapshot
+
+POST /api/diagnostics/analyze → triggers analyzer run
+
+GET /api/diagnostics/insights → fetches recent analyzer results
+
+POST /api/optimization/analyze → triggers optimization task
+
+GET /api/optimization/recommendations → returns latest recommendations
+
+POST /api/alerts/acknowledge → marks alert as resolved
+
+Verify imports and handler mappings exist (controllers in server/diagnostics/metrics.ts, server/diagnostics/analyzer.ts, server/optimization/analyzer.ts).
+
+Restart server → confirm no missing import or circular dependency warnings.
+
+Verification Checklist
+
+✅ Routes file restored > 6000 lines.
+
+✅ Diagnostics & Optimization endpoints respond (HTTP 200).
+
+✅ System Monitoring page loads metrics and AI Insights tabs.
+
+🎨 Task 2 – Minor UI Cleanup (Goals Engine + Trading Indicator + Settings Tabs)
+
+Instructions
+
+A. Rename Sidebar Item
+
+In client/src/components/layout/sidebar.tsx:
+
+Rename “Go Engine” → “Goals Engine.”
+
+Ensure route path (/goals-engine) and icon unchanged.
+
+B. Red Trading Indicator
+
+In client/src/components/trading/status-indicator.tsx:
+
+When status === "Stopped", use color = "#E53935" (red).
+
+Apply to both Paper and Live status variants.
+
+C. Settings Re-tabbing
+
+Replace single Settings view with tabs:
+
+General Settings (default)
+
+Walter Approvals
+
+Users (Admin Panel)
+
+Move existing admin panel content into Users tab.
+
+Remove Walter Approvals from General tab; link directly as own tab.
+
+Update routing:
+
+/settings/general
+/settings/walter-approvals
+/settings/users
+
+
+Default route → General tab.
+
+Verification Checklist
+
+✅ Sidebar shows “Goals Engine.”
+
+✅ “Stopped” status badge is red.
+
+✅ Settings tabs switch without reload.
+
+✅ All routes load cleanly (no 404).
+
+🧠 Task 3 – Finalize Walter Approval Matrix and Threshold Logic
+
+Goal: Complete approval logic and define toggle behavior clearly.
+
+Instructions
+
+Ensure each toggle in Walter Approvals uses:
+
+Blue = Authorized (ON) → Walter can execute without manual approval unless risk > threshold.
+
+Gray = Restricted (OFF) → Walter must request approval before executing.
+
+Add numeric field:
+
+“Maximum Risk % Before Manual Approval Required” (default 5 %).
+
+Store value in approval_matrix.policyConstraints.maxPortfolioRiskPercent.
+
+In backend logic (/server/services/approval-evaluator.ts or equivalent):
+
+Compute projectedRisk % for each pending change.
+
+If projectedRisk > maxPortfolioRiskPercent → require approval.
+
+Confirm Walter messages:
+
+“Change executed automatically.” (for ≤ threshold)
+
+“Change requires approval; estimated risk X %.” (for > threshold)
+
+Verification Checklist
+
+✅ Threshold field visible and editable.
+
+✅ Database updates persist.
+
+✅ Walter follows threshold logic correctly.
+
+✅ UI shows accurate toggle state (blue = active).
+
+🚨 Task 4 – Complete Alerts & Health Dashboard Integration
+
+Goal: Finish alert pipeline and banner display.
+
+Instructions
+
+Use alerts table with fields (id, severity, message, timestamp, acknowledged).
+
+Add top-bar alerts banner on Dashboard and System Monitoring:
+
+Red for Critical, Yellow for Warning, Gray for Info.
+
+Buttons: Acknowledge All / Mute Low Severity.
+
+Wire POST /api/alerts/acknowledge to these buttons.
+
+Ensure Walter verbally reports Critical alerts.
+
+Verification Checklist
+
+✅ Alerts appear on both pages.
+
+✅ Severity color coding correct.
+
+✅ Acknowledgment works and persists.
+
+✅ Walter notifies on Critical events.
+
+🧪 Task 5 – Validation & Stress Tests
+
+Tests
+
+Navigation: Sidebar → all pages load properly.
+
+Diagnostics: Force CPU/memory load spike → alert triggers.
+
+Optimization: Run manual analysis → recommendations populate.
+
+Threshold: Simulate 8 % risk with threshold 5 % → approval required.
+
+Persistence: Reload app → settings and thresholds remain saved.
+
+Color/UI: Visually verify red “Stopped” state and Goals Engine label.
+
+Verification Checklist
+
+✅ All tests pass without React errors.
+
+✅ Diagnostics refresh every 5–10 s.
+
+✅ Alerts and approvals behave per rules.
+
+📘 Task 6 – Documentation & Help Overlay
+
+Goal: Update docs and prepare for user tutorial phase.
+
+Instructions
+
+Append to replit.md:
+
+Phase 5.2 overview.
+
+Sidebar map + tab descriptions.
+
+Explanation of each toggle and threshold.
+
+Add “Help & Tutorial” button on Settings (Walter Approvals tab) → opens in-app markdown summary.
+
+Ensure Walter answers: “Explain the approval matrix and risk threshold.”
+
+Verification Checklist
+
+✅ replit.md updated.
+
+✅ Help button visible and linked.
+
+✅ Walter responds with accurate description.
+
+🏁 Success Criteria
+
+routes.ts fully restored and operational.
+
+Sidebar cleanup and color update complete.
+
+Settings split into General / Walter Approvals / Users.
+
+Approval matrix includes global risk threshold and correct toggle logic.
+
+Alerts and System Monitoring fully functional.
+
+All tests pass; no critical console errors.
+
+Documentation current.
