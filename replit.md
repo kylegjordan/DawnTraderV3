@@ -78,6 +78,17 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user 
   - **Improved Logic**: Now calculates avgVolume from 10-20 prior candles with proper validation (filters invalid/zero volumes, requires minimum 10 candles)
   - **Backfill Results**: Successfully generated 152 historic signals (VWAP Pullback, 26.3% win rate, -0.25% avg P/L) from BTCUSD/ETHUSD (Sep-Oct 2025)
 - **Paper Trading Simulation Engine**: Provides real-time simulated trade execution with realistic order fill logic, slippage, fees, and risk control integration. Includes a Portfolio Manager for tracking positions, P/L, and performance metrics.
+- **AI Orchestrator & Command Center**: Autonomous system monitoring with GPT-4o-powered insights and admin-controlled recommendations.
+  - **Telemetry Collection**: 5-minute interval system metrics (CPU, memory, uptime), trading performance (P/L, win rate, ROI), AI activity (learning cycles, opportunities, adjustments)
+  - **AI Analysis**: GPT-4o evaluates telemetry data for anomalies, optimizations, and recommendations with urgency levels (low/medium/high/critical)
+  - **Recommendation Workflow**: Admin approval required for all AI suggestions before application
+  - **Command Center UI** (admin-only at `/command-center`):
+    - Overview Tab: Live system health, trading performance, AI activity metrics
+    - AI Analysis Tab: Anomalies, optimizations, and strategic recommendations
+    - Logs Tab: Recommendation approval/rejection workflow with timestamp tracking
+    - AI Chat Tab: Conversational interface for system queries
+  - **Security**: All orchestrator endpoints protected by `requireAdmin` middleware with Zod validation
+  - **Data Storage**: `ai_orchestrator_logs` table tracks all recommendations with status (pending/approved/rejected/applied)
 
 ## Configuration & Credentials
 
