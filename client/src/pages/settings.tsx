@@ -12,6 +12,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -33,7 +41,8 @@ import {
   UserPlus,
   Loader2,
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  Key
 } from "lucide-react";
 import { timezones } from "@/lib/timezone";
 
@@ -188,6 +197,35 @@ export default function Settings() {
     }
   });
 
+  // Password Reset State and Mutation
+  const [resetPasswordModalOpen, setResetPasswordModalOpen] = useState(false);
+  const [selectedUserForReset, setSelectedUserForReset] = useState<User | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
+      return await apiRequest('POST', `/api/admin/users/${userId}/reset-password`, { password });
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Password Reset",
+        description: data.message || "Password updated successfully",
+      });
+      setResetPasswordModalOpen(false);
+      setSelectedUserForReset(null);
+      setResetPassword("");
+      setResetPasswordConfirm("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to reset password",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Handlers
   const handleSaveGeneral = async () => {
     try {
@@ -269,6 +307,38 @@ export default function Settings() {
       username: newUserUsername,
       password: newUserPassword,
       isAdmin: newUserIsAdmin
+    });
+  };
+
+  const handleResetPasswordClick = (user: User) => {
+    setSelectedUserForReset(user);
+    setResetPasswordModalOpen(true);
+  };
+
+  const handleResetPasswordSubmit = () => {
+    if (!selectedUserForReset) return;
+    
+    if (!resetPassword || !resetPasswordConfirm) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all password fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (resetPassword !== resetPasswordConfirm) {
+      toast({
+        title: "Validation Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    resetPasswordMutation.mutate({
+      userId: selectedUserForReset.id,
+      password: resetPassword
     });
   };
 
@@ -797,24 +867,37 @@ export default function Settings() {
                               {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
                             </TableCell>
                             <TableCell className="text-right">
-                              {user.id !== currentUser.id ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => toggleAdminMutation.mutate({ 
-                                    userId: user.id, 
-                                    isAdmin: !user.isAdmin 
-                                  })}
-                                  disabled={toggleAdminMutation.isPending}
-                                  data-testid={`button-toggle-admin-${user.id}`}
-                                >
-                                  {user.isAdmin ? "Remove Admin" : "Make Admin"}
-                                </Button>
-                              ) : (
-                                <Badge variant="outline" className="text-xs">
-                                  Current User
-                                </Badge>
-                              )}
+                              <div className="flex items-center justify-end gap-2">
+                                {user.id !== currentUser.id ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleResetPasswordClick(user)}
+                                      data-testid={`button-reset-password-${user.id}`}
+                                    >
+                                      <Key className="w-3 h-3 mr-1" />
+                                      Reset Password
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => toggleAdminMutation.mutate({ 
+                                        userId: user.id, 
+                                        isAdmin: !user.isAdmin 
+                                      })}
+                                      disabled={toggleAdminMutation.isPending}
+                                      data-testid={`button-toggle-admin-${user.id}`}
+                                    >
+                                      {user.isAdmin ? "Remove Admin" : "Make Admin"}
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs">
+                                    Current User
+                                  </Badge>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -827,6 +910,76 @@ export default function Settings() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={resetPasswordModalOpen} onOpenChange={setResetPasswordModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Reset password for {selectedUserForReset?.username} ({selectedUserForReset?.email})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                placeholder="Enter new password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                data-testid="input-reset-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                Must contain at least 8 characters, one uppercase, one number, and one special character
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                placeholder="Confirm new password"
+                value={resetPasswordConfirm}
+                onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                data-testid="input-confirm-password"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setResetPasswordModalOpen(false);
+                setSelectedUserForReset(null);
+                setResetPassword("");
+                setResetPasswordConfirm("");
+              }}
+              data-testid="button-cancel-reset"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleResetPasswordSubmit}
+              disabled={resetPasswordMutation.isPending}
+              data-testid="button-confirm-reset"
+            >
+              {resetPasswordMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <Key className="mr-2 h-4 w-4" />
+                  Reset Password
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

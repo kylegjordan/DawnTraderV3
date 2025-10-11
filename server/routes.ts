@@ -489,6 +489,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Reset user password
+  app.post('/api/admin/users/:userId/reset-password', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const { password } = req.body;
+      
+      if (!password || typeof password !== 'string') {
+        return res.status(400).json({ error: 'Password is required' });
+      }
+      
+      // Validate password strength
+      if (!validatePasswordStrength(password)) {
+        return res.status(400).json({ 
+          error: getPasswordStrengthMessage(password)
+        });
+      }
+      
+      // Hash the new password
+      const hashedPassword = await hashPassword(password);
+      
+      // Update user's password
+      const updatedUser = await storage.updateUser(userId, { password: hashedPassword });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      res.json({ 
+        success: true, 
+        message: `Password updated successfully for ${updatedUser.username}`
+      });
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  });
+
   // Trading Settings
   app.get('/api/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
