@@ -1488,6 +1488,23 @@ export type PaperSimOpenPosition = typeof paperSimOpenPositions.$inferSelect;
 export type InsertPaperSimTradeLog = z.infer<typeof insertPaperSimTradeLogSchema>;
 export type PaperSimTradeLog = typeof paperSimTradeLogs.$inferSelect;
 
+// AI Orchestrator logs table
+export const aiOrchestratorLogs = pgTable("ai_orchestrator_logs", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+  category: varchar("category", { length: 50 }).notNull(), // e.g., 'system', 'trading', 'optimization'
+  recommendation: text("recommendation").notNull(),
+  actionTaken: text("action_taken"),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, approved, rejected, executed
+  urgencyLevel: varchar("urgency_level", { length: 20 }).default("low"), // low, medium, high
+  metadata: jsonb("metadata"), // Additional context data
+});
+
+export const insertAIOrchestratorLogSchema = createInsertSchema(aiOrchestratorLogs).omit({ id: true, timestamp: true });
+export type InsertAIOrchestratorLog = z.infer<typeof insertAIOrchestratorLogSchema>;
+export type AIOrchestratorLog = typeof aiOrchestratorLogs.$inferSelect;
+
 // Context-specific chat history (for Goals, Guardrails, Screener, Strategies tabs)
 export const contextChats = pgTable("context_chats", {
   id: serial("id").primaryKey(),

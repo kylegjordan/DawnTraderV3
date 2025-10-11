@@ -105,6 +105,13 @@ app.use((req, res, next) => {
     });
   });
 
+  // Start AI Orchestrator (async, non-blocking)
+  import('./orchestrator/orchestrator').then(({ aiOrchestrator }) => {
+    aiOrchestrator.start().catch((error) => {
+      console.error('[Server] Failed to start AI Orchestrator:', error);
+    });
+  });
+
   // Start Scheduler Registry with autonomous tasks (async, non-blocking)
   import('./services/scheduler-registry').then(async ({ schedulerRegistry }) => {
     try {

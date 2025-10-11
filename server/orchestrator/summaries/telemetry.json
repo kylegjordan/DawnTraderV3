@@ -1,0 +1,44 @@
+{
+  "timestamp": "2025-10-11T07:19:38.789Z",
+  "system": {
+    "uptime": 20721.02,
+    "memory": {
+      "total": 67436748800,
+      "free": 41367810048,
+      "used": 26068938752,
+      "usagePercent": 38.656873612507255
+    },
+    "cpu": {
+      "cores": 8,
+      "loadAverage": [
+        15.06,
+        14.52,
+        12.26
+      ]
+    }
+  },
+  "trading": {
+    "totalPL": 0,
+    "activeTrades": 0,
+    "closedTrades": 0,
+    "winRate": 0,
+    "roi": 0,
+    "activeStrategies": [
+      "vwap_pullback",
+      "abcd_long",
+      "sma_trend_ride"
+    ]
+  },
+  "ai": {
+    "recentLearningCycles": 0,
+    "averageConfidence": 0,
+    "opportunitiesGenerated": 0,
+    "adjustmentsMade": 0
+  },
+  "goals": [],
+  "guardrails": {
+    "maxOpenTrades": 3,
+    "riskPerTrade": "150.00"
+  },
+  "recentChats": []
+}
