@@ -1579,6 +1579,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get context-specific chat history (for Goals, Guardrails, etc.)
+  app.get('/api/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { context } = req.query;
+      
+      if (!context) {
+        return res.status(400).json({ error: 'Context parameter required' });
+      }
+
+      const chats = await storage.getContextChats(userId, context as string);
+      res.json(chats || []);
+    } catch (error) {
+      console.error('Error fetching chats:', error);
+      res.status(500).json({ error: 'Failed to fetch chats' });
+    }
+  });
+
+  // Save chat message to context-specific history
+  app.post('/api/chats/save', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { role, message, context } = req.body;
+      
+      if (!context || !role || !message) {
+        return res.status(400).json({ error: 'Missing required fields: role, message, context' });
+      }
+
+      await storage.saveContextChat({
+        userId,
+        context,
+        role,
+        message
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error saving chat:', error);
+      res.status(500).json({ error: 'Failed to save chat' });
+    }
+  });
+
   app.post('/api/ai/chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -4235,7 +4277,8 @@ Please:
         ? storage.createGoalAnalysisLive(analysisRecord)
         : storage.createGoalAnalysisPaper(analysisRecord));
 
-      res.json({ success: true, data: aiAnalysis, mode });
+      // Return response in format expected by frontend
+      res.json({ success: true, response: aiAnalysis.aiResponse, data: aiAnalysis, mode });
     } catch (error: any) {
       console.error('Error analyzing goals:', error);
       res.status(500).json({ success: false, error: error.message });

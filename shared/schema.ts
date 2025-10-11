@@ -12,7 +12,8 @@ import {
   date,
   uniqueIndex,
   index,
-  vector
+  vector,
+  serial
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -1486,3 +1487,17 @@ export type PaperSimOpenPosition = typeof paperSimOpenPositions.$inferSelect;
 
 export type InsertPaperSimTradeLog = z.infer<typeof insertPaperSimTradeLogSchema>;
 export type PaperSimTradeLog = typeof paperSimTradeLogs.$inferSelect;
+
+// Context-specific chat history (for Goals, Guardrails, Screener, Strategies tabs)
+export const contextChats = pgTable("context_chats", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  context: varchar("context", { length: 50 }).notNull(), // e.g., 'goals', 'guardrails', 'screener', 'strategies'
+  role: varchar("role", { length: 20 }).notNull(), // 'user' or 'assistant'
+  message: text("message").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+});
+
+export const insertContextChatSchema = createInsertSchema(contextChats).omit({ id: true, timestamp: true });
+export type InsertContextChat = z.infer<typeof insertContextChatSchema>;
+export type ContextChat = typeof contextChats.$inferSelect;

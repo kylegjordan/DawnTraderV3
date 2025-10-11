@@ -36,6 +36,7 @@ import {
   userGoalsPaper,
   goalAnalysisHistoryLive,
   goalAnalysisHistoryPaper,
+  contextChats,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -73,6 +74,8 @@ import {
   type ErrorLog,
   type InsertErrorLog,
   type AITransparencyLog,
+  type InsertContextChat,
+  type ContextChat,
   type InsertAITransparencyLog,
   type KillSwitchEvent,
   type InsertKillSwitchEvent,
@@ -134,7 +137,7 @@ import {
   paperSimTradeLogs
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -204,6 +207,10 @@ export interface IStorage {
   updateAIConversation(userId: string, conversation: InsertAIConversation): Promise<AIConversation>; // Legacy
   updateAIConversationById(conversationId: string, updates: Partial<AIConversation>): Promise<AIConversation>;
   deleteAIConversation(conversationId: string): Promise<void>;
+  
+  // Context-specific chats (Goals, Guardrails, Screener, Strategies)
+  getContextChats(userId: string, context: string): Promise<ContextChat[]>;
+  saveContextChat(chat: InsertContextChat): Promise<ContextChat>;
   
   // AI Chat Logs - cost tracking
   createChatLog(log: InsertAIChatLog): Promise<AIChatLog>;
@@ -958,6 +965,20 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAIConversation(conversationId: string): Promise<void> {
     await db.delete(aiConversations).where(eq(aiConversations.id, conversationId));
+  }
+
+  // Context-specific chats (Goals, Guardrails, Screener, Strategies)
+  async getContextChats(userId: string, context: string): Promise<ContextChat[]> {
+    return await db
+      .select()
+      .from(contextChats)
+      .where(and(eq(contextChats.userId, userId), eq(contextChats.context, context)))
+      .orderBy(asc(contextChats.timestamp));
+  }
+
+  async saveContextChat(chat: InsertContextChat): Promise<ContextChat> {
+    const [result] = await db.insert(contextChats).values(chat).returning();
+    return result;
   }
 
   // AI Chat Logs - cost tracking

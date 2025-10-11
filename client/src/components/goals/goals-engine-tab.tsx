@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Save, Send, Sparkles, Mic, MicOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -44,6 +44,21 @@ export default function GoalsEngineTab() {
     queryKey: [`/api/goals/summary?mode=${mode}`],
   });
 
+  // Load chat history
+  const { data: chatHistory } = useQuery<ChatMessage[]>({
+    queryKey: [`/api/chats?context=goals`],
+  });
+
+  // Initialize chat messages from history
+  useEffect(() => {
+    if (chatHistory && chatHistory.length > 0 && chatMessages.length === 0) {
+      setChatMessages(chatHistory.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content || msg.message // Handle both field names
+      })));
+    }
+  }, [chatHistory]);
+
   const updateMutation = useMutation({
     mutationFn: async (goals: { metric: string; value: number | null }[]) => {
       return apiRequest('POST', '/api/goals/update', { goals, mode });
@@ -69,8 +84,17 @@ export default function GoalsEngineTab() {
     mutationFn: async (message: string) => {
       return apiRequest('POST', '/api/goals/analyze', { message, mode });
     },
-    onSuccess: (data: any) => {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+    onSuccess: async (data: any) => {
+      const assistantMessage = { role: 'assistant' as const, content: data.response };
+      setChatMessages(prev => [...prev, assistantMessage]);
+      
+      // Save assistant message to database
+      await apiRequest('POST', '/api/chats/save', {
+        role: 'assistant',
+        message: data.response,
+        context: 'goals'
+      });
+      
       setIsChatting(false);
     },
     onError: (error: any) => {
@@ -105,12 +129,21 @@ export default function GoalsEngineTab() {
     updateMutation.mutate(goalsToUpdate);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
 
-    setChatMessages(prev => [...prev, { role: 'user', content: chatInput }]);
+    const userMessage = chatInput;
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    
+    // Save user message to database
+    await apiRequest('POST', '/api/chats/save', {
+      role: 'user',
+      message: userMessage,
+      context: 'goals'
+    });
+    
     setIsChatting(true);
-    analyzeMutation.mutate(chatInput);
+    analyzeMutation.mutate(userMessage);
     setChatInput('');
   };
 
@@ -157,10 +190,7 @@ export default function GoalsEngineTab() {
       const data = await response.json();
       setChatInput(data.text);
       
-      toast({
-        title: "Transcription complete",
-        description: "You can now edit and send your message",
-      });
+      // Silent success - no toast notification
     } catch (error: any) {
       console.error('Transcription error:', error);
       toast({

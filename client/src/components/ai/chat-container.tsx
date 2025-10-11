@@ -303,10 +303,7 @@ export function ChatContainer() {
       const data = await response.json();
       setInputMessage(data.text);
       
-      toast({
-        title: "Transcription complete",
-        description: "You can now edit and send your message",
-      });
+      // Silent success - no toast notification
     } catch (error: any) {
       console.error('Transcription error:', error);
       toast({
