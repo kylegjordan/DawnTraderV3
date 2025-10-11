@@ -19,6 +19,7 @@ import { marketDataService } from "./services/market-data";
 import { actuationPolicyService } from "./services/actuation-policy";
 import { assetCapabilitiesService } from "./services/asset-capabilities";
 import { manageChatLifecycle, summarizeChatSession } from "./services/walter-chat-lifecycle";
+import { generateWalterResponse } from "./services/walter-response";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
 import multer from "multer";
@@ -5358,14 +5359,14 @@ Please:
         content: content.trim(),
       });
       
-      // TODO: Send to Walter AI for processing (integrate with OpenAI or existing chat service)
-      // For now, just save a placeholder response
+      // Generate AI response with purpose + memory context (Phase 5.6)
+      const aiResponse = await generateWalterResponse(userId, id, content.trim());
+      
       const assistantMessage = await storage.createWalterChatLog({
         chatSessionId: id,
         userId,
         role: 'assistant',
-        content: "I'm processing your request...",
-        metadata: { placeholder: true },
+        content: aiResponse,
       });
       
       // Update chat metadata
