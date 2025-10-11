@@ -209,7 +209,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               />
               <div className="flex items-center gap-1">
                 <span className={`status-dot ${isActive ? 'active' : 'inactive'}`} />
-                <span className={`text-xs font-semibold ${isActive ? 'text-success' : 'text-muted-foreground'}`}>
+                <span className={`text-xs font-semibold ${isActive ? 'text-success' : 'text-destructive'}`}>
                   {isActive ? 'ACTIVE' : 'STOPPED'}
                 </span>
               </div>
