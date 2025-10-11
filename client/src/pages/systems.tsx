@@ -1,4 +1,4 @@
-import SystemMonitoringPanel from "@/components/system/system-monitoring-panel";
+import EnhancedSystemMonitoring from "@/components/system/enhanced-system-monitoring";
 import { Activity } from "lucide-react";
 
 export default function SystemsPage() {
@@ -10,13 +10,13 @@ export default function SystemsPage() {
           <Activity className="w-7 h-7 text-primary" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Systems Monitoring & Checks</h1>
-          <p className="text-sm text-muted-foreground mt-1">Monitor system health, audit logs, and error tracking</p>
+          <h1 className="text-3xl font-bold text-foreground">System Monitoring</h1>
+          <p className="text-sm text-muted-foreground mt-1">Real-time performance metrics, trading engine status, and system health diagnostics</p>
         </div>
       </div>
 
-      {/* Systems Monitoring Panel */}
-      <SystemMonitoringPanel />
+      {/* Enhanced System Monitoring */}
+      <EnhancedSystemMonitoring />
     </div>
   );
 }

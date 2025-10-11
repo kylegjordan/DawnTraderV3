@@ -3163,6 +3163,102 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // ===== DIAGNOSTICS ENDPOINTS (Phase 5) =====
+  
+  // System Metrics (CPU, Memory, Latency, API Health)
+  app.get('/api/diagnostics/system-metrics', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getSystemMetrics } = await import('./diagnostics/metrics.js');
+      const metrics = await getSystemMetrics();
+      res.json({ ok: true, metrics });
+    } catch (error: any) {
+      console.error('System metrics fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trading Engine Status
+  app.get('/api/diagnostics/trading-engine', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getTradingEngineStatus } = await import('./diagnostics/metrics.js');
+      const status = await getTradingEngineStatus();
+      res.json({ ok: true, status });
+    } catch (error: any) {
+      console.error('Trading engine status fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Walter Activity Metrics
+  app.get('/api/diagnostics/walter-activity', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getWalterActivity } = await import('./diagnostics/metrics.js');
+      const activity = await getWalterActivity();
+      res.json({ ok: true, activity });
+    } catch (error: any) {
+      console.error('Walter activity fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Database Health Metrics
+  app.get('/api/diagnostics/database-health', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getDatabaseHealth } = await import('./diagnostics/metrics.js');
+      const health = await getDatabaseHealth();
+      res.json({ ok: true, health });
+    } catch (error: any) {
+      console.error('Database health fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Export System Report
+  app.get('/api/diagnostics/export-report', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getSystemMetrics, getTradingEngineStatus, getWalterActivity, getDatabaseHealth } = await import('./diagnostics/metrics.js');
+      
+      const [systemMetrics, tradingEngine, walterActivity, databaseHealth] = await Promise.all([
+        getSystemMetrics(),
+        getTradingEngineStatus(),
+        getWalterActivity(),
+        getDatabaseHealth()
+      ]);
+      
+      const report = {
+        timestamp: new Date().toISOString(),
+        systemMetrics,
+        tradingEngine,
+        walterActivity,
+        databaseHealth
+      };
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="system-report-${Date.now()}.json"`);
+      res.json(report);
+    } catch (error: any) {
+      console.error('Export report error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Acknowledge/Resolve Alert
+  app.post('/api/diagnostics/acknowledge-alert', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { alertId } = req.body;
+      
+      if (!alertId) {
+        return res.status(400).json({ error: 'alertId is required' });
+      }
+      
+      const resolvedAlert = await storage.resolveErrorLog(alertId);
+      res.json({ ok: true, alert: resolvedAlert });
+    } catch (error: any) {
+      console.error('Acknowledge alert error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ===== SCHEDULER ENDPOINTS =====
   
   // Get scheduler status for all tasks
