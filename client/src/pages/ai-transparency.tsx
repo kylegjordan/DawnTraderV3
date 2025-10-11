@@ -90,6 +90,12 @@ export default function AITransparencyPage() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
+  // Fetch learning summary (cumulative AI metrics)
+  const { data: learningSummaryData, isLoading: learningSummaryLoading } = useQuery<{ ok: boolean; success: boolean; summary: any }>({
+    queryKey: ['/api/orchestrator/learning-summary'],
+    refetchInterval: 60000, // Refresh every minute
+  });
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
@@ -103,6 +109,7 @@ export default function AITransparencyPage() {
   const isSimRunning = paperSimData?.isRunning || false;
   const paperPositions = paperPositionsData?.positions || [];
   const orchestratorLogs = orchestratorLogsData?.logs ?? [];
+  const learningSummary = learningSummaryData?.summary || null;
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -197,6 +204,10 @@ export default function AITransparencyPage() {
           <TabsTrigger value="learning-health" data-testid="tab-learning-health" className="min-w-[140px] text-sm px-3 py-2">
             <Target className="w-4 h-4 mr-2" />
             Learning Health
+          </TabsTrigger>
+          <TabsTrigger value="historic-learnings" data-testid="tab-historic-learnings" className="min-w-[140px] text-sm px-3 py-2">
+            <Sparkles className="w-4 h-4 mr-2" />
+            Historic Learnings
           </TabsTrigger>
           <TabsTrigger value="paper-trading" data-testid="tab-paper-trading" className="min-w-[140px] text-sm px-3 py-2">
             <LineChart className="w-4 h-4 mr-2" />
@@ -710,7 +721,116 @@ export default function AITransparencyPage() {
           </Card>
         </TabsContent>
 
-        {/* Tab 7: Paper Trading Simulation (Milestone 18) */}
+        {/* Tab 7: Historic Learnings (Cumulative AI Metrics) */}
+        <TabsContent value="historic-learnings" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Historic Learnings Summary</CardTitle>
+              <CardDescription>
+                Cumulative AI learning metrics from all historical data sources
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {learningSummaryLoading ? (
+                <div className="text-sm text-muted-foreground">Loading learning summary...</div>
+              ) : !learningSummary ? (
+                <div className="text-sm text-muted-foreground">
+                  No historical learning data available yet. AI insights and recommendations will accumulate over time.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Overall Metrics */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-4 border rounded-lg bg-card" data-testid="card-total-insights">
+                      <div className="text-sm text-muted-foreground mb-1">Total AI Insights</div>
+                      <div className="text-2xl font-bold text-foreground" data-testid="text-total-insights">
+                        {learningSummary.totalInsights || 0}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 border rounded-lg bg-card" data-testid="card-approved-recs">
+                      <div className="text-sm text-muted-foreground mb-1">Approved Recommendations</div>
+                      <div className="text-2xl font-bold text-green-600" data-testid="text-approved-recs">
+                        {learningSummary.approvedRecommendations || 0}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 border rounded-lg bg-card" data-testid="card-opportunities">
+                      <div className="text-sm text-muted-foreground mb-1">AI Opportunities</div>
+                      <div className="text-2xl font-bold text-foreground" data-testid="text-opportunities">
+                        {learningSummary.totalOpportunities?.toLocaleString() || 0}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 border rounded-lg bg-card" data-testid="card-learning-cycles">
+                      <div className="text-sm text-muted-foreground mb-1">Learning Cycles</div>
+                      <div className="text-2xl font-bold text-purple-600" data-testid="text-learning-cycles">
+                        {learningSummary.learningCycles || 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Paper Trading Performance */}
+                  {learningSummary.paperTrading && (
+                    <div>
+                      <h4 className="text-sm font-medium text-foreground mb-3">Historical Paper Trading Performance</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-4 border rounded-lg bg-card" data-testid="card-paper-trades">
+                          <div className="text-sm text-muted-foreground mb-1">Total Trades</div>
+                          <div className="text-2xl font-bold text-foreground" data-testid="text-paper-trades">
+                            {learningSummary.paperTrading.totalTrades || 0}
+                          </div>
+                        </div>
+                        
+                        <div className="p-4 border rounded-lg bg-card" data-testid="card-paper-winrate">
+                          <div className="text-sm text-muted-foreground mb-1">Win Rate</div>
+                          <div className="text-2xl font-bold text-foreground" data-testid="text-paper-winrate">
+                            {learningSummary.paperTrading.winRate ? `${learningSummary.paperTrading.winRate}%` : 'N/A'}
+                          </div>
+                        </div>
+                        
+                        <div className="p-4 border rounded-lg bg-card" data-testid="card-paper-total-pl">
+                          <div className="text-sm text-muted-foreground mb-1">Total P/L</div>
+                          <div 
+                            className={`text-2xl font-bold ${
+                              learningSummary.paperTrading.totalPL > 0 ? 'text-green-600' : 
+                              learningSummary.paperTrading.totalPL < 0 ? 'text-red-600' : 
+                              'text-foreground'
+                            }`}
+                            data-testid="text-paper-total-pl"
+                          >
+                            ${learningSummary.paperTrading.totalPL?.toFixed(2) || '0.00'}
+                          </div>
+                        </div>
+                        
+                        <div className="p-4 border rounded-lg bg-card" data-testid="card-paper-avg-pl">
+                          <div className="text-sm text-muted-foreground mb-1">Avg P/L</div>
+                          <div 
+                            className={`text-2xl font-bold ${
+                              learningSummary.paperTrading.avgPL > 0 ? 'text-green-600' : 
+                              learningSummary.paperTrading.avgPL < 0 ? 'text-red-600' : 
+                              'text-foreground'
+                            }`}
+                            data-testid="text-paper-avg-pl"
+                          >
+                            ${learningSummary.paperTrading.avgPL?.toFixed(2) || '0.00'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Last Updated */}
+                  <div className="text-xs text-muted-foreground text-right" data-testid="text-last-updated">
+                    Last updated: {learningSummary.lastUpdated ? new Date(learningSummary.lastUpdated).toLocaleString() : 'N/A'}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 8: Paper Trading Simulation (Milestone 18) */}
         <TabsContent value="paper-trading" className="space-y-4">
           <Card>
             <CardHeader>

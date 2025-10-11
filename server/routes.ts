@@ -5329,6 +5329,90 @@ Please:
     }
   });
 
+  // Get learning summary (cumulative AI learning metrics)
+  app.get('/api/orchestrator/learning-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      // Import necessary tables and functions
+      const { aiOpportunities, paperTrades, aiOrchestratorLogs } = await import('@shared/schema');
+      const { eq, count, sum, avg, sql } = await import('drizzle-orm');
+
+      // Use proper SQL aggregation for true cumulative metrics (no limits)
+      const [
+        insightsCount,
+        approvedCount,
+        opportunitiesCount,
+        paperTradesStats,
+        learningCyclesData
+      ] = await Promise.all([
+        // Count total AI insights
+        db.select({ count: count() })
+          .from(aiOrchestratorLogs)
+          .where(eq(aiOrchestratorLogs.category, 'ai_insight')),
+        
+        // Count approved recommendations
+        db.select({ count: count() })
+          .from(aiOrchestratorLogs)
+          .where(eq(aiOrchestratorLogs.status, 'approved')),
+        
+        // Count total opportunities
+        db.select({ count: count() }).from(aiOpportunities),
+        
+        // Paper trading aggregated stats
+        db.select({
+          totalTrades: count(),
+          winningTrades: sql<number>`COUNT(CASE WHEN ${paperTrades.realizedPL} > 0 THEN 1 END)`,
+          losingTrades: sql<number>`COUNT(CASE WHEN ${paperTrades.realizedPL} < 0 THEN 1 END)`,
+          totalPL: sum(paperTrades.realizedPL),
+          avgPL: avg(paperTrades.realizedPL)
+        }).from(paperTrades).where(eq(paperTrades.status, 'closed')),
+        
+        // Count unique learning cycle dates
+        db.select({ 
+          date: sql<string>`DATE(${aiOrchestratorLogs.timestamp})` 
+        })
+          .from(aiOrchestratorLogs)
+          .where(sql`${aiOrchestratorLogs.timestamp} IS NOT NULL`)
+          .groupBy(sql`DATE(${aiOrchestratorLogs.timestamp})`)
+      ]);
+
+      // Extract aggregated values
+      const totalInsights = insightsCount[0]?.count || 0;
+      const approvedRecommendations = approvedCount[0]?.count || 0;
+      const totalOpportunities = opportunitiesCount[0]?.count || 0;
+      
+      const paperStats = paperTradesStats[0] || {};
+      const closedTrades = Number(paperStats.totalTrades) || 0;
+      const winningTrades = Number(paperStats.winningTrades) || 0;
+      const losingTrades = Number(paperStats.losingTrades) || 0;
+      const totalPL = Number(paperStats.totalPL) || 0;
+      const avgPL = Number(paperStats.avgPL) || 0;
+      const winRate = closedTrades > 0 ? (winningTrades / closedTrades) * 100 : 0;
+      
+      const learningCycles = learningCyclesData.length;
+
+      const summary = {
+        totalInsights,
+        approvedRecommendations,
+        totalOpportunities,
+        learningCycles,
+        paperTrading: {
+          totalTrades: closedTrades,
+          winningTrades,
+          losingTrades,
+          winRate: Number(winRate.toFixed(1)),
+          totalPL: Number(totalPL.toFixed(2)),
+          avgPL: Number(avgPL.toFixed(2))
+        },
+        lastUpdated: new Date().toISOString()
+      };
+
+      res.json({ success: true, summary });
+    } catch (error: any) {
+      console.error('[Orchestrator] Error generating learning summary:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get orchestrator logs
   app.get('/api/orchestrator/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
