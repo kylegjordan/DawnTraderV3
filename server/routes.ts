@@ -5706,13 +5706,23 @@ Please:
       }
 
       const approvalMatrix = (user.approvalMatrix as any) || {
-        startLiveTrading: true,
-        adjustGoals: true,
-        modifyGuardrails: true,
-        updateFilters: false,
-        changeStrategyVariables: true,
-        riskThresholdAdjustments: true,
-        paperTradingActivation: false,
+        autoExecute: {
+          startLiveTrading: true,
+          adjustGoals: true,
+          modifyGuardrails: true,
+          updateFilters: true,
+          changeStrategyVariables: true,
+          riskThresholdAdjustments: true,
+          paperTradingActivation: true
+        },
+        policyConstraints: {
+          maxRiskPerTradePercent: 5.0,
+          maxDailyLossPercent: 10.0,
+          maxExposurePercent: 50.0,
+          maxPositionSizeUSD: 10000,
+          minKillSwitchThresholdPercent: 5.0,
+          maxKillSwitchThresholdPercent: 15.0
+        },
         killSwitchOverride: true
       };
 
@@ -5737,15 +5747,27 @@ The user can ask you to:
 
 Current trading mode: ${mode}
 
-Approval Matrix (which actions require approval):
-- Start Live Trading: ${approvalMatrix.startLiveTrading ? 'requires approval' : 'no approval needed'}
-- Adjust Goals: ${approvalMatrix.adjustGoals ? 'requires approval' : 'no approval needed'}
-- Modify Guardrails: ${approvalMatrix.modifyGuardrails ? 'requires approval' : 'no approval needed'}
-- Update Filters: ${approvalMatrix.updateFilters ? 'requires approval' : 'no approval needed'}
-- Change Strategy Variables: ${approvalMatrix.changeStrategyVariables ? 'requires approval' : 'no approval needed'}
-- Risk Threshold Adjustments: ${approvalMatrix.riskThresholdAdjustments ? 'requires approval' : 'no approval needed'}
-- Paper Trading Activation: ${approvalMatrix.paperTradingActivation ? 'requires approval' : 'no approval needed'}
-- Kill Switch Override: always requires admin approval (locked)
+Policy-Based Approval System:
+- By default, all operational changes AUTO-EXECUTE within safe limits
+- Approval is ONLY required when a change would violate policy constraints:
+
+Policy Constraints:
+- Max Risk Per Trade: ${approvalMatrix.policyConstraints?.maxRiskPerTradePercent || 5.0}%
+- Max Daily Loss: ${approvalMatrix.policyConstraints?.maxDailyLossPercent || 10.0}%
+- Max Exposure: ${approvalMatrix.policyConstraints?.maxExposurePercent || 50.0}%
+- Max Position Size: $${approvalMatrix.policyConstraints?.maxPositionSizeUSD || 10000}
+- Kill Switch Range: ${approvalMatrix.policyConstraints?.minKillSwitchThresholdPercent || 5.0}% - ${approvalMatrix.policyConstraints?.maxKillSwitchThresholdPercent || 15.0}%
+
+Auto-Execute Settings (can be manually disabled):
+- Start Live Trading: ${approvalMatrix.autoExecute?.startLiveTrading ? 'auto-execute' : 'requires approval'}
+- Adjust Goals: ${approvalMatrix.autoExecute?.adjustGoals ? 'auto-execute' : 'requires approval'}
+- Modify Guardrails: ${approvalMatrix.autoExecute?.modifyGuardrails ? 'auto-execute' : 'requires approval'}
+- Update Filters: ${approvalMatrix.autoExecute?.updateFilters ? 'auto-execute' : 'requires approval'}
+- Change Strategy Variables: ${approvalMatrix.autoExecute?.changeStrategyVariables ? 'auto-execute' : 'requires approval'}
+- Risk Threshold Adjustments: ${approvalMatrix.autoExecute?.riskThresholdAdjustments ? 'auto-execute' : 'requires approval'}
+- Paper Trading Activation: ${approvalMatrix.autoExecute?.paperTradingActivation ? 'auto-execute' : 'requires approval'}
+
+Kill Switch Override: always requires admin approval (locked)
 
 Known parameter fields:
 - Guardrails: maxDailyLoss, maxDrawdown, maxPositionSize, maxOpenPositions, riskPerTrade
@@ -5797,16 +5819,72 @@ Important: Extract the exact field names and numeric values from the user's requ
         });
       }
 
-      // Determine if approval is required based on action type
-      const requiresApproval = interpretation.requiresApproval !== false && (
-        (interpretation.actionType === 'start_live' && approvalMatrix.startLiveTrading) ||
-        (interpretation.actionType === 'goals' && approvalMatrix.adjustGoals) ||
-        (interpretation.actionType === 'guardrails' && approvalMatrix.modifyGuardrails) ||
-        (interpretation.actionType === 'filters' && approvalMatrix.updateFilters) ||
-        (interpretation.actionType === 'strategy' && approvalMatrix.changeStrategyVariables) ||
-        (interpretation.actionType === 'risk' && approvalMatrix.riskThresholdAdjustments) ||
-        (interpretation.actionType === 'start_paper' && approvalMatrix.paperTradingActivation)
+      // Determine if approval is required based on policy constraints and auto-execute settings
+      let requiresApproval = false;
+      let approvalReason = '';
+      
+      // Check if auto-execute is disabled for this action type
+      const autoExecuteDisabled = (
+        (interpretation.actionType === 'start_live' && !approvalMatrix.autoExecute?.startLiveTrading) ||
+        (interpretation.actionType === 'goals' && !approvalMatrix.autoExecute?.adjustGoals) ||
+        (interpretation.actionType === 'guardrails' && !approvalMatrix.autoExecute?.modifyGuardrails) ||
+        (interpretation.actionType === 'filters' && !approvalMatrix.autoExecute?.updateFilters) ||
+        (interpretation.actionType === 'strategy' && !approvalMatrix.autoExecute?.changeStrategyVariables) ||
+        (interpretation.actionType === 'risk' && !approvalMatrix.autoExecute?.riskThresholdAdjustments) ||
+        (interpretation.actionType === 'start_paper' && !approvalMatrix.autoExecute?.paperTradingActivation)
       );
+      
+      if (autoExecuteDisabled) {
+        requiresApproval = true;
+        approvalReason = 'Auto-execute disabled for this action type';
+      }
+      
+      // Check if the proposed change violates policy constraints
+      const constraints = approvalMatrix.policyConstraints || {};
+      const details = interpretation.actionDetails || {};
+      
+      if (!requiresApproval) {
+        // Check guardrail changes against constraints
+        if (interpretation.actionType === 'guardrails') {
+          if (details.field === 'riskPerTrade') {
+            const newValue = parseFloat(details.value);
+            // Assuming riskPerTrade is a percentage
+            if (newValue > (constraints.maxRiskPerTradePercent || 5.0)) {
+              requiresApproval = true;
+              approvalReason = `Risk per trade (${newValue}%) exceeds policy limit (${constraints.maxRiskPerTradePercent || 5.0}%)`;
+            }
+          } else if (details.field === 'maxDailyLoss') {
+            const newValue = parseFloat(details.value);
+            if (newValue > (constraints.maxDailyLossPercent || 10.0)) {
+              requiresApproval = true;
+              approvalReason = `Max daily loss (${newValue}%) exceeds policy limit (${constraints.maxDailyLossPercent || 10.0}%)`;
+            }
+          } else if (details.field === 'maxExposurePercent' || details.field === 'maxExposure') {
+            const newValue = parseFloat(details.value);
+            if (newValue > (constraints.maxExposurePercent || 50.0)) {
+              requiresApproval = true;
+              approvalReason = `Max exposure (${newValue}%) exceeds policy limit (${constraints.maxExposurePercent || 50.0}%)`;
+            }
+          } else if (details.field === 'maxPositionSize') {
+            const newValue = parseFloat(details.value);
+            if (newValue > (constraints.maxPositionSizeUSD || 10000)) {
+              requiresApproval = true;
+              approvalReason = `Max position size ($${newValue}) exceeds policy limit ($${constraints.maxPositionSizeUSD || 10000})`;
+            }
+          }
+        }
+        
+        // Check kill switch threshold changes
+        if (details.field === 'dailyLossKillSwitch' || details.field === 'killSwitchThreshold') {
+          const newValue = parseFloat(details.value);
+          const min = constraints.minKillSwitchThresholdPercent || 5.0;
+          const max = constraints.maxKillSwitchThresholdPercent || 15.0;
+          if (newValue < min || newValue > max) {
+            requiresApproval = true;
+            approvalReason = `Kill switch threshold (${newValue}%) outside policy range (${min}%-${max}%)`;
+          }
+        }
+      }
 
       // Kill switch override is always admin-only
       if (message.toLowerCase().includes('kill switch') || message.toLowerCase().includes('killswitch')) {
@@ -5821,6 +5899,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
       // If requires approval, create pending action in orchestrator logs
       if (requiresApproval) {
+        console.log('[Walter] Approval required:', { actionType: interpretation.actionType, approvalReason });
         const logData = {
           userId,
           category: 'walter_command' as const,
@@ -5837,8 +5916,10 @@ Important: Extract the exact field names and numeric values from the user's requ
         };
         
         await storage.createOrchestratorLog(logData);
-        finalResponse = `${interpretation.response}\n\nℹ️ This action requires your approval. I've created a pending request in the Command Center for you to review.`;
+        finalResponse = `${interpretation.response}\n\n⚠️ This action requires your approval${approvalReason ? ` because: ${approvalReason}` : ''}. I've created a pending request in the Command Center for you to review.`;
+        console.log('[Walter] Final response (approval required):', finalResponse.substring(0, 100) + '...');
       } else {
+        console.log('[Walter] Executing immediately:', interpretation.actionType);
         // Execute immediately - implement actual parameter changes
         actionTaken = true;
         let executionError = null;
@@ -5846,7 +5927,8 @@ Important: Extract the exact field names and numeric values from the user's requ
         try {
           switch (interpretation.actionType) {
             case 'guardrails':
-              // Update guardrails
+            case 'risk':
+              // Update guardrails or risk parameters
               if (interpretation.actionDetails?.field && interpretation.actionDetails?.value !== undefined) {
                 const currentGuardrails = await storage.getGuardrails({ userId, mode });
                 if (currentGuardrails) {
@@ -5857,7 +5939,7 @@ Important: Extract the exact field names and numeric values from the user's requ
                     mode
                   };
                   await storage.upsertGuardrails(updateData);
-                  console.info(`[Walter] Updated guardrail ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
+                  console.info(`[Walter] Updated ${interpretation.actionType === 'risk' ? 'risk parameter' : 'guardrail'} ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
                 }
               }
               break;
@@ -5996,7 +6078,14 @@ Important: Extract the exact field names and numeric values from the user's requ
           };
           await storage.createOrchestratorLog(logData);
 
-          finalResponse = `${interpretation.response}\n\n✅ Action executed immediately (no approval required).`;
+          // Only add generic success message if no specific message was set
+          if (finalResponse === interpretation.response) {
+            console.log('[Walter] Adding generic success message');
+            finalResponse = `${interpretation.response}\n\n✅ Action executed immediately (no approval required).`;
+          } else {
+            console.log('[Walter] Case set custom message, skipping generic message');
+          }
+          console.log('[Walter] Final response (executed):', finalResponse.substring(0, 100) + '...');
         } catch (execError: any) {
           console.error('[Walter] Execution error:', execError);
           executionError = execError.message;
@@ -6005,6 +6094,7 @@ Important: Extract the exact field names and numeric values from the user's requ
         }
       }
 
+      console.log('[Walter] Sending response:', { requiresApproval, actionTaken, responseLength: finalResponse.length });
       res.json({
         response: finalResponse,
         actionType: interpretation.actionType,
