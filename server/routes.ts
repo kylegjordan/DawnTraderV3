@@ -6255,6 +6255,78 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ========================================
+  // SYSTEM ALERTS API
+  // ========================================
+
+  // Get unacknowledged alerts for current user
+  app.get('/api/alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      
+      const AlertsService = (await import('./services/alerts-service')).default;
+      const alerts = await AlertsService.getUnacknowledgedAlerts(userId, mode);
+      
+      res.json({ ok: true, alerts });
+    } catch (error: any) {
+      console.error('Error fetching alerts:', error);
+      res.status(500).json({ error: 'Failed to fetch alerts' });
+    }
+  });
+
+  // Acknowledge a specific alert
+  app.post('/api/alerts/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const alertId = req.params.id;
+      
+      const AlertsService = (await import('./services/alerts-service')).default;
+      const alert = await AlertsService.acknowledgeAlert(alertId, userId);
+      
+      if (!alert) {
+        return res.status(404).json({ error: 'Alert not found or access denied' });
+      }
+      
+      res.json({ ok: true, alert });
+    } catch (error: any) {
+      console.error('Error acknowledging alert:', error);
+      res.status(500).json({ error: 'Failed to acknowledge alert' });
+    }
+  });
+
+  // Acknowledge all alerts
+  app.post('/api/alerts/acknowledge-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      
+      const AlertsService = (await import('./services/alerts-service')).default;
+      const alerts = await AlertsService.acknowledgeAll(userId, mode);
+      
+      res.json({ ok: true, count: alerts.length });
+    } catch (error: any) {
+      console.error('Error acknowledging all alerts:', error);
+      res.status(500).json({ error: 'Failed to acknowledge all alerts' });
+    }
+  });
+
+  // Mute low severity (info) alerts
+  app.post('/api/alerts/mute-low-severity', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      
+      const AlertsService = (await import('./services/alerts-service')).default;
+      const alerts = await AlertsService.muteLowSeverity(userId, mode);
+      
+      res.json({ ok: true, count: alerts.length });
+    } catch (error: any) {
+      console.error('Error muting low severity alerts:', error);
+      res.status(500).json({ error: 'Failed to mute low severity alerts' });
+    }
+  });
+
   return httpServer;
 }
 
