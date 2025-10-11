@@ -103,6 +103,15 @@ PostgreSQL via Neon serverless driver and Drizzle ORM. Key schemas support user 
   - **Data Storage**: `ai_orchestrator_logs` table tracks all recommendations with status (pending/approved/rejected/applied)
   - **Admin Log Visibility** (Oct 2025 fix): Admins can view ALL system-wide orchestrator logs regardless of which user they were created for. GET /api/orchestrator/logs passes `null` userId for admins (vs regular userId for non-admins), enabling oversight of AI-generated recommendations across the entire system. Storage layer handles nullable userIds with conditional Drizzle queries.
   - **AI Transparency Page** (Oct 2025 fix): Fixed runtime error that caused blank screen. Orchestrator tab now correctly displays logs using `recommendation` field (not `message`), includes admin-only debug panel showing fetch diagnostics (last fetch time, logs count, connection status), and uses optional chaining to prevent crashes when data fields are undefined.
+- **Walter - AI SysAdmin Co-Pilot** (Oct 2025): Voice and text-based co-administrator for system configuration and optimization.
+  - **Dual-Control System**: All configuration changes can be made manually via UI or through Walter voice/text commands
+  - **Approval Matrix**: User-configurable settings determine which actions require approval before Walter executes them
+    - Stored in `users.approval_matrix` JSONB column
+    - Default approvals: Live trading activation, Goals, Guardrails, Strategy variables, Risk thresholds (all require approval)
+    - No approval needed: Filters, Paper trading activation (configurable)
+    - Kill switch override: Always locked to admin-only
+  - **Storage Methods**: Managed via updateUser(id, { approvalMatrix }) using existing user methods
+  - **Change Tracking**: All parameter changes log source (manual vs walter) for full audit trail
 
 ## Configuration & Credentials
 

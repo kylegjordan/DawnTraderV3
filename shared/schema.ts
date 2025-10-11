@@ -40,6 +40,16 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").default(false).notNull(),
   tradingMode: tradingModeEnum("trading_mode").default("paper"),
   tradingStatus: tradingStatusEnum("trading_status").default("stopped"),
+  approvalMatrix: jsonb("approval_matrix").default(sql`'{
+    "startLiveTrading": true,
+    "adjustGoals": true,
+    "modifyGuardrails": true,
+    "updateFilters": false,
+    "changeStrategyVariables": true,
+    "riskThresholdAdjustments": true,
+    "paperTradingActivation": false,
+    "killSwitchOverride": true
+  }'::jsonb`),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

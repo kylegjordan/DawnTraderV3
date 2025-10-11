@@ -1,0 +1,143 @@
+🚀 Phase 4 (Final + Control Revision): Walter – The AI SysAdmin Co-Pilot
+🧭 Overview
+
+Walter is a voice- and text-based co-administrator who can analyze, adjust, and optimize your trading environment.
+You can still change everything manually; Walter can also perform those same updates when you ask or when an approved strategy discussion concludes.
+Only actions you mark as “requires approval” need your confirmation before execution.
+
+🔧 Key Functional Areas
+1 | Dual-Control Configuration
+
+Every system component must support both:
+
+Manual Adjustment (UI-level):
+
+Goals, Guardrails, Filters, and Strategy variables remain editable through their existing configuration screens.
+
+When Kyle changes a value manually, it immediately propagates through the orchestrator.
+
+Walter-Driven Adjustment:
+
+Walter can change the same values via interpreted commands or strategy discussions.
+
+Example:
+
+“Walter, tighten our guardrails by 10 % to reduce exposure.”
+Walter updates the values and confirms:
+“Guardrails updated: exposure limit → 45 % (from 50 %).”
+
+If the parameter type is flagged as “requires approval,” Walter prepares a pending action and waits for Kyle’s confirmation.
+
+2 | Approval Rules Panel
+
+File: client/src/pages/settings/walter-approvals.tsx
+
+Add a new tab or section titled Approval Rules beside the existing Risk & Threshold settings.
+This screen lists all configurable areas and lets you toggle which ones require manual approval before Walter can act.
+
+Action / Parameter Type	Requires Approval (checkbox)	Default State
+Start Live Trading	✅	Checked
+Adjust Goals	✅	Checked
+Modify Guardrails	✅	Checked
+Update Filters	❌	Unchecked
+Change Strategy Variables	✅	Checked
+Risk Threshold Adjustments	✅	Checked
+Paper Trading Activation	❌	Unchecked
+Kill Switch Override	✅	Locked (Admin only)
+
+All changes persist in user_preferences (e.g., JSON blob approvalMatrix).
+
+3 | Walter’s Approval Workflow
+
+Walter interprets a command → checks approvalMatrix.
+
+If the action requires approval:
+
+Create a log entry in ai_orchestrator_logs
+
+[PENDING APPROVAL] Action: Adjust Guardrails → Exposure 45 %
+
+
+Notify Kyle in-app (and optionally email / alert).
+
+Kyle can approve or reject from:
+
+Command Center → Recommendations Tab, or
+
+Walter chat, e.g.:
+
+“Walter, go ahead and apply those guardrail changes.”
+
+On approval → Walter executes change + logs confirmation.
+
+4 | Manual vs AI Change Tracking
+
+Whenever a parameter changes:
+
+Log whether the source was manual or walter.
+
+Show both in the AI Transparency → Learning Adjustments tab.
+Example entry:
+
+2025-10-11 09:44Z | Guardrail adjusted | Source: manual | From 50 % → 45 %
+
+5 | Dual-Control Trading Activation (unchanged logic)
+
+Trading can start/stop either by toggle switch or Walter command.
+
+Walter syncs state with UI toggle.
+
+Existing kill-switch logic remains; only Kyle can restart after trigger.
+
+6 | Approval Rule Protection
+
+Walter cannot alter the approvalMatrix himself.
+
+Only Kyle can edit those checkboxes or their thresholds.
+
+All edits to this matrix are logged as
+
+[CONFIG] Updated approval rules: Guardrails require approval = true
+
+7 | Logging Enhancements
+
+Every Walter-initiated action records:
+
+commandText
+
+affectedModule (Goals, Guardrails, Filters, Strategy)
+
+source (walter or manual)
+
+approvalRequired (Boolean)
+
+approvalStatus
+
+timestamp
+
+userId
+
+Viewable in AI Transparency → Orchestrator Activity.
+
+8 | Example Interactions
+Kyle Says	Expected Behavior
+“Walter, tighten our guardrails by 10 %.”	Creates pending approval if required, or executes immediately.
+“Walter, adjust my profit goal to $100 per trade.”	Checks approval matrix → logs change.
+“Walter, show me the pending approvals.”	Lists current unapproved actions.
+“Walter, approve all filter changes.”	Applies all pending filter updates.
+“Walter, revert last goal change.”	Restores previous parameter set.
+✅ Verification Checklist
+
+Manual editing of Goals / Guardrails / Filters / Strategies still works.
+
+Walter can change the same parameters via chat or voice.
+
+Approval Rules screen shows editable checkboxes for all parameter types.
+
+Only Kyle can modify the approval matrix or override the kill switch.
+
+Both manual and AI changes are logged and visible in AI Transparency.
+
+Trading start/stop works via toggle or Walter command.
+
+All actions display correct approval status in Command Center → Recommendations.
