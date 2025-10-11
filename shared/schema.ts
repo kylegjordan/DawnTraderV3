@@ -56,7 +56,8 @@ export const users = pgTable("users", {
       "maxExposurePercent": 50.0,
       "maxPositionSizeUSD": 10000,
       "minKillSwitchThresholdPercent": 5.0,
-      "maxKillSwitchThresholdPercent": 15.0
+      "maxKillSwitchThresholdPercent": 15.0,
+      "maxPortfolioRiskPercent": 5.0
     },
     "killSwitchOverride": true
   }'::jsonb`),

@@ -5,9 +5,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { User } from "@shared/schema";
 import { 
   Shield,
   Lock,
@@ -19,7 +21,7 @@ export default function WalterApprovals() {
   const { toast } = useToast();
   
   // Fetch user profile to get approval matrix
-  const { data: userProfile, isLoading } = useQuery({
+  const { data: userProfile, isLoading } = useQuery<User>({
     queryKey: ['/api/user/profile'],
   });
   
@@ -34,13 +36,24 @@ export default function WalterApprovals() {
     killSwitchOverride: true
   });
 
+  const [maxPortfolioRiskPercent, setMaxPortfolioRiskPercent] = useState<number>(5.0);
+
   useEffect(() => {
     if (userProfile?.approvalMatrix) {
-      // Always enforce kill switch hard-lock regardless of stored value
-      setApprovalMatrix({
-        ...userProfile.approvalMatrix,
-        killSwitchOverride: true
-      });
+      const matrix = userProfile.approvalMatrix as any;
+      
+      // Extract autoExecute toggles
+      if (matrix.autoExecute) {
+        setApprovalMatrix({
+          ...matrix.autoExecute,
+          killSwitchOverride: true // Always enforce kill switch hard-lock
+        });
+      }
+      
+      // Extract max portfolio risk percent threshold
+      if (matrix.policyConstraints?.maxPortfolioRiskPercent !== undefined) {
+        setMaxPortfolioRiskPercent(matrix.policyConstraints.maxPortfolioRiskPercent);
+      }
     }
   }, [userProfile]);
 
@@ -69,9 +82,16 @@ export default function WalterApprovals() {
   });
 
   const handleSave = async () => {
-    // Always enforce kill switch hard-lock before saving
+    // Build complete approval matrix structure with kill switch hard-locked
     const matrixToSave = {
-      ...approvalMatrix,
+      autoExecute: {
+        ...approvalMatrix,
+        killSwitchOverride: true // Always enforce kill switch hard-lock
+      },
+      policyConstraints: {
+        ...(userProfile?.approvalMatrix as any)?.policyConstraints,
+        maxPortfolioRiskPercent
+      },
       killSwitchOverride: true
     };
     updateApprovalMatrixMutation.mutate(matrixToSave);
@@ -79,11 +99,20 @@ export default function WalterApprovals() {
 
   const handleReset = () => {
     if (userProfile?.approvalMatrix) {
-      // Always enforce kill switch hard-lock on reset
-      setApprovalMatrix({
-        ...userProfile.approvalMatrix,
-        killSwitchOverride: true
-      });
+      const matrix = userProfile.approvalMatrix as any;
+      
+      // Reset autoExecute toggles
+      if (matrix.autoExecute) {
+        setApprovalMatrix({
+          ...matrix.autoExecute,
+          killSwitchOverride: true // Always enforce kill switch hard-lock
+        });
+      }
+      
+      // Reset max portfolio risk percent threshold
+      if (matrix.policyConstraints?.maxPortfolioRiskPercent !== undefined) {
+        setMaxPortfolioRiskPercent(matrix.policyConstraints.maxPortfolioRiskPercent);
+      }
       
       toast({
         title: "Reset Complete",
@@ -290,6 +319,45 @@ export default function WalterApprovals() {
               disabled={true}
               data-testid="switch-approve-killswitch"
             />
+          </div>
+
+          <Separator className="my-8" />
+
+          {/* Risk Threshold Section */}
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Shield className="w-6 h-6 text-amber-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-foreground">Risk Threshold Policy</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Define the maximum portfolio risk percentage that triggers manual approval regardless of toggle settings above
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+              <Label className="text-sm font-medium">
+                Maximum Portfolio Risk % Before Manual Approval Required
+              </Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={maxPortfolioRiskPercent}
+                  onChange={(e) => setMaxPortfolioRiskPercent(parseFloat(e.target.value) || 0)}
+                  className="max-w-[200px]"
+                  data-testid="input-risk-threshold"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                If a proposed change projects portfolio risk above this threshold, Walter will always request approval even if the action toggle is enabled.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
