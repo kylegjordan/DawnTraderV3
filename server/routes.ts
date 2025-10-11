@@ -4923,10 +4923,53 @@ Please:
         
         console.log(`[Walter Approval] Created approval ${approval.id} for ${strategy} (risk: ${projectedRisk}%)`);
         
+        // Auto-create Walter chat session for this approval
+        const chatTitle = `Approval Required: ${strategy} - ${mode} mode (${projectedRisk}% risk)`;
+        const chat = await storage.createWalterChat({
+          userId,
+          title: chatTitle,
+          status: 'active',
+          isApprovalThread: true,
+          approvalId: approval.id,
+          messageCount: 1,
+          lastMessageAt: new Date(),
+        });
+        
+        // Create initial message explaining the approval
+        const initialMessage = `⚠️ **Approval Required**\n\n` +
+          `Strategy ${strategy} change requires your approval because the projected portfolio risk (${projectedRisk}%) exceeds the ${RISK_APPROVAL_THRESHOLD}% threshold.\n\n` +
+          `**Risk Breakdown:**\n` +
+          `- Max Concurrent Positions: ${newParams.maxConcurrentPositions || 0} (was ${oldParams.maxConcurrentPositions || 0})\n` +
+          `- Risk Per Trade: ${newParams.riskPerTrade || 0}% (was ${oldParams.riskPerTrade || 0}%)\n` +
+          `- Total Portfolio Risk: ${newRisk}% (was ${oldRisk}%)\n` +
+          `- Trading Mode: ${mode}\n\n` +
+          `Please review the proposed changes and approve or reject this request.`;
+        
+        await storage.createWalterChatLog({
+          chatSessionId: chat.id,
+          userId,
+          role: 'assistant',
+          content: initialMessage,
+          metadata: {
+            approvalId: approval.id,
+            strategyName: strategy,
+            projectedRisk,
+            type: 'approval_request'
+          },
+        });
+        
+        // Update approval with chat session ID
+        await storage.updateApprovalStatus(approval.id, 'pending', {
+          chatSessionId: chat.id as any,
+        });
+        
+        console.log(`[Walter Approval] Created chat session ${chat.id} for approval ${approval.id}`);
+        
         return res.json({ 
           ok: true, 
           approvalRequired: true,
           approvalId: approval.id,
+          chatSessionId: chat.id,
           projectedRisk,
           message: `Change requires approval: projected portfolio risk is ${projectedRisk}% (threshold: ${RISK_APPROVAL_THRESHOLD}%)`,
         });
