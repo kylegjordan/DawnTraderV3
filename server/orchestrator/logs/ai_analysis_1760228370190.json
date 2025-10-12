@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-10-12T00:19:30.190Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential performance bottlenecks or overutilization."
+    },
+    {
+      "severity": "medium",
+      "message": "No trading activity detected (totalPL, activeTrades, closedTrades, winRate, roi all at 0), which is unusual for a trading platform."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, confidence, opportunities generated, or adjustments made, indicating potential issues with AI functionality or integration."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential system slowdowns or failures."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI processes to ensure they are functioning correctly and contributing to trading strategies."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate high CPU load and identify processes causing the load. Consider scaling resources or optimizing code.",
+      "rationale": "High CPU load can lead to system instability and affect trading operations, which is critical for maintaining platform reliability."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough review of the trading system to ensure that it is operational and correctly configured to execute trades.",
+      "rationale": "The lack of trading activity could indicate a configuration issue or a bug that prevents trades from being executed, impacting revenue and user trust."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart or debug the AI module to ensure it is actively learning and generating trading opportunities.",
+      "rationale": "AI inactivity can hinder the platform's ability to adapt to market conditions and optimize trading strategies, affecting overall performance."
+    }
+  ],
+  "urgencyLevel": "critical"
+}

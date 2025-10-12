@@ -1,0 +1,147 @@
+Implementation Steps (no code)
+1) Define Strategy Specs (one-pager each)
+
+For each strategy, document: entry criteria, exit logic, invalidation, filters used, and risk template.
+
+Check: Each spec lists precisely which filters are required/optional and which parameters are tunable.
+
+Deliverable: 5 signed-off strategy one-pagers (PDF/MD).
+
+2) Add Specialized Filters
+
+Range Detection: Define conditions for “bounded” movement (e.g., % band width, bar count, low volatility).
+
+Stop-Zone / Liquidity Cluster: Define identification around recent swing highs/lows and local stop pockets (using price interaction + volume behavior you already capture).
+
+Check: Both filters output simple booleans plus a short “why” string for audits.
+
+Deliverable: Filter definitions doc + sample screenshots/plots from historical sessions (visual proof they trigger as expected).
+
+3) Parameterize Strategy Settings
+
+Add human-readable settings for each strategy (see table above).
+
+Add toggles: enabled, paper-only, production, weight (if you score/ensemble).
+
+Check: Settings appear on the Settings/Strategies UI with tooltips in plain English.
+
+Deliverable: Screenshot set of the updated settings UI + settings reference doc.
+
+4) Wire Strategies into the Unified Filter → Score → Risk Pipeline
+
+Ensure each strategy calls only the relevant filters.
+
+Compute a strategy signal score (e.g., sum of satisfied criteria with weights).
+
+Apply uniform risk rules: position sizing cap, SL/TP template, daily loss guard.
+
+Check: Dry-run trace shows: input → filters fired → score → decision (pass/fail) → proposed order + SL/TP.
+
+Deliverable: Sample decision traces (3 per strategy) saved as JSON/text logs for review.
+
+5) Conflict & Deduplication Rules
+
+If multiple strategies signal at once on the same asset, choose:
+• Best score wins, or
+• Allow multiple but enforce per-asset exposure cap.
+
+Check: Simulated scenario with 2+ signals on same asset respects caps and picks deterministically.
+
+Deliverable: Conflict policy doc + test transcript proving enforcement.
+
+6) Telemetry, Logging, and Alerts
+
+Per-strategy counters: signals, entries, exits, win rate, avg win/loss, average R, MFE/MAE.
+
+Alerts when:
+• A new strategy is enabled/disabled,
+• Daily drawdown stops trading,
+• Unusual surge in false breakouts / failed reversions (threshold).
+
+Check: Dashboard widgets render per-strategy metrics; alert messages read clearly (non-technical).
+
+Deliverable: Dashboard screenshots + example alert messages.
+
+7) Sandbox & Paper-Trading Validation (staged)
+
+Stage A — Sandbox Replay: Feed historical intraday data; log signals without orders.
+• Checks: No crashes; reasonable signal counts; no rules bypassed.
+
+Stage B — Paper Orders: Place paper trades with SL/TP.
+• Checks: Orders match signals; exits obey rules; P/L computed; guardrails halt on daily loss breach.
+
+Deliverable: Two run reports (A & B) with summary tables by strategy and screenshots of exemplar trades.
+
+8) Guardrails & Safety
+
+Confirm no leverage; spot-only instruments list enforced.
+
+Enforce max daily loss (e.g., −X% of account) → all strategies disabled for the day.
+
+Enforce per-trade risk (e.g., ≤ 1–2% notional) and max concurrent positions.
+
+Check: Simulate hitting daily loss; verify immediate disable + alert.
+
+Deliverable: Guardrail test transcript + screenshot of disable alert.
+
+9) Behavioral QA (human-readable)
+
+Run scripted tests (one short session per strategy):
+
+Ask Walter (in chat) to explain why a signal appeared, in simple language and list the risks.
+
+Ask Walter if the daily goal (“earn more than we lose”) and risk caps are still respected after a loss.
+
+Check: Explanations are clear to a beginner; risks are explicit; caps reflected correctly.
+
+Deliverable: Chat transcripts (5)—one per strategy—saved to docs.
+
+10) Acceptance & Rollout
+
+Acceptance criteria met (see Success Criteria).
+
+Rollout plan:
+
+Enable Breakout and Mean Reversion in paper mode for 5 trading days.
+
+If stable, add Range and VWAP Bounce.
+
+Add Liquidity Trap last (advanced filter).
+
+Deliverable: Signed acceptance checklist + dated rollout plan.
+
+Testing Matrix (what to verify)
+Area	Test	Pass Condition
+Filters	Range detection triggers only in bounded regimes	True/False matches hand-labeled examples
+Filters	Stop-zone detection identifies prior swing stop pockets	Correct zones flagged on test charts
+Scoring	Strategy score increases with more criteria met	Monotonic behavior in controlled cases
+Risk	Per-trade SL/TP applied exactly as configured	Execution logs show correct levels
+Risk	Daily max loss halts all new entries	Trades blocked after breach; alert fired
+Conflicts	Two strategies on same asset	Exposure cap respected; deterministic selection
+Telemetry	Metrics per strategy	Counts and rates update after each session
+Chat	Walter explanations	Plain-English rationale + risks, consistent with logs
+Paper	P/L integrity	P/L equals sum of exits minus fees; no drift
+Regression	Pre-existing features (5.5 & 5.6)	Purpose, memory, chat, alerts unaffected
+Final Deliverables Checklist
+
+ 5 strategy spec one-pagers (entry/exit/filters/risks)
+
+ New filter defs: Range Detection, Stop-Zone/Liquidity Cluster (+ sample visuals)
+
+ Updated Settings/Strategies UI screenshots + human-readable parameter reference
+
+ Decision trace samples (3 per strategy) proving pipeline behavior
+
+ Conflict policy doc + proof test
+
+ Telemetry dashboard screenshots + example alerts
+
+ Sandbox replay report (signals only)
+
+ Paper-trading report (orders, exits, P/L)
+
+ Guardrail tests (daily stop, per-trade caps)
+
+ Chat transcripts (5) with beginner-friendly explanations
+
+ Signed acceptance checklist + phased rollout plan
