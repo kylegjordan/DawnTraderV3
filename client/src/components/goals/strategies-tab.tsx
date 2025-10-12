@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Layers, Save, RotateCcw, Check, X, Download } from "lucide-react";
+import { Layers, Save, RotateCcw, Check, X, Download, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const STRATEGIES = [
@@ -142,17 +142,17 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [isEnabled, setIsEnabled] = useState(true);
+  const [isSavingToggle, setIsSavingToggle] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const [presets, setPresets] = useState<Record<string, any>>({});
   const [selectedPreset, setSelectedPreset] = useState<string>("");
 
-  // Fetch strategy settings
+  // Fetch strategy settings - enable refetch on window focus for fresh state
   const { data: settings, isLoading } = useQuery<StrategySettings>({
     queryKey: [`/api/strategies/settings?strategy=${strategy.id}&mode=${mode}`],
-    staleTime: 60000,
-    refetchInterval: 60000,
-    refetchOnWindowFocus: false,
+    staleTime: 30000, // Reduce stale time to 30 seconds
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
     retry: false,
   });
 
@@ -195,8 +195,11 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
       });
       return response;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/strategies/settings'] });
+    onSuccess: async () => {
+      // Invalidate specific query to refresh with latest data
+      await queryClient.invalidateQueries({ 
+        queryKey: [`/api/strategies/settings?strategy=${strategy.id}&mode=${mode}`] 
+      });
       setEditing(false);
       toast({
         title: "Settings Saved",
@@ -306,10 +309,11 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   };
 
   const handleToggleEnabled = async (enabled: boolean) => {
-    setIsEnabled(enabled);
+    // Show saving indicator
+    setIsSavingToggle(true);
     
-    // Persist toggle state to backend
     try {
+      // Wait for backend confirmation before updating UI
       await apiRequest('PUT', '/api/strategies/settings', {
         strategy: strategy.id,
         mode,
@@ -318,20 +322,28 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
         reason: `strategy ${enabled ? 'enabled' : 'disabled'}`,
       });
       
-      queryClient.invalidateQueries({ queryKey: ['/api/strategies/settings'] });
+      // Update UI only after successful backend save
+      setIsEnabled(enabled);
+      
+      // Invalidate specific query to refresh with latest data
+      await queryClient.invalidateQueries({ 
+        queryKey: [`/api/strategies/settings?strategy=${strategy.id}&mode=${mode}`] 
+      });
       
       toast({
         title: enabled ? "Strategy Enabled" : "Strategy Disabled",
         description: `${strategy.name} is now ${enabled ? 'active' : 'inactive'} in ${mode} mode`,
       });
     } catch (error: any) {
-      // Revert on error
-      setIsEnabled(!enabled);
+      // Don't update UI on error - keep previous state
       toast({
-        title: "Error",
-        description: error.message || "Failed to update strategy status",
+        title: "Save Failed",
+        description: error.message || "Failed to update strategy status. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      // Always clear saving indicator
+      setIsSavingToggle(false);
     }
   };
 
@@ -367,14 +379,20 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
             <div className="flex items-center gap-3">
               <CardTitle className="text-lg">{strategy.name}</CardTitle>
               <div className="flex items-center gap-2">
-                <Switch 
-                  checked={isEnabled}
-                  onCheckedChange={handleToggleEnabled}
-                  data-testid={`switch-enable-${strategy.id}`}
-                  className={isEnabled ? "data-[state=checked]:bg-green-500" : ""}
-                />
+                <div className="relative">
+                  <Switch 
+                    checked={isEnabled}
+                    onCheckedChange={handleToggleEnabled}
+                    disabled={isSavingToggle}
+                    data-testid={`switch-enable-${strategy.id}`}
+                    className={isEnabled ? "data-[state=checked]:bg-green-500" : ""}
+                  />
+                  {isSavingToggle && (
+                    <Loader2 className="absolute -right-6 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
                 <Label className="text-xs text-muted-foreground cursor-pointer">
-                  {isEnabled ? 'Enabled' : 'Disabled'}
+                  {isSavingToggle ? 'Saving...' : (isEnabled ? 'Enabled' : 'Disabled')}
                 </Label>
               </div>
             </div>
