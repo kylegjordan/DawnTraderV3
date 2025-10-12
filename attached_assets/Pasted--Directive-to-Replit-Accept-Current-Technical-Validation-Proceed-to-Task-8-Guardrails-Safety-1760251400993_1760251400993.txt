@@ -1,0 +1,96 @@
+✅ Directive to Replit: Accept Current Technical Validation & Proceed to Task 8 – Guardrails & Safety
+
+Decision: Accept the current Stage C-Lite validation (3 / 8 strategies firing, 0 errors, 0 false positives) as sufficient proof of technical correctness.
+Next step: Proceed to Task 8: Guardrails & Safety Validation to enforce and test risk-control systems under paper-trading conditions.
+
+1. Finalize Task 7 Validation Report
+
+Update /docs/task-7-validation-final-report.md with:
+
+✅ Stage A – Synthetic baseline: VWAP Pullback validated.
+
+✅ Stage B – Historic replay: 0 false positives → confirmed selectivity.
+
+✅ Stage C-Lite – 3 / 8 strategies triggered, all executed without errors.
+
+✅ End-to-end pipeline (logic → telemetry → alerts) proven.
+
+⚠️ Note that additional signal validation will occur naturally during Paper Trading (30–60 days).
+
+Architect sign-off section with timestamp and decision: “Validation accepted; proceed to Task 8.”
+
+2. Mark Task 7 Complete
+
+Update internal task tracker (or docs/project-progress.md):
+
+✅ Task 7 – Validation Testing
+Outcome: Technical Validation Complete (3/8 Synthetic, 0 False Positives)
+Status: Approved for Guardrails & Safety Validation (Task 8)
+Date: <today’s date>
+
+3. Begin Task 8 – Guardrails & Safety Validation
+
+Objective:
+Implement and test all safety mechanisms to ensure the system can never lose more than allowed and can automatically pause trading when thresholds are hit.
+
+Implementation Steps:
+
+Add Risk Control Checks (in server/services/risk-manager.ts):
+
+Daily loss limit (e.g., -3 % of balance → auto-disable trading).
+
+Max open positions per asset = 1.
+
+Exposure cap = 2× normal position size (max).
+
+Stop-loss enforcement on every trade entry.
+
+Spot-Only Trading Verification
+
+Confirm all API calls use spot market endpoints only (Kraken REST or WebSocket).
+
+Block any order containing margin or leverage fields.
+
+Safety Telemetry Enhancements
+
+Extend telemetry schema to track:
+
+dailyDrawdown, exposurePercent, openPositionCount.
+
+Auto-log all safety triggers in server/services/strategy-alerts.ts.
+
+Testing Scenarios (Paper mode):
+
+Simulate cumulative losses to hit daily limit → confirm auto-disable.
+
+Simulate multiple signals same asset → ensure only one position opens.
+
+Force API margin call attempt → expect spot-only block alert.
+
+Deliverables
+
+/docs/task-8-safety-validation-report.md containing:
+
+Test scenario → expected → actual → pass/fail.
+
+System log timestamps for each guardrail trigger.
+
+Screenshots or log snippets of alert outputs.
+
+Pass Criteria
+
+✅ All guardrails trigger as expected.
+
+✅ System auto-disables on daily loss.
+
+✅ Spot-only restriction active.
+
+✅ No unauthorized trades executed.
+
+✅ Telemetry and alerts record all events.
+
+Summary for Replit
+
+“Mark Task 7 (Validation) complete based on technical validation. Proceed to Task 8 – Guardrails & Safety Validation.
+Implement and test all daily-loss, exposure, stop-loss, and spot-only protections.
+Generate task-8-safety-validation-report.md with scenarios, results, and pass criteria.”

@@ -49,3 +49,12 @@ PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, tra
 - **OpenAI GPT-4o / GPT-4o mini API**: Powers AI analysis, conversational assistance, and AI Opportunities generation.
 - **Neon Database**: Serverless PostgreSQL database.
 - **WebSocket Infrastructure**: Custom WebSocket server for real-time data push.
+
+## Project Status
+
+### Completed Tasks
+- **Task 6**: 8-Strategy Expansion - ✅ Complete (All strategies implemented with 37+ parameters)
+- **Task 7**: Validation Testing - ✅ Complete (Technical validation achieved: 3/8 synthetic signals, 0% false positives over 90 days, end-to-end pipeline functional. Approved 2025-10-12)
+
+### Current Tasks
+- **Task 8**: Guardrails & Safety Validation - 🔄 In Progress (Daily loss limits, exposure caps, spot-only enforcement, safety telemetry)
