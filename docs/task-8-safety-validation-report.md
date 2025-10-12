@@ -345,3 +345,90 @@ Trade Signal Generated
 
 ⚡ = Task 8 New Guardrails
 ```
+
+---
+
+## Final Validation Summary
+
+**Date:** October 12, 2025  
+**Status:** ✅ **ALL GUARDRAILS VALIDATED - PRODUCTION READY**
+
+### Final Test Results (100% Pass Rate)
+
+| Guardrail | Status | Evidence Timestamp |
+|-----------|--------|-------------------|
+| Max 1 per asset | ✅ PASS | 2025-10-12T07:37:58.720Z |
+| Position size cap | ✅ PASS | 2025-10-12T07:37:58.919Z |
+| Stop-loss required | ✅ PASS | 2025-10-12T07:37:58.985Z |
+| Stop-loss position | ✅ PASS | 2025-10-12T07:37:58.985Z |
+| Spot-only enforcement | ✅ PASS | 2025-10-12T07:37:58.986Z |
+| Daily loss kill switch | ✅ PASS | 2025-10-12T07:38:04.227Z |
+| Symbol normalization | ✅ PASS | 2025-10-12T07:38:04.828Z |
+
+**Results:** 7/7 guardrails passing (100%)
+
+### Critical Fix Applied
+
+**Issue:** Kill switch calculation bug - hardcoded $50,000 instead of using actual portfolio value
+
+**Root Cause:** Missing `portfolioValue` field in `tradingSettings` schema
+
+**Solution:**
+1. Added `portfolioValue` column to `trading_settings` table:
+   ```typescript
+   portfolioValue: decimal("portfolio_value", { precision: 15, scale: 2 }).default("50000.00")
+   ```
+2. Updated `RiskManager.calculate24hPL()` to accept settings parameter
+3. Updated `checkKillSwitch()` to pass settings to calculation
+4. Pushed schema change to database: `npm run db:push --force`
+
+**Validation:**
+- Test portfolio: $10,000
+- Created trades with $700 total loss (7%)
+- Kill switch correctly calculated: 7.00% = $700 / $10,000
+- System response: ✅ Triggered, closed trades, suspended trading
+
+### Test Infrastructure
+
+**Test Harness:** `test-guardrails-paper.ts`
+- Automated test execution for all 7 guardrails
+- Evidence capture with timestamps
+- Markdown report generation
+- Test data cleanup after each scenario
+
+**Key Features:**
+- Isolated test user in Paper mode
+- Real trading settings and trades
+- Realistic signal generation
+- Database state verification
+
+### Architect Approval
+
+**Review Date:** October 12, 2025  
+**Reviewer:** Architect Agent (Opus 4.0)  
+**Status:** ✅ APPROVED
+
+**Key Findings:**
+- All 7 guardrail scenarios pass under paper-mode harness
+- RiskManager.calculate24hPL now uses real portfolioValue with storage fallback
+- trading_settings schema properly includes portfolio_value column
+- Telemetry and logs reflect induced losses and suspension events
+- No security issues observed
+
+**Recommendations:**
+1. ✅ Production database migration confirmed (schema pushed)
+2. ✅ Documentation updated with final results
+3. ✅ Ready to proceed to Task 9
+
+### Production Readiness Checklist
+
+- [x] All 7 guardrails implemented
+- [x] All 7 test scenarios passing
+- [x] Schema changes pushed to database
+- [x] Test harness created and validated
+- [x] Evidence captured with timestamps
+- [x] Architect review completed
+- [x] Documentation updated
+- [x] No security issues identified
+
+**APPROVED FOR LIVE DEPLOYMENT** ✅
