@@ -1793,6 +1793,121 @@ export const insertContextChatSchema = createInsertSchema(contextChats).omit({ i
 export type InsertContextChat = z.infer<typeof insertContextChatSchema>;
 export type ContextChat = typeof contextChats.$inferSelect;
 
+// Phase 5.8: Expert Context System
+
+// Expert sources - Reference library (must be defined before expertPrinciples for foreign key reference)
+export const expertSources = pgTable("expert_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  author: text("author").notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // 'book', 'blog', 'research', 'news_analysis', 'platform_education'
+  category: varchar("category", { length: 50 }).notNull(),
+  credibilityScore: integer("credibility_score").notNull(),
+  url: text("url"),
+  publicationYear: integer("publication_year"),
+  rationale: text("rationale"),
+  keyTopics: text("key_topics").array(),
+  dateAdded: timestamp("date_added", { withTimezone: true }).defaultNow(),
+  isActive: boolean("is_active").default(true),
+});
+
+// Expert principles - Core trading knowledge base
+export const expertPrinciples = pgTable("expert_principles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  principle: text("principle").notNull(),
+  category: varchar("category", { length: 50 }).notNull(), // 'psychology', 'risk_management', 'market_structure', 'trade_execution'
+  sourceId: varchar("source_id").references(() => expertSources.id).notNull(),
+  sourceName: text("source_name").notNull(),
+  sourceAuthor: text("source_author").notNull(),
+  credibilityScore: integer("credibility_score").notNull(), // 1-5 scale
+  dateAdded: timestamp("date_added", { withTimezone: true }).defaultNow(),
+  isActive: boolean("is_active").default(true),
+  usageCount: integer("usage_count").default(0),
+  metadata: jsonb("metadata"), // Additional context, tags, etc.
+});
+
+// Expert updates - Weekly insights from credible sources
+export const expertUpdates = pgTable("expert_updates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceId: varchar("source_id").references(() => expertSources.id).notNull(),
+  sourceName: text("source_name").notNull(),
+  author: text("author").notNull(),
+  insight: text("insight").notNull(), // Max 200 characters
+  url: text("url"),
+  credibilityScore: integer("credibility_score").notNull(),
+  date: date("date").notNull(),
+  weekOf: date("week_of").notNull(), // Week identifier
+  isActive: boolean("is_active").default(true),
+  appliedToCorpus: boolean("applied_to_corpus").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+// Expert compliance reports - Walter's self-evaluation
+export const expertComplianceReports = pgTable("expert_compliance_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  reportDate: date("report_date").notNull(),
+  weekOf: date("week_of").notNull(),
+  tradesReviewed: integer("trades_reviewed").notNull(),
+  
+  // Adherence metrics by category
+  psychologyAdherence: decimal("psychology_adherence", { precision: 5, scale: 2 }), // percentage
+  riskManagementAdherence: decimal("risk_management_adherence", { precision: 5, scale: 2 }),
+  marketStructureAdherence: decimal("market_structure_adherence", { precision: 5, scale: 2 }),
+  tradeExecutionAdherence: decimal("trade_execution_adherence", { precision: 5, scale: 2 }),
+  overallAdherence: decimal("overall_adherence", { precision: 5, scale: 2 }),
+  
+  // Violations
+  topViolatedPrinciples: jsonb("top_violated_principles"), // Array of {principleId, principle, category, violationCount}
+  violationsCount: integer("violations_count").default(0),
+  
+  // Recommendations
+  recommendations: jsonb("recommendations"), // Array of improvement recommendations
+  
+  // Status and alerts
+  status: varchar("status", { length: 20 }).default("completed"), // 'completed', 'in_progress', 'failed'
+  alertLevel: varchar("alert_level", { length: 20 }), // 'green', 'yellow', 'red'
+  
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  metadata: jsonb("metadata"),
+});
+
+// Expert response logs - Track principle usage in Walter responses
+export const expertResponseLogs = pgTable("expert_response_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  chatLogId: varchar("chat_log_id").references(() => walterChatLogs.id),
+  principlesInjected: jsonb("principles_injected").notNull(), // Array of {principleId, principle, category}
+  responseType: varchar("response_type", { length: 50 }), // 'trade_analysis', 'risk_assessment', 'strategy_explanation', etc.
+  expertContextUsed: boolean("expert_context_used").default(false),
+  explainabilityScore: integer("explainability_score"), // 1-10 rating of clarity
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+});
+
+// Insert schemas
+export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
+export const insertExpertSourceSchema = createInsertSchema(expertSources);
+export const insertExpertUpdateSchema = createInsertSchema(expertUpdates);
+export const insertExpertComplianceReportSchema = createInsertSchema(expertComplianceReports);
+export const insertExpertResponseLogSchema = createInsertSchema(expertResponseLogs);
+
+// Type exports
+export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
+export type ExpertPrinciple = typeof expertPrinciples.$inferSelect;
+
+export type InsertExpertSource = z.infer<typeof insertExpertSourceSchema>;
+export type ExpertSource = typeof expertSources.$inferSelect;
+
+export type InsertExpertUpdate = z.infer<typeof insertExpertUpdateSchema>;
+export type ExpertUpdate = typeof expertUpdates.$inferSelect;
+
+export type InsertExpertComplianceReport = z.infer<typeof insertExpertComplianceReportSchema>;
+export type ExpertComplianceReport = typeof expertComplianceReports.$inferSelect;
+
+export type InsertExpertResponseLog = z.infer<typeof insertExpertResponseLogSchema>;
+export type ExpertResponseLog = typeof expertResponseLogs.$inferSelect;
+
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
   mode: z.enum(['live', 'paper']),
