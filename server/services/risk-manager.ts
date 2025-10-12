@@ -370,9 +370,13 @@ export class RiskManager {
     const positionSize = riskAmount / stopDistance;
     const positionValue = positionSize * signal.entryPrice;
 
-    // Get portfolio value
-    const metrics = await this.getPortfolioMetrics(userId);
-    const portfolioValue = metrics.totalValue || settings.portfolioValue || 50000;
+    // Get portfolio value - prefer settings.portfolioValue, fallback to metrics
+    let portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 0;
+    
+    if (portfolioValue === 0) {
+      const metrics = await this.getPortfolioMetrics(userId, settings.mode);
+      portfolioValue = metrics.totalValue || 50000;
+    }
     
     // Maximum single position: 10% of portfolio
     const MAX_POSITION_PERCENT = 10;
@@ -478,7 +482,7 @@ export class RiskManager {
     return { risk, reward, ratio };
   }
 
-  async getPortfolioMetrics(userId: string): Promise<{
+  async getPortfolioMetrics(userId: string, mode?: 'live' | 'paper'): Promise<{
     totalValue: number;
     unrealizedPL: number;
     realizedPL: number;
@@ -507,8 +511,17 @@ export class RiskManager {
       return total + (parseFloat(trade.realizedPL || '0'));
     }, 0);
 
-    // Simplified total value calculation
-    const totalValue = 50000 + realizedPL + unrealizedPL; // Starting with assumed base value
+    // Get base portfolio value from settings if available
+    let baseValue = 50000; // Default fallback
+    if (mode) {
+      const settings = await storage.getTradingSettings(userId, mode);
+      if (settings?.portfolioValue) {
+        baseValue = parseFloat(settings.portfolioValue.toString());
+      }
+    }
+
+    // Total value = base + realized P/L + unrealized P/L
+    const totalValue = baseValue + realizedPL + unrealizedPL;
 
     return {
       totalValue,

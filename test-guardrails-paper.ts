@@ -50,11 +50,10 @@ class GuardrailTestHarness {
     this.testUserId = user.id;
 
     // Get or create settings
-    const existingSettings = await storage.getTradingSettings(user.id, 'paper');
+    const existingSettings = await storage.getTradingSettings(user.id);
     if (!existingSettings) {
       await storage.createTradingSettings({
         userId: user.id,
-        mode: 'paper',
         krakenApiKey: 'test-key',
         krakenApiSecret: 'test-secret',
         tradingEnabled: true,
@@ -65,14 +64,18 @@ class GuardrailTestHarness {
         portfolioValue: 10000
       });
     } else {
-      await storage.updateTradingSettings(user.id, 'paper', {
+      await storage.updateTradingSettings(user.id, {
         tradingEnabled: true,
+        riskPerTrade: 100,
+        maxExposure: 500,
+        maxOpenTrades: 5,
+        dailyLossLimit: 7.0,
         portfolioValue: 10000,
         tradingSuspended: false
       });
     }
 
-    const settings = await storage.getTradingSettings(this.testUserId, 'paper');
+    const settings = await storage.getTradingSettings(this.testUserId);
     console.log(`✅ Test user initialized: ${user.username || testEmail} (ID: ${this.testUserId})`);
     console.log(`   Portfolio: $${settings?.portfolioValue || 10000}`);
     console.log(`   Mode: paper`);
@@ -86,7 +89,7 @@ class GuardrailTestHarness {
     console.log('📋 Test A: Max 1 Position Per Asset\n');
 
     try {
-      const settings = await storage.getTradingSettings(this.testUserId, 'paper');
+      const settings = await storage.getTradingSettings(this.testUserId);
       if (!settings) throw new Error('Settings not found');
 
       // Step 1: Create first BTC position
@@ -157,7 +160,7 @@ class GuardrailTestHarness {
     console.log('📋 Test B: Position Size Cap (>10% Portfolio)\n');
 
     try {
-      const settings = await storage.getTradingSettings(this.testUserId, 'paper');
+      const settings = await storage.getTradingSettings(this.testUserId);
       if (!settings) throw new Error('Settings not found');
 
       const portfolioValue = settings.portfolioValue || 10000;
@@ -212,7 +215,7 @@ class GuardrailTestHarness {
   async testStopLossEnforcement() {
     console.log('📋 Test C: Stop-Loss Enforcement\n');
 
-    const settings = await storage.getTradingSettings(this.testUserId, 'paper');
+    const settings = await storage.getTradingSettings(this.testUserId);
     if (!settings) throw new Error('Settings not found');
 
     // Test C1: Missing stop-loss
@@ -360,7 +363,7 @@ class GuardrailTestHarness {
     console.log('📋 Test E: Daily Loss Kill Switch\n');
 
     try {
-      const settings = await storage.getTradingSettings(this.testUserId, 'paper');
+      const settings = await storage.getTradingSettings(this.testUserId);
       if (!settings) throw new Error('Settings not found');
 
       const portfolioValue = settings.portfolioValue || 10000;
@@ -434,7 +437,7 @@ class GuardrailTestHarness {
         metadata: { reason: 'Test kill switch block' }
       };
 
-      const updatedSettings = await storage.getTradingSettings(this.testUserId, 'paper');
+      const updatedSettings = await storage.getTradingSettings(this.testUserId);
       if (updatedSettings) {
         const tradeResult = await this.riskManager.checkPreTradeRisk(this.testUserId, signal, updatedSettings);
         const tradingBlocked = !tradeResult.approved && tradeResult.reason?.includes('suspended');
@@ -472,7 +475,7 @@ class GuardrailTestHarness {
     console.log('📋 Test F: Symbol Normalization (BTC Variants)\n');
 
     try {
-      const settings = await storage.getTradingSettings(this.testUserId, 'paper');
+      const settings = await storage.getTradingSettings(this.testUserId);
       if (!settings) throw new Error('Settings not found');
 
       // Create position with Kraken format
