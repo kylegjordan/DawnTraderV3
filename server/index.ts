@@ -126,6 +126,7 @@ app.use((req, res, next) => {
       const { semanticIngestionTask } = await import('./services/semantic-ingestion-task');
       const { diagnosticAnalysisTask } = await import('./services/diagnostic-analysis-task');
       const { optimizationAnalysisTask } = await import('./services/optimization-analysis-task');
+      const { weeklyExpertInsightsTask } = await import('./services/weekly-expert-insights-task');
 
       // Register tasks
       schedulerRegistry.registerTask({
@@ -233,6 +234,17 @@ app.use((req, res, next) => {
         frequency: optimizationAnalysisTask.frequency,
         intervalMs: optimizationAnalysisTask.intervalMs,
         run: optimizationAnalysisTask.run.bind(optimizationAnalysisTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+
+      schedulerRegistry.registerTask({
+        name: weeklyExpertInsightsTask.name,
+        description: weeklyExpertInsightsTask.description,
+        frequency: weeklyExpertInsightsTask.frequency,
+        intervalMs: weeklyExpertInsightsTask.intervalMs,
+        run: weeklyExpertInsightsTask.run.bind(weeklyExpertInsightsTask),
         lastRun: null,
         nextRun: null,
         status: 'idle'
