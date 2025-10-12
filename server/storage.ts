@@ -2675,6 +2675,49 @@ export class DatabaseStorage implements IStorage {
   async deleteWalterMemory(id: string): Promise<void> {
     await db.delete(walterMemory).where(eq(walterMemory.id, id));
   }
+
+  // Expert Updates methods (Phase 5.8 - Task 5)
+  async getExpertUpdatesByWeek(weekOf: string): Promise<any[]> {
+    const { expertUpdates } = await import('@shared/schema');
+    return await db.select()
+      .from(expertUpdates)
+      .where(eq(expertUpdates.weekOf, weekOf));
+  }
+
+  async createExpertUpdate(update: {
+    sourceId: string;
+    sourceName: string;
+    author: string;
+    insight: string;
+    url?: string;
+    credibilityScore: number;
+    date: string;
+    weekOf: string;
+  }): Promise<any> {
+    const { expertUpdates } = await import('@shared/schema');
+    const [created] = await db.insert(expertUpdates).values(update).returning();
+    return created;
+  }
+
+  async checkExpertUpdateDuplicate(insightText: string): Promise<boolean> {
+    const { expertUpdates } = await import('@shared/schema');
+    const [existing] = await db.select()
+      .from(expertUpdates)
+      .where(eq(expertUpdates.insight, insightText))
+      .limit(1);
+    return !!existing;
+  }
+
+  async getExpertSources(filters?: { isActive?: boolean }): Promise<any[]> {
+    const { expertSources } = await import('@shared/schema');
+    let query = db.select().from(expertSources);
+    
+    if (filters?.isActive !== undefined) {
+      query = query.where(eq(expertSources.isActive, filters.isActive)) as any;
+    }
+    
+    return await query;
+  }
 }
 
 export const storage = new DatabaseStorage();
