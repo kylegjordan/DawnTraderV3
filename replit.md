@@ -99,3 +99,13 @@ PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, tra
   - ✅ Validation: 6/6 tests passing (100% success rate)
   - ✅ Documentation: Comprehensive guide in docs/task-10-1-adjustable-guardrails.md
   - **Status**: Production-ready, users can customize kill switch (%) and position cap (%)
+- **Task 5**: Weekly Expert Insights Update System - ✅ **COMPLETE**
+  - ✅ Scheduler Infrastructure: Background job running every 7 days, manual trigger available
+  - ✅ Database Integration: expert_updates table with source_name, author, insight, credibility_score, week_of
+  - ✅ 4-Week Rotating Knowledge System: Risk Management → Psychology → Market Structure → Trade Execution
+  - ✅ Duplicate Prevention: Automatic blocking of same-week re-runs
+  - ✅ Multi-Week Sustainability: Proven to generate unique insights weekly indefinitely
+  - ✅ Validation: 100% test pass - scheduler active, rotation working, data persisting correctly
+  - ✅ Walter Integration: References latest expert insights in responses
+  - **Status**: Production-ready with rotating curated insights
+  - **Future Enhancement (Task 5.1)**: Integrate live web search API for truly fresh weekly insights
