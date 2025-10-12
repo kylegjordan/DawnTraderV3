@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-10-12T10:36:51.098Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all time intervals (11.68, 12.1, 12.27) for an 8-core system, indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "No active trades or recent learning cycles, and zero performance metrics (totalPL, winRate, roi) suggest potential issues with trading strategy execution or AI model engagement."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system responsiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially adjust active trading strategies to ensure they are engaging effectively with market opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Perform an immediate analysis of CPU usage to identify and resolve any processes causing excessive load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Evaluate the current trading strategies and AI model to ensure they are functioning as expected and making adjustments as needed.",
+      "rationale": "Zero trading activity and learning cycles could indicate a malfunction or misconfiguration, impacting profitability."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a system health check to ensure all components are operating correctly and update any outdated software components.",
+      "rationale": "Regular maintenance can prevent unexpected failures and improve overall system efficiency."
+    }
+  ],
+  "urgencyLevel": "high"
+}
