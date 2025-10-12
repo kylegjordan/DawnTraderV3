@@ -528,6 +528,19 @@ export class KrakenService {
     userref?: string;
     validate?: boolean;
   }): Promise<{ txid: string[]; descr: any }> {
+    // Task 8 Safety Guardrail: Spot-only trading enforcement
+    if (params.leverage && params.leverage !== 'none') {
+      throw new Error('🛡️ SAFETY BLOCK: Leverage trading is prohibited. This system only allows spot trading.');
+    }
+
+    // Block margin flags (viqc = volume in quote currency, typically used for margin)
+    if (params.oflags && params.oflags.includes('viqc')) {
+      throw new Error('🛡️ SAFETY BLOCK: Margin trading flags detected. This system only allows spot trading.');
+    }
+
+    // Log spot-only enforcement
+    console.log(`[Kraken:SpotOnly] Order validated: ${params.pair} ${params.type} ${params.volume} (leverage: none, margin: blocked)`);
+
     return await this.makePrivateRequest('AddOrder', params);
   }
 

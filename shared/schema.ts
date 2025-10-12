@@ -442,6 +442,41 @@ export const killSwitchEvents = pgTable("kill_switch_events", {
   notes: text("notes"),
 });
 
+// Task 8: Safety Telemetry (tracks all safety guardrail checks and violations)
+export const safetyTelemetry = pgTable("safety_telemetry", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+  
+  // Portfolio metrics at time of check
+  dailyDrawdown: decimal("daily_drawdown", { precision: 8, scale: 4 }), // % loss in last 24h
+  exposurePercent: decimal("exposure_percent", { precision: 8, scale: 4 }), // % of portfolio in open positions
+  openPositionCount: integer("open_position_count").default(0),
+  portfolioValue: decimal("portfolio_value", { precision: 15, scale: 2 }),
+  
+  // Risk check results
+  checkType: varchar("check_type", { length: 50 }).notNull(), // 'pre_trade', 'kill_switch', 'position_monitor'
+  checkPassed: boolean("check_passed").notNull(),
+  failureReason: text("failure_reason"), // If check failed
+  
+  // Guardrail triggers (Task 8 specific)
+  spotOnlyViolation: boolean("spot_only_violation").default(false),
+  positionLimitViolation: boolean("position_limit_violation").default(false), // Max 1 per asset
+  positionSizeViolation: boolean("position_size_violation").default(false), // 2x cap exceeded
+  stopLossViolation: boolean("stop_loss_violation").default(false), // Missing or invalid SL
+  
+  // Trade context (if applicable)
+  symbol: varchar("symbol", { length: 20 }),
+  strategy: strategyTypeEnum("strategy"),
+  signalId: varchar("signal_id"),
+  
+  // Additional metadata
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  userModeTimestampIdx: uniqueIndex("safety_telemetry_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+}));
+
 // AI opportunity runs (hourly batch runs)
 export const aiOpportunityRuns = pgTable("ai_opportunity_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1370,6 +1405,11 @@ export const insertKillSwitchEventSchema = createInsertSchema(killSwitchEvents).
   triggeredAt: true,
 });
 
+export const insertSafetyTelemetrySchema = createInsertSchema(safetyTelemetry).omit({
+  id: true,
+  timestamp: true,
+});
+
 export const insertAIOpportunityRunSchema = createInsertSchema(aiOpportunityRuns).omit({
   id: true,
   startedAt: true,
@@ -1621,6 +1661,9 @@ export type ErrorLog = typeof errorLogs.$inferSelect;
 
 export type InsertKillSwitchEvent = z.infer<typeof insertKillSwitchEventSchema>;
 export type KillSwitchEvent = typeof killSwitchEvents.$inferSelect;
+
+export type InsertSafetyTelemetry = z.infer<typeof insertSafetyTelemetrySchema>;
+export type SafetyTelemetry = typeof safetyTelemetry.$inferSelect;
 
 export type InsertAIOpportunityRun = z.infer<typeof insertAIOpportunityRunSchema>;
 export type AIOpportunityRun = typeof aiOpportunityRuns.$inferSelect;

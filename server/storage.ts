@@ -82,6 +82,9 @@ import {
   type InsertAITransparencyLog,
   type KillSwitchEvent,
   type InsertKillSwitchEvent,
+  safetyTelemetry,
+  type SafetyTelemetry,
+  type InsertSafetyTelemetry,
   type AIOpportunityRun,
   type InsertAIOpportunityRun,
   type AIOpportunity,
@@ -1416,6 +1419,42 @@ export class DatabaseStorage implements IStorage {
       .where(eq(killSwitchEvents.id, id))
       .returning();
     return result;
+  }
+
+  // Task 8: Safety Telemetry methods
+  async createSafetyTelemetry(telemetry: InsertSafetyTelemetry): Promise<SafetyTelemetry> {
+    const [result] = await db.insert(safetyTelemetry).values(telemetry).returning();
+    return result;
+  }
+
+  async getSafetyTelemetry(
+    userId: string,
+    filters?: { 
+      mode?: 'live' | 'paper';
+      checkType?: string;
+      checkPassed?: boolean;
+      limit?: number;
+    }
+  ): Promise<SafetyTelemetry[]> {
+    const conditions = [eq(safetyTelemetry.userId, userId)];
+    
+    if (filters?.mode) {
+      conditions.push(eq(safetyTelemetry.mode, filters.mode));
+    }
+    if (filters?.checkType) {
+      conditions.push(eq(safetyTelemetry.checkType, filters.checkType));
+    }
+    if (filters?.checkPassed !== undefined) {
+      conditions.push(eq(safetyTelemetry.checkPassed, filters.checkPassed));
+    }
+    
+    const query = db
+      .select()
+      .from(safetyTelemetry)
+      .where(and(...conditions))
+      .orderBy(desc(safetyTelemetry.timestamp));
+    
+    return await (filters?.limit ? query.limit(filters.limit) : query);
   }
 
   // AI Opportunities methods

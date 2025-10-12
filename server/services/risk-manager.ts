@@ -150,6 +150,24 @@ export class RiskManager {
       return maxTradesCheck;
     }
 
+    // Check 5: Max 1 position per asset (Task 8 Safety Guardrail)
+    const assetCheck = await this.checkMaxPositionsPerAsset(userId, signal);
+    if (!assetCheck.approved) {
+      return assetCheck;
+    }
+
+    // Check 6: Stop-loss validation (Task 8 Safety Guardrail)
+    const stopLossCheck = this.checkStopLossRequired(signal);
+    if (!stopLossCheck.approved) {
+      return stopLossCheck;
+    }
+
+    // Check 7: Position size cap (Task 8 Safety Guardrail)
+    const positionSizeCheck = await this.checkPositionSizeCap(userId, signal, settings);
+    if (!positionSizeCheck.approved) {
+      return positionSizeCheck;
+    }
+
     return { approved: true };
   }
 
@@ -260,6 +278,106 @@ export class RiskManager {
       return {
         approved: false,
         reason: `Maximum open trades limit reached (${maxOpenTrades})`
+      };
+    }
+
+    return { approved: true };
+  }
+
+  /**
+   * Task 8 Safety Guardrail: Max 1 position per asset
+   * Prevents multiple simultaneous positions in the same asset
+   */
+  private async checkMaxPositionsPerAsset(
+    userId: string,
+    signal: TradeSignal
+  ): Promise<RiskCheckResult> {
+    const activeTrades = await storage.getActiveTrades(userId);
+    
+    // Extract base asset from symbol - handles all Kraken variants
+    // Kraken uses: XXBTZUSD (double prefix), XBTUSD, XBT/USD, BTC/USD
+    const normalizeSymbol = (symbol: string): string => {
+      // Strip all X and Z prefixes from start (Kraken adds X for crypto, Z for fiat)
+      let normalized = symbol.replace(/^[XZ]+/, '');
+      
+      // Remove quote currency (USD variants and slashes)
+      normalized = normalized.replace(/\/USD|USD|ZUSD|\/ZUSD/g, '');
+      
+      // Map Kraken's XBT to standard BTC
+      if (normalized === 'BT') {
+        normalized = 'BTC';
+      }
+      
+      return normalized;
+    };
+    
+    const normalizedSymbol = normalizeSymbol(signal.symbol);
+    
+    const existingPosition = activeTrades.find(trade => {
+      const tradeSymbol = normalizeSymbol(trade.symbol);
+      return tradeSymbol === normalizedSymbol;
+    });
+
+    if (existingPosition) {
+      return {
+        approved: false,
+        reason: `🛡️ Safety: Already have an open position in ${normalizedSymbol}. Max 1 position per asset allowed.`
+      };
+    }
+
+    return { approved: true };
+  }
+
+  /**
+   * Task 8 Safety Guardrail: Stop-loss required
+   * Ensures every trade has a stop-loss defined
+   */
+  private checkStopLossRequired(signal: TradeSignal): RiskCheckResult {
+    if (!signal.stopPrice || signal.stopPrice === 0) {
+      return {
+        approved: false,
+        reason: '🛡️ Safety: Stop-loss is required for all trades'
+      };
+    }
+
+    // Validate stop-loss is on correct side for long positions
+    if (signal.stopPrice >= signal.entryPrice) {
+      return {
+        approved: false,
+        reason: '🛡️ Safety: Stop-loss must be below entry price for long positions'
+      };
+    }
+
+    return { approved: true };
+  }
+
+  /**
+   * Task 8 Safety Guardrail: Position size cap
+   * Prevents oversized positions (max 10% of portfolio per position)
+   */
+  private async checkPositionSizeCap(
+    userId: string,
+    signal: TradeSignal,
+    settings: TradingSettings
+  ): Promise<RiskCheckResult> {
+    const riskAmount = parseFloat(settings.riskPerTrade || '0');
+    const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
+    const positionSize = riskAmount / stopDistance;
+    const positionValue = positionSize * signal.entryPrice;
+
+    // Get portfolio value
+    const metrics = await this.getPortfolioMetrics(userId);
+    const portfolioValue = metrics.totalValue || 50000;
+    
+    // Maximum single position: 10% of portfolio (Task 8 requirement: 2x exposure cap translates to 10% max per position)
+    const MAX_POSITION_PERCENT = 10;
+    const maxPositionValue = (portfolioValue * MAX_POSITION_PERCENT) / 100;
+    const positionPercent = (positionValue / portfolioValue) * 100;
+
+    if (positionPercent > MAX_POSITION_PERCENT) {
+      return {
+        approved: false,
+        reason: `🛡️ Safety: Position size (${positionPercent.toFixed(1)}% = $${positionValue.toFixed(2)}) exceeds ${MAX_POSITION_PERCENT}% portfolio limit ($${maxPositionValue.toFixed(2)})`
       };
     }
 
