@@ -1,0 +1,125 @@
+Phase 5.7 – Task 7 Validation: Complete Stage B (historic) + Stage C (synthetic) to meet ≥7/8 strategies
+
+Goal: Prove each of the 8 strategies can generate at least one valid signal end-to-end (signal → paper trade → telemetry/alerts), even if current live markets are quiet.
+
+A) Stage B – Historic Paper-Data Replay (use real past data, not just today)
+
+Add Historic Replay Mode
+
+Extend server/services/stage-b-validator.ts with a runHistoricReplay({ userId, symbols, from, to }).
+
+Pull 1-min spot candles from Kraken REST for rolling 24–48h windows within the last 90 days.
+
+Iterate windows until at least one signal fires per strategy using production (non-relaxed) parameters.
+
+Parameter Mapping Check (critical)
+
+Verify each detection call uses the correct param names expected by strategy-engine.ts (e.g., minRangeWidth vs maxRangeWidth, VWAP Bounce slope params, Breakout consolidation width, Liquidity Trap stop-zone radius).
+
+Fix any mismatches in stage-b-validator.ts so overrides actually reach filters.
+
+Execution
+
+Symbols: start with 2–3 liquid pairs (e.g., BTC/USD, ETH/USD) and 2 equities proxies you already support.
+
+Run replay until each of the 8 strategies produces ≥1 signal on at least one symbol (normal, non-relaxed settings).
+
+Checks
+
+✅ paper_trades rows created with strategyType, entry, exit, MFE, MAE, confidence.
+
+✅ Alerts fire on entries/exits.
+
+✅ Telemetry dashboards update per strategy.
+
+Deliverable
+
+Append a “Stage B – Historic Replay” section to docs/strategy-validation-stageb-report.md summarizing, per strategy: symbol, date window, #signals, win/loss, MFE/MAE.
+
+B) Stage C – Deterministic Synthetic Validation (prove each strategy CAN fire)
+
+Per-Strategy Scenario Builders
+
+In server/services/stage-c-validator.ts, create one deterministic generator function per strategy that crafts a minimal candle sequence to satisfy the actual detection criteria used in strategy-engine.ts.
+
+Examples (adapt to your engine logic):
+
+Breakout: 40 bars with tight consolidation (width ≤ required minRangeWidth), then 1 strong bar closing above resistance with volume surge ≥ threshold.
+
+Mean Reversion: Sequence that drives RSI/Bollinger z-score beyond threshold, then prints a reversal candle back toward mean.
+
+Range Trading: Oscillation within [low, high] for N bars; entry near support with rejection; ensure width ≥ minRangeWidth.
+
+VWAP Bounce: Trend up, pullback to VWAP within distance tolerance, then a bounce candle; ensure slope and proximity params satisfied.
+
+Liquidity Trap: Wick fakes out just beyond prior swing high/low into a known stop zone, then immediate rejection back inside.
+
+Exact Param Wiring (no “ultra-relaxed” surprises)
+
+Pass the exact param names expected by each detection method. Confirm by grepping function signatures in strategy-engine.ts.
+
+Keep thresholds as configured for validation mode (you may keep a small “validation easing,” but document it inline and revert defaults afterward).
+
+Execution
+
+Run test-stagec-validation.ts and assert ≥7/8 strategies produce at least one signal and paper trade with exits and telemetry.
+
+Checks
+
+✅ Each strategy’s scenario yields at least one StrategySignal and a persisted paper_trades row.
+
+✅ MFE/MAE populated; alerts fired; conflict resolution respected (one signal per asset).
+
+Deliverable
+
+docs/strategy-validation-stagec-report.md with a table: Strategy | Scenario name | Triggered (Y/N) | Confidence | Notes.
+
+C) Wrap-Up & Gate to Task 8
+
+Consolidated Report
+
+Update docs/strategy-validation-report.md with three sections:
+
+Stage A (unit/synthetic framework – current status),
+
+Stage B (Historic Replay – with dates/symbols where signals fired),
+
+Stage C (Deterministic Synthetic – ≥7/8 confirmed).
+
+Acceptance Criteria
+
+✅ Stage B historic replay shows at least one real-data signal per most strategies (target ≥5/8) using production params.
+
+✅ Stage C synthetic demonstrates ≥7/8 strategies can fire end-to-end on controlled data.
+
+✅ All signals produce proper paper-trades, telemetry (MFE/MAE), and alerts.
+
+On Pass
+
+Mark Task 7 complete.
+
+Proceed to Task 8 – Guardrails & Safety Validation (daily loss stop, spot-only enforcement, exposure caps).
+
+Notes / File Touchpoints
+
+server/services/stage-b-validator.ts – add runHistoricReplay, ensure param name alignment.
+
+test-stageb-validation.ts – enable passing date windows; log summary to console and file.
+
+server/services/stage-c-validator.ts – add per-strategy scenario builders; ensure deterministic sequences.
+
+test-stagec-validation.ts – assert ≥7/8 success; write markdown report.
+
+server/services/strategy-engine.ts & strategy-filters.ts – source of truth for required param names and conditions; do not hardcode thresholds that ignore passed params.
+
+Quick sanity checklist for Replit before running:
+
+ Param names verified against detection signatures (no maxRangeWidth vs minRangeWidth mistakes).
+
+ VWAP proximity/slope logic and volume surge thresholds accounted for in scenarios.
+
+ Paper-trade pipeline writes MFE/MAE, strategyType, confidence.
+
+ Alerts wired for entries/exits.
+
+ Reports write to docs/ and include dates/symbols.

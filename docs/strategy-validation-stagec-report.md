@@ -1,7 +1,7 @@
 # Strategy Validation Report - Stage C
 ## Synthetic Test Scenarios (Functional Proof)
 
-**Date:** 2025-10-12T06:01:16.283Z
+**Date:** 2025-10-12T06:22:25.249Z
 **Purpose:** Prove all 8 strategies CAN generate signals with ideal conditions
 **Method:** Synthetic OHLC data designed per strategy requirements
 
@@ -36,7 +36,7 @@
 ### ❌ SMA TREND RIDE
 
 - **Status:** No signal generated
-- **Scenario:** No signal - check crossover/uptrend
+- **Scenario:** No signal - check uptrend/bounce
 - **Action Required:** Review strategy logic or test scenario
 
 ### ❌ BREAKOUT

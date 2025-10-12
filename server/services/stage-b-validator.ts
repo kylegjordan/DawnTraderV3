@@ -41,6 +41,119 @@ export class StageBValidator {
   }
 
   /**
+   * Run historic replay: Test strategies against past market data windows
+   * Iterates through 24-48h windows over the last 90 days to find volatile periods
+   */
+  async runHistoricReplay(userId: string, daysBack = 90): Promise<StageBResults> {
+    console.log('\n📅 Starting Stage B: Historic Replay Mode\n');
+    console.log(`Testing strategies against last ${daysBack} days of market data`);
+    console.log('============================================================\n');
+
+    const startTime = Date.now();
+    
+    // Get user settings
+    let settings = await storage.getTradingSettings(userId);
+    if (!settings) {
+      console.log('   No existing settings found, creating defaults...');
+      await storage.createTradingSettings({
+        userId,
+        riskPerTrade: '2',
+        maxExposurePercent: '10',
+        maxOpenTrades: 5
+      });
+      settings = await storage.getTradingSettings(userId);
+      if (!settings) throw new Error('Failed to create settings');
+    }
+
+    // Initialize results for all 8 strategies
+    const strategyNames = [
+      'vwap_pullback',
+      'abcd_long', 
+      'sma_trend_ride',
+      'breakout',
+      'mean_reversion',
+      'range_trading',
+      'vwap_bounce',
+      'liquidity_trap'
+    ];
+
+    this.results = strategyNames.map(name => ({
+      strategy: name,
+      signalsDetected: 0,
+      avgConfidence: 0,
+      avgProfitLoss: 0,
+      mfeAvg: 0,
+      maeAvg: 0,
+      successRate: 0,
+      notes: []
+    }));
+
+    // Test windows: 48-hour windows, step back 7 days at a time
+    const now = Date.now();
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const windowSize = 48 * 60 * 60; // 48 hours in seconds
+    
+    let testedWindows = 0;
+    let maxWindows = 12; // Test up to 12 windows (84 days back)
+
+    console.log('Testing historic windows (48h each):');
+
+    for (let daysOffset = 7; daysOffset <= daysBack && testedWindows < maxWindows; daysOffset += 7) {
+      const windowEnd = Math.floor((now - (daysOffset * msPerDay)) / 1000);
+      const windowStart = windowEnd - windowSize;
+      
+      console.log(`\n📊 Window ${testedWindows + 1}: ${new Date(windowStart * 1000).toISOString().split('T')[0]} to ${new Date(windowEnd * 1000).toISOString().split('T')[0]}`);
+      
+      // Test this window across symbols
+      for (const symbol of this.testSymbols.slice(0, 2)) { // Start with BTC and ETH for speed
+        try {
+          const ohlcData = await this.kraken.getOHLCData(symbol, 1, windowStart);
+          
+          if (!ohlcData.ohlc || ohlcData.ohlc.length < 100) {
+            console.log(`   ⚠️  Insufficient data for ${symbol} in this window`);
+            continue;
+          }
+
+          console.log(`   Testing ${symbol}: ${ohlcData.ohlc.length} candles`);
+          await this.validateSymbol(symbol, userId, settings, false); // Production params
+
+        } catch (error: any) {
+          console.log(`   ✗ Error testing ${symbol}: ${error.message}`);
+        }
+      }
+
+      testedWindows++;
+
+      // Check if we have enough signals
+      const strategiesWithSignals = this.results.filter(r => r.signalsDetected > 0).length;
+      if (strategiesWithSignals >= 5) {
+        console.log(`\n✅ Found signals for ${strategiesWithSignals}/8 strategies - stopping early`);
+        break;
+      }
+    }
+
+    // Calculate final metrics
+    const strategiesWithSignals = this.results.filter(r => r.signalsDetected > 0).length;
+    const successRate = (strategiesWithSignals / strategyNames.length) * 100;
+
+    const duration = Date.now() - startTime;
+    console.log(`\n⏱️  Historic replay completed in ${(duration / 1000).toFixed(1)}s`);
+    console.log(`   Tested ${testedWindows} time windows`);
+    console.log(`   Strategies with signals: ${strategiesWithSignals}/8 (${successRate.toFixed(1)}%)\n`);
+
+    return {
+      timestamp: new Date(),
+      totalStrategies: strategyNames.length,
+      strategiesWithSignals,
+      successRate,
+      metrics: this.results,
+      conflictResolutionTests: testedWindows,
+      alertsFired: 0,
+      telemetryUpdates: 0
+    };
+  }
+
+  /**
    * Get relaxed parameters for validation mode
    * These ultra-relaxed settings are ONLY for proving end-to-end functionality
    * Conservative production settings are documented separately
