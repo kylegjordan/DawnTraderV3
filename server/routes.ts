@@ -4992,7 +4992,7 @@ Please:
       const projectedRisk = newRisk; // Total portfolio exposure
       
       // Get risk threshold from user's approval matrix settings (configurable in Walter Approvals)
-      const userProfile = await storage.getUserById(userId);
+      const userProfile = await storage.getUser(userId);
       const approvalMatrix = userProfile?.approvalMatrix as any;
       const riskThreshold = approvalMatrix?.policyConstraints?.maxPortfolioRiskPercent || 20.0;
       
