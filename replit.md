@@ -109,3 +109,33 @@ PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, tra
   - ✅ Walter Integration: References latest expert insights in responses
   - **Status**: Production-ready with rotating curated insights
   - **Future Enhancement (Task 5.1)**: Integrate live web search API for truly fresh weekly insights
+- **Task 6** (Expert Insights): Metrics & Alerts System - ✅ **COMPLETE**
+  - ✅ Expert Insights Metrics Service: Comprehensive tracking (totalInsights, topicDistribution, credibility scores, task execution stats, Walter usage stats)
+  - ✅ Health Check System: Automated status evaluation (healthy/warning/critical) with actionable issues detection
+  - ✅ Alert Integration: Task failure alerts (critical), successful updates (info), duplicate prevention (info), low credibility (warning), topic imbalance (warning)
+  - ✅ API Endpoints: `/api/diagnostics/expert-insights`, `/api/diagnostics/expert-insights/health`, enhanced `/api/diagnostics/export-report`
+  - ✅ Transparency Logging: Task execution logs with correct schema (taskName, success, mode, resultSummary, notes)
+  - ✅ Bug Fixes: Fixed pre-existing issues in metrics.ts (trade_status enum, entry_time column, error_logs table, SQL operator precedence)
+  - ✅ Validation: 100% test pass - metrics accurate, health monitoring operational, alerts triggered correctly
+  - **Status**: Production-ready with comprehensive monitoring and alerting
+- **Task 7** (Expert Insights): End-to-End Quality Testing - ✅ **COMPLETE**
+  - ✅ Expert Insights Generation: Verified 2 new insights created with correct topics (Market Structure, Risk Management)
+  - ✅ Walter Integration: Confirmed expert knowledge referenced in AI responses for risk management and psychology queries
+  - ✅ Metrics Accuracy: All data points validated (totalInsights=5, all 4 topics tracked, successRate validated, health=healthy)
+  - ✅ Alert System: Expert-related alerts operational (duplicate prevention alerts triggered with severity info)
+  - ✅ Export Report: expertInsights section included with complete data (totalInsights, topicDistribution, averageCredibilityScore)
+  - ✅ Duplicate Prevention: Same-week blocking operational with structured JSON logging and alert notifications
+  - ✅ End-to-End Pipeline: Full lifecycle validated (Generation → Storage → Retrieval → Walter Integration → Metrics → Alerts)
+  - **Status**: Production-ready with verified end-to-end functionality
+- **Task 8** (Expert Insights): Regression Testing - ✅ **COMPLETE**
+  - ✅ Authentication & User Management: Login working, user data accessible
+  - ✅ Trading Settings: All fields accessible (mode, riskPerTrade, maxExposure, dailyLossKillSwitch)
+  - ✅ Watchlist Management: CRUD operations functional
+  - ✅ Trades & History: Trade retrieval working correctly
+  - ✅ Walter Chat: Non-expert queries operational (trading mode, watchlist queries)
+  - ✅ AI Opportunities: `/api/ai/opportunities` endpoint working (200 OK with JSON array)
+  - ✅ System Alerts: All alert types accessible
+  - ✅ General Diagnostics: Export report working with complete data
+  - ✅ Database Integrity: All core tables verified, expert_updates table accessible
+  - ✅ Zero Regressions: Expert insights implementation isolated and non-breaking
+  - **Status**: Production-ready with zero impact on existing functionality

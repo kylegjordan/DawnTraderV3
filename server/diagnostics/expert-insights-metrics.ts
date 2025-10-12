@@ -151,10 +151,10 @@ async function getTopicDistribution() {
 async function getDuplicateBlockCount(): Promise<number> {
   try {
     const result = await db.execute(sql`
-      SELECT COUNT(*) as count FROM transparency_logs 
-      WHERE action_type = 'expert_insights_update' 
-      AND details LIKE '%duplicate%'
-      AND timestamp >= NOW() - INTERVAL '30 days'
+      SELECT COUNT(*) as count FROM ai_transparency_log 
+      WHERE task_name = 'Weekly Expert Insights Update' 
+      AND notes LIKE '%duplicate%'
+      AND executed_at >= NOW() - INTERVAL '30 days'
     `);
     return parseInt((result.rows[0] as any)?.count || '0');
   } catch (error) {
@@ -171,11 +171,11 @@ async function getTaskExecutionStats() {
     const executionsResult = await db.execute(sql`
       SELECT 
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successes,
-        MAX(timestamp) as last_execution
-      FROM transparency_logs 
-      WHERE action_type = 'expert_insights_update'
-      AND timestamp >= NOW() - INTERVAL '90 days'
+        SUM(CASE WHEN success = true THEN 1 ELSE 0 END) as successes,
+        MAX(executed_at) as last_execution
+      FROM ai_transparency_log 
+      WHERE task_name = 'Weekly Expert Insights Update'
+      AND executed_at >= NOW() - INTERVAL '90 days'
     `);
 
     const row = executionsResult.rows[0] as any;
@@ -185,15 +185,15 @@ async function getTaskExecutionStats() {
 
     // Calculate consecutive failures (look at last 5 executions)
     const recentResult = await db.execute(sql`
-      SELECT status FROM transparency_logs 
-      WHERE action_type = 'expert_insights_update'
-      ORDER BY timestamp DESC 
+      SELECT success FROM ai_transparency_log 
+      WHERE task_name = 'Weekly Expert Insights Update'
+      ORDER BY executed_at DESC 
       LIMIT 5
     `);
 
     let consecutiveFailures = 0;
     for (const row of recentResult.rows as any[]) {
-      if (row.status === 'failed' || row.status === 'error') {
+      if (row.success === false) {
         consecutiveFailures++;
       } else {
         break;
