@@ -143,8 +143,13 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
     // Calculate daily loss
     const currentDailyLoss = Math.abs(metrics.realizedPL); // Simplified
 
-    // Note: Enabled strategies tracked in strategy_settings table, not trading_settings
-    const enabledStrategies: string[] = []; // TODO: Query strategy_settings if needed
+    // Get enabled strategies from strategy_settings table
+    const strategySettingsList = await storage.listStrategySettings({ userId, mode });
+    const enabledStrategies = strategySettingsList
+      .filter(s => s.enabled)
+      .map(s => s.strategy);
+    
+    console.log(`[BehavioralTemplate] User ${userId} (${mode}): Found ${strategySettingsList.length} strategies, ${enabledStrategies.length} enabled:`, enabledStrategies);
 
     return {
       portfolioValue,
