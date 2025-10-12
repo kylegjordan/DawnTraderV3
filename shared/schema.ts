@@ -126,6 +126,7 @@ export const tradingSettings = pgTable("trading_settings", {
   // Daily Loss Kill Switch
   dailyLossKillSwitch: decimal("daily_loss_kill_switch", { precision: 5, scale: 2 }).default("7.00"), // % of portfolio
   dailyLossWarningTrigger: decimal("daily_loss_warning_trigger", { precision: 5, scale: 2 }).default("75.00"), // % of kill switch threshold
+  maxPositionPercent: decimal("max_position_percent", { precision: 5, scale: 2 }).default("10.00"), // % of portfolio per position
   portfolioValue: decimal("portfolio_value", { precision: 15, scale: 2 }).default("50000.00"), // Base portfolio value for calculations
   tradingSuspended: boolean("trading_suspended").default(false), // System-controlled flag
   

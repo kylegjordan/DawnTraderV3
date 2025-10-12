@@ -1,0 +1,162 @@
+Task 10.1 – Add Adjustable Risk Parameters in Guardrails Tab
+🎯 Objective
+
+Allow users to view, adjust, and save two key risk-management guardrail parameters directly from the Guardrails tab UI:
+
+Daily Loss Kill Switch (%)
+
+Max Position Size Cap (%)
+
+Values should be saved to and read from the user’s trading_settings table.
+All trading logic (RiskManager checks) must automatically use the latest user-defined values.
+
+🧩 System Components Affected
+
+client/components/GuardrailsTab.tsx (frontend UI)
+
+server/routes/settings.ts (API endpoint for saving/retrieving settings)
+
+shared/schema.ts (trading_settings table)
+
+server/services/risk-manager.ts (reads new parameters from settings)
+
+Part 1 – Database Updates
+🧱 Step 1: Confirm Fields Exist
+
+Open shared/schema.ts.
+
+Ensure the following two columns exist in the trading_settings table:
+
+dailyLossKillSwitch: decimal("daily_loss_kill_switch", { precision: 5, scale: 2 }).default("7.00"),
+maxPositionPercent: decimal("max_position_percent", { precision: 5, scale: 2 }).default("10.00"),
+
+
+If missing, add them below the other numeric safety settings (like riskPerTrade).
+
+✅ Check: Run npm run db:push and verify that both fields appear in your database schema.
+✅ Deliverable: Database schema includes both adjustable parameters with defaults 7.00 and 10.00.
+
+Part 2 – Backend (Server) Integration
+🧩 Step 2: Retrieve and Save Settings
+
+Open server/routes/settings.ts.
+
+Locate the API endpoints for:
+
+GET /api/settings (fetch current settings)
+
+POST /api/settings (save updates)
+
+Extend both endpoints to include:
+
+dailyLossKillSwitch
+
+maxPositionPercent
+
+✅ Check:
+
+When calling GET /api/settings, both fields return the correct values.
+
+When calling POST /api/settings, both fields update properly in the database.
+
+✅ Deliverable: Backend routes now fully support reading and updating these two fields.
+
+Part 3 – Frontend (Guardrails Tab)
+🎨 Step 3: Add New Input Fields
+
+Open client/components/GuardrailsTab.tsx.
+
+Under the section titled “Risk Limits” or similar, add two new input components:
+
+Daily Loss Limit (%):
+Placeholder: 7
+Tooltip: “Maximum total daily portfolio loss before trading stops automatically.”
+
+Max Position Size (%):
+Placeholder: 10
+Tooltip: “Maximum percentage of your portfolio allowed in a single trade.”
+
+Use existing input styles (e.g., NumberInput or TextField depending on the UI framework).
+
+✅ Check: Both fields appear in the Guardrails tab with labels, placeholders, and tooltips.
+✅ Deliverable: Guardrails tab visually includes both adjustable inputs.
+
+🔄 Step 4: Sync with API
+
+When the Guardrails tab loads:
+
+Fetch current settings using GET /api/settings.
+
+Populate both fields with the current values.
+
+When the user presses “Save” or “Apply Changes”:
+
+Send the updated values via POST /api/settings.
+
+Show a success message:
+"✅ Guardrail settings updated successfully!"
+
+✅ Check: Changing the values in the UI updates the database.
+✅ Deliverable: Full two-way synchronization between UI and backend.
+
+Part 4 – RiskManager Integration
+🧠 Step 5: Use Adjustable Parameters in Logic
+
+Open server/services/risk-manager.ts.
+
+Find where the following constants are referenced:
+
+DAILY_LOSS_THRESHOLD = 7
+
+MAX_POSITION_PERCENT = 10
+
+Replace hardcoded numbers with dynamic references:
+
+const dailyLossLimit = settings.dailyLossKillSwitch || 7;
+const positionCap = settings.maxPositionPercent || 10;
+
+
+Ensure all checks in:
+
+checkKillSwitch()
+
+checkPositionSizeCap()
+now use these dynamic values.
+
+✅ Check: When you adjust the guardrails in the UI, RiskManager calculations immediately reflect those values on the next trade.
+✅ Deliverable: RiskManager uses real-time adjustable guardrail values instead of fixed constants.
+
+Part 5 – Testing and Validation
+🧪 Step 6: Validation Scenarios
+
+Create or reuse a simple test harness (like test-guardrails-paper.ts) to confirm behavior.
+
+Test	Setup	Expected Result
+A	Set dailyLossKillSwitch to 5%	Kill switch triggers at 5% total daily loss
+B	Set maxPositionPercent to 15%	Trade using 14% passes, 16% blocked
+C	Revert to defaults	Kill switch back to 7%, position cap back to 10%
+
+✅ Deliverable: All validation tests pass, confirming values are adjustable and active.
+
+Part 6 – Documentation
+📘 Step 7: Update Docs
+
+Add a new section to docs/task-10-guardrail-adjustments.md:
+
+Describe both adjustable parameters.
+
+Include default values, purpose, and usage examples.
+
+Add screenshots or field labels for reference.
+
+✅ Deliverable: Documentation updated and linked in replit.md.
+
+✅ Final Acceptance Criteria
+Requirement	Status
+Database fields added and migrated	☐
+API endpoints updated	☐
+Guardrails tab shows both inputs	☐
+Values sync between UI and backend	☐
+RiskManager reads user values dynamically	☐
+Validation tests pass for both	☐
+Documentation updated	☐
