@@ -1,6 +1,14 @@
 import type { WalterMemory, WalterChatLog, InsertWalterMemory } from '@shared/schema';
 import { getWalterPurpose } from './walter-purpose';
 import { getHighImportanceMemories, createMemory } from './walter-memory';
+import { 
+  detectIntent, 
+  fetchUserContext, 
+  getBehavioralGuidance, 
+  enhancePrompt as enhanceBehavioralPrompt,
+  validateResponse,
+  type ValidationResult 
+} from './behavioral-template';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -23,6 +31,7 @@ interface MemoryExtractionResult {
 
 /**
  * Generate AI response for user message with full context injection
+ * Enhanced with Task 10 behavioral templates
  */
 export async function generateWalterResponse(
   userId: string,
@@ -33,13 +42,37 @@ export async function generateWalterResponse(
     // 1. Gather context
     const context = await gatherContext(userId, chatId);
 
-    // 2. Build prompt
-    const prompt = buildPrompt(context, userMessage);
+    // 2. Detect intent and fetch behavioral context (Task 10)
+    const intent = detectIntent(userMessage);
+    const userContext = await fetchUserContext(userId);
+    const behavioralGuidance = getBehavioralGuidance(intent, userContext);
 
-    // 3. Call OpenAI
-    const response = await callOpenAI(prompt, userMessage);
+    console.log(`[Walter] Detected intent: ${intent} for message: "${userMessage.substring(0, 50)}..."`);
 
-    // 4. Extract and store memory if needed
+    // 3. Build prompt with behavioral enhancement
+    const basePrompt = buildPrompt(context, userMessage);
+    const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
+
+    // 4. Call OpenAI
+    const response = await callOpenAI(enhancedPrompt, userMessage);
+
+    // 5. Validate response against behavioral requirements (Task 10)
+    const validation = validateResponse(response, behavioralGuidance);
+    logBehavioralTest(userId, userMessage, intent, response, validation);
+
+    // 6. SAFETY ENFORCEMENT: Block unsafe responses
+    if (!validation.safetyCompliant) {
+      console.error('[Walter] ⛔ UNSAFE RESPONSE BLOCKED:', validation.issues.join(', '));
+      return "I can't provide that response as it may compromise safety. Let me rephrase: I'm designed to protect your capital, and I can't suggest ways to bypass safety features. However, I can help you optimize within safe parameters. What would you like to adjust?";
+    }
+
+    // 7. If validation failed for tone/accuracy, log warning but allow response
+    if (!validation.passed && validation.safetyCompliant) {
+      console.warn('[Walter] ⚠️  Response validation issues (non-safety):', validation.issues.join(', '));
+      // Allow response but log for improvement
+    }
+
+    // 8. Extract and store memory if needed
     await extractAndStoreMemory(userId, chatId, userMessage, response);
 
     return response;
@@ -388,4 +421,52 @@ function formatDate(date: Date | string): string {
   if (diffDays < 7) return `${diffDays} days ago`;
   if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
   return `${Math.floor(diffDays / 30)} months ago`;
+}
+
+/**
+ * Log behavioral test result for Task 10
+ */
+function logBehavioralTest(
+  userId: string,
+  userMessage: string,
+  intent: string,
+  response: string,
+  validation: ValidationResult
+): void {
+  import('fs').then(fs => {
+    import('path').then(path => {
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        userId,
+        userMessage,
+        detectedIntent: intent,
+        walterResponse: response,
+        validation: {
+          passed: validation.passed,
+          tone: validation.tone,
+          safetyCompliant: validation.safetyCompliant,
+          usedContext: validation.usedContext,
+          issues: validation.issues,
+          templateMatch: validation.templateMatch
+        }
+      };
+
+      const logDir = path.join(process.cwd(), 'logs');
+      const logFile = path.join(logDir, 'behavioral-tests.log');
+
+      // Ensure logs directory exists
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+
+      // Append log entry
+      fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n');
+
+      // Console log for monitoring
+      console.log(`[Behavioral Test] ${validation.passed ? '✅ PASS' : '❌ FAIL'} - Intent: ${intent}, Match: ${validation.templateMatch}%`);
+      if (!validation.passed) {
+        console.log(`[Behavioral Test] Issues: ${validation.issues.join(', ')}`);
+      }
+    });
+  });
 }

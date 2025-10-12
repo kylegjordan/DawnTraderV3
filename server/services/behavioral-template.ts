@@ -64,17 +64,30 @@ export function detectIntent(userMessage: string): IntentType {
 
   // Guardrail explanation patterns
   const guardrailKeywords = [
-    'position limit', 'position cap', '10%', 'why can\'t i buy',
+    'position limit', 'position cap', 'position size', '10%', '15%', 'why can\'t i buy',
     'stop loss', 'stop-loss', 'why do i need',
     'kill switch', 'daily loss', '7%', 'shut down', 'stopped trading',
     'spot only', 'leverage', 'margin', 'why no leverage',
     'symbol', 'btc/usd', 'xbt', 'ticker',
     'exposure', 'max exposure', 'total exposure',
-    'one position', 'duplicate', 'already have'
+    'one position', 'duplicate', 'already have',
+    'rejected because', 'order was rejected'
   ];
 
   if (guardrailKeywords.some(kw => msg.includes(kw))) {
     return 'guardrail_explanation';
+  }
+
+  // Risk reassurance patterns (check before strategy to avoid conflicts)
+  const reassuranceKeywords = [
+    'worried', 'scared', 'nervous', 'safe', 'protect', 'security',
+    'risk management', 'how safe', 'will i lose', 'protection',
+    'safeguards', 'guardrails', 'safety features',
+    'prevent big losses', 'prevent losses', 'how does the system prevent'
+  ];
+
+  if (reassuranceKeywords.some(kw => msg.includes(kw))) {
+    return 'risk_reassurance';
   }
 
   // Strategy explanation patterns
@@ -87,17 +100,6 @@ export function detectIntent(userMessage: string): IntentType {
 
   if (strategyKeywords.some(kw => msg.includes(kw))) {
     return 'strategy_explanation';
-  }
-
-  // Risk reassurance patterns
-  const reassuranceKeywords = [
-    'worried', 'scared', 'nervous', 'safe', 'protect', 'security',
-    'risk management', 'how safe', 'will i lose', 'protection',
-    'safeguards', 'guardrails', 'safety features'
-  ];
-
-  if (reassuranceKeywords.some(kw => msg.includes(kw))) {
-    return 'risk_reassurance';
   }
 
   // Default to general config
