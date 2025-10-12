@@ -2,6 +2,7 @@ import { KrakenService } from './kraken';
 import { StrategyEngine } from './strategy-engine';
 import { storage } from '../storage';
 import { WatchlistPair } from '@shared/schema';
+import { strategyAlerts } from './strategy-alerts';
 
 export class MarketScanner {
   private kraken: KrakenService;
@@ -271,11 +272,37 @@ export class MarketScanner {
       // Filter out null signals
       const validSignals = signals.filter(signal => signal !== null);
 
+      // ===== TELEMETRY: Signal Counter Logging =====
+      if (validSignals.length > 0) {
+        const signalsByStrategy = validSignals.reduce((acc: Record<string, number>, signal: any) => {
+          acc[signal.strategy] = (acc[signal.strategy] || 0) + 1;
+          return acc;
+        }, {});
+        console.log(`📊 [TELEMETRY] Signals generated for ${pair.symbol}:`, signalsByStrategy);
+      }
+
       // Apply conflict resolution if multiple signals found
       let resolvedSignals = validSignals;
+      let skippedSignals: any[] = [];
       if (validSignals.length > 1) {
         resolvedSignals = this.resolveConflicts(validSignals, strategySettings);
+        skippedSignals = validSignals.filter(s => !resolvedSignals.includes(s));
         console.log(`⚖️ Conflict resolution: ${validSignals.length} signals → ${resolvedSignals.length} resolved for ${pair.symbol}`);
+        
+        // ===== TELEMETRY: Skipped Signals =====
+        if (skippedSignals.length > 0) {
+          console.log(`📊 [TELEMETRY] Skipped signals (conflict resolution):`, 
+            skippedSignals.map(s => `${s.strategy}(conf=${s.confidence})`).join(', '));
+        }
+
+        // ===== ALERT: Conflict Resolution =====
+        strategyAlerts.conflictResolution(
+          userId,
+          pair.symbol,
+          validSignals.length,
+          resolvedSignals.length,
+          skippedSignals.map(s => s.strategy)
+        );
       }
 
       // Process any found signals

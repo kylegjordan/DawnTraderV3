@@ -260,6 +260,8 @@ export const trades = pgTable("trades", {
   realizedPL: decimal("realized_pl", { precision: 10, scale: 2 }),
   realizedPLPercent: decimal("realized_pl_percent", { precision: 8, scale: 4 }),
   realizedPLR: decimal("realized_pl_r", { precision: 8, scale: 4 }),
+  mfe: decimal("mfe", { precision: 10, scale: 2 }), // Maximum Favorable Excursion (max profit while open)
+  mae: decimal("mae", { precision: 10, scale: 2 }), // Maximum Adverse Excursion (max loss while open)
   entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
   exitTime: timestamp("exit_time", { withTimezone: true }),
   metadata: jsonb("metadata"), // Additional strategy-specific data
@@ -637,6 +639,8 @@ export const paperTrades = pgTable("paper_trades", {
   realizedPL: decimal("realized_pl", { precision: 10, scale: 2 }),
   realizedPLPercent: decimal("realized_pl_percent", { precision: 8, scale: 4 }),
   realizedPLR: decimal("realized_pl_r", { precision: 8, scale: 4 }),
+  mfe: decimal("mfe", { precision: 10, scale: 2 }), // Maximum Favorable Excursion (max profit while open)
+  mae: decimal("mae", { precision: 10, scale: 2 }), // Maximum Adverse Excursion (max loss while open)
   entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
   exitTime: timestamp("exit_time", { withTimezone: true }),
   metadata: jsonb("metadata"), // Additional strategy-specific data

@@ -253,6 +253,7 @@ export class PaperMetricsService {
 
   /**
    * Get performance metrics by strategy for paper trading
+   * Now includes all 8 strategies + MFE/MAE tracking
    */
   async getPerformanceByStrategy(): Promise<{
     strategy: string;
@@ -260,15 +261,30 @@ export class PaperMetricsService {
     winRate: number;
     avgPL: number;
     avgRMultiple: number;
+    avgMFE: number;
+    avgMAE: number;
+    avgWin: number;
+    avgLoss: number;
   }[]> {
     const allTrades = await storage.getAllPaperTrades(this.userId);
     const closedTrades = allTrades.filter(t => t.status === 'closed');
     
-    const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'];
+    // All 8 strategies
+    const strategies = [
+      'vwap_pullback', 
+      'abcd_long', 
+      'sma_trend_ride',
+      'breakout',
+      'mean_reversion',
+      'range_trading',
+      'vwap_bounce',
+      'liquidity_trap'
+    ];
     
     return strategies.map(strategy => {
       const strategyTrades = closedTrades.filter(t => t.strategy === strategy);
       const wins = strategyTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
+      const losses = strategyTrades.filter(t => parseFloat(t.realizedPL || '0') < 0);
       
       const winRate = strategyTrades.length > 0
         ? (wins.length / strategyTrades.length) * 100
@@ -282,12 +298,34 @@ export class PaperMetricsService {
         ? strategyTrades.reduce((sum, t) => sum + parseFloat(t.realizedPLR || '0'), 0) / strategyTrades.length
         : 0;
 
+      // Calculate MFE/MAE averages
+      const avgMFE = strategyTrades.length > 0
+        ? strategyTrades.reduce((sum, t) => sum + parseFloat(t.mfe || '0'), 0) / strategyTrades.length
+        : 0;
+
+      const avgMAE = strategyTrades.length > 0
+        ? strategyTrades.reduce((sum, t) => sum + parseFloat(t.mae || '0'), 0) / strategyTrades.length
+        : 0;
+
+      // Calculate avg win/loss
+      const avgWin = wins.length > 0
+        ? wins.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0) / wins.length
+        : 0;
+
+      const avgLoss = losses.length > 0
+        ? losses.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0) / losses.length
+        : 0;
+
       return {
         strategy,
         trades: strategyTrades.length,
         winRate,
         avgPL,
-        avgRMultiple
+        avgRMultiple,
+        avgMFE,
+        avgMAE,
+        avgWin,
+        avgLoss
       };
     });
   }
