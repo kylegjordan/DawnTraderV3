@@ -1,0 +1,189 @@
+Phase 5.8 — Walter Expert Context System
+Purpose
+Equip Walter with the contextual mindset and discipline of a professional day trader for stocks and crypto (spot-only) by giving him a structured expert knowledge base, a contextual reasoning layer, and a continuous self-evaluation system.
+Overall Goal
+Enable Walter to:
+•	Reference credible expert principles in every analysis or recommendation.
+•	Apply those principles consistently across all trades and strategies.
+•	Explain his reasoning clearly and simply.
+•	Measure and report how closely his decisions follow expert trading standards.
+________________________________________
+Task 1 – Source and Compile Expert Corpus v1
+Objective:
+Create the initial library of 50–100 expert trading principles grouped by topic.
+Instructions:
+1.	Gather materials from approved public and educational sources only:
+o	Trading psychology: Trading in the Zone (Douglas), The Daily Trading Coach (Steenbarger).
+o	Technical setups: Come Into My Trading Room (Elder), Street Smarts (Raschke & Connors).
+o	Risk and money management: Trade Your Way to Financial Freedom (Van Tharp), Steve Burns (NewTraderU).
+o	Modern online educators: Rayner Teo blog, Cointelegraph Analysis, Binance Research, TradingView Editor’s Picks.
+2.	From each source, extract or paraphrase short, stand-alone principles (1 sentence each).
+3.	Categorize under:
+o	Psychology / Discipline
+o	Risk Management
+o	Market Structure & Strategy
+o	Trade Execution & Review
+4.	Record each entry in a table with:
+o	principle (text)
+o	category
+o	source (title + author)
+o	credibility_score (1–5 scale)
+o	date_added
+Checks:
+•	Minimum 10 principles per category.
+•	All entries paraphrased (no copied sentences).
+•	Every entry has a source + credibility score ≥ 4.
+Deliverables:
+•	docs/walter-expert-corpus-v1.md — 50–100 principles.
+•	expertise_sources.yaml — list of sources with credibility ratings.
+________________________________________
+Task 2 – Integrate Expert Context into Response Pipeline
+Objective:
+Ensure every Walter AI response includes context from the expert corpus.
+Instructions:
+1.	Extend the conceptual response sequence to:
+Purpose → Memory → Expertise → Chat Context → User Prompt.
+2.	For each AI call, select 3–5 principles relevant to the current topic.
+3.	Inject selected principles as expertContext before model generation.
+4.	Log all injected principles with timestamps.
+Checks:
+•	Each response log shows at least one expert principle.
+•	Principle relevance matches conversation topic (risk ↔ risk, breakout ↔ breakout).
+•	No empty or duplicate context fields.
+Deliverables:
+•	docs/walter-context-pipeline.png — visual diagram.
+•	3 log samples confirming correct principle injection.
+________________________________________
+Task 3 – Establish Weekly Expert Insights Update
+Objective:
+Keep Walter’s expertise current with reputable online commentary.
+Instructions:
+1.	Configure an update process (manual or scheduled) that summarizes top expert articles weekly from:
+o	NewTraderU, Rayner Teo, The Chart Guys, Cointelegraph Analysis, Binance Research.
+2.	For each article, extract ≤ 3 key insights (max 200 characters each).
+3.	Append insights to walter_expert_updates_YYYY-MM-DD.json with metadata:
+o	source, author, date, credibility_score.
+Checks:
+•	At least 3 credible sources per week.
+•	Each update entry includes all metadata + score ≥ 4.
+•	Dashboard alert confirms “New Expert Insights Available.”
+Deliverables:
+•	Example update file (walter_expert_updates_YYYY-MM-DD.json).
+•	Screenshot of dashboard alert.
+________________________________________
+Task 4 – Enable Explainability Mode (Expert Reasoning View)
+Objective:
+Make Walter explain his decisions like an expert teacher.
+Instructions:
+1.	For every trade signal or recommendation, have Walter output:
+o	Expert Principle Referenced.
+o	How that principle applies.
+o	The associated risk and alternative view.
+2.	Language target: grade 7–8 reading level.
+3.	Include citations inline (“Based on Mark Douglas’s discipline rule…”).
+Checks:
+•	10 sample responses reviewed; all contain principle + risk + plain language.
+•	Readability test < grade 8.
+Deliverables:
+•	docs/walter-explainability-samples.md — 10 chat examples.
+•	Internal readability report.
+________________________________________
+Task 5 – Create Expert Compliance Evaluation System
+Objective:
+Give Walter a self-review process that compares his trades vs expert standards.
+Instructions:
+1.	Each week, Walter reviews stored trades.
+2.	For each trade, match relevant principles (risk, entry, psychology).
+3.	Tag as followed or violated.
+4.	Compute adherence % = followed / total.
+5.	Generate report summarizing:
+o	Adherence rate per category.
+o	Top 3 violated rules.
+o	5 improvement recommendations.
+Checks:
+•	Report runs automatically weekly.
+•	Each section populated with ≥ 1 finding.
+•	Summary sent to dashboard as notification.
+Deliverables:
+•	walter_expert_compliance_report_YYYY-MM-DD.md — sample report.
+•	Screenshot of dashboard summary.
+________________________________________
+Task 6 – Add Metrics & Alerts
+Objective:
+Measure and display expert adherence and response quality.
+Instructions:
+1.	Add telemetry for:
+o	Expert adherence rate (%)
+o	Response expertise accuracy rate (%)
+o	Violations count by category
+2.	Set alerts:
+o	< 80 % adherence → yellow warning.
+o	< 60 % → red alert and trading pause.
+Checks:
+•	Metrics visible on dashboard.
+•	Alerts trigger as configured in simulated tests.
+Deliverables:
+•	Dashboard screenshot with metrics panel.
+•	Example alert messages.
+________________________________________
+Task 7 – Quality Testing
+Objective:
+Validate that Walter reasons and communicates like an expert.
+Instructions:
+1.	Conduct simulated chat sessions and paper trades covering each major topic.
+2.	Test scenarios:
+o	Breakout setup explanation.
+o	Rejection of over-leveraged trade (request).
+o	Reflection on mistake → lesson learned.
+3.	Human review each response for accuracy and clarity.
+Checks:
+•	≥ 90 % responses rated “expert-consistent.”
+•	0 cases of Walter endorsing margin or derivatives.
+Deliverables:
+•	phase5.8_quality_results.md — summary table.
+•	5 annotated chat transcripts.
+________________________________________
+Task 8 – Regression Testing
+Objective:
+Verify all previous phase features remain stable.
+Instructions:
+1.	Run tests on:
+o	Purpose saving & loading.
+o	Memory creation & retrieval.
+o	Response latency (< 8 s).
+o	Chat UI functionality.
+2.	Log any failures and confirm none introduced by expert context additions.
+Checks:
+•	All tests pass 100 %.
+•	No new LSP errors or runtime exceptions.
+Deliverables:
+•	Regression test summary table.
+•	“All systems stable” confirmation note.
+________________________________________
+Task 9 – Final Acceptance Review
+Objective:
+Confirm readiness for production and architect sign-off.
+Instructions:
+1.	Review all deliverables and metrics.
+2.	Validate success criteria:
+o	Expert principles referenced ≥ 80 % of responses.
+o	Corpus entries properly sourced and approved.
+o	Weekly updates functioning.
+o	Compliance report generated without errors.
+3.	Record final verdict in Phase 5.8 acceptance form.
+Checks:
+•	All criteria met with documented proof.
+•	Architect approves and marks phase complete.
+Deliverables:
+•	phase5.8_acceptance_checklist.md (signed).
+•	phase5.8_summary.md — executive overview.
+________________________________________
+Completion Definition
+Phase 5.8 is complete when:
+✅ Expert Corpus v1 approved (≥ 50 entries).
+✅ Expert principles appear in ≥ 80 % of responses.
+✅ Weekly insight feed active.
+✅ Compliance reports generated automatically.
+✅ Dashboard shows metrics and alerts working.
+✅ No regression or performance degradation (< 8 s response time).
+ 
