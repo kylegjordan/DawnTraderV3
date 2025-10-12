@@ -1,19 +1,19 @@
 {
-  "timestamp": "2025-10-12T05:07:36.809Z",
+  "timestamp": "2025-10-12T05:10:52.084Z",
   "system": {
-    "uptime": 47538.56,
+    "uptime": 47732.39,
     "memory": {
       "total": 67436748800,
-      "free": 37567025152,
-      "used": 29869723648,
-      "usagePercent": 44.29294736106851
+      "free": 37400018944,
+      "used": 30036729856,
+      "usagePercent": 44.5405960258867
     },
     "cpu": {
       "cores": 8,
       "loadAverage": [
-        13.87,
-        14.34,
-        14.92
+        14.22,
+        14.1,
+        14.7
       ]
     }
   },
@@ -23,7 +23,11 @@
     "closedTrades": 0,
     "winRate": 0,
     "roi": 0,
-    "activeStrategies": []
+    "activeStrategies": [
+      "vwap_pullback",
+      "abcd_long",
+      "sma_trend_ride"
+    ]
   },
   "ai": {
     "recentLearningCycles": 0,

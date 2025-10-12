@@ -18,7 +18,14 @@ Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. 
 PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, trading settings, watchlist pairs, trades, AI reports, conversations, price data, AI opportunities, transparency logs, semantic memory (vector embeddings), and learning infrastructure.
 
 ### System Design
-- **Trading Strategies**: Implements fixed rules for VWAP Pullback, ABCD Long, and SMA Trend Ride.
+- **Trading Strategies**: Implements 8 automated strategies:
+  - **Original 3**: VWAP Pullback, ABCD Long, SMA Trend Ride
+  - **New 5**: Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap
+  - Per-strategy parameterization with 37+ tunable parameters
+  - Specialized filters: Range Detection, Stop-Zone/Liquidity Cluster detection
+  - Conflict resolution: Best-score-wins deterministic selection (weight → confidence → name)
+  - Telemetry: Signal counters, MFE/MAE tracking, per-strategy performance metrics
+  - Alert system: Strategy state changes, conflict resolution, anomaly detection
 - **Risk Management**: Multi-layered system covering risk per trade, max exposure, max open trades, slippage tolerance, order book depth validation, and a daily loss kill switch.
 - **AI Opportunities**: Hourly automated pipeline using GPT-4o mini to identify, validate, and store trading opportunities.
 - **Continuous Learning Engine (CLE)**: Monitors trading performance, detects patterns, and optimizes parameters through Paper mode experimentation and controlled Live mode deployment with safety mechanisms.
