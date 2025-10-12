@@ -6,10 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Shield, Save, RotateCcw } from "lucide-react";
+import { Shield, Save, RotateCcw, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const DEFAULTS = {
   maxDailyLoss: 1000,
@@ -18,6 +24,11 @@ const DEFAULTS = {
   maxOpenPositions: 5,
   riskPerTrade: 1.5,
   aiCanAdjust: false,
+};
+
+const GLOBAL_DEFAULTS = {
+  dailyLossKillSwitch: 7.0,
+  maxPositionPercent: 10.0,
 };
 
 interface Guardrails {
@@ -29,15 +40,30 @@ interface Guardrails {
   aiCanAdjust: boolean;
 }
 
+interface TradingSettings {
+  dailyLossKillSwitch: string | number;
+  maxPositionPercent: string | number;
+}
+
 export default function GuardrailsTab() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
   const [settings, setSettings] = useState<Partial<Guardrails>>(DEFAULTS);
+  const [globalSettings, setGlobalSettings] = useState<Partial<TradingSettings>>(GLOBAL_DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
 
   const { data: currentSettings, isLoading } = useQuery<Guardrails>({
     queryKey: ['/api/guardrails', mode],
     queryFn: () => fetch(`/api/guardrails?mode=${mode}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
+  });
+
+  const { data: tradingSettings, isLoading: isLoadingSettings } = useQuery<TradingSettings>({
+    queryKey: ['/api/settings'],
+    queryFn: () => fetch('/api/settings', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
@@ -56,6 +82,15 @@ export default function GuardrailsTab() {
       });
     }
   }, [currentSettings, mode]);
+
+  useEffect(() => {
+    if (tradingSettings) {
+      setGlobalSettings({
+        dailyLossKillSwitch: parseFloat(String(tradingSettings.dailyLossKillSwitch)) || GLOBAL_DEFAULTS.dailyLossKillSwitch,
+        maxPositionPercent: parseFloat(String(tradingSettings.maxPositionPercent)) || GLOBAL_DEFAULTS.maxPositionPercent,
+      });
+    }
+  }, [tradingSettings]);
 
   const updateMutation = useMutation({
     mutationFn: async (updates: Partial<Guardrails>) => {
@@ -85,6 +120,29 @@ export default function GuardrailsTab() {
     },
   });
 
+  const updateGlobalMutation = useMutation({
+    mutationFn: async (updates: Partial<TradingSettings>) => {
+      return fetch('/api/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(updates)
+      }).then(r => r.json());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update global settings",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleChange = (field: keyof Guardrails, value: string | boolean) => {
     if (typeof value === 'boolean') {
       setSettings(prev => ({ ...prev, [field]: value }));
@@ -95,12 +153,31 @@ export default function GuardrailsTab() {
     setHasChanges(true);
   };
 
-  const handleSave = () => {
-    updateMutation.mutate(settings);
+  const handleGlobalChange = (field: keyof TradingSettings, value: string) => {
+    const numValue = parseFloat(value) || 0;
+    setGlobalSettings(prev => ({ ...prev, [field]: numValue }));
+    setHasChanges(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      await Promise.all([
+        updateMutation.mutateAsync(settings),
+        updateGlobalMutation.mutateAsync(globalSettings)
+      ]);
+      toast({
+        title: "Settings saved",
+        description: "All guardrail parameters have been updated successfully.",
+      });
+      setHasChanges(false);
+    } catch (error) {
+      // Errors handled by individual mutations
+    }
   };
 
   const handleReset = () => {
     setSettings(DEFAULTS);
+    setGlobalSettings(GLOBAL_DEFAULTS);
     setHasChanges(true);
     toast({
       title: "Reset to Defaults",
@@ -108,7 +185,7 @@ export default function GuardrailsTab() {
     });
   };
 
-  if (isLoading) {
+  if (isLoading || isLoadingSettings) {
     return (
       <Card>
         <CardHeader>
@@ -153,6 +230,78 @@ export default function GuardrailsTab() {
         </div>
       </CardHeader>
       <CardContent>
+        {/* Global Risk Limits Section */}
+        <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-500" />
+            <h3 className="font-semibold text-amber-900 dark:text-amber-100">Global Risk Limits</h3>
+          </div>
+          <p className="text-sm text-amber-700 dark:text-amber-200/80 mb-4">
+            These safety parameters apply across both Live and Paper trading modes
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="space-y-2">
+                    <Label htmlFor="dailyLossKillSwitch">Daily Loss Kill Switch (%)</Label>
+                    <Input
+                      id="dailyLossKillSwitch"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={globalSettings.dailyLossKillSwitch || ''}
+                      onChange={(e) => handleGlobalChange('dailyLossKillSwitch', e.target.value)}
+                      data-testid="input-daily-loss-kill-switch"
+                      className="bg-white dark:bg-slate-950"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Maximum total daily portfolio loss before trading stops automatically
+                    </p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">Percentage of your portfolio value that triggers an automatic trading halt. Default: 7%</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="space-y-2">
+                    <Label htmlFor="maxPositionPercent">Max Position Size Cap (%)</Label>
+                    <Input
+                      id="maxPositionPercent"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={globalSettings.maxPositionPercent || ''}
+                      onChange={(e) => handleGlobalChange('maxPositionPercent', e.target.value)}
+                      data-testid="input-max-position-percent"
+                      className="bg-white dark:bg-slate-950"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Maximum percentage of your portfolio allowed in a single trade
+                    </p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">Maximum portfolio percentage allowed for any single position. Default: 10%</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
+
+        {/* Mode-Specific Guardrails Section */}
+        <div className="mb-4">
+          <h3 className="font-semibold text-sm text-muted-foreground mb-4">
+            Mode-Specific Risk Parameters ({mode === 'live' ? 'Live' : 'Paper'} Mode)
+          </h3>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
             <Label htmlFor="maxDailyLoss">Max Daily Loss ($)</Label>

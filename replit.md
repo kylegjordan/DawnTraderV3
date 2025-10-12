@@ -84,3 +84,11 @@ PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, tra
   - ✅ Architect approved - production-ready with safety enforcement
   - ✅ Test harness validates guardrails, strategies, risk reassurance, and safety refusals
   - **Status**: Production-ready, all behavioral templates active in runtime
+- **Task 10.1**: Adjustable Risk Parameters in Guardrails Tab - ✅ **COMPLETE**
+  - ✅ Database: Added dailyLossKillSwitch and maxPositionPercent fields with defaults (7%, 10%)
+  - ✅ Backend: API endpoints automatically support new fields via dynamic schema
+  - ✅ Frontend: Global Risk Limits section in GuardrailsTab with tooltips and validation
+  - ✅ RiskManager: Updated to use dynamic values from settings (was hardcoded)
+  - ✅ Validation: 6/6 tests passing (100% success rate)
+  - ✅ Documentation: Comprehensive guide in docs/task-10-1-adjustable-guardrails.md
+  - **Status**: Production-ready, users can customize kill switch (%) and position cap (%)

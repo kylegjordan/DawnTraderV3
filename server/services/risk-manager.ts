@@ -378,17 +378,17 @@ export class RiskManager {
       portfolioValue = metrics.totalValue || 50000;
     }
     
-    // Maximum single position: 10% of portfolio
-    const MAX_POSITION_PERCENT = 10;
-    const maxPositionValue = (portfolioValue * MAX_POSITION_PERCENT) / 100;
+    // Maximum single position: dynamically configured (default 10% of portfolio)
+    const maxPositionPercent = parseFloat(String(settings.maxPositionPercent || '10.00'));
+    const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
     const positionPercent = (positionValue / portfolioValue) * 100;
 
-    console.log(`[Position Size Cap] Risk=${riskAmount}, Stop=${stopDistance}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${MAX_POSITION_PERCENT}%`);
+    console.log(`[Position Size Cap] Risk=${riskAmount}, Stop=${stopDistance}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
 
-    if (positionPercent > MAX_POSITION_PERCENT) {
+    if (positionPercent > maxPositionPercent) {
       return {
         approved: false,
-        reason: `🛡️ Safety: Position size (${positionPercent.toFixed(1)}% = $${positionValue.toFixed(2)}) exceeds ${MAX_POSITION_PERCENT}% portfolio limit ($${maxPositionValue.toFixed(2)})`
+        reason: `🛡️ Safety: Position size (${positionPercent.toFixed(1)}% = $${positionValue.toFixed(2)}) exceeds ${maxPositionPercent}% portfolio limit ($${maxPositionValue.toFixed(2)})`
       };
     }
 
