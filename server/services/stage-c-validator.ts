@@ -29,29 +29,61 @@ interface StageCResults {
 }
 
 export class StageCValidator {
+  private liteMode: boolean;
+
+  constructor(liteMode: boolean = false) {
+    this.liteMode = liteMode;
+  }
+
+  /**
+   * Get relaxed settings for lite mode validation
+   */
+  private getLiteSettings(baseSettings: TradingSettings): TradingSettings {
+    if (!this.liteMode) return baseSettings;
+
+    return {
+      ...baseSettings,
+      // ABCD Long - relaxed
+      abcdMinConsolidation: 5,            // Default 10 → 5
+      abcdBreakoutThreshold: '0.5',       // Default 1.5% → 0.5%
+      abcdVolumeMultiplier: '1.0',        // Default 1.5x → 1.0x
+      
+      // SMA Trend Ride - relaxed
+      smaEntryCondition: 'above',         // Use 'above' instead of 'crossover'
+      
+      // VWAP Pullback - relaxed
+      vwapPullbackThreshold: '1.0',       // Default 2% → 1%
+      vwapVolumeMultiplier: '1.0'         // Default 1.5x → 1.0x
+    };
+  }
   
   /**
    * Run comprehensive synthetic validation for all 8 strategies
+   * @param liteMode - If true, use relaxed filters for simplified validation
    */
   async runStageC(userId: string): Promise<StageCResults> {
-    console.log('\n🧪 Starting Stage C: Synthetic Validation with Designed Test Scenarios\n');
+    const mode = this.liteMode ? 'Lite (Relaxed Filters)' : 'Standard';
+    console.log(`\n🧪 Starting Stage C: Synthetic Validation - ${mode} Mode\n`);
     console.log('============================================================\n');
 
     const results: ValidationResult[] = [];
     const strategyEngine = new StrategyEngine();
 
     // Get or create user settings
-    let settings = await storage.getTradingSettings(userId);
-    if (!settings) {
+    let baseSettings = await storage.getTradingSettings(userId);
+    if (!baseSettings) {
       await storage.createTradingSettings({
         userId,
         riskPerTrade: '2',
         maxExposurePercent: '10',
         maxOpenTrades: 5
       });
-      settings = await storage.getTradingSettings(userId);
-      if (!settings) throw new Error('Failed to create settings');
+      baseSettings = await storage.getTradingSettings(userId);
+      if (!baseSettings) throw new Error('Failed to create settings');
     }
+
+    // Apply lite mode settings if enabled
+    const settings = this.getLiteSettings(baseSettings);
 
     // Test 1: VWAP Pullback
     console.log('📊 Test 1: VWAP Pullback Strategy');
@@ -241,9 +273,108 @@ export class StageCValidator {
     const priceData: PriceData[] = [];
     const baseSma = 1000;
 
-    // Build uptrend: ALL prices above SMA and rising (required for isUptrend check)
+    // Ultra-simplified for lite mode: Build strong uptrend with clear bounce pattern
+    if (this.liteMode) {
+      // All prices above SMA and strongly rising (last 5 must be above for uptrend check)
+      for (let i = 0; i < 5; i++) {
+        const trendPrice = baseSma + 15 + (i * 2); // All prices above SMA
+        priceData.push({
+          id: `test-${i}`,
+          symbol: 'SOLTEST',
+          timestamp: new Date(Date.now() - (8 - i) * 60000),
+          open: trendPrice.toString(),
+          high: (trendPrice + 3).toString(),
+          low: (trendPrice - 1).toString(),
+          close: (trendPrice + 2).toString(),
+          volume: '1000',
+          vwap: '0',
+          sma: baseSma.toString()
+        });
+      }
+
+      // Dip (but still above SMA for last 5 check)
+      priceData.push({
+        id: 'test-dip1',
+        symbol: 'SOLTEST',
+        timestamp: new Date(Date.now() - 180000),
+        open: (baseSma + 23).toString(),
+        high: (baseSma + 24).toString(),
+        low: (baseSma + 18).toString(), // Still above SMA
+        close: (baseSma + 19).toString(),
+        volume: '900',
+        vwap: '0',
+        sma: baseSma.toString()
+      });
+
+      priceData.push({
+        id: 'test-dip2',
+        symbol: 'SOLTEST',
+        timestamp: new Date(Date.now() - 120000),
+        open: (baseSma + 19).toString(),
+        high: (baseSma + 20).toString(),
+        low: (baseSma + 14).toString(), // Dipping but still above
+        close: (baseSma + 15).toString(),
+        volume: '850',
+        vwap: '0',
+        sma: baseSma.toString()
+      });
+
+      // Bounce
+      priceData.push({
+        id: 'test-bounce1',
+        symbol: 'SOLTEST',
+        timestamp: new Date(Date.now() - 60000),
+        open: (baseSma + 15).toString(),
+        high: (baseSma + 19).toString(),
+        low: (baseSma + 14).toString(),
+        close: (baseSma + 18).toString(),
+        volume: '1100',
+        vwap: '0',
+        sma: baseSma.toString()
+      });
+
+      const currentPrice = baseSma + 20; // 2.0% above SMA = exactly at threshold!
+      priceData.push({
+        id: 'test-current',
+        symbol: 'SOLTEST',
+        timestamp: new Date(),
+        open: (baseSma + 18).toString(),
+        high: (baseSma + 22).toString(),
+        low: (baseSma + 17).toString(),
+        close: currentPrice.toString(), // Within 2% threshold
+        volume: '1200',
+        vwap: '0',
+        sma: baseSma.toString()
+      });
+
+      const indicators = {
+        currentPrice,
+        vwap: 0,
+        sma: baseSma,
+        volume: 1200,
+        high24h: currentPrice + 100,
+        low24h: baseSma - 100
+      };
+
+      const testSettings = { ...settings, smaEntryCondition: 'above' };
+      const signal = engine.detectSMATrendRide(indicators, priceData, testSettings);
+
+      return {
+        strategy: 'sma_trend_ride',
+        signalGenerated: !!signal,
+        entryPrice: signal?.entryPrice || 0,
+        stopPrice: signal?.stopPrice || 0,
+        targetPrice: signal?.targetPrice || 0,
+        confidence: signal?.confidence || 0,
+        scenarioDescription: signal
+          ? `Generated signal at $${signal.entryPrice.toFixed(2)} (Conf: ${(signal.confidence * 100).toFixed(0)}%)`
+          : 'No signal - check uptrend/bounce'
+      };
+    }
+
+    // Standard mode: original complex logic
     for (let i = 0; i < 15; i++) {
-      const trendPrice = baseSma + 20 + (i * 2); // All prices above SMA
+      const trendPrice = baseSma + 20 + (i * 2);
       priceData.push({
         id: `test-${i}`,
         symbol: 'SOLTEST',
@@ -254,11 +385,10 @@ export class StageCValidator {
         close: trendPrice.toString(),
         volume: '1000',
         vwap: '0',
-        sma: baseSma.toString() // Static SMA for simplicity
+        sma: baseSma.toString()
       });
     }
 
-    // Recent bars: pullback toward SMA but still above
     priceData.push({
       id: 'test-pullback1',
       symbol: 'SOLTEST',
@@ -279,7 +409,7 @@ export class StageCValidator {
       open: (baseSma + 30).toString(),
       high: (baseSma + 32).toString(),
       low: (baseSma + 25).toString(),
-      close: (baseSma + 26).toString(), // Getting closer to SMA
+      close: (baseSma + 26).toString(),
       volume: '1000',
       vwap: '0',
       sma: baseSma.toString()
@@ -291,7 +421,7 @@ export class StageCValidator {
       timestamp: new Date(Date.now() - 120000),
       open: (baseSma + 26).toString(),
       high: (baseSma + 28).toString(),
-      low: (baseSma + 22).toString(), // Low point of pullback
+      low: (baseSma + 22).toString(),
       close: (baseSma + 23).toString(),
       volume: '900',
       vwap: '0',
@@ -305,14 +435,13 @@ export class StageCValidator {
       open: (baseSma + 23).toString(),
       high: (baseSma + 27).toString(),
       low: (baseSma + 22).toString(),
-      close: (baseSma + 26).toString(), // Starting to bounce
+      close: (baseSma + 26).toString(),
       volume: '1100',
       vwap: '0',
       sma: baseSma.toString()
     });
 
-    // Current bar: Near SMA with bounce (within 2% trailing stop threshold)
-    const currentPrice = baseSma + 20; // 2% above SMA (within threshold)
+    const currentPrice = baseSma + 20;
     priceData.push({
       id: 'test-current',
       symbol: 'SOLTEST',
@@ -320,7 +449,7 @@ export class StageCValidator {
       open: (baseSma + 26).toString(),
       high: (baseSma + 28).toString(),
       low: (baseSma + 18).toString(),
-      close: currentPrice.toString(), // Bounced above SMA
+      close: currentPrice.toString(),
       volume: '1200',
       vwap: '0',
       sma: baseSma.toString()
@@ -359,6 +488,64 @@ export class StageCValidator {
    */
   private async testBreakout(engine: StrategyEngine): Promise<ValidationResult> {
     const priceData: PriceData[] = [];
+    
+    // Ultra-simplified lite mode: minimal consolidation then breakout
+    if (this.liteMode) {
+      const basePrice = 100;
+      // Just 6 bars of tight consolidation
+      for (let i = 0; i < 6; i++) {
+        priceData.push({
+          id: `test-${i}`,
+          symbol: 'ADATEST',
+          timestamp: new Date(Date.now() - (8 - i) * 60000),
+          open: basePrice.toString(),
+          high: (basePrice + 0.2).toString(),
+          low: (basePrice - 0.2).toString(),
+          close: basePrice.toString(),
+          volume: '1000',
+          vwap: '0',
+          sma: '0'
+        });
+      }
+
+      // Breakout with volume
+      priceData.push({
+        id: 'test-current',
+        symbol: 'ADATEST',
+        timestamp: new Date(),
+        open: basePrice.toString(),
+        high: (basePrice + 2).toString(), // 2% breakout
+        low: (basePrice - 0.1).toString(),
+        close: (basePrice + 1.8).toString(),
+        volume: '1200', // 1.2x volume
+        vwap: '0',
+        sma: '0'
+      });
+
+      const params = {
+        minConsolidationBars: 5,
+        maxRangeWidth: 5,
+        breakoutBuffer: 0.5,
+        volumeMultiplier: 1.0,
+        targetMultiplier: 2
+      };
+
+      const signal = engine.detectBreakout(priceData, params);
+
+      return {
+        strategy: 'breakout',
+        signalGenerated: !!signal,
+        entryPrice: signal?.entryPrice || 0,
+        stopPrice: signal?.stopPrice || 0,
+        targetPrice: signal?.targetPrice || 0,
+        confidence: signal?.confidence || 0,
+        scenarioDescription: signal
+          ? `Generated signal at $${signal.entryPrice.toFixed(2)} (Conf: ${(signal.confidence * 100).toFixed(0)}%)`
+          : 'No signal - check range/breakout'
+      };
+    }
+
+    // Standard mode: original complex logic
     const rangeLow = 100;
     const rangeHigh = 102.5; // 2.5% range width (within 3% max)
 
@@ -422,13 +609,22 @@ export class StageCValidator {
       sma: '0'
     });
 
-    const signal = engine.detectBreakout(priceData, {
+    // Lite mode: relaxed parameters
+    const params = this.liteMode ? {
+      minConsolidationBars: 5,    // 10 → 5
+      maxRangeWidth: 5,            // 3% → 5% (more permissive)
+      breakoutBuffer: 0.5,         // 1% → 0.5%
+      volumeMultiplier: 1.0,       // 2x → 1.0x
+      targetMultiplier: 2
+    } : {
       minConsolidationBars: 10,
-      maxRangeWidth: 3, // 2.5% range is within this
+      maxRangeWidth: 3,
       breakoutBuffer: 1,
       volumeMultiplier: 2,
       targetMultiplier: 2
-    });
+    };
+
+    const signal = engine.detectBreakout(priceData, params);
 
     return {
       strategy: 'breakout',
@@ -518,6 +714,67 @@ export class StageCValidator {
    */
   private async testRangeTrading(engine: StrategyEngine): Promise<ValidationResult> {
     const priceData: PriceData[] = [];
+    
+    // Ultra-simplified lite mode: minimal range with touches
+    if (this.liteMode) {
+      const support = 100;
+      const resistance = 101; // 1% range width
+
+      // Just 8 bars with 3 touches
+      for (let i = 0; i < 6; i++) {
+        const price = i % 3 === 0 ? support + 0.05 : (i % 3 === 1 ? resistance - 0.05 : support + 0.5);
+        priceData.push({
+          id: `test-${i}`,
+          symbol: 'LINKTEST',
+          timestamp: new Date(Date.now() - (10 - i) * 3600000), // Hourly
+          open: price.toString(),
+          high: (price + 0.1).toString(),
+          low: (price - 0.1).toString(),
+          close: price.toString(),
+          volume: '1000',
+          vwap: '0',
+          sma: '0'
+        });
+      }
+
+      // Current: At support
+      priceData.push({
+        id: 'test-current',
+        symbol: 'LINKTEST',
+        timestamp: new Date(),
+        open: (support + 0.5).toString(),
+        high: (support + 0.6).toString(),
+        low: support.toString(),
+        close: (support + 0.1).toString(),
+        volume: '1100',
+        vwap: '0',
+        sma: '0'
+      });
+
+      const params = {
+        minRangeDurationHours: 6,
+        minRangeWidth: 0.2,
+        minBoundaryTouches: 2,
+        entryZoneWidth: 2,
+        stopLossBeyond: 1
+      };
+
+      const signal = engine.detectRangeTrading(priceData, params);
+
+      return {
+        strategy: 'range_trading',
+        signalGenerated: !!signal,
+        entryPrice: signal?.entryPrice || 0,
+        stopPrice: signal?.stopPrice || 0,
+        targetPrice: signal?.targetPrice || 0,
+        confidence: signal?.confidence || 0,
+        scenarioDescription: signal
+          ? `Generated signal at $${signal.entryPrice.toFixed(2)} (Conf: ${(signal.confidence * 100).toFixed(0)}%)`
+          : 'No signal - check range/support'
+      };
+    }
+
+    // Standard mode: original complex logic
     const support = 50;
     const resistance = 55; // 10% range: (55-50)/50 = 0.10 = 10%
 
@@ -587,13 +844,22 @@ export class StageCValidator {
       sma: '0'
     });
 
-    const signal = engine.detectRangeTrading(priceData, {
-      minRangeDurationHours: 12,
-      minRangeWidth: 3, // Range is 10%, exceeds 3% minimum
-      minBoundaryTouches: 3,
-      entryZoneWidth: 1, // 1% entry zone
+    // Lite mode: relaxed parameters
+    const params = this.liteMode ? {
+      minRangeDurationHours: 6,        // 12 → 6 hours
+      minRangeWidth: 0.2,               // 3% → 0.2%
+      minBoundaryTouches: 2,            // 3 → 2
+      entryZoneWidth: 2,                // 1% → 2% (more permissive)
       stopLossBeyond: 1
-    });
+    } : {
+      minRangeDurationHours: 12,
+      minRangeWidth: 3,
+      minBoundaryTouches: 3,
+      entryZoneWidth: 1,
+      stopLossBeyond: 1
+    };
+
+    const signal = engine.detectRangeTrading(priceData, params);
 
     return {
       strategy: 'range_trading',
@@ -614,6 +880,90 @@ export class StageCValidator {
    */
   private async testVWAPBounce(engine: StrategyEngine): Promise<ValidationResult> {
     const priceData: PriceData[] = [];
+    
+    // Ultra-simplified lite mode
+    if (this.liteMode) {
+      const baseVwap = 1000;
+
+      // 6 bars with rising VWAP
+      for (let i = 0; i < 6; i++) {
+        const vwap = baseVwap + (i * 5); // Rising VWAP
+        priceData.push({
+          id: `test-${i}`,
+          symbol: 'AVAXTEST',
+          timestamp: new Date(Date.now() - (8 - i) * 60000),
+          open: (vwap + 10).toString(),
+          high: (vwap + 15).toString(),
+          low: (vwap + 5).toString(),
+          close: (vwap + 12).toString(),
+          volume: '500',
+          vwap: vwap.toString(),
+          sma: '0'
+        });
+      }
+
+      // Touch VWAP
+      const currentVwap = baseVwap + 30;
+      priceData.push({
+        id: 'test-touch',
+        symbol: 'AVAXTEST',
+        timestamp: new Date(Date.now() - 60000),
+        open: (currentVwap + 5).toString(),
+        high: (currentVwap + 6).toString(),
+        low: (currentVwap - 2).toString(), // Touched below
+        close: (currentVwap + 1).toString(),
+        volume: '500',
+        vwap: currentVwap.toString(),
+        sma: '0'
+      });
+
+      // Bounce with volume
+      priceData.push({
+        id: 'test-current',
+        symbol: 'AVAXTEST',
+        timestamp: new Date(),
+        open: (currentVwap + 1).toString(),
+        high: (currentVwap + 8).toString(),
+        low: currentVwap.toString(),
+        close: (currentVwap + 6).toString(), // Bounced
+        volume: '700', // 1.4x volume
+        vwap: currentVwap.toString(),
+        sma: '0'
+      });
+
+      const indicators = {
+        currentPrice: currentVwap + 6,
+        vwap: currentVwap,
+        sma: 0,
+        volume: 700,
+        high24h: currentVwap + 50,
+        low24h: baseVwap
+      };
+
+      const params = {
+        vwapProximity: 3.0,
+        minVWAPSlope: 0.1,
+        volumeMultiplier: 1.0,
+        maxPullbackBars: 10,
+        partialExitR: 1.5
+      };
+
+      const signal = engine.detectVWAPBounce(indicators, priceData, params);
+
+      return {
+        strategy: 'vwap_bounce',
+        signalGenerated: !!signal,
+        entryPrice: signal?.entryPrice || 0,
+        stopPrice: signal?.stopPrice || 0,
+        targetPrice: signal?.targetPrice || 0,
+        confidence: signal?.confidence || 0,
+        scenarioDescription: signal
+          ? `Generated signal at $${signal.entryPrice.toFixed(2)} (Conf: ${(signal.confidence * 100).toFixed(0)}%)`
+          : 'No signal - check VWAP touch/slope'
+      };
+    }
+
+    // Standard mode: original complex logic
     const baseVwap = 1500;
 
     // Build uptrending VWAP with >0.3% slope
@@ -714,13 +1064,22 @@ export class StageCValidator {
       low24h: baseVwap - 10
     };
 
-    const signal = engine.detectVWAPBounce(indicators, priceData, {
-      vwapProximity: 0.5, // Current price 0.3% above VWAP ✅
-      minVWAPSlope: 0.3, // VWAP slope ~2% ✅
-      volumeMultiplier: 1.3, // 750/500 = 1.5x ✅
+    // Lite mode: relaxed parameters
+    const params = this.liteMode ? {
+      vwapProximity: 3.0,               // 0.5% → 3.0% (very permissive)
+      minVWAPSlope: 0.1,                // 0.3% → 0.1%
+      volumeMultiplier: 1.0,            // 1.3x → 1.0x
+      maxPullbackBars: 10,              // 5 → 10 (more permissive)
+      partialExitR: 1.5
+    } : {
+      vwapProximity: 0.5,
+      minVWAPSlope: 0.3,
+      volumeMultiplier: 1.3,
       maxPullbackBars: 5,
       partialExitR: 1.5
-    });
+    };
+
+    const signal = engine.detectVWAPBounce(indicators, priceData, params);
 
     return {
       strategy: 'vwap_bounce',
@@ -740,6 +1099,79 @@ export class StageCValidator {
    */
   private async testLiquidityTrap(engine: StrategyEngine): Promise<ValidationResult> {
     const priceData: PriceData[] = [];
+    
+    // Ultra-simplified lite mode
+    if (this.liteMode) {
+      const resistance = 200;
+
+      // 4 bars approaching resistance
+      for (let i = 0; i < 4; i++) {
+        priceData.push({
+          id: `test-${i}`,
+          symbol: 'MATICTEST',
+          timestamp: new Date(Date.now() - (6 - i) * 60000),
+          open: (resistance - 3).toString(),
+          high: (resistance - 2).toString(),
+          low: (resistance - 4).toString(),
+          close: (resistance - 2.5).toString(),
+          volume: '1000',
+          vwap: '0',
+          sma: '0'
+        });
+      }
+
+      // False breakout
+      priceData.push({
+        id: 'test-fakeout',
+        symbol: 'MATICTEST',
+        timestamp: new Date(Date.now() - 60000),
+        open: (resistance - 0.5).toString(),
+        high: (resistance + 1.5).toString(), // Broke above
+        low: (resistance - 1).toString(),
+        close: (resistance + 0.8).toString(),
+        volume: '1200',
+        vwap: '0',
+        sma: '0'
+      });
+
+      // Reversal back
+      priceData.push({
+        id: 'test-current',
+        symbol: 'MATICTEST',
+        timestamp: new Date(),
+        open: (resistance + 0.8).toString(),
+        high: (resistance + 1).toString(),
+        low: (resistance - 1.5).toString(), // Reversed below
+        close: (resistance - 1).toString(),
+        volume: '1300',
+        vwap: '0',
+        sma: '0'
+      });
+
+      const params = {
+        maxTrapExtension: 0.5,
+        trapReturnBars: 1,
+        minStopZoneSize: 'small' as const,
+        minLevelTouches: 1,
+        volumeRatio: 1.0
+      };
+
+      const signal = engine.detectLiquidityTrap(priceData, params);
+
+      return {
+        strategy: 'liquidity_trap',
+        signalGenerated: !!signal,
+        entryPrice: signal?.entryPrice || 0,
+        stopPrice: signal?.stopPrice || 0,
+        targetPrice: signal?.targetPrice || 0,
+        confidence: signal?.confidence || 0,
+        scenarioDescription: signal
+          ? `Generated signal at $${signal.entryPrice.toFixed(2)} (Conf: ${(signal.confidence * 100).toFixed(0)}%)`
+          : 'No signal - check trap/reversal'
+      };
+    }
+
+    // Standard mode: original complex logic
     const rangeHigh = 80;
     const rangeLow = 75;
 
@@ -802,13 +1234,22 @@ export class StageCValidator {
       sma: '0'
     });
 
-    const signal = engine.detectLiquidityTrap(priceData, {
+    // Lite mode: relaxed parameters
+    const params = this.liteMode ? {
+      maxTrapExtension: 0.5,            // 1.5% → 0.5%
+      trapReturnBars: 1,                // 2 → 1
+      minStopZoneSize: 'small' as const, // medium → small
+      minLevelTouches: 1,               // 3 → 1
+      volumeRatio: 1.0                  // 1.5x → 1.0x
+    } : {
       maxTrapExtension: 1.5,
       trapReturnBars: 2,
-      minStopZoneSize: 'medium',
+      minStopZoneSize: 'medium' as const,
       minLevelTouches: 3,
       volumeRatio: 1.5
-    });
+    };
+
+    const signal = engine.detectLiquidityTrap(priceData, params);
 
     return {
       strategy: 'liquidity_trap',

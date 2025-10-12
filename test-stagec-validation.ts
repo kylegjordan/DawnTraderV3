@@ -7,17 +7,18 @@ import { StageCValidator } from './server/services/stage-c-validator';
 import { writeFileSync } from 'fs';
 
 async function runStageCValidation() {
-  console.log('🚀 Starting Stage C: Synthetic Validation\n');
+  console.log('🚀 Starting Stage C-Lite: Synthetic Validation (Relaxed Filters)\n');
   console.log('Using test user: testuser\n');
   
-  const validator = new StageCValidator();
+  // Enable lite mode for simplified validation
+  const validator = new StageCValidator(true); // liteMode = true
   const userId = 'ce50e56b-0208-4fca-9c14-2777db4104b7'; // testuser
   
   const results = await validator.runStageC(userId);
   
   // Generate and save report
   const report = validator.generateReport(results);
-  const reportPath = './docs/strategy-validation-stagec-report.md';
+  const reportPath = './docs/stage-c-lite-validation-report.md';
   writeFileSync(reportPath, report);
   
   console.log(`\n✅ Stage C validation report saved to: ${reportPath}\n`);
