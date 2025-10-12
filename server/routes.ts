@@ -3102,6 +3102,52 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // VALIDATION ENDPOINT: Run strategy validation tests (Stage A: Historical Replay)
+  app.post('/api/strategies/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      console.log(`\n🚀 Running strategy validation for user ${userId}...`);
+      
+      const { StrategyValidator } = await import('./services/strategy-validator');
+      const validator = new StrategyValidator();
+      
+      const results = await validator.runAllTests(userId);
+      const report = validator.generateReport();
+      
+      // Save report to docs folder
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const docsDir = path.join(process.cwd(), 'docs');
+      
+      try {
+        await fs.mkdir(docsDir, { recursive: true });
+      } catch (err) {
+        // Directory might already exist
+      }
+      
+      const reportPath = path.join(docsDir, 'strategy-validation-report.md');
+      await fs.writeFile(reportPath, report, 'utf-8');
+      
+      console.log(`\n📝 Validation report saved to: ${reportPath}\n`);
+      
+      res.json({
+        success: true,
+        summary: {
+          totalTests: results.totalTests,
+          passed: results.passed,
+          failed: results.failed,
+          successRate: ((results.passed / results.totalTests) * 100).toFixed(1) + '%'
+        },
+        results: results.results,
+        reportPath: 'docs/strategy-validation-report.md',
+        report
+      });
+    } catch (error: any) {
+      console.error('Strategy validation error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // TEST ENDPOINT: Test Kraken credentials
   app.get('/api/test/kraken-balance', authenticateToken, async (_req, res) => {
     try {
