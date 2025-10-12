@@ -1,0 +1,84 @@
+✅ Directive to Replit: Apply Final Kill-Switch Fix and Complete Task 8 Validation
+1. Implement Final Fix
+
+File: server/services/risk-manager.ts
+Location: around line 611 in calculate24hPL() (or wherever portfolio value is referenced)
+
+Change:
+
+// ❌ current (uses hardcoded 50_000)
+const portfolioValue = 50000;
+
+// ✅ fix
+const portfolioValue = settings?.portfolioValue || 50000;
+
+
+or, if settings already holds the live metrics:
+
+const portfolioValue = await storage.getPortfolioValue(userId, mode);
+
+
+Purpose:
+Ensure the kill-switch percentage calculation uses the actual configured portfolio value, not a hardcoded constant.
+
+2. Rerun Kill-Switch Tests
+
+Re-execute only the kill-switch section of your paper-mode test suite:
+
+npx tsx test-guardrails-paper.ts | grep -A 10 "Test E:"
+
+
+Expected Output:
+
+🛡️ SAFETY BLOCK: Daily loss limit reached – trading suspended.
+PASS: Kill switch auto-triggered after 7% loss threshold
+PASS: Manual re-enable restores trading
+
+
+Confirm:
+
+✅ Loss percentage correctly calculated from settings.portfolioValue
+
+✅ Kill-switch engages once threshold exceeded
+
+✅ Telemetry + alert logged
+
+✅ Manual re-enable test passes
+
+3. Update Validation Report
+
+Edit /docs/task-8-safety-validation-report.md to reflect the final pass:
+
+Guardrail	Result	Notes
+Stop-Loss Required	✅	Enforced for all trades
+Stop-Loss Position	✅	Correct validation
+Spot-Only Trading	✅	Leverage blocked
+Position Size Cap	✅	10 % portfolio limit verified
+Max 1 Per Asset	✅	Duplicate detection confirmed
+Symbol Normalization	✅	All BTC variants unified
+Daily Loss Kill Switch	✅	Fixed and verified
+Exposure Limit	✅	Within portfolio constraints
+
+Add a Final Validation Summary section:
+
+Status: 8 / 8 Guardrails Passed
+Date: <today’s date>
+Mode: Paper Trading
+Result: System confirmed production-safe.
+Next Step: Proceed to Task 9 – Behavioral QA with Walter.
+
+4. Mark Task 8 Complete
+
+Update replit.md and/or project tracker:
+
+✅ Task 8 – Guardrails & Safety Validation
+Outcome: 100 % Pass
+Summary: All safety features validated under paper-mode conditions.
+Next: Task 9 – Behavioral QA with Walter (user-facing safety explanations)
+
+5. Proceed to Task 9 – Behavioral QA with Walter
+
+Once Task 8 is marked complete:
+
+“Begin Task 9 – Behavioral QA with Walter.
+Create docs/task-9-behavioral-qa.md with scripted dialogues verifying Walter explains safety actions, blocked trades, and strategy rationale clearly and accurately in beginner-friendly language.”

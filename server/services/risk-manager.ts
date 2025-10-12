@@ -577,7 +577,7 @@ export class RiskManager {
   /**
    * Calculate rolling 24h P/L (realized + unrealized)
    */
-  async calculate24hPL(userId: string): Promise<{
+  async calculate24hPL(userId: string, settings?: TradingSettings): Promise<{
     totalPL: number;
     realizedPL: number;
     unrealizedPL: number;
@@ -607,8 +607,18 @@ export class RiskManager {
     
     const totalPL = realizedPL + unrealizedPL;
     
-    // Portfolio value calculation (assuming $50K starting balance)
-    const basePortfolioValue = 50000;
+    // ✅ FIXED: Use actual portfolio value from settings instead of hardcoded value
+    let basePortfolioValue = 50000; // Fallback only
+    if (settings?.portfolioValue) {
+      basePortfolioValue = parseFloat(settings.portfolioValue.toString());
+    } else {
+      // Try to get from storage if settings not provided
+      const userSettings = await storage.getTradingSettings(userId);
+      if (userSettings?.portfolioValue) {
+        basePortfolioValue = parseFloat(userSettings.portfolioValue.toString());
+      }
+    }
+    
     const portfolioValueCurrent = basePortfolioValue + realizedPL + unrealizedPL;
     const portfolioValueBefore = portfolioValueCurrent - totalPL;
     const lossPercent = portfolioValueBefore > 0 ? 
@@ -637,7 +647,7 @@ export class RiskManager {
       return { triggered: false, eventType: 'none', message: '' };
     }
     
-    const pl24h = await this.calculate24hPL(userId);
+    const pl24h = await this.calculate24hPL(userId, settings);
     
     // Only check if there's a loss
     if (pl24h.totalPL >= 0) {

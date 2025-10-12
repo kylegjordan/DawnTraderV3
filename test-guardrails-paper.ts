@@ -363,6 +363,17 @@ class GuardrailTestHarness {
     console.log('📋 Test E: Daily Loss Kill Switch\n');
 
     try {
+      // Clean up any existing trades first to ensure clean state
+      const existingTrades = await storage.getTrades(this.testUserId, {});
+      for (const trade of existingTrades) {
+        await storage.updateTrade(trade.id, { 
+          realizedPL: 0, 
+          pnl: 0,
+          exitTime: null,
+          status: 'cancelled'
+        });
+      }
+      
       const settings = await storage.getTradingSettings(this.testUserId);
       if (!settings) throw new Error('Settings not found');
 
@@ -453,8 +464,8 @@ class GuardrailTestHarness {
       await storage.updateTradingSettings(this.testUserId, {
         tradingSuspended: false
       });
-      await storage.updateTrade(lossTrade1.id, { pnl: 0 });
-      await storage.updateTrade(lossTrade2.id, { pnl: 0 });
+      await storage.updateTrade(lossTrade1.id, { pnl: 0, realizedPL: 0 });
+      await storage.updateTrade(lossTrade2.id, { pnl: 0, realizedPL: 0 });
       
       console.log(`   🧹 Reset kill switch and cleaned up test trades\n`);
 
