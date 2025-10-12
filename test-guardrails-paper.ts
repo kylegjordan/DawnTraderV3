@@ -60,7 +60,7 @@ class GuardrailTestHarness {
         riskPerTrade: 100,
         maxExposure: 500,
         maxOpenTrades: 5,
-        dailyLossLimit: 7.0,
+        dailyLossKillSwitch: 7.0,
         portfolioValue: 10000
       });
     } else {
@@ -69,7 +69,7 @@ class GuardrailTestHarness {
         riskPerTrade: 100,
         maxExposure: 500,
         maxOpenTrades: 5,
-        dailyLossLimit: 7.0,
+        dailyLossKillSwitch: 7.0,
         portfolioValue: 10000,
         tradingSuspended: false
       });
@@ -367,13 +367,14 @@ class GuardrailTestHarness {
       if (!settings) throw new Error('Settings not found');
 
       const portfolioValue = settings.portfolioValue || 10000;
-      const killSwitchThreshold = settings.dailyLossLimit || 7.0;
+      const killSwitchThreshold = settings.dailyLossKillSwitch ? parseFloat(settings.dailyLossKillSwitch.toString()) : 7.0;
       const lossToTrigger = (portfolioValue * killSwitchThreshold / 100);
 
       console.log(`   Portfolio: $${portfolioValue}`);
       console.log(`   Kill switch at: ${killSwitchThreshold}% = $${lossToTrigger.toFixed(2)} loss`);
 
       // Create losing trades
+      const now = new Date();
       const lossTrade1 = await storage.createTrade({
         userId: this.testUserId,
         mode: 'paper',
@@ -385,7 +386,9 @@ class GuardrailTestHarness {
         targetPrice: 1.05,
         status: 'closed',
         exitPrice: 0.96,
+        exitTime: now,
         pnl: -400,
+        realizedPL: -400,
         strategy: 'vwap_pullback',
         riskAmount: 400
       });
@@ -401,7 +404,9 @@ class GuardrailTestHarness {
         targetPrice: 10.5,
         status: 'closed',
         exitPrice: 9.4,
+        exitTime: now,
         pnl: -300,
+        realizedPL: -300,
         strategy: 'mean_reversion',
         riskAmount: 300
       });
@@ -445,7 +450,7 @@ class GuardrailTestHarness {
       }
 
       // Cleanup
-      await storage.updateTradingSettings(this.testUserId, 'paper', {
+      await storage.updateTradingSettings(this.testUserId, {
         tradingSuspended: false
       });
       await storage.updateTrade(lossTrade1.id, { pnl: 0 });
