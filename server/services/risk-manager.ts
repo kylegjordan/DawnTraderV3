@@ -374,7 +374,7 @@ export class RiskManager {
     let portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 0;
     
     if (portfolioValue === 0) {
-      const metrics = await this.getPortfolioMetrics(userId, settings.mode);
+      const metrics = await this.getPortfolioMetrics(userId);
       portfolioValue = metrics.totalValue || 50000;
     }
     
@@ -513,11 +513,9 @@ export class RiskManager {
 
     // Get base portfolio value from settings if available
     let baseValue = 50000; // Default fallback
-    if (mode) {
-      const settings = await storage.getTradingSettings(userId, mode);
-      if (settings?.portfolioValue) {
-        baseValue = parseFloat(settings.portfolioValue.toString());
-      }
+    const settings = await storage.getTradingSettings(userId);
+    if (settings?.portfolioValue) {
+      baseValue = parseFloat(settings.portfolioValue.toString());
     }
 
     // Total value = base + realized P/L + unrealized P/L
