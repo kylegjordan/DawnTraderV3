@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-12T10:12:38.589Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (10.51, 11.89, 13.04) for an 8-core system, indicating potential performance bottlenecks."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, opportunities generated, or adjustments made, indicating it may not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system shows no active trades and a win rate of 0, which is unusual for a trading platform."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system responsiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI learning processes to ensure they are active and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the current trading strategies and market conditions to ensure they are aligned and effective."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and mitigate the root cause of high load averages.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting user experience and trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Restart the AI learning module and monitor its performance to ensure it is functioning correctly.",
+      "rationale": "The AI system is not generating opportunities or making adjustments, which could hinder trading effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review trading strategies and market conditions to ensure they are optimized for current market trends.",
+      "rationale": "No active trades and a win rate of 0 suggest that strategies may not be effective or aligned with market conditions."
+    }
+  ],
+  "urgencyLevel": "high"
+}

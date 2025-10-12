@@ -6,6 +6,13 @@ A long-only, spot-trading cryptocurrency day trading web application for Kraken.
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Testing Credentials
+**IMPORTANT**: For all automated testing, use:
+- **Username**: `testuser123`
+- **Password**: `SecurePass123!`
+- **Login Method**: Username-based authentication (NOT email)
+- These credentials should be used consistently across all e2e tests and validation scenarios.
+
 ## System Architecture
 
 ### Frontend
