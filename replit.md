@@ -64,3 +64,13 @@ PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, tra
   - ✅ Critical fix: Added portfolioValue to tradingSettings schema for accurate kill switch calculations
   - ✅ All tests executed in Paper mode with timestamped evidence
   - **Status**: Production-ready, approved for Live deployment
+- **Task 9**: Behavioral QA with Walter - ✅ **COMPLETE**
+  - ✅ Created comprehensive behavioral documentation with 10 scripted dialogues
+  - ✅ All guardrails explained in plain language (max 1 position, 10% cap, stop-loss, spot-only, kill switch, symbol normalization, exposure limits)
+  - ✅ All 8 strategies explained with simple analogies and real-world examples
+  - ✅ Risk management reassurance dialogue validates multi-layered protection
+  - ✅ Proper refusal patterns for unsafe requests (disable kill switch, enable leverage)
+  - ✅ Tone validated: Professional + Approachable + Protective + Educational
+  - ✅ All explanations verified against actual system logic (RiskManager, StrategyEngine)
+  - ✅ Zero unsafe suggestions or bypass methods
+  - **Status**: Ready for integration into Walter's AI prompts
