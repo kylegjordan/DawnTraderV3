@@ -9,10 +9,12 @@ import {
   validateResponse,
   type ValidationResult 
 } from './behavioral-template';
+import { ExpertContextService, type PrincipleContext } from './expert-context';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const expertContext = new ExpertContextService();
 
 interface ResponseContext {
   purpose: string;
@@ -20,6 +22,7 @@ interface ResponseContext {
   chatHistory: WalterChatLog[];
   chatSummary: string | null;
   memoryDepth: number;
+  expertPrinciples: PrincipleContext[];
 }
 
 interface MemoryExtractionResult {
@@ -39,8 +42,8 @@ export async function generateWalterResponse(
   userMessage: string
 ): Promise<string> {
   try {
-    // 1. Gather context
-    const context = await gatherContext(userId, chatId);
+    // 1. Gather context including expert principles
+    const context = await gatherContext(userId, chatId, userMessage);
 
     // 2. Detect intent and fetch behavioral context (Task 10)
     const intent = detectIntent(userMessage);
@@ -72,7 +75,7 @@ export async function generateWalterResponse(
       // Allow response but log for improvement
     }
 
-    // 8. Extract and store memory if needed
+    // 8. Extract and store memory if needed (expert principles already logged in getRelevantPrinciples)
     await extractAndStoreMemory(userId, chatId, userMessage, response);
 
     return response;
@@ -83,9 +86,9 @@ export async function generateWalterResponse(
 }
 
 /**
- * Gather all context: purpose, memories, chat history, summary
+ * Gather all context: purpose, memories, chat history, summary, expert principles
  */
-async function gatherContext(userId: string, chatId: string): Promise<ResponseContext> {
+async function gatherContext(userId: string, chatId: string, userMessage: string): Promise<ResponseContext> {
   try {
     // Get user settings for memory depth
     const settings = await storage.getTradingSettings(userId);
@@ -97,22 +100,31 @@ async function gatherContext(userId: string, chatId: string): Promise<ResponseCo
       throw new Error('Chat not found');
     }
 
-    // Gather context in parallel
-    const [purposeText, memories, chatHistory] = await Promise.all([
+    // Gather context in parallel including expert principles
+    const [purposeText, memories, chatHistory, expertPrinciples] = await Promise.all([
       getWalterPurpose(userId),
       getHighImportanceMemories(userId, 5), // Top 5 high-importance memories
-      storage.getWalterChatLogs(chatId, memoryDepth)
+      storage.getWalterChatLogs(chatId, memoryDepth),
+      expertContext.getRelevantPrinciples({ 
+        userId, 
+        topic: userMessage, 
+        maxPrinciples: 5,
+        chatId: chatId  // Enable usage logging (now references walter_chats.id)
+      })
     ]);
 
     // Get chat summary from metadata if exists
     const chatSummary = ((chat.metadata as any)?.summaries?.[0]?.summary) || null;
+
+    console.log(`[Walter] Loaded ${expertPrinciples.length} expert principles for topic analysis`);
 
     return {
       purpose: purposeText,
       memories: memories || [],
       chatHistory: chatHistory || [],
       chatSummary,
-      memoryDepth
+      memoryDepth,
+      expertPrinciples: expertPrinciples || []
     };
   } catch (error) {
     console.error('[WalterResponseService] Error gathering context:', error);
@@ -123,16 +135,17 @@ async function gatherContext(userId: string, chatId: string): Promise<ResponseCo
       memories: [],
       chatHistory: [],
       chatSummary: null,
-      memoryDepth: 20
+      memoryDepth: 20,
+      expertPrinciples: []
     };
   }
 }
 
 /**
- * Build prompt with context injection
+ * Build prompt with context injection including expert principles
  */
 function buildPrompt(context: ResponseContext, userMessage: string): string {
-  const { purpose, memories, chatHistory, chatSummary } = context;
+  const { purpose, memories, chatHistory, chatSummary, expertPrinciples } = context;
 
   // Format memories
   const memoriesText = memories.length > 0
@@ -140,6 +153,13 @@ function buildPrompt(context: ResponseContext, userMessage: string): string {
         `• [Importance ${m.importance}/5] ${m.content}${m.timestamp ? ` (${formatDate(m.timestamp)})` : ''}`
       ).join('\n')
     : 'No specific memories retrieved for this conversation.';
+
+  // Format expert principles (Phase 5.8)
+  const expertText = expertPrinciples.length > 0
+    ? expertPrinciples.map(p => 
+        `• [${p.category}] ${p.principle}${p.source ? ` (Source: ${p.source})` : ''}`
+      ).join('\n')
+    : 'No specific expert principles loaded for this topic.';
 
   // Format chat history
   const historyText = chatHistory.length > 0
@@ -153,7 +173,7 @@ function buildPrompt(context: ResponseContext, userMessage: string): string {
     ? `Previous conversation summary: ${chatSummary}`
     : 'This is a new conversation.';
 
-  // Build full prompt
+  // Build full prompt with expert principles
   return `You are Walter, an AI SysAdmin Co-Pilot for a cryptocurrency day trading platform (Kraken exchange).
 
 Your role is to:
@@ -161,11 +181,19 @@ Your role is to:
 - Provide strategic insights based on market conditions and trading performance
 - Answer questions about system settings, risk management, and trading strategies
 - Make recommendations that align with the user's defined purpose and past learnings
+- Apply expert trading principles to provide professional-grade guidance
 
 ---
 
 WALTER'S DEFINED PURPOSE:
 ${purpose}
+
+---
+
+EXPERT TRADING PRINCIPLES (Apply these to your analysis):
+${expertText}
+
+IMPORTANT: Ground your recommendations in these expert principles. When discussing risk, psychology, market structure, or execution, reference relevant principles to provide credible, professional guidance.
 
 ---
 
@@ -192,12 +220,13 @@ ${userMessage}
 RESPONSE GUIDELINES:
 1. Answer clearly and concisely in everyday language (avoid technical jargon)
 2. Reference your purpose when making recommendations
-3. Use your memories to provide context-aware insights
-4. If asked about trading strategies, refer to: VWAP Pullback, ABCD Long, SMA Trend Ride
-5. If the question is off-topic (not related to trading/system), politely redirect:
+3. Use expert principles to support your reasoning (cite category when relevant)
+4. Use your memories to provide context-aware insights
+5. If asked about trading strategies, refer to: VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap
+6. If the question is off-topic (not related to trading/system), politely redirect:
    "I'm focused on helping with trading system configuration and strategy. Could you rephrase your question related to those topics?"
-6. If you don't have enough information, ask clarifying questions
-7. Keep responses under 200 words for readability
+7. If you don't have enough information, ask clarifying questions
+8. Keep responses under 200 words for readability
 
 Now respond to the user's message:`;
 }

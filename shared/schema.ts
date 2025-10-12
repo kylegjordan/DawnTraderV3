@@ -1877,7 +1877,8 @@ export const expertComplianceReports = pgTable("expert_compliance_reports", {
 export const expertResponseLogs = pgTable("expert_response_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
-  chatLogId: varchar("chat_log_id").references(() => walterChatLogs.id),
+  chatId: varchar("chat_id").references(() => walterChats.id), // Reference to chat session
+  chatLogId: varchar("chat_log_id"), // Optional message ID (no FK to avoid constraint issues)
   principlesInjected: jsonb("principles_injected").notNull(), // Array of {principleId, principle, category}
   responseType: varchar("response_type", { length: 50 }), // 'trade_analysis', 'risk_assessment', 'strategy_explanation', etc.
   expertContextUsed: boolean("expert_context_used").default(false),

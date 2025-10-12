@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-12T09:02:21.852Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all time intervals (1, 5, and 15 minutes) with values of 12.78, 11.79, and 12.5 respectively, which exceeds the number of CPU cores (8)."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated or adjustments made, indicating a possible malfunction or misconfiguration."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system has zero active trades and a win rate of 0%, which may indicate issues with the trading strategies or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Optimize or scale up CPU resources to handle the high load average and prevent potential performance bottlenecks."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and update AI algorithms or configurations to ensure they are functioning correctly and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider diversifying or adjusting them to improve trading performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate and address the high CPU load immediately to prevent system slowdowns or failures.",
+      "rationale": "The CPU load is significantly higher than the number of available cores, which can lead to degraded system performance and affect trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Diagnose and resolve issues with the AI system to ensure it resumes normal operation and contributes to trading decisions.",
+      "rationale": "The AI system's inactivity suggests it is not contributing to trading strategy adjustments, which can impact overall trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a thorough review of current trading strategies and market conditions to identify reasons for zero active trades and a win rate of 0%.",
+      "rationale": "Understanding the lack of active trades and poor performance is crucial for adjusting strategies to align with current market dynamics."
+    }
+  ],
+  "urgencyLevel": "high"
+}

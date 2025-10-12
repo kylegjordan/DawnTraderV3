@@ -28,7 +28,7 @@ export interface ExpertContextOptions {
   topic?: string;
   categories?: string[];
   maxPrinciples?: number;
-  chatLogId?: string;
+  chatId?: string; // Changed from chatLogId to chatId
 }
 
 export class ExpertContextService {
@@ -67,8 +67,8 @@ export class ExpertContextService {
     }));
 
     // Log principle usage
-    if (options.chatLogId) {
-      await this.logPrincipleUsage(userId, options.chatLogId, formatted);
+    if (options.chatId) {
+      await this.logPrincipleUsage(userId, options.chatId, formatted);
     }
 
     // Update usage counts
@@ -251,13 +251,14 @@ export class ExpertContextService {
    */
   private async logPrincipleUsage(
     userId: string, 
-    chatLogId: string, 
+    chatId: string, 
     principles: PrincipleContext[]
   ): Promise<void> {
     try {
       await db.insert(expertResponseLogs).values({
         userId,
-        chatLogId,
+        chatId, // Now references walter_chats.id
+        chatLogId: null, // Optional - could be set if we had message ID
         principlesInjected: principles,
         expertContextUsed: true,
         timestamp: new Date()
