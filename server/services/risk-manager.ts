@@ -126,46 +126,46 @@ export class RiskManager {
       };
     }
 
-    // Check 1: Available balance (for live trading)
-    const balanceCheck = await this.checkAvailableBalance(userId, signal, settings);
-    if (!balanceCheck.approved) {
-      return balanceCheck;
-    }
-
-    // Check 2: Risk per trade
-    const riskCheck = await this.checkRiskPerTrade(signal, settings);
-    if (!riskCheck.approved) {
-      return riskCheck;
-    }
-
-    // Check 3: Maximum concurrent exposure
-    const exposureCheck = await this.checkMaxExposure(userId, signal, settings);
-    if (!exposureCheck.approved) {
-      return exposureCheck;
-    }
-
-    // Check 4: Maximum open trades
-    const maxTradesCheck = await this.checkMaxOpenTrades(userId, settings);
-    if (!maxTradesCheck.approved) {
-      return maxTradesCheck;
-    }
-
-    // Check 5: Max 1 position per asset (Task 8 Safety Guardrail)
-    const assetCheck = await this.checkMaxPositionsPerAsset(userId, signal);
-    if (!assetCheck.approved) {
-      return assetCheck;
-    }
-
-    // Check 6: Stop-loss validation (Task 8 Safety Guardrail)
+    // Check 1: Stop-loss validation (Task 8 Safety Guardrail - MOVED TO TOP)
     const stopLossCheck = this.checkStopLossRequired(signal);
     if (!stopLossCheck.approved) {
       return stopLossCheck;
     }
 
-    // Check 7: Position size cap (Task 8 Safety Guardrail)
+    // Check 2: Max 1 position per asset (Task 8 Safety Guardrail - MOVED TO TOP)
+    const assetCheck = await this.checkMaxPositionsPerAsset(userId, signal);
+    if (!assetCheck.approved) {
+      return assetCheck;
+    }
+
+    // Check 3: Position size cap (Task 8 Safety Guardrail - MOVED BEFORE EXPOSURE)
     const positionSizeCheck = await this.checkPositionSizeCap(userId, signal, settings);
     if (!positionSizeCheck.approved) {
       return positionSizeCheck;
+    }
+
+    // Check 4: Risk per trade
+    const riskCheck = await this.checkRiskPerTrade(signal, settings);
+    if (!riskCheck.approved) {
+      return riskCheck;
+    }
+
+    // Check 5: Available balance (for live trading)
+    const balanceCheck = await this.checkAvailableBalance(userId, signal, settings);
+    if (!balanceCheck.approved) {
+      return balanceCheck;
+    }
+
+    // Check 6: Maximum concurrent exposure
+    const exposureCheck = await this.checkMaxExposure(userId, signal, settings);
+    if (!exposureCheck.approved) {
+      return exposureCheck;
+    }
+
+    // Check 7: Maximum open trades
+    const maxTradesCheck = await this.checkMaxOpenTrades(userId, settings);
+    if (!maxTradesCheck.approved) {
+      return maxTradesCheck;
     }
 
     return { approved: true };
@@ -362,17 +362,24 @@ export class RiskManager {
   ): Promise<RiskCheckResult> {
     const riskAmount = parseFloat(settings.riskPerTrade || '0');
     const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
+    
+    if (stopDistance === 0) {
+      return { approved: true }; // Can't calculate if no stop distance
+    }
+    
     const positionSize = riskAmount / stopDistance;
     const positionValue = positionSize * signal.entryPrice;
 
     // Get portfolio value
     const metrics = await this.getPortfolioMetrics(userId);
-    const portfolioValue = metrics.totalValue || 50000;
+    const portfolioValue = metrics.totalValue || settings.portfolioValue || 50000;
     
-    // Maximum single position: 10% of portfolio (Task 8 requirement: 2x exposure cap translates to 10% max per position)
+    // Maximum single position: 10% of portfolio
     const MAX_POSITION_PERCENT = 10;
     const maxPositionValue = (portfolioValue * MAX_POSITION_PERCENT) / 100;
     const positionPercent = (positionValue / portfolioValue) * 100;
+
+    console.log(`[Position Size Cap] Risk=${riskAmount}, Stop=${stopDistance}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${MAX_POSITION_PERCENT}%`);
 
     if (positionPercent > MAX_POSITION_PERCENT) {
       return {

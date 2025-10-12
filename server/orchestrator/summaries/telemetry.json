@@ -1,26 +1,26 @@
 {
-  "timestamp": "2025-10-12T07:12:34.070Z",
+  "timestamp": "2025-10-12T07:19:36.458Z",
   "system": {
-    "uptime": 55035.75,
+    "uptime": 55461.37,
     "memory": {
       "total": 67436748800,
-      "free": 35727499264,
-      "used": 31709249536,
-      "usagePercent": 47.02072697786996
+      "free": 35472314368,
+      "used": 31964434432,
+      "usagePercent": 47.39913326307926
     },
     "cpu": {
       "cores": 8,
       "loadAverage": [
-        12.73,
-        13.59,
-        12.59
+        12.26,
+        11.67,
+        12
       ]
     }
   },
   "trading": {
     "totalPL": 0,
     "activeTrades": 0,
-    "closedTrades": 0,
+    "closedTrades": 9,
     "winRate": 0,
     "roi": 0,
     "activeStrategies": [

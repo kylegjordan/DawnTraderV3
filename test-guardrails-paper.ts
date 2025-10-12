@@ -379,6 +379,7 @@ class GuardrailTestHarness {
         quantity: 100,
         entryPrice: 1.0,
         stopPrice: 0.96,
+        targetPrice: 1.05,
         status: 'closed',
         exitPrice: 0.96,
         pnl: -400,
@@ -394,6 +395,7 @@ class GuardrailTestHarness {
         quantity: 50,
         entryPrice: 10.0,
         stopPrice: 9.4,
+        targetPrice: 10.5,
         status: 'closed',
         exitPrice: 9.4,
         pnl: -300,
@@ -482,6 +484,7 @@ class GuardrailTestHarness {
         quantity: 0.1,
         entryPrice: 50000,
         stopPrice: 49000,
+        targetPrice: 52000,
         status: 'open',
         strategy: 'breakout',
         riskAmount: 100

@@ -1,0 +1,160 @@
+✅ Directive to Replit: Debug Failing Guardrails & Complete Paper-Mode Validation (Task 8 Finalization)
+
+Goal: Fix and retest the failing guardrails (position-size cap & duplicate detection), then complete kill-switch and symbol-normalization tests. Produce a final verified safety report and mark Task 8 complete.
+
+1. Fix: Position Size Cap
+
+File: server/services/risk-manager.ts
+
+Problem: Trades >10 % of portfolio are being approved.
+Likely cause:
+
+Using positionValue (full notional) vs riskAmount incorrectly.
+
+Cap logic running after exposure or trade creation instead of before return.
+
+Action:
+
+if (trade.valueUSD > portfolioValue * 0.1) {
+   logAlert("🛡️ SAFETY BLOCK: Position exceeds 10% portfolio cap");
+   await storage.insertSafetyTelemetry({ type: "size_cap", symbol, value: trade.valueUSD });
+   return false;
+}
+
+
+Check:
+
+✅ Trades ≤10 % pass
+
+✅ Trades > 10 % blocked before submission
+
+✅ Alert + telemetry recorded
+
+2. Fix: Max 1 Position Per Asset
+
+File: server/services/risk-manager.ts
+
+Problem: Duplicate asset blocked for wrong reason (exposure limit).
+Likely cause: Symbol normalization check executes after exposure calculation.
+
+Action:
+
+Move duplicate detection to the top of risk checks.
+
+Normalize symbol first using the existing helper (improved in earlier step).
+
+Query open positions by normalized symbol.
+
+If any exist → block and alert.
+
+Code stub:
+
+const norm = normalizeSymbol(signal.symbol);
+const open = await storage.getOpenPositionsBySymbol(norm);
+if (open.length > 0) {
+   logAlert(`🛡️ SAFETY BLOCK: Duplicate ${norm} position not allowed`);
+   await storage.insertSafetyTelemetry({ type: "duplicate_block", symbol: norm });
+   return false;
+}
+
+
+Check:
+
+✅ Second BTC trade blocked even if alias used (BTC/USD, XXBTZUSD).
+
+✅ Alert message correct.
+
+✅ Telemetry logged.
+
+3. Complete: Kill-Switch Test
+
+File: test-guardrails-paper.ts
+
+Action:
+
+Use small consecutive losing trades to push daily loss > threshold.
+
+Confirm system disables new entries.
+
+Then simulate manual reset (existing function resetKillSwitch() or API endpoint).
+
+Expected:
+
+✅ Kill-switch engaged automatically.
+
+✅ Alert: “Trading disabled – daily loss limit reached.”
+
+✅ Manual re-enable restores trading.
+
+4. Complete: Symbol Normalization Test
+
+Action:
+
+Attempt trades using variants (BTC/USD, XBTUSD, XXBTZUSD).
+
+All normalize to “BTC”.
+
+Ensure the Max 1 Per Asset check blocks duplicates across variants.
+
+Expected:
+
+✅ All variants treated as one symbol.
+
+✅ Telemetry shows normalized “BTC”.
+
+5. Rerun Full Test Suite
+
+Command:
+
+cd /home/runner/ReplitCryptoApp
+npx tsx test-guardrails-paper.ts | tee test-results-final.log
+
+
+Verify:
+
+Guardrail	Result	Evidence
+Stop-Loss Required	✅	log line + telemetry
+Stop-Loss Validation	✅	log line
+Spot-Only	✅	alert “Leverage blocked”
+Position Size Cap	✅	alert “10% cap”
+Max 1 Per Asset	✅	alert “duplicate block”
+Kill-Switch	✅	alert “daily loss limit”
+Symbol Normalization	✅	telemetry “BTC”
+6. Update Documentation
+
+Edit /docs/task-8-safety-validation-report.md:
+
+Replace partial results with new table of final outcomes.
+
+Attach evidence paths (/logs/test-results-final.log, DB record IDs).
+
+Add “✅ Task 8 Status: Passed 100 % Validation – All guardrails verified under paper-mode conditions.”
+
+7. Acceptance Criteria
+
+✅ All 7 guardrails block unsafe cases and log telemetry.
+
+✅ No runtime or LSP errors.
+
+✅ Kill-switch auto-disables + manual reset works.
+
+✅ Symbol aliases unified across Kraken variants.
+
+✅ task-8-safety-validation-report.md updated with timestamp + summary.
+
+When confirmed:
+
+Mark Task 8 complete in replit.md and project tracker.
+Begin Task 9 – Behavioral QA with Walter.
+
+Optional Add-On (If You Have Tokens Left)
+
+Create /docs/symbol-alias-todo.md listing:
+
+ETH → XETHZUSD, ETHUSD
+DOGE → XDGUSD, DOGEUSD
+XRP → XXRPZUSD, XRPUSD
+SOL → XSOLZUSD, SOLUSD
+
+
+for later normalization coverage.
