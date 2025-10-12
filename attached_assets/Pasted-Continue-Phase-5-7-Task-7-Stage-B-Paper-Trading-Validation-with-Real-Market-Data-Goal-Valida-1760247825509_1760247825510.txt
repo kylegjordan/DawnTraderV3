@@ -1,0 +1,84 @@
+Continue Phase 5.7 → Task 7 (Stage B: Paper Trading Validation with Real Market Data).
+
+Goal: Validate all 8 strategies in realistic conditions using live or recent spot-market data (Kraken API + paper-trading mode). Confirm that each strategy can detect entries/exits, log trades, and update telemetry correctly.
+
+Implementation Steps
+
+Set Up Paper-Trading Environment
+
+Use the existing paper_trades table and risk controls (spot-only).
+
+Connect to Kraken’s spot-price WebSocket or REST endpoints for BTC/USD, ETH/USD, AAPL proxy symbols, etc.
+
+Disable leverage/futures—spot data only.
+
+Run Real-Data Validation
+
+For each strategy (VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap):
+
+Feed 24 h of recent 1-min candles.
+
+Detect and log signals.
+
+Execute simulated paper orders with defined stop-loss / take-profit / max holding time.
+
+Record & Verify Results
+
+Save every signal to paper_trades with: strategy ID, symbol, confidence, entry, exit, MFE, MAE.
+
+Confirm telemetry dashboard updates automatically.
+
+Trigger alerts on new signals and trade exits.
+
+Testing Checks / Pass Criteria
+
+✅ Each of 8 strategies produces at least one valid signal in paper mode.
+
+✅ Trades persist with correct fields in DB.
+
+✅ Conflict resolution (1 signal per asset) verified.
+
+✅ MFE/MAE values populate accurately.
+
+✅ Alert system fires on entries and exits.
+
+✅ Performance metrics (update rates, avg gain/loss) visible in telemetry panel.
+
+Documentation Deliverables
+
+Generate docs/strategy-validation-report.md → Stage B section summarizing:
+
+Strategy → signals detected / expected
+
+Confidence levels
+
+Avg profit/loss %
+
+MFE/MAE statistics
+
+Notes on parameter sensitivity or missed signals
+
+Next Step Trigger
+
+When Stage B validation completes (≥ 80 % strategies confirmed functional), mark Task 7 complete and proceed to Task 8 – Guardrails & Safety Validation.
+
+Reference Context
+
+Synthetic framework (StrategyValidator) remains available for future unit testing.
+
+Real market validation is now the authoritative proof of signal generation.
+
+Use existing paper-trade execution path; no new endpoints needed.
+
+Expected Output
+
+Live logs showing strategy triggers and trade entries/exits.
+
+Updated strategy-validation-report.md documented with Stage B results.
+
+Console confirmation:
+
+✅ Stage B Validation Complete – 8 Strategies Tested Successfully
+
+
+Architect review after report generation.

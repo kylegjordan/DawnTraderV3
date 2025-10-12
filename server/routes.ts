@@ -3148,6 +3148,53 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // STAGE B VALIDATION: Paper trading with real market data
+  app.post('/api/strategies/validate-stageb', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      console.log(`\n🚀 Running Stage B validation with real market data for user ${userId}...`);
+      
+      const { StageBValidator } = await import('./services/stage-b-validator');
+      const validator = new StageBValidator();
+      
+      const results = await validator.runStageB(userId);
+      const report = validator.generateReport(results);
+      
+      // Save report to docs folder
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const docsDir = path.join(process.cwd(), 'docs');
+      
+      try {
+        await fs.mkdir(docsDir, { recursive: true });
+      } catch (err) {
+        // Directory might already exist
+      }
+      
+      const reportPath = path.join(docsDir, 'strategy-validation-stageb-report.md');
+      await fs.writeFile(reportPath, report, 'utf-8');
+      
+      console.log(`\n📝 Stage B validation report saved to: ${reportPath}\n`);
+      
+      res.json({
+        success: true,
+        stage: 'B',
+        summary: {
+          totalStrategies: results.totalStrategies,
+          strategiesWithSignals: results.strategiesWithSignals,
+          successRate: results.successRate.toFixed(1) + '%',
+          passed: results.successRate >= 80
+        },
+        metrics: results.metrics,
+        reportPath: 'docs/strategy-validation-stageb-report.md',
+        report
+      });
+    } catch (error: any) {
+      console.error('Stage B validation error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // TEST ENDPOINT: Test Kraken credentials
   app.get('/api/test/kraken-balance', authenticateToken, async (_req, res) => {
     try {
