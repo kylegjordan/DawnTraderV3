@@ -173,8 +173,11 @@ export class MarketScanner {
         return;
       }
 
+      // Fetch all strategy settings for this user and mode
+      const strategySettings = await storage.listStrategySettings({ userId, mode });
+
       for (const pair of watchlist) {
-        await this.analyzeSymbolForSignals(userId, pair, settings);
+        await this.analyzeSymbolForSignals(userId, pair, settings, strategySettings, mode);
         
         // Add delay to respect API rate limits
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -187,7 +190,9 @@ export class MarketScanner {
   private async analyzeSymbolForSignals(
     userId: string, 
     pair: WatchlistPair, 
-    settings: any
+    settings: any,
+    strategySettings: any[],
+    mode: 'live' | 'paper'
   ): Promise<void> {
     try {
       // Get price data for analysis
@@ -222,38 +227,61 @@ export class MarketScanner {
         low24h: Math.min(...priceData.slice(-24).map(p => parseFloat(p.low)))
       };
 
-      // Check each strategy for signals - ✅ Now passing settings to all strategies
+      // Helper function to get strategy params
+      const getStrategyParams = (strategyName: string) => {
+        const strategySetting = strategySettings.find(s => s.strategy === strategyName && s.enabled);
+        return strategySetting?.params || null;
+      };
+
+      // Check all 8 strategies for signals
       console.log(`\n🔍 Analyzing ${pair.symbol} for strategy signals...`);
-      const signals = [
-        this.strategyEngine.detectVWAPPullback(indicators, settings, priceData),
-        this.strategyEngine.detectABCDLong(priceData, settings),
-        this.strategyEngine.detectSMATrendRide(indicators, priceData, settings)
-      ].filter(signal => signal !== null);
+      const signals = [];
+
+      // Original 3 strategies (still using TradingSettings)
+      signals.push(this.strategyEngine.detectVWAPPullback(indicators, settings, priceData));
+      signals.push(this.strategyEngine.detectABCDLong(priceData, settings));
+      signals.push(this.strategyEngine.detectSMATrendRide(indicators, priceData, settings));
+
+      // New 5 strategies (using strategy-specific params)
+      const breakoutParams = getStrategyParams('breakout');
+      if (breakoutParams) {
+        signals.push(this.strategyEngine.detectBreakout(priceData, breakoutParams));
+      }
+
+      const meanReversionParams = getStrategyParams('mean_reversion');
+      if (meanReversionParams) {
+        signals.push(this.strategyEngine.detectMeanReversion(indicators, priceData, meanReversionParams));
+      }
+
+      const rangeTradingParams = getStrategyParams('range_trading');
+      if (rangeTradingParams) {
+        signals.push(this.strategyEngine.detectRangeTrading(priceData, rangeTradingParams));
+      }
+
+      const vwapBounceParams = getStrategyParams('vwap_bounce');
+      if (vwapBounceParams) {
+        signals.push(this.strategyEngine.detectVWAPBounce(indicators, priceData, vwapBounceParams));
+      }
+
+      const liquidityTrapParams = getStrategyParams('liquidity_trap');
+      if (liquidityTrapParams) {
+        signals.push(this.strategyEngine.detectLiquidityTrap(priceData, liquidityTrapParams));
+      }
+
+      // Filter out null signals
+      const validSignals = signals.filter(signal => signal !== null);
 
       // Process any found signals
-      if (signals.length > 0) {
-        console.log(`✅ Found ${signals.length} signal(s) for ${pair.symbol}`);
+      if (validSignals.length > 0) {
+        console.log(`✅ Found ${validSignals.length} signal(s) for ${pair.symbol}`);
       }
       
-      for (const signal of signals) {
+      for (const signal of validSignals) {
         if (signal) {
           signal.symbol = pair.symbol;
           await this.processSignal(userId, signal);
         }
       }
-
-      // Save price data for future analysis (commented out due to type issues - not critical for screener)
-      // await storage.savePriceData(priceData.map(p => ({
-      //   symbol: p.symbol,
-      //   timestamp: p.timestamp,
-      //   open: p.open,
-      //   high: p.high,
-      //   low: p.low,
-      //   close: p.close,
-      //   volume: p.volume,
-      //   vwap: vwap.toString(),
-      //   sma: sma.toString()
-      // })));
 
     } catch (error) {
       console.error(`Error analyzing ${pair.symbol} for user ${userId}:`, error);

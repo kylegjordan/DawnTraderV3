@@ -1,9 +1,10 @@
 import { Trade, TradingSettings, PriceData } from '@shared/schema';
 import { storage } from '../storage';
+import { detectRange, detectStopZone, type RangeDetectionResult, type StopZoneResult } from './strategy-filters';
 
 export interface StrategySignal {
   symbol: string;
-  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride';
+  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap';
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -283,6 +284,331 @@ export class StrategyEngine {
     return null;
   }
 
+  // Breakout Strategy
+  detectBreakout(
+    priceHistory: PriceData[], 
+    params: any
+  ): StrategySignal | null {
+    const minConsolidationBars = params.minConsolidationBars || 10;
+    const maxRangeWidth = params.maxRangeWidth || 3;
+    const breakoutBuffer = (params.breakoutBuffer || 1) / 100;
+    const volumeMultiplier = params.volumeMultiplier || 2;
+    const maxHoldingHours = params.maxHoldingHours || 12;
+    
+    if (priceHistory.length < minConsolidationBars + 5) return null;
+    
+    // Use Range Detection filter to find consolidation
+    const rangeResult = detectRange(priceHistory, minConsolidationBars, maxRangeWidth, 3);
+    
+    if (!rangeResult.isRange) {
+      console.log('[Breakout] No valid consolidation range detected');
+      return null;
+    }
+    
+    const current = priceHistory[priceHistory.length - 1];
+    const currentPrice = parseFloat(current.close);
+    const currentVolume = parseFloat(current.volume);
+    
+    // Check for breakout above resistance
+    const breakoutLevel = rangeResult.rangeHigh * (1 + breakoutBuffer);
+    const isBreakout = currentPrice > breakoutLevel;
+    
+    // Volume confirmation - calculate average from recent bars
+    const recentBars = priceHistory.slice(-Math.min(10, priceHistory.length));
+    const avgVolume = recentBars.reduce((sum, p) => sum + parseFloat(p.volume), 0) / recentBars.length;
+    const hasVolumeSpike = currentVolume >= avgVolume * volumeMultiplier;
+    
+    if (isBreakout && hasVolumeSpike) {
+      const entryPrice = breakoutLevel * 1.002; // Entry slightly above breakout
+      const stopPrice = rangeResult.rangeLow * 0.998; // Below range support
+      const rangeHeight = rangeResult.rangeHigh - rangeResult.rangeLow;
+      const targetPrice = entryPrice + rangeHeight; // Measured move target
+      
+      console.log(`[Breakout] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
+      
+      return {
+        symbol: '',
+        strategy: 'breakout',
+        entryPrice,
+        stopPrice,
+        targetPrice,
+        confidence: 0.75,
+        metadata: {
+          rangeSupport: rangeResult.rangeLow,
+          rangeResistance: rangeResult.rangeHigh,
+          consolidationBars: rangeResult.durationBars,
+          breakoutLevel,
+          volumeRatio: currentVolume / avgVolume,
+          maxHoldingHours
+        }
+      };
+    }
+    
+    return null;
+  }
+
+  // Mean Reversion Strategy
+  detectMeanReversion(
+    indicators: TechnicalIndicators,
+    priceHistory: PriceData[],
+    params: any
+  ): StrategySignal | null {
+    const meanType = params.meanType || 'vwap';
+    const smaLength = params.smaLength || 20;
+    const deviationThreshold = (params.deviationThreshold || 2.5) / 100;
+    const partialExitPercent = params.partialExitPercent || 50;
+    const stopLossBuffer = (params.stopLossBuffer || 1) / 100;
+    
+    if (priceHistory.length < 20) return null;
+    
+    const { currentPrice, vwap } = indicators;
+    
+    // Determine mean reference
+    let meanValue: number;
+    if (meanType === 'sma') {
+      meanValue = this.calculateSMA(priceHistory, smaLength);
+    } else if (meanType === 'midpoint') {
+      const rangeResult = detectRange(priceHistory, 10, 8, 2);
+      if (!rangeResult.isRange) return null;
+      meanValue = (rangeResult.rangeLow + rangeResult.rangeHigh) / 2;
+    } else {
+      meanValue = vwap;
+    }
+    
+    if (!meanValue || meanValue === 0) return null;
+    
+    // Check for oversold condition (price below mean)
+    const deviation = (currentPrice - meanValue) / meanValue;
+    const isOversold = deviation < -deviationThreshold;
+    
+    // Reversal confirmation
+    const hasReversal = this.detectBullishReversal(indicators);
+    
+    if (isOversold && hasReversal) {
+      const entryPrice = currentPrice * 1.001;
+      const stopPrice = currentPrice * (1 - stopLossBuffer);
+      const targetPrice = meanValue * 0.998; // Target slightly below mean
+      
+      console.log(`[MeanReversion] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
+      
+      return {
+        symbol: '',
+        strategy: 'mean_reversion',
+        entryPrice,
+        stopPrice,
+        targetPrice,
+        confidence: 0.7,
+        metadata: {
+          meanType,
+          meanValue,
+          deviation: deviation * 100,
+          partialExitPercent,
+          oversoldLevel: -deviationThreshold * 100
+        }
+      };
+    }
+    
+    return null;
+  }
+
+  // Range Trading Strategy
+  detectRangeTrading(
+    priceHistory: PriceData[],
+    params: any
+  ): StrategySignal | null {
+    const minRangeDurationHours = params.minRangeDurationHours || 12;
+    const minRangeWidth = (params.minRangeWidth || 3) / 100;
+    const minBoundaryTouches = params.minBoundaryTouches || 3;
+    const entryZoneWidth = (params.entryZoneWidth || 0.5) / 100;
+    const stopLossBeyond = (params.stopLossBeyond || 1) / 100;
+    
+    if (priceHistory.length < 30) return null;
+    
+    // Convert hours to bars (assuming 1h bars)
+    const minBars = minRangeDurationHours;
+    
+    // Detect established range
+    const rangeResult = detectRange(priceHistory, minBars, 20, minBoundaryTouches);
+    
+    if (!rangeResult.isRange) return null;
+    
+    // Check range width meets minimum
+    const rangeWidth = (rangeResult.rangeHigh - rangeResult.rangeLow) / rangeResult.rangeLow;
+    if (rangeWidth < minRangeWidth) {
+      console.log(`[RangeTrading] Range too narrow: ${(rangeWidth * 100).toFixed(2)}% < ${(minRangeWidth * 100).toFixed(2)}%`);
+      return null;
+    }
+    
+    const current = priceHistory[priceHistory.length - 1];
+    const currentPrice = parseFloat(current.close);
+    
+    // Check if price is in entry zone near support
+    const supportEntryZone = rangeResult.rangeLow * (1 + entryZoneWidth);
+    const isNearSupport = currentPrice >= rangeResult.rangeLow && currentPrice <= supportEntryZone;
+    
+    if (isNearSupport) {
+      const entryPrice = currentPrice * 1.001;
+      const stopPrice = rangeResult.rangeLow * (1 - stopLossBeyond);
+      const targetPrice = rangeResult.rangeHigh * 0.995; // Target near resistance
+      
+      console.log(`[RangeTrading] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
+      
+      return {
+        symbol: '',
+        strategy: 'range_trading',
+        entryPrice,
+        stopPrice,
+        targetPrice,
+        confidence: 0.72,
+        metadata: {
+          rangeSupport: rangeResult.rangeLow,
+          rangeResistance: rangeResult.rangeHigh,
+          rangeWidth: rangeWidth * 100,
+          rangeDuration: rangeResult.durationBars,
+          entryZoneWidth: entryZoneWidth * 100
+        }
+      };
+    }
+    
+    return null;
+  }
+
+  // VWAP Bounce Strategy
+  detectVWAPBounce(
+    indicators: TechnicalIndicators,
+    priceHistory: PriceData[],
+    params: any
+  ): StrategySignal | null {
+    const vwapProximity = (params.vwapProximity || 0.5) / 100;
+    const minVWAPSlope = (params.minVWAPSlope || 0.3) / 100;
+    const volumeMultiplier = params.volumeMultiplier || 1.3;
+    const maxPullbackBars = params.maxPullbackBars || 5;
+    const partialExitR = params.partialExitR || 1.5;
+    
+    if (priceHistory.length < 20) return null;
+    
+    const { currentPrice, vwap, volume } = indicators;
+    
+    if (!vwap || vwap === 0) return null;
+    
+    // Check VWAP is trending up
+    const vwapHistory = priceHistory.slice(-10).map(p => parseFloat(p.vwap || '0'));
+    const vwapSlope = (vwapHistory[vwapHistory.length - 1] - vwapHistory[0]) / vwapHistory[0];
+    
+    if (vwapSlope < minVWAPSlope) {
+      console.log(`[VWAPBounce] VWAP not trending up: slope ${(vwapSlope * 100).toFixed(2)}%`);
+      return null;
+    }
+    
+    // Check price is near VWAP
+    const distanceFromVWAP = Math.abs(currentPrice - vwap) / vwap;
+    const isNearVWAP = distanceFromVWAP <= vwapProximity;
+    
+    // Check for bounce (price touched or went below VWAP recently, now above)
+    const recentPrices = priceHistory.slice(-maxPullbackBars);
+    const touchedVWAP = recentPrices.some(p => parseFloat(p.low) <= vwap);
+    const nowAboveVWAP = currentPrice > vwap;
+    
+    // Volume confirmation
+    const avgVolume = recentPrices.reduce((sum, p) => sum + parseFloat(p.volume), 0) / recentPrices.length;
+    const hasVolume = volume >= avgVolume * volumeMultiplier;
+    
+    if (isNearVWAP && touchedVWAP && nowAboveVWAP && hasVolume) {
+      const entryPrice = currentPrice * 1.001;
+      const stopPrice = vwap * 0.997; // Slightly below VWAP
+      const riskDistance = entryPrice - stopPrice;
+      const targetPrice = entryPrice + (riskDistance * 2); // 2R target
+      
+      console.log(`[VWAPBounce] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
+      
+      return {
+        symbol: '',
+        strategy: 'vwap_bounce',
+        entryPrice,
+        stopPrice,
+        targetPrice,
+        confidence: 0.73,
+        metadata: {
+          vwap,
+          vwapSlope: vwapSlope * 100,
+          distanceFromVWAP: distanceFromVWAP * 100,
+          partialExitR,
+          volumeRatio: volume / avgVolume
+        }
+      };
+    }
+    
+    return null;
+  }
+
+  // Liquidity Trap Strategy
+  detectLiquidityTrap(
+    priceHistory: PriceData[],
+    params: any
+  ): StrategySignal | null {
+    const maxTrapExtension = (params.maxTrapExtension || 1.2) / 100;
+    const trapReturnBars = params.trapReturnBars || 2;
+    const minStopZoneSize = params.minStopZoneSize || 'medium';
+    const minLevelTouches = params.minLevelTouches || 3;
+    const volumeRatio = params.volumeRatio || 1.5;
+    
+    if (priceHistory.length < 30) return null;
+    
+    // First, detect a range
+    const rangeResult = detectRange(priceHistory.slice(0, -5), 10, 5, minLevelTouches);
+    
+    if (!rangeResult.isRange) return null;
+    
+    // Check for stop zone near resistance
+    const currentPrice = parseFloat(priceHistory[priceHistory.length - 1].close);
+    const stopZone = detectStopZone(priceHistory, currentPrice, 20, minLevelTouches);
+    
+    const minClusterStrength = minStopZoneSize === 'small' ? 'weak' : minStopZoneSize === 'large' ? 'strong' : 'medium';
+    if (!stopZone.hasStopZone) return null;
+    
+    // Check for false breakout and return
+    const recentBars = priceHistory.slice(-trapReturnBars - 2);
+    const breakoutBar = recentBars[0];
+    const currentBar = recentBars[recentBars.length - 1];
+    
+    const breakoutHigh = parseFloat(breakoutBar.high);
+    const breakoutVolume = parseFloat(breakoutBar.volume);
+    const currentBarPrice = parseFloat(currentBar.close);
+    const currentVolume = parseFloat(currentBar.volume);
+    
+    // False breakout: went above resistance, then returned
+    const brokeAbove = breakoutHigh > rangeResult.rangeHigh;
+    const trapExtension = (breakoutHigh - rangeResult.rangeHigh) / rangeResult.rangeHigh;
+    const returnedToRange = currentBarPrice <= rangeResult.rangeHigh;
+    const hasVolumeReversal = currentVolume >= breakoutVolume * volumeRatio;
+    
+    if (brokeAbove && trapExtension <= maxTrapExtension && returnedToRange && hasVolumeReversal) {
+      const entryPrice = currentBarPrice * 0.999; // Enter on return
+      const stopPrice = breakoutHigh * 1.005; // Above trap high
+      const targetPrice = rangeResult.rangeLow * 1.002; // Target range support
+      
+      console.log(`[LiquidityTrap] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
+      
+      return {
+        symbol: '',
+        strategy: 'liquidity_trap',
+        entryPrice,
+        stopPrice,
+        targetPrice,
+        confidence: 0.68,
+        metadata: {
+          trapLevel: rangeResult.rangeHigh,
+          trapExtension: trapExtension * 100,
+          stopZoneStrength: stopZone.clusterStrength,
+          returnBars: trapReturnBars,
+          volumeReversal: currentVolume / breakoutVolume
+        }
+      };
+    }
+    
+    return null;
+  }
+
   // Exit condition checking
   async checkExitConditions(
     trade: Trade, 
@@ -308,6 +634,21 @@ export class StrategyEngine {
       
       case 'sma_trend_ride':
         return await this.checkSMATrendRideExit(trade, currentPrice);
+      
+      case 'breakout':
+        return await this.checkBreakoutExit(trade, currentPrice);
+      
+      case 'mean_reversion':
+        return await this.checkMeanReversionExit(trade, currentPrice);
+      
+      case 'range_trading':
+        return await this.checkRangeTradingExit(trade, currentPrice);
+      
+      case 'vwap_bounce':
+        return await this.checkVWAPBounceExit(trade, currentPrice);
+      
+      case 'liquidity_trap':
+        return await this.checkLiquidityTrapExit(trade, currentPrice);
       
       default:
         return false;
@@ -343,6 +684,57 @@ export class StrategyEngine {
     
     // Exit if price closes below SMA
     return currentPrice < currentSMA;
+  }
+
+  private async checkBreakoutExit(trade: Trade, currentPrice: number): Promise<boolean> {
+    // Breakout exits if price returns below the breakout level
+    const metadata = trade.metadata as any;
+    const breakoutLevel = metadata?.breakoutLevel;
+    
+    if (!breakoutLevel) return false;
+    
+    // Exit if price closes below breakout level
+    return currentPrice < breakoutLevel * 0.995;
+  }
+
+  private async checkMeanReversionExit(trade: Trade, currentPrice: number): Promise<boolean> {
+    // Mean reversion exits if price reaches the mean (target)
+    // Already handled by target price check, no additional logic needed
+    return false;
+  }
+
+  private async checkRangeTradingExit(trade: Trade, currentPrice: number): Promise<boolean> {
+    // Range trading exits if price breaks above resistance (range invalidated)
+    const metadata = trade.metadata as any;
+    const rangeResistance = metadata?.rangeResistance;
+    
+    if (!rangeResistance) return false;
+    
+    // Exit if price breaks above resistance
+    return currentPrice > rangeResistance * 1.002;
+  }
+
+  private async checkVWAPBounceExit(trade: Trade, currentPrice: number): Promise<boolean> {
+    // VWAP bounce exits if price closes below VWAP (trend broken)
+    const recentData = await storage.getPriceData(trade.symbol);
+    if (recentData.length === 0) return false;
+    
+    const latestData = recentData[recentData.length - 1];
+    const currentVWAP = parseFloat(latestData.vwap || '0');
+    
+    // Exit if price closes below VWAP
+    return currentPrice < currentVWAP;
+  }
+
+  private async checkLiquidityTrapExit(trade: Trade, currentPrice: number): Promise<boolean> {
+    // Liquidity trap exits if price returns above the trap level (setup invalidated)
+    const metadata = trade.metadata as any;
+    const trapLevel = metadata?.trapLevel;
+    
+    if (!trapLevel) return false;
+    
+    // Exit if price goes back above trap level
+    return currentPrice > trapLevel * 1.002;
   }
 
   // Helper methods
