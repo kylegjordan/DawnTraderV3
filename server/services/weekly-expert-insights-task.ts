@@ -7,6 +7,7 @@
 
 import { storage } from '../storage';
 import type { ScheduledTask } from './scheduler-registry';
+import { ExpertInsightsAlertsService } from './expert-insights-alerts';
 
 export class WeeklyExpertInsightsTask implements Omit<ScheduledTask, 'lastRun' | 'nextRun' | 'status'> {
   name = 'Weekly Expert Insights Update';
@@ -17,14 +18,39 @@ export class WeeklyExpertInsightsTask implements Omit<ScheduledTask, 'lastRun' |
   async run(): Promise<void> {
     console.log('[WeeklyExpertInsights] Starting weekly expert insights update...');
 
+    const weekOf = this.getWeekOfDate();
+    let insightCount = 0;
+
     try {
-      // Get current week identifier (YYYY-MM-DD format for Monday of current week)
-      const weekOf = this.getWeekOfDate();
-      
+      // Get admin user for alerts (use first admin found)
+      const users = await storage.getAllUsers();
+      const adminUser = users.find(u => u.isAdmin) || users[0];
+      const userId = adminUser?.id || 'system';
+      const mode: 'live' | 'paper' = 'paper';
+
       // Check if we've already fetched insights for this week
       const existingUpdates = await storage.getExpertUpdatesByWeek(weekOf);
       if (existingUpdates.length > 0) {
         console.log(`[WeeklyExpertInsights] Already fetched ${existingUpdates.length} insights for week ${weekOf}, skipping`);
+        
+        // Log duplicate prevention to transparency logs
+        await storage.createTransparencyLog({
+          userId,
+          taskName: 'Weekly Expert Insights Update',
+          success: true,
+          mode,
+          resultSummary: `Duplicate prevention: ${existingUpdates.length} insights already exist for week ${weekOf}`,
+          notes: JSON.stringify({ weekOf, existingCount: existingUpdates.length })
+        });
+        
+        // Alert for duplicate prevention
+        await ExpertInsightsAlertsService.alertDuplicatePrevented(
+          userId,
+          `${existingUpdates.length} insights already fetched`,
+          weekOf,
+          mode
+        );
+        
         return;
       }
 
@@ -33,6 +59,17 @@ export class WeeklyExpertInsightsTask implements Omit<ScheduledTask, 'lastRun' |
       
       if (insights.length === 0) {
         console.log('[WeeklyExpertInsights] No new insights found this week');
+        
+        // Log no new insights to transparency logs
+        await storage.createTransparencyLog({
+          userId,
+          taskName: 'Weekly Expert Insights Update',
+          success: true,
+          mode,
+          resultSummary: `No new insights found for week ${weekOf}`,
+          notes: JSON.stringify({ weekOf })
+        });
+        
         return;
       }
 
@@ -48,12 +85,67 @@ export class WeeklyExpertInsightsTask implements Omit<ScheduledTask, 'lastRun' |
           date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
           weekOf,
         });
+        
+        // Alert for low credibility scores
+        await ExpertInsightsAlertsService.alertLowCredibility(
+          userId,
+          insight.text,
+          insight.credibilityScore,
+          mode
+        );
+        
+        insightCount++;
       }
 
       console.log(`[WeeklyExpertInsights] Successfully stored ${insights.length} new expert insights for week ${weekOf}`);
 
+      // Log success to transparency logs
+      await storage.createTransparencyLog({
+        userId,
+        taskName: 'Weekly Expert Insights Update',
+        success: true,
+        mode,
+        resultSummary: `Successfully fetched and stored ${insights.length} expert insights for week ${weekOf}`,
+        notes: JSON.stringify({ weekOf, insightCount: insights.length })
+      });
+
+      // Alert for successful update
+      await ExpertInsightsAlertsService.alertSuccessfulUpdate(
+        userId,
+        insights.length,
+        weekOf,
+        mode
+      );
+
     } catch (error) {
       console.error('[WeeklyExpertInsights] Error updating expert insights:', error);
+      
+      // Get user for error logging
+      const users = await storage.getAllUsers().catch(() => []);
+      const adminUser = users.find(u => u.isAdmin) || users[0];
+      const userId = adminUser?.id || 'system';
+      
+      // Log error to transparency logs
+      await storage.createTransparencyLog({
+        userId,
+        taskName: 'Weekly Expert Insights Update',
+        success: false,
+        mode: 'paper',
+        resultSummary: `Error updating expert insights: ${error instanceof Error ? error.message : String(error)}`,
+        notes: JSON.stringify({ 
+          weekOf, 
+          error: error instanceof Error ? error.message : String(error),
+          insightCount
+        })
+      }).catch((logErr: Error) => console.error('[WeeklyExpertInsights] Failed to log error:', logErr));
+      
+      // Alert for task failure
+      await ExpertInsightsAlertsService.alertTaskFailure(
+        userId,
+        error instanceof Error ? error : new Error(String(error)),
+        'paper'
+      ).catch(alertErr => console.error('[WeeklyExpertInsights] Failed to create alert:', alertErr));
+      
       throw error;
     }
   }

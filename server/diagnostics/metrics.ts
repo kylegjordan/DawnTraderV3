@@ -146,14 +146,14 @@ export async function getSystemMetrics(): Promise<SystemMetrics> {
 export async function getTradingEngineStatus(): Promise<TradingEngineStatus> {
   // Get active trades count as proxy for orders queue
   const activeTrades = await db.execute(sql`
-    SELECT COUNT(*) as count FROM trades WHERE status IN ('open', 'pending')
+    SELECT COUNT(*) as count FROM trades WHERE status = 'open'
   `);
   
   const count = (activeTrades.rows[0] as any)?.count || 0;
   
   // Get most recent trade activity
   const lastActivity = await db.execute(sql`
-    SELECT MAX(created_at) as last_activity FROM trades
+    SELECT MAX(entry_time) as last_activity FROM trades
   `);
   
   const lastActivityDate = (lastActivity.rows[0] as any)?.last_activity;
@@ -222,7 +222,7 @@ export async function getDatabaseHealth(): Promise<DatabaseHealth> {
     const lastHour = new Date(Date.now() - 60 * 60 * 1000);
     const errors = await db.execute(sql`
       SELECT COUNT(*) as count 
-      FROM system_error_logs 
+      FROM error_logs 
       WHERE timestamp >= ${lastHour.toISOString()} AND resolved = false
     `);
     

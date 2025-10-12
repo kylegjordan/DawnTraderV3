@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-10-12T11:14:13.117Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (14.49, 17.87, 15.66) for an 8-core system, indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero confidence, and no opportunities generated, suggesting it may not be functioning or is misconfigured."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system responsiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI module configuration and ensure it's correctly set up to perform learning cycles and generate trading opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of the processes contributing to high CPU load and optimize or redistribute workloads.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Verify AI module settings and logs to ensure it's operational and capable of generating trading insights.",
+      "rationale": "The AI module is crucial for identifying trading opportunities and its inactivity could lead to missed trading opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Increase monitoring of system performance metrics and set up alerts for abnormal CPU usage.",
+      "rationale": "Proactive monitoring can help in early detection of performance issues and prevent potential downtime."
+    }
+  ],
+  "urgencyLevel": "high"
+}

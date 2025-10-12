@@ -3345,16 +3345,42 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Expert Insights Metrics
+  app.get('/api/diagnostics/expert-insights', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getExpertInsightsMetrics } = await import('./diagnostics/expert-insights-metrics.js');
+      const metrics = await getExpertInsightsMetrics();
+      res.json({ ok: true, metrics });
+    } catch (error: any) {
+      console.error('Expert insights metrics fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Expert Insights Health Check
+  app.get('/api/diagnostics/expert-insights/health', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { checkExpertInsightsHealth } = await import('./diagnostics/expert-insights-metrics.js');
+      const health = await checkExpertInsightsHealth();
+      res.json({ ok: true, health });
+    } catch (error: any) {
+      console.error('Expert insights health check error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Export System Report
   app.get('/api/diagnostics/export-report', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getSystemMetrics, getTradingEngineStatus, getWalterActivity, getDatabaseHealth } = await import('./diagnostics/metrics.js');
+      const { getExpertInsightsMetrics } = await import('./diagnostics/expert-insights-metrics.js');
       
-      const [systemMetrics, tradingEngine, walterActivity, databaseHealth] = await Promise.all([
+      const [systemMetrics, tradingEngine, walterActivity, databaseHealth, expertInsights] = await Promise.all([
         getSystemMetrics(),
         getTradingEngineStatus(),
         getWalterActivity(),
-        getDatabaseHealth()
+        getDatabaseHealth(),
+        getExpertInsightsMetrics()
       ]);
       
       const report = {
@@ -3362,7 +3388,8 @@ Provide specific, actionable recommendations.`,
         systemMetrics,
         tradingEngine,
         walterActivity,
-        databaseHealth
+        databaseHealth,
+        expertInsights
       };
       
       res.setHeader('Content-Type', 'application/json');
