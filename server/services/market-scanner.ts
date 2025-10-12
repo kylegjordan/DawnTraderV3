@@ -271,12 +271,19 @@ export class MarketScanner {
       // Filter out null signals
       const validSignals = signals.filter(signal => signal !== null);
 
+      // Apply conflict resolution if multiple signals found
+      let resolvedSignals = validSignals;
+      if (validSignals.length > 1) {
+        resolvedSignals = this.resolveConflicts(validSignals, strategySettings);
+        console.log(`⚖️ Conflict resolution: ${validSignals.length} signals → ${resolvedSignals.length} resolved for ${pair.symbol}`);
+      }
+
       // Process any found signals
-      if (validSignals.length > 0) {
-        console.log(`✅ Found ${validSignals.length} signal(s) for ${pair.symbol}`);
+      if (resolvedSignals.length > 0) {
+        console.log(`✅ Found ${resolvedSignals.length} signal(s) for ${pair.symbol}`);
       }
       
-      for (const signal of validSignals) {
+      for (const signal of resolvedSignals) {
         if (signal) {
           signal.symbol = pair.symbol;
           await this.processSignal(userId, signal);
@@ -286,6 +293,51 @@ export class MarketScanner {
     } catch (error) {
       console.error(`Error analyzing ${pair.symbol} for user ${userId}:`, error);
     }
+  }
+
+  /**
+   * Resolve conflicts when multiple strategies trigger on the same symbol
+   * Strategy: BEST SCORE WINS - Only 1 signal per asset
+   * Prioritization (deterministic):
+   * 1. Strategy weight (from settings)
+   * 2. Signal confidence
+   * 3. Strategy name (alphabetical, for determinism)
+   */
+  private resolveConflicts(signals: any[], strategySettings: any[]): any[] {
+    // Get strategy weight for each signal
+    const signalsWithWeight = signals.map(signal => {
+      const setting = strategySettings.find(s => s.strategy === signal.strategy);
+      const weight = setting?.weight ?? 1.0; // Default weight = 1.0
+      return { signal, weight };
+    });
+
+    // Sort by: weight (desc) → confidence (desc) → strategy name (asc for determinism)
+    signalsWithWeight.sort((a, b) => {
+      // 1. Higher weight wins
+      if (a.weight !== b.weight) {
+        return b.weight - a.weight;
+      }
+      // 2. Higher confidence wins
+      if (a.signal.confidence !== b.signal.confidence) {
+        return b.signal.confidence - a.signal.confidence;
+      }
+      // 3. Alphabetical strategy name (deterministic tiebreaker)
+      return a.signal.strategy.localeCompare(b.signal.strategy);
+    });
+
+    // Take only the best signal (prevents over-exposure to single asset)
+    const bestSignal = signalsWithWeight[0].signal;
+
+    // Log conflict resolution details
+    if (signals.length > 1) {
+      const dropped = signals.length - 1;
+      console.log(`📉 Conflict resolution: ${signals.length} signals → BEST SCORE WINS`);
+      console.log(`  ✅ Selected: ${bestSignal.strategy} (weight=${signalsWithWeight[0].weight}, conf=${bestSignal.confidence})`);
+      console.log(`  ❌ Dropped: ${dropped} signal(s):`, 
+        signalsWithWeight.slice(1).map(s => `${s.signal.strategy}(w=${s.weight},c=${s.signal.confidence})`).join(', '));
+    }
+
+    return [bestSignal];
   }
 
   private async processSignal(userId: string, signal: any): Promise<void> {
