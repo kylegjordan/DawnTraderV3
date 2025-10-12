@@ -22,7 +22,16 @@ import { z } from "zod";
 // Enums
 export const tradingModeEnum = pgEnum("trading_mode", ["live", "paper"]);
 export const tradingStatusEnum = pgEnum("trading_status", ["active", "stopped"]);
-export const strategyTypeEnum = pgEnum("strategy_type", ["vwap_pullback", "abcd_long", "sma_trend_ride"]);
+export const strategyTypeEnum = pgEnum("strategy_type", [
+  "vwap_pullback", 
+  "abcd_long", 
+  "sma_trend_ride",
+  "breakout",
+  "mean_reversion",
+  "range_trading",
+  "vwap_bounce",
+  "liquidity_trap"
+]);
 export const tradeStatusEnum = pgEnum("trade_status", ["open", "closed", "cancelled"]);
 export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);
 export const opportunityTypeEnum = pgEnum("opportunity_type", ["long_term_hold", "moonshot", "momentum", "breakout", "mean_reversion"]);
@@ -1755,7 +1764,7 @@ export const orchestratorUpdateGuardrailSchema = z.object({
 
 export const orchestratorUpdateStrategySchema = z.object({
   mode: z.enum(['live', 'paper']),
-  strategy: z.enum(['vwap_pullback', 'abcd_long', 'sma_trend_ride']),
+  strategy: z.enum(['vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout', 'mean_reversion', 'range_trading', 'vwap_bounce', 'liquidity_trap']),
   field: z.enum(['enabled', 'params']),
   value: z.union([z.boolean(), z.record(z.any())]),
   approved: z.boolean(),

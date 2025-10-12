@@ -18,40 +18,117 @@ const STRATEGIES = [
   { id: 'vwap_pullback', name: 'VWAP Pullback', description: 'Entry when price pulls back to VWAP with momentum confirmation' },
   { id: 'abcd_long', name: 'ABCD Long', description: 'Classic ABCD pattern with Fibonacci retracement levels' },
   { id: 'sma_trend_ride', name: 'SMA Trend Ride', description: 'Trend following strategy using moving average crossovers' },
+  { id: 'breakout', name: 'Breakout', description: 'Trades price breakouts from consolidation ranges with volume confirmation' },
+  { id: 'mean_reversion', name: 'Mean Reversion', description: 'Trades oversold/overbought conditions in ranging markets back to mean' },
+  { id: 'range_trading', name: 'Range Trading', description: 'Systematically trades within identified ranges, buying support and selling resistance' },
+  { id: 'vwap_bounce', name: 'VWAP Bounce', description: 'Trades bounces from VWAP in trending markets using dynamic support/resistance' },
+  { id: 'liquidity_trap', name: 'Liquidity Trap', description: 'Advanced strategy trading false breakouts where stops are triggered then reversed' },
 ];
 
 const PARAM_LABELS: Record<string, string> = {
+  // Base common parameters
   maxConcurrentPositions: "Max Concurrent Positions",
   riskPerTrade: "Risk Per Trade (%)",
   takeProfitR: "Take Profit R-Multiple",
   stopLossR: "Stop Loss R-Multiple",
   cooldownMinutes: "Cooldown (minutes)",
+  // VWAP Pullback
   vwapLookbackMin: "VWAP Lookback (min)",
   pullbackPct: "Pullback Threshold (%)",
   minVolumeUsd: "Min Volume (USD)",
+  // ABCD Long
   minAtoBStrength: "Min A→B Strength",
   cPullbackPctMax: "C Pullback Max (%)",
   dBreakoutBufferPct: "D Breakout Buffer (%)",
+  // SMA Trend Ride
   fastSma: "Fast SMA Period",
   slowSma: "Slow SMA Period",
   trendStrengthMin: "Trend Strength Min",
+  // Breakout Strategy
+  minConsolidationBars: "Min Consolidation Bars",
+  maxRangeWidth: "Max Range Width (%)",
+  breakoutBuffer: "Breakout Buffer (%)",
+  volumeMultiplier: "Volume Multiplier (x)",
+  trailingStopEnabled: "Trailing Stop Enabled",
+  maxHoldingHours: "Max Holding (hours)",
+  // Mean Reversion
+  meanType: "Mean Reference Type",
+  smaLength: "SMA Period",
+  deviationThreshold: "Deviation Threshold (%)",
+  minRangeTouches: "Min Range Touches",
+  partialExitPercent: "Partial Exit (%)",
+  stopLossBuffer: "Stop Loss Buffer (%)",
+  // Range Trading
+  minRangeDurationHours: "Min Range Duration (hours)",
+  minRangeWidth: "Min Range Width (%)",
+  minBoundaryTouches: "Min Boundary Touches",
+  entryZoneWidth: "Entry Zone Width (%)",
+  stopLossBeyond: "Stop Loss Beyond (%)",
+  // VWAP Bounce
+  vwapProximity: "VWAP Proximity (%)",
+  minVWAPSlope: "Min VWAP Slope (%)",
+  trailingToVWAP: "Trail Stop to VWAP",
+  maxPullbackBars: "Max Pullback Bars",
+  partialExitR: "Partial Exit R-Multiple",
+  // Liquidity Trap
+  maxTrapExtension: "Max Trap Extension (%)",
+  trapReturnBars: "Trap Return Bars",
+  minStopZoneSize: "Min Stop Zone Size",
+  minLevelTouches: "Min Level Touches",
+  volumeRatio: "Volume Ratio (x)",
 };
 
 const PARAM_DESCRIPTIONS: Record<string, string> = {
+  // Base common
   maxConcurrentPositions: "Maximum number of concurrent positions for this strategy (0-20)",
   riskPerTrade: "Percentage of portfolio to risk per trade (0.05-5%)",
   takeProfitR: "Target profit in R-multiples (0.2-10)",
   stopLossR: "Stop loss in R-multiples (0.1-10)",
   cooldownMinutes: "Minutes to wait between trades for the same symbol (0-240)",
+  // VWAP Pullback
   vwapLookbackMin: "VWAP calculation lookback period in minutes (1-120)",
   pullbackPct: "Pullback threshold percentage (0.1-5%)",
   minVolumeUsd: "Minimum 24h volume in USD (0+)",
+  // ABCD Long
   minAtoBStrength: "Minimum A to B leg strength (0.1-5)",
   cPullbackPctMax: "Maximum C pullback percentage (1-30%)",
   dBreakoutBufferPct: "D breakout buffer percentage (0-5%)",
+  // SMA Trend Ride
   fastSma: "Fast SMA period (3-50)",
   slowSma: "Slow SMA period (10-200)",
   trendStrengthMin: "Minimum trend strength (0-1)",
+  // Breakout
+  minConsolidationBars: "Minimum bars required for valid consolidation range (5-30)",
+  maxRangeWidth: "Maximum range width as % of price (1-5%)",
+  breakoutBuffer: "Buffer above resistance for entry (0.5-2%)",
+  volumeMultiplier: "Volume spike confirmation multiplier (1.5-3x avg)",
+  trailingStopEnabled: "Enable trailing stop after reaching profit",
+  maxHoldingHours: "Maximum position duration in hours (2-24)",
+  // Mean Reversion
+  meanType: "Reference point for mean: VWAP, SMA, or range midpoint",
+  smaLength: "SMA period if using SMA as mean (10-50)",
+  deviationThreshold: "Distance from mean required for entry (1.5-4%)",
+  minRangeTouches: "Minimum support/resistance touches required (2-4)",
+  partialExitPercent: "Percent of position to exit at 50% reversion (25-75%)",
+  stopLossBuffer: "Stop loss distance beyond extreme (0.5-2%)",
+  // Range Trading
+  minRangeDurationHours: "Minimum range duration before trading (4-48 hours)",
+  minRangeWidth: "Minimum range width for adequate profit potential (2-8%)",
+  minBoundaryTouches: "Minimum touches per boundary to validate range (2-5)",
+  entryZoneWidth: "Entry zone around support/resistance (0.2-0.8%)",
+  stopLossBeyond: "Stop loss distance beyond boundary (0.5-2%)",
+  // VWAP Bounce
+  vwapProximity: "Maximum distance from VWAP for entry (0.2-1%)",
+  minVWAPSlope: "Minimum VWAP upward slope for trend confirmation (0.1-1%)",
+  trailingToVWAP: "Trail stop to VWAP after profit",
+  maxPullbackBars: "Maximum pullback duration in bars (2-10)",
+  partialExitR: "R-multiple for partial exit (1-2R)",
+  // Liquidity Trap
+  maxTrapExtension: "Maximum breakout distance before reversal (0.5-2%)",
+  trapReturnBars: "Bars required for price to return to range (1-3)",
+  minStopZoneSize: "Minimum liquidity cluster size: small, medium, or large",
+  minLevelTouches: "Minimum touches of trap level (2-5)",
+  volumeRatio: "Return volume vs breakout volume ratio (1.2-2x)",
 };
 
 interface StrategySettings {
