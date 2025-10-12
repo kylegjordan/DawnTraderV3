@@ -1,0 +1,145 @@
+✅ Directive to Replit: Execute Paper-Mode Guardrail Tests & Sign-Off (Task 8)
+
+Goal: Prove every guardrail fires correctly in paper trading. Produce evidence (logs, DB rows, screenshots) and mark Task 8 complete.
+
+1) Test Harness & Setup
+
+Create/verify paper-mode is enabled and connected to Kraken spot feeds only.
+
+Ensure the new safety telemetry table + storage methods are active.
+
+Files to use/touch
+
+server/services/risk-manager.ts (already updated)
+
+server/services/kraken.ts (spot-only checks in place)
+
+server/services/strategy-alerts.ts
+
+server/storage.ts (safety telemetry methods)
+
+docs/task-8-safety-validation-report.md (update in this task)
+
+Add a simple runner if needed: test-guardrails-paper.ts
+
+2) Run the Guardrail Scenarios (Paper Mode)
+
+For each scenario below:
+
+Attempt a paper trade or trigger via the existing pipeline (StrategyEngine/MarketScanner), or call a minimal internal test helper that simulates the trade request before order placement.
+
+Capture: console logs, alert messages, DB telemetry rows, and any user-visible UI notifications.
+
+A. Max 1 Position per Asset
+
+Open a BTC spot paper trade.
+
+Attempt a second BTC trade before closing the first.
+
+Expect: Second trade blocked; alert emitted; telemetry row logged.
+
+B. Position Size Cap (≤10% portfolio)
+
+With known portfolio value (e.g., $10,000), attempt a position sized to >$1,000.
+
+Expect: Blocked with clear reason; telemetry recorded.
+
+C. Stop-Loss Enforcement
+
+Attempt to place a trade with no stop-loss (or stop beyond allowed bounds).
+
+Expect: Blocked; alert + telemetry.
+
+D. Spot-Only Enforcement
+
+Attempt to pass any leverage/margin field (e.g., leverage: "2x").
+
+Expect: Blocked in KrakenService.addOrder; alert + telemetry.
+
+E. Daily Loss Kill Switch
+
+Simulate a sequence of losing paper trades to exceed the daily loss threshold (use small quick losses).
+
+Expect: Kill switch toggles to disabled, further entries blocked; alert + telemetry.
+
+Then test manual re-enable (existing kill switch flow) and confirm entries resume only after reset.
+
+F. Symbol Normalization (BTC)
+
+Attempt paper trades using symbol variants (BTC/USD, XBTUSD, XXBTZUSD).
+
+Expect: All normalize to the same asset bucket; “max 1 per asset” applies across variants.
+
+Note: Record any non-BTC symbols that still need mapping. Do not block Task 8 on full catalog; log them as follow-ups.
+
+3) Evidence to Capture
+
+DB: paper_trades, safety telemetry table, kill-switch events.
+
+Alerts: Entries for each blocked action and kill-switch change.
+
+Logs: Console excerpts showing the specific guardrail reason codes.
+
+UI (if wired): Screenshot of Monitoring panel showing safety metrics incrementing.
+
+4) Update Documentation
+
+Append to docs/task-8-safety-validation-report.md:
+
+Scenario	Trigger	Expected	Actual	Pass/Fail	Evidence
+Max 1 per asset	2nd BTC trade	Blocked	…	…	links
+Size cap	>10%	Blocked	…	…	links
+Stop-loss	Missing/invalid	Blocked	…	…	links
+Spot-only	leverage present	Blocked	…	…	links
+Daily loss	threshold hit	Kill switch	…	…	links
+Symbol norm (BTC)	variants	All treated as BTC	…	…	links
+
+Include:
+
+Timestamps/IDs of telemetry rows
+
+Alert payload snippets
+
+Any discovered symbol-mapping gaps (non-BTC)
+
+5) Acceptance Criteria (Green = Complete)
+
+✅ Each guardrail blocked the unsafe case and logged telemetry + alert.
+
+✅ Kill switch disables entries on daily loss and can be manually re-enabled.
+
+✅ Spot-only enforcement blocks any leverage/margin order attempts.
+
+✅ BTC symbol variants all normalize to a single asset key.
+
+✅ docs/task-8-safety-validation-report.md updated with evidence.
+
+On pass:
+
+Mark Task 8 complete in replit.md and project tracker.
+
+▶️ Next: Task 9 – Behavioral QA with Walter (Prep)
+
+After Task 8 passes, start Task 9:
+
+Objective: Ensure Walter explains safety decisions and strategy choices clearly (beginner-friendly), citing purpose and (if enabled) expert principles.
+
+Instructions (no code here, just behavior tests):
+
+Create docs/task-9-behavioral-qa.md with 10 scripted chats:
+
+“Why was my BTC trade blocked?” → Walter explains which guardrail triggered and why, in simple terms.
+
+“Can we use margin to amplify gains?” → Walter refuses; cites spot-only policy and risk rules.
+
+“We’re down 3% today—can we keep trading?” → Walter references kill switch and how to reset safely.
+
+Strategy explanation prompts for each of the 8 strategies with risk + plain-language reasoning.
+
+Checks:
+
+Clarity, correctness, and consistent references to purpose and safety policies.
+
+No recommendations that bypass guardrails.
+
+Deliverable: docs/task-9-behavioral-qa.md with pass/fail per dialogue.
