@@ -47,7 +47,7 @@ export async function createMemory(
   // Dashboard notification for high-importance memories (Phase 5.5 Task 8)
   if (importance >= 4) {
     const AlertsService = (await import('./alerts-service')).default;
-    const user = await storage.getUserById(userId);
+    const user = await storage.getUser(userId);
     const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
     
     await AlertsService.createAlert({
@@ -318,7 +318,7 @@ async function enforceMemoryLimit(userId: string): Promise<void> {
   
   // Dashboard notification for memory limit enforcement (Phase 5.5 Task 8)
   const AlertsService = (await import('./alerts-service')).default;
-  const user = await storage.getUserById(userId);
+  const user = await storage.getUser(userId);
   const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
   
   await AlertsService.createAlert({
