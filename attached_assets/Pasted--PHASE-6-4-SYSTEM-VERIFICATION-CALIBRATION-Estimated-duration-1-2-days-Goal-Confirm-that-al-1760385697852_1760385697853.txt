@@ -1,0 +1,124 @@
+🧩 PHASE 6.4 — SYSTEM VERIFICATION & CALIBRATION
+
+Estimated duration: 1–2 days
+Goal: Confirm that all intelligence, memory, logging, and TTS features work seamlessly with Walter’s data feeds, exchanges, and response logic.
+
+🧠 1. Verify System Connections
+
+Objective: Ensure Walter’s ecosystem is online and communicating.
+
+Replit Instructions:
+
+Review all .env API keys for exchanges, Bob system, and OpenAI. Confirm none are expired.
+
+Ping each API endpoint (e.g., /api/exchange/status, /api/bob/heartbeat) and confirm a valid response.
+
+Validate database and storage mounts (/logs, /db, /uploads) exist and are writable.
+
+If any connection fails, log to /logs/system_diagnostics.json and retry after key refresh.
+
+⚙️ 2. Validate Chat and Memory Flow
+
+Objective: Confirm Phase 6.3’s memory upgrades and chat logging function as expected.
+
+Replit Instructions:
+
+Open server/services/walter-memory.ts and confirm MEMORY_LIMIT = 1500.
+
+Run a diagnostic conversation between User and Walter (5–6 messages).
+
+Ensure entries are added to /logs/chats/chat_log_<date>.json.
+
+Archive the chat and confirm a summary is written to /logs/chat_summaries/.
+
+Verify smart aging reports in console (🧠 Smart aging activated).
+
+🔊 3. Check Audio Pipeline (TTS + Playback)
+
+Objective: Make sure Walter can speak reliably after 6.3 integration.
+
+Replit Instructions:
+
+Call the endpoint /api/walter/tts with a test message (“Testing Walter voice system”).
+
+Verify MP3 output plays and saves to /public/audio/tts_test.mp3.
+
+Log success/failure in /logs/audio_diagnostics.json.
+
+Confirm voice model (default: gpt-4o-mini-tts-alloy) responds within 2 seconds.
+
+📁 4. Cross-Check Learning Ingestion Records
+
+Objective: Confirm Walter’s 273 training files were fully processed and indexed.
+
+Replit Instructions:
+
+Run tsx scripts/test-memory-summary.ts.
+
+Verify output shows 1,500 memories retained, average importance ≈ 3.0.
+
+Check /logs/ingest_log.json for "status":"complete" entries for each file batch.
+
+Log any missing entries and attempt re-ingestion if required.
+
+🧩 5. Verify Behavioral and Tone Responses
+
+Objective: Ensure Walter’s adaptive personality and emotional response engine operate correctly.
+
+Replit Instructions:
+
+Run sample conversations expressing frustration, urgency, and curiosity.
+
+Verify Walter responds empathetically, concisely, and educationally depending on tone.
+
+Ensure feedback recognition works (“No, I meant …” → Walter acknowledges correction).
+
+Log each tone test in /logs/personality_diagnostics.json.
+
+🔍 6. Performance and Load Checks
+
+Objective: Test stability under moderate load and confirm latency targets.
+
+Replit Instructions:
+
+Run simultaneous 5-chat simulation (tsx scripts/chat_stress_test.ts).
+
+Observe average response times — goal < 2.5 s for text, < 3 s for TTS.
+
+Monitor system CPU and memory via Replit metrics.
+
+Document results in /logs/performance_summary.json.
+
+🪶 7. Calibration & Adjustment
+
+Objective: Fine-tune Walter’s operational thresholds before trading integration.
+
+Replit Instructions:
+
+Adjust tone weights, response length preferences, and memory aging threshold if needed.
+
+Confirm chat archival and renaming still function correctly after changes.
+
+Update replit.md under Phase 6.4 Verification Results with key metrics and changes.
+
+✅ Completion Checklist
+
+When Replit finishes:
+
+ All APIs and data feeds respond ✅
+
+ Chat and memory logging stable ✅
+
+ TTS and audio verified ✅
+
+ Learning ingestion records complete ✅
+
+ Adaptive tone engine working ✅
+
+ Performance under load acceptable ✅
+
+ All diagnostic reports saved ✅
+
+📊 Cost Note
+
+Phase 6.4 adds no new recurring costs. Monthly operational expenses remain within the $80–$235 range, depending on OpenAI and data feed usage.
