@@ -21,9 +21,13 @@ import { assetCapabilitiesService } from "./services/asset-capabilities";
 import { manageChatLifecycle, summarizeChatSession } from "./services/walter-chat-lifecycle";
 import { generateWalterResponse } from "./services/walter-response";
 import { chatLogging } from "./middleware/chat-logging";
+import { textToSpeech, estimateTTSCost } from "./services/walter-tts";
+import { ingestLearningFile, getIngestionHistory } from "./services/walter-ingest";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
 import multer from "multer";
+import fs from 'fs/promises';
+import path from 'path';
 import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStrengthMessage } from "./services/auth-service";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -2050,6 +2054,112 @@ Provide specific, actionable recommendations.`,
       }
       
       res.status(500).json({ error: 'Failed to transcribe audio. Please try again.' });
+    }
+  });
+
+  // Phase 6.3: Text-to-Speech endpoint
+  app.post('/api/walter/tts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { text, voice, speed } = req.body;
+      
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ error: 'Text is required' });
+      }
+      
+      if (text.length > 4096) {
+        return res.status(400).json({ 
+          error: 'Text too long (max 4096 characters)',
+          maxLength: 4096,
+          actualLength: text.length
+        });
+      }
+      
+      console.log(`[TTS] Request for ${text.length} characters`);
+      
+      const audioBuffer = await textToSpeech(text, { voice, speed });
+      const cost = estimateTTSCost(text);
+      
+      console.log(`[TTS] Generated audio (${audioBuffer.length} bytes, cost: $${cost.toFixed(4)})`);
+      
+      // Return audio as MP3
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', audioBuffer.length.toString());
+      res.setHeader('X-TTS-Cost', cost.toFixed(6));
+      res.send(audioBuffer);
+    } catch (error: any) {
+      console.error('[TTS] Error:', error);
+      
+      if (error.status === 429) {
+        return res.status(429).json({ error: 'Rate limit exceeded. Please try again in a moment.' });
+      }
+      
+      res.status(500).json({ error: 'Failed to generate speech. Please try again.' });
+    }
+  });
+
+  // Phase 6.3: Learning file upload and ingestion  
+  app.post('/api/walter/ingest', authenticateToken, (req: AuthenticatedRequest, res, next) => {
+    upload.single('file')(req as any, res as any, (err: any) => {
+      if (err) {
+        console.error('[Ingest] Multer error:', err);
+        return res.status(400).json({ 
+          error: `File upload error: ${err.message}. Expected field name: 'file'` 
+        });
+      }
+      next();
+    });
+  }, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      if (!req.file) {
+        return res.status(400).json({ 
+          error: 'No file provided. Use multipart/form-data with field name "file"' 
+        });
+      }
+      
+      const allowedTypes = ['.json', '.txt', '.md', '.zip'];
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      
+      if (!allowedTypes.includes(ext)) {
+        return res.status(400).json({ 
+          error: `Unsupported file type: ${ext}. Allowed: ${allowedTypes.join(', ')}` 
+        });
+      }
+      
+      // Save file to learning directory
+      const learningDir = path.join(process.cwd(), 'attached_assets', 'learning');
+      await fs.mkdir(learningDir, { recursive: true });
+      
+      const filename = `${Date.now()}_${req.file.originalname}`;
+      const filePath = path.join(learningDir, filename);
+      
+      await fs.writeFile(filePath, req.file.buffer);
+      
+      console.log(`[Ingest] File uploaded: ${filename} (${req.file.size} bytes)`);
+      
+      // Ingest the file
+      const result = await ingestLearningFile(filePath, userId);
+      
+      res.json({
+        success: result.success,
+        result
+      });
+    } catch (error: any) {
+      console.error('[Ingest] Upload error:', error);
+      res.status(500).json({ error: 'Failed to process learning file' });
+    }
+  });
+
+  // Get ingestion history
+  app.get('/api/walter/ingest/history', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const history = await getIngestionHistory(limit);
+      res.json({ success: true, history });
+    } catch (error: any) {
+      console.error('[Ingest] History error:', error);
+      res.status(500).json({ error: 'Failed to retrieve ingestion history' });
     }
   });
 
@@ -5431,7 +5541,7 @@ Please:
       const updates: any = {};
       if (title !== undefined) updates.title = title;
       if (status !== undefined) updates.status = status;
-      if (archivedAt !== undefined) updates.archivedAt = archivedAt;
+      if (archivedAt !== undefined) updates.archivedAt = new Date(archivedAt);
       
       // Phase 6.3: Log rename event to file storage
       if (title !== undefined && title !== chat.title) {

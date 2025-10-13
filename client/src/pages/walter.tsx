@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Bot, Send, User, Mic, MicOff, Loader2, MessageSquare, 
-  Plus, Archive, Search, Filter, Check, X, AlertCircle, Paperclip, Upload, FileText 
+  Plus, Archive, Search, Filter, Check, X, AlertCircle, Paperclip, Upload, FileText, Pencil 
 } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -75,6 +75,8 @@ export default function WalterPage() {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
@@ -233,7 +235,7 @@ export default function WalterPage() {
     mutationFn: async (chatId: string) => {
       await apiRequest('PATCH', `/api/walter/chats/${chatId}`, {
         status: 'archived',
-        archivedAt: new Date()
+        archivedAt: new Date().toISOString()
       });
     },
     onSuccess: () => {
@@ -242,6 +244,31 @@ export default function WalterPage() {
       toast({
         title: "Chat Archived",
         description: "Chat session archived successfully"
+      });
+    }
+  });
+
+  // Rename chat (Phase 6.3)
+  const renameChatMutation = useMutation({
+    mutationFn: async ({ chatId, newTitle }: { chatId: string; newTitle: string }) => {
+      await apiRequest('PATCH', `/api/walter/chats/${chatId}`, {
+        title: newTitle
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/walter/chats'] });
+      setRenamingChatId(null);
+      setRenameValue('');
+      toast({
+        title: "Chat Renamed",
+        description: "Chat session renamed successfully"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Rename Failed",
+        description: error.message || "Could not rename chat",
+        variant: "destructive"
       });
     }
   });
@@ -569,35 +596,101 @@ export default function WalterPage() {
                   </p>
                 ) : (
                   filteredChats.map((chat) => (
-                    <button
+                    <div
                       key={chat.id}
-                      onClick={() => setSelectedChatId(chat.id)}
                       className={cn(
-                        "w-full flex flex-col gap-1 p-3 rounded-md text-sm text-left transition-colors",
+                        "w-full flex flex-col gap-1 p-3 rounded-md text-sm transition-colors group relative",
                         selectedChatId === chat.id 
                           ? "bg-primary text-primary-foreground" 
                           : "hover:bg-muted"
                       )}
                       data-testid={`chat-${chat.id}`}
                     >
-                      <div className="flex items-center gap-2">
-                        {chat.isApprovalThread ? (
-                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                        ) : (
-                          <MessageSquare className="w-4 h-4 flex-shrink-0" />
-                        )}
-                        <span className="font-medium truncate flex-1">{chat.title}</span>
-                        {chat.status === 'archived' && (
-                          <Archive className="w-3 h-3 flex-shrink-0" />
-                        )}
-                      </div>
-                      <span className={cn(
-                        "text-xs",
-                        selectedChatId === chat.id ? "opacity-90" : "text-muted-foreground"
-                      )}>
-                        {chat.messageCount} message{chat.messageCount !== 1 ? 's' : ''} • {new Date(chat.lastMessageAt).toLocaleDateString()}
-                      </span>
-                    </button>
+                      {renamingChatId === chat.id ? (
+                        // Rename mode
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                renameChatMutation.mutate({ chatId: chat.id, newTitle: renameValue });
+                              } else if (e.key === 'Escape') {
+                                setRenamingChatId(null);
+                                setRenameValue('');
+                              }
+                            }}
+                            className="flex-1 h-7 text-sm"
+                            autoFocus
+                            data-testid={`input-rename-chat-${chat.id}`}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={() => renameChatMutation.mutate({ chatId: chat.id, newTitle: renameValue })}
+                            disabled={!renameValue.trim() || renameChatMutation.isPending}
+                            data-testid={`button-confirm-rename-${chat.id}`}
+                          >
+                            <Check className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={() => {
+                              setRenamingChatId(null);
+                              setRenameValue('');
+                            }}
+                            data-testid={`button-cancel-rename-${chat.id}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        // Normal mode
+                        <>
+                          <button
+                            onClick={() => setSelectedChatId(chat.id)}
+                            className="flex items-center gap-2 text-left w-full"
+                          >
+                            {chat.isApprovalThread ? (
+                              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                            ) : (
+                              <MessageSquare className="w-4 h-4 flex-shrink-0" />
+                            )}
+                            <span className="font-medium truncate flex-1">{chat.title}</span>
+                            {chat.status === 'archived' && (
+                              <Archive className="w-3 h-3 flex-shrink-0" />
+                            )}
+                            {!chat.isApprovalThread && chat.status === 'active' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className={cn(
+                                  "h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity",
+                                  selectedChatId === chat.id && "text-primary-foreground hover:text-primary-foreground"
+                                )}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRenamingChatId(chat.id);
+                                  setRenameValue(chat.title);
+                                }}
+                                data-testid={`button-edit-chat-${chat.id}`}
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </button>
+                          <span className={cn(
+                            "text-xs",
+                            selectedChatId === chat.id ? "opacity-90" : "text-muted-foreground"
+                          )}>
+                            {chat.messageCount} message{chat.messageCount !== 1 ? 's' : ''} • {new Date(chat.lastMessageAt).toLocaleDateString()}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   ))
                 )}
               </div>
