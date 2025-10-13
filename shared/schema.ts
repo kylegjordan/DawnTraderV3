@@ -542,6 +542,20 @@ export const dailyBriefs = pgTable("daily_briefs", {
 
 // ===== WALTER AI ASSISTANT TABLES =====
 
+// Walter chats (multi-chat session management)
+export const walterChats = pgTable("walter_chats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  title: text("title").default("New Chat"), // Chat session title
+  status: walterChatStatusEnum("status").default("active"),
+  isApprovalThread: boolean("is_approval_thread").default(false), // True if auto-created for approval
+  approvalId: varchar("approval_id"), // Added without reference to avoid circular inference
+  messageCount: integer("message_count").default(0), // Total messages in session
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+});
+
 // Walter pending approvals (tracks parameter changes requiring approval)
 export const walterPendingApprovals = pgTable("walter_pending_approvals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -559,26 +573,7 @@ export const walterPendingApprovals = pgTable("walter_pending_approvals", {
   rejectedAt: timestamp("rejected_at", { withTimezone: true }),
   approvedBy: varchar("approved_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-}, (table) => ({
-  userStatusIdx: index("walter_pending_approvals_user_status_idx").on(table.userId, table.status),
-}));
-
-// Walter chats (multi-chat session management)
-export const walterChats = pgTable("walter_chats", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  title: text("title").default("New Chat"), // Chat session title
-  status: walterChatStatusEnum("status").default("active"),
-  isApprovalThread: boolean("is_approval_thread").default(false), // True if auto-created for approval
-  approvalId: varchar("approval_id").references(() => walterPendingApprovals.id), // Links to approval if applicable
-  messageCount: integer("message_count").default(0), // Total messages in session
-  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  archivedAt: timestamp("archived_at", { withTimezone: true }),
-}, (table) => ({
-  userStatusIdx: index("walter_chats_user_status_idx").on(table.userId, table.status),
-  lastMessageIdx: index("walter_chats_last_message_idx").on(table.lastMessageAt),
-}));
+});
 
 // Walter chat logs (all messages and interactions)
 export const walterChatLogs = pgTable("walter_chat_logs", {
