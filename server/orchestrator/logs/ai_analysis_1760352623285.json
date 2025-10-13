@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-13T10:50:23.284Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is high, especially over the last 15 minutes (13.7), which is close to or exceeding the number of CPU cores (8)."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has not generated any learning cycles, opportunities, or adjustments, indicating potential issues with AI functionality."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show no active trades, no profit/loss, and a win rate of 0, which could indicate issues with trading strategies or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider optimizing or scaling the system to handle CPU load more efficiently, potentially by adding more CPU resources or optimizing current processes."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Investigate and enhance AI learning cycles and opportunity generation to improve trading strategy effectiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially adjust trading strategies to ensure they are aligned with current market conditions and capable of generating trades."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Increase CPU resources or optimize processes to reduce load average.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Diagnose and resolve issues with the AI system to ensure it is functioning correctly.",
+      "rationale": "AI inactivity suggests a malfunction or misconfiguration, which could hinder trading strategy performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Evaluate and adjust trading strategies to ensure they are effective in the current market environment.",
+      "rationale": "No active trades and a win rate of 0 indicate that current strategies may not be effective, potentially impacting profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}
