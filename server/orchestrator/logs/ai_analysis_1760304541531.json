@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-12T21:29:01.531Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (12.43, 14.47, 13.72) for an 8-core system, indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, average confidence, opportunities generated, or adjustments made, suggesting it may not be functioning as expected."
+    },
+    {
+      "severity": "low",
+      "message": "Trading metrics show zero active trades, total profit/loss, win rate, and ROI, which may indicate a lack of trading activity or issues with strategy execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart or reconfigure AI systems to ensure they are operational and contributing to trading strategies."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Evaluate trading strategies and market conditions to ensure strategies are aligned with current market trends and are being executed properly."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and address processes causing high load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Perform diagnostics on the AI system to determine why it is not generating learning cycles or opportunities.",
+      "rationale": "Ensuring the AI system is functional is crucial for leveraging automated insights and improving trading outcomes."
+    },
+    {
+      "urgencyLevel": "low",
+      "action": "Review the current trading strategies and market conditions to ensure strategies are appropriate and effective.",
+      "rationale": "Aligning strategies with market conditions can improve trading performance and profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}

@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-12T14:49:02.032Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all time intervals (1, 5, 15 minutes), indicating potential overutilization or a bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system metrics show no recent learning cycles, zero average confidence, and no opportunities generated, suggesting a potential malfunction or misconfiguration."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics indicate zero active trades and zero total profit/loss, which could imply a lack of trading activity or issues with strategy execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by reviewing running processes and identifying any that can be optimized or offloaded."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI system configuration and logs to ensure it is functioning correctly and capable of generating trading opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the performance and configuration of active trading strategies to ensure they are operating as expected."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough analysis of CPU-intensive processes and consider scaling resources or optimizing code to reduce load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Perform a diagnostic check on the AI system to identify and resolve any issues preventing it from learning and generating opportunities.",
+      "rationale": "The AI system is not contributing to trading decisions, which may affect the platform's competitiveness and profitability."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Audit the trading strategies to ensure they are correctly implemented and aligned with market conditions.",
+      "rationale": "Zero active trades and profit/loss indicate potential issues with strategy execution or market engagement."
+    }
+  ],
+  "urgencyLevel": "high"
+}

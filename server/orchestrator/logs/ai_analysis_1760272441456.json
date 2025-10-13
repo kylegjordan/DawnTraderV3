@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-12T12:34:01.456Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load averages are significantly high (9.99, 10.98, 12.89) for an 8-core system, indicating potential overloading or inefficiency."
+    },
+    {
+      "severity": "medium",
+      "message": "No recent learning cycles, average confidence, opportunities generated, or adjustments made by the AI, suggesting the AI component might not be functioning as expected."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show no active trades, zero total profit/loss, and zero ROI, indicating potential issues with trading strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate and potentially update AI models or strategies to ensure they are actively learning and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and adjust trading strategies to improve engagement and profitability."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve the root cause.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Assess the AI system's configuration and logs to determine why it is not generating opportunities or learning.",
+      "rationale": "Ensuring the AI is functioning correctly is crucial for maintaining competitive trading strategies."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze current trading strategies and market conditions to identify reasons for zero active trades and adjust strategies accordingly.",
+      "rationale": "Improving trading strategy effectiveness is essential for achieving profitability and maintaining platform activity."
+    }
+  ],
+  "urgencyLevel": "high"
+}

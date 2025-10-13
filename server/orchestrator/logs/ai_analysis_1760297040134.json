@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-12T19:24:00.134Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load averages (10.32, 12.09, 12.61) are significantly higher than the number of cores (8), indicating potential CPU bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero total profit/loss, zero active trades, and zero ROI, indicating potential issues with trading activity or strategy effectiveness."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent performance degradation."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI strategies to ensure they are generating opportunities and learning effectively."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate trading strategies and their parameters to improve trading activity and performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Address CPU bottleneck by analyzing running processes and optimizing or scaling resources.",
+      "rationale": "High CPU load can lead to system instability and affect trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Diagnose and resolve issues with the AI module to ensure it is learning and generating opportunities.",
+      "rationale": "AI inactivity can lead to missed trading opportunities and reduced platform effectiveness."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Review and adjust trading strategies to ensure they are aligned with current market conditions.",
+      "rationale": "Zero trading activity and performance metrics suggest strategies may not be effective."
+    }
+  ],
+  "urgencyLevel": "high"
+}
