@@ -1,0 +1,89 @@
+🧠 Instruction for Replit — Increase Walter Memory Limit, Add Smart Aging, and Post-Ingestion Summary
+
+Instruction Title:
+🔧 Upgrade Walter Memory System — Expand Capacity, Add Smart Aging, and Add Confirmation Summary
+
+Instruction Body (copy and paste into Replit):
+
+Please enhance Walter’s memory management system by performing the following updates within server/services/walter-memory.ts and related files where necessary:
+
+Objective
+
+Improve Walter’s learning and memory system so he can retain more knowledge from ingestion, prioritize important information, and confirm how many items he has successfully learned after each ingestion cycle.
+
+Tasks
+
+Increase Walter’s Memory Limit
+
+Locate the current setting that defines Walter’s memory capacity (currently limited to 500 items).
+
+Increase this capacity to 1,500 to allow Walter to retain a broader range of learned content from training and ingestion.
+
+Ensure this limit applies consistently across all relevant services that reference Walter’s memory configuration.
+
+Add Smart Aging Mechanism
+
+Implement an intelligent aging process that keeps Walter’s most relevant and recent memories when the memory limit is reached.
+
+This system should:
+
+Prioritize retaining the most important or frequently referenced knowledge.
+
+Gradually remove older or less relevant items when necessary.
+
+Log a message in the console if pruning occurs (e.g., indicating that the limit was reached and older entries were trimmed).
+
+The process must run automatically in the background without interrupting active learning or responses.
+
+Add Post-Ingestion Confirmation Summary
+
+After Walter completes a learning or ingestion session, display a confirmation message in the console that states how many total memories were successfully retained.
+
+The message should clearly indicate completion and show the final total count (for example: “Walter learning complete — total retained memories: X”).
+
+This confirmation ensures visibility into the learning progress and verifies that the increased memory limit is functioning correctly.
+
+Preserve Compatibility
+
+Maintain all existing functionality and data structures related to Walter’s memory system.
+
+Ensure that no changes break the existing learning, summarization, or chat features.
+
+Validate that Walter’s responses and memory retrieval remain stable under the new configuration.
+
+Testing and Verification
+
+Restart the system and verify successful compilation with no errors.
+
+Run a new ingestion test using the training files located in docs/training/Walter_Learning_Files.
+
+Confirm that:
+
+Walter processes all files without reaching a hard memory cap.
+
+Smart aging activates only when the memory pool exceeds 1,500 items.
+
+A confirmation message appears at the end of ingestion with the total retained memory count.
+
+Document results and confirm that performance remains stable.
+
+Deliverable
+
+Provide a confirmation message in the Replit log stating:
+
+✅ Walter memory limit increased to 1500, smart aging enabled, and confirmation summary added.
+
+Expected Outcome
+
+After this task:
+
+Walter can now retain up to 1,500 pieces of knowledge during ingestion and ongoing learning.
+
+Older or lower-priority data is automatically pruned only when needed.
+
+Each learning session ends with a clear confirmation of how much Walter successfully retained.
+
+The system remains fully compatible, stable, and resource-efficient under Replit’s environment.
+
+✅ Summary:
+This enhancement ensures Walter learns more deeply, retains what matters most, and provides transparent progress updates after every ingestion cycle — all without exceeding safe memory limits.

@@ -273,13 +273,14 @@ export async function pruneOldMemories(
 }
 
 /**
- * Enforce memory limit for user (Phase 5.5 Task 7)
- * Deletes oldest, least important memories when limit is exceeded
+ * Enforce memory limit for user (Phase 5.5 Task 7, Enhanced Phase 6.3)
+ * Smart aging: Deletes oldest, least important memories when limit is exceeded
+ * Prioritizes keeping recent and high-importance memories
  */
 async function enforceMemoryLimit(userId: string): Promise<void> {
-  // Get user settings
+  // Get user settings with NEW DEFAULT: 1,500 memories (Phase 6.3)
   const settings = await storage.getTradingSettings(userId);
-  const memoryLimit = (settings as any)?.walterMemoryLimit ?? 500;
+  const memoryLimit = (settings as any)?.walterMemoryLimit ?? 1500;
   
   // -1 means unlimited
   if (memoryLimit === -1) {
@@ -297,24 +298,38 @@ async function enforceMemoryLimit(userId: string): Promise<void> {
   // Calculate how many to delete
   const toDelete = memories.length - memoryLimit;
   
-  // Sort by importance (ASC) then timestamp (ASC) - delete least important and oldest first
-  const sorted = [...memories].sort((a, b) => {
-    if (a.importance !== b.importance) {
-      return a.importance - b.importance;
-    }
-    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-    return timeA - timeB;
+  // SMART AGING (Phase 6.3): Calculate aging score for each memory
+  // Score = (importance * 20) + (age_factor * 10)
+  // Higher score = keep, Lower score = delete
+  const now = Date.now();
+  const MAX_AGE_DAYS = 365; // 1 year reference
+  
+  const scoredMemories = memories.map((memory) => {
+    const age = memory.timestamp 
+      ? (now - new Date(memory.timestamp).getTime()) / (1000 * 60 * 60 * 24) 
+      : MAX_AGE_DAYS;
+    
+    // Newer memories get higher age factor (0-10)
+    const ageFactor = Math.max(0, 10 - (age / MAX_AGE_DAYS * 10));
+    
+    // Importance contributes more weight than age
+    const score = (memory.importance * 20) + (ageFactor * 10);
+    
+    return { memory, score, age };
   });
   
-  // Delete oldest/least important memories
-  const toDeleteMemories = sorted.slice(0, toDelete);
+  // Sort by score (ASC) - lowest scores get deleted first
+  scoredMemories.sort((a, b) => a.score - b.score);
   
-  for (const memory of toDeleteMemories) {
-    await storage.deleteWalterMemory(memory.id);
+  // Delete lowest-scored memories
+  const toDeleteMemories = scoredMemories.slice(0, toDelete);
+  
+  for (const item of toDeleteMemories) {
+    await storage.deleteWalterMemory(item.memory.id);
   }
   
-  console.log(`🗑️ Memory limit enforced: deleted ${toDelete} oldest/least important memories (limit: ${memoryLimit})`);
+  console.log(`🧠 Smart aging activated: removed ${toDelete} lower-priority memories (limit: ${memoryLimit})`);
+  console.log(`   Retained: ${memories.length - toDelete} memories (prioritized by importance and recency)`);
   
   // Dashboard notification for memory limit enforcement (Phase 5.5 Task 8)
   const AlertsService = (await import('./alerts-service')).default;
@@ -325,8 +340,8 @@ async function enforceMemoryLimit(userId: string): Promise<void> {
     userId,
     mode,
     alertType: 'walter_memory_limit',
-    severity: 'warning',
-    message: `Memory limit reached: ${toDelete} low-priority memories archived to maintain ${memoryLimit} memory limit.`,
-    metadata: { deleted: toDelete, limit: memoryLimit }
+    severity: 'info',
+    message: `Smart aging activated: ${toDelete} lower-priority memories pruned to maintain ${memoryLimit} memory limit.`,
+    metadata: { deleted: toDelete, limit: memoryLimit, retained: memories.length - toDelete }
   }).catch(err => console.error('[Walter Memory] Limit alert creation failed:', err));
 }
