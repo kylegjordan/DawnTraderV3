@@ -55,6 +55,15 @@ PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, stores user dat
   - **Services**: `walter-reference-tracker.ts`, `walter-personality.ts`, `walter-response-templates.ts`, `walter-feedback.ts`, `walter-adaptive-heuristics.ts` integrated into `walter-response.ts` orchestrator.
   - **Data Persistence**: Feedback/preferences logged to `ai_transparency_log` with taskName prefixes (`walter_feedback_*`, `walter_preference_update`). Preferences inferred from 30-day feedback window.
   - **Testing**: Comprehensive playwright test suite validates all conversational intelligence features (reference resolution, tone adaptation, feedback recognition, preference acknowledgment).
+- **Phase 6.3: Chat Intelligence & Continuous Learning Infrastructure (October 2025)**: Enhanced Walter's learning capabilities with file-based logging, text-to-speech, and knowledge ingestion:
+  - **Chat Logging System**: File-based conversation logging via `chat-logging.ts` middleware captures all user-Walter interactions to daily log files (`/logs/chats/chat_log_YYYY-MM-DD.json`). Maintains centralized chat index (`/logs/chat_index.json`) tracking all chat sessions, creation timestamps, message counts, and rename events.
+  - **Chat Summarization Pipeline**: Enhanced chat lifecycle management with dual-storage summarization - summaries saved to both database metadata and file system (`/logs/chat_summaries/summary_{chat_id}.json`). Auto-triggers on chat archive for knowledge preservation and future learning.
+  - **Chat Rename Feature**: Inline chat renaming UI with hover-reveal edit button, keyboard shortcuts (Enter to save, Escape to cancel), and automatic synchronization between database and chat index file. Rename events logged as system messages for audit trail.
+  - **Text-to-Speech (TTS)**: OpenAI TTS API integration via `/api/walter/tts` endpoint. Supports 6 voices (alloy, echo, fable, onyx, nova, shimmer), streaming MP3 audio output, cost tracking via response headers, and automatic chunking for long text (4096 char limit per request).
+  - **Learning File Ingestion**: Knowledge upload pipeline (`walter-ingest.ts`) accepts JSON, TXT, MD, and ZIP files via `/api/walter/ingest` endpoint. Automatically processes files into semantic memories with importance scoring, metadata preservation, and ingestion logging to `/logs/ingest_log.json` (bounded to last 100 entries).
+  - **Bug Fixes**: Resolved archive timestamp conversion error (ISO string to Date object coercion in backend PATCH handler). Enhanced multer error handling for file uploads with clear field name expectations.
+  - **File Structure**: `/logs/chats/` for daily conversation logs, `/logs/chat_summaries/` for session summaries, `/logs/ingest_log.json` for learning file history.
+  - **Testing**: End-to-end playwright validation of all features (chat rename, archive, TTS audio generation, file ingestion with memory creation).
 
 ## Operational Runbooks
 
