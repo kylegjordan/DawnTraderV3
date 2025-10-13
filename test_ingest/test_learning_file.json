@@ -1,0 +1,22 @@
+{
+  "memories": [
+    {
+      "type": "lesson",
+      "content": "Phase 6.3 memory enhancements: Increased capacity to 1,500 memories with smart aging using composite scoring (importance × 20 + age_factor × 10)",
+      "importance": 5,
+      "metadata": {"source": "system_upgrade", "phase": "6.3"}
+    },
+    {
+      "type": "lesson",
+      "content": "Smart aging automatically prunes lower-priority memories when limit is reached, prioritizing recent and high-importance knowledge",
+      "importance": 4,
+      "metadata": {"source": "system_upgrade", "phase": "6.3"}
+    },
+    {
+      "type": "lesson",
+      "content": "Post-ingestion confirmation summary displays total retained memories, average importance, type breakdown, and importance distribution",
+      "importance": 4,
+      "metadata": {"source": "system_upgrade", "phase": "6.3"}
+    }
+  ]
+}
