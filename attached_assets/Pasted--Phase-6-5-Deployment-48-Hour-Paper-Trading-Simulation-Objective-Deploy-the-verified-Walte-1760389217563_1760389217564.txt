@@ -1,0 +1,162 @@
+🧭 Phase 6.5 — Deployment & 48-Hour Paper Trading Simulation
+🎯 Objective
+
+Deploy the verified Walter system to a production runtime, connect the paper-trading engine, and run a continuous 48-hour simulation beginning with a portfolio balance of $800.
+
+🧩 Replit Instruction Set
+
+Title: Deploy Walter for Paper Trading Simulation
+
+Instructions (to paste into Replit):
+
+✅ Step 1 — Prepare Deployment
+
+Confirm Phase 6.4 completion (no active background processes).
+
+In the Replit command area, enter:
+
+pnpm build
+
+
+(This builds the production bundle.)
+
+Verify that the Start application command runs without errors:
+
+pnpm start
+
+
+✅ Step 2 — Activate Production Mode
+
+In replit.nix or .env, ensure these lines exist (or ask Replit to add them):
+
+NODE_ENV=production
+PAPER_TRADING_ENABLED=true
+STARTING_BALANCE_USD=800
+TRADING_MODE=paper
+TRADE_LOG_DIR=/logs/trading_sessions
+
+
+Ask Replit to confirm that these environment variables were applied successfully.
+
+✅ Step 3 — Launch Walter Paper-Trading Process
+
+In Replit’s console, execute:
+
+pnpm run start:paper
+
+
+This command tells Walter to:
+
+Load $800 as initial virtual balance.
+
+Begin simulated trading against live market feeds (Kraken, Binance, etc.).
+
+Log every trade, order, and balance update to:
+
+/logs/trading_sessions/session_<timestamp>.json
+
+
+Generate rolling summaries every 6 hours under:
+
+/logs/trading_summaries/
+
+
+✅ Step 4 — Performance & Monitoring
+
+Replit should confirm that logs are being created in /logs/trading_sessions/.
+
+Each summary file will include:
+
+Total trades executed
+
+Current balance
+
+Win / loss ratio
+
+Drawdown %
+
+24 h performance delta
+
+Replit will display console updates every 10 minutes showing:
+
+[Walter Paper Trade] Balance: $xxx.xx  Open Positions: n  PnL: +/- %
+
+
+✅ Step 5 — End-of-Test Report (after 48 hours)
+
+At the end of 48 hours, Replit automatically generates:
+
+/logs/paper_trading_48hr_summary.json
+
+
+The report includes:
+
+Starting balance ($800)
+
+Ending balance ($ xxx.xx)
+
+Net % change
+
+Total trades executed
+
+AI decision accuracy and behavioral consistency
+
+The report is also summarized into:
+
+/logs/daily_analysis/ (automatic)
+
+Walter’s internal knowledge base for post-test analysis.
+
+✅ Step 6 — Manual Stop (if needed)
+If you want to end the simulation early:
+
+ps aux | grep paper
+kill <ID_of_paper_process>
+
+
+Replit will log the final balance and write a partial summary to:
+/logs/paper_trading_interrupted.json
+
+✅ Step 7 — Post-Simulation Preparation
+After the 48-hour test:
+
+Verify the results in /logs/paper_trading_48hr_summary.json.
+
+Walter will automatically analyze the session and generate:
+
+/logs/ai_analysis/ai_trading_behavior_summary.json
+
+
+Once you confirm accuracy and stability, we’ll proceed to Phase 6.6 (live-mode readiness).
+
+📊 Expected Outputs
+
+✅ Walter active and trading continuously for 48 hours
+
+💰 Initial balance = $800 (virtual)
+
+🧠 AI behavior and decision tracking enabled
+
+📂 Comprehensive logs under /logs/trading_sessions/ and /logs/trading_summaries/
+
+🧾 Automatic 48-hour performance report generated
+
+💡 Optional Enhancements (after deployment)
+
+Enable Telegram or email notifications for profit/loss thresholds.
+
+Add chart visualization for balance and PnL over time (Replit already added zoom/pan support).
+
+Allow Walter to pause paper trading automatically if drawdown exceeds a set limit.
+
+✅ Completion Criteria
+
+Phase 6.5 is considered successful when:
+
+Walter runs for 48 hours without crashes or trade stalls.
+
+All logs and reports are generated automatically.
+
+Ending balance and PnL data are visible in the dashboard.
+
+Walter’s AI analysis summary is stored and verifiable.
