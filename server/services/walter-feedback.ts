@@ -150,9 +150,10 @@ export async function logFeedback(
   try {
     await storage.createTransparencyLog({
       userId,
-      category: 'walter_feedback',
-      action: `feedback_${feedback.sentiment}`,
-      details: {
+      taskName: `walter_feedback_${feedback.sentiment}`,
+      success: true,
+      resultSummary: `User provided ${feedback.sentiment} feedback (confidence: ${feedback.confidence})`,
+      notes: JSON.stringify({
         chatId,
         sentiment: feedback.sentiment,
         confidence: feedback.confidence,
@@ -160,12 +161,8 @@ export async function logFeedback(
         userMessage: userMessage.substring(0, 200), // Truncate for storage
         assistantMessage: assistantMessage?.substring(0, 200),
         correction: feedback.correction,
-        userPreference: feedback.userPreference,
-        timestamp: new Date().toISOString()
-      },
-      impact: feedback.sentiment === 'positive' ? 'beneficial' : 
-              feedback.sentiment === 'negative' ? 'concerning' :
-              feedback.sentiment === 'correction' ? 'action_required' : 'neutral'
+        userPreference: feedback.userPreference
+      })
     });
     
     console.log(`[WalterFeedback] Logged ${feedback.sentiment} feedback (confidence: ${feedback.confidence})`);
@@ -239,20 +236,29 @@ export async function analyzeFeedbackTrends(userId: string, days: number = 7): P
     const since = new Date();
     since.setDate(since.getDate() - days);
     
-    // Get all feedback logs
+    // Get all feedback logs (filter by taskName prefix)
     const logs = await storage.getTransparencyLogs(userId, {
-      category: 'walter_feedback',
       startDate: since
     });
     
-    const positiveCount = logs.filter(l => l.action === 'feedback_positive').length;
-    const negativeCount = logs.filter(l => l.action === 'feedback_negative').length;
-    const correctionCount = logs.filter(l => l.action === 'feedback_correction').length;
+    const feedbackLogs = logs.filter(l => l.taskName?.startsWith('walter_feedback_'));
     
-    // Extract common preferences
-    const preferences = logs
-      .filter(l => l.details && (l.details as any).userPreference)
-      .map(l => (l.details as any).userPreference);
+    const positiveCount = feedbackLogs.filter(l => l.taskName === 'walter_feedback_positive').length;
+    const negativeCount = feedbackLogs.filter(l => l.taskName === 'walter_feedback_negative').length;
+    const correctionCount = feedbackLogs.filter(l => l.taskName === 'walter_feedback_correction').length;
+    
+    // Extract common preferences from notes
+    const preferences = feedbackLogs
+      .filter(l => l.notes)
+      .map(l => {
+        try {
+          const data = JSON.parse(l.notes!);
+          return data.userPreference;
+        } catch {
+          return null;
+        }
+      })
+      .filter(p => p !== null);
     
     const commonPreferences = [...new Set(preferences)]; // Unique preferences
     

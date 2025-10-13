@@ -45,6 +45,16 @@ PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, stores user dat
   - **Reports Deep Linking**: Tab-to-URL synchronization ensuring browser navigation updates both URL parameters and active tab state.
   - **User Admin Panel**: Complete CRUD operations for user management including create user, reset password, toggle admin status, accessible only to admin users.
   - **Strategies Uniformity**: All 8 strategies (VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap) use uniform StrategyCard component with full editable parameter sets, presets, and validation.
+- **Phase 6.2: Conversational Intelligence & Personality (October 2025)**: Transformed Walter into an intelligent conversational AI with human-like interaction patterns:
+  - **Reference Tracking System**: Walter understands contextual references like "that one", "the last trade", "the file I sent" by extracting and resolving entities from conversation history (trades, reports, files, dates).
+  - **Personality Framework**: Defined core personality traits (warm, concise, confident) with contextual humor and empathy. Walter adapts tone based on situation.
+  - **Adaptive Tone Engine**: Detects user emotional state from message content (frustration → empathetic; urgency → action-oriented; curiosity → educational) and adjusts response tone accordingly.
+  - **Response Templates**: Structured guidance for common scenarios (error troubleshooting, diagnostic summaries, capability explanations) ensuring consistent, helpful responses.
+  - **Feedback Recognition**: Detects user feedback sentiment (positive, negative, correction) and logs to transparency table. Walter acknowledges corrections immediately and adjusts responses.
+  - **Adaptive Heuristics**: Learns user preferences over time from feedback history (response length: short/medium/detailed; detail level: simple/balanced/technical; communication style: formal/balanced/casual; format: bullets/paragraphs/mixed). After 3+ feedbacks, Walter adapts future responses to match learned preferences.
+  - **Services**: `walter-reference-tracker.ts`, `walter-personality.ts`, `walter-response-templates.ts`, `walter-feedback.ts`, `walter-adaptive-heuristics.ts` integrated into `walter-response.ts` orchestrator.
+  - **Data Persistence**: Feedback/preferences logged to `ai_transparency_log` with taskName prefixes (`walter_feedback_*`, `walter_preference_update`). Preferences inferred from 30-day feedback window.
+  - **Testing**: Comprehensive playwright test suite validates all conversational intelligence features (reference resolution, tone adaptation, feedback recognition, preference acknowledgment).
 
 ## Operational Runbooks
 

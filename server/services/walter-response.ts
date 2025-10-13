@@ -14,6 +14,7 @@ import { referenceTracker } from './walter-reference-tracker';
 import { buildPersonalityPrompt } from './walter-personality';
 import { buildTemplateGuidance } from './walter-response-templates';
 import { detectFeedback, logFeedback, buildFeedbackAcknowledgment } from './walter-feedback';
+import { inferUserPreferences, buildAdaptiveGuidance } from './walter-adaptive-heuristics';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -66,8 +67,8 @@ export async function generateWalterResponse(
 
     console.log(`[Walter] Detected intent: ${intent} for message: "${userMessage.substring(0, 50)}..."`);
 
-    // 4. Build prompt with behavioral enhancement and feedback acknowledgment
-    const basePrompt = buildPrompt(context, userMessage, feedbackDetection);
+    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, and adaptive preferences
+    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
     // 4. Call OpenAI
@@ -166,7 +167,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
 /**
  * Build prompt with context injection including expert principles
  */
-function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any): string {
+async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string): Promise<string> {
   const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext } = context;
 
   // Format memories
@@ -195,10 +196,18 @@ function buildPrompt(context: ResponseContext, userMessage: string, feedbackDete
     ? `Previous conversation summary: ${chatSummary}`
     : 'This is a new conversation.';
 
-  // Phase 6.2: Build personality-aware prompt with response templates and feedback
+  // Phase 6.2: Build personality-aware prompt with response templates, feedback, and adaptive preferences
   const personalityGuidance = buildPersonalityPrompt(userMessage);
   const templateGuidance = buildTemplateGuidance(userMessage);
   const feedbackGuidance = feedbackDetection ? buildFeedbackAcknowledgment(feedbackDetection) : '';
+  
+  // Phase 6.2: Load learned user preferences
+  const userPreferences = userId ? await inferUserPreferences(userId) : null;
+  const adaptiveGuidance = userPreferences ? buildAdaptiveGuidance(userPreferences) : '';
+  
+  if (adaptiveGuidance && userPreferences) {
+    console.log(`[Walter] Applying learned preferences (confidence: ${Math.round(userPreferences.confidenceLevel * 100)}%)`);
+  }
 
   // Build full prompt with expert principles, reference tracking, personality, and templates (Phase 6.2)
   return `You are Walter, an AI SysAdmin Co-Pilot for a cryptocurrency day trading platform (Kraken exchange).
@@ -214,6 +223,8 @@ Your role is to:
 ${personalityGuidance}
 
 ${feedbackGuidance}
+
+${adaptiveGuidance}
 
 ${templateGuidance}
 
