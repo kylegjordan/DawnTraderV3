@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-13T16:20:22.682Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all time intervals (1, 5, and 15 minutes), indicating potential over-utilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, confidence, opportunities generated, or adjustments made, suggesting it may not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show no active trades or profit/loss activity, which is unusual for a trading platform."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation or system instability."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI systems to ensure they are actively learning and generating trading opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the trading strategies and market conditions to ensure they are aligned with current market dynamics."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve the root cause.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting the platform's reliability and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart or debug the AI system to ensure it is operational and contributing to trading decisions.",
+      "rationale": "The AI system is not performing any learning or adjustments, which may hinder the platform's ability to adapt to market changes."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review trading strategies and market conditions to ensure they are appropriate and effective.",
+      "rationale": "No active trades or profit/loss activity could indicate misalignment with market conditions or ineffective strategies."
+    }
+  ],
+  "urgencyLevel": "high"
+}

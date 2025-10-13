@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-13T14:55:19.456Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential performance bottlenecks or resource overutilization."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system has a total profit/loss of zero with no active trades and a win rate of 0%, indicating potential issues with trading strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider optimizing or scaling the CPU resources to handle the current load more efficiently."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI algorithms or data inputs to ensure the AI system is learning and generating opportunities effectively."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the active trading strategies for performance and adjust them to improve the win rate and ROI."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate and address the high CPU load immediately to prevent potential system failures or degraded performance.",
+      "rationale": "High CPU load can lead to system instability, affecting the platform's ability to process trades efficiently."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough review of the AI system to identify and fix any issues preventing it from learning and generating opportunities.",
+      "rationale": "The AI system is crucial for identifying trading opportunities and optimizing strategies; its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the current market conditions and trading strategies to identify reasons for the lack of active trades and zero win rate.",
+      "rationale": "Understanding the cause of poor trading performance is essential to adjust strategies and improve profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}

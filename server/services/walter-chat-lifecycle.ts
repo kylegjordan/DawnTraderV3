@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { storage } from '../storage';
 import { createMemory } from './walter-memory';
 import { estimateMessagesTokens, calculateCost } from '../utils/token-counter';
+import { chatLogging, type ChatSummary } from '../middleware/chat-logging';
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || ""
@@ -85,7 +86,23 @@ Keep the summary under 200 words.`;
       metadata: updatedMetadata,
     });
     
-    console.log(`✅ Chat ${chatId} summarized successfully`);
+    // Phase 6.3: Save summary to file storage
+    const chatMessages = await storage.getWalterChatLogs(chatId, 10000);
+    const summaryData: ChatSummary = {
+      chat_id: chatId,
+      chat_name: chat.title || 'Unnamed Chat',
+      message_count: chat.messageCount || 0,
+      start_time: chat.createdAt?.toISOString() || new Date().toISOString(),
+      end_time: new Date().toISOString(),
+      key_insights: [], // Could be enhanced with AI extraction
+      action_items: [], // Could be enhanced with AI extraction
+      user_preferences: [], // Could be enhanced with AI extraction
+      summary_text: summary,
+    };
+    
+    await chatLogging.saveChatSummary(summaryData);
+    
+    console.log(`✅ Chat ${chatId} summarized successfully (DB + file storage)`);
     
     // Dashboard notification for summarization (Phase 5.5 Task 8)
     const AlertsService = (await import('./alerts-service')).default;

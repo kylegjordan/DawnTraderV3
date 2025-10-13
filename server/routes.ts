@@ -20,6 +20,7 @@ import { actuationPolicyService } from "./services/actuation-policy";
 import { assetCapabilitiesService } from "./services/asset-capabilities";
 import { manageChatLifecycle, summarizeChatSession } from "./services/walter-chat-lifecycle";
 import { generateWalterResponse } from "./services/walter-response";
+import { chatLogging } from "./middleware/chat-logging";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
 import multer from "multer";
@@ -5432,6 +5433,16 @@ Please:
       if (status !== undefined) updates.status = status;
       if (archivedAt !== undefined) updates.archivedAt = archivedAt;
       
+      // Phase 6.3: Log rename event to file storage
+      if (title !== undefined && title !== chat.title) {
+        await chatLogging.renameChatInIndex(
+          id,
+          chat.title || 'Unnamed Chat',
+          title,
+          userId
+        );
+      }
+      
       const updated = await storage.updateWalterChat(id, updates);
       
       console.log(`[Walter] Updated chat ${id}: ${JSON.stringify(updates)}`);
@@ -5479,6 +5490,16 @@ Please:
         content: content.trim(),
       });
       
+      // Phase 6.3: Log user message to file
+      await chatLogging.logMessage({
+        chat_id: id,
+        chat_name: chat.title || 'New Chat',
+        timestamp: new Date().toISOString(),
+        user_id: userId,
+        message_type: 'user',
+        content: content.trim(),
+      });
+      
       // Generate AI response with purpose + memory context (Phase 5.6)
       const aiResponse = await generateWalterResponse(userId, id, content.trim());
       
@@ -5486,6 +5507,16 @@ Please:
         chatSessionId: id,
         userId,
         role: 'assistant',
+        content: aiResponse,
+      });
+      
+      // Phase 6.3: Log Walter response to file
+      await chatLogging.logMessage({
+        chat_id: id,
+        chat_name: chat.title || 'New Chat',
+        timestamp: new Date().toISOString(),
+        user_id: userId,
+        message_type: 'walter',
         content: aiResponse,
       });
       
