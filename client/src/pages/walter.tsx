@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Bot, Send, User, Mic, MicOff, Loader2, MessageSquare, 
-  Plus, Archive, Search, Filter, Check, X, AlertCircle 
+  Plus, Archive, Search, Filter, Check, X, AlertCircle, Paperclip, Upload 
 } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -71,8 +71,11 @@ export default function WalterPage() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'archived' | 'approvals'>('all');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast} = useToast();
   const { isRecording, startRecording, stopRecording, audioBlob, error: recorderError } = useAudioRecorder();
 
   // Fetch all Walter chats
@@ -306,6 +309,86 @@ export default function WalterPage() {
       });
     }
   });
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'text/csv',
+      'text/plain',
+      'application/json'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload PDF, Word, Image, CSV, or Text files only.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Maximum file size is 10MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSelectedFile(file);
+    setIsUploadingFile(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (selectedChatId) {
+        formData.append('chatSessionId', selectedChatId);
+      }
+
+      const response = await fetch('/api/walter/analyze-file', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Upload failed');
+
+      const data = await response.json();
+      
+      setInputMessage(data.summary || `Uploaded: ${file.name}`);
+      toast({
+        title: "File Analyzed",
+        description: data.summary ? "File content analyzed successfully" : "File uploaded successfully"
+      });
+    } catch (error) {
+      toast({
+        title: "Upload Failed",
+        description: "Could not analyze file. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUploadingFile(false);
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   const handleSend = () => {
     const trimmedMessage = inputMessage.trim();
@@ -614,6 +697,15 @@ export default function WalterPage() {
                 </div>
               )}
               
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.csv,.txt,.json"
+                onChange={handleFileSelect}
+                className="hidden"
+                data-testid="input-file-upload"
+              />
+              
               <div className="flex gap-2">
                 <Textarea
                   value={inputMessage}
@@ -621,22 +713,46 @@ export default function WalterPage() {
                   onKeyPress={handleKeyPress}
                   placeholder="Ask Walter anything..."
                   className="min-h-[60px] resize-none"
-                  disabled={sendMessageMutation.isPending || isTranscribing}
+                  disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
                   data-testid="input-message"
                 />
                 
                 <div className="flex flex-col gap-2">
                   <Button
                     size="icon"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
+                    data-testid="button-upload-file"
+                    title="Upload file for analysis"
+                  >
+                    {isUploadingFile ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Paperclip className="w-5 h-5" />
+                    )}
+                  </Button>
+                  
+                  <Button
+                    size="icon"
                     variant={isRecording ? "destructive" : "outline"}
                     onClick={handleVoiceToggle}
-                    disabled={sendMessageMutation.isPending || isTranscribing}
+                    disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
                     data-testid="button-voice"
+                    className="relative"
                   >
                     {isTranscribing ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : isRecording ? (
-                      <MicOff className="w-5 h-5" />
+                      <>
+                        <MicOff className="w-5 h-5 relative z-10" />
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <span className="w-8 h-8 bg-destructive/30 rounded-full animate-ping" />
+                        </span>
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <span className="w-6 h-6 bg-destructive/50 rounded-full animate-pulse" />
+                        </span>
+                      </>
                     ) : (
                       <Mic className="w-5 h-5" />
                     )}
@@ -645,7 +761,7 @@ export default function WalterPage() {
                   <Button
                     size="icon"
                     onClick={handleSend}
-                    disabled={!inputMessage.trim() || sendMessageMutation.isPending || isTranscribing}
+                    disabled={!inputMessage.trim() || sendMessageMutation.isPending || isTranscribing || isUploadingFile}
                     data-testid="button-send"
                   >
                     <Send className="w-5 h-5" />

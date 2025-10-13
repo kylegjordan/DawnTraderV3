@@ -19,7 +19,7 @@ import type { Trade } from "@/lib/types";
 import { Link } from "wouter";
 
 export default function ReportsPage() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   
   // Parse tab from query parameter
   const params = new URLSearchParams(location.split('?')[1] || '');
@@ -114,7 +114,13 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue={tabParam || "trade-history"} className="space-y-6">
+      <Tabs 
+        value={tabParam || "trade-history"} 
+        onValueChange={(value) => {
+          navigate(`/reports?tab=${value}`);
+        }}
+        className="space-y-6"
+      >
         <TabsList className="grid w-full max-w-4xl grid-cols-4">
           <TabsTrigger value="trade-history" data-testid="tab-trade-history">Trade History</TabsTrigger>
           <TabsTrigger value="canned" data-testid="tab-canned-reports">Canned Reports</TabsTrigger>

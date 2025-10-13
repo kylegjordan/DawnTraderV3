@@ -5657,6 +5657,105 @@ Please:
     }
   });
 
+  // POST analyze uploaded file
+  const fileUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  });
+
+  app.post('/api/walter/analyze-file', authenticateToken, fileUpload.single('file'), async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const file = req.file;
+      const chatSessionId = req.body.chatSessionId;
+
+      if (!file) {
+        return res.status(400).json({ ok: false, error: 'No file uploaded' });
+      }
+
+      // Validate file type
+      const allowedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'text/csv',
+        'text/plain',
+        'application/json'
+      ];
+
+      if (!allowedTypes.includes(file.mimetype)) {
+        return res.status(400).json({ ok: false, error: 'Invalid file type. Only PDF, Word, images, CSV, and text files are supported.' });
+      }
+
+      // For text files, read content
+      let fileContent = '';
+      if (file.mimetype === 'text/plain' || file.mimetype === 'text/csv' || file.mimetype === 'application/json') {
+        fileContent = file.buffer.toString('utf-8');
+      }
+
+      // Generate summary using OpenAI (for text files)
+      let summary = `File uploaded: ${file.originalname} (${(file.size / 1024).toFixed(2)} KB)`;
+      
+      if (fileContent && process.env.OPENAI_API_KEY) {
+        try {
+          const { default: OpenAI } = await import('openai');
+          const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+          const prompt = `Analyze this file content and provide a concise summary (max 3 sentences):
+
+File: ${file.originalname}
+Type: ${file.mimetype}
+Content:
+${fileContent.slice(0, 4000)}${fileContent.length > 4000 ? '...(truncated)' : ''}
+
+Summary:`;
+
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 150,
+            temperature: 0.3,
+          });
+
+          summary = response.choices[0].message.content || summary;
+        } catch (error) {
+          console.error('[Walter] Error generating file summary:', error);
+        }
+      }
+
+      // Store file metadata in Walter chat log if chatSessionId provided
+      if (chatSessionId) {
+        await storage.createWalterChatLog({
+          chatSessionId,
+          userId,
+          role: 'system',
+          content: `File uploaded: ${file.originalname}\nType: ${file.mimetype}\nSize: ${(file.size / 1024).toFixed(2)} KB\n\nSummary: ${summary}`,
+          metadata: {
+            fileUpload: true,
+            fileName: file.originalname,
+            fileType: file.mimetype,
+            fileSize: file.size
+          }
+        });
+      }
+
+      res.json({ 
+        ok: true, 
+        summary,
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        fileSize: file.size
+      });
+    } catch (error: any) {
+      console.error('[Walter] Error analyzing file:', error);
+      res.status(500).json({ ok: false, error: error.message || 'Failed to analyze file' });
+    }
+  });
+
   // ==================== Semantic Memory API (Milestone 15) ====================
   
   // Search semantic memories by similarity

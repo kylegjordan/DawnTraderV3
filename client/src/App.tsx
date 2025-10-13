@@ -89,7 +89,7 @@ function getPageContext(location: string): string {
     '/reports': 'Reports',
     '/daily-brief': 'Daily Brief',
     '/briefings': 'Briefings',
-    '/goals-engine': 'Go Engine',
+    '/goals-engine': 'Goals Engine',
     '/systems': 'System Monitoring',
     '/ai-transparency': 'AI Transparency',
     '/settings': 'Settings',

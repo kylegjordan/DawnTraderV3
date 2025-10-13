@@ -36,6 +36,7 @@ const navigation = [
   { name: "Trading", href: "/active-trades", icon: BarChart3 },
   { name: "Briefings", href: "/briefings", icon: Newspaper },
   { name: "Goals Engine", href: "/goals-engine", icon: Target },
+  { name: "Reports", href: "/reports", icon: FileText },
   { name: "Watch List", href: "/watchlist", icon: Eye },
   { name: "Search and Analysis", href: "/search", icon: Search },
   { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
