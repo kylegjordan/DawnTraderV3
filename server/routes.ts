@@ -1467,8 +1467,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           await manager.start();
         } catch (error) {
-          // Rollback on failure
+          // Rollback on failure - clean up both manager and session
           paperPortfolioManagers.delete(userId);
+          activeSimulationSessions.delete(userId);
           throw error;
         } finally {
           paperSimOperationLocks.delete(userId);

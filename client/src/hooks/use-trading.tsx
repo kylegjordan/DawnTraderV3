@@ -23,7 +23,14 @@ export function useTrading() {
   });
 
   // Paper trading simulation status
-  const { data: paperSimStatus, isLoading: paperSimStatusLoading } = useQuery<{ isRunning: boolean }>({
+  const { data: paperSimStatus, isLoading: paperSimStatusLoading } = useQuery<{ 
+    isRunning: boolean;
+    sessionInfo?: {
+      sessionId: string;
+      startTime: Date;
+      type: '48hr' | 'manual';
+    } | null;
+  }>({
     queryKey: ['/api/paper-sim/status'],
     refetchInterval: 5000, // More frequent updates for responsive UI
     staleTime: 0, // Always consider data stale for immediate updates

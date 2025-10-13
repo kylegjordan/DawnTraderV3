@@ -35,6 +35,7 @@ export class Paper48HrSimulation {
   private startTime: Date;
   private monitoringInterval: NodeJS.Timeout | null = null;
   private summaryInterval: NodeJS.Timeout | null = null;
+  private completionTimeout: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
   
   // Configuration
@@ -66,43 +67,91 @@ export class Paper48HrSimulation {
     console.log(`Duration: 48 hours`);
     console.log(`${'='.repeat(70)}\n`);
 
-    this.isRunning = true;
+    try {
+      this.isRunning = true;
 
-    // Register this session globally so the API status endpoint can detect it
-    if (typeof (global as any).registerSimulationSession === 'function') {
-      (global as any).registerSimulationSession({
-        sessionId: this.sessionId,
-        userId: this.userId,
-        startTime: this.startTime,
-        isRunning: true,
-        type: '48hr'
-      });
-    }
+      // Register this session globally so the API status endpoint can detect it
+      if (typeof (global as any).registerSimulationSession === 'function') {
+        (global as any).registerSimulationSession({
+          sessionId: this.sessionId,
+          userId: this.userId,
+          startTime: this.startTime,
+          isRunning: true,
+          type: '48hr'
+        });
+      }
 
-    // Initialize simulation session log
-    await this.initializeSession();
+      // Initialize simulation session log
+      await this.initializeSession();
 
-    // Start execution engine and portfolio manager
-    await this.executionEngine.start();
-    await this.portfolioManager.start();
+      // Start execution engine and portfolio manager
+      await this.executionEngine.start();
+      await this.portfolioManager.start();
 
-    // Start monitoring console updates (every 10 minutes)
-    this.monitoringInterval = setInterval(async () => {
+      // Start monitoring console updates (every 10 minutes)
+      this.monitoringInterval = setInterval(async () => {
+        try {
+          await this.logConsoleUpdate();
+        } catch (error) {
+          console.error('[48HrSim] Error in monitoring interval:', error);
+        }
+      }, this.MONITOR_LOG_INTERVAL_MS);
+
+      // Start 6-hour summary generation
+      this.summaryInterval = setInterval(async () => {
+        try {
+          await this.generateRollingSummary();
+        } catch (error) {
+          console.error('[48HrSim] Error in summary interval:', error);
+        }
+      }, this.SUMMARY_INTERVAL_MS);
+
+      // Run initial console update
       await this.logConsoleUpdate();
-    }, this.MONITOR_LOG_INTERVAL_MS);
 
-    // Start 6-hour summary generation
-    this.summaryInterval = setInterval(async () => {
-      await this.generateRollingSummary();
-    }, this.SUMMARY_INTERVAL_MS);
-
-    // Run initial console update
-    await this.logConsoleUpdate();
-
-    // Schedule automatic stop after 48 hours
-    setTimeout(async () => {
-      await this.stop(true); // true = completed normally
-    }, this.SIMULATION_DURATION_MS);
+      // Schedule automatic stop after 48 hours
+      this.completionTimeout = setTimeout(async () => {
+        await this.stop(true); // true = completed normally
+      }, this.SIMULATION_DURATION_MS);
+    } catch (error) {
+      // Comprehensive cleanup on failure
+      console.error('[48HrSim] Failed to start simulation:', error);
+      this.isRunning = false;
+      
+      // Stop any partially started services
+      try {
+        await this.executionEngine.stop();
+      } catch (stopError) {
+        console.error('[48HrSim] Error stopping execution engine during cleanup:', stopError);
+      }
+      
+      try {
+        await this.portfolioManager.stop();
+      } catch (stopError) {
+        console.error('[48HrSim] Error stopping portfolio manager during cleanup:', stopError);
+      }
+      
+      // Deregister session on failure
+      if (typeof (global as any).deregisterSimulationSession === 'function') {
+        (global as any).deregisterSimulationSession(this.userId);
+      }
+      
+      // Clean up all intervals and timeouts
+      if (this.monitoringInterval) {
+        clearInterval(this.monitoringInterval);
+        this.monitoringInterval = null;
+      }
+      if (this.summaryInterval) {
+        clearInterval(this.summaryInterval);
+        this.summaryInterval = null;
+      }
+      if (this.completionTimeout) {
+        clearTimeout(this.completionTimeout);
+        this.completionTimeout = null;
+      }
+      
+      throw error; // Re-throw to notify caller
+    }
   }
 
   async stop(completed: boolean = false): Promise<void> {
@@ -121,7 +170,7 @@ export class Paper48HrSimulation {
       (global as any).deregisterSimulationSession(this.userId);
     }
 
-    // Stop intervals
+    // Stop intervals and timeouts
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
@@ -130,6 +179,11 @@ export class Paper48HrSimulation {
     if (this.summaryInterval) {
       clearInterval(this.summaryInterval);
       this.summaryInterval = null;
+    }
+
+    if (this.completionTimeout) {
+      clearTimeout(this.completionTimeout);
+      this.completionTimeout = null;
     }
 
     // Stop execution engine and portfolio manager
