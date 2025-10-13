@@ -1403,6 +1403,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const paperPortfolioManagers = new Map<string, any>();
   const paperSimOperationLocks = new Map<string, Promise<void>>();
 
+  // Global 48-hour simulation session registry
+  interface SimulationSession {
+    sessionId: string;
+    userId: string;
+    startTime: Date;
+    isRunning: boolean;
+    type: '48hr' | 'manual';
+  }
+
+  const activeSimulationSessions = new Map<string, SimulationSession>();
+
+  // Session management helpers (exported for use by Paper48HrSimulation)
+  (global as any).registerSimulationSession = (session: SimulationSession): void => {
+    activeSimulationSessions.set(session.userId, session);
+    console.log(`[SimRegistry] Registered session for user ${session.userId}: ${session.sessionId}`);
+  };
+
+  (global as any).deregisterSimulationSession = (userId: string): void => {
+    const session = activeSimulationSessions.get(userId);
+    if (session) {
+      session.isRunning = false;
+      activeSimulationSessions.delete(userId);
+      console.log(`[SimRegistry] Deregistered session for user ${userId}`);
+    }
+  };
+
+  (global as any).getActiveSession = (userId: string): SimulationSession | undefined => {
+    return activeSimulationSessions.get(userId);
+  };
+
   app.post('/api/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     
@@ -1425,6 +1455,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Reserve the slot before starting to prevent race condition
           paperPortfolioManagers.set(userId, manager);
+          
+          // Register session for status tracking
+          activeSimulationSessions.set(userId, {
+            sessionId: `manual_${Date.now()}`,
+            userId,
+            startTime: new Date(),
+            isRunning: true,
+            type: 'manual'
+          });
           
           await manager.start();
         } catch (error) {
@@ -1470,6 +1509,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           // Remove from map first to prevent new operations
           paperPortfolioManagers.delete(userId);
+          
+          // Deregister session
+          activeSimulationSessions.delete(userId);
+          
           await currentManager.stop();
         } catch (error) {
           // Only restore if no newer manager was started
@@ -1496,9 +1539,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const isRunning = paperPortfolioManagers.has(userId);
       
-      res.json({ isRunning });
+      // Check both UI-started simulations and console-started 48hr simulations
+      const hasUISimulation = paperPortfolioManagers.has(userId);
+      const activeSession = activeSimulationSessions.get(userId);
+      const has48HrSimulation = activeSession && activeSession.isRunning;
+      
+      const isRunning = hasUISimulation || has48HrSimulation;
+      
+      // Include session details if available
+      const sessionInfo = activeSession ? {
+        sessionId: activeSession.sessionId,
+        startTime: activeSession.startTime,
+        type: activeSession.type
+      } : null;
+      
+      res.json({ 
+        isRunning,
+        sessionInfo
+      });
     } catch (error) {
       console.error('Error checking paper trading status:', error);
       res.status(500).json({ error: 'Failed to check status' });

@@ -68,6 +68,17 @@ export class Paper48HrSimulation {
 
     this.isRunning = true;
 
+    // Register this session globally so the API status endpoint can detect it
+    if (typeof (global as any).registerSimulationSession === 'function') {
+      (global as any).registerSimulationSession({
+        sessionId: this.sessionId,
+        userId: this.userId,
+        startTime: this.startTime,
+        isRunning: true,
+        type: '48hr'
+      });
+    }
+
     // Initialize simulation session log
     await this.initializeSession();
 
@@ -104,6 +115,11 @@ export class Paper48HrSimulation {
     console.log(`${'='.repeat(70)}\n`);
 
     this.isRunning = false;
+
+    // Deregister this session globally
+    if (typeof (global as any).deregisterSimulationSession === 'function') {
+      (global as any).deregisterSimulationSession(this.userId);
+    }
 
     // Stop intervals
     if (this.monitoringInterval) {
