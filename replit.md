@@ -39,6 +39,12 @@ PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, stores user dat
 - **Bob Frontend Health Inspection (Phase 6.0 Addendum A)**: Extended Bob's capabilities to monitor frontend health metrics including build status, bundle size, theme integrity (HSL color validation, dark mode), component health, and UI error tracking. Prepares for future browser performance metrics (LCP, FCP, CLS, FID, TTFB).
 - **UX Reasoning Templates (Phase 6.0 Addendum A)**: Walter equipped with structured response patterns for design review, aesthetic evaluation, accessibility checks, and user flow analysis. Provides actionable UX recommendations citing UI principles and implementation details.
 - **Weekly Knowledge Refresh (Phase 6.0)**: Automated weekly scan by Bob detects new services, schema changes, and file additions. Updates Walter's knowledge base and logs findings to transparency table. Ensures Walter's technical understanding evolves with codebase changes.
+- **Phase 5.9.1 + 6.1 Finalization (October 2025)**: Completed UI/UX enhancements including:
+  - **Walter Chat Input Upgrades**: Drag & drop file upload with visual feedback (blue ring overlay), clipboard paste support for images, inline file preview with thumbnails/icons and clear button, refactored file handling (processFile/uploadFile separation).
+  - **Voice Indicator Enhancement**: Inline recording indicator within textarea with pulsing animation and "Recording..." text (ChatGPT-style positioning).
+  - **Reports Deep Linking**: Tab-to-URL synchronization ensuring browser navigation updates both URL parameters and active tab state.
+  - **User Admin Panel**: Complete CRUD operations for user management including create user, reset password, toggle admin status, accessible only to admin users.
+  - **Strategies Uniformity**: All 8 strategies (VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap) use uniform StrategyCard component with full editable parameter sets, presets, and validation.
 
 ## Operational Runbooks
 
