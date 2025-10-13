@@ -2,6 +2,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
 import { readdir, stat } from 'fs/promises';
 import { ingestLearningFile } from '../server/services/walter-ingest.js';
+import { displayIngestionSummary } from '../server/services/walter-memory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -93,14 +94,17 @@ async function bulkIngest(dirPath: string, userId: string) {
   }
   
   console.log(`\n${'='.repeat(60)}`);
-  console.log('📊 Ingestion Summary:');
+  console.log('📊 File Ingestion Summary:');
   console.log(`${'='.repeat(60)}`);
-  console.log(`Total files found:    ${stats.totalFiles}`);
+  console.log(`Total files found:      ${stats.totalFiles}`);
   console.log(`Successfully processed: ${stats.processed}`);
-  console.log(`Skipped (too large):   ${stats.skipped}`);
-  console.log(`Failed:                ${stats.failed}`);
+  console.log(`Skipped (too large):    ${stats.skipped}`);
+  console.log(`Failed:                 ${stats.failed}`);
   console.log(`Total memories created: ${stats.totalMemories}`);
   console.log(`${'='.repeat(60)}\n`);
+  
+  // Display Walter's post-ingestion confirmation summary (Phase 6.3)
+  await displayIngestionSummary(userId, 'Bulk ingestion');
 }
 
 // Parse command line arguments

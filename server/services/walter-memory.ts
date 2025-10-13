@@ -273,6 +273,38 @@ export async function pruneOldMemories(
 }
 
 /**
+ * Display post-ingestion confirmation summary (Phase 6.3)
+ * Shows total memories retained and provides learning progress visibility
+ */
+export async function displayIngestionSummary(userId: string, sessionLabel?: string): Promise<void> {
+  const stats = await getMemoryStats(userId);
+  const label = sessionLabel || 'Learning session';
+  
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`✅ ${label} complete`);
+  console.log(`${'='.repeat(70)}`);
+  console.log(`📊 Total retained memories: ${stats.totalMemories}`);
+  console.log(`📈 Average importance: ${stats.avgImportance.toFixed(2)}/5`);
+  console.log(`\n📚 Memory breakdown by type:`);
+  
+  Object.entries(stats.byType).forEach(([type, count]) => {
+    const emoji = type === 'lesson' ? '📖' : type === 'observation' ? '👁️' : 
+                  type === 'decision' ? '🎯' : type === 'result' ? '📊' : '🎯';
+    console.log(`   ${emoji} ${type}: ${count}`);
+  });
+  
+  console.log(`\n⭐ Memory distribution by importance:`);
+  Object.entries(stats.byImportance)
+    .filter(([_, count]) => count > 0)
+    .forEach(([importance, count]) => {
+      const stars = '★'.repeat(parseInt(importance));
+      console.log(`   ${stars} (${importance}): ${count} memories`);
+    });
+  
+  console.log(`${'='.repeat(70)}\n`);
+}
+
+/**
  * Enforce memory limit for user (Phase 5.5 Task 7, Enhanced Phase 6.3)
  * Smart aging: Deletes oldest, least important memories when limit is exceeded
  * Prioritizes keeping recent and high-importance memories
