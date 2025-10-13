@@ -8,13 +8,22 @@ import { systemAlerts } from '@shared/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 
+export interface ActionButton {
+  label: string;
+  action: string;
+  variant: 'default' | 'destructive' | 'outline' | 'secondary';
+  requiresConfirmation?: boolean;
+}
+
 export interface CreateAlertInput {
   userId: string;
   mode: 'live' | 'paper';
   alertType: string;
   severity: 'critical' | 'warning' | 'info';
+  category?: 'informational' | 'actionable' | 'critical';
   message: string;
   metadata?: any;
+  actionButtons?: ActionButton[];
 }
 
 export class AlertsService {
@@ -22,13 +31,27 @@ export class AlertsService {
    * Creates a new system alert
    */
   static async createAlert(input: CreateAlertInput) {
+    // Auto-categorize if not provided
+    let category = input.category;
+    if (!category) {
+      if (input.severity === 'critical') {
+        category = 'critical';
+      } else if (input.actionButtons && input.actionButtons.length > 0) {
+        category = 'actionable';
+      } else {
+        category = 'informational';
+      }
+    }
+
     const [alert] = await db.insert(systemAlerts).values({
       userId: input.userId,
       mode: input.mode,
       alertType: input.alertType,
       severity: input.severity,
+      category,
       message: input.message,
       metadata: input.metadata || {},
+      actionButtons: input.actionButtons || null,
       acknowledged: false,
     }).returning();
 

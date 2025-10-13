@@ -71,6 +71,7 @@ export default function Settings() {
     emailNotifications: (settings as any)?.emailNotifications ?? true,
     pushNotifications: (settings as any)?.pushNotifications ?? true,
     telegramNotifications: (settings as any)?.telegramNotifications ?? false,
+    showSystemAlerts: (settings as any)?.showSystemAlerts !== false, // Default true
     timezone: settings?.timezone || 'Asia/Dubai',
     walterMemoryDepth: settings?.walterMemoryDepth || 20,
     walterMemoryLimit: (settings as any)?.walterMemoryLimit ?? 500,
@@ -83,6 +84,7 @@ export default function Settings() {
         emailNotifications: (settings as any).emailNotifications ?? true,
         pushNotifications: (settings as any).pushNotifications ?? true,
         telegramNotifications: (settings as any).telegramNotifications ?? false,
+        showSystemAlerts: (settings as any).showSystemAlerts !== false,
         timezone: settings.timezone || 'Asia/Dubai',
         walterMemoryDepth: (settings as any).walterMemoryDepth || 20,
         walterMemoryLimit: (settings as any).walterMemoryLimit ?? 500,
@@ -495,6 +497,22 @@ export default function Settings() {
                   checked={generalFormData.telegramNotifications}
                   onCheckedChange={(checked) => setGeneralFormData({...generalFormData, telegramNotifications: checked})}
                   data-testid="switch-telegram-notifications"
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">System Alerts</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Show informational notifications (critical alerts always visible)
+                  </p>
+                </div>
+                <Switch
+                  checked={generalFormData.showSystemAlerts}
+                  onCheckedChange={(checked) => setGeneralFormData({...generalFormData, showSystemAlerts: checked})}
+                  data-testid="switch-system-alerts"
                 />
               </div>
 

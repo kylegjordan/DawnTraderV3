@@ -147,6 +147,9 @@ export const tradingSettings = pgTable("trading_settings", {
   aiOpportunitiesMaxPairs: integer("ai_opportunities_max_pairs").default(150), // max pairs to send to AI
   aiOpportunitiesMaxSaved: integer("ai_opportunities_max_saved").default(40), // max opportunities to save per run
   
+  // Notification Preferences
+  showSystemAlerts: boolean("show_system_alerts").default(true), // Toggle non-critical notifications
+  
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -936,8 +939,10 @@ export const systemAlerts = pgTable("system_alerts", {
   mode: tradingModeEnum("mode").notNull(),
   alertType: varchar("alert_type", { length: 50 }).notNull(),
   severity: varchar("severity", { length: 20 }).default("info"),
+  category: varchar("category", { length: 20 }).default("informational"), // 'informational', 'actionable', 'critical'
   message: text("message").notNull(),
   metadata: jsonb("metadata"),
+  actionButtons: jsonb("action_buttons"), // Array of action buttons: [{ label, action, variant }]
   acknowledged: boolean("acknowledged").default(false),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 }, (table) => ({

@@ -7312,6 +7312,53 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Handle actionable alert actions
+  app.post('/api/alerts/:id/action', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const alertId = req.params.id;
+      const { action } = req.body;
+
+      if (!action) {
+        return res.status(400).json({ error: 'Action is required' });
+      }
+
+      const AlertsService = (await import('./services/alerts-service')).default;
+      const { AlertActionHandler } = await import('./services/alert-action-handler');
+      
+      // Verify alert belongs to user
+      const [alert] = await db
+        .select()
+        .from(systemAlerts)
+        .where(
+          and(
+            eq(systemAlerts.id, alertId),
+            eq(systemAlerts.userId, userId)
+          )
+        );
+
+      if (!alert) {
+        return res.status(404).json({ error: 'Alert not found' });
+      }
+
+      // Execute the action
+      const result = await AlertActionHandler.executeAction(alert, action, userId);
+
+      // Acknowledge the alert after successful action
+      await AlertsService.acknowledgeAlert(alertId, userId);
+      
+      res.json({ 
+        ok: true, 
+        success: result.success,
+        message: result.message, 
+        data: result.data 
+      });
+    } catch (error: any) {
+      console.error('[API] Error executing alert action:', error);
+      res.status(500).json({ error: error.message || 'Failed to execute action' });
+    }
+  });
+
   // ==============================================================================
   // DIAGNOSTIC API ROUTES - Phase 5.9: Bob v2 / Walter v2
   // ==============================================================================
