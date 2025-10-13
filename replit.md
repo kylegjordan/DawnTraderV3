@@ -100,6 +100,49 @@ tsx server/paper-trading-start.ts
 - Failed: 0
 - Warnings: 2 (optional API keys: GOOGLE_CLOUD_PROJECT_ID, GOOGLE_CLOUD_PRIVATE_KEY)
 
+## Phase 6.6 Smart Notification System
+
+**Completed:** October 13, 2025
+
+### Intelligent Dashboard Alert System
+Created a comprehensive, categorized notification system with smart filtering and actionable alerts.
+
+**Implementation:**
+- Alert categorization: informational, actionable, critical
+- NotificationsPanel component for collapsible non-critical alerts
+- ActionableAlertModal component with approve/reject/retry/ignore buttons
+- AlertActionHandler service for executing user actions
+- Settings toggle for controlling informational alert visibility
+
+**Database Schema:**
+- Added `showSystemAlerts` boolean to tradingSettings table (default: true)
+- Added `category` varchar field to systemAlerts table
+- Added `actionButtons` JSONB field for action button metadata
+
+**Features:**
+- **Smart Filtering**: Critical alerts always visible; informational alerts respect user preferences
+- **Actionable Alerts**: Click to open modal with action buttons (approve, reject, retry, ignore)
+- **Alert Action Execution**: Backend handler validates and executes real state changes (parameter updates, strategy activation, kill switch resets)
+- **Mobile Responsive**: All components optimized for mobile and desktop viewports
+- **Settings Integration**: Toggle in Settings > General for controlling alert visibility
+
+**Components:**
+- `alert-utils.ts`: Categorization and filtering logic
+- `notifications-panel.tsx`: Collapsible panel for informational alerts
+- `actionable-alert-modal.tsx`: Modal with action buttons and confirmation
+- `alert-banner.tsx`: Refactored with category-based filtering
+- `alert-action-handler.ts`: Routes and executes alert actions
+
+**API Endpoints:**
+- POST /api/alerts/:id/action - Execute alert action with validation and state updates
+
+**Verification Results:**
+- ✅ E2E test passed - Login, settings toggle, alert dismissal, mobile responsiveness verified
+- ✅ Settings persistence across page refreshes confirmed
+- ✅ Alert dismissal working correctly (7→6 alerts)
+- ✅ Mobile viewport (375x667) fully functional
+- ✅ Navigation stability verified across Dashboard↔Settings
+
 ### Detailed Verification Results
 
 #### 1. System Connections ✅
