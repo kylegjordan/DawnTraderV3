@@ -1,153 +1,44 @@
 # Crypto Day Trading Web App
 
 ## Overview
-A long-only, spot-trading cryptocurrency day trading web application for Kraken. It automates VWAP Pullback, ABCD Long, and SMA Trend Ride strategies, offering real-time market scanning, disciplined risk management, and both live and paper trading capabilities. The application integrates OpenAI's GPT-5 for AI analysis, trade tracking, performance analytics, and error diagnosis, aiming to provide a comprehensive and resilient trading platform. Key features include robust execution with bracket order rollback, partial fill recovery, and a daily loss kill switch. The project aims to provide a comprehensive and resilient trading platform with continuous improvement through an autonomous learning engine, including admin access control for secure user management.
+This project is a long-only, spot-trading cryptocurrency day trading web application for Kraken. It automates advanced trading strategies (VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap) and incorporates real-time market scanning, disciplined risk management, and both live and paper trading capabilities. The application integrates OpenAI's GPT models for AI analysis, trade tracking, performance analytics, and error diagnosis. Its primary goal is to provide a comprehensive, resilient, and continuously improving trading platform with features like robust execution, bracket order rollback, partial fill recovery, a daily loss kill switch, and an autonomous learning engine, including admin access control for secure user management. The project aims for a continuous learning and self-optimizing system driven by AI.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-## Testing Credentials
-**IMPORTANT**: For all automated testing, use:
-- **Username**: `testuser123`
-- **Password**: `SecurePass123!`
-- **Login Method**: Username-based authentication (NOT email)
-- These credentials should be used consistently across all e2e tests and validation scenarios.
-
 ## System Architecture
 
 ### Frontend
-Built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS), and TanStack Query for state management. Wouter handles routing, and WebSockets provide real-time updates. The design is mobile-first, responsive, and features dynamic mode-aware UI. Key features include microphone-based voice transcription (OpenAI Whisper API), context-based persistent chat history, and a mode-aware toggle for starting/stopping trading engines with safety confirmations for live trading.
+The frontend is built with React, TypeScript, Vite, shadcn/ui (Radix UI + Tailwind CSS), and TanStack Query for state management. Wouter handles routing, and WebSockets provide real-time updates. It features a mobile-first, responsive design with dynamic mode-aware UI, microphone-based voice transcription (OpenAI Whisper API), context-based persistent chat history, and a mode-aware toggle for trading engines with safety confirmations.
 
 ### Backend
-Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`. Admin API endpoints manage users, their creation, and admin status.
+The backend utilizes Node.js with Express, ESM-based, providing a RESTful API and WebSocket support. Key services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`. Admin API endpoints manage user creation and roles.
 
 ### Data Storage
-PostgreSQL via Neon serverless driver and Drizzle ORM, supporting user data, trading settings, watchlist pairs, trades, AI reports, conversations, price data, AI opportunities, transparency logs, semantic memory (vector embeddings), and learning infrastructure.
+PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, stores user data, trading settings, watchlist pairs, trades, AI reports, conversations, price data, AI opportunities, transparency logs, semantic memory (vector embeddings), and learning infrastructure.
 
 ### System Design
-- **Trading Strategies**: Implements 8 automated strategies:
-  - **Original 3**: VWAP Pullback, ABCD Long, SMA Trend Ride
-  - **New 5**: Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap
-  - Per-strategy parameterization with 37+ tunable parameters
-  - Specialized filters: Range Detection, Stop-Zone/Liquidity Cluster detection
-  - Conflict resolution: Best-score-wins deterministic selection (weight → confidence → name)
-  - Telemetry: Signal counters, MFE/MAE tracking, per-strategy performance metrics
-  - Alert system: Strategy state changes, conflict resolution, anomaly detection
-- **Risk Management**: Multi-layered system covering risk per trade, max exposure, max open trades, slippage tolerance, order book depth validation, and a daily loss kill switch.
-- **AI Opportunities**: Hourly automated pipeline using GPT-4o mini to identify, validate, and store trading opportunities.
-- **Continuous Learning Engine (CLE)**: Monitors trading performance, detects patterns, and optimizes parameters through Paper mode experimentation and controlled Live mode deployment with safety mechanisms.
-- **Context Optimization**: Reduces AI API costs via conversation summarization and response caching.
-- **Authentication & Security**: User authentication uses username/password (or email) with bcrypt and JWT tokens, supporting WebAuthn. Admin panel enforces role-based access control.
+- **Trading Strategies**: Implements 8 automated strategies (VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap) with over 37 tunable parameters, specialized filters (Range Detection, Stop-Zone/Liquidity Cluster), and a best-score-wins conflict resolution system. Includes telemetry for signal counters, MFE/MAE tracking, and per-strategy performance metrics.
+- **Risk Management**: A multi-layered system covering risk per trade, max exposure, max open trades, slippage tolerance, order book depth validation, and a configurable daily loss kill switch.
+- **AI Opportunities**: An hourly automated pipeline using GPT-4o mini identifies, validates, and stores trading opportunities.
+- **Continuous Learning Engine (CLE)**: Monitors trading performance, detects patterns, and optimizes parameters through paper mode experimentation and controlled live deployment.
+- **Context Optimization**: Reduces AI API costs through conversation summarization and response caching.
+- **Authentication & Security**: Supports username/password (or email) with bcrypt and JWT tokens, and WebAuthn. An admin panel enforces role-based access control.
 - **Mode Isolation**: Data and functionalities are isolated between Live and Paper trading modes.
-- **AI Transparency Panel**: Provides visibility into autonomous scheduler activity, learning adjustments, semantic memory insights, and system health alerts.
-- **Semantic Memory Layer**: Vector-based knowledge recall system using pgvector and OpenAI embeddings, populated from AI lessons and conversation summaries.
-- **Intelligence Refinement Layer**: Self-optimizing Cognitive Weight Adjuster (CWA) dynamically adjusts learning source weights for continuous optimization.
-- **Autonomous Adjustments Actuation Policy**: Governs AI's autonomous adjustment of trading parameters, enforcing variable bounds, cooldowns, confidence thresholds, and daily change limits.
+- **AI Transparency Panel**: Provides insights into autonomous scheduler activity, learning adjustments, semantic memory, and system health alerts.
+- **Semantic Memory Layer**: A vector-based knowledge recall system using pgvector and OpenAI embeddings, populated from AI lessons and conversation summaries.
+- **Intelligence Refinement Layer**: Features a Self-optimizing Cognitive Weight Adjuster (CWA) for dynamic adjustment of learning source weights.
+- **Autonomous Adjustments Actuation Policy**: Governs AI's autonomous adjustment of trading parameters with variable bounds, cooldowns, confidence thresholds, and daily change limits.
 - **Historic Signal Backfilling**: Fetches multi-month historical OHLC data from Kraken for Semantic Memory.
 - **Paper Trading Simulation Engine**: Provides real-time simulated trade execution with realistic order fill logic, slippage, fees, and risk control.
-- **AI Orchestrator & Command Center**: Autonomous system monitoring with GPT-4o-powered insights and admin-controlled recommendations. Includes telemetry collection, AI analysis, a continuous learning cycle, and a human-in-the-loop recommendation workflow with admin approval. A System Audit tool provides comprehensive diagnostic snapshots.
-- **Walter - AI SysAdmin Co-Pilot**: Voice and text-based co-administrator for system configuration and optimization with a dual-control system. Features a configurable approval matrix for various actions (e.g., Start Live Trading, Adjust Goals, Modify Guardrails), stored in the `users.approval_matrix` JSONB column. Walter also includes a configurable risk evaluation system and a chat memory system with auto-summarization. **Phase 5.6 Complete**: AI-powered response generation using GPT-4o with purpose-driven behavior, persistent memory integration (top 5 high-importance memories), 8-second timeout protection via Promise.race, automatic memory extraction with importance scoring (1-5), and graceful degradation. Implemented via WalterResponseService orchestrating context gathering, prompt assembly, OpenAI API calls, and response persistence.
+- **AI Orchestrator & Command Center**: An autonomous system for monitoring and insights, powered by GPT-4o, with a continuous learning cycle and a human-in-the-loop recommendation workflow. Includes a System Audit tool for diagnostics.
+- **Walter - AI SysAdmin Co-Pilot**: A voice and text-based co-administrator for system configuration and optimization, featuring a dual-control system, configurable approval matrix for actions, a configurable risk evaluation system, and chat memory with auto-summarization. AI-powered response generation uses GPT-4o with purpose-driven behavior and persistent memory integration.
 - **System Monitoring Panel**: Provides real-time metrics, Walter activity, database health, and alert acknowledgement.
-- **Diagnostics & Auto-Analysis**: Anomaly detection and trend analysis with AI-powered diagnostic insights via `DiagnosticsAnalyzer` service and scheduled tasks.
+- **Diagnostics & Auto-Analysis**: Anomaly detection and trend analysis with AI-powered diagnostic insights via `DiagnosticsAnalyzer` service and scheduled tasks. Includes an interactive diagnostic system ("Bob Inspector Service") for autonomous code reading, log search, data consistency checks, and AI-powered patch proposals requiring human approval.
 
 ## External Dependencies
 
 - **Kraken Exchange API**: For market data, trade execution, and account management.
-- **OpenAI GPT-4o / GPT-4o mini API**: Powers AI analysis, conversational assistance, and AI Opportunities generation.
+- **OpenAI GPT-4o / GPT-4o mini API**: Powers AI analysis, conversational assistance, and AI Opportunities generation, and voice transcription (Whisper API).
 - **Neon Database**: Serverless PostgreSQL database.
 - **WebSocket Infrastructure**: Custom WebSocket server for real-time data push.
-
-## Project Status
-
-### Completed Tasks
-- **Task 6**: 8-Strategy Expansion - ✅ Complete (All strategies implemented with 37+ parameters)
-- **Task 7**: Validation Testing - ✅ Complete (Technical validation achieved: 3/8 synthetic signals, 0% false positives over 90 days, end-to-end pipeline functional. Approved 2025-10-12)
-- **Task 8**: Guardrails & Safety Validation - ✅ **COMPLETE** (100% Validated)
-  - ✅ All 7 guardrails implemented and tested: max 1 position/asset, 10% position cap, stop-loss enforcement, spot-only trading, daily loss kill switch, symbol normalization
-  - ✅ Safety telemetry infrastructure complete
-  - ✅ Test harness created with automated evidence capture
-  - ✅ 7/7 test scenarios passing (100% pass rate)
-  - ✅ Architect approved for production deployment
-  - ✅ Critical fix: Added portfolioValue to tradingSettings schema for accurate kill switch calculations
-  - ✅ All tests executed in Paper mode with timestamped evidence
-  - **Status**: Production-ready, approved for Live deployment
-- **Task 9**: Behavioral QA with Walter - ✅ **COMPLETE**
-  - ✅ Created comprehensive behavioral documentation with 10 scripted dialogues
-  - ✅ All guardrails explained in plain language (max 1 position, 10% cap, stop-loss, spot-only, kill switch, symbol normalization, exposure limits)
-  - ✅ All 8 strategies explained with simple analogies and real-world examples
-  - ✅ Risk management reassurance dialogue validates multi-layered protection
-  - ✅ Proper refusal patterns for unsafe requests (disable kill switch, enable leverage)
-  - ✅ Tone validated: Professional + Approachable + Protective + Educational
-  - ✅ All explanations verified against actual system logic (RiskManager, StrategyEngine)
-  - ✅ Zero unsafe suggestions or bypass methods
-  - **Status**: Ready for integration into Walter's AI prompts
-- **Task 10**: Behavioral Integration & Live Response Testing - ✅ **COMPLETE**
-  - ✅ Created BehavioralTemplateService with intent detection, context injection, and response validation
-  - ✅ Integrated into Walter's response pipeline (walter-response.ts)
-  - ✅ 100% intent detection accuracy (24/24 test scenarios)
-  - ✅ Real-time context injection (portfolio values, settings, trades)
-  - ✅ Safety enforcement implemented - blocks unsafe responses with fallback message
-  - ✅ Comprehensive logging system (/logs/behavioral-tests.log)
-  - ✅ Architect approved - production-ready with safety enforcement
-  - ✅ Test harness validates guardrails, strategies, risk reassurance, and safety refusals
-  - **Status**: Production-ready, all behavioral templates active in runtime
-- **Task 10.1**: Adjustable Risk Parameters in Guardrails Tab - ✅ **COMPLETE**
-  - ✅ Database: Added dailyLossKillSwitch and maxPositionPercent fields with defaults (7%, 10%)
-  - ✅ Backend: API endpoints automatically support new fields via dynamic schema
-  - ✅ Frontend: Global Risk Limits section in GuardrailsTab with tooltips and validation
-  - ✅ RiskManager: Updated to use dynamic values from settings (was hardcoded)
-  - ✅ Validation: 6/6 tests passing (100% success rate)
-  - ✅ Documentation: Comprehensive guide in docs/task-10-1-adjustable-guardrails.md
-  - **Status**: Production-ready, users can customize kill switch (%) and position cap (%)
-- **Task 5**: Weekly Expert Insights Update System - ✅ **COMPLETE**
-  - ✅ Scheduler Infrastructure: Background job running every 7 days, manual trigger available
-  - ✅ Database Integration: expert_updates table with source_name, author, insight, credibility_score, week_of
-  - ✅ 4-Week Rotating Knowledge System: Risk Management → Psychology → Market Structure → Trade Execution
-  - ✅ Duplicate Prevention: Automatic blocking of same-week re-runs
-  - ✅ Multi-Week Sustainability: Proven to generate unique insights weekly indefinitely
-  - ✅ Validation: 100% test pass - scheduler active, rotation working, data persisting correctly
-  - ✅ Walter Integration: References latest expert insights in responses
-  - **Status**: Production-ready with rotating curated insights
-  - **Future Enhancement (Task 5.1)**: Integrate live web search API for truly fresh weekly insights
-- **Task 6** (Expert Insights): Metrics & Alerts System - ✅ **COMPLETE**
-  - ✅ Expert Insights Metrics Service: Comprehensive tracking (totalInsights, topicDistribution, credibility scores, task execution stats, Walter usage stats)
-  - ✅ Health Check System: Automated status evaluation (healthy/warning/critical) with actionable issues detection
-  - ✅ Alert Integration: Task failure alerts (critical), successful updates (info), duplicate prevention (info), low credibility (warning), topic imbalance (warning)
-  - ✅ API Endpoints: `/api/diagnostics/expert-insights`, `/api/diagnostics/expert-insights/health`, enhanced `/api/diagnostics/export-report`
-  - ✅ Transparency Logging: Task execution logs with correct schema (taskName, success, mode, resultSummary, notes)
-  - ✅ Bug Fixes: Fixed pre-existing issues in metrics.ts (trade_status enum, entry_time column, error_logs table, SQL operator precedence)
-  - ✅ Validation: 100% test pass - metrics accurate, health monitoring operational, alerts triggered correctly
-  - **Status**: Production-ready with comprehensive monitoring and alerting
-- **Task 7** (Expert Insights): End-to-End Quality Testing - ✅ **COMPLETE**
-  - ✅ Expert Insights Generation: Verified 2 new insights created with correct topics (Market Structure, Risk Management)
-  - ✅ Walter Integration: Confirmed expert knowledge referenced in AI responses for risk management and psychology queries
-  - ✅ Metrics Accuracy: All data points validated (totalInsights=5, all 4 topics tracked, successRate validated, health=healthy)
-  - ✅ Alert System: Expert-related alerts operational (duplicate prevention alerts triggered with severity info)
-  - ✅ Export Report: expertInsights section included with complete data (totalInsights, topicDistribution, averageCredibilityScore)
-  - ✅ Duplicate Prevention: Same-week blocking operational with structured JSON logging and alert notifications
-  - ✅ End-to-End Pipeline: Full lifecycle validated (Generation → Storage → Retrieval → Walter Integration → Metrics → Alerts)
-  - **Status**: Production-ready with verified end-to-end functionality
-- **Task 8** (Expert Insights): Regression Testing - ✅ **COMPLETE**
-  - ✅ Authentication & User Management: Login working, user data accessible
-  - ✅ Trading Settings: All fields accessible (mode, riskPerTrade, maxExposure, dailyLossKillSwitch)
-  - ✅ Watchlist Management: CRUD operations functional
-  - ✅ Trades & History: Trade retrieval working correctly
-  - ✅ Walter Chat: Non-expert queries operational (trading mode, watchlist queries)
-  - ✅ AI Opportunities: `/api/ai/opportunities` endpoint working (200 OK with JSON array)
-  - ✅ System Alerts: All alert types accessible
-  - ✅ General Diagnostics: Export report working with complete data
-  - ✅ Database Integrity: All core tables verified, expert_updates table accessible
-  - ✅ Zero Regressions: Expert insights implementation isolated and non-breaking
-  - **Status**: Production-ready with zero impact on existing functionality
-- **Phase 5.9**: Bob v2 / Walter v2 Interactive Diagnostic & Development System - ✅ **COMPLETE**
-  - ✅ Diagnostic Infrastructure: Three trigger types (error-based, user-initiated, Walter-initiated) with priority escalation
-  - ✅ Bob Inspector Service: Autonomous code reading, log search, data consistency checks, and schema verification capabilities
-  - ✅ Walter↔Bob Communication Protocol: Structured diagnostic schema with inspection reports, findings, and patch proposals
-  - ✅ AI-Powered Patch Analyst: GPT-4o-based intelligent fix proposal generation with context-aware code suggestions
-  - ✅ Safety & Approval Layer: Human-in-the-loop approval workflow with KyleApproved flag requirement for all patches
-  - ✅ API Integration: Complete REST endpoints (/api/diagnostics/inspect, /api/diagnostics/reports, /api/diagnostics/patches, /api/diagnostics/logs)
-  - ✅ Transparency Logging: All diagnostic events logged to ai_transparency_log with full audit trail
-  - ✅ Walter's Wealth Mission: Updated core purpose configuration to guide all AI responses toward capital generation
-  - ✅ Comprehensive Testing: 9/9 tests passing (100% success rate) validating all trigger types, inspection modes, and patch proposals
-  - ✅ Server Integration: All routes properly placed within registerRoutes function, server running successfully
-  - **Status**: Production-ready with autonomous error detection and intelligent diagnostic capabilities
