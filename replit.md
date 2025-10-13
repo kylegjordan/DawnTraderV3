@@ -40,6 +40,36 @@ PostgreSQL, accessed via Neon serverless driver and Drizzle ORM, stores user dat
 - **UX Reasoning Templates (Phase 6.0 Addendum A)**: Walter equipped with structured response patterns for design review, aesthetic evaluation, accessibility checks, and user flow analysis. Provides actionable UX recommendations citing UI principles and implementation details.
 - **Weekly Knowledge Refresh (Phase 6.0)**: Automated weekly scan by Bob detects new services, schema changes, and file additions. Updates Walter's knowledge base and logs findings to transparency table. Ensures Walter's technical understanding evolves with codebase changes.
 
+## Operational Runbooks
+
+### Manual Diagnostic Operations
+
+**Trigger Bob Inspection:**
+```typescript
+// User-initiated diagnostic
+await diagnosticController.triggerUserDiagnostic(userId, 'system_state');
+await diagnosticController.triggerUserDiagnostic(userId, 'frontend_health');
+
+// Walter-initiated diagnostic  
+await diagnosticController.triggerWalterDiagnostic(userId, 'reason', 'data_consistency');
+```
+
+**Run Knowledge Refresh:**
+```typescript
+// Manual weekly knowledge refresh
+await walterKnowledgeRefresh.runWeeklyScan(userId);
+```
+
+**Search Expert Corpus:**
+```typescript
+// Query Walter's knowledge base
+const results = searchCorpus('React'); // Search across all domains
+const formatted = formatCorpusForPrompt(['Front-End Design & UX']); // Format specific domain
+```
+
+### Scheduled Tasks
+Weekly knowledge refresh can be integrated into scheduler-registry.ts following the pattern in system-health-check-task.ts.
+
 ## External Dependencies
 
 - **Kraken Exchange API**: For market data, trade execution, and account management.
