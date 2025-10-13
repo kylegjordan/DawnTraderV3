@@ -22,3 +22,35 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 -   **OpenAI GPT-4o / GPT-4o mini API**: Powers AI analysis, conversational assistance, AI Opportunities generation, and voice transcription (Whisper API).
 -   **Neon Database**: Serverless PostgreSQL database.
 -   **WebSocket Infrastructure**: Custom WebSocket server for real-time data push.
+## Recent Updates
+
+### Phase 6.7: System-Wide Paper Trading Status Synchronization
+**Completed:** October 13, 2025
+
+**Problem Solved:** Paper trading simulation status was user-specific, causing different users to see different statuses (e.g., user A sees "Active" while user B sees "Stopped").
+
+**Solution:** Refactored from user-specific to system-wide global session tracking.
+
+**Key Changes:**
+- **Architecture**: Changed from `Map<userId, session>` to single `globalSimulationSession`
+- **Manager**: Changed from `Map<userId, manager>` to single `globalPaperPortfolioManager`
+- **API Response**: Now includes `startedBy` field showing which user started the simulation
+- **Visibility**: ALL users see identical status regardless of who is logged in
+
+**Technical Details:**
+- Only ONE simulation can run at any time (system-wide constraint)
+- Session includes: sessionId, startTime, type ('48hr'|'manual'), startedBy
+- /api/paper-sim/status returns global status (same for all users)
+- Frontend polls every 5 seconds for real-time updates
+- Comprehensive error handling with global state rollback
+
+**Verification:**
+✅ E2E test passed - Multi-user cross-context synchronization confirmed
+✅ User A starts → User B sees Active
+✅ Stop from any context → all users see Stopped
+✅ Architect approved global state management
+
+**Files Modified:**
+- server/routes.ts - Global session/manager registry
+- server/services/paper-48hr-simulation.ts - Global session registration
+- client/src/hooks/use-trading.tsx - Updated TypeScript types
