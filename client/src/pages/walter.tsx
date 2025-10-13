@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Bot, Send, User, Mic, MicOff, Loader2, MessageSquare, 
-  Plus, Archive, Search, Filter, Check, X, AlertCircle, Paperclip, Upload 
+  Plus, Archive, Search, Filter, Check, X, AlertCircle, Paperclip, Upload, FileText 
 } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -72,9 +72,12 @@ export default function WalterPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'archived' | 'approvals'>('all');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputAreaRef = useRef<HTMLDivElement>(null);
   const { toast} = useToast();
   const { isRecording, startRecording, stopRecording, audioBlob, error: recorderError } = useAudioRecorder();
 
@@ -347,7 +350,11 @@ export default function WalterPage() {
       return;
     }
 
-    setSelectedFile(file);
+    processFile(file);
+  };
+
+  // Upload file to server
+  const uploadFile = async (file: File) => {
     setIsUploadingFile(true);
 
     try {
@@ -371,6 +378,7 @@ export default function WalterPage() {
       const data = await response.json();
       
       setInputMessage(data.summary || `Uploaded: ${file.name}`);
+      clearFilePreview();
       toast({
         title: "File Analyzed",
         description: data.summary ? "File content analyzed successfully" : "File uploaded successfully"
@@ -383,14 +391,19 @@ export default function WalterPage() {
       });
     } finally {
       setIsUploadingFile(false);
-      setSelectedFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
+    // If file is selected, upload it first
+    if (selectedFile) {
+      await uploadFile(selectedFile);
+      return;
+    }
+
     const trimmedMessage = inputMessage.trim();
     if (trimmedMessage && !sendMessageMutation.isPending && selectedChatId) {
       sendMessageMutation.mutate(trimmedMessage);
@@ -402,6 +415,66 @@ export default function WalterPage() {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // Handle drag & drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      processFile(files[0]);
+    }
+  };
+
+  // Handle clipboard paste
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(item => item.type.startsWith('image/'));
+    
+    if (imageItem) {
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (file) {
+        processFile(file);
+      }
+    }
+  };
+
+  // Process file for preview and upload
+  const processFile = (file: File) => {
+    setSelectedFile(file);
+    
+    // Generate preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFilePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setFilePreview(null);
+    }
+  };
+
+  // Clear file preview
+  const clearFilePreview = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
   };
 
   // Get approval data for current chat (from chat detail response, not pending approvals list)
@@ -706,16 +779,92 @@ export default function WalterPage() {
                 data-testid="input-file-upload"
               />
               
-              <div className="flex gap-2">
-                <Textarea
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Ask Walter anything..."
-                  className="min-h-[60px] resize-none"
-                  disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
-                  data-testid="input-message"
-                />
+              <div 
+                ref={inputAreaRef}
+                className={cn(
+                  "flex gap-2 relative",
+                  isDragging && "ring-2 ring-primary ring-offset-2 rounded-lg"
+                )}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {isDragging && (
+                  <div className="absolute inset-0 bg-primary/10 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+                    <p className="text-sm font-medium">Drop file to upload</p>
+                  </div>
+                )}
+
+                <div className="flex-1">
+                  {filePreview && selectedFile && (
+                    <div className="mb-2 p-2 border rounded-lg bg-muted/50 flex items-center gap-2">
+                      <img 
+                        src={filePreview} 
+                        alt={selectedFile.name} 
+                        className="w-16 h-16 object-cover rounded"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+                        <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={clearFilePreview}
+                        className="h-8 w-8"
+                        data-testid="button-clear-file"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {selectedFile && !filePreview && (
+                    <div className="mb-2 p-2 border rounded-lg bg-muted/50 flex items-center gap-2">
+                      <FileText className="w-8 h-8 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+                        <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={clearFilePreview}
+                        className="h-8 w-8"
+                        data-testid="button-clear-file"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <Textarea
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      onPaste={handlePaste}
+                      placeholder="Ask Walter anything... (drag & drop files or paste images)"
+                      className="min-h-[60px] resize-none pr-12"
+                      disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
+                      data-testid="input-message"
+                    />
+                    {isRecording && (
+                      <div className="absolute right-3 top-3 flex items-center gap-2">
+                        <div className="relative">
+                          <Mic className="w-5 h-5 text-destructive relative z-10" />
+                          <span className="absolute inset-0 flex items-center justify-center">
+                            <span className="w-8 h-8 bg-destructive/30 rounded-full animate-ping" />
+                          </span>
+                          <span className="absolute inset-0 flex items-center justify-center">
+                            <span className="w-6 h-6 bg-destructive/50 rounded-full animate-pulse" />
+                          </span>
+                        </div>
+                        <span className="text-xs text-destructive font-medium">Recording...</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
                 
                 <div className="flex flex-col gap-2">
                   <Button
