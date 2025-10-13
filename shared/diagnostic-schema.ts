@@ -13,7 +13,10 @@ export type InspectionType =
   | 'data_consistency'
   | 'schema_verification'
   | 'system_state'
-  | 'error_trace';
+  | 'error_trace'
+  | 'frontend_health'     // Phase 6.0 Addendum A
+  | 'ui_performance'       // Phase 6.0 Addendum A
+  | 'render_metrics';      // Phase 6.0 Addendum A
 
 // Severity levels for findings
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
@@ -104,4 +107,80 @@ export interface SafetyValidation {
   approvedAt?: string;
   reason?: string;
   constraints?: Record<string, any>;
+}
+
+// Frontend Health Metrics - Phase 6.0 Addendum A
+export interface FrontendHealthReport {
+  timestamp: string;
+  buildStatus: 'success' | 'failed' | 'warning';
+  bundleSize?: {
+    total: number;
+    js: number;
+    css: number;
+    assets: number;
+  };
+  renderMetrics?: {
+    lcp?: number; // Largest Contentful Paint (ms)
+    fcp?: number; // First Contentful Paint (ms)
+    cls?: number; // Cumulative Layout Shift
+    fid?: number; // First Input Delay (ms)
+    ttfb?: number; // Time to First Byte (ms)
+  };
+  uiErrors: UIError[];
+  componentHealth: {
+    registered: number;
+    failed: number;
+    warnings: string[];
+  };
+  themeIntegrity: {
+    darkModeWorking: boolean;
+    missingVariables: string[];
+    contrastIssues: string[];
+  };
+}
+
+export interface UIError {
+  timestamp: string;
+  type: 'react_error' | 'console_error' | 'network_error' | 'render_error';
+  message: string;
+  stack?: string;
+  component?: string;
+  severity: FindingSeverity;
+}
+
+// UX Analysis Request - For Walter's design review capabilities
+export interface UXAnalysisRequest {
+  requestId: string;
+  analysisType: 'design_review' | 'aesthetic_evaluation' | 'accessibility_check' | 'user_flow_analysis';
+  targetComponent?: string;
+  targetPage?: string;
+  userFeedback?: string;
+  metrics?: FrontendHealthReport;
+}
+
+// UX Analysis Response - Walter's design recommendations
+export interface UXAnalysisResponse {
+  requestId: string;
+  timestamp: string;
+  analysisType: string;
+  findings: UXFinding[];
+  recommendations: UXRecommendation[];
+  overallScore?: number; // 1-10 scale
+  summary: string;
+}
+
+export interface UXFinding {
+  category: 'layout' | 'hierarchy' | 'accessibility' | 'performance' | 'consistency' | 'feedback';
+  severity: FindingSeverity;
+  description: string;
+  location?: string;
+  userImpact: 'high' | 'medium' | 'low';
+}
+
+export interface UXRecommendation {
+  priority: 'must_fix' | 'should_improve' | 'nice_to_have';
+  category: string;
+  suggestion: string;
+  implementation?: string; // How to implement (file paths, code changes)
+  expectedBenefit: string;
 }

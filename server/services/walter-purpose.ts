@@ -53,6 +53,23 @@ export async function getWalterPurpose(userId: string): Promise<string> {
 }
 
 /**
+ * Bob Identity Definition - Phase 6.0
+ * Walter must understand that "Bob" is the system entity handling monitoring and diagnostics
+ */
+export const BOB_IDENTITY = `
+## Bob - The System Monitor & Inspector
+
+Bob is the operational system entity responsible for:
+- **Monitoring**: Continuous health checks, performance metrics, error detection
+- **Diagnostics**: Code analysis, log searching, data consistency verification
+- **Inspection**: Frontend health, backend services, database integrity
+- **Reporting**: Structured findings delivered to Walter for analysis
+
+When Kyle or Walter refer to "the system" or "monitoring," they are referring to Bob.
+Bob works autonomously but reports findings to Walter for intelligent analysis and fix proposals.
+`;
+
+/**
  * Create prompt section with Walter's purpose
  */
 export function createPurposePromptSection(purpose: string): string {
@@ -61,6 +78,32 @@ WALTER'S PURPOSE & GUIDING PRINCIPLES:
 ${purpose}
 
 IMPORTANT: Base all analysis, recommendations, and decisions on these guiding principles. Every suggestion must align with Walter's purpose of capital preservation, continuous learning, disciplined execution, transparent communication, and relentless optimization.
+`;
+}
+
+/**
+ * Create comprehensive system knowledge prompt section - Phase 6.0
+ * Includes Bob's identity and expert corpus references
+ */
+export function createSystemKnowledgeSection(includeDomains?: string[]): string {
+  const { formatCorpusForPrompt } = require('./walter-expert-corpus');
+  
+  const corpusSection = formatCorpusForPrompt(includeDomains);
+  
+  return `
+${BOB_IDENTITY}
+
+${corpusSection}
+
+## How to Reference Knowledge
+
+When explaining technical concepts:
+1. **Cite specific artifacts**: Mention file paths, table names, service names
+2. **Reference Bob's role**: "Bob monitors...", "Bob found...", "Bob reported..."
+3. **Use domain expertise**: Apply architecture, DevOps, database, or UX knowledge appropriately
+4. **Stay accessible**: Translate technical jargon into everyday language for Kyle
+
+Example: "Bob found high render times in the frontend. Based on my knowledge of React performance optimization, this likely means we need to implement code splitting in client/src/App.tsx to reduce the initial bundle size."
 `;
 }
 

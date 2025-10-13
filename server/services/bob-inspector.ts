@@ -47,6 +47,15 @@ export class BobInspector {
         case 'system_state':
           findings = await this.inspectSystemState(command);
           break;
+        case 'frontend_health':
+          findings = await this.inspectFrontendHealth(command);
+          break;
+        case 'ui_performance':
+          findings = await this.inspectUIPerformance(command);
+          break;
+        case 'render_metrics':
+          findings = await this.inspectRenderMetrics(command);
+          break;
         default:
           findings = [{
             severity: 'medium',
@@ -407,6 +416,170 @@ export class BobInspector {
         evidence: { error: error instanceof Error ? error.message : String(error) }
       });
     }
+
+    return findings;
+  }
+
+  /**
+   * Inspect frontend health (Phase 6.0 Addendum A)
+   * Checks build status, bundle size, component health, theme integrity
+   */
+  private async inspectFrontendHealth(command: BobInspectionCommand): Promise<Finding[]> {
+    const findings: Finding[] = [];
+
+    try {
+      // Check frontend build artifacts
+      try {
+        const distPath = path.join(process.cwd(), 'dist');
+        const distExists = await fs.access(distPath).then(() => true).catch(() => false);
+        
+        if (distExists) {
+          findings.push({
+            severity: 'info',
+            category: 'frontend_health',
+            description: 'Frontend build artifacts present',
+            location: { file: 'dist/' }
+          });
+        } else {
+          findings.push({
+            severity: 'low',
+            category: 'frontend_health',
+            description: 'Frontend build artifacts not found (may not be built yet)',
+            location: { file: 'dist/' },
+            suggestedAction: 'Run npm run build to generate production artifacts'
+          });
+        }
+      } catch (error) {
+        findings.push({
+          severity: 'low',
+          category: 'frontend_health',
+          description: 'Unable to check frontend build status',
+          evidence: { error: error instanceof Error ? error.message : String(error) }
+        });
+      }
+
+      // Check theme configuration
+      try {
+        const cssPath = path.join(process.cwd(), 'client/src/index.css');
+        const cssContent = await fs.readFile(cssPath, 'utf-8');
+        
+        const hslColorPattern = /hsl\(\d+,\s*[\d.]+%,\s*[\d.]+%\)/g;
+        const hslMatches = cssContent.match(hslColorPattern);
+        
+        if (hslMatches && hslMatches.length > 0) {
+          findings.push({
+            severity: 'info',
+            category: 'theme_integrity',
+            description: `Theme uses HSL color format correctly (${hslMatches.length} color variables found)`,
+            location: { file: 'client/src/index.css' }
+          });
+        }
+
+        const darkModePattern = /\.dark\s*{/g;
+        const hasDarkMode = darkModePattern.test(cssContent);
+        
+        if (hasDarkMode) {
+          findings.push({
+            severity: 'info',
+            category: 'theme_integrity',
+            description: 'Dark mode theme configuration detected',
+            location: { file: 'client/src/index.css' }
+          });
+        } else {
+          findings.push({
+            severity: 'medium',
+            category: 'theme_integrity',
+            description: 'Dark mode configuration may be incomplete',
+            location: { file: 'client/src/index.css' },
+            suggestedAction: 'Ensure .dark class styles are defined for dark mode support'
+          });
+        }
+      } catch (error) {
+        findings.push({
+          severity: 'low',
+          category: 'theme_integrity',
+          description: 'Unable to verify theme configuration',
+          evidence: { error: error instanceof Error ? error.message : String(error) }
+        });
+      }
+
+      // Check component structure
+      try {
+        const componentsPath = path.join(process.cwd(), 'client/src/components');
+        const componentFiles = await fs.readdir(componentsPath, { recursive: true });
+        const tsxFiles = componentFiles.filter(f => typeof f === 'string' && f.endsWith('.tsx'));
+        
+        findings.push({
+          severity: 'info',
+          category: 'component_health',
+          description: `${tsxFiles.length} component files registered`,
+          location: { file: 'client/src/components/' },
+          evidence: { componentCount: tsxFiles.length }
+        });
+      } catch (error) {
+        findings.push({
+          severity: 'low',
+          category: 'component_health',
+          description: 'Unable to scan component directory',
+          evidence: { error: error instanceof Error ? error.message : String(error) }
+        });
+      }
+
+    } catch (error) {
+      findings.push({
+        severity: 'medium',
+        category: 'inspection_error',
+        description: 'Frontend health inspection failed',
+        evidence: { error: error instanceof Error ? error.message : String(error) }
+      });
+    }
+
+    return findings;
+  }
+
+  /**
+   * Inspect UI performance metrics (Phase 6.0 Addendum A)
+   * Currently placeholder for future browser metric integration
+   */
+  private async inspectUIPerformance(command: BobInspectionCommand): Promise<Finding[]> {
+    const findings: Finding[] = [];
+
+    findings.push({
+      severity: 'info',
+      category: 'ui_performance',
+      description: 'UI performance monitoring is prepared for future browser metrics integration',
+      suggestedAction: 'Metrics like LCP, FCP, CLS will be collected when browser reporting is enabled'
+    });
+
+    // Future: Will integrate with browser performance APIs
+    // - Largest Contentful Paint (LCP)
+    // - First Contentful Paint (FCP)
+    // - Cumulative Layout Shift (CLS)
+    // - First Input Delay (FID)
+    // - Time to First Byte (TTFB)
+
+    return findings;
+  }
+
+  /**
+   * Inspect render metrics (Phase 6.0 Addendum A)
+   * Currently placeholder for future render performance analysis
+   */
+  private async inspectRenderMetrics(command: BobInspectionCommand): Promise<Finding[]> {
+    const findings: Finding[] = [];
+
+    findings.push({
+      severity: 'info',
+      category: 'render_metrics',
+      description: 'Render metrics inspection is prepared for future integration',
+      suggestedAction: 'Will track component render times, re-render counts, and bundle size when metrics are available'
+    });
+
+    // Future: Will analyze:
+    // - Component render performance
+    // - Bundle size and code splitting effectiveness
+    // - React error boundaries and component failures
+    // - Console errors and warnings
 
     return findings;
   }
