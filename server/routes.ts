@@ -7560,3 +7560,101 @@ function generatePnLReport(trades: any[], period: 'monthly' | 'quarterly' | 'ann
   
   return [headers.join(','), ...rows].join('\n');
 }
+
+// ==============================================================================
+// DIAGNOSTIC API ROUTES - Phase 5.9: Bob v2 / Walter v2
+// ==============================================================================
+
+// Trigger user-initiated diagnostic
+app.post('/api/diagnostics/inspect', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const { inspectionType, searchScope } = req.body;
+    
+    const { diagnosticController } = await import('./services/diagnostic-controller');
+    
+    const report = await diagnosticController.triggerUserDiagnostic(
+      userId,
+      inspectionType,
+      searchScope
+    );
+    
+    res.json({ ok: true, report });
+  } catch (error: any) {
+    console.error('[Diagnostics] User inspection failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Trigger error-based diagnostic
+app.post('/api/diagnostics/inspect-error/:errorId', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const { errorId } = req.params;
+    
+    const { diagnosticController } = await import('./services/diagnostic-controller');
+    
+    const report = await diagnosticController.triggerErrorDiagnostic(errorId, userId);
+    
+    res.json({ ok: true, report });
+  } catch (error: any) {
+    console.error('[Diagnostics] Error inspection failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Analyze inspection report and generate patch proposals
+app.post('/api/diagnostics/analyze-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const { report } = req.body;
+    
+    const { walterPatchAnalyst } = await import('./services/walter-patch-analyst');
+    
+    const proposals = await walterPatchAnalyst.analyzeAndPropose(report, userId);
+    
+    res.json({ ok: true, proposals });
+  } catch (error: any) {
+    console.error('[Diagnostics] Report analysis failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Approve or reject a patch proposal
+app.post('/api/diagnostics/patch/:proposalId/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    const { proposalId } = req.params;
+    const { approved, notes } = req.body;
+    
+    const { diagnosticController } = await import('./services/diagnostic-controller');
+    
+    await diagnosticController.approvePatchProposal(proposalId, userId, approved, notes);
+    
+    res.json({ 
+      ok: true, 
+      message: approved ? 'Patch approved successfully' : 'Patch rejected',
+      proposalId
+    });
+  } catch (error: any) {
+    console.error('[Diagnostics] Patch approval failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get diagnostic transparency logs
+app.get('/api/diagnostics/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    
+    const logs = await storage.getTransparencyLogs({ 
+      taskName: 'Diagnostic',
+      limit 
+    });
+    
+    res.json({ ok: true, logs });
+  } catch (error: any) {
+    console.error('[Diagnostics] Log fetch failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
