@@ -3,6 +3,11 @@
 ## Overview
 This project is a long-only, spot-trading cryptocurrency day trading web application for Kraken. It automates advanced trading strategies, integrates real-time market scanning, disciplined risk management, and offers both live and paper trading capabilities. The application leverages OpenAI's GPT models for AI analysis, trade tracking, performance analytics, error diagnosis, and an autonomous learning engine. Its primary goal is to provide a comprehensive, resilient, and continuously improving self-optimizing trading platform.
 
+## Test Credentials
+- Username: testuser123
+- Password: SecurePass123!
+- Note: Always use username-based login for testing (not email)
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
