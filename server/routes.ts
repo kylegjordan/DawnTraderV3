@@ -21,6 +21,9 @@ import { assetCapabilitiesService } from "./services/asset-capabilities";
 import { manageChatLifecycle, summarizeChatSession } from "./services/walter-chat-lifecycle";
 import { generateWalterResponse } from "./services/walter-response";
 import { chatLogging } from "./middleware/chat-logging";
+import { parseIntent } from "./services/intent-parser";
+import { CommandRouter } from "./services/command-router";
+import { commandLogger } from "./services/command-logger";
 import { textToSpeech, estimateTTSCost } from "./services/walter-tts";
 import { ingestLearningFile, getIngestionHistory } from "./services/walter-ingest";
 import OpenAI from "openai";
@@ -43,6 +46,10 @@ const tradingEngines = new Map<string, TradingEngine>();
 const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
 const riskManager = new RiskManager();
+const commandRouter = new CommandRouter(tradingEngines);
+
+// Phase 6.8: Store pending confirmations per user for bare "yes/no" replies
+const userPendingConfirmations = new Map<string, string>(); // userId -> confirmationId
 
 // JWT secrets for authentication
 const JWT_SECRET = process.env.JWT_SECRET || "development_secret_change_in_production";
@@ -5667,8 +5674,64 @@ Please:
         content: content.trim(),
       });
       
-      // Generate AI response with purpose + memory context (Phase 5.6)
-      const aiResponse = await generateWalterResponse(userId, id, content.trim());
+      // Phase 6.8: Parse for command intent FIRST
+      const parsedIntent = parseIntent(content.trim());
+      let aiResponse: string;
+      
+      // Get pending confirmation ID for this user FIRST
+      const pendingConfirmationId = userPendingConfirmations.get(userId);
+      
+      // Check if user is confirming a pending command (whole-word matching to avoid false positives)
+      const normalizedContent = content.trim().toLowerCase();
+      const firstWord = normalizedContent.split(/\s+/)[0].replace(/[^a-z]/g, ''); // Get first word, strip ALL punctuation
+      const isAffirmative = ['yes', 'yeah', 'yep', 'yup', 'ok', 'okay', 'confirm', 'sure'].includes(firstWord);
+      const isNegative = ['no', 'nope', 'nah', 'cancel', 'stop', 'abort'].includes(firstWord);
+      
+      if ((isAffirmative || isNegative) && pendingConfirmationId) {
+        // User is confirming/canceling a pending command
+        const confirmed = isAffirmative;
+        const result = await commandRouter.confirmCommand(pendingConfirmationId, userId, confirmed);
+        aiResponse = result.success 
+          ? `✅ ${result.message}${result.data ? '\n\n📊 Data:\n```json\n' + JSON.stringify(result.data, null, 2) + '\n```' : ''}`
+          : `❌ ${result.message}`;
+        
+        // Clear pending confirmation after processing
+        userPendingConfirmations.delete(userId);
+        
+        // Log confirmation (Phase 6.8)
+        await commandLogger.logConfirmation(userId, pendingConfirmationId, confirmed, result, req.user?.username);
+      }
+      // If user has pending confirmation but input is NOT yes/no, remind them
+      else if (pendingConfirmationId) {
+        // User has pending confirmation but didn't say yes/no - remind them
+        aiResponse = `⚠️  You have a pending confirmation. Please reply with "yes" or "no" first, or say "cancel" to clear it. Then you can issue new commands.`;
+      }
+      // If it's a command (not just conversation) and NO pending confirmation, route it
+      else if (parsedIntent.type !== 'conversation' && !pendingConfirmationId) {
+        const startTime = Date.now();
+        const result = await commandRouter.routeCommand(parsedIntent, userId);
+        const executionTimeMs = Date.now() - startTime;
+        
+        if (result.requiresConfirmation) {
+          // Store confirmation ID for this user (we already checked no pending exists)
+          if (result.confirmationId) {
+            userPendingConfirmations.set(userId, result.confirmationId);
+          }
+          aiResponse = `⚠️  ${result.confirmationMessage}\n\nReply with **"yes"** to confirm or **"no"** to cancel.`;
+        } else if (result.success) {
+          aiResponse = `✅ ${result.message}${result.warnings?.length ? '\n\n⚠️  Warnings:\n' + result.warnings.join('\n') : ''}${result.data ? '\n\n📊 Data:\n```json\n' + JSON.stringify(result.data, null, 2) + '\n```' : ''}`;
+        } else {
+          aiResponse = `❌ ${result.message}${result.errors?.length ? '\n\nErrors:\n' + result.errors.join('\n') : ''}`;
+        }
+        
+        // Log command execution (Phase 6.8)
+        await commandLogger.logCommand(userId, parsedIntent, result, req.user?.username, executionTimeMs);
+        console.log(`[Command] User ${userId} executed: ${parsedIntent.type} - ${parsedIntent.action} ${parsedIntent.entity}`, { result });
+      }
+      // Normal conversation - generate Walter response
+      else {
+        aiResponse = await generateWalterResponse(userId, id, content.trim());
+      }
       
       const assistantMessage = await storage.createWalterChatLog({
         chatSessionId: id,

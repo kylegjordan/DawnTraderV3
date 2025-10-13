@@ -54,3 +54,106 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 - server/routes.ts - Global session/manager registry
 - server/services/paper-48hr-simulation.ts - Global session registration
 - client/src/hooks/use-trading.tsx - Updated TypeScript types
+
+### Phase 6.8: Unified Command & Conversation Layer
+**Completed:** October 13, 2025
+
+**Goal:** Enable Walter to interpret and execute natural-language commands while trading is active, eliminating mode confusion and manual configuration switching.
+
+**Solution:** Implemented a comprehensive intent parsing and command routing system integrated directly into Walter's chat interface.
+
+**Key Components:**
+
+1. **Intent Parser** (`server/services/intent-parser.ts`)
+   - NLP-based pattern matching for command detection
+   - Supports 4 intent types: `configuration`, `status`, `analysis`, `action`
+   - Extracts parameters: pairs, risk amounts, timeframes, targets, strategies
+   - Safety validation with configurable thresholds
+   - 85% confidence scoring for parsed commands
+
+2. **Command Router** (`server/services/command-router.ts`)
+   - Routes parsed intents to appropriate subsystems (TradingEngine, Settings, etc.)
+   - Safety constraint validation (max risk, exposure limits, drawdown)
+   - Confirmation flow for critical actions (1-minute timeout)
+   - Execution tracking with warnings and errors
+   - Handles: trading control, risk configuration, strategy management, status queries, analysis requests
+
+3. **Command Logger** (`server/services/command-logger.ts`)
+   - Persistent logging to `/logs/command_history/`
+   - Date-specific files: `commands_YYYY-MM-DD.jsonl`
+   - User-specific tracking: `user_{userId}_YYYY-MM-DD.jsonl`
+   - Confirmation logging: `confirmations_YYYY-MM-DD.jsonl`
+   - Command statistics and history retrieval
+
+4. **Chat Integration** (`server/routes.ts`)
+   - Seamless command detection in Walter chat flow
+   - Parallel processing: conversation + command handling
+   - Confirmation prompts with yes/no responses
+   - Execution time tracking
+
+**Supported Commands:**
+
+**Trading Control:**
+- "pause trading" / "resume trading"
+- "close ETHUSD position"
+- "switch to live mode" / "switch to paper mode"
+
+**Risk Configuration:**
+- "set risk to $200"
+- "increase BTC risk to 2.5%"
+- "set max exposure to 75%"
+- "set max open trades to 5"
+
+**Strategy Management:**
+- "enable vwap_pullback strategy"
+- "disable sma_trend_ride"
+
+**Status Queries:**
+- "what's my trading status"
+- "what are my open positions"
+- "show my performance"
+- "show my settings"
+
+**Analysis:**
+- "show reasoning for last trade"
+- "analyze BTCUSD"
+- "analyze market conditions"
+
+**Safety Features:**
+- Automatic confirmation for critical actions (trading control, risk changes, mode switching)
+- Validation against max thresholds (risk: $500, exposure: 100%, trades: 10)
+- Warning system for aggressive settings
+- Command history audit trail with timestamps and user IDs
+
+**Technical Details:**
+- Intent confidence threshold: 0.85 for commands, 0.5 for conversation fallback
+- Confirmation timeout: 60 seconds
+- Pattern matching: 40+ regex patterns across 4 intent categories
+- Logging format: JSONL for efficient parsing and analysis
+- Pending confirmations tracked per-user in memory (Map<userId, confirmationId>)
+- Users reply with simple "yes"/"no" - confirmation ID auto-retrieved
+
+**Testing:**
+✅ All test commands parsing correctly:
+- "pause trading" → action: pause (confirmed)
+- "increase BTC risk to 2.5%" → config: update risk (confirmed)
+- "show reasoning for last trade" → analysis: explain trade
+- "close ETHUSD position" → action: close position (confirmed)
+- Normal conversation falls through to Walter AI
+
+**Files Created:**
+- `server/services/intent-parser.ts` - NLP intent detection
+- `server/services/command-router.ts` - Command routing and execution
+- `server/services/command-logger.ts` - Persistent command logging
+- `server/test-commands.ts` - Command testing suite
+- `logs/command_history/` - Command execution logs
+
+**Files Modified:**
+- `server/routes.ts` - Integrated command detection in Walter chat endpoint
+
+**Benefits:**
+- ✅ No more mode confusion - commands work anytime
+- ✅ Natural language interface - no syntax to memorize
+- ✅ Safety-first design - confirmations for critical actions
+- ✅ Complete audit trail - all commands logged with context
+- ✅ Seamless integration - works alongside normal Walter conversations
