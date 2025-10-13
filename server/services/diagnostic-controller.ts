@@ -18,6 +18,9 @@ import {
 } from '@shared/diagnostic-schema';
 
 export class DiagnosticController {
+  // In-memory proposals store with approval status
+  private proposals: Map<string, PatchProposal & { approved: boolean }> = new Map();
+
   /**
    * Trigger error-based diagnostic
    * Automatically triggered when system detects errors
@@ -230,6 +233,12 @@ export class DiagnosticController {
       })
     });
 
+    // Store in proposals map with approval status
+    this.proposals.set(proposal.proposalId, {
+      ...proposal,
+      approved: false
+    });
+
     return proposal;
   }
 
@@ -244,6 +253,16 @@ export class DiagnosticController {
     notes?: string
   ): Promise<void> {
     console.log(`[DiagnosticController] ${approved ? '✅' : '❌'} Patch proposal ${proposalId}: ${approved ? 'APPROVED' : 'REJECTED'}`);
+
+    // Update proposal approval status in map
+    const proposal = this.proposals.get(proposalId);
+    if (!proposal) {
+      throw new Error(`Proposal ${proposalId} not found`);
+    }
+
+    proposal.approved = approved;
+    proposal.kyleApproved = approved;
+    this.proposals.set(proposalId, proposal);
 
     await this.logDiagnosticEvent({
       eventId: uuidv4(),
@@ -279,6 +298,56 @@ export class DiagnosticController {
         notes: notes || 'No reason provided'
       });
     }
+  }
+
+  /**
+   * Get proposal by ID
+   */
+  getProposal(proposalId: string): (PatchProposal & { approved: boolean }) | undefined {
+    return this.proposals.get(proposalId);
+  }
+
+  /**
+   * Apply a patch - ENFORCES approval check
+   * This method blocks any attempt to apply unapproved patches
+   */
+  async applyPatch(proposalId: string, userId: string): Promise<void> {
+    const proposal = this.proposals.get(proposalId);
+    
+    if (!proposal) {
+      throw new Error(`Proposal ${proposalId} not found`);
+    }
+
+    // CRITICAL: Enforce approval gate
+    if (!proposal.kyleApproved || !proposal.approved) {
+      throw new Error(`BLOCKED: Patch ${proposalId} cannot be applied - Kyle approval required (kyleApproved=${proposal.kyleApproved})`);
+    }
+
+    console.log(`[DiagnosticController] 🚀 Applying approved patch ${proposalId}`);
+
+    await this.logDiagnosticEvent({
+      eventId: uuidv4(),
+      timestamp: new Date().toISOString(),
+      eventType: 'application',
+      userId,
+      component: 'controller',
+      action: 'Approved patch applied',
+      status: 'completed',
+      metadata: {
+        proposalId,
+        file: proposal.file,
+        fix: proposal.proposedFix
+      }
+    });
+
+    await storage.createTransparencyLog({
+      userId,
+      taskName: 'Diagnostic Patch Applied',
+      success: true,
+      mode: 'paper',
+      resultSummary: `Approved patch ${proposalId} successfully applied`,
+      notes: `File: ${proposal.file}, Fix: ${proposal.proposedFix}`
+    });
   }
 
   /**

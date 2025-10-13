@@ -40,6 +40,8 @@ export const dailyBriefStatusEnum = pgEnum("daily_brief_status", ["in_progress",
 export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected", "cancelled"]);
 export const walterChatStatusEnum = pgEnum("walter_chat_status", ["active", "archived"]);
 export const walterMemoryTypeEnum = pgEnum("walter_memory_type", ["observation", "decision", "result", "goal", "lesson"]);
+export const patchSeverityEnum = pgEnum("patch_severity", ["critical", "high", "medium", "low", "info"]);
+export const patchStatusEnum = pgEnum("patch_status", ["pending", "approved", "rejected", "applied"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -976,6 +978,30 @@ export const aiTransparencyLog = pgTable("ai_transparency_log", {
   taskExecutedIdx: uniqueIndex("ai_transparency_log_task_executed_idx").on(table.taskName, table.executedAt),
 }));
 
+// Phase 5.9: Diagnostic Patch Proposals (Bob/Walter fix proposals requiring approval)
+export const patchProposals = pgTable("patch_proposals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  proposalId: varchar("proposal_id", { length: 100 }).notNull().unique(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  sourceReport: varchar("source_report", { length: 100 }).notNull(),
+  file: text("file").notNull(),
+  issue: text("issue").notNull(),
+  proposedFix: text("proposed_fix").notNull(),
+  reason: text("reason").notNull(),
+  severity: patchSeverityEnum("severity").notNull(),
+  estimatedImpact: varchar("estimated_impact", { length: 50 }).notNull(),
+  testingRequired: boolean("testing_required").default(true),
+  status: patchStatusEnum("status").default("pending").notNull(),
+  kyleApproved: boolean("kyle_approved").default(false).notNull(),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  approvalNotes: text("approval_notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  proposalIdIdx: uniqueIndex("patch_proposals_proposal_id_idx").on(table.proposalId),
+  userStatusIdx: index("patch_proposals_user_status_idx").on(table.userId, table.status),
+}));
+
 // Milestone 17A: Actuation Policy Registry (defines safe bounds for AI adjustments)
 export const actuationPolicies = pgTable("actuation_policies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1603,6 +1629,13 @@ export const insertWalterMemorySchema = createInsertSchema(walterMemory).omit({
   timestamp: true,
 });
 
+export const insertPatchProposalSchema = createInsertSchema(patchProposals).omit({
+  id: true,
+  createdAt: true,
+  approvedAt: true,
+  appliedAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -1958,3 +1991,6 @@ export type WalterPurpose = typeof walterPurpose.$inferSelect;
 
 export type InsertWalterMemory = z.infer<typeof insertWalterMemorySchema>;
 export type WalterMemory = typeof walterMemory.$inferSelect;
+
+export type InsertPatchProposal = z.infer<typeof insertPatchProposalSchema>;
+export type PatchProposal = typeof patchProposals.$inferSelect;

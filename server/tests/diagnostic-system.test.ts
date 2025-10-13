@@ -21,6 +21,15 @@ async function runDiagnosticTests() {
   let testsPassed = 0;
   let testsFailed = 0;
 
+  // Get test user ID first
+  const testUser = await storage.getUserByUsername('testuser123');
+  if (!testUser) {
+    console.error('❌ Test user not found. Please ensure testuser123 exists in the database.');
+    return;
+  }
+  const testUserId = testUser.id;
+  console.log(`Using test user: ${testUser.username} (ID: ${testUserId})\n`);
+
   // Test 1: Error-based Diagnostic Trigger
   try {
     console.log('Test 1: Error-Based Diagnostic Trigger');
@@ -28,14 +37,14 @@ async function runDiagnosticTests() {
     
     // Create a test error log first
     const errorLog = await storage.createErrorLog({
-      userId: 'test-user',
+      userId: testUserId,
       errorType: 'TestError',
       errorMessage: 'Simulated error for diagnostic testing',
       errorStack: 'at test:1:1',
       context: { test: true }
     });
 
-    const report = await diagnosticController.triggerErrorDiagnostic(errorLog.id, 'test-user');
+    const report = await diagnosticController.triggerErrorDiagnostic(errorLog.id, testUserId);
     
     console.log(`✅ Error diagnostic triggered successfully`);
     console.log(`   - Report status: ${report.status}`);
@@ -61,7 +70,7 @@ async function runDiagnosticTests() {
     console.log('----------------------------------');
     
     const report = await diagnosticController.triggerUserDiagnostic(
-      'test-user',
+      testUserId,
       'system_state',
       {}
     );
@@ -90,7 +99,7 @@ async function runDiagnosticTests() {
     console.log('------------------------------------');
     
     const report = await diagnosticController.triggerWalterDiagnostic(
-      'test-user',
+      testUserId,
       'Anomaly detected in trading metrics',
       'data_consistency',
       {}
@@ -326,6 +335,98 @@ async function runDiagnosticTests() {
   } catch (error) {
     testsFailed++;
     console.error('❌ Test 9 FAILED:', error);
+    console.log('');
+  }
+
+  // Test 10: Approval Enforcement - Unapproved Patch Blocked
+  try {
+    console.log('Test 10: Approval Enforcement - Unapproved Patch Blocked');
+    console.log('--------------------------------------------------------');
+    
+    // Create a test proposal
+    const finding = {
+      severity: 'high' as const,
+      category: 'bug',
+      description: 'Test finding for enforcement',
+      location: { file: 'test.ts', line: 1 },
+      suggestedAction: 'Fix the bug'
+    };
+    
+    const proposal = await diagnosticController.createPatchProposal('test-report', finding, testUserId);
+    
+    // Try to apply without approval - should be blocked
+    let blocked = false;
+    try {
+      await diagnosticController.applyPatch(proposal.proposalId, testUserId);
+    } catch (error: any) {
+      blocked = error.message.includes('BLOCKED') && error.message.includes('Kyle approval required');
+    }
+    
+    console.log(`✅ Unapproved patch application attempt`);
+    console.log(`   - Proposal ID: ${proposal.proposalId}`);
+    console.log(`   - Blocked: ${blocked}`);
+    console.log(`   - kyleApproved: ${proposal.kyleApproved}`);
+    
+    if (blocked && !proposal.kyleApproved) {
+      testsPassed++;
+      console.log('✅ Test 10 PASSED - Unapproved patches are correctly blocked\n');
+    } else {
+      testsFailed++;
+      console.log('❌ Test 10 FAILED - Unapproved patches not blocked!\n');
+    }
+  } catch (error) {
+    testsFailed++;
+    console.error('❌ Test 10 FAILED:', error);
+    console.log('');
+  }
+
+  // Test 11: Approval Enforcement - Approved Patch Allowed
+  try {
+    console.log('Test 11: Approval Enforcement - Approved Patch Allowed');
+    console.log('-------------------------------------------------------');
+    
+    // Create a test proposal
+    const finding = {
+      severity: 'medium' as const,
+      category: 'improvement',
+      description: 'Test finding for approved patch',
+      location: { file: 'test2.ts', line: 10 },
+      suggestedAction: 'Apply improvement'
+    };
+    
+    const proposal = await diagnosticController.createPatchProposal('test-report-2', finding, testUserId);
+    
+    // Approve the patch
+    await diagnosticController.approvePatchProposal(proposal.proposalId, testUserId, true, 'Test approval');
+    
+    // Verify approval status updated
+    const updatedProposal = diagnosticController.getProposal(proposal.proposalId);
+    
+    // Try to apply - should succeed
+    let applied = false;
+    try {
+      await diagnosticController.applyPatch(proposal.proposalId, testUserId);
+      applied = true;
+    } catch (error) {
+      console.error('  Unexpected error:', error);
+    }
+    
+    console.log(`✅ Approved patch application attempt`);
+    console.log(`   - Proposal ID: ${proposal.proposalId}`);
+    console.log(`   - Approved: ${updatedProposal?.approved}`);
+    console.log(`   - kyleApproved: ${updatedProposal?.kyleApproved}`);
+    console.log(`   - Applied: ${applied}`);
+    
+    if (applied && updatedProposal?.kyleApproved) {
+      testsPassed++;
+      console.log('✅ Test 11 PASSED - Approved patches can be applied\n');
+    } else {
+      testsFailed++;
+      console.log('❌ Test 11 FAILED - Approved patches blocked!\n');
+    }
+  } catch (error) {
+    testsFailed++;
+    console.error('❌ Test 11 FAILED:', error);
     console.log('');
   }
 
