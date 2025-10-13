@@ -10,6 +10,10 @@ import {
   type ValidationResult 
 } from './behavioral-template';
 import { ExpertContextService, type PrincipleContext } from './expert-context';
+import { referenceTracker } from './walter-reference-tracker';
+import { buildPersonalityPrompt } from './walter-personality';
+import { buildTemplateGuidance } from './walter-response-templates';
+import { detectFeedback, logFeedback, buildFeedbackAcknowledgment } from './walter-feedback';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -23,6 +27,7 @@ interface ResponseContext {
   chatSummary: string | null;
   memoryDepth: number;
   expertPrinciples: PrincipleContext[];
+  referenceContext: string | null;
 }
 
 interface MemoryExtractionResult {
@@ -45,15 +50,24 @@ export async function generateWalterResponse(
     // 1. Gather context including expert principles
     const context = await gatherContext(userId, chatId, userMessage);
 
-    // 2. Detect intent and fetch behavioral context (Task 10)
+    // 2. Phase 6.2: Detect user feedback (positive, negative, correction)
+    const lastAssistantMessage = context.chatHistory.filter(m => m.role === 'assistant').pop()?.content;
+    const feedbackDetection = detectFeedback(userMessage, lastAssistantMessage);
+    
+    if (feedbackDetection.hasFeedback) {
+      console.log(`[Walter] Detected ${feedbackDetection.sentiment} feedback (confidence: ${feedbackDetection.confidence})`);
+      await logFeedback(userId, chatId, feedbackDetection, userMessage, lastAssistantMessage);
+    }
+
+    // 3. Detect intent and fetch behavioral context (Task 10)
     const intent = detectIntent(userMessage);
     const userContext = await fetchUserContext(userId);
     const behavioralGuidance = getBehavioralGuidance(intent, userContext);
 
     console.log(`[Walter] Detected intent: ${intent} for message: "${userMessage.substring(0, 50)}..."`);
 
-    // 3. Build prompt with behavioral enhancement
-    const basePrompt = buildPrompt(context, userMessage);
+    // 4. Build prompt with behavioral enhancement and feedback acknowledgment
+    const basePrompt = buildPrompt(context, userMessage, feedbackDetection);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
     // 4. Call OpenAI
@@ -113,8 +127,14 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       })
     ]);
 
-    // Get chat summary from metadata if exists
-    const chatSummary = ((chat.metadata as any)?.summaries?.[0]?.summary) || null;
+    // Phase 6.2: Extract and resolve conversation references
+    const entities = await referenceTracker.extractEntitiesFromChat(userId, chatId, chatHistory);
+    const resolvedRef = await referenceTracker.resolveReference(userMessage, entities, userId);
+    const referenceContext = resolvedRef.found ? referenceTracker.buildReferenceContext(resolvedRef) : null;
+
+    if (referenceContext) {
+      console.log(`[Walter] Resolved reference: ${resolvedRef.type} - ${resolvedRef.entity?.name}`);
+    }
 
     console.log(`[Walter] Loaded ${expertPrinciples.length} expert principles for topic analysis`);
 
@@ -122,9 +142,10 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       purpose: purposeText,
       memories: memories || [],
       chatHistory: chatHistory || [],
-      chatSummary,
+      chatSummary: null, // Chat summaries handled separately by ConversationSummarizationService
       memoryDepth,
-      expertPrinciples: expertPrinciples || []
+      expertPrinciples: expertPrinciples || [],
+      referenceContext
     };
   } catch (error) {
     console.error('[WalterResponseService] Error gathering context:', error);
@@ -136,7 +157,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       chatHistory: [],
       chatSummary: null,
       memoryDepth: 20,
-      expertPrinciples: []
+      expertPrinciples: [],
+      referenceContext: null
     };
   }
 }
@@ -144,8 +166,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
 /**
  * Build prompt with context injection including expert principles
  */
-function buildPrompt(context: ResponseContext, userMessage: string): string {
-  const { purpose, memories, chatHistory, chatSummary, expertPrinciples } = context;
+function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any): string {
+  const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext } = context;
 
   // Format memories
   const memoriesText = memories.length > 0
@@ -173,7 +195,12 @@ function buildPrompt(context: ResponseContext, userMessage: string): string {
     ? `Previous conversation summary: ${chatSummary}`
     : 'This is a new conversation.';
 
-  // Build full prompt with expert principles
+  // Phase 6.2: Build personality-aware prompt with response templates and feedback
+  const personalityGuidance = buildPersonalityPrompt(userMessage);
+  const templateGuidance = buildTemplateGuidance(userMessage);
+  const feedbackGuidance = feedbackDetection ? buildFeedbackAcknowledgment(feedbackDetection) : '';
+
+  // Build full prompt with expert principles, reference tracking, personality, and templates (Phase 6.2)
   return `You are Walter, an AI SysAdmin Co-Pilot for a cryptocurrency day trading platform (Kraken exchange).
 
 Your role is to:
@@ -182,8 +209,13 @@ Your role is to:
 - Answer questions about system settings, risk management, and trading strategies
 - Make recommendations that align with the user's defined purpose and past learnings
 - Apply expert trading principles to provide professional-grade guidance
+- Understand contextual references naturally (e.g., "that one", "the last trade", "the file I sent")
 
----
+${personalityGuidance}
+
+${feedbackGuidance}
+
+${templateGuidance}
 
 WALTER'S DEFINED PURPOSE:
 ${purpose}
@@ -210,6 +242,8 @@ ${contextText}
 RECENT CHAT HISTORY:
 ${historyText}
 
+${referenceContext || ''}
+
 ---
 
 USER'S LATEST MESSAGE:
@@ -222,11 +256,12 @@ RESPONSE GUIDELINES:
 2. Reference your purpose when making recommendations
 3. Use expert principles to support your reasoning (cite category when relevant)
 4. Use your memories to provide context-aware insights
-5. If asked about trading strategies, refer to: VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap
-6. If the question is off-topic (not related to trading/system), politely redirect:
+5. When the user refers to "that one", "the last trade", "the file I sent", etc., use the reference context above to understand what they mean
+6. If asked about trading strategies, refer to: VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap
+7. If the question is off-topic (not related to trading/system), politely redirect:
    "I'm focused on helping with trading system configuration and strategy. Could you rephrase your question related to those topics?"
-7. If you don't have enough information, ask clarifying questions
-8. Keep responses under 200 words for readability
+8. If you don't have enough information, ask clarifying questions
+9. Keep responses under 200 words for readability
 
 Now respond to the user's message:`;
 }
