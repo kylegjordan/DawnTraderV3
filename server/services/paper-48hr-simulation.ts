@@ -71,10 +71,11 @@ export class Paper48HrSimulation {
       this.isRunning = true;
 
       // Register this session globally so the API status endpoint can detect it
+      // NOTE: This is a SYSTEM-WIDE session, not user-specific
       if (typeof (global as any).registerSimulationSession === 'function') {
         (global as any).registerSimulationSession({
           sessionId: this.sessionId,
-          userId: this.userId,
+          startedBy: this.userId,
           startTime: this.startTime,
           isRunning: true,
           type: '48hr'
@@ -131,9 +132,9 @@ export class Paper48HrSimulation {
         console.error('[48HrSim] Error stopping portfolio manager during cleanup:', stopError);
       }
       
-      // Deregister session on failure
+      // Deregister GLOBAL session on failure
       if (typeof (global as any).deregisterSimulationSession === 'function') {
-        (global as any).deregisterSimulationSession(this.userId);
+        (global as any).deregisterSimulationSession();
       }
       
       // Clean up all intervals and timeouts
@@ -165,9 +166,9 @@ export class Paper48HrSimulation {
 
     this.isRunning = false;
 
-    // Deregister this session globally
+    // Deregister GLOBAL session
     if (typeof (global as any).deregisterSimulationSession === 'function') {
-      (global as any).deregisterSimulationSession(this.userId);
+      (global as any).deregisterSimulationSession();
     }
 
     // Stop intervals and timeouts

@@ -1400,50 +1400,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Paper Trading Simulation Engine Routes (Milestone 18)
-  const paperPortfolioManagers = new Map<string, any>();
-  const paperSimOperationLocks = new Map<string, Promise<void>>();
+  // NOTE: Paper trading is SYSTEM-WIDE. Only ONE simulation can run at a time.
+  // All users see the same simulation status.
+  let globalPaperPortfolioManager: any = null;
+  let globalPaperSimOperationLock: Promise<void> | null = null;
 
-  // Global 48-hour simulation session registry
+  // Global system-wide simulation session registry
+  // NOTE: This is SYSTEM-WIDE, not user-specific. All users see the same simulation status.
   interface SimulationSession {
     sessionId: string;
-    userId: string;
+    startedBy: string; // User who started the simulation (for audit purposes)
     startTime: Date;
     isRunning: boolean;
     type: '48hr' | 'manual';
   }
 
-  const activeSimulationSessions = new Map<string, SimulationSession>();
+  let globalSimulationSession: SimulationSession | null = null;
 
   // Session management helpers (exported for use by Paper48HrSimulation)
   (global as any).registerSimulationSession = (session: SimulationSession): void => {
-    activeSimulationSessions.set(session.userId, session);
-    console.log(`[SimRegistry] Registered session for user ${session.userId}: ${session.sessionId}`);
+    globalSimulationSession = session;
+    console.log(`[SimRegistry] Registered GLOBAL session ${session.sessionId} (started by user ${session.startedBy})`);
   };
 
-  (global as any).deregisterSimulationSession = (userId: string): void => {
-    const session = activeSimulationSessions.get(userId);
-    if (session) {
-      session.isRunning = false;
-      activeSimulationSessions.delete(userId);
-      console.log(`[SimRegistry] Deregistered session for user ${userId}`);
+  (global as any).deregisterSimulationSession = (): void => {
+    if (globalSimulationSession) {
+      console.log(`[SimRegistry] Deregistered GLOBAL session ${globalSimulationSession.sessionId}`);
+      globalSimulationSession = null;
     }
   };
 
-  (global as any).getActiveSession = (userId: string): SimulationSession | undefined => {
-    return activeSimulationSessions.get(userId);
+  (global as any).getGlobalSession = (): SimulationSession | null => {
+    return globalSimulationSession;
   };
 
   app.post('/api/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     
     try {
-      // Check for existing manager
-      if (paperPortfolioManagers.has(userId)) {
-        return res.status(400).json({ error: 'Paper trading simulation already running' });
+      // Check for existing GLOBAL manager (system-wide check)
+      if (globalPaperPortfolioManager) {
+        return res.status(400).json({ error: 'Paper trading simulation already running (system-wide)' });
       }
 
       // Check for pending operation (prevent race condition)
-      if (paperSimOperationLocks.has(userId)) {
+      if (globalPaperSimOperationLock) {
         return res.status(409).json({ error: 'Paper trading operation already in progress' });
       }
 
@@ -1453,13 +1454,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { PaperPortfolioManager } = await import('./services/paper-portfolio-manager.js');
           const manager = new PaperPortfolioManager(userId);
           
-          // Reserve the slot before starting to prevent race condition
-          paperPortfolioManagers.set(userId, manager);
+          // Set the global manager before starting to prevent race condition
+          globalPaperPortfolioManager = manager;
           
-          // Register session for status tracking
-          activeSimulationSessions.set(userId, {
+          // Register GLOBAL session for status tracking
+          (global as any).registerSimulationSession({
             sessionId: `manual_${Date.now()}`,
-            userId,
+            startedBy: userId,
             startTime: new Date(),
             isRunning: true,
             type: 'manual'
@@ -1468,91 +1469,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await manager.start();
         } catch (error) {
           // Rollback on failure - clean up both manager and session
-          paperPortfolioManagers.delete(userId);
-          activeSimulationSessions.delete(userId);
+          globalPaperPortfolioManager = null;
+          (global as any).deregisterSimulationSession();
           throw error;
         } finally {
-          paperSimOperationLocks.delete(userId);
+          globalPaperSimOperationLock = null;
         }
       })();
 
-      paperSimOperationLocks.set(userId, startPromise);
+      globalPaperSimOperationLock = startPromise;
       await startPromise;
       
       res.json({ success: true, message: 'Paper trading simulation started' });
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
-      paperSimOperationLocks.delete(userId);
+      globalPaperSimOperationLock = null;
       res.status(500).json({ error: error.message || 'Failed to start paper trading simulation' });
     }
   });
 
   app.post('/api/paper-sim/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    const userId = req.user!.id;
-    
     try {
-      const manager = paperPortfolioManagers.get(userId);
-      
-      if (!manager) {
+      // Check GLOBAL manager (system-wide)
+      if (!globalPaperPortfolioManager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });
       }
 
       // Check for pending operation (prevent race condition)
-      if (paperSimOperationLocks.has(userId)) {
+      if (globalPaperSimOperationLock) {
         return res.status(409).json({ error: 'Paper trading operation already in progress' });
       }
 
       // Create lock to serialize all start/stop operations
       const stopPromise = (async () => {
         // Store reference to current manager for rollback
-        const currentManager = paperPortfolioManagers.get(userId);
+        const currentManager = globalPaperPortfolioManager;
         
         try {
-          // Remove from map first to prevent new operations
-          paperPortfolioManagers.delete(userId);
+          // Clear global manager first to prevent new operations
+          globalPaperPortfolioManager = null;
           
-          // Deregister session
-          activeSimulationSessions.delete(userId);
+          // Deregister GLOBAL session
+          (global as any).deregisterSimulationSession();
           
           await currentManager.stop();
         } catch (error) {
           // Only restore if no newer manager was started
-          if (!paperPortfolioManagers.has(userId)) {
-            paperPortfolioManagers.set(userId, currentManager);
+          if (!globalPaperPortfolioManager) {
+            globalPaperPortfolioManager = currentManager;
           }
           throw error;
         } finally {
-          paperSimOperationLocks.delete(userId);
+          globalPaperSimOperationLock = null;
         }
       })();
 
-      paperSimOperationLocks.set(userId, stopPromise);
+      globalPaperSimOperationLock = stopPromise;
       await stopPromise;
       
       res.json({ success: true, message: 'Paper trading simulation stopped' });
     } catch (error: any) {
       console.error('Error stopping paper trading simulation:', error);
-      paperSimOperationLocks.delete(userId);
+      globalPaperSimOperationLock = null;
       res.status(500).json({ error: error.message || 'Failed to stop paper trading simulation' });
     }
   });
 
   app.get('/api/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
-      
-      // Check both UI-started simulations and console-started 48hr simulations
-      const hasUISimulation = paperPortfolioManagers.has(userId);
-      const activeSession = activeSimulationSessions.get(userId);
-      const has48HrSimulation = activeSession && activeSession.isRunning;
+      // Return GLOBAL system-wide status (same for all users)
+      const hasUISimulation = globalPaperPortfolioManager !== null;
+      const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
+      const has48HrSimulation = !!(globalSession && globalSession.isRunning);
       
       const isRunning = hasUISimulation || has48HrSimulation;
       
       // Include session details if available
-      const sessionInfo = activeSession ? {
-        sessionId: activeSession.sessionId,
-        startTime: activeSession.startTime,
-        type: activeSession.type
+      const sessionInfo = globalSession ? {
+        sessionId: globalSession.sessionId,
+        startTime: globalSession.startTime,
+        type: globalSession.type,
+        startedBy: globalSession.startedBy
       } : null;
       
       res.json({ 

@@ -22,13 +22,14 @@ export function useTrading() {
     refetchOnWindowFocus: false
   });
 
-  // Paper trading simulation status
+  // Paper trading simulation status (SYSTEM-WIDE - all users see the same status)
   const { data: paperSimStatus, isLoading: paperSimStatusLoading } = useQuery<{ 
     isRunning: boolean;
     sessionInfo?: {
       sessionId: string;
       startTime: Date;
       type: '48hr' | 'manual';
+      startedBy: string; // User ID who started the simulation
     } | null;
   }>({
     queryKey: ['/api/paper-sim/status'],
