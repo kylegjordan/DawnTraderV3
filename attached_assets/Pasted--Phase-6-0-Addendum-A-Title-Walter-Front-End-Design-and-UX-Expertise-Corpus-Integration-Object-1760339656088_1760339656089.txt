@@ -1,0 +1,113 @@
+🧩 Phase 6.0 – Addendum A
+
+Title: Walter Front-End Design and UX Expertise Corpus Integration
+Objective:
+Equip Walter with professional-level knowledge in front-end design, UI/UX methodology, and user-centered interface principles, enabling him to analyze, critique, or propose visual and experiential improvements in later phases.
+Ensure Walter can draw relevant information from Bob for front-end inspection and visual health validation when requested.
+
+⚙️ Core Goals
+#	Goal	Description
+1	Front-End Design Corpus Creation	Provide Walter with structured knowledge on UI layout, design systems, aesthetic principles, and component interaction models used in the app (Tailwind CSS, shadcn/ui, Wouter, React 18).
+2	UX Methodology Integration	Teach Walter core UX methods (user flows, hierarchy, feedback loops, accessibility, mobile first).
+3	Bob Visual Inspection Extension	Enable Bob to collect front-end state data (loaded components, render timings, UI error logs, layout integrity checks).
+4	Visual Feedback Capability Preparation	Prepare Walter for future visual inspection support (e.g., render snapshot review or color/contrast evaluation) once visual data feeds are enabled.
+5	Safety and Resource Control	Ensure Walter never attempts direct UI changes without Kyle’s approval; visual inspections remain advisory only.
+🪜 Step-by-Step Implementation Plan
+1️⃣ Corpus Category Definition (4 seconds)
+
+Add new corpus domain “Front-End Design & UX” to Walter’s expert structure.
+
+Include subtopics:
+• UI Architecture (React, component composition, state management)
+• Design Systems (Tailwind variables, HSL themes, responsive rules)
+• UX Patterns (feedback loops, affordance, clarity, accessibility)
+• Aesthetics (visual hierarchy, typography, color theory basics)
+✅ Validation: Corpus category listed and linked to semantic memory map.
+
+2️⃣ Knowledge Population (6 seconds)
+
+Feed structured summaries of the app’s current UI stack: React 18, Vite, Tailwind, shadcn/ui, Wouter routing.
+
+Add industry best-practice summaries (Figma workflow, WCAG accessibility standards, mobile responsiveness heuristics).
+✅ Validation: Corpus records show complete entries for at least five front-end topics.
+
+3️⃣ Bob Inspection Scope Expansion (8 seconds)
+
+Update Bob’s monitoring logic to record:
+• Frontend build status and bundle size
+• Render performance metrics (LCP, CLS, FCP)
+• UI error logs from console or React error boundaries
+• Theme integrity and component registration issues
+
+All front-end inspections logged under diagnostic_trigger: frontend_health.
+✅ Validation: Bob reports frontend health metrics successfully in nightly scan.
+
+4️⃣ Walter ↔ Bob Visual Protocol Setup (5 seconds)
+
+Define new payload types in shared/diagnostic-schema.ts for frontend reports.
+
+Walter can now request via phrase like:
+
+“Bob, run a front-end inspection and show me the UI render metrics.”
+
+Bob responds with structured data for Walter to analyze.
+✅ Validation: Walter correctly recognizes and interprets frontend inspection payloads.
+
+5️⃣ UX Reasoning Template Integration (6 seconds)
+
+Add three new response patterns:
+
+Design Review Mode: Explains UI flow and suggests simplifications.
+
+Aesthetic Evaluation: Describes visual balance and readability (using non-visual data metrics for now).
+
+Accessibility Check: Confirms presence of alt text, contrast ratios (once available from Bob).
+✅ Validation: Simulation responses use correct template structure and stay advisory (no direct change suggestions without approval).
+
+6️⃣ Visual Inspection Preparation (4 seconds)
+
+Design placeholder routine for future visual input (e.g., screenshots or render snapshots).
+
+Ensure Walter is aware that he can interpret visual data when available but should not expect it yet.
+✅ Validation: Walter acknowledges he can perform future visual analysis once enabled.
+
+7️⃣ Weekly Front-End Update Integration (4 seconds)
+
+Extend Bob’s weekly maintenance to include front-end metric summaries.
+
+Walter receives these and adds them to his semantic memory as “UX insight records.”
+✅ Validation: Weekly update logs show front-end data included in corpus refresh.
+
+8️⃣ Testing and Validation (8 seconds)
+
+Run 3 scenarios:
+
+UX Query: Kyle asks Walter how to simplify a settings panel layout.
+
+Performance Query: Bob reports high render time; Walter explains causes and improvements.
+
+Visual Query: Walter is asked how to make the dashboard feel cleaner for new users.
+✅ Validation: Walter’s answers reference UI principles, Bob’s data, and future visual inspection capability.
+
+9️⃣ Architect Review and Sign-Off (3 seconds)
+
+Review Walter’s UX explanations for technical accuracy and clarity.
+
+Confirm he understands that “Bob” is also the system responsible for front-end health checks.
+✅ Validation: Architect approves Phase 6.0 Addendum A as stable and ready for Phase 6.1.
+
+📦 Deliverables Summary
+#	Deliverable	Status Target	Verification
+1	Front-End Design Corpus	✅ Complete	Corpus records verified
+2	Bob Frontend Inspection	✅ Operational	Health metrics appear in logs
+3	Walter ↔ Bob Visual Protocol	✅ Integrated	Walter handles frontend payloads
+4	UX Reasoning Templates	✅ Loaded	Responses match new patterns
+5	Visual Inspection Preparation	✅ Ready	Placeholder routine active
+6	Weekly Frontend Metrics	✅ Included	Bob’s updates contain UI data
+7	Regression Integrity	✅ Passed	No impact on core systems
+8	Architect Approval	✅ Signed off	Production-ready status granted
+✅ Completion Statement
+
+Phase 6.0 – Addendum A successfully extends Walter’s expert knowledge into front-end design and UX methodology. He can now analyze, interpret, and advise on user interface designs and aesthetic improvements using data provided by Bob.
+Bob’s inspection scope has been expanded to include front-end health and render metrics, and Walter is prepared for future visual inspection capabilities once those data feeds are available.
+All testing shows the system remains stable, safe, and production-ready for Phase 6.1 and beyond.
