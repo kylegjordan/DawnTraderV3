@@ -1,0 +1,78 @@
+🧾 Instruction for Replit — Restart Walter Learning with Upgraded Memory
+
+Instruction Title:
+🚀 Restart Walter Learning Process Using Expanded Memory and Smart Aging
+
+Instruction Body:
+
+Please restart Walter’s learning process to re-ingest all training materials now that the upgraded memory system is active.
+
+Objective
+
+Re-run the full ingestion process so Walter can re-learn everything in the training folder using his new 1,500-memory capacity, smart aging system, and confirmation summary.
+
+Tasks
+
+Prepare the System
+
+Confirm that the memory upgrades are active and no errors are present in recent logs.
+
+Make sure the training files are still located at:
+
+docs/training/Walter_Learning_Files
+
+
+Run the Ingestion Process
+
+Initiate a complete learning run using the updated memory service.
+
+Allow the ingestion process to run in the background if needed.
+
+Capture all progress and results in the system log file (logs/ingest_log.json).
+
+Monitor Smart Aging
+
+Ensure that Walter intelligently prunes older or less relevant items if the memory pool exceeds 1,500.
+
+Log messages should clearly show when pruning occurs and confirm that it’s functioning properly.
+
+Confirm Learning Completion
+
+When ingestion finishes, display a detailed confirmation summary, including:
+
+Total memories retained
+
+Average importance score
+
+Memory type breakdown
+
+Star-based priority distribution
+
+Save this summary to the system logs for future reference.
+
+Verify Stability
+
+Confirm that the system remains responsive throughout ingestion.
+
+Ensure Walter’s chat and TTS features still work normally while learning runs in the background.
+
+Deliverable
+
+Provide a confirmation message once complete:
+
+✅ Walter successfully re-learned from training corpus using expanded memory and smart aging system.
+
+Expected Outcome
+
+After this instruction:
+
+Walter will fully re-learn all training materials.
+
+He will retain the 1,500 most valuable knowledge entries.
+
+He will automatically prune outdated or low-value information.
+
+You will receive a detailed summary confirming exactly what he retained and learned.
+
+✅ Summary:
+This command restarts Walter’s learning process, ensuring his expanded memory and smart aging features are applied to the full training corpus so he can learn more deeply, intelligently, and efficiently.
