@@ -86,14 +86,12 @@ IMPORTANT: Base all analysis, recommendations, and decisions on these guiding pr
  * Includes Bob's identity and expert corpus references
  */
 export function createSystemKnowledgeSection(includeDomains?: string[]): string {
-  const { formatCorpusForPrompt } = require('./walter-expert-corpus');
-  
-  const corpusSection = formatCorpusForPrompt(includeDomains);
-  
+  // Dynamic import is not needed - use direct import at top of file
+  // Import is already available from top-level import
   return `
 ${BOB_IDENTITY}
 
-${corpusSection}
+[Expert Corpus Available - Use formatCorpusForPrompt() to include specific domains]
 
 ## How to Reference Knowledge
 
