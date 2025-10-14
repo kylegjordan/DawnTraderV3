@@ -1480,6 +1480,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Global System Health Endpoint - provides comprehensive system status
+  app.get('/api/system/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      let allHealthy = true;
+      const healthData: any = {
+        backend: 'OK',
+        lastSync: new Date().toISOString()
+      };
+
+      // Check paper trading status
+      try {
+        const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
+        healthData.paperTrading = {
+          isRunning: globalSession?.isRunning || false,
+          sessionId: globalSession?.sessionId || null,
+          startedBy: globalSession?.startedBy || null,
+          startTime: globalSession?.startTime || null,
+          type: globalSession?.type || null
+        };
+      } catch (error) {
+        healthData.paperTrading = { isRunning: false, error: 'Failed to get paper trading status' };
+        allHealthy = false;
+      }
+
+      // Check database connectivity
+      try {
+        await storage.getUser(userId);
+        healthData.database = 'OK';
+      } catch (error) {
+        healthData.database = 'ERROR';
+        allHealthy = false;
+      }
+
+      // Check goals for both modes
+      try {
+        const liveGoals = await storage.getGoalsSummary(userId, 'live');
+        const paperGoals = await storage.getGoalsSummary(userId, 'paper');
+        healthData.goals = {
+          live: { count: liveGoals.length, hasGoals: liveGoals.length > 0 },
+          paper: { count: paperGoals.length, hasGoals: paperGoals.length > 0 }
+        };
+      } catch (error) {
+        healthData.goals = { error: 'Failed to get goals' };
+        allHealthy = false;
+      }
+
+      // Frontend connection status (clients ping this endpoint, so we assume connected)
+      healthData.frontendConnected = true;
+
+      // Return appropriate status code
+      const statusCode = allHealthy ? 200 : 503;
+      res.status(statusCode).json(healthData);
+    } catch (error: any) {
+      console.error('Error in system health check:', error);
+      res.status(503).json({
+        backend: 'ERROR',
+        error: error.message,
+        lastSync: new Date().toISOString()
+      });
+    }
+  });
+
   app.post('/api/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     

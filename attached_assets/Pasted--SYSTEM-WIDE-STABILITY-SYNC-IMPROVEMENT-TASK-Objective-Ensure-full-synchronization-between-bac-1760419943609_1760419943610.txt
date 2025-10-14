@@ -1,0 +1,96 @@
+📋 SYSTEM-WIDE STABILITY & SYNC IMPROVEMENT TASK
+
+Objective:
+Ensure full synchronization between backend services, frontend widgets, and AI monitoring.
+Create visibility into system health and prevent silent data disconnects.
+
+Tasks
+🩺 1. Add a Global System Health Endpoint
+
+File: server/routes.ts
+
+Create endpoint /api/system/health returning JSON summary:
+
+{
+  "backend": "OK",
+  "paperTrading": { "isRunning": true, "sessionId": "..." },
+  "database": "OK",
+  "goals": { "count": 6, "mode": "paper" },
+  "frontendConnected": true,
+  "lastSync": "2025-10-14T09:05:00Z"
+}
+
+
+Pull data from existing internal services (paperSim, db, goals, frontendStatus).
+
+Response code: 200 when all OK, 503 if any subsystem unavailable.
+
+🔄 2. Implement Auto Frontend Resync
+
+Files: client/src/components/dashboard/*.tsx
+
+Poll /api/system/health every 10–15 s.
+
+If paperTrading.isRunning or goals.count changes → refresh dashboard widgets.
+
+Remove dependency on manual refresh.
+
+🧭 3. Verify Mode Context Propagation
+
+Trace how mode (LIVE/PAPER) is read from TradingModeProvider.
+
+Ensure every API request appends ?mode=${mode}.
+
+Confirm correct DB tables used (user_goals_live, user_goals_paper).
+
+🧰 4. Add Developer-Only “Data Flow Trace” Panel
+
+Optional, behind isDevMode flag
+Display last 5 backend requests with:
+
+Frontend → Endpoint → Response (status/time)
+
+
+This helps verify data flow during tests.
+
+🧠 5. Allow Walter & Bob to Read /api/system/health
+
+Give read-only access.
+
+When health endpoint returns errors or nulls, Walter must produce clear natural-language alerts, e.g.
+
+“Backend is online, but the goals service isn’t returning data.”
+
+🧪 6. Create /server/tests/system-verify.ts
+
+Automated end-to-end check list:
+
+1. Call /api/system/health → expect OK
+2. Start paper trading → expect isRunning=true
+3. Create paper-mode goal → expect goal count+1
+4. Verify dashboard updates ≤15 s
+5. Stop paper trading → expect isRunning=false
+
+
+Run with:
+
+tsx server/tests/system-verify.ts
+
+🚨 7. Add Walter Monitoring
+
+Poll /api/system/health every 30 s.
+
+Alert user if:
+
+paperTrading unexpectedly stops
+
+frontendConnected=false
+
+goals.count=0 when previous>0
+
+Deliverables:
+✅ /api/system/health endpoint operational
+✅ Dashboard auto-sync confirmed
+✅ Mode propagation verified
+✅ Walter monitoring live
+✅ system-verify.ts passes all tests
