@@ -15,8 +15,12 @@ import AveragesWidget from "@/components/goals/averages-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 import AlertBanner from "@/components/alerts/alert-banner";
+import { useSystemHealth } from "@/hooks/use-system-health";
 
 export default function Dashboard() {
+  // Enable auto-resync polling every 12s (detects backend changes and auto-refreshes widgets)
+  useSystemHealth();
+
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-testid="dashboard-page">
       {/* Maintenance Mode Banner */}
