@@ -141,7 +141,8 @@ export class Paper48HrSimulation {
       try {
         await fetch('http://localhost:5000/api/internal/paper-sim/deregister-session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
         });
       } catch (error) {
         console.error('[48HrSim] Failed to deregister session via API:', error);
@@ -180,7 +181,8 @@ export class Paper48HrSimulation {
     try {
       await fetch('http://localhost:5000/api/internal/paper-sim/deregister-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
       });
     } catch (error) {
       console.error('[48HrSim] Failed to deregister session via API:', error);
