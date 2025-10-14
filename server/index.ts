@@ -112,6 +112,13 @@ app.use((req, res, next) => {
     });
   });
 
+  // Start Walter Health Monitor (async, non-blocking)
+  import('./services/walter-health-monitor').then(({ walterHealthMonitor }) => {
+    walterHealthMonitor.start().catch((error) => {
+      console.error('[Server] Failed to start Walter Health Monitor:', error);
+    });
+  });
+
   // Start Scheduler Registry with autonomous tasks (async, non-blocking)
   import('./services/scheduler-registry').then(async ({ schedulerRegistry }) => {
     try {

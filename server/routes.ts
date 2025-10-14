@@ -1516,8 +1516,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check goals for both modes
       try {
-        const liveGoals = await storage.getGoalsSummary(userId, 'live');
-        const paperGoals = await storage.getGoalsSummary(userId, 'paper');
+        const liveGoals = await storage.getUserGoalsLive(userId);
+        const paperGoals = await storage.getUserGoalsPaper(userId);
         healthData.goals = {
           live: { count: liveGoals.length, hasGoals: liveGoals.length > 0 },
           paper: { count: paperGoals.length, hasGoals: paperGoals.length > 0 }
