@@ -1,19 +1,19 @@
 {
-  "timestamp": "2025-10-14T05:55:38.008Z",
+  "timestamp": "2025-10-14T06:17:11.613Z",
   "system": {
-    "uptime": 223222.71,
+    "uptime": 224511.56,
     "memory": {
       "total": 67436748800,
-      "free": 25278144512,
-      "used": 42158604288,
-      "usagePercent": 62.51577224316009
+      "free": 22578671616,
+      "used": 44858077184,
+      "usagePercent": 66.51874235075816
     },
     "cpu": {
       "cores": 8,
       "loadAverage": [
-        16.26,
-        14.31,
-        13.19
+        22.48,
+        17.55,
+        14.86
       ]
     }
   },
@@ -36,9 +36,6 @@
     "adjustmentsMade": 0
   },
   "goals": [],
-  "guardrails": {
-    "maxOpenTrades": 5,
-    "riskPerTrade": "400.00"
-  },
+  "guardrails": {},
   "recentChats": []
 }

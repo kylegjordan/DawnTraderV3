@@ -6,6 +6,11 @@ This project is a long-only, spot-trading cryptocurrency day trading web applica
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Test Credentials
+**IMPORTANT:** All automated tests use username-only login (NOT email)
+- Username: `testuser123`
+- Password: `SecurePass123!`
+
 ## System Architecture
 
 ### UI/UX
