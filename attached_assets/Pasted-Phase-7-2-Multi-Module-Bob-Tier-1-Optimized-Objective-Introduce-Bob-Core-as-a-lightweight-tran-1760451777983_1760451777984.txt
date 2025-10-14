@@ -1,0 +1,271 @@
+Phase 7.2 — Multi-Module Bob (Tier-1 Optimized)
+Objective
+
+Introduce Bob Core as a lightweight, transparent optimization layer that accelerates Walter by:
+
+Fetching dashboard data in parallel,
+
+Caching hot endpoints for short windows, and
+
+Returning unified responses to Walter (no prompt changes).
+
+This phase does not remove Walter’s direct API usage; it intercepts a subset (system health & metrics first) and falls back to current endpoints if needed.
+
+Scope (what to build now)
+
+In scope (Phase 7.2):
+
+Bob Core: a coordinator that routes requests to Bob modules, handles caching, parallel fetch, and fallbacks.
+
+MetricsBob (Module #1): owns system health + analytics used by dashboard and Walter context.
+
+Transparent Routing: only for health/metrics endpoints; dashboard and Walter keep working as-is.
+
+Prefetch + Cache: pre-warm and reuse results for fast responses.
+
+Observability: simple logs + counters to validate speedups.
+
+Out of scope (deferred to later phases):
+
+DataBob, ConfigBob, StrategyBob, TradeBob
+
+Redis/external cache
+
+Any prompt/behavior change for Walter
+
+Success criteria (measurable)
+
+P50 system health request ≤ 1.0s (cache miss) / ≤ 120ms (cache hit).
+
+Walter first reply after chat open improves by ≥ 30% (thanks to prefetch).
+
+Zero functional regressions on dashboard health widgets and system endpoints.
+
+Clean fallback to existing endpoints on error or cache miss.
+
+Deliverables
+
+Bob Core: centralized coordinator (single place to register modules, TTLs, and fallbacks).
+
+MetricsBob v1: provides:
+
+/api/system/health data mirror
+
+paper-sim status mirror
+
+simple analytics (uptime snapshot, last change time, error rate window)
+
+Transparent interception for health/metrics only.
+
+Prefetch on events:
+
+On app server start
+
+On Walter chat mount (per mode: LIVE/PAPER)
+
+On mode change
+
+Operational logs:
+
+cache hit/miss
+
+prefetch success/fail
+
+fallback invoked
+
+Docs: Section in replit.md titled “Phase 7.2 – Multi-Module Bob (Tier-1 Optimized)” with:
+
+What Bob Core is
+
+Which endpoints are intercepted
+
+TTLs and fallback behavior
+
+How to test and read logs
+
+Implementation plan (no code)
+A) Create Bob Core (Coordinator)
+
+Create a new service file for Bob Core.
+
+Bob Core responsibilities:
+
+Register modules (start with MetricsBob).
+
+Provide a small, in-memory cache with per-key TTL (e.g., 30s default, configurable per key).
+
+Expose methods: fetchOrServe(key, fetchFn, ttl, tags) and prefetch(key, fetchFn, ttl).
+
+Emit structured logs for:
+
+BOB_CORE_CACHE_HIT, BOB_CORE_CACHE_MISS, BOB_CORE_PREFETCH_OK/FAIL, BOB_CORE_FALLBACK.
+
+Accept a mode (LIVE/PAPER) and auth token to ensure parity with dashboard calls.
+
+B) Build MetricsBob (Module #1)
+
+Create a MetricsBob service that wraps existing backend health/metrics calls identical to what the dashboard uses:
+
+System health (same endpoint shape as dashboard).
+
+Paper-sim status (same shape).
+
+Implement parallel fetch of the above when requested together.
+
+Register with Bob Core:
+
+Keys: metrics:systemHealth:<mode>, metrics:paperSimStatus:<mode>.
+
+TTL: 30s default (configurable).
+
+C) Transparent routing (health/metrics only)
+
+Introduce a very small interception layer for the two endpoints:
+
+When those endpoints are requested, Bob Core is asked first:
+
+If cached → return immediately.
+
+If not cached → MetricsBob fetches in parallel and populates cache.
+
+If MetricsBob fails → fallback to current live endpoint path and return.
+
+Do not alter or remove existing routes — the interception delegates to Bob Core before calling existing logic.
+
+D) Prefetch triggers
+
+Wire three prefetch triggers that call Bob Core:
+
+Server startup: prefetch health + paper-sim status for default mode.
+
+Walter chat open: prefetch for current mode (LIVE/PAPER).
+
+Mode change (LIVE ↔ PAPER): prefetch for the newly selected mode.
+
+Ensure prefetch is non-blocking (it should never delay UI).
+
+E) Observability (minimal)
+
+Add structured logs (one-liners) for:
+
+Bob Core cache hit/miss, prefetch, fallback
+
+MetricsBob fetch start/finish with durations
+
+Add a simple counter window (in memory) to display:
+
+1-minute hit ratio
+
+Last error time (if any)
+
+F) Configuration & safety
+
+Add config values (environment or constants):
+
+BOB_ENABLED=true
+
+BOB_METRICS_TTL_SECONDS=30
+
+BOB_PREFETCH_ON_CHAT_OPEN=true
+
+BOB_PREFETCH_ON_MODE_CHANGE=true
+
+If BOB_ENABLED=false, Bob Core should no-op and let original endpoints behave normally.
+
+Test plan (hands-on checks)
+1) Smoke tests (no UI)
+
+Start the server and watch logs:
+
+Expect prefetch logs for system health and paper-sim.
+
+Hit system health twice quickly (same mode):
+
+First call = MISS (duration ~0.6–1.2s)
+
+Second call = HIT (duration ~50–120ms)
+
+Toggle mode and hit again:
+
+First call after toggle = MISS (new key)
+
+Next call = HIT
+
+2) Walter chat tests
+
+Open Walter chat in LIVE → ask:
+“What’s the system health and is the paper simulation running?”
+
+Expect sub-2s response after prefetch (no “try again”).
+
+Switch to PAPER and ask the same question.
+
+Expect similar speed and correct mode in the answer.
+
+Close/reopen chat; first health query should still be fast (cache warm).
+
+3) Dashboard parity
+
+Validate dashboard health and status widgets continue to work.
+
+Verify that data shown to Walter matches the dashboard values for the same mode.
+
+4) Failure behavior
+
+Temporarily simulate a MetricsBob fetch failure.
+
+Verify logs show BOB_CORE_FALLBACK.
+
+Verify endpoint still returns valid data via original handler.
+
+Verify Walter’s response is still natural and accurate (no raw JSON/errors).
+
+5) Performance targets
+
+Record:
+
+Health endpoint durations before/after (cold/warm).
+
+Walter first-response time after chat mount.
+
+Cache hit ratio after 2 minutes of normal use (should be ≥60% for these keys).
+
+Rollback plan
+
+Set BOB_ENABLED=false and restart the app.
+
+All routes revert to current behavior automatically (no code removal required).
+
+This should restore pre-phase behavior instantly.
+
+Handoff notes for Replit
+
+Keep all existing routes intact; add Bob Core as a thin layer in front of health/metrics.
+
+Do not change Walter prompts or behavior in this phase.
+
+Keep all changes self-contained (easy on/off via config).
+
+Update replit.md with:
+
+What Bob Core is,
+
+Which endpoints are intercepted,
+
+How to read logs + measure wins,
+
+How to toggle or rollback.
+
+Acceptance checklist (what we’re signing off on)
+
+ Cache HIT/MISS logs visible; fallback logs on simulated failures.
+
+ P50 health request ≤ 1.0s (MISS), ≤ 120ms (HIT).
+
+ Walter chat first health response after open ≤ 2.5s.
+
+ Mode switching warms the right cache keys; answers match dashboard for that mode.
+
+ Turning BOB_ENABLED=false restores old behavior without errors.
+
+ replit.md updated with Phase 7.2 docs.
