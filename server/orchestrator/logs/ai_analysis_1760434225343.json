@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-14T09:30:25.343Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (11.29, 13.34, 14.12), which is well above the number of CPU cores (8). This indicates the system is under heavy load and may be experiencing performance issues."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero average confidence, and no opportunities generated. This suggests the AI component is inactive or malfunctioning."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show no active trades and a total P&L of 0, indicating potential inactivity or issues with trading operations."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI processes to ensure they are functioning correctly and contributing to trading strategies."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate current trading strategies and market conditions to ensure they are aligned and potentially adjust strategies to increase trading activity."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and address processes causing high load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Restart and troubleshoot the AI module to ensure it is operational and contributing to trading decisions.",
+      "rationale": "The AI module is crucial for identifying trading opportunities and optimizing strategies."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review and adjust trading strategies to align with current market conditions and increase trading activity.",
+      "rationale": "Active trading is essential for generating revenue and achieving platform goals."
+    }
+  ],
+  "urgencyLevel": "high"
+}

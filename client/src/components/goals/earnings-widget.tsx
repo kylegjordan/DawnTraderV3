@@ -25,12 +25,22 @@ export default function EarningsWidget() {
   const { mode, isPaper } = useTradingMode();
   
   const { data: earnings, isLoading } = useQuery<EarningsSummary>({
-    queryKey: [`/api/earnings/summary?mode=${mode}`],
+    queryKey: ['earnings', 'summary', mode],
+    queryFn: () => fetch(`/api/earnings/summary?mode=${mode}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
   });
   
   const sparklineEndpoint = isPaper ? '/api/paper/metrics/earnings-chart' : '/api/portfolio/earnings-chart';
   const { data: sparklineData } = useQuery<EarningsDataPoint[]>({
-    queryKey: [`${sparklineEndpoint}?days=7`],
+    queryKey: ['earnings', 'sparkline', mode],
+    queryFn: () => fetch(`${sparklineEndpoint}?days=7`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
   });
 
   if (isLoading && !earnings) {

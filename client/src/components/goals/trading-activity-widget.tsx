@@ -38,13 +38,22 @@ export default function TradingActivityWidget() {
   const [period, setPeriod] = useState('1d');
   
   const { data: activity, isLoading: activityLoading } = useQuery<TradingActivityData>({
-    queryKey: ['/api/trading/activity', mode, period],
-    queryFn: () => fetch(`/api/trading/activity?mode=${mode}&period=${period}`).then(r => r.json()),
+    queryKey: ['trading', 'activity', mode, period],
+    queryFn: () => fetch(`/api/trading/activity?mode=${mode}&period=${period}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
   });
   
   const activeTradesEndpoint = isPaper ? '/api/paper/trades/active' : '/api/trades/active';
   const { data: activeTrades, isLoading: activeLoading } = useQuery<ActiveTrade[]>({
-    queryKey: [activeTradesEndpoint, mode],
+    queryKey: ['trades', 'active', mode],
+    queryFn: () => fetch(activeTradesEndpoint, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
   });
 
   const isLoading = activityLoading || activeLoading;
