@@ -6,6 +6,9 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Save, RotateCcw, TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTradingMode } from "@/contexts/trading-mode-context";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface PerformanceMetric {
   metric: string;
@@ -14,18 +17,52 @@ interface PerformanceMetric {
   percentAchieved: number;
 }
 
+interface UserGoal {
+  id: string;
+  userId: string;
+  metricName: string;
+  goalValue: string;
+  actualValue: string;
+  percentAchieved: string | null;
+}
+
+const DEFAULT_METRICS: PerformanceMetric[] = [
+  { metric: "Earnings per Trade", goal: 50, actual: 0, percentAchieved: 0 },
+  { metric: "Average Return", goal: 2.5, actual: 0, percentAchieved: 0 },
+  { metric: "Earnings per Day", goal: 100, actual: 0, percentAchieved: 0 },
+  { metric: "Earnings per Week", goal: 700, actual: 0, percentAchieved: 0 },
+  { metric: "Earnings per Month", goal: 3000, actual: 0, percentAchieved: 0 },
+  { metric: "Earnings per Year", goal: 36000, actual: 0, percentAchieved: 0 },
+];
+
 export default function PerformanceTrackingMetrics() {
+  const { mode } = useTradingMode();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const [metrics, setMetrics] = useState<PerformanceMetric[]>([
-    { metric: "Earnings per Trade", goal: 50, actual: 0, percentAchieved: 0 },
-    { metric: "Average Return", goal: 2.5, actual: 0, percentAchieved: 0 },
-    { metric: "Earnings per Day", goal: 100, actual: 0, percentAchieved: 0 },
-    { metric: "Earnings per Week", goal: 700, actual: 0, percentAchieved: 0 },
-    { metric: "Earnings per Month", goal: 3000, actual: 0, percentAchieved: 0 },
-    { metric: "Earnings per Year", goal: 36000, actual: 0, percentAchieved: 0 },
-  ]);
+  const [metrics, setMetrics] = useState<PerformanceMetric[]>(DEFAULT_METRICS);
+
+  const { data: goalsData, isLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
+    queryKey: [`/api/goals/summary?mode=${mode}`],
+  });
+
+  useEffect(() => {
+    if (goalsData?.goals && goalsData.goals.length > 0) {
+      const newMetrics = DEFAULT_METRICS.map(defaultMetric => {
+        const savedGoal = goalsData.goals.find(g => g.metricName === defaultMetric.metric);
+        if (savedGoal) {
+          return {
+            metric: defaultMetric.metric,
+            goal: parseFloat(savedGoal.goalValue) || defaultMetric.goal,
+            actual: parseFloat(savedGoal.actualValue) || 0,
+            percentAchieved: parseFloat(savedGoal.percentAchieved || '0') || 0,
+          };
+        }
+        return defaultMetric;
+      });
+      setMetrics(newMetrics);
+    } else {
+      setMetrics(DEFAULT_METRICS);
+    }
+  }, [goalsData]);
 
   const updateGoal = (metric: string, value: number) => {
     setMetrics(prev => prev.map(m => {
@@ -99,6 +136,30 @@ export default function PerformanceTrackingMetrics() {
     }));
   };
 
+  const saveMutation = useMutation({
+    mutationFn: async (goals: { metricName: string; goalValue: number; actualValue: number; percentAchieved: number }[]) => {
+      const payload = {
+        goals,
+        mode,
+      };
+      return apiRequest('POST', '/api/goals/update', payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=${mode}`] });
+      toast({
+        title: "Metrics Saved",
+        description: "Performance tracking metrics have been saved successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save metrics",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleRecalculate = () => {
     setMetrics(prev => prev.map(m => ({
       ...m,
@@ -112,21 +173,17 @@ export default function PerformanceTrackingMetrics() {
   };
 
   const handleSave = () => {
-    toast({
-      title: "Metrics Saved",
-      description: "Performance tracking metrics have been saved successfully.",
-    });
+    const goals = metrics.map((m) => ({
+      metricName: m.metric,
+      goalValue: m.goal,
+      actualValue: m.actual,
+      percentAchieved: m.percentAchieved,
+    }));
+    saveMutation.mutate(goals);
   };
 
   const handleReset = () => {
-    setMetrics([
-      { metric: "Earnings per Trade", goal: 50, actual: 0, percentAchieved: 0 },
-      { metric: "Average Return", goal: 2.5, actual: 0, percentAchieved: 0 },
-      { metric: "Earnings per Day", goal: 100, actual: 0, percentAchieved: 0 },
-      { metric: "Earnings per Week", goal: 700, actual: 0, percentAchieved: 0 },
-      { metric: "Earnings per Month", goal: 3000, actual: 0, percentAchieved: 0 },
-      { metric: "Earnings per Year", goal: 36000, actual: 0, percentAchieved: 0 },
-    ]);
+    setMetrics(DEFAULT_METRICS);
     
     toast({
       title: "Reset Complete",
@@ -181,10 +238,11 @@ export default function PerformanceTrackingMetrics() {
             <Button
               onClick={handleSave}
               size="sm"
+              disabled={saveMutation.isPending}
               data-testid="button-save-performance"
             >
               <Save className="w-4 h-4 mr-2" />
-              Save
+              {saveMutation.isPending ? "Saving..." : "Save"}
             </Button>
           </div>
         </div>
