@@ -1,0 +1,71 @@
+🧭 Fix Summary (No-Code Instruction Block)
+
+Title:
+🔧 Dashboard Goals Summary – Mode Synchronization Update
+
+Objective:
+Ensure the main dashboard’s “Goals Summary” panel dynamically pulls data from the correct mode (LIVE or PAPER), matching what’s shown in the Goals Engine tabs.
+
+Implementation Tasks
+Task 1 – Audit Data Source
+
+Locate the data source for the Dashboard Goals Summary panel.
+
+Confirm whether it calls /api/goals/summary or /api/goals/:mode/summary.
+
+Verify whether this endpoint supports mode awareness.
+
+If not, update it to accept a mode parameter (e.g., via req.query.mode or x-app-mode header).
+
+Ensure it fetches data from the correct mode-specific table (e.g., user_goals_live or user_goals_paper).
+
+✅ Expected Outcome:
+Dashboard fetches data from the same mode-aware structure as the Goals Engine tabs.
+
+Task 2 – Sync Mode Context
+
+Confirm that the dashboard component imports and uses the TradingModeContext (the same context used in the Goals Engine tabs).
+
+Verify that the API call for “Goals Summary” automatically includes the mode context.
+
+For example, by appending ?mode=${currentTradingMode} or including the x-app-mode header.
+
+Ensure the dashboard automatically re-fetches data whenever the trading mode toggle changes.
+
+✅ Expected Outcome:
+When you toggle between LIVE and PAPER at the top, the Goals Summary section refreshes instantly to show the correct data.
+
+Task 3 – Visual Alignment
+
+Add a small mode indicator tag (LIVE / PAPER) inside the Goals Summary card title on the dashboard.
+
+Blue for LIVE, purple for PAPER — matching the other tabs.
+
+Confirm the indicator updates dynamically when the mode changes.
+
+✅ Expected Outcome:
+The dashboard visually confirms which mode’s data is being displayed.
+
+Task 4 – Verification Test
+
+Set distinct goals for LIVE and PAPER modes.
+
+Toggle between modes and confirm the following:
+
+Dashboard → Goals Summary values match the respective mode.
+
+Goals Engine → Performance Tracking Metrics reflect the same numbers.
+
+Confirm that switching modes updates both sections instantly and independently.
+
+✅ Expected Outcome:
+Dashboard Goals Summary is now synchronized with the active trading mode, eliminating cross-mode confusion.
+
+Task 5 – Documentation Update
+
+Add the following note to replit.md:
+
+Phase 6.14 – Dashboard Goals Summary Mode Synchronization
+- Dashboard Goals Summary now dynamically loads from mode-aware Goals data
+- Automatically updates when LIVE/PAPER mode toggles
+- Added mode indicator label for clear context alignment

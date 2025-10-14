@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-10-14T07:21:13.352Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is high, particularly the 15-minute average at 11.33, which is above the number of CPU cores (8). This indicates potential CPU bottleneck issues."
+    },
+    {
+      "severity": "medium",
+      "message": "AI subsystem shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning as expected."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load, potentially by redistributing workloads or upgrading hardware."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the AI subsystem's configuration and algorithms to ensure it is properly set up to learn and generate trading opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and mitigate processes causing high load.",
+      "rationale": "High CPU load can lead to system instability and slow response times, affecting trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review and troubleshoot the AI subsystem to ensure it is operational and capable of generating insights and opportunities.",
+      "rationale": "The AI subsystem is crucial for identifying trading opportunities and optimizing strategies, and its current inactivity suggests it may not be contributing effectively."
+    },
+    {
+      "urgencyLevel": "low",
+      "action": "Monitor memory usage trends to ensure it remains within acceptable levels, as current usage is at 62%.",
+      "rationale": "While memory usage is not currently critical, proactive monitoring can prevent future issues as system demands increase."
+    }
+  ],
+  "urgencyLevel": "high"
+}

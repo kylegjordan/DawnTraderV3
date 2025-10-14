@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useLocation } from "wouter";
 import { AchievementPill } from "@/components/ui/achievement-pill";
+import { ModeIndicator } from "@/components/goals/mode-indicator";
 
 interface GoalSummary {
   metric: string;
@@ -63,11 +64,7 @@ export default function GoalsSummaryWidget() {
           <div className="flex items-center gap-2">
             <Target className="w-5 h-5 text-primary" />
             <span>Goals Summary</span>
-            {isPaper && (
-              <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">
-                SIMULATED
-              </span>
-            )}
+            <ModeIndicator />
           </div>
           <Button 
             variant="ghost" 
