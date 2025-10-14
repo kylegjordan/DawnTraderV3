@@ -1,0 +1,324 @@
+Phase 7.4 — ConfigBob Implementation (Tier 1 Optimization Expansion)
+
+🎯 Objective
+
+Introduce ConfigBob, a new module under Bob Core, focused on caching and serving all configuration-level data — Goals, Guardrails, Screeners, Strategies, and Purpose — across LIVE and PAPER modes.
+
+This ensures Walter always has synchronized, mode-aware access to the same configuration data you see on the dashboard, without hitting backend endpoints every time he builds context.
+
+
+---
+
+🔍 Scope
+
+In Scope
+
+1. Create the ConfigBob module.
+
+
+2. Intercept configuration endpoints (/api/config/goals, /api/config/guardrails, /api/config/screeners, /api/config/strategies, /api/config/purpose).
+
+
+3. Add prefetch triggers for Walter chat open and mode change.
+
+
+4. Log all cache metrics through /api/bob/stats.
+
+
+5. Update documentation (replit.md) with Phase 7.4 details.
+
+
+
+Out of Scope
+
+Data persistence beyond in-memory TTL.
+
+Strategy performance metrics (reserved for StrategyBob).
+
+Realtime synchronization (this phase focuses on cache + parity).
+
+
+
+---
+
+✅ Success Criteria
+
+Metric	Target
+
+Config response time (warm)	≤ 150 ms
+Walter mode-switch context rebuild	≤ 2.0 s
+Config parity LIVE vs PAPER	100% accurate
+Cache hit ratio (steady state)	≥ 70%
+Dashboard regressions	0
+
+
+
+---
+
+📦 Deliverables
+
+1. server/services/bob-config.ts
+
+Defines ConfigBob module functions:
+
+fetchGoals(mode)
+
+fetchGuardrails(mode)
+
+fetchScreeners(mode)
+
+fetchStrategies(mode)
+
+fetchPurpose(mode)
+
+
+TTL: 30 seconds (default).
+
+Cache keys:
+
+config:goals:<mode>
+
+config:guardrails:<mode>
+
+config:screeners:<mode>
+
+config:strategies:<mode>
+
+config:purpose:<mode>
+
+
+
+
+2. Transparent Routing Integration
+
+Intercept configuration API calls before original handlers.
+
+Serve cached responses when available.
+
+Fall back to backend fetch + cache when missing.
+
+
+
+3. Prefetch Triggers
+
+On server startup → prefetch LIVE configuration.
+
+On Walter chat open → prefetch current mode configuration.
+
+On mode switch → prefetch full configuration for new mode.
+
+
+
+4. Stats Integration
+
+Extend /api/bob/stats output with ConfigBob metrics (hits, misses, latency).
+
+
+
+5. Documentation Update
+
+Add Phase 7.4 section to replit.md with configuration endpoints, prefetch triggers, and rollback procedure.
+
+
+
+
+
+---
+
+⚙️ Implementation Plan (No Code)
+
+A) Create bob-config.ts
+
+Mirror structure of DataBob and MetricsBob:
+
+Import BobCore.
+
+Define each fetch<ConfigName>(mode) method using existing dashboard endpoints.
+
+Register all five methods with Bob Core (TTL 30 s).
+
+
+Add structured logging:
+
+[ConfigBob] Fetching goals (mode: live)
+
+[BobCore] Cached: config:goals:live (TTL:30s, fetch:122ms)
+
+
+
+
+---
+
+B) Transparent Routing
+
+In server/routes.ts:
+
+Before /api/config/... handlers, check Bob Core cache.
+
+If hit → return cached config.
+
+If miss → call backend, cache, then return.
+
+If error → fallback gracefully to existing handler.
+
+
+
+
+---
+
+C) Prefetch Logic
+
+Extend the /api/bob/prefetch endpoint:
+
+Trigger all ConfigBob fetches for current mode when Walter chat opens.
+
+On mode change, repeat prefetch for new mode.
+
+
+Optional: server startup prefetch LIVE configuration for default caching.
+
+
+
+---
+
+D) Observability & Stats
+
+All ConfigBob metrics automatically integrated with Bob Core stats.
+
+/api/bob/stats should now display:
+
+{
+  "module": "ConfigBob",
+  "hits": 318,
+  "misses": 102,
+  "avgLatencyMs": 128,
+  "ttl": 30
+}
+
+Log summary every 5 minutes in console.
+
+
+
+---
+
+E) Configuration Keys
+
+Env Variable	Purpose	Default
+
+BOB_CONFIG_ENABLED	Enable ConfigBob module	true
+BOB_CONFIG_TTL_SECONDS	Default cache TTL	30
+BOB_PREFETCH_CONFIG_ON_CHAT_OPEN	Prefetch configs when chat opens	true
+BOB_PREFETCH_CONFIG_ON_MODE_CHANGE	Prefetch configs on mode switch	true
+
+
+
+---
+
+🧪 Testing Plan
+
+1. Smoke Tests
+
+Start server → confirm prefetch of LIVE configuration in logs.
+
+Hit /api/config/goals → expect MISS (first fetch).
+
+Hit again → expect HIT (≤150 ms).
+
+Repeat for guardrails, screeners, strategies, and purpose.
+
+
+2. Mode Awareness
+
+Switch to PAPER mode and query /api/config/goals.
+
+Confirm distinct cache entry (config:goals:paper).
+
+Switch back to LIVE → confirm separate cache.
+
+
+3. Walter Chat Tests
+
+Ask: “Summarize my LIVE goals and guardrails.”
+
+Should respond instantly (< 2 s total).
+
+
+Switch mode and ask: “Summarize my PAPER goals.”
+
+Expect accurate, distinct response.
+
+
+
+4. Stress Test
+
+Run 20 repeated config queries within 30 seconds.
+
+Expect ≥ 80% cache hit ratio.
+
+Verify latency stable under 200 ms.
+
+
+5. Prefetch Validation
+
+Observe logs after chat open and mode switch:
+
+[BobCore] Prefetch triggered: ConfigBob
+
+[ConfigBob] Prefetch complete for mode: paper]
+
+
+
+6. Rollback Validation
+
+Set BOB_CONFIG_ENABLED=false.
+
+Restart app → confirm endpoints bypass ConfigBob cache.
+
+
+
+---
+
+🔄 Rollback Procedure
+
+1. Set BOB_CONFIG_ENABLED=false.
+
+
+2. Restart application.
+
+
+3. Confirm all /api/config/... endpoints return normal responses.
+
+
+
+
+---
+
+🧾 Acceptance Checklist
+
+[ ] ConfigBob created and registered with Bob Core.
+
+[ ] Transparent routing integrated and stable.
+
+[ ] Prefetch triggers active (chat open, mode change, startup).
+
+[ ] /api/bob/stats shows ConfigBob metrics.
+
+[ ] Dashboard ↔ Walter configuration parity verified per mode.
+
+[ ] No data corruption, caching, or stale data observed.
+
+[ ] Documentation updated in replit.md.
+
+
+
+---
+
+🚀 Expected Outcomes
+
+Area	Before	After
+
+Config data fetch (cold)	1.5–2.0 s	0.9–1.2 s
+Config data fetch (warm)	1.2–1.5 s	≤150 ms
+Context build time (Walter)	~4–6 s	~2 s
+Cache hit ratio	—	70–80%
+Data parity across modes	Manual verification	Automated + instant
