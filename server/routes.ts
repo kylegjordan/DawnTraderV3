@@ -1858,6 +1858,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Phase 7.1c Deliverable 5: Delete chat history for a context
+  app.delete('/api/chats/:context', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { context } = req.params;
+      
+      await storage.deleteContextChats(userId, context);
+      
+      res.json({ success: true, message: 'Chat history cleared' });
+    } catch (error) {
+      console.error('Error deleting chats:', error);
+      res.status(500).json({ error: 'Failed to delete chat history' });
+    }
+  });
+
+  // Phase 7.1c Deliverable 5: Create new chat session (clears current session)
+  app.post('/api/chats/new', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { context } = req.body;
+      
+      if (!context) {
+        return res.status(400).json({ error: 'Context required' });
+      }
+
+      // Clear current chat history for this context
+      await storage.deleteContextChats(userId, context);
+      
+      res.json({ success: true, message: 'New chat session created' });
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      res.status(500).json({ error: 'Failed to create new chat' });
+    }
+  });
+
   app.post('/api/ai/chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;

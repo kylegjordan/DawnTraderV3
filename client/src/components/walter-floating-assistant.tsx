@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bot, Send, X, Mic, MicOff, Loader2, Minimize2 } from 'lucide-react';
+import { Bot, Send, X, Mic, MicOff, Loader2, Minimize2, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -293,6 +293,35 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
             <span className="font-semibold text-sm">Walter - {pageContext}</span>
           </div>
           <div className="flex items-center gap-1">
+            {/* Phase 7.1c Deliverable 5: Chat Management Controls */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 hover:bg-primary-foreground/20"
+              onClick={async () => {
+                if (confirm('Start a new chat? This will clear your current conversation with Walter.')) {
+                  try {
+                    await apiRequest('POST', '/api/chats/new', { context: 'walter' });
+                    setMessages([]);
+                    queryClient.invalidateQueries({ queryKey: ['/api/chats', 'walter'] });
+                    toast({
+                      title: 'New Chat Started',
+                      description: 'Your conversation history has been cleared.',
+                    });
+                  } catch (error) {
+                    toast({
+                      title: 'Error',
+                      description: 'Failed to start new chat.',
+                      variant: 'destructive',
+                    });
+                  }
+                }
+              }}
+              title="New Chat"
+              data-testid="button-new-chat"
+            >
+              <PlusCircle className="w-4 h-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"

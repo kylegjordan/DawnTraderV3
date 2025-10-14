@@ -232,6 +232,7 @@ export interface IStorage {
   // Context-specific chats (Goals, Guardrails, Screener, Strategies)
   getContextChats(userId: string, context: string): Promise<ContextChat[]>;
   saveContextChat(chat: InsertContextChat): Promise<ContextChat>;
+  deleteContextChats(userId: string, context: string): Promise<void>;
   
   // AI Orchestrator Logs
   createOrchestratorLog(log: InsertAIOrchestratorLog): Promise<AIOrchestratorLog>;
@@ -1030,6 +1031,12 @@ export class DatabaseStorage implements IStorage {
   async saveContextChat(chat: InsertContextChat): Promise<ContextChat> {
     const [result] = await db.insert(contextChats).values(chat).returning();
     return result;
+  }
+
+  // Phase 7.1c Deliverable 5: Delete context-specific chat history
+  async deleteContextChats(userId: string, context: string): Promise<void> {
+    await db.delete(contextChats)
+      .where(and(eq(contextChats.userId, userId), eq(contextChats.context, context)));
   }
 
   // AI Orchestrator Logs
