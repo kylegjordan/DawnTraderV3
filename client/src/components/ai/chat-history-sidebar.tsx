@@ -249,10 +249,10 @@ export function ChatHistorySidebar({
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1 w-full">
+                  <div className="flex items-center justify-between w-full">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 flex-1 min-w-0 max-w-[180px] md:max-w-[200px]">
+                        <div className="flex items-center gap-2 min-w-0 flex-shrink overflow-hidden max-w-[55%]">
                           <MessageSquare className="w-4 h-4 flex-shrink-0 text-muted-foreground dark:text-muted-foreground" />
                           <span className="text-sm truncate">{conv.title}</span>
                         </div>
