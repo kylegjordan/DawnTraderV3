@@ -245,3 +245,31 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 - ♿ Accessible - full screen reader and keyboard support
 - 📱 Responsive - optimized for mobile, tablet, and desktop
 - 🌗 Theme aware - works perfectly in light and dark modes
+
+### Phase 6.9.1: Walter Page Chat List Icon Fix
+**Completed:** October 14, 2025
+
+**Issue:** Pencil edit icon was hidden (opacity-0) on Walter AI Co-Pilot page chat sessions, making it impossible to find or click.
+
+**Root Cause:** The Walter page (`client/src/pages/walter.tsx`) has its own separate chat list implementation, distinct from the `ChatHistorySidebar` component used elsewhere.
+
+**Solution:** Relocated the pencil icon from the hidden first row to the visible second row, next to the message count and date.
+
+**Changes Made:**
+- Moved pencil icon from title row to date/message count row
+- Removed `opacity-0` - icon now always visible
+- Positioned inline with chat metadata (messages • date)
+- Reduced button size to 5x5 for better fit
+- Removed hover-only visibility requirement
+
+**Technical Details:**
+- File: `client/src/pages/walter.tsx` (lines 670-695)
+- Icon now in `<div className="flex items-center gap-2">` with message count
+- Always visible with `text-muted-foreground hover:text-foreground` styling
+- No opacity transitions - immediately accessible
+
+**Benefits:**
+- ✅ Edit icon clearly visible without hovering
+- ✅ Positioned next to relevant metadata
+- ✅ Consistent with user expectations
+- ✅ Improved usability and discoverability
