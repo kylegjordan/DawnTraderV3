@@ -663,13 +663,21 @@ export default function WalterPage() {
                             {chat.status === 'archived' && (
                               <Archive className="w-3 h-3 flex-shrink-0" />
                             )}
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "text-xs flex-1",
+                              selectedChatId === chat.id ? "opacity-90" : "text-muted-foreground"
+                            )}>
+                              {chat.messageCount} message{chat.messageCount !== 1 ? 's' : ''} • {new Date(chat.lastMessageAt).toLocaleDateString()}
+                            </span>
                             {!chat.isApprovalThread && chat.status === 'active' && (
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 className={cn(
-                                  "h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity",
-                                  selectedChatId === chat.id && "text-primary-foreground hover:text-primary-foreground"
+                                  "h-5 w-5 p-0",
+                                  selectedChatId === chat.id ? "text-primary-foreground hover:text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                                 )}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -681,13 +689,7 @@ export default function WalterPage() {
                                 <Pencil className="w-3 h-3" />
                               </Button>
                             )}
-                          </button>
-                          <span className={cn(
-                            "text-xs",
-                            selectedChatId === chat.id ? "opacity-90" : "text-muted-foreground"
-                          )}>
-                            {chat.messageCount} message{chat.messageCount !== 1 ? 's' : ''} • {new Date(chat.lastMessageAt).toLocaleDateString()}
-                          </span>
+                          </div>
                         </>
                       )}
                     </div>
