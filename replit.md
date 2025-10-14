@@ -6,6 +6,11 @@ This project is a long-only, spot-trading cryptocurrency day trading web applica
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Test Credentials
+**Username-based login (for all E2E tests):**
+- Username: testuser123
+- Password: SecurePass123!
+
 ## System Architecture
 
 ### UI/UX
@@ -164,3 +169,79 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 - ✅ Safety-first design - confirmations for critical actions
 - ✅ Complete audit trail - all commands logged with context
 - ✅ Seamless integration - works alongside normal Walter conversations
+
+### Phase 6.9: Chat Sidebar Usability & Accessibility Improvements
+**Completed:** October 14, 2025
+
+**Goal:** Improve chat sidebar visibility, usability, and accessibility for better user experience.
+
+**Solution:** Enhanced the chat history sidebar with increased width, always-visible icons, comprehensive tooltips, and full accessibility support.
+
+**Key Improvements:**
+
+1. **Increased Width for Better Visibility**
+   - Desktop (md+): 300px (previously 256px)
+   - Mobile: 280px (optimized for smaller screens)
+   - Collapsed: 48px (icon-only mode unchanged)
+
+2. **Always-Visible Action Icons**
+   - Previous: Icons hidden (opacity-0) until hover
+   - Current: Icons always visible with muted-foreground styling
+   - Hover effect: Icons highlight to foreground color
+   - No more hunting for hidden controls
+
+3. **Comprehensive Tooltip System**
+   - Chat title tooltip: Shows full text for truncated titles
+   - Rename icon tooltip: "Rename chat"
+   - Delete icon tooltip: "Delete chat"
+   - Positioned to the right for optimal visibility
+   - Works seamlessly in both light and dark themes
+
+4. **Full Accessibility Support**
+   - All icon-only buttons now have descriptive aria-labels:
+     - Collapse: "Collapse sidebar"
+     - Expand: "Expand sidebar"
+     - Rename: "Rename chat: {title}"
+     - Delete: "Delete chat: {title}"
+     - Save (edit): "Save chat title"
+     - Cancel (edit): "Cancel editing"
+     - New chat (collapsed): "Create new chat"
+   - Screen reader compatible
+   - Keyboard navigation fully supported
+
+5. **Text Truncation & Overflow Handling**
+   - Long titles truncated with ellipsis (...)
+   - Full text visible on hover via tooltip
+   - Proper flex layout prevents icon overlap
+
+6. **Theme Consistency**
+   - Light mode: Subtle muted-foreground colors
+   - Dark mode: Dark-optimized muted-foreground
+   - Hover states work correctly in both themes
+   - Consistent visual hierarchy
+
+**Technical Implementation:**
+- Used shadcn Tooltip component with TooltipProvider wrapper
+- Responsive width: `w-[280px] md:w-[300px]`
+- Icon styling: `text-muted-foreground hover:text-foreground`
+- Dark mode: `dark:text-muted-foreground dark:hover:text-foreground`
+- Text truncation: `truncate` class with `flex-1 min-w-0`
+- Accessibility: aria-label on all icon buttons
+
+**Files Modified:**
+- `client/src/components/ai/chat-history-sidebar.tsx` - Complete sidebar enhancement
+
+**Verification:**
+- ✅ Architect review: PASS rating
+- ✅ Width responsive across all breakpoints
+- ✅ Icons always visible without hover
+- ✅ Tooltips display correctly
+- ✅ All accessibility requirements met
+- ✅ Dark/light theme consistency verified
+
+**Benefits:**
+- 🎯 Better discoverability - icons always visible at a glance
+- 📏 More space - 300px width provides better readability
+- ♿ Accessible - full screen reader and keyboard support
+- 📱 Responsive - optimized for mobile, tablet, and desktop
+- 🌗 Theme aware - works perfectly in light and dark modes
