@@ -1,0 +1,327 @@
+Phase 7.3 — DataBob Implementation (Tier 1 Optimization Expansion)
+
+🎯 Objective
+
+Expand Bob Core by introducing DataBob, a dedicated data-fetching and caching module that accelerates Walter’s access to dashboard-related performance data:
+
+Results (/api/results)
+
+Averages (/api/averages)
+
+Activity (/api/activity)
+
+
+This phase delivers real-time data parity between the Dashboard and Walter’s responses while cutting redundant backend calls and latency.
+
+
+---
+
+🔍 Scope (for this phase)
+
+In Scope
+
+1. Create the DataBob module.
+
+
+2. Integrate DataBob with Bob Core (using the same registration and cache pattern as MetricsBob).
+
+
+3. Add transparent interception for /api/results, /api/activity, and /api/averages.
+
+
+4. Add prefetch triggers for chat open and mode change.
+
+
+5. Expand /api/bob/stats to include DataBob metrics.
+
+
+6. Update documentation in replit.md.
+
+
+
+Out of Scope
+
+ConfigBob, StrategyBob, TradeBob (future phases)
+
+Long-term persistent caching (still in-memory only)
+
+Walter prompt or reasoning updates
+
+
+
+---
+
+✅ Success Criteria
+
+Metric	Target
+
+Results/Averages/Activity response time	≤ 1.2 s (cold) / ≤ 150 ms (warm)
+Dashboard ↔ Walter data parity	100 % match for each mode
+Cache hit ratio	≥ 60 % after 2 minutes
+Regressions	0 dashboard or API failures
+
+
+
+---
+
+📦 Deliverables
+
+1. server/services/bob-data.ts
+
+Defines DataBob module:
+
+fetchResults(mode, period)
+
+fetchAverages(mode, period)
+
+fetchActivity(mode, limit)
+
+
+Registers each with Bob Core via keys:
+
+data:results:<mode>:<period>
+
+data:averages:<mode>:<period>
+
+data:activity:<mode>
+
+
+TTL = 30 s (default; configurable per endpoint)
+
+
+
+2. Route Interception
+
+Extend server/routes.ts or middleware to intercept:
+
+/api/results, /api/averages, /api/activity
+
+
+Return cached data if available; otherwise fetch and cache.
+
+
+
+3. Prefetch Triggers
+
+On Walter chat open: prefetch results + averages + activity for current mode.
+
+On mode change: repeat prefetch for new mode.
+
+Server startup: optional warm cache for LIVE mode only.
+
+
+
+4. Stats Integration
+
+Extend /api/bob/stats to include:
+
+DataBob hit/miss counts
+
+Average latency per endpoint
+
+TTL status
+
+
+
+
+5. Documentation
+
+Add new section “Phase 7.3 — DataBob Implementation” to replit.md
+
+Include endpoints intercepted, TTLs, how to measure hit rates, and rollback procedure.
+
+
+
+
+
+---
+
+⚙️ Implementation Plan (no code)
+
+A) Create bob-data.ts
+
+Mirror MetricsBob structure:
+
+Import Bob Core helper functions.
+
+Define three async fetchers that call the same endpoints used by the Dashboard.
+
+Add parallel fetch support for combined queries (e.g., results + averages in one shot).
+
+
+Register with Bob Core using TTL ≈ 30 s (default).
+
+Include basic error logging (BOB_DATA_FETCH_FAIL, BOB_DATA_CACHE_HIT/MISS).
+
+
+B) Transparent Routing
+
+In server/routes.ts, before handlers for results/averages/activity:
+
+Ask Bob Core first.
+
+On cache hit → return immediately.
+
+On miss → DataBob fetch → cache → return.
+
+On failure → fallback to existing handler.
+
+
+
+C) Prefetch Logic
+
+Extend existing Bob prefetch system:
+
+Server startup → prefetch results + averages LIVE.
+
+Walter chat open → prefetch all three for current mode.
+
+Mode change → prefetch same for new mode.
+
+
+Prefetch is non-blocking; log success/failure events.
+
+
+D) Observability & Stats
+
+Track for each key: hits, misses, errors, avgLatency.
+
+Add to /api/bob/stats response:
+
+{
+  "module": "DataBob",
+  "hits": 352,
+  "misses": 72,
+  "avgLatencyMs": 138,
+  "ttl": 30
+}
+
+Log summary every 5 minutes to console.
+
+
+E) Configuration Keys
+
+Env Variable	Purpose	Default
+
+BOB_DATA_ENABLED	Enable/disable DataBob intercepts	true
+BOB_DATA_TTL_SECONDS	Default cache TTL	30
+BOB_PREFETCH_DATA_ON_CHAT_OPEN	Prefetch on chat open	true
+BOB_PREFETCH_DATA_ON_MODE_CHANGE	Prefetch on mode switch	true
+
+
+When BOB_DATA_ENABLED=false, DataBob should bypass all logic and allow original endpoints.
+
+
+---
+
+🧪 Testing Plan
+
+1. Smoke Tests
+
+Start server; observe logs: expect prefetch for LIVE mode (results + averages).
+
+Call /api/results → MISS (0.8–1.2 s).
+
+Call again → HIT (≤ 150 ms).
+
+Call /api/averages and /api/activity → same pattern.
+
+
+2. Walter Chat Tests
+
+Ask: “Show me today’s performance averages and recent activity.”
+
+Expect response within ≈ 2 s and data matching dashboard.
+
+
+Toggle mode → repeat question.
+
+Expect new mode’s data to load fast (cached).
+
+
+
+3. Dashboard Parity
+
+Compare dashboard data for each widget against Walter’s responses after mode change.
+
+They should be identical values for each mode.
+
+
+
+4. Stress Test
+
+Run 20 requests for results/averages in quick succession.
+
+Verify ≥ 80 % cache hit rate and consistent latency under 100 ms.
+
+Ensure no memory leaks or TTL overflows.
+
+
+
+5. Fallback Check
+
+Simulate DataBob failure (return error from fetch).
+
+Logs should show BOB_CORE_FALLBACK.
+
+API should still respond via original endpoint.
+
+
+
+6. Metrics Validation
+
+Call /api/bob/stats → confirm DataBob module is listed with live counters.
+
+Observe hit/miss ratio increasing with usage.
+
+
+
+---
+
+🔄 Rollback Procedure
+
+1. Set BOB_DATA_ENABLED=false.
+
+
+2. Restart application.
+
+
+3. System reverts to direct endpoints instantly (no cache layer).
+
+
+4. Verify no missing responses or errors.
+
+
+
+
+---
+
+🧾 Acceptance Checklist
+
+[ ] DataBob created and registered in Bob Core.
+
+[ ] Health metrics still stable (post-integration).
+
+[ ] Response times meet targets.
+
+[ ] Cache hit/miss logs visible in /api/bob/stats.
+
+[ ] Dashboard ↔ Walter data parity confirmed for each mode.
+
+[ ] Rollback flag functions properly.
+
+[ ] Documentation updated (replit.md).
+
+
+
+---
+
+🚀 Expected Outcomes
+
+Area	Before	After
+
+Walter first response (time to data)	2.5–3 s	≈ 1 s
+Repeated data requests	Repeated API calls	Instant (cache hits ≤ 150 ms)
+Dashboard ↔ Walter consistency	Occasional lag	Perfect sync per mode
+Cache coverage	System health only	System + Results + Averages + Activity
+Stability	High	Even higher – isolated and monitored modules

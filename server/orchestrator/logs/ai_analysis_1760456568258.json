@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-14T15:42:48.258Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero confidence, and no generated opportunities or adjustments, suggesting it might be inactive or malfunctioning."
+    },
+    {
+      "severity": "low",
+      "message": "Trading metrics show zero active trades and a win rate of 0%, which might indicate inactivity or issues with trading strategies."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by reviewing running processes and potentially upgrading hardware or optimizing software."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart or update the AI module to ensure it is functioning and contributing to trading decisions."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments or alternative strategies to improve trading activity and performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Immediately investigate the cause of high CPU load and take corrective actions to prevent system instability.",
+      "rationale": "High CPU load can lead to degraded performance, increased latency, and potential system failures, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Diagnose and resolve issues with the AI module to ensure it is operational and contributing to trading strategy development.",
+      "rationale": "AI inactivity can lead to missed trading opportunities and reduced platform competitiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a review of current trading strategies and performance metrics to identify areas for improvement.",
+      "rationale": "Optimizing trading strategies can enhance profitability and user satisfaction."
+    }
+  ],
+  "urgencyLevel": "high"
+}
