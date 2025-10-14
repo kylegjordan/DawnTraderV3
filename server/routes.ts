@@ -1488,8 +1488,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Transparent optimization layer for health/metrics
   // ========================================
 
-  // Bob stats endpoint for monitoring cache performance
-  app.get('/api/bob/stats', authenticateToken, bobStatsHandler);
+  // Bob stats endpoint for monitoring cache performance (no auth for monitoring tools)
+  app.get('/api/bob/stats', bobStatsHandler);
 
   // Bob prefetch endpoint - triggered by Walter chat open or mode change
   app.post('/api/bob/prefetch', authenticateToken, async (req: AuthenticatedRequest, res) => {

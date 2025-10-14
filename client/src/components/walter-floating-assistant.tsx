@@ -48,9 +48,12 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
           
           // Phase 7.2: Trigger Bob Core prefetch for faster metrics
           const trigger = prefetchedModes.size === 0 ? 'chat_open' : 'mode_change';
-          apiRequest('POST', '/api/bob/prefetch', { mode, trigger }).catch(err => 
-            console.warn('[BobCore] Prefetch trigger failed:', err)
-          );
+          try {
+            await apiRequest('POST', '/api/bob/prefetch', { mode, trigger });
+            console.log(`[BobCore] ✅ Prefetch triggered: ${trigger} for ${mode} mode`);
+          } catch (err) {
+            console.error('[BobCore] ⚠️ Prefetch trigger failed:', err);
+          }
 
           await Promise.all([
             queryClient.prefetchQuery({
