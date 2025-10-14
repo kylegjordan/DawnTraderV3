@@ -22,3 +22,64 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 -   **OpenAI GPT-4o / GPT-4o mini API**: Powers AI analysis, conversational assistance, AI Opportunities generation, and voice transcription (Whisper API).
 -   **Neon Database**: Serverless PostgreSQL database.
 -   **WebSocket Infrastructure**: Custom WebSocket server for real-time data push.
+
+## Recent Changes
+
+### Phase 6.10: Frontend-Backend Synchronization Fixes
+**Completed:** October 14, 2025
+
+**Goal:** Fix critical synchronization issues where frontend displayed stale or incorrect data despite backend state changes.
+
+**Problems Solved:**
+
+1. **Paper Trading Status Sync:** Dashboard showed "Stopped" even when 48hr simulation was running
+2. **Goals Display Sync:** Goals Summary Widget showed "no goals configured" even when goals existed
+
+**Solutions:**
+
+**1. Paper Trading Cross-Process Communication**
+- Created internal HTTP API endpoints: `/api/internal/paper-sim/register-session` and `/deregister-session`
+- Updated `Paper48HrSimulation` to call HTTP API instead of global variables
+- Fixed deregister bug: Added empty JSON body `{}` to prevent Express parser error
+
+**2. Goals API Response Format Fix**
+- Changed `/api/goals/summary` response: `{success, data, mode}` → `{goals, hasGoals}`
+- Transformed DB fields: `metricName → metric`, `goalValue → goal`, `actualValue → actual`
+
+**3. Frontend QueryKey Fixes**
+- GoalsTable: Fixed queryKey to `['/api/goals/summary?mode=${mode}']`
+- Fixed response parsing and cache invalidation
+
+**Verification:**
+- ✅ E2E test passed
+- ✅ Paper trading script registers via HTTP API
+- ✅ Dashboard shows real-time backend state
+
+### Phase 6.11: PerformanceTrackingMetrics Backend Integration
+**Completed:** October 14, 2025
+
+**Critical Bug:** PerformanceTrackingMetrics component `handleSave()` was a mock - showed success toast but didn't save to database.
+
+**Impact:** Users edited goals, clicked "Save", saw success message, but goals weren't persisted. Dashboard showed "no goals configured" despite users thinking goals were saved.
+
+**Root Cause:** Component was UI-only with no backend integration.
+
+**Solution:**
+- Added `useTradingMode`, `useQuery`, `useMutation` hooks
+- Implemented `saveMutation` that POSTs to `/api/goals/update`
+- Added query to fetch existing goals from `/api/goals/summary?mode=${mode}`
+- Mode-aware saving: Goals save to correct table (user_goals_live or user_goals_paper)
+- Save button shows loading state, proper error handling
+
+**Verification:**
+- ✅ E2E test passed: Goals save in paper mode
+- ✅ Database confirmed: Goals persisted to user_goals_paper
+- ✅ Dashboard displays saved goals
+- ✅ Full synchronization verified
+
+**Files Modified:**
+- `server/routes.ts` - Internal endpoints, goals API fixes
+- `server/services/paper-48hr-simulation.ts` - HTTP API integration
+- `client/src/components/goals/goals-table.tsx` - QueryKey fixes
+- `client/src/components/goals/goals-engine-tab.tsx` - Cache invalidation
+- `client/src/components/goals/performance-tracking-metrics.tsx` - Backend integration
