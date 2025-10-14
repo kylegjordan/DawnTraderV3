@@ -36,6 +36,7 @@ import { bobStatsHandler } from "./middleware/bob-routing";
 import { bobCore } from "./services/bob-core";
 import { metricsBob } from "./services/bob-metrics";
 import { dataBob } from "./services/bob-data";
+import { configBob } from "./services/bob-config";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -4863,10 +4864,23 @@ Provide specific, actionable recommendations.`,
   // ===== GOALS ENGINE ROUTES =====
 
   // Get goals summary (mode-aware)
+  // Phase 7.4: ConfigBob transparent routing for goals endpoint
   app.get('/api/goals/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
+
+      // Phase 7.4: Try ConfigBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using ConfigBob for /api/goals/summary');
+          const goalsData = await configBob.getGoals(userId, mode as 'live' | 'paper');
+          return res.json(goalsData);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
 
       console.log(`[Goals] Fetching goals summary for user ${userId} in ${mode} mode`);
 

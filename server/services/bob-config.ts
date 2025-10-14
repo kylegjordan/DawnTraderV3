@@ -8,7 +8,7 @@
 
 import { bobCore, FetchContext } from './bob-core';
 import { db } from '../db';
-import { goals, guardrails, screeners, strategySettings, walterPurpose } from '@shared/schema';
+import { userGoalsLive, userGoalsPaper, guardrails, screenerFilters, strategySettings, walterPurpose } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 
 /**
@@ -52,16 +52,18 @@ class ConfigBobModule {
         throw new Error('userId is required for goals fetch');
       }
 
-      // Fetch goals for the user in the specified mode
-      const userGoals = await db.query.goals.findMany({
-        where: and(
-          eq(goals.userId, userId),
-          eq(goals.mode, mode)
-        ),
-        orderBy: (goals, { asc }) => [asc(goals.metricName)]
-      });
+      // Fetch goals for the user in the specified mode (mode-specific tables)
+      const userGoals = mode === 'live'
+        ? await db.query.userGoalsLive.findMany({
+            where: eq(userGoalsLive.userId, userId),
+            orderBy: (table, { asc }) => [asc(table.metricName)]
+          })
+        : await db.query.userGoalsPaper.findMany({
+            where: eq(userGoalsPaper.userId, userId),
+            orderBy: (table, { asc }) => [asc(table.metricName)]
+          });
 
-      const formattedGoals = userGoals.map(g => ({
+      const formattedGoals = userGoals.map((g: any) => ({
         metric: g.metricName,
         goal: g.goalValue ? parseFloat(g.goalValue) : null,
         actual: g.actualValue ? parseFloat(g.actualValue) : 0,
@@ -128,10 +130,10 @@ class ConfigBobModule {
         throw new Error('userId is required for screeners fetch');
       }
 
-      const screenersData = await db.query.screeners.findFirst({
+      const screenersData = await db.query.screenerFilters.findFirst({
         where: and(
-          eq(screeners.userId, userId),
-          eq(screeners.mode, mode)
+          eq(screenerFilters.userId, userId),
+          eq(screenerFilters.mode, mode)
         )
       });
 
