@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-14T02:43:26.118Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential over-utilization or a bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows zero recent learning cycles, average confidence, opportunities generated, and adjustments made, suggesting it is not functioning as expected."
+    },
+    {
+      "severity": "low",
+      "message": "Trading metrics show zero active trades and zero total profit/loss, which might be unusual depending on typical trading activity."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation or system instability."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI processes to ensure they are running and contributing to trading strategies."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Consider reviewing trading strategies or market conditions to ensure trading activity aligns with expected outcomes."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve any underlying issues.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart or troubleshoot the AI system to ensure it is operational and contributing to trading decisions.",
+      "rationale": "The AI system is not generating opportunities or making adjustments, which could hinder trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review the current trading strategies and market conditions to ensure alignment with expected trading activity.",
+      "rationale": "Zero active trades and profit/loss might indicate a misalignment with market conditions or strategy inefficiencies."
+    }
+  ],
+  "urgencyLevel": "high"
+}

@@ -249,60 +249,56 @@ export function ChatHistorySidebar({
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2 w-full">
+                    <MessageSquare className="w-4 h-4 flex-shrink-0 text-muted-foreground dark:text-muted-foreground" />
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 min-w-0 flex-shrink overflow-hidden max-w-[55%]">
-                          <MessageSquare className="w-4 h-4 flex-shrink-0 text-muted-foreground dark:text-muted-foreground" />
-                          <span className="text-sm truncate">{conv.title}</span>
-                        </div>
+                        <span className="text-sm truncate flex-1 min-w-0">{conv.title}</span>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs">
                         <p className="break-words">{conv.title}</p>
                       </TooltipContent>
                     </Tooltip>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEdit(conv);
-                            }}
-                            aria-label={`Rename chat: ${conv.title}`}
-                            data-testid={`button-edit-${conv.id}`}
-                          >
-                            <Edit2 className="w-3 h-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                          <p>Rename chat</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteClick(conv.id);
-                            }}
-                            aria-label={`Delete chat: ${conv.title}`}
-                            data-testid={`button-delete-${conv.id}`}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                          <p>Delete chat</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 flex-shrink-0 text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEdit(conv);
+                          }}
+                          aria-label={`Rename chat: ${conv.title}`}
+                          data-testid={`button-edit-${conv.id}`}
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Rename chat</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 flex-shrink-0 text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(conv.id);
+                          }}
+                          aria-label={`Delete chat: ${conv.title}`}
+                          data-testid={`button-delete-${conv.id}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Delete chat</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 )}
               </div>
