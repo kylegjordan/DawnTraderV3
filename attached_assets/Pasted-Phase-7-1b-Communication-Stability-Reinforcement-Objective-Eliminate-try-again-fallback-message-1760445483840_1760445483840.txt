@@ -1,0 +1,109 @@
+Phase 7.1b: Communication Stability Reinforcement
+
+Objective:
+Eliminate “try again” fallback messages and replace them with clear, natural feedback while Walter builds context.
+Ensure first-ask responses complete reliably even when context aggregation is heavy.
+
+Deliverables
+1️⃣ Extend Context-Build Timeout
+
+Increase the backend context-assembly timeout from 8 → 30 seconds.
+
+Applies to all /api/walter/chat requests and to gatherContext() service calls.
+
+Include a visible countdown spinner or animated “Walter is thinking…” indicator on the frontend during this period.
+
+If context completes in < 30 s, return immediately (don’t delay responses).
+
+Acceptance Test:
+
+Ask a high-load question (e.g., “List all endpoints and data sources you use”).
+
+Walter responds fully on first try, within ≤ 30 s.
+
+No “I’m taking longer…” messages appear.
+
+2️⃣ Add Prefetch Trigger on Chat Mount
+
+When the user opens or refreshes the chat, prefetch all standard dashboard endpoints in the background so caches are warm before the first user message.
+
+Prefetch should include:
+
+/api/goals/summary
+
+/api/results
+
+/api/activity
+
+/api/averages
+
+/api/simulation/status
+
+/api/system/health
+
+Acceptance Test:
+
+Immediately after chat opens, first query latency < 2 seconds.
+
+Server logs confirm successful prefetch calls per endpoint.
+
+3️⃣ Improve User Feedback During Context Build
+
+Replace the “system might be under heavy load” text with an animated spinner + dynamic progress messages such as:
+
+“🔍 Gathering goals and results…”
+
+“📊 Checking system health…”
+
+“🤖 Almost there — finalizing your data view…”
+
+Maintain interactivity (cancel or minimize option) during this phase.
+
+Acceptance Test:
+
+When Walter takes > 3 s to respond, spinner appears with at least one dynamic status update.
+
+No static “try again” message shown.
+
+4️⃣ Enforce Fallback Humanizer on All Replies
+
+All responses must pass through the natural-language formatter (getFallbackResponse() equivalent).
+
+No raw JSON or command structures should appear in user-visible text.
+
+Acceptance Test:
+
+Ask “What is your purpose?” → returns natural sentence (no code).
+
+Force an error by temporarily blocking an endpoint → natural “I can’t reach that data right now…” message, no technical trace.
+
+5️⃣ Provenance Footer (Phase 7.1b Optional but Recommended)
+
+Append a discreet line to data-based replies:
+“(Data as of 2025-10-14 17:05 UTC | Mode: PAPER | Source: api/goals/summary)”
+
+Toggle visibility via a developer flag in replit.env.
+
+Acceptance Test:
+
+When enabled, each data-response includes timestamp, mode, and endpoint.
+
+When disabled, response remains clean and conversational.
+
+Readiness Verification Checklist
+Check	Expected Result
+Context build completes within ≤ 30 s	✅
+No “try again” messages	✅
+Spinner/progress messages visible	✅
+Prefetch reduces first-query latency < 2 s	✅
+All user-visible text natural-language only	✅
+Provenance footer optional & accurate	✅
+Success Definition
+
+When you ask a heavy multi-endpoint question, you see:
+
+A smooth loading indicator (“Walter is gathering data…”),
+
+A single, complete answer — no retry required, and
+
+A small provenance footer confirming data freshness.

@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-14T12:42:27.415Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high, especially the 1-minute load average (27.82) which is more than 3 times the number of cores (8)."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, average confidence, or opportunities generated, indicating potential issues with AI functionality."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system has no active trades or profit/loss, which is unusual given the active strategies."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Optimize CPU usage by reviewing and potentially optimizing the processes consuming high CPU resources."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Investigate and enhance AI system's learning and opportunity generation capabilities to improve trading performance."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Review and adjust active trading strategies to ensure they are effectively identifying and executing trades."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate and resolve high CPU load immediately to prevent potential system instability or downtime.",
+      "rationale": "High CPU load can lead to system performance degradation and potential outages, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough review of the AI system to identify why it is not generating learning cycles or opportunities.",
+      "rationale": "The AI system is crucial for identifying trading opportunities and optimizing strategies; its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Evaluate the effectiveness of the active trading strategies and make necessary adjustments to ensure they are aligned with current market conditions.",
+      "rationale": "Active strategies should be regularly reviewed to ensure they are performing as expected and adapting to market changes."
+    }
+  ],
+  "urgencyLevel": "high"
+}

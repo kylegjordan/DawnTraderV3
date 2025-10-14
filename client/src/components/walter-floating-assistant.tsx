@@ -9,11 +9,17 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { cn } from '@/lib/utils';
+import { useTradingMode } from '@/contexts/trading-mode-context';
 
 interface Message {
   role: 'user' | 'assistant';
   message: string;
   timestamp: Date;
+  provenance?: {
+    timestamp: string;
+    mode: string;
+    sources: string[];
+  };
 }
 
 interface WalterFloatingAssistantProps {
@@ -25,9 +31,56 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [progressMessage, setProgressMessage] = useState<string>('');
+  const [prefetchedModes, setPrefetchedModes] = useState<Set<string>>(new Set());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { isRecording, startRecording, stopRecording, audioBlob, error: recorderError } = useAudioRecorder();
+  const { mode } = useTradingMode();
+
+  // Phase 7.1b Deliverable 2: Prefetch dashboard endpoints when chat opens
+  // Fixed: Track prefetch per mode to handle mode switching
+  useEffect(() => {
+    if (isOpen && !prefetchedModes.has(mode)) {
+      const prefetchEndpoints = async () => {
+        try {
+          console.log(`[Walter] Prefetching dashboard data for ${mode} mode...`);
+          await Promise.all([
+            queryClient.prefetchQuery({
+              queryKey: ['goals', 'summary', mode],
+              queryFn: () => apiRequest('GET', `/api/goals/summary?mode=${mode}`)
+            }),
+            queryClient.prefetchQuery({
+              queryKey: ['trading', 'results', mode, 'today'],
+              queryFn: () => apiRequest('GET', `/api/trading/results?mode=${mode}&period=today`)
+            }),
+            queryClient.prefetchQuery({
+              queryKey: ['trading', 'activity', mode, 'today'],
+              queryFn: () => apiRequest('GET', `/api/trading/activity?mode=${mode}&period=today`)
+            }),
+            queryClient.prefetchQuery({
+              queryKey: ['trading', 'averages', mode, 'today'],
+              queryFn: () => apiRequest('GET', `/api/trading/averages?mode=${mode}&period=today`)
+            }),
+            queryClient.prefetchQuery({
+              queryKey: ['simulation', 'status'],
+              queryFn: () => apiRequest('GET', '/api/simulation/status')
+            }),
+            queryClient.prefetchQuery({
+              queryKey: ['system', 'health'],
+              queryFn: () => apiRequest('GET', '/api/system/health')
+            })
+          ]);
+          setPrefetchedModes(prev => new Set(prev).add(mode));
+          console.log(`[Walter] ✅ Prefetch complete for ${mode} mode`);
+        } catch (error) {
+          console.error('[Walter] Prefetch failed:', error);
+        }
+      };
+      
+      prefetchEndpoints();
+    }
+  }, [isOpen, prefetchedModes, mode]);
 
   // Load chat history
   const { data: chatHistory, isLoading: isLoadingHistory } = useQuery({
@@ -97,40 +150,77 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
-      // Add context to the message
-      const contextualMessage = `[Page: ${pageContext}] ${message}`;
+      // Phase 7.1b Deliverable 3: Dynamic progress messages (fixed to show during actual request)
+      // Stage 1: Initial gathering
+      setProgressMessage('🔍 Gathering goals and results...');
       
-      const response = await apiRequest('POST', '/api/walter/interpret-command', {
-        message: contextualMessage
-      });
+      // Start the API request immediately
+      const requestPromise = (async () => {
+        const contextualMessage = `[Page: ${pageContext}] ${message}`;
+        return await apiRequest('POST', '/api/walter/interpret-command', {
+          message: contextualMessage
+        });
+      })();
+      
+      // Stage 2: Show progress while request is in flight
+      const progressTimer1 = setTimeout(() => {
+        setProgressMessage('📊 Checking system health...');
+      }, 1000);
+      
+      // Stage 3: Final stage
+      const progressTimer2 = setTimeout(() => {
+        setProgressMessage('🤖 Almost there — finalizing your data view...');
+      }, 2000);
+      
+      try {
+        const response = await requestPromise;
+        clearTimeout(progressTimer1);
+        clearTimeout(progressTimer2);
+        setProgressMessage('');
+        return response;
+      } catch (error) {
+        clearTimeout(progressTimer1);
+        clearTimeout(progressTimer2);
+        setProgressMessage('');
+        throw error;
+      }
+    },
+    onSuccess: async (data, variables) => {
+      // Phase 7.1b Deliverable 5: Create provenance metadata
+      const provenance = {
+        timestamp: new Date().toISOString(),
+        mode: mode.toUpperCase(),
+        sources: data.sources || ['api/goals/summary', 'api/system/health']
+      };
+
+      const showProvenance = import.meta.env.VITE_WALTER_PROVENANCE === 'true';
 
       // Save both user and assistant messages to chat history
       await apiRequest('POST', '/api/chats/save', {
         context: 'walter',
         role: 'user',
-        message: message // Save original message without context prefix
+        message: variables // variables contains the original message
       });
 
       await apiRequest('POST', '/api/chats/save', {
         context: 'walter',
         role: 'assistant',
-        message: response.response
+        message: data.response
       });
 
-      return response;
-    },
-    onSuccess: (data) => {
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
           message: data.response,
-          timestamp: new Date()
+          timestamp: new Date(),
+          ...(showProvenance && { provenance })
         }
       ]);
       queryClient.invalidateQueries({ queryKey: ['/api/chats', 'walter'] });
     },
     onError: (error) => {
+      setProgressMessage('');
       toast({
         title: 'Error',
         description: 'Failed to send message. Please try again.',
@@ -253,6 +343,19 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
                   )}
                 >
                   <p className="whitespace-pre-wrap">{msg.message}</p>
+                  
+                  {/* Phase 7.1b Deliverable 5: Provenance footer */}
+                  {msg.provenance && (
+                    <div className="mt-2 pt-2 border-t border-border text-[10px] text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <span>Data as of {new Date(msg.provenance.timestamp).toLocaleTimeString()}</span>
+                        <span>•</span>
+                        <span>Mode: {msg.provenance.mode}</span>
+                        <span>•</span>
+                        <span>Sources: {msg.provenance.sources.join(', ')}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -263,7 +366,14 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
                   <Bot className="w-4 h-4 text-primary-foreground" />
                 </div>
                 <div className="bg-muted rounded-lg p-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {progressMessage && (
+                      <span className="text-xs text-muted-foreground animate-pulse">
+                        {progressMessage}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

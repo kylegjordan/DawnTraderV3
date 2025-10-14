@@ -302,13 +302,14 @@ Now respond to the user's message:`;
 }
 
 /**
- * Call OpenAI API to generate response with 8-second timeout
+ * Call OpenAI API to generate response with 30-second timeout
+ * Phase 7.1b: Extended from 8s to 30s for heavy context builds
  */
 async function callOpenAI(systemPrompt: string, userMessage: string): Promise<string> {
   try {
-    // Create timeout promise
+    // Create timeout promise - Phase 7.1b: Extended to 30s
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('TIMEOUT')), 8000); // 8 second timeout
+      setTimeout(() => reject(new Error('TIMEOUT')), 30000); // 30 second timeout
     });
 
     // Race OpenAI call against timeout
