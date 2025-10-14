@@ -3,6 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { 
   Plus, 
   MessageSquare, 
@@ -152,19 +158,20 @@ export function ChatHistorySidebar({
   }
 
   return (
-    <div className="w-64 border-r bg-background flex flex-col" data-testid="chat-history-sidebar">
-      {/* Header */}
-      <div className="p-4 border-b flex items-center justify-between">
-        <h3 className="font-semibold text-sm">Chat History</h3>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggleCollapse}
-          data-testid="button-collapse-sidebar"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-      </div>
+    <TooltipProvider>
+      <div className="w-[300px] border-r bg-background flex flex-col" data-testid="chat-history-sidebar">
+        {/* Header */}
+        <div className="p-4 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-sm">Chat History</h3>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggleCollapse}
+            data-testid="button-collapse-sidebar"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+        </div>
 
       {/* New Chat Button */}
       <div className="p-2">
@@ -237,36 +244,57 @@ export function ChatHistorySidebar({
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <MessageSquare className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-sm truncate">{conv.title}</span>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(conv);
-                        }}
-                        data-testid={`button-edit-${conv.id}`}
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteClick(conv.id);
-                        }}
-                        data-testid={`button-delete-${conv.id}`}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                  <div className="flex items-center justify-between gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <MessageSquare className="w-4 h-4 flex-shrink-0 text-muted-foreground dark:text-muted-foreground" />
+                          <span className="text-sm truncate">{conv.title}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <p className="break-words">{conv.title}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEdit(conv);
+                            }}
+                            data-testid={`button-edit-${conv.id}`}
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Rename chat</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(conv.id);
+                            }}
+                            data-testid={`button-delete-${conv.id}`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Delete chat</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 )}
@@ -298,6 +326,7 @@ export function ChatHistorySidebar({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }
