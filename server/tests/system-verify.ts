@@ -22,7 +22,7 @@ async function authenticate(): Promise<void> {
   const username = process.env.TEST_USER_EMAIL || 'testuser123';
   const password = process.env.TEST_USER_PASSWORD || 'SecurePass123!';
   
-  const response = await fetch(`${BASE_URL}/api/login`, {
+  const response = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
@@ -112,17 +112,35 @@ async function test3_GoalsCreation(): Promise<void> {
   
   console.log(`   - Goals before: ${goalsBefore}`);
   
-  // Create a test goal
-  const testGoal = {
+  // Create test goals in correct format
+  const testGoals = {
     mode: 'paper',
-    metrics: {
-      'Earnings per Day': { goal: 100, actual: 0 },
-      'Average Return': { goal: 2.5, actual: 0 },
-      'Earnings per Trade': { goal: 25, actual: 0 }
-    }
+    goals: [
+      {
+        metricName: 'Earnings per Day',
+        goalValue: '100',
+        actualValue: '0',
+        percentAchieved: '0',
+        aiValidationNotes: null
+      },
+      {
+        metricName: 'Average Return',
+        goalValue: '2.5',
+        actualValue: '0',
+        percentAchieved: '0',
+        aiValidationNotes: null
+      },
+      {
+        metricName: 'Earnings per Trade',
+        goalValue: '25',
+        actualValue: '0',
+        percentAchieved: '0',
+        aiValidationNotes: null
+      }
+    ]
   };
   
-  await apiCall('POST', '/api/goals/update', testGoal);
+  await apiCall('POST', '/api/goals/update', testGoals);
   
   // Wait a moment for persistence
   await new Promise(resolve => setTimeout(resolve, 500));

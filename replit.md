@@ -83,3 +83,85 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 - `client/src/components/goals/goals-table.tsx` - QueryKey fixes
 - `client/src/components/goals/goals-engine-tab.tsx` - Cache invalidation
 - `client/src/components/goals/performance-tracking-metrics.tsx` - Backend integration
+
+### Phase 6.12: System Health Monitoring & Auto-Resync
+**Completed:** October 14, 2025
+
+**Goal:** Implement comprehensive system health monitoring, automatic frontend resynchronization, and developer debugging tools to ensure real-time data accuracy.
+
+**Features Implemented:**
+
+**1. System Health Endpoint (`/api/system/health`)**
+- Comprehensive status checks: backend, database, paper trading, goals (live & paper), frontend connection
+- Returns HTTP 200 when healthy, 503 when issues detected
+- Authenticated endpoint with mode-aware tracking
+- Real-time subsystem status monitoring
+
+**2. Auto Frontend Resync**
+- Created `useSystemHealth` hook that polls health endpoint every 12s
+- Detects backend state changes (paper trading, goals)
+- Auto-invalidates TanStack Query cache when changes detected
+- Integrated into dashboard for seamless updates
+- Smart query invalidation prevents unnecessary re-fetches
+
+**3. Mode Context Propagation**
+- Fixed default trading mode mismatch (queryClient and TradingModeContext now both default to 'live')
+- Verified `x-app-mode` header is added to all API requests
+- Confirmed validateMode middleware works correctly
+- Mode-aware data fetching across all components
+
+**4. Developer Data Flow Trace Panel**
+- Created RequestTraceProvider context for request tracking infrastructure
+- Built DataFlowTracePanel component (dev-only via `import.meta.env.DEV`)
+- Shows last 5 requests with method, endpoint, status, duration
+- Integrated into dashboard for debugging
+- Hidden in production builds
+
+**5. AI Health Access Service**
+- Created `SystemHealthService` for Walter & Bob AI assistants
+- Provides direct health status access without HTTP overhead
+- Generates natural language alerts from health data
+- Reusable service for future AI integrations
+
+**6. Automated Verification Script**
+- Created `/server/tests/system-verify.ts` E2E verification script
+- Tests: health endpoint, paper trading start/stop, goals creation, dashboard sync
+- Can be run with `tsx server/tests/system-verify.ts`
+- Validates system-wide synchronization
+
+**7. Walter Health Monitor (Disabled)**
+- Created `WalterHealthMonitor` service for continuous monitoring
+- Designed to poll `/api/system/health` every 30s
+- Detects: paper trading stops, frontend disconnect, goals disappearing
+- **Status:** Temporarily disabled due to JWT/tsx module import issue
+- **TODO:** Fix JWT import before enabling continuous monitoring
+
+**Key Fixes:**
+- Fixed `storage.getGoalsSummary()` calls → `storage.getUserGoalsLive/Paper()`
+- Corrected system verification test: `/api/login` → `/api/auth/login`
+- Fixed test goals format: `metrics` object → `goals` array
+
+**Verification:**
+- ✅ All 5 system verification tests passed
+- ✅ Health endpoint operational
+- ✅ Paper trading syncs correctly
+- ✅ Goals persist and sync to dashboard
+- ✅ Frontend auto-resync working within 12s
+- ✅ Mode propagation verified
+
+**Known Issues:**
+- Walter Health Monitor disabled due to `jwt.sign is not a function` error with tsx/ES modules
+- Needs resolution before enabling continuous monitoring
+
+**Files Created/Modified:**
+- `server/routes.ts` - Added `/api/system/health` endpoint
+- `server/services/system-health-service.ts` - New health service for AI
+- `server/services/walter-health-monitor.ts` - New (disabled) continuous monitor
+- `server/tests/system-verify.ts` - New E2E verification script
+- `server/index.ts` - Disabled Walter monitor startup
+- `client/src/hooks/use-system-health.tsx` - New auto-resync hook
+- `client/src/hooks/use-request-trace.tsx` - New request trace context
+- `client/src/components/dashboard/data-flow-trace-panel.tsx` - New dev panel
+- `client/src/pages/dashboard.tsx` - Integrated system health hook
+- `client/src/App.tsx` - Added RequestTraceProvider
+- `client/src/lib/queryClient.ts` - Fixed default mode to 'live'

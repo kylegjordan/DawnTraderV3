@@ -9,6 +9,7 @@
  */
 
 import { storage } from '../storage';
+import * as jwt from 'jsonwebtoken';
 
 interface SystemHealthStatus {
   backend: string;
@@ -136,7 +137,6 @@ export class WalterHealthMonitor {
       if (!user) return null;
 
       // Create a JWT token for internal monitoring (using same logic as login)
-      const jwt = await import('jsonwebtoken');
       const JWT_SECRET = process.env.JWT_SECRET || 'development_secret_change_in_production';
       
       const token = jwt.sign(
