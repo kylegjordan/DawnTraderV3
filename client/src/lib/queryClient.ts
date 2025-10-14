@@ -9,7 +9,8 @@ async function throwIfResNotOk(res: Response) {
 }
 
 // Global trading mode accessor - updated by TradingModeContext
-let currentTradingMode: 'live' | 'paper' = 'paper';
+// Default to 'live' to match TradingModeContext default
+let currentTradingMode: 'live' | 'paper' = 'live';
 
 export function setGlobalTradingMode(mode: 'live' | 'paper') {
   currentTradingMode = mode;
