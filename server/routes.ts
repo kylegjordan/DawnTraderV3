@@ -1543,6 +1543,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Phase 7.4: Prefetch ConfigBob (all 5 config types)
       await configBob.prefetchForMode(userId, mode as 'live' | 'paper');
       
+      // Phase 7.5: Prefetch StrategyBob (signals only on mode_change)
+      const includeSignals = trigger === 'mode_change';
+      await strategyBob.prefetchForMode(userId, mode as 'live' | 'paper', includeSignals);
+      
       res.json({ success: true, mode, trigger });
     } catch (error: any) {
       console.error('[BobCore] ⚠️ Prefetch failed:', error);
