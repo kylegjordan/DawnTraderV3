@@ -140,6 +140,7 @@ export function ChatHistorySidebar({
           variant="ghost"
           size="icon"
           onClick={onToggleCollapse}
+          aria-label="Expand sidebar"
           data-testid="button-expand-sidebar"
         >
           <ChevronRight className="w-4 h-4" />
@@ -149,6 +150,7 @@ export function ChatHistorySidebar({
           size="icon"
           onClick={() => createMutation.mutate()}
           disabled={createMutation.isPending}
+          aria-label="Create new chat"
           data-testid="button-new-chat-collapsed"
         >
           <Plus className="w-4 h-4" />
@@ -167,6 +169,7 @@ export function ChatHistorySidebar({
             variant="ghost"
             size="icon"
             onClick={onToggleCollapse}
+            aria-label="Collapse sidebar"
             data-testid="button-collapse-sidebar"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -229,6 +232,7 @@ export function ChatHistorySidebar({
                       size="icon"
                       className="h-7 w-7"
                       onClick={handleSaveEdit}
+                      aria-label="Save chat title"
                       data-testid="button-save-title"
                     >
                       <Check className="w-3 h-3" />
@@ -238,6 +242,7 @@ export function ChatHistorySidebar({
                       size="icon"
                       className="h-7 w-7"
                       onClick={handleCancelEdit}
+                      aria-label="Cancel editing"
                       data-testid="button-cancel-title"
                     >
                       <X className="w-3 h-3" />
@@ -267,6 +272,7 @@ export function ChatHistorySidebar({
                               e.stopPropagation();
                               handleStartEdit(conv);
                             }}
+                            aria-label={`Rename chat: ${conv.title}`}
                             data-testid={`button-edit-${conv.id}`}
                           >
                             <Edit2 className="w-3 h-3" />
@@ -286,6 +292,7 @@ export function ChatHistorySidebar({
                               e.stopPropagation();
                               handleDeleteClick(conv.id);
                             }}
+                            aria-label={`Delete chat: ${conv.title}`}
                             data-testid={`button-delete-${conv.id}`}
                           >
                             <Trash2 className="w-3 h-3" />
