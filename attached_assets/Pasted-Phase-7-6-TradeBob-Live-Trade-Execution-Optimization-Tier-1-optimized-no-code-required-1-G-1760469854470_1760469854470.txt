@@ -1,0 +1,206 @@
+Phase 7.6 — TradeBob (Live Trade & Execution Optimization)
+
+Tier-1 optimized, no code required
+
+1) Goal (what success looks like)
+
+Give Walter (and the dashboard) instant, consistent awareness of live trading state by introducing a TradeBob module under Bob Core that:
+
+Caches hot trading data (open positions, working orders, recent fills/executions, live PnL, exposure) with tight TTLs.
+
+Refreshes proactively on trade events (place, amend, cancel, fill, reject) — not only on pull.
+
+Serves identical data to Walter and the UI, so Walter’s answers always mirror the dashboard.
+
+Definition of Done
+
+Walter answers trade state questions in <1–2s.
+
+Dashboard and Walter return the same values for open positions, PnL, exposure, recent fills.
+
+No “stale after event” windows longer than 3 seconds under normal load.
+
+2) Scope & data map (what TradeBob will cover)
+
+Both modes: LIVE and PAPER (mode-isolated keys)
+
+Resources to serve through TradeBob
+
+Open positions (symbol, side, qty, avg price, UPL/RPL, entry time)
+
+Working orders (id, symbol, side, qty, type, limit/stop price, status, timestamps)
+
+Recent fills / executions (last N by time)
+
+Session PnL & exposure (realized, unrealized, gross/net, %; portfolio exposure %)
+
+Recent trade activity (compact stream for widgets: last N events across orders/fills)
+
+Note: We intentionally keep historical “activity by period” out of the cache if its query surface is wide; TradeBob focuses on hot, near-real-time state. (Historical/per-period remains DataBob’s domain.)
+
+3) Caching policy (how fast, how fresh)
+
+Per-resource TTLs (defaults):
+
+Open positions: 2 s
+
+Working orders: 1 s
+
+Fills/executions (recent N): 3 s
+
+Session PnL / exposure: 2 s
+
+Aggregated “recent trade activity” stream: 2 s
+
+Cache keys include: userId + mode + resource + relevant parameters (e.g., limit for fills list).
+
+Hard invalidation events (bypass TTL):
+
+Order placed / amended / canceled
+
+Fill or partial fill received
+
+Position opened/closed
+
+Realized PnL update posted
+
+Engine heartbeat switching state (e.g., pause/resume)
+
+When these events occur, TradeBob immediately invalidates affected keys and rehydrates.
+
+4) Integration points (no code, who does what)
+4.1 Transparent routing (server side)
+
+For each existing trading endpoint that serves the 5 resources above, insert TradeBob in front of the handler (same pattern used for MetricsBob/DataBob/ConfigBob):
+
+Try TradeBob cached response → if miss or stale → fetch underlying storage/engine → store → serve.
+
+Keep original handlers intact behind the router (automatic fallback).
+
+4.2 Event hooks (execution engine → TradeBob)
+
+Have the execution engine (paper & live) emit lightweight internal events whenever a trade lifecycle change happens (place, amend, cancel, fill, position update, PnL tick).
+
+On each event, TradeBob invalidates the exact affected keys and (optionally) rehydrates right away for hot resources (positions, orders, PnL).
+
+If you already broadcast events on an internal bus or through logs, you can wire a small listener that translates those into TradeBob invalidation calls — no functional code changes to the engine.
+
+4.3 Prefetch triggers (same pattern you used for other Bobs)
+
+Server start: pre-warm LIVE positions & PnL for the most active account (skip if user-specific auth is required).
+
+Dashboard mount (user-scoped): prefetch positions, orders, PnL for current mode.
+
+Walter chat open: prefetch positions & PnL for current mode.
+
+Mode change: prefetch positions, orders, PnL for the new mode.
+
+5) Security & data boundaries
+
+TradeBob uses the same auth headers as the dashboard/Walter (Bearer token + x-app-mode).
+
+Cache keys are user-scoped. No cross-user leakage.
+
+Add a cap on list sizes returned from cache (e.g., fills limit max 100) to prevent accidental overfetch.
+
+6) Observability (what to log & watch)
+
+Expose/append to /api/bob/stats:
+
+modulesRegistered includes TradeBob
+
+Per-resource: hits, misses, prefetches, invalidations, avgFetchMs, avgServeMs
+
+Current TTL/time-to-live for each hot key (for debugging)
+
+Last event processed timestamp
+
+Dash debug overlay (dev only):
+
+Tiny “⚡ TradeBob” badge shows “cache hit” or “fresh fetch” when positions/PnL tiles render.
+
+7) Failure handling (what if it breaks)
+
+If underlying fetch fails: serve last good cache with (stale) tag for up to 10 s; log WARN and surface an unobtrusive “data delayed” banner in dev builds.
+
+If cache empty and fetch fails: return structured friendly error to the route and do not crash the endpoint; Walter’s response template should say:
+“I can’t reach live trading data right now. I’m using the last confirmed state from [time].”
+
+Feature flag: BOB_TRADE_ENABLED to bypass TradeBob quickly if needed.
+
+8) Acceptance tests (what QA should run — copy/paste steps)
+A. Consistency — Dashboard vs Walter (LIVE and PAPER)
+
+Open dashboard (LIVE). Note positions count, UPL, open orders.
+
+Ask Walter: “In LIVE, how many open positions and what’s UPL right now?”
+Pass: Values match dashboard.
+
+Switch to PAPER. Repeat #1–2.
+Pass: Values match, and differ if the modes differ.
+
+B. Freshness after events
+
+Place a dummy PAPER order (small size).
+
+Within 3 seconds, confirm:
+
+Dashboard orders tile increments.
+
+Ask Walter: “Did we just place a new PAPER order? Which symbol and qty?”
+Pass: Both reflect the new order.
+
+Trigger a partial fill.
+Pass: Positions qty/UPL update within 3 s; Walter reports the partial.
+
+C. Burst behavior (stability)
+
+Fire 10 quick order actions (place/cancel mix) in PAPER.
+
+Check /api/bob/stats: invalidations increase, hit rate remains >60%, no error spikes.
+Pass: Dashboard responsive; Walter answers under 2 s.
+
+D. Stale-serve fallback
+
+Temporarily block underlying data source (simulate outage).
+
+Ask Walter for positions.
+Pass: He returns last good state with a “data may be slightly delayed” note.
+
+9) Deliverables (what Replit should hand back)
+
+TradeBob registered in Bob Core (visible in /api/bob/stats) with counters for:
+
+positions / orders / fills / pnl / activity
+
+Transparent routing active for the 5 resources (visible “Using TradeBob for …” logs).
+
+Event invalidation wiring documented: list of event types and which cache keys they flush.
+
+Prefetch triggers documented: where they fire (server start, dashboard mount, chat open, mode switch).
+
+Observability updated: stats include TradeBob metrics; optional dev overlay enabled.
+
+Runbook (one page): how to toggle, clear cache, and diagnose stale data.
+
+QA evidence: screenshots/gifs or agent test replays for the Acceptance Tests A–D above.
+
+10) Rollout plan (safe & reversible)
+
+Ship behind BOB_TRADE_ENABLED=false → turn on in staging → run Acceptance Tests → promote to prod.
+
+If any anomaly: set flag off, endpoints auto-fall back to original handlers. Investigate with /api/bob/stats + logs.
+
+11) What Walter gains immediately
+
+Instant answers about “what’s open?”, “latest fill?”, “current UPL/RPL?”, “portfolio exposure?”
+
+Fewer timeouts, because hot data is already hydrated by events/prefetch.
+
+Answers that always match the UI, reducing confusion and re-asks.
+
+If this looks good, I’ll follow with two tiny add-ons (still no code):
+
+A Walter prompt snippet to always include TradeBob provenance in his replies when the VITE_WALTER_PROVENANCE flag is on (keeps us transparent during testing).
+
+A 1-minute operator checklist your team can use at the start of each trading session (verify flags, check /api/bob/stats, run A/B freshness checks).
