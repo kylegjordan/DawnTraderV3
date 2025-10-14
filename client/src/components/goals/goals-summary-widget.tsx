@@ -8,6 +8,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useLocation } from "wouter";
 import { AchievementPill } from "@/components/ui/achievement-pill";
 import { ModeIndicator } from "@/components/goals/mode-indicator";
+import { useEffect } from "react";
 
 interface GoalSummary {
   metric: string;
@@ -25,9 +26,19 @@ export default function GoalsSummaryWidget() {
   const { mode, isPaper } = useTradingMode();
   const [, setLocation] = useLocation();
   
-  const { data, isLoading } = useQuery<GoalsSummaryData>({
-    queryKey: [`/api/goals/summary?mode=${mode}`],
+  const { data, isLoading, refetch } = useQuery<GoalsSummaryData>({
+    queryKey: ['goals', 'summary', mode],
+    queryFn: () => fetch(`/api/goals/summary?mode=${mode}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
   });
+
+  // Refetch when mode changes
+  useEffect(() => {
+    refetch();
+  }, [mode, refetch]);
 
   if (isLoading && !data) {
     return (

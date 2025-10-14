@@ -41,7 +41,12 @@ export default function GoalsEngineTab() {
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder();
 
   const { data, isLoading } = useQuery<GoalsSummary>({
-    queryKey: [`/api/goals/summary?mode=${mode}`],
+    queryKey: ['goals', 'summary', mode],
+    queryFn: () => fetch(`/api/goals/summary?mode=${mode}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
   });
 
   // Load chat history
@@ -64,7 +69,7 @@ export default function GoalsEngineTab() {
       return apiRequest('POST', '/api/goals/update', { goals, mode });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=${mode}`] });
+      queryClient.invalidateQueries({ queryKey: ['goals', 'summary', mode] });
       toast({
         title: "Goals updated",
         description: "Your goals have been saved successfully.",

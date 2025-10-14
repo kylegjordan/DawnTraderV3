@@ -51,7 +51,12 @@ export default function GoalsTable() {
   const [values, setValues] = useState<Record<string, number>>({});
 
   const { data: goalsData, isLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
-    queryKey: [`/api/goals/summary?mode=${mode}`],
+    queryKey: ['goals', 'summary', mode],
+    queryFn: () => fetch(`/api/goals/summary?mode=${mode}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    }).then(r => r.json()),
   });
 
   useEffect(() => {
@@ -91,7 +96,7 @@ export default function GoalsTable() {
       return apiRequest('POST', '/api/goals/update', payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=${mode}`] });
+      queryClient.invalidateQueries({ queryKey: ['goals', 'summary', mode] });
       toast({
         title: "Goals Saved",
         description: "Your trading goals have been saved successfully.",

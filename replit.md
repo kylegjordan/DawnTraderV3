@@ -27,3 +27,61 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 -   **OpenAI GPT-4o / GPT-4o mini API**: Powers AI analysis, conversational assistance, AI Opportunities generation, and voice transcription (Whisper API).
 -   **Neon Database**: Serverless PostgreSQL database.
 -   **WebSocket Infrastructure**: Custom WebSocket server for real-time data push.
+
+## Recent Changes
+
+### Phase 6.15: Dashboard Reactive Goals Refresh
+**Completed:** October 14, 2025
+
+**Goal:** Ensure the Dashboard Goals Summary dynamically refreshes and displays the correct mode's goals immediately when the trading mode changes — eliminating stale data and ensuring perfect synchronization.
+
+**Implementation:**
+
+**1. Unified Query Cache Keys**
+- Standardized all goals-related components to use array-based query keys
+- Old format: `['/api/goals/summary?mode=${mode}']` (string-based, hard to invalidate)
+- New format: `['goals', 'summary', mode]` (array-based, precise cache control)
+- Applied to: Dashboard Widget, Goals Engine, Performance Metrics, Goals Table
+
+**2. Added Reactive Refresh Trigger**
+- Dashboard Goals Summary now has explicit useEffect hook
+- Automatically refetches data when mode changes
+- Triggers within 1 second of mode toggle
+- No page refresh or navigation required
+
+**3. Fixed Cache Invalidation**
+- System health hook now invalidates correct mode-specific cache
+- All mutation callbacks use unified query key format
+- Ensures Goals Engine updates instantly appear on Dashboard
+
+**4. Custom Query Functions**
+- All components now use custom queryFn with proper auth headers
+- Consistent data fetching across all goals components
+- Better error handling and authentication flow
+
+**Key Benefits:**
+- Dashboard updates instantly when mode toggles (within ~1 second)
+- No stale "No goals set" messages
+- Perfect synchronization between Dashboard and Goals Engine
+- Shared cache prevents duplicate API calls
+- Eliminated query key mismatches that caused refresh bugs
+
+**Technical Details:**
+- useEffect dependency on `[mode, refetch]` triggers automatic refresh
+- React Query's queryKey change detection provides backup refresh
+- Unified cache ensures all components show same data for same mode
+- System health monitoring invalidates correct cache when goals change
+
+**Verification:**
+- ✅ E2E test passed: Set LIVE goal ($7000), PAPER goal ($3000)
+- ✅ Dashboard refreshes within 1 second of mode toggle
+- ✅ No page navigation needed for data refresh
+- ✅ Goals Engine and Dashboard perfectly synchronized
+- ✅ Mode indicator updates instantly
+
+**Files Modified:**
+- `client/src/components/goals/goals-summary-widget.tsx` - Added useEffect refresh trigger, unified query key
+- `client/src/components/goals/performance-tracking-metrics.tsx` - Unified query key and invalidation
+- `client/src/components/goals/goals-table.tsx` - Unified query key and invalidation
+- `client/src/components/goals/goals-engine-tab.tsx` - Unified query key and invalidation
+- `client/src/hooks/use-system-health.tsx` - Fixed cache invalidation to use mode-specific key

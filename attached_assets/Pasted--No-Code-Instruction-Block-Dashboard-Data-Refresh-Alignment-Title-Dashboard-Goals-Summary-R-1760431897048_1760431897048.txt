@@ -1,0 +1,88 @@
+🧭 No-Code Instruction Block: Dashboard Data Refresh Alignment
+
+Title:
+🩵 Dashboard Goals Summary: Reactive Refresh and Cache Alignment
+
+Objective:
+Ensure the Dashboard Goals Summary dynamically refreshes and displays the correct mode’s goals immediately when the trading mode changes — matching the Goals Engine view and data source.
+
+Implementation Tasks
+Task 1 – Validate Mode Dependency
+
+Confirm the useQuery or data-fetching hook for the Goals Summary Widget includes currentTradingMode as a dependency.
+
+If the hook only defines the mode in the queryKey, make sure the component re-renders when currentTradingMode changes.
+
+Check that the component imports the same TradingModeContext as the Goals Engine tabs.
+
+✅ Expected Outcome:
+The dashboard re-renders automatically whenever you toggle between LIVE and PAPER.
+
+Task 2 – Unify Query Cache Keys
+
+Compare the query key used in:
+
+The Goals Engine Performance Metrics tab
+
+The Dashboard Goals Summary Widget
+
+Ensure both use the exact same key format, for example:
+
+['goals/summary', currentTradingMode]
+
+
+not /api/goals/summary/${mode} in one place and /api/goals/summary?mode=${mode} in another.
+
+This ensures they share and update the same cached data between tabs.
+
+✅ Expected Outcome:
+Goals Engine updates instantly appear in the dashboard without refresh.
+
+Task 3 – Add Forced Refresh Trigger
+
+Add a lightweight “mode change trigger” in the dashboard (could be a simple React effect).
+
+This trigger should refetch dashboard data whenever the mode toggle is flipped.
+
+Confirm the refetch happens silently in the background (no loading spinner needed).
+
+✅ Expected Outcome:
+Dashboard updates goals automatically within 1 second of toggling modes.
+
+Task 4 – Verify UI State Logic
+
+If the dashboard shows “No goals set,” confirm it’s not reading a stale or default fallback state.
+
+Ensure that condition (goals.length === 0) only triggers after the new data fetch completes.
+
+If needed, add a short (200–500ms) delay before evaluating that state on mode switch.
+
+✅ Expected Outcome:
+“No goals set” message only appears when truly no goals exist in that mode.
+
+Task 5 – Developer Verification Test
+
+Set unique values for LIVE and PAPER goals.
+
+Switch between modes without reloading the page.
+
+Verify that:
+
+Dashboard “Goals Summary” updates immediately.
+
+“Performance Tracking Metrics” tab matches exactly.
+
+No “No goals set” appears incorrectly.
+
+✅ Expected Outcome:
+Dashboard and Goals Engine are now visually and functionally synchronized.
+
+Task 6 – Documentation Update
+
+Add the following note to replit.md:
+
+Phase 6.15 – Dashboard Reactive Goals Refresh
+- Dashboard Goals Summary now re-renders automatically when trading mode changes
+- Query caching unified with Goals Engine tabs
+- Eliminated stale “No goals set” issue
+- Ensures full synchronization across UI, backend, and cache layers

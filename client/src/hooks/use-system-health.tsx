@@ -55,7 +55,7 @@ export function useSystemHealth() {
     
     if (prevGoalsCount !== currentGoalsCount) {
       console.log('[SystemHealth] Goals count changed, refreshing goals widgets...');
-      queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', 'summary', mode] });
     }
 
     // Update reference for next comparison
