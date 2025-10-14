@@ -32,6 +32,9 @@ import multer from "multer";
 import fs from 'fs/promises';
 import path from 'path';
 import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStrengthMessage } from "./services/auth-service";
+import { bobStatsHandler } from "./middleware/bob-routing";
+import { bobCore } from "./services/bob-core";
+import { metricsBob } from "./services/bob-metrics";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -1480,10 +1483,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========================================
+  // BOB CORE - PHASE 7.2
+  // Transparent optimization layer for health/metrics
+  // ========================================
+
+  // Bob stats endpoint for monitoring cache performance
+  app.get('/api/bob/stats', authenticateToken, bobStatsHandler);
+
   // Global System Health Endpoint - provides comprehensive system status
+  // Phase 7.2: Uses Bob Core for caching with transparent fallback
   app.get('/api/system/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const userId = req.user!.id;
+    const mode = (req.query.mode as string) || 'live';
+
+    // Phase 7.2: Try Bob Core first if enabled
+    if (bobCore.isEnabled()) {
+      try {
+        console.log('[BobRouting] 🎯 Using Bob Core for /api/system/health');
+        const healthData = await metricsBob.getSystemHealth(mode as 'live' | 'paper');
+        return res.json(healthData);
+      } catch (bobError: any) {
+        console.error('[BobRouting] ⚠️ Bob Core failed, using original handler:', bobError.message);
+        // Fall through to original implementation below
+      }
+    }
+
+    // Original implementation (fallback or when Bob disabled)
     try {
-      const userId = req.user!.id;
       let allHealthy = true;
       const healthData: any = {
         backend: 'OK',
@@ -1644,7 +1671,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Phase 7.2: Paper trading status with Bob Core caching
   app.get('/api/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    // Phase 7.2: Try Bob Core first if enabled
+    if (bobCore.isEnabled()) {
+      try {
+        console.log('[BobRouting] 🎯 Using Bob Core for /api/paper-sim/status');
+        const status = await metricsBob.getPaperSimStatus();
+        return res.json(status);
+      } catch (bobError: any) {
+        console.error('[BobRouting] ⚠️ Bob Core failed, using original handler:', bobError.message);
+        // Fall through to original implementation below
+      }
+    }
+
+    // Original implementation (fallback or when Bob disabled)
     try {
       // Return GLOBAL system-wide status (same for all users)
       const hasUISimulation = globalPaperPortfolioManager !== null;
