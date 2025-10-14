@@ -5060,24 +5060,13 @@ Please:
   });
 
   // ===== TRADING ACTIVITY ROUTE =====
-  // Phase 7.3: DataBob transparent routing for activity endpoint
+  // Phase 7.3: DataBob caching disabled for activity endpoint
+  // Reason: DataBob implementation doesn't support period filtering (incompatible with original endpoint)
 
   app.get('/api/trading/activity', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
-
-      // Phase 7.3: Try DataBob first if enabled  
-      if (bobCore.isEnabled()) {
-        try {
-          console.log('[BobRouting] 🎯 Using DataBob for /api/trading/activity');
-          const activityData = await dataBob.getActivity(userId, mode as 'live' | 'paper');
-          return res.json(activityData);
-        } catch (bobError: any) {
-          console.error('[BobRouting] ⚠️ DataBob failed, using original handler:', bobError.message);
-          // Fall through to original implementation below
-        }
-      }
       const period = (req.query.period as string) || '1d';
 
       const periodMap: { [key: string]: number } = {

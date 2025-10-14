@@ -23,13 +23,13 @@ class DataBobModule {
 
   /**
    * Register this module's fetch functions with Bob Core
+   * Note: Activity not registered due to period filtering incompatibility
    */
   private registerWithBobCore() {
     const fetchFunctions = new Map<string, (context: FetchContext) => Promise<any>>();
 
     fetchFunctions.set('results', this.fetchResults.bind(this));
     fetchFunctions.set('averages', this.fetchAverages.bind(this));
-    fetchFunctions.set('activity', this.fetchActivity.bind(this));
 
     bobCore.registerModule(this.MODULE_NAME, fetchFunctions);
   }
@@ -266,8 +266,9 @@ class DataBobModule {
   }
 
   /**
-   * Get trading activity with caching
-   * Public API for routes to use
+   * Get trading activity WITHOUT caching
+   * NOTE: Disabled caching due to period filtering incompatibility with original endpoint
+   * This method is kept for backward compatibility but does not use Bob Core
    */
   async getActivity(
     userId: string,
@@ -275,21 +276,15 @@ class DataBobModule {
     limit: number = 50,
     ttl?: number
   ): Promise<any> {
-    const key = `data:activity:${mode}:${userId}`;
     const context = { mode, limit, userId } as FetchContext & { limit?: number };
-
-    return await bobCore.fetchOrServe(
-      key,
-      () => this.fetchActivity(context),
-      ttl,
-      { mode, userId },
-      ['data', 'activity', mode]
-    );
+    // Direct fetch without caching
+    return await this.fetchActivity(context);
   }
 
   /**
    * Fetch multiple data endpoints in parallel
    * Used by dashboard and Walter for faster responses
+   * NOTE: Activity endpoint fetched directly without caching (period incompatibility)
    */
   async fetchParallel(
     userId: string,
@@ -312,6 +307,7 @@ class DataBobModule {
     }
 
     if (endpoints.includes('activity')) {
+      // Activity fetched directly without caching (getActivity no longer uses Bob Core)
       promises.activity = this.getActivity(userId, mode, 50, ttl);
     }
 
@@ -336,6 +332,7 @@ class DataBobModule {
   /**
    * Prefetch data for a specific mode
    * Called on app start, Walter chat mount, or mode change
+   * Note: Activity endpoint not cached due to period filtering incompatibility
    */
   async prefetchForMode(
     userId: string,
@@ -343,7 +340,7 @@ class DataBobModule {
     period: 'today' | 'week' | 'month' = 'today',
     ttl?: number
   ): Promise<void> {
-    console.log(`[${this.MODULE_NAME}] 🔄 Prefetching data for ${mode} mode`);
+    console.log(`[${this.MODULE_NAME}] 🔄 Prefetching data for ${mode} mode (results, averages only)`);
 
     const prefetches = [
       bobCore.prefetch(
@@ -359,13 +356,6 @@ class DataBobModule {
         ttl,
         { mode, userId },
         ['data', 'averages', mode]
-      ),
-      bobCore.prefetch(
-        `data:activity:${mode}:${userId}`,
-        () => this.fetchActivity({ mode, limit: 50, userId } as FetchContext & { limit?: number }),
-        ttl,
-        { mode, userId },
-        ['data', 'activity', mode]
       )
     ];
 
@@ -380,7 +370,6 @@ class DataBobModule {
     console.log(`[${this.MODULE_NAME}] 🗑️ Invalidating cache for ${mode} mode`);
     bobCore.invalidate(`data:results:${mode}:${period}:${userId}`);
     bobCore.invalidate(`data:averages:${mode}:${userId}`);
-    bobCore.invalidate(`data:activity:${mode}:${userId}`);
   }
 }
 
