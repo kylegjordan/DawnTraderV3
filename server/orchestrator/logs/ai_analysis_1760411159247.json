@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-14T03:05:59.247Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (10.28, 12.29, 14.01), which may indicate overutilization or potential bottlenecks."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system metrics show no recent learning cycles, zero average confidence, and no opportunities generated, suggesting the AI component is inactive or malfunctioning."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero active trades and a win rate of 0, indicating potential issues with strategy execution or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential system slowdowns or failures."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI system configurations and logs to ensure it's functioning correctly and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies to ensure they are aligned with current market conditions."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve the root cause.",
+      "rationale": "High CPU load can lead to system instability and affect the platform's ability to process trades efficiently."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Perform a diagnostic check on the AI system to determine why it is not generating learning cycles or opportunities.",
+      "rationale": "The AI component is crucial for identifying trading opportunities and optimizing strategies; its inactivity could impact trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze recent market conditions and strategy performance to adjust or replace non-performing strategies.",
+      "rationale": "Adapting strategies to current market conditions can improve trading outcomes and profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}
