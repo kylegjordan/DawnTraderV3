@@ -217,18 +217,10 @@ export default function GoalsEngineTab() {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Goals Configuration</CardTitle>
+            <CardTitle>Performance Tracking Metrics</CardTitle>
           </CardHeader>
           <CardContent>
             <Skeleton className="h-64 w-full" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>AI Assistant</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-96 w-full" />
           </CardContent>
         </Card>
       </div>
@@ -242,102 +234,6 @@ export default function GoalsEngineTab() {
     <div className="space-y-6">
       {/* Performance Tracking Metrics - Primary Goals Table */}
       <PerformanceTrackingMetrics />
-
-      {/* AI Conversational Panel */}
-      <Card data-testid="card-ai-chat">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
-            AI Goal Assistant
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Chat with the AI to discuss your goals, get recommendations, and optimize your strategy
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Chat Messages */}
-            <ScrollArea className="h-[400px] w-full border rounded-lg p-4">
-              {chatMessages.length === 0 ? (
-                <div className="text-center text-muted-foreground py-16">
-                  <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Start a conversation with the AI assistant</p>
-                  <p className="text-sm mt-2">Ask about your goals, request recommendations, or discuss strategies</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {chatMessages.map((message, index) => (
-                    <div
-                      key={index}
-                      className={cn(
-                        "flex",
-                        message.role === 'user' ? 'justify-end' : 'justify-start'
-                      )}
-                      data-testid={`chat-message-${index}`}
-                    >
-                      <div
-                        className={cn(
-                          "max-w-[80%] rounded-lg p-3",
-                          message.role === 'user'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-foreground'
-                        )}
-                      >
-                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {isChatting && (
-                    <div className="flex justify-start">
-                      <div className="bg-muted rounded-lg p-3">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </ScrollArea>
-
-            {/* Chat Input */}
-            <div className="flex gap-2">
-              <Input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Ask the AI about your goals..."
-                disabled={isChatting || isTranscribing}
-                data-testid="input-ai-chat"
-              />
-              <Button 
-                onClick={handleMicToggle}
-                disabled={isChatting || isTranscribing}
-                variant={isRecording ? "destructive" : "outline"}
-                size="icon"
-                data-testid="button-voice-input"
-              >
-                {isTranscribing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isRecording ? (
-                  <MicOff className="w-4 h-4" />
-                ) : (
-                  <Mic className="w-4 h-4" />
-                )}
-              </Button>
-              <Button 
-                onClick={handleSendMessage} 
-                disabled={isChatting || !chatInput.trim() || isTranscribing}
-                data-testid="button-send-message"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
