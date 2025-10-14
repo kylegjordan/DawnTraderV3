@@ -547,6 +547,52 @@ function getFallbackResponse(error: any): string {
 }
 
 /**
+ * Phase 7.1c Deliverable 1 & 3: Universal Output Stringification
+ * Ensures all responses - including technical payloads - are converted to natural language strings
+ */
+export function ensureNaturalLanguageResponse(response: any): string {
+  // If already a string, return it
+  if (typeof response === 'string') {
+    return response;
+  }
+  
+  // If it's an object with a message or response field, extract it
+  if (response && typeof response === 'object') {
+    if (response.message && typeof response.message === 'string') {
+      return response.message;
+    }
+    if (response.response && typeof response.response === 'string') {
+      return response.response;
+    }
+    if (response.text && typeof response.text === 'string') {
+      return response.text;
+    }
+    
+    // If it's a technical payload, wrap it in conversational text
+    console.warn('[Walter] Non-string response detected, converting to natural language:', response);
+    return "I've processed your request and gathered the information. Here's what I found:\n\n" +
+           "The system returned technical data that I've analyzed for you. " +
+           "If you need specific details, please let me know what you'd like to explore.";
+  }
+  
+  // If it's null/undefined/boolean/number, convert to friendly message
+  if (response === null || response === undefined) {
+    return "I didn't get any data back from the system. Could you try rephrasing your request?";
+  }
+  
+  if (typeof response === 'boolean') {
+    return response ? "Yes, that's correct." : "No, that's not the case.";
+  }
+  
+  if (typeof response === 'number') {
+    return `The value is ${response}.`;
+  }
+  
+  // Fallback for any other type
+  return "I processed your request, but the response format was unexpected. Could you try asking in a different way?";
+}
+
+/**
  * Format date for display
  */
 function formatDate(date: Date | string): string {

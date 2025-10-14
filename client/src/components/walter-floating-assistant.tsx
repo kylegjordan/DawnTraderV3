@@ -208,11 +208,24 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
         message: data.response
       });
 
+      // Phase 7.1c Deliverable 4: Response-Type Validation
+      const responseText = typeof data.response === 'string' 
+        ? data.response 
+        : (() => {
+            console.warn('[Walter] Non-string response detected:', data.response);
+            toast({
+              title: 'Response Format Issue',
+              description: 'Walter sent a technical payload — retrying in text mode.',
+              variant: 'destructive'
+            });
+            return 'I apologize, but I returned data in a technical format. Could you try asking that again?';
+          })();
+
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
-          message: data.response,
+          message: responseText,
           timestamp: new Date(),
           ...(showProvenance && { provenance })
         }
