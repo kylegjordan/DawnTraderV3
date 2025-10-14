@@ -39,6 +39,8 @@ import { dataBob } from "./services/bob-data";
 import { configBob } from "./services/bob-config";
 import { strategyBob } from "./services/bob-strategy";
 import { tradeBob } from "./services/bob-trade";
+import { insightBob } from "./services/bob-insight";
+import { uiBob } from "./services/bob-ui";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -1542,6 +1544,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Bob stats endpoint for monitoring cache performance (no auth for monitoring tools)
   app.get('/api/bob/stats', bobStatsHandler);
+
+  // Phase 7.7: Bob Insight endpoint - system introspection and meta-information
+  app.get('/api/bob/insight', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const summary = await insightBob.getInsightSummary();
+      res.json(summary);
+    } catch (error: any) {
+      console.error('[BobInsight] Error fetching insight summary:', error);
+      res.status(500).json({ error: 'Failed to fetch insight summary' });
+    }
+  });
+
+  // Phase 7.7: UI State endpoint - current UI context and visibility
+  app.get('/api/ui/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.query.mode as 'live' | 'paper') || 'live';
+      const uiState = await uiBob.getUIState(userId, mode);
+      res.json(uiState);
+    } catch (error: any) {
+      console.error('[UIBob] Error fetching UI state:', error);
+      res.status(500).json({ error: 'Failed to fetch UI state' });
+    }
+  });
+
+  // Phase 7.7: Update UI State endpoint - frontend sends current view context
+  app.post('/api/ui/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { view, subView, mode, filters } = req.body;
+      
+      uiBob.updateUIState(userId, { view, subView, mode, filters });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[UIBob] Error updating UI state:', error);
+      res.status(500).json({ error: 'Failed to update UI state' });
+    }
+  });
 
   // Bob prefetch endpoint - triggered by Walter chat open or mode change
   // Phase 7.3: Extended to include DataBob prefetch
