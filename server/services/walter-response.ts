@@ -16,6 +16,8 @@ import { buildTemplateGuidance } from './walter-response-templates';
 import { detectFeedback, logFeedback, buildFeedbackAcknowledgment } from './walter-feedback';
 import { inferUserPreferences, buildAdaptiveGuidance } from './walter-adaptive-heuristics';
 import { walterDataPipeline } from './walter-data-pipeline';
+import { insightBob } from './bob-insight';
+import { uiBob } from './bob-ui';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -31,6 +33,8 @@ interface ResponseContext {
   expertPrinciples: PrincipleContext[];
   referenceContext: string | null;
   dashboardContext: string | null; // Phase 7.1: Live dashboard data
+  insightContext: string | null; // Phase 7.7: InsightBob system introspection
+  uiContext: string | null; // Phase 7.7: UIBob current UI state
   tradingMode: 'live' | 'paper';
 }
 
@@ -105,6 +109,50 @@ export async function generateWalterResponse(
 }
 
 /**
+ * Format InsightBob data into context string (Phase 7.7)
+ */
+function formatInsightContext(insight: any): string {
+  const { modules, overallStats, systemHealth, recentChanges } = insight;
+  
+  let context = `System Introspection (Bob Core):\n`;
+  context += `- Active Modules: ${overallStats.modulesActive} (${Object.keys(modules).join(', ')})\n`;
+  context += `- Cache Performance: ${(overallStats.overallHitRate * 100).toFixed(1)}% hit rate\n`;
+  context += `- System Health: ${systemHealth.status}\n`;
+  
+  if (recentChanges && recentChanges.length > 0) {
+    context += `- Recent Changes:\n`;
+    recentChanges.slice(0, 3).forEach((change: any) => {
+      context += `  • ${change.description} (${new Date(change.timestamp).toLocaleTimeString()})\n`;
+    });
+  }
+  
+  return context;
+}
+
+/**
+ * Format UIBob data into context string (Phase 7.7)
+ */
+function formatUIContext(uiState: any): string {
+  const { current, previous } = uiState;
+  
+  let context = `Current UI Context:\n`;
+  context += `- User is viewing: ${current.view}`;
+  if (current.subView) context += ` > ${current.subView}`;
+  context += `\n`;
+  context += `- Trading Mode: ${current.mode.toUpperCase()}\n`;
+  
+  if (current.filters && Object.keys(current.filters).length > 0) {
+    context += `- Active Filters: ${JSON.stringify(current.filters)}\n`;
+  }
+  
+  if (previous) {
+    context += `- Previous View: ${previous.view}\n`;
+  }
+  
+  return context;
+}
+
+/**
  * Gather all context: purpose, memories, chat history, summary, expert principles
  */
 async function gatherContext(userId: string, chatId: string, userMessage: string): Promise<ResponseContext> {
@@ -124,8 +172,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       throw new Error('Chat not found');
     }
 
-    // Gather context in parallel including expert principles and dashboard data (Phase 7.1)
-    const [purposeText, memories, chatHistory, expertPrinciples, dashboardData] = await Promise.all([
+    // Gather context in parallel including expert principles, dashboard data, InsightBob, and UIBob (Phase 7.7)
+    const [purposeText, memories, chatHistory, expertPrinciples, dashboardData, insightData, uiStateData] = await Promise.all([
       getWalterPurpose(userId),
       getHighImportanceMemories(userId, 5), // Top 5 high-importance memories
       storage.getWalterChatLogs(chatId, memoryDepth),
@@ -135,11 +183,19 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
         maxPrinciples: 5,
         chatId: chatId  // Enable usage logging (now references walter_chats.id)
       }),
-      walterDataPipeline.getDashboardData(userId, tradingMode)
+      walterDataPipeline.getDashboardData(userId, tradingMode),
+      insightBob.isEnabled() ? insightBob.getInsightSummary() : Promise.resolve(null),
+      uiBob.isEnabled() ? uiBob.getUIState(userId, tradingMode) : Promise.resolve(null)
     ]);
 
     // Format dashboard data into context
     const dashboardContext = walterDataPipeline.formatDashboardContext(dashboardData, tradingMode);
+    
+    // Format InsightBob data into context (Phase 7.7)
+    const insightContext = insightData ? formatInsightContext(insightData) : null;
+    
+    // Format UIBob data into context (Phase 7.7)
+    const uiContext = uiStateData ? formatUIContext(uiStateData) : null;
 
     // Phase 6.2: Extract and resolve conversation references
     const entities = await referenceTracker.extractEntitiesFromChat(userId, chatId, chatHistory);
@@ -152,6 +208,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
 
     console.log(`[Walter] Loaded ${expertPrinciples.length} expert principles for topic analysis`);
     console.log(`[Walter] Loaded dashboard data for ${tradingMode} mode`);
+    if (insightContext) console.log(`[Walter] Loaded InsightBob system introspection`);
+    if (uiContext) console.log(`[Walter] Loaded UIBob current view: ${uiStateData?.current.view}`);
 
     return {
       purpose: purposeText,
@@ -162,6 +220,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       expertPrinciples: expertPrinciples || [],
       referenceContext,
       dashboardContext,
+      insightContext,
+      uiContext,
       tradingMode
     };
   } catch (error) {
@@ -177,6 +237,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       expertPrinciples: [],
       referenceContext: null,
       dashboardContext: null,
+      insightContext: null,
+      uiContext: null,
       tradingMode: 'paper'
     };
   }
@@ -186,7 +248,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
  * Build prompt with context injection including expert principles
  */
 async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string): Promise<string> {
-  const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, tradingMode } = context;
+  const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, insightContext, uiContext, tradingMode } = context;
 
   // Format memories
   const memoriesText = memories.length > 0
@@ -270,7 +332,7 @@ IMPORTANT: This dashboard data represents the EXACT current state of the system 
 
 ---
 
-CONVERSATION CONTEXT:
+${uiContext ? `CURRENT USER VIEW:\n${uiContext}\n\nIMPORTANT: The user is currently viewing the ${uiContext.split('viewing: ')[1]?.split('\n')[0]} screen. Provide context-aware responses based on what they're looking at.\n\n---\n\n` : ''}${insightContext ? `SYSTEM INTROSPECTION:\n${insightContext}\n\nIMPORTANT: Use this system health data to answer questions about recent changes, performance, or technical status.\n\n---\n\n` : ''}CONVERSATION CONTEXT:
 ${contextText}
 
 ---
