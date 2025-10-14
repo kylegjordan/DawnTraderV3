@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
+import { RequestTraceProvider } from "@/hooks/use-request-trace";
 import { ensureValidToken } from "@/lib/auth";
 import WalterFloatingAssistant from "@/components/walter-floating-assistant";
 
@@ -192,12 +193,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TradingModeProvider>
-        <TooltipProvider>
-          <div className="min-h-screen bg-background text-foreground">
-            <Toaster />
-            <Router />
-          </div>
-        </TooltipProvider>
+        <RequestTraceProvider>
+          <TooltipProvider>
+            <div className="min-h-screen bg-background text-foreground">
+              <Toaster />
+              <Router />
+            </div>
+          </TooltipProvider>
+        </RequestTraceProvider>
       </TradingModeProvider>
     </QueryClientProvider>
   );

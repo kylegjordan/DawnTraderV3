@@ -14,6 +14,7 @@ import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import AveragesWidget from "@/components/goals/averages-widget";
 import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
+import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
 import AlertBanner from "@/components/alerts/alert-banner";
 import { useSystemHealth } from "@/hooks/use-system-health";
 
@@ -72,6 +73,9 @@ export default function Dashboard() {
 
       {/* Filter Health Diagnostics */}
       <FilterHealthWidget />
+
+      {/* Developer-Only Data Flow Trace */}
+      <DataFlowTracePanel />
     </div>
   );
 }
