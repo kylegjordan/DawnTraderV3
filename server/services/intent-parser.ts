@@ -247,8 +247,71 @@ const intentPatterns: IntentPattern[] = [
   },
 ];
 
+/**
+ * Phase 7.1c Deliverable 2: Pronoun + Stop-Word Shield
+ * Prevents false positive command intents for conversational questions
+ */
+const CONVERSATION_PRONOUNS = ['i', 'you', 'your', 'my', 'mine', 'me', 'our', 'ours', 'we', 'us'];
+const CONVERSATION_VERBS = ['tell', 'show', 'explain', 'describe'];
+const LINKING_VERBS = ['is', 'are', 'was', 'were', 'be', 'mean', 'purpose'];
+
+function isConversationalQuery(input: string): boolean {
+  const lowerInput = input.toLowerCase();
+  const words = lowerInput.split(/\s+/);
+  
+  // Check for pronoun + linking verb combinations (e.g., "what is your purpose")
+  for (let i = 0; i < words.length - 1; i++) {
+    const currentWord = words[i];
+    const nextWord = words[i + 1];
+    
+    // Pattern: pronoun + linking verb (your purpose, your goal, etc.)
+    if (CONVERSATION_PRONOUNS.includes(currentWord) && LINKING_VERBS.includes(nextWord)) {
+      return true;
+    }
+    
+    // Pattern: linking verb + pronoun (is your, are you, etc.)
+    if (LINKING_VERBS.includes(currentWord) && CONVERSATION_PRONOUNS.includes(nextWord)) {
+      return true;
+    }
+  }
+  
+  // Check for conversation verbs with pronouns (tell me, show me, explain your, etc.)
+  for (const verb of CONVERSATION_VERBS) {
+    for (const pronoun of CONVERSATION_PRONOUNS) {
+      if (lowerInput.includes(`${verb} ${pronoun}`) || lowerInput.includes(`${pronoun} ${verb}`)) {
+        return true;
+      }
+    }
+  }
+  
+  // Common conversational question patterns
+  const conversationalPatterns = [
+    /what (is|are) (you|your)/i,
+    /who (is|are) (you|your)/i,
+    /why (is|are) (you|your)/i,
+    /how (is|are) (you|your)/i,
+    /(tell|show|explain) me about/i,
+    /can you (tell|show|explain)/i,
+    /what (do|does) (you|your)/i,
+  ];
+  
+  return conversationalPatterns.some(pattern => pattern.test(input));
+}
+
 export function parseIntent(input: string): ParsedIntent {
   const normalizedInput = input.trim();
+  
+  // Phase 7.1c: Check conversational shield BEFORE pattern matching
+  if (isConversationalQuery(normalizedInput)) {
+    console.log('[IntentParser] Conversational shield activated for:', normalizedInput.substring(0, 50));
+    return {
+      type: 'conversation',
+      parameters: {},
+      rawInput: input,
+      confidence: 0.9, // High confidence for shielded conversations
+      requiresConfirmation: false,
+    };
+  }
   
   // Try to match against known patterns
   for (const pattern of intentPatterns) {

@@ -1,0 +1,86 @@
+Phase 7.1c : Intent Router + Fallback Enforcement Fix
+Objective
+
+Prevent command intents (especially false positives like “your”) from bypassing the natural-language formatter and causing invisible or hybrid JSON responses.
+
+Deliverables
+1️⃣ Universal Output Stringification
+
+Guarantee that every response—no matter the intent—is converted to a UTF-8 string before returning to the frontend.
+
+Even diagnostic or data payloads must be wrapped in the conversational formatter.
+
+Acceptance Test:
+Ask “What is your purpose?” → Natural-language answer only.
+Ask “Analyze AAPL” → Text + embedded data summary, never pure JSON.
+
+2️⃣ Pronoun + Stop-Word Shield
+
+Expand stop-word list in intent-parser.ts to include:
+
+I, you, your, my, mine, me, our, ours, we, us, tell, show, explain, describe
+
+
+When these appear near verbs like is, are, was, were, be, mean, purpose, force classification = conversation.
+
+Acceptance Test:
+“What is your purpose?” → classified as conversation.
+“Analyze EURUSD” → correctly classified as command.
+
+3️⃣ Safe Command Formatter
+
+Wrap all command-intent outputs in the humanizer layer (getFallbackResponse() or equivalent).
+
+Example conversion:
+
+{"pair":"AAPL","analysisRequested":true}
+
+
+⮕
+“✅ I’ve queued an analysis for AAPL — I’ll summarize results once complete.”
+
+4️⃣ Response-Type Validation in Frontend
+
+Add lightweight type-check before rendering:
+
+if (typeof response !== "string") {
+    console.warn("Non-string Walter response:", response);
+    displayError("Walter sent a technical payload — retrying in text mode.");
+}
+
+
+This ensures no silent failures or empty bubbles.
+
+5️⃣ Chat Management Enhancement
+
+Add chat controls:
+
+🗑️ Delete Chat (clears history from localStorage / DB)
+
+📁 Archive Chat (moves old sessions to “Past Sessions” list)
+
+♻️ New Chat (creates fresh session context)
+
+Keeps the interface clean and prevents “stale memory” bleed between tests.
+
+Acceptance Test:
+User can delete or archive old chats; new chat starts with clean context.
+
+Success Criteria
+Scenario	Expected Result
+“What is your purpose?”	Natural conversational text, no JSON
+“Analyze AAPL”	Friendly text + summary, no silent drop
+Mixed pronoun phrases	Classified as conversation
+Invalid payload test	Returns fallback text, visible error
+Chat cleanup controls	Fully functional in UI
+Outcome
+
+Once 7.1c is applied:
+
+Walter will never produce raw JSON in chat again.
+
+Pronoun phrases stop triggering the trade-analysis route.
+
+The frontend becomes resilient to malformed payloads.
+
+You can delete and manage old chats easily.
