@@ -35,10 +35,9 @@ class StrategyBobModule {
    * Fetch strategy performance metrics (win rate, P/L, R-multiple)
    * Adapts existing /api/metrics/strategies and /api/paper/metrics/strategies
    */
-  private async fetchPerformance(context: FetchContext): Promise<any> {
+  private async fetchPerformance(context: FetchContext & { days?: number }): Promise<any> {
     const startTime = Date.now();
-    const { mode = 'live', userId } = context;
-    const days = 7; // Default period
+    const { mode = 'live', userId, days = 7 } = context;
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching performance (mode: ${mode}, days: ${days})`);
 
     try {
@@ -130,10 +129,9 @@ class StrategyBobModule {
    * Fetch recent signal history
    * Adapts existing /api/historic-signals
    */
-  private async fetchSignals(context: FetchContext): Promise<any> {
+  private async fetchSignals(context: FetchContext & { limit?: number }): Promise<any> {
     const startTime = Date.now();
-    const { mode = 'live', userId } = context;
-    const limit = 50; // Default limit
+    const { mode = 'live', userId, limit = 50 } = context;
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching signals (mode: ${mode}, limit: ${limit})`);
 
     try {
@@ -190,7 +188,7 @@ class StrategyBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `strategy:performance:${mode}:${userId}:${days}`;
-    const context: FetchContext = { mode, userId };
+    const context = { mode, userId, days } as FetchContext & { days?: number };
 
     return await bobCore.fetchOrServe(
       key,
@@ -211,7 +209,7 @@ class StrategyBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `strategy:signals:${mode}:${userId}:${limit}`;
-    const context: FetchContext = { mode, userId };
+    const context = { mode, userId, limit } as FetchContext & { limit?: number };
 
     return await bobCore.fetchOrServe(
       key,
@@ -265,9 +263,9 @@ class StrategyBobModule {
       ),
       bobCore.prefetch(
         `strategy:performance:${mode}:${userId}:7`,
-        () => this.fetchPerformance({ mode, userId }),
+        () => this.fetchPerformance({ mode, userId, days: 7 } as FetchContext & { days?: number }),
         ttl || this.TTL_SECONDS,
-        { mode, userId },
+        { mode, userId, days: 7 } as FetchContext & { days?: number },
         ['strategy', 'performance', mode]
       )
     ];
@@ -277,9 +275,9 @@ class StrategyBobModule {
       prefetchTasks.push(
         bobCore.prefetch(
           `strategy:signals:${mode}:${userId}:50`,
-          () => this.fetchSignals({ mode, userId }),
+          () => this.fetchSignals({ mode, userId, limit: 50 } as FetchContext & { limit?: number }),
           ttl || this.TTL_SECONDS,
-          { mode, userId },
+          { mode, userId, limit: 50 } as FetchContext & { limit?: number },
           ['strategy', 'signals', mode]
         )
       );
