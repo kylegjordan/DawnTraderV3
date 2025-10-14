@@ -1441,6 +1441,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return globalSimulationSession;
   };
 
+  // Internal endpoint for 48hr simulation script to register session (no auth required - internal use only)
+  app.post('/api/internal/paper-sim/register-session', async (req, res) => {
+    try {
+      const { sessionId, startedBy, startTime, type } = req.body;
+      
+      if (!sessionId || !startedBy || !startTime || !type) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      globalSimulationSession = {
+        sessionId,
+        startedBy,
+        startTime: new Date(startTime),
+        isRunning: true,
+        type
+      };
+      
+      console.log(`[SimRegistry] Registered GLOBAL session ${sessionId} (started by user ${startedBy}) via API`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error registering simulation session:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Internal endpoint for 48hr simulation script to deregister session (no auth required - internal use only)
+  app.post('/api/internal/paper-sim/deregister-session', async (req, res) => {
+    try {
+      if (globalSimulationSession) {
+        console.log(`[SimRegistry] Deregistered GLOBAL session ${globalSimulationSession.sessionId} via API`);
+        globalSimulationSession = null;
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deregistering simulation session:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post('/api/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     
@@ -4663,11 +4702,22 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
 
-      const goals = mode === 'live' 
+      const goalsData = mode === 'live' 
         ? await storage.getUserGoalsLive(userId)
         : await storage.getUserGoalsPaper(userId);
 
-      res.json({ success: true, data: goals, mode });
+      // Transform to frontend format
+      const goals = goalsData.map(g => ({
+        metric: g.metricName,
+        goal: g.goalValue ? parseFloat(g.goalValue) : null,
+        actual: g.actualValue ? parseFloat(g.actualValue) : 0,
+        percentAchieved: g.percentAchieved ? parseFloat(g.percentAchieved) : null,
+      }));
+
+      res.json({ 
+        goals,
+        hasGoals: goals.length > 0
+      });
     } catch (error: any) {
       console.error('Error fetching goals summary:', error);
       res.status(500).json({ success: false, error: error.message });

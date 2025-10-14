@@ -70,16 +70,21 @@ export class Paper48HrSimulation {
     try {
       this.isRunning = true;
 
-      // Register this session globally so the API status endpoint can detect it
+      // Register this session globally via HTTP API (works across processes)
       // NOTE: This is a SYSTEM-WIDE session, not user-specific
-      if (typeof (global as any).registerSimulationSession === 'function') {
-        (global as any).registerSimulationSession({
-          sessionId: this.sessionId,
-          startedBy: this.userId,
-          startTime: this.startTime,
-          isRunning: true,
-          type: '48hr'
+      try {
+        await fetch('http://localhost:5000/api/internal/paper-sim/register-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: this.sessionId,
+            startedBy: this.userId,
+            startTime: this.startTime.toISOString(),
+            type: '48hr'
+          })
         });
+      } catch (error) {
+        console.error('[48HrSim] Failed to register session via API:', error);
       }
 
       // Initialize simulation session log
@@ -132,9 +137,14 @@ export class Paper48HrSimulation {
         console.error('[48HrSim] Error stopping portfolio manager during cleanup:', stopError);
       }
       
-      // Deregister GLOBAL session on failure
-      if (typeof (global as any).deregisterSimulationSession === 'function') {
-        (global as any).deregisterSimulationSession();
+      // Deregister GLOBAL session on failure via HTTP API
+      try {
+        await fetch('http://localhost:5000/api/internal/paper-sim/deregister-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        console.error('[48HrSim] Failed to deregister session via API:', error);
       }
       
       // Clean up all intervals and timeouts
@@ -166,9 +176,14 @@ export class Paper48HrSimulation {
 
     this.isRunning = false;
 
-    // Deregister GLOBAL session
-    if (typeof (global as any).deregisterSimulationSession === 'function') {
-      (global as any).deregisterSimulationSession();
+    // Deregister GLOBAL session via HTTP API
+    try {
+      await fetch('http://localhost:5000/api/internal/paper-sim/deregister-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      console.error('[48HrSim] Failed to deregister session via API:', error);
     }
 
     // Stop intervals and timeouts
