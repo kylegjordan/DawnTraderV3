@@ -58,8 +58,23 @@ export default function GoalsSummaryWidget() {
     );
   }
 
-  const formatValue = (value: number | null) => {
+  const formatValue = (value: number | null, metric: string, isActual: boolean = false) => {
     if (value == null) return '—';
+    
+    // For percentage-based metrics, format goal as % but actual as $
+    const isPercentageMetric = metric.includes('(%)') || metric.includes('Percent') || metric.includes('Rate');
+    
+    if (isPercentageMetric && !isActual) {
+      // Show goal as percentage
+      return `${value.toFixed(1)}%`;
+    }
+    
+    // For ratios and counts, show as plain numbers
+    if (metric.includes('Ratio') || metric.includes('Trades') || metric.includes('Frequency')) {
+      return value.toFixed(metric.includes('Ratio') ? 1 : 0);
+    }
+    
+    // For dollar values (including actuals for percentage metrics)
     if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
     if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
     return `$${value.toFixed(2)}`;
@@ -117,10 +132,10 @@ export default function GoalsSummaryWidget() {
                   <tr key={index} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
                     <td className="p-3 text-sm" data-testid={`goal-metric-${index}`}>{goal.metric}</td>
                     <td className="p-3 text-sm font-mono text-right" data-testid={`goal-target-${index}`}>
-                      {formatValue(goal.goal)}
+                      {formatValue(goal.goal, goal.metric, false)}
                     </td>
                     <td className="p-3 text-sm font-mono text-right" data-testid={`goal-actual-${index}`}>
-                      {formatValue(goal.actual)}
+                      {formatValue(goal.actual, goal.metric, true)}
                     </td>
                     <td className="p-3 text-center" data-testid={`goal-percent-${index}`}>
                       <AchievementPill percent={goal.percentAchieved} />
