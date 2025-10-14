@@ -1,0 +1,209 @@
+Phase 7.5 — StrategyBob Implementation Plan (Tier 1 Optimization Expansion #4)
+🎯 Objective
+
+Create StrategyBob, a specialized Bob Core module that caches, correlates, and analyzes all strategy-level trading data — summaries, performance metrics, and signal history — to give Walter near-instant recall and reasoning when discussing or comparing trading strategies.
+
+This completes the Tier 1 “data plane,” connecting system, data, and configuration layers to strategy intelligence.
+
+🔍 Scope
+In Scope
+
+Create server/services/bob-strategy.ts.
+
+Cache strategy-related endpoints:
+
+/api/strategies/summary
+
+/api/strategies/performance
+
+/api/strategies/signals
+
+Add prefetch hooks on chat open & mode switch.
+
+Add transparent routing and stats integration.
+
+Document in replit.md.
+
+Out of Scope
+
+Real-time trade streaming (Tier 2).
+
+Cross-symbol predictive analytics (future upgrade).
+
+✅ Success Criteria
+Metric	Target
+Cached strategy fetch (warm)	≤ 150 ms
+Strategy comparison latency	≤ 2 s
+Cache hit ratio	≥ 70 %
+Dashboard regressions	0
+Mode isolation	100 %
+📦 Deliverables
+1 – StrategyBob Module
+
+File: server/services/bob-strategy.ts
+Defines 3 methods:
+
+fetchSummary(mode) → overall strategy metadata
+
+fetchPerformance(mode) → P&L stats, win rates
+
+fetchSignals(mode) → recent signal history (last N bars)
+
+Cache TTL = 30 s
+Cache keys:
+
+strategy:summary:<mode>
+strategy:performance:<mode>
+strategy:signals:<mode>
+
+
+Each function logs timing and registers with Bob Core.
+
+2 – Transparent Routing
+
+In server/routes.ts:
+
+Before existing /api/strategies/... handlers, call Bob Core.
+
+Serve cached data on hit; fallback on miss.
+
+Ensure mode awareness in keys.
+
+Use the existing logger to record [StrategyBob] Cache hit/miss.
+
+3 – Prefetch Triggers
+
+Extend /api/bob/prefetch:
+
+On Walter chat open → prefetch strategy summary & performance.
+
+On mode change → prefetch all three functions.
+(Signals skipped on startup prefetch for speed.)
+
+4 – Stats Integration
+
+Automatic through bobCore.getStats().
+Example output:
+
+{
+  "module": "StrategyBob",
+  "hits": 85,
+  "misses": 22,
+  "avgLatencyMs": 142,
+  "ttl": 30
+}
+
+5 – Documentation
+
+Add to replit.md → new section:
+
+Phase 7.5 – StrategyBob
+purpose, endpoints, env vars, rollback steps.
+
+⚙️ Implementation Steps (No Code)
+A) Create bob-strategy.ts
+
+Import BobCore and fetchJson utilities.
+
+Define 3 async fetchers.
+
+Register module in constructor:
+
+bobCore.registerModule("StrategyBob", {
+   summary: fetchSummary,
+   performance: fetchPerformance,
+   signals: fetchSignals
+})
+
+B) Add Transparent Routing
+
+For each strategy endpoint:
+
+app.get("/api/strategies/summary", async (req, res, next) => {
+   const mode = getMode(req);
+   const cached = await bobCore.try("strategy:summary", mode);
+   if (cached) return res.json(cached);
+   next();
+});
+
+C) Prefetch Logic
+
+Extend existing prefetch endpoint:
+
+await bobCore.prefetch("StrategyBob", ["summary","performance"], mode);
+
+
+Called by Walter on chat open and mode change.
+
+D) Observability & Stats
+
+Verify /api/bob/stats shows StrategyBob metrics.
+
+Add log roll-up every 5 minutes in server/index.ts.
+
+E) Environment Variables
+Key	Purpose	Default
+BOB_STRATEGY_ENABLED	Enable StrategyBob	true
+BOB_STRATEGY_TTL_SECONDS	Cache TTL	30
+BOB_PREFETCH_STRATEGY_ON_CHAT_OPEN	Prefetch summary/perf	true
+BOB_PREFETCH_STRATEGY_ON_MODE_CHANGE	Prefetch all	true
+🧪 Testing Plan
+1 – Smoke Tests
+
+Hit /api/strategies/summary twice → 1 miss, 1 hit.
+
+Confirm latency ≤ 150 ms on hit.
+
+2 – Mode Awareness
+
+Switch to PAPER mode; verify separate cache keys.
+
+3 – Walter Behavior
+
+Ask: “Compare my top strategies in LIVE vs PAPER.”
+
+Walter should respond instantly using cached data.
+
+4 – Prefetch Validation
+
+Check logs after chat open/mode change:
+[BobCore] Prefetch triggered: StrategyBob
+
+5 – Stress Test
+
+Run 20 parallel requests to each strategy endpoint → ≥ 70 % hit rate.
+
+6 – Rollback Validation
+
+Set BOB_STRATEGY_ENABLED=false → restart → confirm endpoints bypass cache.
+
+🔄 Rollback Procedure
+
+Set BOB_STRATEGY_ENABLED=false.
+
+Restart server.
+
+All routes revert to standard handlers.
+
+🧾 Acceptance Checklist
+
+ StrategyBob file created and registered.
+
+ Transparent routing stable.
+
+ Prefetch hooks operational.
+
+ Stats endpoint shows module metrics.
+
+ Mode isolation confirmed.
+
+ No dashboard regressions.
+
+ Documentation complete.
+
+🚀 Expected Outcomes
+Area	Before	After
+Strategy summary fetch	1.6–2.3 s	≤ 0.2 s
+Walter strategy analysis	4–5 s	1–2 s
+Cache hit ratio	—	≥ 70 %
+User experience	Occasional delay	Instant recall

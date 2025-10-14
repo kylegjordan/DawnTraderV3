@@ -37,6 +37,7 @@ import { bobCore } from "./services/bob-core";
 import { metricsBob } from "./services/bob-metrics";
 import { dataBob } from "./services/bob-data";
 import { configBob } from "./services/bob-config";
+import { strategyBob } from "./services/bob-strategy";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
