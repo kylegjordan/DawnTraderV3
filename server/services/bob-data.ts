@@ -38,7 +38,7 @@ class DataBobModule {
    * Fetch trading results (earnings, win rate, etc.)
    * Mirrors /api/trading/results endpoint
    */
-  private async fetchResults(context: FetchContext): Promise<any> {
+  private async fetchResults(context: FetchContext & { period?: string }): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', period = 'today', userId } = context;
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching results (mode: ${mode}, period: ${period})`);
@@ -70,7 +70,7 @@ class DataBobModule {
       const tradesData = await db.query.trades.findMany({
         where: and(
           eq(trades.userId, userId),
-          eq(trades.tradingMode, mode),
+          eq(trades.mode, mode),
           gte(trades.exitTime, startDate)
         ),
         orderBy: [desc(trades.exitTime)]
@@ -78,11 +78,11 @@ class DataBobModule {
 
       // Calculate results
       const totalTrades = tradesData.length;
-      const profitableTrades = tradesData.filter(t => t.profitLoss && t.profitLoss > 0).length;
-      const totalEarnings = tradesData.reduce((sum, t) => sum + (t.profitLoss || 0), 0);
+      const profitableTrades = tradesData.filter(t => t.realizedPL && Number(t.realizedPL) > 0).length;
+      const totalEarnings = tradesData.reduce((sum, t) => sum + Number(t.realizedPL || 0), 0);
       const winRate = totalTrades > 0 ? (profitableTrades / totalTrades) * 100 : 0;
       const averageReturn = totalTrades > 0 
-        ? tradesData.reduce((sum, t) => sum + (t.returnPercent || 0), 0) / totalTrades 
+        ? tradesData.reduce((sum, t) => sum + Number(t.realizedPLPercent || 0), 0) / totalTrades 
         : 0;
 
       const results = {
@@ -122,7 +122,7 @@ class DataBobModule {
       const allTrades = await db.query.trades.findMany({
         where: and(
           eq(trades.userId, userId),
-          eq(trades.tradingMode, mode)
+          eq(trades.mode, mode)
         )
       });
 
@@ -139,7 +139,7 @@ class DataBobModule {
       const yearTrades = allTrades.filter(t => t.exitTime && t.exitTime >= yearStart);
 
       const calculateEarnings = (trades: any[]) => 
-        trades.reduce((sum, t) => sum + (t.profitLoss || 0), 0);
+        trades.reduce((sum, t) => sum + Number(t.realizedPL || 0), 0);
 
       const averages = {
         avgDailyEarnings: Number(calculateEarnings(todayTrades).toFixed(2)),
@@ -166,7 +166,7 @@ class DataBobModule {
    * Fetch trading activity (trade count, status)
    * Mirrors /api/trading/activity endpoint
    */
-  private async fetchActivity(context: FetchContext): Promise<any> {
+  private async fetchActivity(context: FetchContext & { limit?: number }): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', limit = 50, userId } = context;
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching activity (mode: ${mode}, limit: ${limit})`);
@@ -184,7 +184,7 @@ class DataBobModule {
       const todayTrades = await db.query.trades.findMany({
         where: and(
           eq(trades.userId, userId),
-          eq(trades.tradingMode, mode),
+          eq(trades.mode, mode),
           gte(trades.exitTime, today)
         ),
         orderBy: [desc(trades.exitTime)],
@@ -193,9 +193,9 @@ class DataBobModule {
 
       // Calculate activity metrics
       const totalTrades = todayTrades.length;
-      const profitableTrades = todayTrades.filter(t => t.profitLoss && t.profitLoss > 0).length;
-      const losingTrades = todayTrades.filter(t => t.profitLoss && t.profitLoss < 0).length;
-      const totalEarnings = todayTrades.reduce((sum, t) => sum + (t.profitLoss || 0), 0);
+      const profitableTrades = todayTrades.filter(t => t.realizedPL && Number(t.realizedPL) > 0).length;
+      const losingTrades = todayTrades.filter(t => t.realizedPL && Number(t.realizedPL) < 0).length;
+      const totalEarnings = todayTrades.reduce((sum, t) => sum + Number(t.realizedPL || 0), 0);
 
       const activity = {
         numberOfTrades: totalTrades,
@@ -205,9 +205,9 @@ class DataBobModule {
         trades: todayTrades.map(t => ({
           id: t.id,
           symbol: t.symbol,
-          side: t.side,
-          profitLoss: t.profitLoss,
-          returnPercent: t.returnPercent,
+          strategy: t.strategy,
+          realizedPL: t.realizedPL,
+          realizedPLPercent: t.realizedPLPercent,
           exitTime: t.exitTime
         }))
       };
@@ -233,13 +233,13 @@ class DataBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `data:results:${mode}:${period}:${userId}`;
-    const context: FetchContext = { mode, period, userId };
+    const context = { mode, period, userId } as FetchContext & { period?: string };
 
     return await bobCore.fetchOrServe(
       key,
       () => this.fetchResults(context),
       ttl,
-      context,
+      { mode, userId },
       ['data', 'results', mode, period]
     );
   }
@@ -276,13 +276,13 @@ class DataBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `data:activity:${mode}:${userId}`;
-    const context: FetchContext = { mode, limit, userId };
+    const context = { mode, limit, userId } as FetchContext & { limit?: number };
 
     return await bobCore.fetchOrServe(
       key,
       () => this.fetchActivity(context),
       ttl,
-      context,
+      { mode, userId },
       ['data', 'activity', mode]
     );
   }
@@ -348,9 +348,9 @@ class DataBobModule {
     const prefetches = [
       bobCore.prefetch(
         `data:results:${mode}:${period}:${userId}`,
-        () => this.fetchResults({ mode, period, userId }),
+        () => this.fetchResults({ mode, period, userId } as FetchContext & { period?: string }),
         ttl,
-        { mode, period, userId },
+        { mode, userId },
         ['data', 'results', mode, period]
       ),
       bobCore.prefetch(
@@ -362,9 +362,9 @@ class DataBobModule {
       ),
       bobCore.prefetch(
         `data:activity:${mode}:${userId}`,
-        () => this.fetchActivity({ mode, limit: 50, userId }),
+        () => this.fetchActivity({ mode, limit: 50, userId } as FetchContext & { limit?: number }),
         ttl,
-        { mode, limit: 50, userId },
+        { mode, userId },
         ['data', 'activity', mode]
       )
     ];
@@ -376,9 +376,11 @@ class DataBobModule {
   /**
    * Invalidate data cache for a specific mode
    */
-  invalidateMode(userId: string, mode: 'live' | 'paper') {
+  invalidateMode(userId: string, mode: 'live' | 'paper', period: 'today' | 'week' | 'month' = 'today') {
     console.log(`[${this.MODULE_NAME}] 🗑️ Invalidating cache for ${mode} mode`);
-    bobCore.invalidateByTag(['data', mode]);
+    bobCore.invalidate(`data:results:${mode}:${period}:${userId}`);
+    bobCore.invalidate(`data:averages:${mode}:${userId}`);
+    bobCore.invalidate(`data:activity:${mode}:${userId}`);
   }
 }
 

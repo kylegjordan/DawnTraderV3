@@ -35,6 +35,7 @@ import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStre
 import { bobStatsHandler } from "./middleware/bob-routing";
 import { bobCore } from "./services/bob-core";
 import { metricsBob } from "./services/bob-metrics";
+import { dataBob } from "./services/bob-data";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -5051,11 +5052,24 @@ Please:
   });
 
   // ===== TRADING ACTIVITY ROUTE =====
+  // Phase 7.3: DataBob transparent routing for activity endpoint
 
   app.get('/api/trading/activity', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
+
+      // Phase 7.3: Try DataBob first if enabled  
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using DataBob for /api/trading/activity');
+          const activityData = await dataBob.getActivity(userId, mode as 'live' | 'paper');
+          return res.json(activityData);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ DataBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
       const period = (req.query.period as string) || '1d';
 
       const periodMap: { [key: string]: number } = {
@@ -5120,11 +5134,24 @@ Please:
   });
 
   // ===== TRADING AVERAGES ROUTE =====
+  // Phase 7.3: DataBob transparent routing for averages endpoint
 
   app.get('/api/trading/averages', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
+
+      // Phase 7.3: Try DataBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using DataBob for /api/trading/averages');
+          const averagesData = await dataBob.getAverages(userId, mode as 'live' | 'paper');
+          return res.json(averagesData);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ DataBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
       const period = (req.query.period as string) || '1d';
 
       const periodMap: { [key: string]: number } = {
@@ -5197,12 +5224,25 @@ Please:
   });
 
   // ===== TRADING RESULTS ROUTE =====
+  // Phase 7.3: DataBob transparent routing for results endpoint
 
   app.get('/api/trading/results', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
       const period = (req.query.period as string) || '1d';
+
+      // Phase 7.3: Try DataBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using DataBob for /api/trading/results');
+          const resultsData = await dataBob.getResults(userId, mode as 'live' | 'paper', period as any);
+          return res.json(resultsData);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ DataBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
 
       const periodMap: { [key: string]: number } = {
         '1d': 1,
