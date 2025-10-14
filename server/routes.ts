@@ -38,6 +38,7 @@ import { metricsBob } from "./services/bob-metrics";
 import { dataBob } from "./services/bob-data";
 import { configBob } from "./services/bob-config";
 import { strategyBob } from "./services/bob-strategy";
+import { tradeBob } from "./services/bob-trade";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -1125,7 +1126,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/trades/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const trades = await storage.getActiveTrades(userId);
+      
+      // Phase 7.6: Use TradeBob for caching if enabled, otherwise fallback
+      const trades = tradeBob.isEnabled()
+        ? await tradeBob.getAllActiveTrades(userId)
+        : await storage.getActiveTrades(userId);
+      
       res.json(trades);
     } catch (error) {
       console.error('Error fetching active trades:', error);
@@ -1144,6 +1150,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const closedTrade = await engine.closeTrade(id, 'manual');
+      
+      // Phase 7.6: Invalidate TradeBob cache on trade close
+      tradeBob.invalidateActiveTrades(userId);
+      if (closedTrade.mode === 'paper') {
+        tradeBob.invalidatePaperTrades(userId);
+      }
+      
       res.json(closedTrade);
     } catch (error) {
       console.error('Error closing trade:', error);
@@ -1344,7 +1357,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/paper/trades/open', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const trades = await storage.getOpenPaperTrades(userId);
+      
+      // Phase 7.6: Use TradeBob for caching if enabled, otherwise fallback
+      const trades = tradeBob.isEnabled()
+        ? await tradeBob.getOpenPaperTrades(userId)
+        : await storage.getOpenPaperTrades(userId);
+      
       res.json(trades);
     } catch (error) {
       console.error('Error fetching open paper trades:', error);
@@ -1356,6 +1374,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.id;
       await storage.deleteAllPaperTrades(userId);
+      
+      // Phase 7.6: Invalidate TradeBob cache when paper trades are cleared
+      tradeBob.invalidateActiveTrades(userId); // Invalidate combined cache
+      tradeBob.invalidatePaperTrades(userId);   // Invalidate paper-specific cache
+      
       res.json({ success: true, message: 'All paper trades cleared' });
     } catch (error) {
       console.error('Error clearing paper trades:', error);
@@ -1546,6 +1569,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Phase 7.5: Prefetch StrategyBob (signals only on mode_change)
       const includeSignals = trigger === 'mode_change';
       await strategyBob.prefetchForMode(userId, mode as 'live' | 'paper', includeSignals);
+      
+      // Phase 7.6: Prefetch TradeBob (active/open trades)
+      if (tradeBob.isEnabled()) {
+        await tradeBob.prefetchForMode(userId, mode as 'live' | 'paper');
+      }
       
       res.json({ success: true, mode, trigger });
     } catch (error: any) {

@@ -1,30 +1,30 @@
+import { bobCore, type FetchContext } from './bob-core';
+import { db } from '../db';
+import { trades } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
+
 /**
- * TradeBob - Phase 7.6 Module #5
+ * TradeBob - Trade & Execution Optimization Module (Phase 7.6)
  * 
- * Handles live trading state caching with tight TTLs and event-driven invalidation
- * Provides instant, consistent awareness of positions, orders, fills, PnL, and activity
- * for both Walter and dashboard across LIVE and PAPER modes
+ * Caches real-time trade data with very tight TTLs (1s) for instant dashboard updates
+ * and Walter AI queries about active positions and recent executions.
+ * 
+ * Architecture (per architect guidance):
+ * - Caches /api/trades/active (combined live+paper) with single key per user
+ * - Caches /api/paper/trades/open (paper-only) separately
+ * - Provides in-memory filtering for mode-specific data when needed
+ * 
+ * Event-driven invalidation on trade execution, close, or update.
  */
-
-import { bobCore, FetchContext } from './bob-core.js';
-import { storage } from '../storage.js';
-
-/**
- * TradeBob Module
- * Owns: positions, orders, fills, pnl, activity (hot trading data)
- */
-class TradeBobModule {
+class TradeBob {
   private readonly MODULE_NAME = 'TradeBob';
   private readonly ENABLED = process.env.BOB_TRADE_ENABLED !== 'false';
   
-  // Per-resource TTLs (in seconds) - tight for hot trading data
-  private readonly TTL_POSITIONS = parseInt(process.env.BOB_TRADE_POSITIONS_TTL || '2', 10);
-  private readonly TTL_ORDERS = parseInt(process.env.BOB_TRADE_ORDERS_TTL || '1', 10);
-  private readonly TTL_FILLS = parseInt(process.env.BOB_TRADE_FILLS_TTL || '3', 10);
-  private readonly TTL_PNL = parseInt(process.env.BOB_TRADE_PNL_TTL || '2', 10);
-  private readonly TTL_ACTIVITY = parseInt(process.env.BOB_TRADE_ACTIVITY_TTL || '2', 10);
+  // Very tight TTL for real-time trade data
+  private readonly TTL_ACTIVE_TRADES = parseInt(process.env.BOB_TRADE_ACTIVE_TTL || '1', 10);
 
   constructor() {
+    console.log(`[${this.MODULE_NAME}] Constructor called - ENABLED: ${this.ENABLED}`);
     if (this.ENABLED) {
       this.registerWithBobCore();
       console.log(`[${this.MODULE_NAME}] ✅ Initialized with event-driven invalidation`);
@@ -37,448 +37,183 @@ class TradeBobModule {
     return this.ENABLED;
   }
 
-  /**
-   * Register this module's fetch functions with Bob Core
-   */
-  private registerWithBobCore() {
+  private registerWithBobCore(): void {
     const fetchFunctions = new Map<string, (context: FetchContext) => Promise<any>>();
-
-    fetchFunctions.set('positions', this.fetchPositions.bind(this));
-    fetchFunctions.set('orders', this.fetchOrders.bind(this));
-    fetchFunctions.set('fills', this.fetchFills.bind(this));
-    fetchFunctions.set('pnl', this.fetchPnL.bind(this));
-    fetchFunctions.set('activity', this.fetchActivity.bind(this));
-
+    
+    fetchFunctions.set('activeTrades', this.fetchActiveTrades.bind(this));
+    fetchFunctions.set('openPaperTrades', this.fetchOpenPaperTrades.bind(this));
+    
     bobCore.registerModule(this.MODULE_NAME, fetchFunctions);
   }
 
+  // ========================================
+  // FETCH FUNCTIONS
+  // ========================================
+
   /**
-   * Fetch open positions (active trades)
-   * Resource: /api/trades/active (LIVE), /api/paper/trades/open (PAPER)
+   * Fetch ALL active trades (live + paper combined)
+   * Matches /api/trades/active endpoint behavior
    */
-  private async fetchPositions(context: FetchContext): Promise<any> {
-    const startTime = Date.now();
-    const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching positions (mode: ${mode})`);
-
-    try {
-      if (!userId) {
-        throw new Error('userId is required for positions fetch');
-      }
-
-      // Get active trades based on mode
-      const positions = mode === 'live'
-        ? await storage.getActiveTrades(userId)
-        : await storage.getOpenPaperTrades(userId);
-
-      const elapsed = Date.now() - startTime;
-      console.log(`[${this.MODULE_NAME}] ✅ Positions fetched in ${elapsed}ms (${positions.length} positions)`);
-
-      return positions;
-    } catch (error: any) {
-      console.error(`[${this.MODULE_NAME}] ❌ Positions fetch failed:`, error.message);
-      throw error;
-    }
+  private async fetchActiveTrades(context: FetchContext): Promise<any> {
+    const { userId } = context;
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching all active trades (live + paper)`);
+    
+    const start = Date.now();
+    const result = await db.query.trades.findMany({
+      where: and(
+        eq(trades.userId, userId),
+        eq(trades.status, 'open')
+      ),
+      orderBy: (trades, { desc }) => [desc(trades.entryTime)]
+    });
+    
+    const duration = Date.now() - start;
+    console.log(`[${this.MODULE_NAME}] ✅ Active trades fetched in ${duration}ms (${result.length} trades)`);
+    return result;
   }
 
   /**
-   * Fetch working orders
-   * Resource: /api/trades (LIVE), /api/paper/trades (PAPER)
+   * Fetch open paper trades only
+   * Matches /api/paper/trades/open endpoint behavior
    */
-  private async fetchOrders(context: FetchContext): Promise<any> {
-    const startTime = Date.now();
-    const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching orders (mode: ${mode})`);
+  private async fetchOpenPaperTrades(context: FetchContext): Promise<any> {
+    const { userId } = context;
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching open paper trades`);
+    
+    const start = Date.now();
+    const result = await db.query.trades.findMany({
+      where: and(
+        eq(trades.userId, userId),
+        eq(trades.status, 'open'),
+        eq(trades.mode, 'paper')
+      ),
+      orderBy: (trades, { desc }) => [desc(trades.entryTime)]
+    });
+    
+    const duration = Date.now() - start;
+    console.log(`[${this.MODULE_NAME}] ✅ Open paper trades fetched in ${duration}ms (${result.length} trades)`);
+    return result;
+  }
 
-    try {
-      if (!userId) {
-        throw new Error('userId is required for orders fetch');
-      }
+  // ========================================
+  // TRANSPARENT ROUTING (BobCore Integration)
+  // ========================================
 
-      // Get all trades (includes pending orders) based on mode
-      const orders = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
-
-      const elapsed = Date.now() - startTime;
-      console.log(`[${this.MODULE_NAME}] ✅ Orders fetched in ${elapsed}ms (${orders.length} orders)`);
-
-      return orders;
-    } catch (error: any) {
-      console.error(`[${this.MODULE_NAME}] ❌ Orders fetch failed:`, error.message);
-      throw error;
+  /**
+   * Get all active trades (live + paper combined)
+   * Used by /api/trades/active endpoint
+   */
+  async getAllActiveTrades(userId: string): Promise<any> {
+    if (!this.ENABLED) {
+      return this.fetchActiveTrades({ userId });
     }
+
+    const cacheKey = `trade:active:${userId}`;
+    const tag = `user:${userId}`;
+
+    return bobCore.fetchOrServe(
+      cacheKey,
+      () => this.fetchActiveTrades({ userId }),
+      this.TTL_ACTIVE_TRADES,
+      [tag, 'trade:active'],
+      'activeTrades'
+    );
   }
 
   /**
-   * Fetch recent fills/executions
-   * Resource: /api/trades with status=closed (recent N)
+   * Get open paper trades only
+   * Used by /api/paper/trades/open endpoint
    */
-  private async fetchFills(context: FetchContext & { limit?: number }): Promise<any> {
-    const startTime = Date.now();
-    const { mode = 'live', userId, limit = 50 } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching fills (mode: ${mode}, limit: ${limit})`);
-
-    try {
-      if (!userId) {
-        throw new Error('userId is required for fills fetch');
-      }
-
-      // Get recent closed trades (fills) based on mode
-      const allTrades = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
-
-      // Filter to closed trades and sort by exit time, take most recent N
-      const fills = allTrades
-        .filter(t => t.status === 'closed' && t.exitTime)
-        .sort((a, b) => {
-          const timeA = new Date(a.exitTime!).getTime();
-          const timeB = new Date(b.exitTime!).getTime();
-          return timeB - timeA; // Most recent first
-        })
-        .slice(0, Math.min(limit, 100)); // Cap at 100 max
-
-      const elapsed = Date.now() - startTime;
-      console.log(`[${this.MODULE_NAME}] ✅ Fills fetched in ${elapsed}ms (${fills.length} fills)`);
-
-      return fills;
-    } catch (error: any) {
-      console.error(`[${this.MODULE_NAME}] ❌ Fills fetch failed:`, error.message);
-      throw error;
+  async getOpenPaperTrades(userId: string): Promise<any> {
+    if (!this.ENABLED) {
+      return this.fetchOpenPaperTrades({ userId });
     }
+
+    const cacheKey = `trade:paper:open:${userId}`;
+    const tag = `user:${userId}`;
+
+    return bobCore.fetchOrServe(
+      cacheKey,
+      () => this.fetchOpenPaperTrades({ userId }),
+      this.TTL_ACTIVE_TRADES,
+      [tag, 'trade:paper'],
+      'openPaperTrades'
+    );
   }
 
   /**
-   * Fetch session PnL & exposure
-   * Resource: /api/portfolio/overview (LIVE), /api/paper/metrics/portfolio (PAPER)
+   * Helper: Filter active trades by mode (in-memory)
+   * Used by Walter when mode-specific data is needed
    */
-  private async fetchPnL(context: FetchContext): Promise<any> {
-    const startTime = Date.now();
-    const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching PnL (mode: ${mode})`);
+  async getActiveTradesByMode(userId: string, mode: 'live' | 'paper'): Promise<any> {
+    const allTrades = await this.getAllActiveTrades(userId);
+    return allTrades.filter((trade: any) => trade.mode === mode);
+  }
 
+  // ========================================
+  // PREFETCH INTEGRATION
+  // ========================================
+
+  async prefetchForMode(userId: string, mode: 'live' | 'paper'): Promise<void> {
+    if (!this.ENABLED) return;
+
+    console.log(`[${this.MODULE_NAME}] 🔄 Prefetching active trades for ${mode} mode`);
+    
     try {
-      if (!userId) {
-        throw new Error('userId is required for PnL fetch');
-      }
-
-      let pnlData;
-
-      if (mode === 'live') {
-        // Get live portfolio overview using RiskManager
-        const { RiskManager } = await import('./risk-manager.js');
-        const riskManager = new RiskManager();
-        const liveBalance = await riskManager.getLiveKrakenBalance(userId);
-        const metrics = await riskManager.getPortfolioMetrics(userId);
-        const winRateData = await riskManager.getWinRate(userId, 30);
-        
-        pnlData = {
-          totalValue: liveBalance.totalValueUSD,
-          unrealizedPL: metrics.unrealizedPL,
-          realizedPL: metrics.realizedPL,
-          currentExposure: metrics.currentExposure,
-          openTradesCount: metrics.openTradesCount,
-          ...winRateData,
-          cash: liveBalance.cashUSD,
-          crypto: liveBalance.cryptoUSD,
-          cashPercent: liveBalance.totalValueUSD > 0 ? (liveBalance.cashUSD / liveBalance.totalValueUSD) * 100 : 0,
-          cryptoPercent: liveBalance.totalValueUSD > 0 ? (liveBalance.cryptoUSD / liveBalance.totalValueUSD) * 100 : 0,
-          syncTimestamp: liveBalance.syncTimestamp
-        };
+      if (mode === 'paper') {
+        // For paper mode, prefetch the paper-specific endpoint
+        await this.getOpenPaperTrades(userId);
       } else {
-        // Get paper portfolio metrics
-        const { PaperMetricsService } = await import('./paper-metrics.js');
-        const metricsService = new PaperMetricsService(userId);
-        pnlData = await metricsService.getPortfolioMetrics();
+        // For live mode, prefetch the combined active trades
+        await this.getAllActiveTrades(userId);
       }
-
-      const elapsed = Date.now() - startTime;
-      console.log(`[${this.MODULE_NAME}] ✅ PnL fetched in ${elapsed}ms`);
-
-      return pnlData;
-    } catch (error: any) {
-      console.error(`[${this.MODULE_NAME}] ❌ PnL fetch failed:`, error.message);
-      throw error;
+      
+      console.log(`[${this.MODULE_NAME}] ✅ Prefetch complete for ${mode} mode`);
+    } catch (error) {
+      console.error(`[${this.MODULE_NAME}] ❌ Prefetch failed for ${mode} mode:`, error);
     }
   }
 
+  // ========================================
+  // EVENT-DRIVEN INVALIDATION
+  // ========================================
+
   /**
-   * Fetch recent trade activity (compact stream for widgets)
-   * Resource: /api/trading/activity
+   * Invalidate all active trades cache when a trade changes
+   * Called on trade execution, close, or update
    */
-  private async fetchActivity(context: FetchContext & { limit?: number }): Promise<any> {
-    const startTime = Date.now();
-    const { mode = 'live', userId, limit = 20 } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching activity (mode: ${mode}, limit: ${limit})`);
-
-    try {
-      if (!userId) {
-        throw new Error('userId is required for activity fetch');
-      }
-
-      // Get all trades and create activity stream
-      const allTrades = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
-
-      // Sort by most recent activity (entry or exit time)
-      const activity = allTrades
-        .map(t => ({
-          id: t.id,
-          symbol: t.symbol,
-          strategy: t.strategy,
-          action: t.status === 'closed' ? 'closed' : t.status === 'open' ? 'opened' : 'pending',
-          timestamp: t.status === 'closed' ? t.exitTime : t.entryTime,
-          pnl: t.status === 'closed' ? parseFloat(t.realizedPL || '0') : null,
-          qty: parseFloat(t.quantity || '0')
-        }))
-        .filter(a => a.timestamp)
-        .sort((a, b) => {
-          const timeA = new Date(a.timestamp!).getTime();
-          const timeB = new Date(b.timestamp!).getTime();
-          return timeB - timeA; // Most recent first
-        })
-        .slice(0, Math.min(limit, 100)); // Cap at 100 max
-
-      const elapsed = Date.now() - startTime;
-      console.log(`[${this.MODULE_NAME}] ✅ Activity fetched in ${elapsed}ms (${activity.length} events)`);
-
-      return activity;
-    } catch (error: any) {
-      console.error(`[${this.MODULE_NAME}] ❌ Activity fetch failed:`, error.message);
-      throw error;
-    }
+  invalidateActiveTrades(userId: string): void {
+    if (!this.ENABLED) return;
+    
+    // Invalidate combined active trades
+    const cacheKey = `trade:active:${userId}`;
+    bobCore.invalidate(cacheKey);
+    
+    console.log(`[${this.MODULE_NAME}] 🗑️ Invalidated active trades cache (user: ${userId})`);
   }
 
   /**
-   * Public API: Get open positions with caching
+   * Invalidate paper trades cache when paper trade changes
    */
-  async getPositions(
-    userId: string,
-    mode: 'live' | 'paper' = 'live',
-    ttl?: number
-  ): Promise<any> {
-    const key = `trade:positions:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
-
-    return await bobCore.fetchOrServe(
-      key,
-      () => this.fetchPositions(context),
-      ttl || this.TTL_POSITIONS,
-      context,
-      ['trade', 'positions', mode]
-    );
+  invalidatePaperTrades(userId: string): void {
+    if (!this.ENABLED) return;
+    
+    const cacheKey = `trade:paper:open:${userId}`;
+    bobCore.invalidate(cacheKey);
+    
+    console.log(`[${this.MODULE_NAME}] 🗑️ Invalidated paper trades cache (user: ${userId})`);
   }
 
   /**
-   * Public API: Get working orders with caching
+   * Invalidate all trade caches for a user
    */
-  async getOrders(
-    userId: string,
-    mode: 'live' | 'paper' = 'live',
-    ttl?: number
-  ): Promise<any> {
-    const key = `trade:orders:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
-
-    return await bobCore.fetchOrServe(
-      key,
-      () => this.fetchOrders(context),
-      ttl || this.TTL_ORDERS,
-      context,
-      ['trade', 'orders', mode]
-    );
-  }
-
-  /**
-   * Public API: Get recent fills with caching
-   */
-  async getFills(
-    userId: string,
-    mode: 'live' | 'paper' = 'live',
-    limit: number = 50,
-    ttl?: number
-  ): Promise<any> {
-    const key = `trade:fills:${mode}:${userId}:${limit}`;
-    const context = { mode, userId, limit } as FetchContext & { limit?: number };
-
-    return await bobCore.fetchOrServe(
-      key,
-      () => this.fetchFills(context),
-      ttl || this.TTL_FILLS,
-      context,
-      ['trade', 'fills', mode]
-    );
-  }
-
-  /**
-   * Public API: Get session PnL & exposure with caching
-   */
-  async getPnL(
-    userId: string,
-    mode: 'live' | 'paper' = 'live',
-    ttl?: number
-  ): Promise<any> {
-    const key = `trade:pnl:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
-
-    return await bobCore.fetchOrServe(
-      key,
-      () => this.fetchPnL(context),
-      ttl || this.TTL_PNL,
-      context,
-      ['trade', 'pnl', mode]
-    );
-  }
-
-  /**
-   * Public API: Get recent trade activity with caching
-   */
-  async getActivity(
-    userId: string,
-    mode: 'live' | 'paper' = 'live',
-    limit: number = 20,
-    ttl?: number
-  ): Promise<any> {
-    const key = `trade:activity:${mode}:${userId}:${limit}`;
-    const context = { mode, userId, limit } as FetchContext & { limit?: number };
-
-    return await bobCore.fetchOrServe(
-      key,
-      () => this.fetchActivity(context),
-      ttl || this.TTL_ACTIVITY,
-      context,
-      ['trade', 'activity', mode]
-    );
-  }
-
-  /**
-   * Helper: Invalidate all keys with a given prefix using tag-based invalidation
-   */
-  private invalidateByTag(tag: string): void {
-    bobCore.invalidate(tag);
-  }
-
-  /**
-   * Event-driven invalidation: Called when trade lifecycle changes
-   * Invalidates affected keys immediately (bypasses TTL)
-   */
-  invalidateOnEvent(
-    userId: string,
-    mode: 'live' | 'paper',
-    eventType: 'order_placed' | 'order_amended' | 'order_canceled' | 'fill' | 'position_update' | 'pnl_update' | 'engine_state'
-  ): void {
-    console.log(`[${this.MODULE_NAME}] 🔄 Event-driven invalidation: ${eventType} (${mode} mode)`);
-
-    // Invalidate affected resources based on event type
-    switch (eventType) {
-      case 'order_placed':
-      case 'order_amended':
-      case 'order_canceled':
-        // Invalidate orders and activity (using tags)
-        bobCore.invalidate(`trade:orders:${mode}:${userId}`);
-        this.invalidateByTag('activity'); // Tag-based for all activity variants
-        break;
-
-      case 'fill':
-        // Invalidate positions, orders, fills, PnL, and activity
-        bobCore.invalidate(`trade:positions:${mode}:${userId}`);
-        bobCore.invalidate(`trade:orders:${mode}:${userId}`);
-        this.invalidateByTag('fills'); // Tag-based for all fill limits
-        bobCore.invalidate(`trade:pnl:${mode}:${userId}`);
-        this.invalidateByTag('activity'); // Tag-based for all activity variants
-        break;
-
-      case 'position_update':
-        // Invalidate positions, PnL, and activity
-        bobCore.invalidate(`trade:positions:${mode}:${userId}`);
-        bobCore.invalidate(`trade:pnl:${mode}:${userId}`);
-        this.invalidateByTag('activity'); // Tag-based for all activity variants
-        break;
-
-      case 'pnl_update':
-        // Invalidate PnL only
-        bobCore.invalidate(`trade:pnl:${mode}:${userId}`);
-        break;
-
-      case 'engine_state':
-        // Invalidate everything (engine pause/resume)
-        bobCore.invalidate(`trade:positions:${mode}:${userId}`);
-        bobCore.invalidate(`trade:orders:${mode}:${userId}`);
-        this.invalidateByTag('fills'); // Tag-based for all fill limits
-        bobCore.invalidate(`trade:pnl:${mode}:${userId}`);
-        this.invalidateByTag('activity'); // Tag-based for all activity variants
-        break;
-    }
-  }
-
-  /**
-   * Prefetch hot trading data for a specific mode
-   * Called on dashboard mount, Walter chat open, mode change
-   */
-  async prefetchForMode(
-    userId: string,
-    mode: 'live' | 'paper',
-    includeActivity: boolean = false,
-    ttl?: number
-  ): Promise<void> {
-    console.log(`[${this.MODULE_NAME}] 🔄 Prefetching for ${mode} mode (activity: ${includeActivity})`);
-
-    const prefetchTasks = [
-      // Always prefetch positions, orders, and PnL
-      bobCore.prefetch(
-        `trade:positions:${mode}:${userId}`,
-        () => this.fetchPositions({ mode, userId }),
-        ttl || this.TTL_POSITIONS,
-        { mode, userId },
-        ['trade', 'positions', mode]
-      ),
-      bobCore.prefetch(
-        `trade:orders:${mode}:${userId}`,
-        () => this.fetchOrders({ mode, userId }),
-        ttl || this.TTL_ORDERS,
-        { mode, userId },
-        ['trade', 'orders', mode]
-      ),
-      bobCore.prefetch(
-        `trade:pnl:${mode}:${userId}`,
-        () => this.fetchPnL({ mode, userId }),
-        ttl || this.TTL_PNL,
-        { mode, userId },
-        ['trade', 'pnl', mode]
-      )
-    ];
-
-    // Optionally prefetch activity (only on dashboard mount or mode change)
-    if (includeActivity) {
-      prefetchTasks.push(
-        bobCore.prefetch(
-          `trade:activity:${mode}:${userId}:20`,
-          () => this.fetchActivity({ mode, userId, limit: 20 } as FetchContext & { limit?: number }),
-          ttl || this.TTL_ACTIVITY,
-          { mode, userId, limit: 20 } as FetchContext & { limit?: number },
-          ['trade', 'activity', mode]
-        )
-      );
-    }
-
-    await Promise.all(prefetchTasks);
-    console.log(`[${this.MODULE_NAME}] ✅ Prefetch complete for ${mode} mode`);
-  }
-
-  /**
-   * Invalidate all trading data for a user/mode
-   */
-  invalidateAll(userId: string, mode: 'live' | 'paper'): void {
-    console.log(`[${this.MODULE_NAME}] 🗑️ Invalidating all trading data for ${mode} mode`);
-    bobCore.invalidate(`trade:positions:${mode}:${userId}`);
-    bobCore.invalidate(`trade:orders:${mode}:${userId}`);
-    this.invalidateByTag('fills'); // Tag-based for all fill limits
-    bobCore.invalidate(`trade:pnl:${mode}:${userId}`);
-    this.invalidateByTag('activity'); // Tag-based for all activity variants
+  invalidateAllForUser(userId: string): void {
+    if (!this.ENABLED) return;
+    
+    bobCore.invalidate(`user:${userId}`);
+    console.log(`[${this.MODULE_NAME}] 🗑️ Invalidated all trade caches for user ${userId}`);
   }
 }
 
 // Export singleton instance
-export const tradeBob = new TradeBobModule();
+export const tradeBob = new TradeBob();
