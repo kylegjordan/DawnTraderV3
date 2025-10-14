@@ -159,7 +159,7 @@ export function ChatHistorySidebar({
 
   return (
     <TooltipProvider>
-      <div className="w-[300px] border-r bg-background flex flex-col" data-testid="chat-history-sidebar">
+      <div className="w-[280px] md:w-[300px] border-r bg-background flex flex-col" data-testid="chat-history-sidebar">
         {/* Header */}
         <div className="p-4 border-b flex items-center justify-between">
           <h3 className="font-semibold text-sm">Chat History</h3>
