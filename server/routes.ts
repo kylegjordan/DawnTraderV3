@@ -19,7 +19,7 @@ import { marketDataService } from "./services/market-data";
 import { actuationPolicyService } from "./services/actuation-policy";
 import { assetCapabilitiesService } from "./services/asset-capabilities";
 import { manageChatLifecycle, summarizeChatSession } from "./services/walter-chat-lifecycle";
-import { generateWalterResponse } from "./services/walter-response";
+import { generateWalterResponse, ensureNaturalLanguageResponse } from "./services/walter-response";
 import { chatLogging } from "./middleware/chat-logging";
 import { parseIntent } from "./services/intent-parser";
 import { CommandRouter } from "./services/command-router";
@@ -7513,8 +7513,12 @@ Important: Extract the exact field names and numeric values from the user's requ
       }
 
       console.log('[Walter] Sending response:', { requiresApproval, actionTaken, responseLength: finalResponse.length });
+      
+      // Phase 7.1c Deliverable 1 & 3: Ensure response is natural language
+      const naturalResponse = ensureNaturalLanguageResponse(finalResponse);
+      
       res.json({
-        response: finalResponse,
+        response: naturalResponse,
         actionType: interpretation.actionType,
         requiresApproval,
         actionTaken,
@@ -7522,9 +7526,15 @@ Important: Extract the exact field names and numeric values from the user's requ
       });
     } catch (error: any) {
       console.error('[Walter] Error interpreting command:', error);
+      
+      // Phase 7.1c: Ensure error responses are also natural language
+      const errorResponse = ensureNaturalLanguageResponse(
+        "I encountered an error processing your request. Please try again or rephrase your command."
+      );
+      
       res.status(500).json({ 
         error: 'Failed to process command',
-        response: "I encountered an error processing your request. Please try again or rephrase your command."
+        response: errorResponse
       });
     }
   });

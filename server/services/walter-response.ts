@@ -96,7 +96,8 @@ export async function generateWalterResponse(
     // 8. Extract and store memory if needed (expert principles already logged in getRelevantPrinciples)
     await extractAndStoreMemory(userId, chatId, userMessage, response);
 
-    return response;
+    // Phase 7.1c Deliverable 1 & 3: Apply universal stringification
+    return ensureNaturalLanguageResponse(response);
   } catch (error) {
     console.error('[WalterResponseService] Error generating response:', error);
     return getFallbackResponse(error);
