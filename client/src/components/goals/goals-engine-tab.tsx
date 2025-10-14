@@ -64,7 +64,7 @@ export default function GoalsEngineTab() {
       return apiRequest('POST', '/api/goals/update', { goals, mode });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=${mode}`] });
       toast({
         title: "Goals updated",
         description: "Your goals have been saved successfully.",

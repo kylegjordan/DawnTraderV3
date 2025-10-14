@@ -4702,9 +4702,13 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
 
+      console.log(`[Goals] Fetching goals summary for user ${userId} in ${mode} mode`);
+
       const goalsData = mode === 'live' 
         ? await storage.getUserGoalsLive(userId)
         : await storage.getUserGoalsPaper(userId);
+
+      console.log(`[Goals] Found ${goalsData.length} goals in ${mode} mode for user ${userId}`);
 
       // Transform to frontend format
       const goals = goalsData.map(g => ({
@@ -4713,6 +4717,8 @@ Provide specific, actionable recommendations.`,
         actual: g.actualValue ? parseFloat(g.actualValue) : 0,
         percentAchieved: g.percentAchieved ? parseFloat(g.percentAchieved) : null,
       }));
+
+      console.log(`[Goals] Returning ${goals.length} goals:`, JSON.stringify(goals));
 
       res.json({ 
         goals,
@@ -4730,6 +4736,8 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const { goals, mode = 'live' } = req.body;
 
+      console.log(`[Goals] Saving ${goals.length} goals for user ${userId} in ${mode} mode:`, JSON.stringify(goals));
+
       const updatedGoals = [];
       
       for (const goal of goals) {
@@ -4746,9 +4754,11 @@ Provide specific, actionable recommendations.`,
           ? await storage.upsertGoalLive(goalData)
           : await storage.upsertGoalPaper(goalData);
         
+        console.log(`[Goals] Saved goal ${goal.metricName} = ${goal.goalValue} (${mode}) -> DB ID: ${result.id}`);
         updatedGoals.push(result);
       }
 
+      console.log(`[Goals] Successfully saved ${updatedGoals.length} goals in ${mode} mode`);
       res.json({ success: true, data: updatedGoals, mode });
     } catch (error: any) {
       console.error('Error updating goals:', error);
