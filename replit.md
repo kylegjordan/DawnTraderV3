@@ -85,3 +85,57 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 - `client/src/components/goals/goals-table.tsx` - Unified query key and invalidation
 - `client/src/components/goals/goals-engine-tab.tsx` - Unified query key and invalidation
 - `client/src/hooks/use-system-health.tsx` - Fixed cache invalidation to use mode-specific key
+
+### Phase 6.16: Dashboard Initial Data Load Enhancement
+**Completed:** October 14, 2025
+
+**Goal:** Ensure the Dashboard automatically loads all mode-specific data immediately after login or page refresh — without waiting for manual triggers like mode toggle or user actions.
+
+**Implementation:**
+
+**1. Unified Array-Based Query Keys Across All Widgets**
+- **Goals Summary**: `['goals', 'summary', mode]` ✓
+- **Earnings Widget**: `['earnings', 'summary', mode]` and `['earnings', 'sparkline', mode]`
+- **Trading Activity**: `['trading', 'activity', mode, period]` and `['trades', 'active', mode]`
+- **Results Widget**: `['trading', 'results', mode, period]`
+- **Averages Widget**: `['trading', 'averages', mode, period]`
+
+**2. Added Authenticated Query Functions**
+All widgets now include custom `queryFn` with proper authentication:
+```typescript
+queryFn: () => fetch(`/api/endpoint?mode=${mode}`, {
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  }
+}).then(r => r.json())
+```
+
+**3. Automatic Data Load on Mount**
+- React Query automatically fetches data when components mount
+- Mode dependency in queryKey triggers refetch on mode change
+- No redundant useEffect hooks needed (except Goals Summary for backward compatibility)
+
+**4. Average Return Format Verification**
+- Confirmed `avgReturnPercent` displays with % format (not $) in both Results and Averages widgets
+- Consistent percentage formatting across all widgets: `+X.XX%` or `-X.XX%`
+
+**Key Benefits:**
+- Dashboard populates immediately after login/refresh
+- All widgets load mode-specific data without user action
+- Consistent authentication across all protected endpoints
+- Optimal cache management with array-based query keys
+- No "empty on first load" visual lag
+
+**E2E Test Results:**
+✅ Login → Dashboard shows all widget data instantly
+✅ Toggle to PAPER → All widgets refresh within 1-2 seconds
+✅ Browser refresh → Mode persists, data reloads correctly
+✅ Toggle back to LIVE → Widgets show LIVE data immediately
+✅ PAPER mode shows proper UI (blue borders, SIMULATED badges)
+✅ All widgets use authenticated Bearer token requests
+
+**Files Modified:**
+- `client/src/components/goals/earnings-widget.tsx` - Array-based query keys with auth headers
+- `client/src/components/goals/averages-widget.tsx` - Array-based query keys with auth headers
+- `client/src/components/goals/trading-activity-widget.tsx` - Array-based query keys with auth headers
+- `client/src/components/goals/results-widget.tsx` - Array-based query keys with auth headers
