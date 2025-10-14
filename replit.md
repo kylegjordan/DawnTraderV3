@@ -132,6 +132,13 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 - Logging format: JSONL for efficient parsing and analysis
 - Pending confirmations tracked per-user in memory (Map<userId, confirmationId>)
 - Users reply with simple "yes"/"no" - confirmation ID auto-retrieved
+- **Confirmation Flow (Production-Ready):**
+  - Whole-word first-word matching: extracts first word, strips ALL punctuation with `/[^a-z]/g`
+  - Natural language support: "yes please", "no thanks", "yeah!", "nope" all work correctly
+  - False positive prevention: "yesterday", "nobody" no longer trigger confirmations
+  - Pending confirmation guard: blocks new critical commands until current one resolved
+  - Clear user feedback: explicit reminders when confirmation pending
+  - Architect approved with PASS rating after 5 iterations
 
 **Testing:**
 ✅ All test commands parsing correctly:
