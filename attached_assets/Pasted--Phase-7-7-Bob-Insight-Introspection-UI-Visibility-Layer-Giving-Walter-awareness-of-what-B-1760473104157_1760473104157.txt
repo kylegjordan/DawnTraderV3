@@ -1,0 +1,126 @@
+⚙️ Phase 7.7 – Bob Insight (Introspection + UI Visibility Layer)
+
+“Giving Walter awareness of what Bob knows — and what’s on screen.”
+
+🧠 1. Core Purpose
+
+This phase upgrades Bob Core with introspective capability — allowing Walter to query meta-information about:
+
+System changes, freshness, and cache states
+
+Which modules are running or stale
+
+What’s visible in the UI at any given time
+
+This enables questions like:
+
+“What changed since my last session?”
+“Which modules are out of date?”
+“What’s currently shown on screen?”
+
+🧩 2. Components Added
+Component	Description	Location	Purpose
+InsightBob	New module that tracks Bob Core health, cache status, and last updates	/server/services/bob-insight.ts	Enables Walter to query introspection and module state
+UIBob	Lightweight module tracking UI visibility state	/server/services/bob-ui.ts	Reports which view/tab the user is on and what data is visible
+/api/bob/insight	New endpoint for system-level introspection	/server/routes.ts	Unified endpoint for “Bob Insight” data
+/api/ui/state	New endpoint returning current UI context	Frontend → Backend	Allows Walter and InsightBob to reason in context of what’s displayed
+Goals Table Fix	Update Goals table to display $ average returns instead of %	Frontend & /api/goals/summary	Data consistency fix across live and paper modes
+🧩 3. Functional Flow
+Frontend
+   │
+   ├──► /api/ui/state   ← (UIBob watches active view)
+   │
+   ├──► /api/bob/insight  ← (InsightBob summarizes Bob health + state)
+   │
+   ▼
+Hybrid Cortex / Walter
+   │
+   └──► “What changed?” or “What’s visible now?”
+
+⚙️ 4. Implementation Steps (No Code)
+Step 1 — Create InsightBob
+
+Extend Bob Core with a new module:
+
+Monitors all other Bob modules’ cache timestamps
+
+Tracks cache hit/miss ratio, uptime, and last update per module
+
+Logs event summaries (e.g., when TradeBob invalidates a cache)
+
+Adds a function getInsightSummary() returning:
+
+{
+  "modules": {
+    "MetricsBob": { "lastUpdate": "2025-10-14T19:55Z", "stale": false },
+    "TradeBob": { "lastUpdate": "2025-10-14T19:56Z", "stale": false }
+  },
+  "overallHitRate": "74%",
+  "recentChanges": ["TradeBob cache invalidated", "StrategyBob updated"]
+}
+
+Step 2 — Add UIBob
+
+Create /api/ui/state
+
+Returns which dashboard view or component is active.
+
+Ex: { "view": "Trades", "subView": "Active", "filters": { "mode": "live" } }
+
+Update the frontend to send a small “heartbeat” (every ~15 s or on route change).
+
+Cache this lightweight data locally in UIBob.
+
+Step 3 — Extend /api/bob/insight
+
+Combine data from InsightBob + UIBob into one payload:
+
+{
+  "system": { "modulesActive": 5, "hitRatio": "73.8%" },
+  "ui": { "currentView": "Goals", "mode": "paper" },
+  "recentChanges": ["Goals table format corrected to $", "StrategyBob refreshed"]
+}
+
+Step 4 — Fix Goals Table Unit
+
+Update both /api/goals/summary and the UI to show:
+
+Average Returns → $ (currency) not %
+
+Apply in both Live and Paper modes.
+
+Add a validation rule in InsightBob to check for mismatched units and log them as anomalies.
+
+Step 5 — Prefetch Integration
+
+Add InsightBob to the /api/bob/prefetch call, so that Walter’s session always starts with:
+
+Most recent insight snapshot
+
+Current UI context
+
+Step 6 — Walter Awareness Expansion
+
+Walter gains a new reasoning schema:
+
+“Ask InsightBob before diagnosing a delay.”
+
+“Ask UIBob before answering context-sensitive questions.”
+
+🧭 5. Example Queries Walter Can Now Handle
+User	Walter’s Source	Example Answer
+“What’s changed since yesterday?”	InsightBob	“TradeBob updated its cache 4 times and StrategyBob 2 times.”
+“What am I currently looking at?”	UIBob	“You’re viewing the Paper Goals tab showing average return in dollars.”
+“Which module is running stale?”	InsightBob	“MetricsBob’s cache is 75 s old — it will refresh soon.”
+“Why does this goal value look wrong?”	InsightBob + ConfigBob	“The average return metric has been corrected to use USD, not %.”
+📊 6. Data Structures to Add (Conceptually)
+Name	Description	Example
+InsightCache	Tracks per-module stats	{ module: 'TradeBob', lastUpdated: 1734205123, hitRate: 0.84 }
+UIStateCache	Current UI context	{ view: 'Goals', mode: 'paper' }
+✅ 7. Completion Criteria
+Requirement	Verification
+InsightBob registered with Bob Core	Appears in /api/bob/stats
+/api/ui/state returning correct active view	Visible in console logs
+/api/bob/insight aggregates data from all modules	JSON structure verified
+Goals table shows $ values in both modes	Manual UI check
+Walter able to query state & changes successfully	“What changed?” query returns accurate info
