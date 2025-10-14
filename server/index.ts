@@ -112,13 +112,12 @@ app.use((req, res, next) => {
     });
   });
 
-  // Start Walter Health Monitor (async, non-blocking)
-  // TODO: Fix JWT import issue with tsx/ES modules before enabling
-  // import('./services/walter-health-monitor').then(({ walterHealthMonitor }) => {
-  //   walterHealthMonitor.start().catch((error) => {
-  //     console.error('[Server] Failed to start Walter Health Monitor:', error);
-  //   });
-  // });
+  // Start Walter Health Monitor (async, non-blocking) - Phase 7.4: Re-enabled
+  import('./services/walter-health-monitor').then(({ walterHealthMonitor }) => {
+    walterHealthMonitor.start().catch((error) => {
+      console.error('[Server] Failed to start Walter Health Monitor:', error);
+    });
+  });
 
   // Start Scheduler Registry with autonomous tasks (async, non-blocking)
   import('./services/scheduler-registry').then(async ({ schedulerRegistry }) => {

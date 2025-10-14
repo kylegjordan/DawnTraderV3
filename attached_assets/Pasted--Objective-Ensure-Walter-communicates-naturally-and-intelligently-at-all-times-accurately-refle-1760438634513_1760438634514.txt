@@ -1,0 +1,202 @@
+🎯 Objective
+
+Ensure Walter communicates naturally and intelligently at all times — accurately reflecting real system state, responding contextually to your intent (command vs conversation), and staying connected to the updated synchronized data layer.
+
+🔹 Phase 7.1 – Establish Reliable Data Pipeline Link
+
+Goal:
+Guarantee that Walter reads live data from the same endpoints powering the dashboard and Goals Engine.
+
+Instructions:
+
+Verify that Walter’s monitoring process polls only the public health and data endpoints now confirmed to be mode-aware:
+
+/api/system/health
+
+/api/goals/summary
+
+/api/trading/activity
+
+/api/trading/results
+
+/api/trading/averages
+
+Ensure each request includes:
+
+Current mode parameter (LIVE or PAPER)
+
+Active Bearer token authentication
+
+Confirm the data Walter receives matches the visible dashboard values.
+
+Check:
+
+Ask Walter: “What is my current trading mode and total portfolio value?”
+
+His answer should exactly match what you see on the Dashboard header and Portfolio card.
+
+Deliverable:
+✅ Data Consistency Verification Report — Walter reads and reports identical values to the Dashboard for all key metrics.
+
+🔹 Phase 7.2 – Communication Context Parsing
+
+Goal:
+Enable Walter to reliably interpret your message intent (command vs conversation vs question).
+
+Instructions:
+
+Review Walter’s language parsing configuration to ensure it uses these intent categories:
+
+Command: Action requests (e.g., “Start paper trading for 24 hours.”)
+
+Inquiry: Data or status questions (e.g., “How is the system performing?”)
+
+Reflection / Conversation: Discussion (e.g., “I’m feeling unsure about the results.”)
+
+Confirm Walter uses the “intent classifier” model or ruleset already integrated in previous builds.
+
+Validate response behavior:
+
+For Commands, he confirms or executes with clear acknowledgment.
+
+For Inquiries, he answers naturally in plain English.
+
+For Conversation, he maintains a human-like tone and empathy.
+
+Check:
+Give Walter three consecutive messages:
+
+A command (“Restart paper trading.”)
+
+A question (“What’s my P&L so far today?”)
+
+A conversational statement (“I’m curious if our strategy is improving.”)
+
+He should handle each appropriately — no code fragments, no robotic confusion.
+
+Deliverable:
+✅ Intent-Response Behavior Matrix — Each category tested and validated.
+
+🔹 Phase 7.3 – Natural-Language Error Handling
+
+Goal:
+Ensure Walter expresses uncertainty or data gaps naturally and helpfully.
+
+Instructions:
+
+Review his fallback responses for missing data or unclear requests.
+Example:
+
+Instead of “undefined response error,” he should say:
+
+“I can’t find updated data for that request right now — would you like me to check the session log?”
+
+Test several scenarios where endpoints are intentionally unavailable or return partial data.
+
+Confirm Walter no longer produces code or mixed-language outputs.
+
+Check:
+
+Temporarily disable one endpoint (e.g., goals summary).
+
+Ask Walter for that data.
+
+Verify his response is human-readable, acknowledges the issue, and offers next steps.
+
+Deliverable:
+✅ Plain-Language Fallback Library validated — all error states produce friendly responses.
+
+🔹 Phase 7.4 – Health Awareness & Proactive Alerts
+
+Goal:
+Re-enable Walter’s health monitoring (temporarily disabled in Phase 6.12) using the now-stable JWT configuration.
+
+Instructions:
+
+Restore Walter’s Health Monitor polling the /api/system/health endpoint every 30 seconds.
+
+Confirm it detects:
+
+Trading session status (active/inactive)
+
+API connectivity
+
+Data sync latency
+
+Configure Walter to summarize alerts in English:
+
+Example: “The paper-trading session stopped responding; would you like me to restart it?”
+
+Check:
+Stop a background process manually and see if Walter alerts within 30 seconds.
+
+Deliverable:
+✅ Active Health Alerting verified — Walter detects and communicates live system changes autonomously.
+
+🔹 Phase 7.5 – End-to-End Conversational Simulation
+
+Goal:
+Run a full conversational workflow between you and Walter to test comprehension, execution, and follow-through.
+
+Scenario:
+
+You: “Walter, please start a new 24-hour paper trading test with $1,000.”
+
+Walter: Confirms and initiates the session.
+
+You: “How are we performing so far?”
+
+Walter: Reports P&L, open positions, and relevant metrics.
+
+You: “That’s good progress. Could you adjust the SMA strategy to test a tighter stop?”
+
+Walter: Acknowledges and confirms the adjustment.
+
+You: “End the session early.”
+
+Walter: Gracefully ends and provides summary.
+
+Check:
+All responses are in natural language, accurate, and based on real data.
+
+Deliverable:
+✅ Conversation Playback Report — Verified seamless, human-style dialogue with correct backend synchronization.
+
+🔹 Phase 7.6 – Documentation & Final Sign-Off
+
+Goal:
+Ensure full transparency of Walter’s stabilized communication and data pipeline.
+
+Instructions:
+
+Document in replit.md under:
+
+Phase 7.0 – Walter Communication Stabilization v2
+
+
+Include:
+
+Data access verification results
+
+Intent classification test outcomes
+
+Error-handling validation
+
+Health monitor functionality summary
+
+End-to-end conversation transcript
+
+Mark the system “Stable for Continuous Operation.”
+
+Deliverable:
+✅ Phase 7.0 Documentation Completed
+✅ Walter Communication v2 certified operational
+
+🧩 Summary
+Phase	Focus	Deliverable
+7.1	Data pipeline alignment	Data consistency report
+7.2	Intent parsing	Intent-Response matrix
+7.3	Human-language fallback	Fallback validation library
+7.4	Health monitor re-enable	Active alert confirmation
+7.5	Conversational workflow	E2E conversation playback
+7.6	Documentation	Phase 7.0 completion log

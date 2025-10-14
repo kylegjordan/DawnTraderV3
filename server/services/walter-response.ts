@@ -15,6 +15,7 @@ import { buildPersonalityPrompt } from './walter-personality';
 import { buildTemplateGuidance } from './walter-response-templates';
 import { detectFeedback, logFeedback, buildFeedbackAcknowledgment } from './walter-feedback';
 import { inferUserPreferences, buildAdaptiveGuidance } from './walter-adaptive-heuristics';
+import { walterDataPipeline } from './walter-data-pipeline';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -29,6 +30,8 @@ interface ResponseContext {
   memoryDepth: number;
   expertPrinciples: PrincipleContext[];
   referenceContext: string | null;
+  dashboardContext: string | null; // Phase 7.1: Live dashboard data
+  tradingMode: 'live' | 'paper';
 }
 
 interface MemoryExtractionResult {
@@ -105,9 +108,14 @@ export async function generateWalterResponse(
  */
 async function gatherContext(userId: string, chatId: string, userMessage: string): Promise<ResponseContext> {
   try {
-    // Get user settings for memory depth
-    const settings = await storage.getTradingSettings(userId);
+    // Get user settings for memory depth and trading mode
+    const [settings, user] = await Promise.all([
+      storage.getTradingSettings(userId),
+      storage.getUser(userId)
+    ]);
+    
     const memoryDepth = settings?.walterMemoryDepth || 20;
+    const tradingMode = (user?.tradingMode || 'paper') as 'live' | 'paper';
 
     // Get chat for history
     const chat = await storage.getWalterChatById(chatId);
@@ -115,8 +123,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       throw new Error('Chat not found');
     }
 
-    // Gather context in parallel including expert principles
-    const [purposeText, memories, chatHistory, expertPrinciples] = await Promise.all([
+    // Gather context in parallel including expert principles and dashboard data (Phase 7.1)
+    const [purposeText, memories, chatHistory, expertPrinciples, dashboardData] = await Promise.all([
       getWalterPurpose(userId),
       getHighImportanceMemories(userId, 5), // Top 5 high-importance memories
       storage.getWalterChatLogs(chatId, memoryDepth),
@@ -125,8 +133,12 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
         topic: userMessage, 
         maxPrinciples: 5,
         chatId: chatId  // Enable usage logging (now references walter_chats.id)
-      })
+      }),
+      walterDataPipeline.getDashboardData(userId, tradingMode)
     ]);
+
+    // Format dashboard data into context
+    const dashboardContext = walterDataPipeline.formatDashboardContext(dashboardData, tradingMode);
 
     // Phase 6.2: Extract and resolve conversation references
     const entities = await referenceTracker.extractEntitiesFromChat(userId, chatId, chatHistory);
@@ -138,6 +150,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
     }
 
     console.log(`[Walter] Loaded ${expertPrinciples.length} expert principles for topic analysis`);
+    console.log(`[Walter] Loaded dashboard data for ${tradingMode} mode`);
 
     return {
       purpose: purposeText,
@@ -146,7 +159,9 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       chatSummary: null, // Chat summaries handled separately by ConversationSummarizationService
       memoryDepth,
       expertPrinciples: expertPrinciples || [],
-      referenceContext
+      referenceContext,
+      dashboardContext,
+      tradingMode
     };
   } catch (error) {
     console.error('[WalterResponseService] Error gathering context:', error);
@@ -159,7 +174,9 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       chatSummary: null,
       memoryDepth: 20,
       expertPrinciples: [],
-      referenceContext: null
+      referenceContext: null,
+      dashboardContext: null,
+      tradingMode: 'paper'
     };
   }
 }
@@ -168,7 +185,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
  * Build prompt with context injection including expert principles
  */
 async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string): Promise<string> {
-  const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext } = context;
+  const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, tradingMode } = context;
 
   // Format memories
   const memoriesText = memories.length > 0
@@ -242,6 +259,13 @@ IMPORTANT: Ground your recommendations in these expert principles. When discussi
 
 RELEVANT MEMORIES (Key Learnings from Past):
 ${memoriesText}
+
+---
+
+LIVE DASHBOARD DATA (What the user sees):
+${dashboardContext || 'Dashboard data unavailable'}
+
+IMPORTANT: This dashboard data represents the EXACT current state of the system for ${tradingMode.toUpperCase()} mode. When answering questions about performance, goals, or system status, reference these specific values.
 
 ---
 
@@ -473,13 +497,52 @@ function determineType(content: string, userMessage: string): InsertWalterMemory
 
 /**
  * Get fallback response for errors
+ * Phase 7.3: Enhanced with natural language error handling
  */
 function getFallbackResponse(error: any): string {
-  if (error.message === 'TIMEOUT') {
-    return "I'm having trouble processing that right now. Could you rephrase your question?";
+  const errorMsg = error?.message?.toLowerCase() || '';
+  
+  // Timeout errors
+  if (errorMsg === 'timeout' || errorMsg.includes('timeout')) {
+    return "I'm taking longer than usual to respond. The system might be under heavy load. Could you try asking that again in a moment?";
   }
-
-  return "I encountered an error while processing your request. Please try again or rephrase your question.";
+  
+  // API/Network errors
+  if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('connection')) {
+    return "I'm having trouble connecting to the data right now. This usually resolves quickly — please try again in a few seconds.";
+  }
+  
+  // Authentication errors
+  if (errorMsg.includes('auth') || errorMsg.includes('unauthorized') || errorMsg.includes('token')) {
+    return "I can't access that data right now due to an authentication issue. Try refreshing your browser, and if the problem persists, you may need to log in again.";
+  }
+  
+  // Data not found
+  if (errorMsg.includes('not found') || errorMsg.includes('missing')) {
+    return "I couldn't find the data you're looking for. Could you double-check what you're asking about, or try rephrasing your question?";
+  }
+  
+  // OpenAI API errors
+  if (errorMsg.includes('openai') || errorMsg.includes('model')) {
+    return "I'm experiencing a temporary issue with my language processing. This should resolve shortly — please try your question again in a moment.";
+  }
+  
+  // Rate limit errors
+  if (errorMsg.includes('rate limit') || errorMsg.includes('too many')) {
+    return "I've handled too many requests recently and need a brief moment to catch up. Please wait about 30 seconds and try again.";
+  }
+  
+  // Empty response
+  if (errorMsg.includes('empty') || errorMsg === '') {
+    return "I generated a response, but it was empty. Could you rephrase your question so I can give you a better answer?";
+  }
+  
+  // Generic fallback with helpful guidance
+  return "I encountered an unexpected issue while processing your request. Here's what might help:\n\n" +
+         "1. Try rephrasing your question\n" +
+         "2. Check if you're asking about specific data that exists\n" +
+         "3. If this keeps happening, the system might need a refresh\n\n" +
+         "What would you like to try?";
 }
 
 /**

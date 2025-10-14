@@ -6,8 +6,12 @@ const riskManager = new RiskManager();
 
 /**
  * Intent types based on Task 9 behavioral templates
+ * Phase 7.2: Enhanced with command/inquiry/conversation categories
  */
 export type IntentType = 
+  | 'command'           // Action requests (e.g., "Start paper trading")
+  | 'inquiry'           // Data or status questions (e.g., "What's my P&L?")
+  | 'conversation'      // Discussion/reflection (e.g., "I'm feeling unsure")
   | 'guardrail_explanation'
   | 'strategy_explanation'
   | 'risk_reassurance'
@@ -42,11 +46,48 @@ interface BehavioralGuidance {
 
 /**
  * Detect user intent from message
+ * Phase 7.2: Enhanced with command/inquiry/conversation detection
  */
 export function detectIntent(userMessage: string): IntentType {
   const msg = userMessage.toLowerCase();
 
-  // Safety refusal patterns (highest priority)
+  // Command patterns (action requests) - Phase 7.2
+  const commandPatterns = [
+    /^(start|stop|pause|resume|restart|end|close|exit)/i,
+    /(please|can you|could you|would you)\s+(start|stop|pause|resume|restart|adjust|change|set|enable|disable)/i,
+    /^(adjust|change|set|update|enable|disable|activate|deactivate)/i,
+  ];
+
+  if (commandPatterns.some(pattern => pattern.test(msg))) {
+    return 'command';
+  }
+
+  // Inquiry patterns (questions) - Phase 7.2
+  const inquiryPatterns = [
+    /^(what|how|when|where|why|which|who|whose)/i,
+    /^(is|are|do|does|can|could|would|should|will)/i,
+    /\?(.*)/,  // Ends with question mark
+    /^(show|tell|explain|list|give|get|display)/i,
+    /(what's|how's|what is|how is)/i,
+  ];
+
+  if (inquiryPatterns.some(pattern => pattern.test(msg))) {
+    return 'inquiry';
+  }
+
+  // Conversation patterns (reflection, discussion) - Phase 7.2
+  const conversationPatterns = [
+    /(i'm|i am|i feel|feeling|i think|i believe|i wonder)/i,
+    /(curious|unsure|uncertain|confused|concerned|worried|excited|anxious)/i,
+    /(seems|appears|looks like|sounds like)/i,
+    /^(hmm|well|so|actually|interesting)/i,
+  ];
+
+  if (conversationPatterns.some(pattern => pattern.test(msg))) {
+    return 'conversation';
+  }
+
+  // Safety refusal patterns (highest priority for safety)
   const refusalPatterns = [
     /disable.*kill switch/i,
     /turn off.*stop/i,

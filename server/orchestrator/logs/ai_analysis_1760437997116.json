@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-14T10:33:17.116Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows zero recent learning cycles, average confidence, opportunities generated, and adjustments made, indicating it is not functioning as expected."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero active trades and zero total profit/loss, suggesting inactivity or potential issues with trade execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system responsiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI system configuration and logs to identify and resolve issues preventing learning and opportunity generation."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate trading strategy performance and execution to ensure trades are being executed as expected."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and mitigate the root cause.",
+      "rationale": "High CPU load can lead to system instability, slow performance, and potential downtime, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Perform a diagnostic on the AI system to determine why it is not learning or generating opportunities.",
+      "rationale": "The AI system is crucial for identifying trading opportunities and optimizing strategies; its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the trading system to ensure that trades are being executed and strategies are functioning correctly.",
+      "rationale": "Zero active trades and total P/L could indicate a problem with trade execution or strategy effectiveness, affecting profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}

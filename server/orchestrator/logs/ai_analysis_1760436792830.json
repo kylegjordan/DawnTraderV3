@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-14T10:13:12.830Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck issues."
+    },
+    {
+      "severity": "medium",
+      "message": "AI component shows no recent learning cycles, confidence, opportunities generated, or adjustments made, suggesting it may not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero active trades, win rate, and ROI, indicating a lack of trading activity or potential issues with trading strategies."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider scaling the system resources or optimizing current processes to handle the high CPU load more effectively."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Investigate and potentially reactivate or update AI learning cycles to ensure the AI component is contributing to trading decisions."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and possibly adjust the active trading strategies to ensure they are aligned with current market conditions and capable of generating trades."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify processes causing high load and optimize or distribute workloads accordingly.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Audit the AI system to diagnose why it is not generating learning cycles or opportunities and implement necessary fixes or updates.",
+      "rationale": "AI inactivity can lead to missed trading opportunities and reduced system effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Evaluate the current trading strategies for effectiveness and make necessary adjustments or replacements to improve trading outcomes.",
+      "rationale": "Zero trading activity and performance metrics suggest that strategies may not be functioning optimally."
+    }
+  ],
+  "urgencyLevel": "high"
+}
