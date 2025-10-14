@@ -38,13 +38,20 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
   const { isRecording, startRecording, stopRecording, audioBlob, error: recorderError } = useAudioRecorder();
   const { mode } = useTradingMode();
 
-  // Phase 7.1b Deliverable 2: Prefetch dashboard endpoints when chat opens
+  // Phase 7.1b + 7.2: Prefetch dashboard endpoints and Bob Core cache when chat opens
   // Fixed: Track prefetch per mode to handle mode switching
   useEffect(() => {
     if (isOpen && !prefetchedModes.has(mode)) {
       const prefetchEndpoints = async () => {
         try {
           console.log(`[Walter] Prefetching dashboard data for ${mode} mode...`);
+          
+          // Phase 7.2: Trigger Bob Core prefetch for faster metrics
+          const trigger = prefetchedModes.size === 0 ? 'chat_open' : 'mode_change';
+          apiRequest('POST', '/api/bob/prefetch', { mode, trigger }).catch(err => 
+            console.warn('[BobCore] Prefetch trigger failed:', err)
+          );
+
           await Promise.all([
             queryClient.prefetchQuery({
               queryKey: ['goals', 'summary', mode],

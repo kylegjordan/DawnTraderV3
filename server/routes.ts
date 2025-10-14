@@ -1491,6 +1491,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bob stats endpoint for monitoring cache performance
   app.get('/api/bob/stats', authenticateToken, bobStatsHandler);
 
+  // Bob prefetch endpoint - triggered by Walter chat open or mode change
+  app.post('/api/bob/prefetch', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const { mode, trigger } = req.body;
+    
+    if (!mode || !['live', 'paper'].includes(mode)) {
+      return res.status(400).json({ error: 'Invalid mode. Must be "live" or "paper"' });
+    }
+
+    try {
+      console.log(`[BobCore] 🔄 Prefetch triggered by ${trigger || 'unknown'} for ${mode} mode`);
+      await metricsBob.prefetchForMode(mode as 'live' | 'paper');
+      res.json({ success: true, mode, trigger });
+    } catch (error: any) {
+      console.error('[BobCore] ⚠️ Prefetch failed:', error);
+      res.status(500).json({ error: 'Prefetch failed', details: error.message });
+    }
+  });
+
   // Global System Health Endpoint - provides comprehensive system status
   // Phase 7.2: Uses Bob Core for caching with transparent fallback
   app.get('/api/system/health', authenticateToken, async (req: AuthenticatedRequest, res) => {

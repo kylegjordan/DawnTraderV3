@@ -298,7 +298,16 @@ app.use((req, res, next) => {
     }
   });
 
-  server.listen(port, "0.0.0.0", () => {
+  server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
+
+    // Phase 7.2: Prefetch metrics on server startup to warm Bob Core cache
+    try {
+      const { metricsBob } = await import('./services/bob-metrics');
+      await metricsBob.prefetchForMode('live');
+      console.log('[BobCore] ✅ Server startup prefetch complete');
+    } catch (error) {
+      console.error('[BobCore] ⚠️ Server startup prefetch failed:', error);
+    }
   });
 })();
