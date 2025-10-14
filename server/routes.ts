@@ -590,6 +590,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Guardrails endpoints (mode-isolated)
+  // Phase 7.4: ConfigBob transparent routing for guardrails endpoint
   app.get('/api/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -597,6 +598,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
         return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      // Phase 7.4: Try ConfigBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using ConfigBob for /api/guardrails');
+          const guardrailsData = await configBob.getGuardrails(userId, mode);
+          return res.json(guardrailsData);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
       }
 
       let guardrailsData = await storage.getGuardrails({ userId, mode });
@@ -700,10 +713,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Screener filters endpoints (mode-isolated)
+  // Phase 7.4: ConfigBob transparent routing for screeners endpoint
   app.get('/api/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
+
+      // Phase 7.4: Try ConfigBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using ConfigBob for /api/screeners');
+          const screenerData = await configBob.getScreeners(userId, mode);
+          return res.json(screenerData);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
 
       let screenerData = await storage.getScreenerFilters({ userId, mode });
 
@@ -5400,11 +5426,24 @@ Please:
   });
 
   // GET all settings for a mode
+  // Phase 7.4: ConfigBob transparent routing for strategies endpoint
   app.get('/api/strategies/settings/all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       
+      // Phase 7.4: Try ConfigBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using ConfigBob for /api/strategies/settings/all');
+          const rows = await configBob.getStrategies(userId, mode);
+          return res.json(rows);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
+
       const rows = await storage.listStrategySettings({ userId, mode });
       return res.json(rows);
     } catch (error: any) {
@@ -6046,11 +6085,24 @@ Please:
   // ==================== Walter Purpose & Memory API (Phase 5.5, mode-aware as of Phase 6.13) ====================
   
   // GET current user's Walter purpose (mode-aware)
+  // Phase 7.4: ConfigBob transparent routing for purpose endpoint
   app.get('/api/walter/purpose', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
       
+      // Phase 7.4: Try ConfigBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using ConfigBob for /api/walter/purpose');
+          const purpose = await configBob.getPurpose(userId, mode);
+          return res.json({ ok: true, purpose: purpose || null });
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
+
       const purpose = await db.select()
         .from(walterPurpose)
         .where(and(
