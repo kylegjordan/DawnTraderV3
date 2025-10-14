@@ -1521,6 +1521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Bob prefetch endpoint - triggered by Walter chat open or mode change
   // Phase 7.3: Extended to include DataBob prefetch
+  // Phase 7.4: Extended to include ConfigBob prefetch
   app.post('/api/bob/prefetch', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const { mode, trigger } = req.body;
     const userId = req.user!.id;
@@ -1537,6 +1538,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Phase 7.3: Prefetch DataBob
       await dataBob.prefetchForMode(userId, mode as 'live' | 'paper', 'today');
+      
+      // Phase 7.4: Prefetch ConfigBob (all 5 config types)
+      await configBob.prefetchForMode(userId, mode as 'live' | 'paper');
       
       res.json({ success: true, mode, trigger });
     } catch (error: any) {
