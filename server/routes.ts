@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
@@ -5898,16 +5898,20 @@ Please:
     }
   });
 
-  // ==================== Walter Purpose & Memory API (Phase 5.5) ====================
+  // ==================== Walter Purpose & Memory API (Phase 5.5, mode-aware as of Phase 6.13) ====================
   
-  // GET current user's Walter purpose
-  app.get('/api/walter/purpose', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  // GET current user's Walter purpose (mode-aware)
+  app.get('/api/walter/purpose', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const mode = req.mode!;
       
       const purpose = await db.select()
         .from(walterPurpose)
-        .where(eq(walterPurpose.userId, userId))
+        .where(and(
+          eq(walterPurpose.userId, userId),
+          eq(walterPurpose.mode, mode)
+        ))
         .limit(1);
       
       if (purpose.length === 0) {
@@ -5921,20 +5925,24 @@ Please:
     }
   });
   
-  // POST create or update Walter purpose
-  app.post('/api/walter/purpose', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  // POST create or update Walter purpose (mode-aware)
+  app.post('/api/walter/purpose', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const mode = req.mode!;
       const { content } = req.body;
       
       if (!content || typeof content !== 'string') {
         return res.status(400).json({ ok: false, error: 'Purpose content is required' });
       }
       
-      // Check if purpose already exists
+      // Check if purpose already exists for this mode
       const existing = await db.select()
         .from(walterPurpose)
-        .where(eq(walterPurpose.userId, userId))
+        .where(and(
+          eq(walterPurpose.userId, userId),
+          eq(walterPurpose.mode, mode)
+        ))
         .limit(1);
       
       let purpose;
@@ -5948,7 +5956,10 @@ Please:
             updatedBy: userId,
             updatedAt: new Date(),
           })
-          .where(eq(walterPurpose.userId, userId))
+          .where(and(
+            eq(walterPurpose.userId, userId),
+            eq(walterPurpose.mode, mode)
+          ))
           .returning();
         purpose = updated[0];
       } else {
@@ -5956,6 +5967,7 @@ Please:
         const created = await db.insert(walterPurpose)
           .values({
             userId,
+            mode,
             content,
             updatedBy: userId,
           })
@@ -5965,7 +5977,6 @@ Please:
       
       // Create dashboard notification (Phase 5.5 Task 8)
       const AlertsService = (await import('./services/alerts-service')).default;
-      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       
       await AlertsService.createAlert({
         userId,
@@ -5973,9 +5984,9 @@ Please:
         alertType: 'walter_purpose',
         severity: 'info',
         message: isUpdate 
-          ? "Walter's purpose has been updated. New guidance is now active."
-          : "Walter's purpose has been defined. AI decisions will now align with your stated objectives.",
-        metadata: { purposeLength: content.length }
+          ? `Walter's purpose has been updated (${mode.toUpperCase()} mode). New guidance is now active.`
+          : `Walter's purpose has been defined (${mode.toUpperCase()} mode). AI decisions will now align with your stated objectives.`,
+        metadata: { purposeLength: content.length, mode }
       });
       
       res.json({ ok: true, purpose });

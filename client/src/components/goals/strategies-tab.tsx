@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ModeIndicator } from "./mode-indicator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -556,6 +557,7 @@ export default function StrategiesTab() {
         <CardTitle className="flex items-center gap-2">
           <Layers className="w-5 h-5" />
           Trading Strategies Configuration
+          <ModeIndicator />
         </CardTitle>
         <CardDescription>
           Configure parameters for each trading strategy in <Badge variant="outline">{mode}</Badge> mode

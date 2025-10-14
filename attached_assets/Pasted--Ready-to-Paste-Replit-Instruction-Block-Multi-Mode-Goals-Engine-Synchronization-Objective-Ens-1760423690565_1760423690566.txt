@@ -1,0 +1,95 @@
+🧭 Ready-to-Paste Replit Instruction Block — Multi-Mode Goals Engine Synchronization
+
+Objective:
+Ensure all configuration tabs in the Goals Engine (Goals, Guardrails, Screeners, Strategies, Purpose) support independent LIVE and PAPER mode data, with initial duplication from LIVE → PAPER.
+
+Implementation Tasks
+Task 1 – Extend Mode Awareness to All Tabs
+
+Review how mode is currently passed in the Goals tab (LIVE / PAPER).
+
+Apply the same mode-context handling to Guardrails, Screeners, Strategies, and Purpose tabs.
+
+Confirm each save or update operation includes the current trading mode in its API call.
+
+Validate that the backend stores these separately (for example, in user_guardrails_live vs user_guardrails_paper).
+
+Confirm that toggling between LIVE and PAPER instantly refreshes all tabs with their mode-specific data.
+
+✅ Expected Outcome:
+Each tab maintains two independent data sets — one for LIVE, one for PAPER — and automatically displays the correct one when mode changes.
+
+Task 2 – Duplicate LIVE Settings to PAPER
+
+For each category (Goals, Guardrails, Screeners, Strategies, Purpose), run a one-time duplication of all LIVE data into the PAPER tables.
+
+Verify that the PAPER tables are fully populated and identical to LIVE values.
+
+Mark this duplication task as completed in the system logs to prevent it from repeating automatically later.
+
+✅ Expected Outcome:
+PAPER mode starts as a mirror image of LIVE, so you can safely modify PAPER data without affecting LIVE data.
+
+Task 3 – Create Clear Mode Switching Behavior
+
+When the user switches from LIVE to PAPER (or vice versa), the UI should:
+
+Reload all data from that mode’s dataset.
+
+Display a brief visual indicator (for example, “Switched to PAPER mode — showing simulation variables”).
+
+Prevent cross-mode caching (so PAPER edits never overwrite LIVE).
+
+Confirm that after switching modes, any changes you make are saved only in that mode.
+
+✅ Expected Outcome:
+Mode toggle feels instant and seamless, with no confusion about which dataset you’re editing.
+
+Task 4 – Add Fallback and Verification
+
+If a PAPER dataset doesn’t exist yet (for a new user), automatically create it by cloning the LIVE configuration once.
+
+Add a background sync check (visible in developer logs) to verify each mode’s dataset integrity once every 24 hours.
+
+Provide Walter with read-only visibility into both LIVE and PAPER configurations so he can explain current settings accurately.
+
+✅ Expected Outcome:
+System is self-healing: if one mode’s data is missing, it rebuilds automatically from the other, keeping both consistent.
+
+Task 5 – Testing and Validation
+
+Switch to LIVE mode, set unique variables across all five tabs.
+
+Toggle to PAPER mode and confirm all variables initially match LIVE.
+
+Modify one variable in PAPER mode (e.g., change a Guardrail value).
+
+Switch back to LIVE mode and confirm LIVE variables remain unchanged.
+
+Save in both modes and confirm persistence independently in the backend.
+
+✅ Expected Outcome:
+All tabs operate correctly in both modes, with no cross-pollination of values.
+
+Task 6 – Documentation Update
+
+Add the following section to replit.md:
+
+Phase 6.13 – Dual-Mode Configuration Sync (LIVE vs PAPER)
+- Each Goals Engine tab (Goals, Guardrails, Screeners, Strategies, Purpose) now supports independent mode-specific datasets.
+- Data duplication from LIVE → PAPER completed at initialization.
+- Toggle automatically loads mode-appropriate configuration.
+- Changes in one mode never affect the other.
+- Walter has read-only access to both for analysis and explanation.
+
+
+✅ Expected Outcome:
+Future developers, testers, and AI assistants understand the separation and logic between the two environments.
+
+Deliverables
+
+✅ Separate LIVE/PAPER datasets for all Goals Engine tabs
+✅ Initial duplication from LIVE → PAPER
+✅ Proper mode switching behavior
+✅ Automatic fallback sync
+✅ Documentation update

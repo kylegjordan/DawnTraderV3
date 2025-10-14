@@ -6,12 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, Save, Lightbulb, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useTradingMode } from "@/contexts/trading-mode-context";
 import { format } from "date-fns";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ModeIndicator } from "./mode-indicator";
 
 interface WalterPurpose {
   id: string;
   userId: string;
+  mode: string;
   content: string;
   updatedBy: string | null;
   createdAt: string;
@@ -20,6 +23,7 @@ interface WalterPurpose {
 
 export default function WalterPurposeTab() {
   const { toast } = useToast();
+  const { mode } = useTradingMode();
   const [purposeText, setPurposeText] = useState("");
   
   // Default purpose statement
@@ -33,32 +37,38 @@ export default function WalterPurposeTab() {
 
 My success is measured not just by profits, but by consistent execution of our rules, preservation of capital during downturns, and the quality of insights I provide to support our shared goal of financial freedom.`;
 
-  // Fetch current purpose
+  // Fetch current purpose (mode-aware)
   const { data: response, isLoading } = useQuery<{ ok: boolean; purpose: WalterPurpose | null }>({
-    queryKey: ["/api/walter/purpose"],
+    queryKey: ["/api/walter/purpose", mode],
+    queryFn: () => fetch(`/api/walter/purpose?mode=${mode}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'x-app-mode': mode
+      }
+    }).then(r => r.json()),
   });
 
   const purpose = response?.purpose;
 
-  // Update local state when purpose is fetched
+  // Update local state when purpose is fetched or mode changes
   useEffect(() => {
     if (purpose) {
       setPurposeText(purpose.content);
     } else {
       setPurposeText(defaultPurpose);
     }
-  }, [purpose]);
+  }, [purpose, mode]);
 
-  // Save purpose mutation
+  // Save purpose mutation (mode-aware)
   const saveMutation = useMutation({
     mutationFn: async (content: string) => {
-      return await apiRequest("POST", "/api/walter/purpose", { content });
+      return await apiRequest("POST", `/api/walter/purpose?mode=${mode}`, { content });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/walter/purpose"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/walter/purpose", mode] });
       toast({
         title: "Purpose Updated",
-        description: "Walter's purpose has been successfully saved.",
+        description: `Walter's purpose has been successfully saved for ${mode.toUpperCase()} mode.`,
       });
     },
     onError: (error: Error) => {
@@ -110,6 +120,7 @@ My success is measured not just by profits, but by consistent execution of our r
             <div className="flex items-center gap-2">
               <Lightbulb className="w-5 h-5 text-primary" />
               <CardTitle>Walter's Purpose Statement</CardTitle>
+              <ModeIndicator />
             </div>
             {purpose?.updatedAt && (
               <p className="text-xs text-muted-foreground">

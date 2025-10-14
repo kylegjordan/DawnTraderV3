@@ -608,16 +608,17 @@ export const walterApprovalsAudit = pgTable("walter_approvals_audit", {
   timestampIdx: index("walter_approvals_audit_timestamp_idx").on(table.timestamp),
 }));
 
-// Walter purpose (Phase 5.5 - stores Walter's guiding purpose statement)
+// Walter purpose (Phase 5.5 - stores Walter's guiding purpose statement, mode-aware as of Phase 6.13)
 export const walterPurpose = pgTable("walter_purpose", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(), // One purpose per user (enforced via unique index)
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(), // 'live' or 'paper' - separate purpose per mode
   content: text("content").notNull(), // The purpose statement
   updatedBy: varchar("updated_by").references(() => users.id), // Who last updated it
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  userUniqueIdx: uniqueIndex("walter_purpose_user_unique_idx").on(table.userId),
+  uniqueUserMode: uniqueIndex("walter_purpose_user_mode_idx").on(table.userId, table.mode),
 }));
 
 // Walter memory (Phase 5.5 - persistent memory for continuity across sessions)

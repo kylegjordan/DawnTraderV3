@@ -170,3 +170,71 @@ The system incorporates an AI Orchestrator & Command Center for monitoring and i
 - `client/src/pages/dashboard.tsx` - Integrated system health hook
 - `client/src/App.tsx` - Added RequestTraceProvider
 - `client/src/lib/queryClient.ts` - Fixed default mode to 'live'
+
+### Phase 6.13: Dual-Mode Configuration Sync (LIVE vs PAPER)
+**Completed:** October 14, 2025
+
+**Goal:** Ensure all configuration tabs in the Goals Engine (Goals, Guardrails, Screeners, Strategies, Purpose) support independent LIVE and PAPER mode data, with initial duplication from LIVE → PAPER.
+
+**Features Implemented:**
+
+**1. Mode-Aware Schema for Walter Purpose**
+- Added `mode` column to `walter_purpose` table
+- Changed unique index from `userId` to `(userId, mode)` pair
+- Enables separate purpose statements for LIVE and PAPER modes
+
+**2. Purpose API Mode Awareness**
+- Updated GET `/api/walter/purpose` to use `validateMode` middleware
+- Updated POST `/api/walter/purpose` to store mode-specific data
+- Both endpoints now filter by userId AND mode
+- Alert notifications now include mode context
+
+**3. Purpose Frontend Mode Context**
+- Updated `WalterPurposeTab` to use `useTradingMode` hook
+- Query key includes mode: `["/api/walter/purpose", mode]`
+- Auto-reloads purpose when mode changes
+- Success toast shows which mode was updated
+
+**4. Data Duplication Script**
+- Created `/server/scripts/duplicate-live-to-paper.ts`
+- One-time script to copy all LIVE data to PAPER
+- Duplicates: Goals, Guardrails, Screeners, Strategies, Purpose
+- Only duplicates if PAPER data doesn't exist
+- Run with: `tsx server/scripts/duplicate-live-to-paper.ts`
+
+**5. Mode Indicator Badges**
+- Created reusable `ModeIndicator` component
+- Shows current mode (LIVE/PAPER) beside each tab title
+- Blue badge for LIVE mode, Purple badge for PAPER mode
+- Dynamically updates when mode toggle changes
+- Added to all 5 tabs: Goals, Guardrails, Screeners, Strategies, Purpose
+
+**6. Complete Mode Isolation**
+- All Goals Engine tabs now maintain separate LIVE/PAPER datasets
+- Toggling mode instantly refreshes all tabs with mode-specific data
+- Changes in one mode never affect the other
+- Verified across all configuration categories
+
+**Key Benefits:**
+- Safe experimentation in PAPER mode without affecting LIVE settings
+- Independent optimization of strategies per mode
+- Clear visual indication of current mode context
+- Seamless mode switching with automatic data refresh
+
+**Verification:**
+- ✅ Schema migration completed successfully
+- ✅ Purpose endpoints mode-aware
+- ✅ Data duplication script executed (2 strategies, 2 purposes duplicated)
+- ✅ Mode indicators visible on all 5 tabs
+- ✅ Mode context propagates correctly across all tabs
+
+**Files Created/Modified:**
+- `shared/schema.ts` - Updated walter_purpose with mode column
+- `server/routes.ts` - Made Purpose endpoints mode-aware, added `and` import
+- `server/scripts/duplicate-live-to-paper.ts` - New duplication script
+- `client/src/components/goals/walter-purpose-tab.tsx` - Added mode context
+- `client/src/components/goals/mode-indicator.tsx` - New mode badge component
+- `client/src/components/goals/performance-tracking-metrics.tsx` - Added mode indicator
+- `client/src/components/goals/guardrails-tab.tsx` - Added mode indicator
+- `client/src/components/goals/screener-filters-tab.tsx` - Added mode indicator
+- `client/src/components/goals/strategies-tab.tsx` - Added mode indicator

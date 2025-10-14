@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ModeIndicator } from "./mode-indicator";
 
 interface PerformanceMetric {
   metric: string;
@@ -212,6 +213,7 @@ export default function PerformanceTrackingMetrics() {
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
               Performance Tracking Metrics
+              <ModeIndicator />
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-2">
               Track your earnings across different time periods

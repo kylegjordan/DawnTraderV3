@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ModeIndicator } from "./mode-indicator";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -141,6 +142,7 @@ export default function ScreenerFiltersTab() {
           <CardTitle className="flex items-center gap-2">
             <Filter className="w-5 h-5" />
             Screener Filters Configuration
+            <ModeIndicator />
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -159,6 +161,7 @@ export default function ScreenerFiltersTab() {
           <CardTitle className="flex items-center gap-2">
             <Filter className="w-5 h-5" />
             Screener Filters Configuration
+            <ModeIndicator />
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-2">
             Configure filters used to identify trade opportunities

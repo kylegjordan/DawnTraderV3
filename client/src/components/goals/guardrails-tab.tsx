@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ModeIndicator } from "./mode-indicator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -205,6 +206,7 @@ export default function GuardrailsTab() {
           <CardTitle className="flex items-center gap-2">
             <Shield className="w-5 h-5" />
             Guardrails Configuration
+            <ModeIndicator />
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-2">
             Portfolio-level risk parameters to protect your trading account
