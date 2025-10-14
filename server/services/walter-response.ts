@@ -116,13 +116,13 @@ function formatInsightContext(insight: any): string {
   
   let context = `System Introspection (Bob Core):\n`;
   context += `- Active Modules: ${overallStats.modulesActive} (${Object.keys(modules).join(', ')})\n`;
-  context += `- Cache Performance: ${(overallStats.overallHitRate * 100).toFixed(1)}% hit rate\n`;
-  context += `- System Health: ${systemHealth.status}\n`;
+  context += `- Cache Performance: ${overallStats.overallHitRate} hit rate\n`;
+  context += `- System Health: ${systemHealth}\n`;
   
   if (recentChanges && recentChanges.length > 0) {
     context += `- Recent Changes:\n`;
-    recentChanges.slice(0, 3).forEach((change: any) => {
-      context += `  • ${change.description} (${new Date(change.timestamp).toLocaleTimeString()})\n`;
+    recentChanges.slice(0, 3).forEach((change: string) => {
+      context += `  • ${change}\n`;
     });
   }
   
