@@ -1493,8 +1493,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/bob/stats', bobStatsHandler);
 
   // Bob prefetch endpoint - triggered by Walter chat open or mode change
+  // Phase 7.3: Extended to include DataBob prefetch
   app.post('/api/bob/prefetch', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const { mode, trigger } = req.body;
+    const userId = req.user!.id;
     
     if (!mode || !['live', 'paper'].includes(mode)) {
       return res.status(400).json({ error: 'Invalid mode. Must be "live" or "paper"' });
@@ -1502,7 +1504,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       console.log(`[BobCore] 🔄 Prefetch triggered by ${trigger || 'unknown'} for ${mode} mode`);
+      
+      // Phase 7.2: Prefetch MetricsBob
       await metricsBob.prefetchForMode(mode as 'live' | 'paper');
+      
+      // Phase 7.3: Prefetch DataBob
+      await dataBob.prefetchForMode(userId, mode as 'live' | 'paper', 'today');
+      
       res.json({ success: true, mode, trigger });
     } catch (error: any) {
       console.error('[BobCore] ⚠️ Prefetch failed:', error);
