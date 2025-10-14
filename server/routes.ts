@@ -4477,6 +4477,18 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 7;
 
+      // Phase 7.5: Try StrategyBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using StrategyBob for /api/metrics/strategies');
+          const performanceData = await strategyBob.getPerformance(userId, 'live', days);
+          return res.json(performanceData);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ StrategyBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
+
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
@@ -4560,6 +4572,18 @@ Provide specific, actionable recommendations.`,
     try {
       const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 7;
+
+      // Phase 7.5: Try StrategyBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using StrategyBob for /api/paper/metrics/strategies');
+          const performanceData = await strategyBob.getPerformance(userId, 'paper', days);
+          return res.json(performanceData);
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ StrategyBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
 
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
@@ -6477,6 +6501,19 @@ Summary:`;
     try {
       const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
+
+      // Phase 7.5: Try StrategyBob first if enabled
+      if (bobCore.isEnabled()) {
+        try {
+          console.log('[BobRouting] 🎯 Using StrategyBob for /api/historic-signals');
+          const signals = await strategyBob.getSignals(userId, 'live', limit);
+          return res.json({ ok: true, signals });
+        } catch (bobError: any) {
+          console.error('[BobRouting] ⚠️ StrategyBob failed, using original handler:', bobError.message);
+          // Fall through to original implementation below
+        }
+      }
+
       const signals = await storage.getHistoricSignals(userId, limit);
       res.json({ ok: true, signals });
     } catch (error: any) {
