@@ -4,13 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Bot, Send, User, Mic, MicOff, Loader2, MessageSquare, 
-  Plus, Archive, Search, Filter, Check, X, AlertCircle, Paperclip, Upload, FileText, Pencil, Trash2 
+  Plus, Archive, Search, Filter, Check, X, AlertCircle, Upload, FileText, Pencil, Trash2 
 } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -611,8 +610,6 @@ export default function WalterPage() {
               </Button>
             </div>
 
-            <Separator className="my-2" />
-
             {/* Chat List */}
             <ScrollArea className="flex-1">
               <div className="space-y-1">
@@ -768,10 +765,10 @@ export default function WalterPage() {
         </div>
 
         {/* Central Chat Area */}
-        <Card className="flex-1 flex flex-col min-h-0">
+        <Card className="flex-1 flex flex-col min-h-0 border-0 shadow-none">
           {/* Chat Header */}
           {selectedChatId && chatData?.chat && (
-            <div className="p-2 border-b flex items-center justify-between">
+            <div className="px-2 pt-0 pb-2 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-medium">{chatData.chat.title}</h2>
                 {chatData.chat.isApprovalThread && currentApproval && (
@@ -922,8 +919,6 @@ export default function WalterPage() {
             </div>
           </ScrollArea>
 
-          <Separator />
-
           {/* Input Area */}
           {selectedChatId && chatData?.chat.status === 'active' && (
             <div className="p-4">
@@ -1002,14 +997,23 @@ export default function WalterPage() {
                   )}
 
                   <div className="relative">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
+                      className="absolute left-3 top-3 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
+                      data-testid="button-upload-file"
+                      title="Upload file for analysis"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
                     <Textarea
                       ref={textareaRef}
                       value={inputMessage}
                       onChange={(e) => setInputMessage(e.target.value)}
                       onKeyPress={handleKeyPress}
                       onPaste={handlePaste}
-                      placeholder="Ask Walter anything... (drag & drop files or paste images)"
-                      className="resize-none pr-12 overflow-y-auto"
+                      placeholder="Ask Walter anything, drag and drop files, or paste images"
+                      className="resize-none pl-10 pr-12 overflow-y-auto"
                       style={{ minHeight: '120px', maxHeight: '200px' }}
                       disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
                       data-testid="input-message"
@@ -1032,21 +1036,6 @@ export default function WalterPage() {
                 </div>
                 
                 <div className="flex flex-col gap-2">
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
-                    data-testid="button-upload-file"
-                    title="Upload file for analysis"
-                  >
-                    {isUploadingFile ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Paperclip className="w-5 h-5" />
-                    )}
-                  </Button>
-                  
                   <Button
                     size="icon"
                     variant={isRecording ? "destructive" : "outline"}
