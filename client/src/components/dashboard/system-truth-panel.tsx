@@ -63,15 +63,17 @@ interface ContextRefreshMetrics {
 
 export function SystemTruthPanel() {
   // Fetch truth check data
-  const { data: truthData, isLoading: truthLoading, refetch: refetchTruth } = useQuery<{ ok: boolean; result: TruthCheckResult }>({
+  const { data: truthData, isLoading: truthLoading, error: truthError, refetch: refetchTruth } = useQuery<{ ok: boolean; result: TruthCheckResult }>({
     queryKey: ['/api/system/truth-check'],
     refetchInterval: 30000, // Auto-refresh every 30 seconds
+    retry: 1,
   });
 
   // Fetch context refresh metrics
   const { data: metricsData } = useQuery<{ ok: boolean; metrics: ContextRefreshMetrics }>({
     queryKey: ['/api/context/metrics'],
     refetchInterval: 30000,
+    retry: 1,
   });
 
   // Manual refresh mutation
@@ -100,10 +102,59 @@ export function SystemTruthPanel() {
     );
   }
 
+  // Error state - show error message instead of hiding the component
+  if (truthError || !truthData?.ok) {
+    return (
+      <Card data-testid="truth-panel-error" className="border-l-4 border-l-red-500">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                System Truth Sync
+                <Badge variant="outline" className="text-red-600 border-red-600" data-testid="badge-error">Error</Badge>
+              </CardTitle>
+              <CardDescription>
+                Failed to load synchronization status
+              </CardDescription>
+            </div>
+            <Button
+              onClick={() => refetchTruth()}
+              size="sm"
+              variant="outline"
+              data-testid="button-retry"
+            >
+              <RefreshCw className="w-4 h-4 mr-1" />
+              Retry
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-red-600 dark:text-red-400">
+            {truthError ? String(truthError) : "Unable to fetch truth check data. Please check your authentication or try refreshing."}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const truthResult = truthData?.result;
   const metrics = metricsData?.metrics;
 
-  if (!truthResult) return null;
+  if (!truthResult) {
+    return (
+      <Card data-testid="truth-panel-no-data" className="border-l-4 border-l-yellow-500">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-yellow-600" />
+            System Truth Sync
+            <Badge variant="outline" className="text-yellow-600 border-yellow-600" data-testid="badge-no-data">No Data</Badge>
+          </CardTitle>
+          <CardDescription>No synchronization data available</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   const { summary, discrepancies, layers } = truthResult;
   
