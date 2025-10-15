@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Bot, Send, User, Mic, MicOff, Loader2, MessageSquare, 
-  Plus, Archive, Search, Filter, Check, X, AlertCircle, Paperclip, Upload, FileText, Pencil 
+  Plus, Archive, Search, Filter, Check, X, AlertCircle, Paperclip, Upload, FileText, Pencil, Trash2 
 } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -80,8 +80,20 @@ export default function WalterPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast} = useToast();
   const { isRecording, startRecording, stopRecording, audioBlob, error: recorderError } = useAudioRecorder();
+
+  // Phase 8.4: Dynamic textarea resizing (ChatGPT-style)
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = '60px'; // Reset to min height
+      const scrollHeight = textarea.scrollHeight;
+      const maxHeight = 200; // Max 200px
+      textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+    }
+  }, [inputMessage]);
 
   // Fetch all Walter chats
   const { data: chatsData, isLoading: isLoadingChats } = useQuery({
@@ -244,6 +256,28 @@ export default function WalterPage() {
       toast({
         title: "Chat Archived",
         description: "Chat session archived successfully"
+      });
+    }
+  });
+
+  // Phase 8.4: Delete chat
+  const deleteChatMutation = useMutation({
+    mutationFn: async (chatId: string) => {
+      await apiRequest('DELETE', `/api/walter/chats/${chatId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/walter/chats'] });
+      setSelectedChatId(null);
+      toast({
+        title: "Chat Deleted",
+        description: "Chat session permanently deleted"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Could not delete chat",
+        variant: "destructive"
       });
     }
   });
@@ -672,22 +706,59 @@ export default function WalterPage() {
                               {chat.messageCount} message{chat.messageCount !== 1 ? 's' : ''} • {new Date(chat.lastMessageAt).toLocaleDateString()}
                             </span>
                             {!chat.isApprovalThread && chat.status === 'active' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className={cn(
-                                  "h-5 w-5 p-0",
-                                  selectedChatId === chat.id ? "text-primary-foreground hover:text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                                )}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setRenamingChatId(chat.id);
-                                  setRenameValue(chat.title);
-                                }}
-                                data-testid={`button-edit-chat-${chat.id}`}
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </Button>
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className={cn(
+                                    "h-5 w-5 p-0",
+                                    selectedChatId === chat.id ? "text-primary-foreground hover:text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRenamingChatId(chat.id);
+                                    setRenameValue(chat.title);
+                                  }}
+                                  title="Rename chat"
+                                  data-testid={`button-edit-chat-${chat.id}`}
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className={cn(
+                                    "h-5 w-5 p-0",
+                                    selectedChatId === chat.id ? "text-primary-foreground hover:text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    archiveChatMutation.mutate(chat.id);
+                                  }}
+                                  title="Archive chat"
+                                  data-testid={`button-archive-chat-${chat.id}`}
+                                >
+                                  <Archive className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className={cn(
+                                    "h-5 w-5 p-0",
+                                    selectedChatId === chat.id ? "text-primary-foreground hover:text-primary-foreground" : "text-destructive/80 hover:text-destructive"
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`Delete chat "${chat.title}"? This action cannot be undone.`)) {
+                                      deleteChatMutation.mutate(chat.id);
+                                    }
+                                  }}
+                                  title="Delete chat"
+                                  data-testid={`button-delete-chat-${chat.id}`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </>
                             )}
                           </div>
                         </>
@@ -935,12 +1006,14 @@ export default function WalterPage() {
 
                   <div className="relative">
                     <Textarea
+                      ref={textareaRef}
                       value={inputMessage}
                       onChange={(e) => setInputMessage(e.target.value)}
                       onKeyPress={handleKeyPress}
                       onPaste={handlePaste}
                       placeholder="Ask Walter anything... (drag & drop files or paste images)"
-                      className="min-h-[60px] resize-none pr-12"
+                      className="resize-none pr-12 overflow-y-auto"
+                      style={{ minHeight: '60px', maxHeight: '200px' }}
                       disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
                       data-testid="input-message"
                     />
