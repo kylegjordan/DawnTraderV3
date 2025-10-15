@@ -1776,6 +1776,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Phase 8.3: Detailed System Health Metrics from SystemHealthMonitor
+  app.get('/api/system/health-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const healthMetrics = await metricsBob.getSystemHealthMetrics(5); // 5s TTL
+      res.json(healthMetrics);
+    } catch (error: any) {
+      console.error('[SystemHealthMetrics] Error:', error);
+      res.status(500).json({ error: 'Failed to get health metrics', message: error.message });
+    }
+  });
+
+  // Phase 8.3: Manual System Recovery Trigger
+  app.post('/api/system/recover', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { selfRepairService } = await import('./services/self-repair');
+      const result = await selfRepairService.manualRecover();
+      
+      res.json({
+        ok: true,
+        success: result.success,
+        message: result.message,
+        stats: result.stats
+      });
+    } catch (error: any) {
+      console.error('[SystemRecovery] Error:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to perform recovery', 
+        message: error.message 
+      });
+    }
+  });
+
   app.post('/api/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     

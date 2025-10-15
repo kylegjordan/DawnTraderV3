@@ -359,5 +359,14 @@ app.use((req, res, next) => {
     } catch (error) {
       console.error('[SystemHealthMonitor] ⚠️ Integration failed:', error);
     }
+
+    // Phase 8.3: Start Health Report Scheduler (hourly reports)
+    try {
+      const { healthReportScheduler } = await import('./services/health-report-scheduler');
+      await healthReportScheduler.start();
+      console.log('[HealthReportScheduler] ✅ Started successfully');
+    } catch (error) {
+      console.error('[HealthReportScheduler] ⚠️ Startup failed:', error);
+    }
   });
 })();
