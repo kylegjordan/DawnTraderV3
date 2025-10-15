@@ -544,7 +544,7 @@ export default function WalterPage() {
   const pendingApprovalsCount = approvalsData?.filter(a => a.status === 'pending').length || 0;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-1 max-w-full overflow-hidden h-screen flex flex-col">
+    <div className="p-2 sm:p-3 lg:p-4 space-y-1 max-w-full overflow-hidden h-screen flex flex-col">
       <ModeBanner />
       
       <div className="flex items-center justify-between">
@@ -775,9 +775,9 @@ export default function WalterPage() {
         <Card className="flex-1 flex flex-col min-h-0">
           {/* Chat Header */}
           {selectedChatId && chatData?.chat && (
-            <div className="p-4 border-b flex items-center justify-between">
+            <div className="p-2 border-b flex items-center justify-between">
               <div>
-                <h2 className="font-semibold">{chatData.chat.title}</h2>
+                <h2 className="text-sm font-medium">{chatData.chat.title}</h2>
                 {chatData.chat.isApprovalThread && currentApproval && (
                   <p className="text-xs text-muted-foreground">
                     {currentApproval.strategyName} • {currentApproval.mode} mode • {currentApproval.projectedRisk}% risk
@@ -786,21 +786,22 @@ export default function WalterPage() {
               </div>
               {chatData.chat.status === 'active' && !chatData.chat.isApprovalThread && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
+                  className="h-6 w-6 p-0"
                   onClick={() => archiveChatMutation.mutate(selectedChatId)}
                   disabled={archiveChatMutation.isPending}
+                  title="Archive chat"
                   data-testid="button-archive-chat"
                 >
-                  <Archive className="w-4 h-4 mr-2" />
-                  Archive
+                  <Archive className="w-3.5 h-3.5" />
                 </Button>
               )}
             </div>
           )}
 
           {/* Messages Area */}
-          <ScrollArea ref={scrollAreaRef} className="flex-1 p-4 sm:p-6">
+          <ScrollArea ref={scrollAreaRef} className="flex-1 p-2 sm:p-3">
             <div className="space-y-6 max-w-4xl mx-auto">
               {!selectedChatId ? (
                 <div className="text-center py-12">

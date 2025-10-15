@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-15T12:31:15.234Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it might not be functioning as expected."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system has zero active trades and a win rate of 0%, which could indicate issues with trading strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by reviewing running processes and optimizing or scaling resources."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Enhance AI model training and evaluation to ensure it is actively learning and generating trading opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially adjust trading strategies to improve effectiveness and adapt to current market conditions."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and mitigate bottlenecks.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review AI system configurations and logs to diagnose why it is not generating learning cycles or opportunities.",
+      "rationale": "Ensuring the AI system is operational is crucial for maintaining competitive trading strategies."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Evaluate the performance of active trading strategies and consider adjustments or alternative strategies.",
+      "rationale": "Improving trading strategy performance is essential for achieving positive trading outcomes."
+    }
+  ],
+  "urgencyLevel": "high"
+}
