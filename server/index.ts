@@ -340,5 +340,14 @@ app.use((req, res, next) => {
     } catch (error) {
       console.error('[Cortex] ⚠️ Initialization failed:', error);
     }
+
+    // Phase 8.2: Start Analytics Scheduler (15-min cycle)
+    try {
+      const { analyticsScheduler } = await import('./services/cortex/analytics-scheduler');
+      await analyticsScheduler.start();
+      console.log('[AnalyticsScheduler] ✅ Started successfully');
+    } catch (error) {
+      console.error('[AnalyticsScheduler] ⚠️ Startup failed:', error);
+    }
   });
 })();
