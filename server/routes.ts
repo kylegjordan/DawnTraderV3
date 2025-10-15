@@ -847,11 +847,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
       const engineActive = isPaperSimRunning;
       
-      // Get active strategies count
-      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
-      const strategies = await storage.getStrategies({ userId, mode });
-      const activeStrategies = strategies.filter((s: any) => s.enabled).length;
-      
       // Get watchlist pairs (filtered pairs)
       const watchlist = await storage.getWatchlist(userId);
       const filteredPairs = watchlist.length;
@@ -874,7 +869,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         mode: user?.tradingMode || 'paper',
         engineActive,
-        activeStrategies,
+        activeStrategies: 8, // Fixed: 8 automated strategies available
         filteredPairs,
         readyToBuy,
         activeTrades: activeTradesCount,
