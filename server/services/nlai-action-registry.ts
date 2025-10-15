@@ -272,6 +272,103 @@ export class NLAIActionRegistry {
       description: 'Check paper trading simulation status',
       requiredAuth: true,
     });
+
+    // Phase 8.5 Addendum H: Context Refresh Actions
+    this.register({
+      id: 'refresh_context',
+      patterns: [
+        /(?:please\s+)?(?:refresh|update|reload)(?:\s+(?:your|the|my))?(?:\s+(?:data|context|values|information|stats))/i,
+        /(?:please\s+)?(?:get|fetch)(?:\s+(?:fresh|latest|new|updated))?(?:\s+(?:data|context|values))/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const baseUrl = process.env.API_URL || 'http://localhost:5000';
+          const response = await fetch(`${baseUrl}/api/context/refresh`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': userId,
+            },
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            return {
+              success: false,
+              message: `Failed to refresh context: ${error.error || 'Unknown error'}`,
+              error: error.error,
+            };
+          }
+
+          const data = await response.json();
+          return {
+            success: true,
+            message: `✅ Context refreshed successfully! All my data is now up-to-date with the latest portfolio, strategies, and system state.`,
+            data,
+          };
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `Error refreshing context: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Refresh Walter context with latest data',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'check_system_truth',
+      patterns: [
+        /(?:please\s+)?(?:check|verify|validate)(?:\s+(?:system|data))?(?:\s+(?:truth|consistency|alignment|sync))/i,
+        /(?:are|is)(?:\s+(?:all|the|my))?(?:\s+(?:data|systems?|values?|contexts?))?(?:\s+(?:in\s+)?sync(?:ed|hronized)?)/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const baseUrl = process.env.API_URL || 'http://localhost:5000';
+          const response = await fetch(`${baseUrl}/api/system/truth-check`, {
+            method: 'GET',
+            headers: {
+              'x-user-id': userId,
+            },
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            return {
+              success: false,
+              message: `Failed to run truth check: ${error.error || 'Unknown error'}`,
+              error: error.error,
+            };
+          }
+
+          const data = await response.json();
+          const aligned = data.isAligned;
+          const discrepancies = data.discrepanciesCount;
+          
+          let message = aligned 
+            ? '✅ All systems aligned! Backend, Cortex, and Walter are perfectly synchronized.'
+            : `⚠️ Found ${discrepancies} discrepancy(ies) between system layers. I can refresh my context to fix this.`;
+
+          return {
+            success: true,
+            message,
+            data,
+          };
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `Error checking system truth: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Check system truth and data alignment',
+      requiredAuth: true,
+    });
   }
 
   register(action: ActionDefinition): void {
@@ -319,7 +416,7 @@ export class NLAIActionRegistry {
   }
 
   private extractVerb(message: string): string {
-    const verbs = ['start', 'stop', 'check', 'generate', 'create', 'show', 'get', 'display', 'activate', 'deactivate'];
+    const verbs = ['start', 'stop', 'check', 'generate', 'create', 'show', 'get', 'display', 'activate', 'deactivate', 'refresh', 'update', 'reload', 'verify', 'validate'];
     const words = message.toLowerCase().split(/\s+/);
     
     for (const word of words) {
@@ -338,6 +435,8 @@ export class NLAIActionRegistry {
       if (msg.includes('paper') || msg.includes('simulation')) return 'paper_simulation';
     } else if (category === 'system') {
       if (msg.includes('health') || msg.includes('status')) return 'system_health';
+      if (msg.includes('context') || msg.includes('data') || msg.includes('refresh')) return 'context';
+      if (msg.includes('truth') || msg.includes('sync') || msg.includes('alignment')) return 'system_truth';
     } else if (category === 'report') {
       if (msg.includes('report') || msg.includes('summary')) return 'report';
     }

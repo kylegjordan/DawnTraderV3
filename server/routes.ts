@@ -1887,6 +1887,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== Phase 8.5 Addendum G + H: System Truth & Context Refresh ====================
+
+  // GET /api/system/truth-check - Compare backend, Cortex, and Walter snapshots
+  app.get('/api/system/truth-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+
+      const { systemTruthDiagnostic } = await import('./services/system-truth-diagnostic');
+      
+      const truthComparison = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+      
+      res.json({
+        ok: true,
+        comparison: truthComparison,
+        isAligned: truthComparison.isAligned,
+        discrepanciesCount: truthComparison.discrepancies.length,
+        timestamp: truthComparison.timestamp
+      });
+    } catch (error: any) {
+      console.error('[TruthCheck] Error:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to run truth check', 
+        message: error.message 
+      });
+    }
+  });
+
+  // GET /api/system/truth-check/report - Get truth check as Markdown report
+  app.get('/api/system/truth-check/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+
+      const { systemTruthDiagnostic } = await import('./services/system-truth-diagnostic');
+      
+      const truthComparison = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+      const markdownReport = systemTruthDiagnostic.generateMarkdownReport(truthComparison);
+      
+      res.type('text/markdown').send(markdownReport);
+    } catch (error: any) {
+      console.error('[TruthCheckReport] Error:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to generate truth check report', 
+        message: error.message 
+      });
+    }
+  });
+
+  // POST /api/context/refresh - Force context refresh across all layers
+  app.post('/api/context/refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+
+      const { contextRefreshCoordinator } = await import('./services/context-refresh-coordinator');
+      
+      const result = await contextRefreshCoordinator.refresh(userId, mode, 'api');
+      
+      res.json({
+        ok: result.success,
+        result,
+        message: result.success 
+          ? `Context refreshed successfully in ${result.latencyMs}ms`
+          : `Context refresh failed: ${result.error}`
+      });
+    } catch (error: any) {
+      console.error('[ContextRefresh] Error:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to refresh context', 
+        message: error.message 
+      });
+    }
+  });
+
+  // GET /api/context/metrics - Get context refresh metrics
+  app.get('/api/context/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { contextRefreshCoordinator } = await import('./services/context-refresh-coordinator');
+      
+      const metrics = contextRefreshCoordinator.getMetrics();
+      
+      res.json({
+        ok: true,
+        metrics
+      });
+    } catch (error: any) {
+      console.error('[ContextMetrics] Error:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to get context metrics', 
+        message: error.message 
+      });
+    }
+  });
+
   // ==================== Phase 8.5: Real-Time Execution Layer ====================
 
   // Get execution metrics

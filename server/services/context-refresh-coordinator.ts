@@ -1,0 +1,293 @@
+/**
+ * Phase 8.5 Addendum H - Context Refresh Coordinator
+ * 
+ * Fetches live data from backend and synchronizes Cortex + Walter contexts.
+ * Emits WebSocket events for real-time UI updates.
+ */
+
+import { storage } from '../storage';
+import { cortexCore } from './cortex/cortex-core';
+import { strategyAnalytics } from './strategy-analytics';
+import { portfolioAggregator } from './portfolio-aggregator';
+import { systemHealthMonitor } from './system-health-monitor';
+import { EventEmitter } from 'events';
+import { createMemory } from './walter-memory';
+import { systemTruthDiagnostic } from './system-truth-diagnostic';
+
+const MODULE_NAME = 'ContextRefresh';
+
+export interface RefreshResult {
+  success: boolean;
+  latencyMs: number;
+  source: 'api' | 'direct';
+  timestamp: string;
+  userId: string;
+  mode: 'live' | 'paper';
+  discrepanciesFound: number;
+  error?: string;
+}
+
+export interface RefreshMetrics {
+  lastRefreshISO: string | null;
+  avgLatencyMs: number;
+  totalRefreshes: number;
+  failedRefreshes: number;
+  lastError: string | null;
+}
+
+class ContextRefreshCoordinator extends EventEmitter {
+  private readonly MODULE_NAME = MODULE_NAME;
+  private metrics: RefreshMetrics = {
+    lastRefreshISO: null,
+    avgLatencyMs: 0,
+    totalRefreshes: 0,
+    failedRefreshes: 0,
+    lastError: null
+  };
+  private latencyHistory: number[] = [];
+  private readonly MAX_LATENCY_SAMPLES = 100;
+
+  /**
+   * Refresh live context for a user - fetch from backend, update Cortex, emit events
+   */
+  async refresh(userId: string, mode: 'live' | 'paper', source: 'api' | 'direct' = 'direct'): Promise<RefreshResult> {
+    console.log(`[${this.MODULE_NAME}] 🔄 Refreshing context for user ${userId} (${mode}, source=${source})`);
+    const start = Date.now();
+
+    try {
+      // Fetch fresh data from backend
+      const freshData = await this.fetchFreshData(userId, mode);
+
+      // Update Cortex cache with fresh data
+      await this.updateCortex(userId, mode, freshData);
+
+      // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
+      await this.updateWalterMemory(userId, mode, freshData);
+
+      // Run truth check to detect any remaining discrepancies
+      const truthCheck = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+      const discrepanciesFound = truthCheck.discrepancies.length;
+
+      // Calculate latency and update metrics
+      const latencyMs = Date.now() - start;
+      this.updateMetrics(latencyMs, true);
+
+      // Record in SystemHealthMonitor with actual discrepancy count (Phase 8.5 Addendum H)
+      systemHealthMonitor.recordContextRefresh(latencyMs, true, discrepanciesFound);
+
+      // Emit WebSocket event for real-time UI updates
+      this.emit('contextRefreshed', {
+        userId,
+        mode,
+        source,
+        timestamp: new Date().toISOString(),
+        portfolioBalance: freshData.portfolioBalance,
+        activeStrategiesCount: freshData.activeStrategies.length,
+        discrepanciesFound
+      });
+
+      console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${latencyMs}ms (${discrepanciesFound} discrepancies detected)`);
+
+      const result: RefreshResult = {
+        success: true,
+        latencyMs,
+        source,
+        timestamp: new Date().toISOString(),
+        userId,
+        mode,
+        discrepanciesFound
+      };
+
+      return result;
+    } catch (error) {
+      const latencyMs = Date.now() - start;
+      this.updateMetrics(latencyMs, false);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Record failure in SystemHealthMonitor (Phase 8.5 Addendum H)
+      systemHealthMonitor.recordContextRefresh(latencyMs, false, 0);
+      
+      console.error(`[${this.MODULE_NAME}] ❌ Context refresh failed:`, error);
+
+      return {
+        success: false,
+        latencyMs,
+        source,
+        timestamp: new Date().toISOString(),
+        userId,
+        mode,
+        discrepanciesFound: 0,
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * Fetch fresh data from backend (portfolio, strategies, settings)
+   */
+  private async fetchFreshData(userId: string, mode: 'live' | 'paper') {
+    // Fetch in parallel
+    const [portfolioState, strategies, settings, user] = await Promise.all([
+      storage.getPortfolioState({ userId, mode }),
+      storage.listStrategySettings({ userId, mode }),
+      storage.getTradingSettings(userId),
+      storage.getUser(userId)
+    ]);
+
+    // Get global session for engineActive status
+    const globalSession = (global as any).getGlobalSession?.();
+    const engineActive = !!(globalSession && globalSession.isRunning);
+
+    // Extract data
+    const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 1000;
+    const activeStrategies = strategies
+      .filter(s => s.enabled)
+      .map(s => s.strategy)
+      .sort();
+
+    return {
+      portfolioBalance,
+      activeStrategies,
+      activeStrategiesCount: activeStrategies.length,
+      engineActive,
+      mode: (user?.tradingMode || mode) as 'live' | 'paper',
+      riskPerTrade: settings?.riskPerTrade ? parseFloat(settings.riskPerTrade.toString()) : 0,
+      dailyLossKillSwitch: settings?.dailyLossKillSwitch ? parseFloat(settings.dailyLossKillSwitch.toString()) : 7.0,
+      maxExposurePercent: settings?.maxExposurePercent ? parseFloat(settings.maxExposurePercent.toString()) : 100,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Update Cortex cache with fresh data
+   */
+  private async updateCortex(userId: string, mode: 'live' | 'paper', freshData: any) {
+    console.log(`[${this.MODULE_NAME}] 💾 Updating Cortex cache for user ${userId} (${mode})`);
+
+    // Recompute analytics with fresh data
+    const strategySnapshot = await strategyAnalytics.computeStrategyAnalytics(userId, mode);
+    const portfolioSnapshot = await portfolioAggregator.aggregatePortfolio(
+      userId,
+      mode,
+      strategySnapshot.strategies
+    );
+
+    // Cache in Cortex with 15-minute TTL
+    const ttl = 900; // 15 minutes
+    const cacheKey = `analytics_${mode}_${userId}`;
+    
+    cortexCore.set(cacheKey, {
+      strategy_analytics: strategySnapshot,
+      portfolio_summary: portfolioSnapshot,
+      computed_at: new Date().toISOString(),
+      user_id: userId,
+      mode,
+      refreshed_by: 'ContextRefreshCoordinator'
+    }, ttl);
+
+    console.log(`[${this.MODULE_NAME}] ✅ Cortex cache updated (key: ${cacheKey}, TTL: ${ttl}s)`);
+  }
+
+  /**
+   * Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
+   */
+  private async updateWalterMemory(userId: string, mode: 'live' | 'paper', freshData: any) {
+    console.log(`[${this.MODULE_NAME}] 🧠 Updating Walter memory for user ${userId} (${mode})`);
+
+    const memoryContent = `Context refreshed: Portfolio balance $${freshData.portfolioBalance}, ${freshData.activeStrategiesCount} strategies active (${freshData.activeStrategies.join(', ')}), engine ${freshData.engineActive ? 'running' : 'stopped'}, mode: ${mode}`;
+
+    await createMemory(
+      userId,
+      'observation',
+      memoryContent,
+      2, // Importance: medium (routine context update)
+      {
+        source: 'ContextRefreshCoordinator',
+        portfolioBalance: freshData.portfolioBalance,
+        activeStrategiesCount: freshData.activeStrategiesCount,
+        engineActive: freshData.engineActive,
+        mode
+      }
+    );
+
+    console.log(`[${this.MODULE_NAME}] ✅ Walter memory updated`);
+  }
+
+  /**
+   * Update refresh metrics
+   */
+  private updateMetrics(latencyMs: number, success: boolean) {
+    this.metrics.lastRefreshISO = new Date().toISOString();
+    this.metrics.totalRefreshes++;
+    
+    if (!success) {
+      this.metrics.failedRefreshes++;
+    }
+
+    // Track latency history (rolling average)
+    this.latencyHistory.push(latencyMs);
+    if (this.latencyHistory.length > this.MAX_LATENCY_SAMPLES) {
+      this.latencyHistory.shift();
+    }
+
+    // Calculate average latency
+    const sum = this.latencyHistory.reduce((acc, val) => acc + val, 0);
+    this.metrics.avgLatencyMs = Math.round(sum / this.latencyHistory.length);
+  }
+
+  /**
+   * Get current refresh metrics
+   */
+  getMetrics(): RefreshMetrics {
+    return { ...this.metrics };
+  }
+
+  /**
+   * Get context age in seconds for a user
+   */
+  getContextAge(userId: string, mode: 'live' | 'paper'): number | null {
+    const cacheKey = `analytics_${mode}_${userId}`;
+    const analytics = cortexCore.get(cacheKey);
+
+    if (!analytics || !analytics.computed_at) {
+      return null;
+    }
+
+    const computedAt = new Date(analytics.computed_at).getTime();
+    const now = Date.now();
+    const ageMs = now - computedAt;
+    
+    return Math.floor(ageMs / 1000); // Return age in seconds
+  }
+
+  /**
+   * Check if context needs refresh (age > threshold)
+   */
+  needsRefresh(userId: string, mode: 'live' | 'paper', thresholdSeconds: number = 30): boolean {
+    const age = this.getContextAge(userId, mode);
+    
+    if (age === null) {
+      // No context exists - needs refresh
+      return true;
+    }
+
+    return age > thresholdSeconds;
+  }
+
+  /**
+   * Reset metrics (for testing)
+   */
+  resetMetrics() {
+    this.metrics = {
+      lastRefreshISO: null,
+      avgLatencyMs: 0,
+      totalRefreshes: 0,
+      failedRefreshes: 0,
+      lastError: null
+    };
+    this.latencyHistory = [];
+  }
+}
+
+// Singleton instance
+export const contextRefreshCoordinator = new ContextRefreshCoordinator();

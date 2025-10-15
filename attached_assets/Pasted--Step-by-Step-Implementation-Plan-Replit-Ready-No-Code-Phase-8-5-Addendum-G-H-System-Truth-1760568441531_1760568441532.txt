@@ -1,0 +1,96 @@
+🧰 Step-by-Step Implementation Plan (Replit-Ready, No Code)
+
+Phase 8.5 Addendum G + H — System Truth & Live Context Synchronization
+
+Create Diagnostic Service
+
+File: server/services/system-truth-diagnostic.ts
+
+Compare portfolio, strategies, engineActive, risk settings between backend, Cortex, and Walter.
+
+Output JSON and Markdown reports.
+
+Add ContextRefresh Coordinator
+
+File: server/services/context-refresh.ts
+
+Fetch from /api/trading/status.
+
+Update Cortex snapshot and Walter context.
+
+Emit WebSocket event contextRefreshed.
+
+Integrate with Walter Response Pipeline
+
+In walter-response.ts, before building the prompt:
+
+Check contextAge > 30s → trigger ContextRefresh.
+
+Include freshness metadata (lastRefresh, source).
+
+Integrate with Cortex Snapshot Cycle
+
+In cortex-core.ts:
+
+Add listener for contextRefreshed to update cached snapshots.
+
+Log [CortexSync] source=live delta=….
+
+Expose API Endpoints
+
+GET /api/system/truth-check → runs diagnostic and returns JSON diffs.
+
+POST /api/context/refresh → forces live refresh across layers.
+
+Update SystemHealthMonitor
+
+Track lastContextRefreshISO, avgContextLatency, refreshCount, deltaDiscrepancies.
+
+Include these in hourly health reports and Walter’s insight context.
+
+Enhance UI
+
+Add “System Truth Panel” component to dashboard.
+
+Show backend vs Cortex vs Walter values side by side.
+
+Auto-update on contextRefreshed event.
+
+Add Manual Commands
+
+Extend NLAI registry with phrases like:
+“refresh your data,” “update context,” “reload live values.”
+
+Map to ContextRefreshCoordinator.run().
+
+Add Discrepancy Alerts
+
+If abs(backend – cortex) > threshold, log [TruthAlert].
+
+Walter reports: “⚠ Some data were out of sync, I’ve refreshed them.”
+
+Test End-to-End
+
+Run /api/system/truth-check → expect all values aligned.
+
+Ask Walter: “Read trading status” → should say $800 & 8 strategies.
+
+Simulate manual refresh command → watch logs for [ContextSync] source=api→cortex.
+
+Document and Verify
+
+Update replit.md and add reports/system-truth-alignment.md.
+
+Confirm health metrics and logs are active.
+
+✅ Success Criteria
+
+/api/system/truth-check shows no discrepancies.
+
+Walter’s context always matches backend values.
+
+Dashboard truth panel shows “Live Data ✓”.
+
+Context refresh logs appear every ≤ 30 s.
+
+No more $1000/$50 000 mismatch ever again.

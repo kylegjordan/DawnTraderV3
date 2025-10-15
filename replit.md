@@ -41,6 +41,16 @@ A **Contextual Intent Engine (CIE)** elevates Walter with semantic understanding
 
 **Unified Portfolio & Strategy State** establishes a single source of truth. A `portfolio_state` database table tracks per-user, per-mode portfolio balance. A `StrategySync` Service ensures all 8 strategies exist in `strategy_settings` for every user. This ensures a unified data flow from `portfolio_state` to the Dashboard UI, Walter context, and Cortex snapshots.
 
+**System Truth Synchronization & Context Refresh (Phase 8.5 Addendum G+H)** establishes cross-layer data consistency validation and intelligent context refresh mechanisms. Core components include:
+- **SystemTruthDiagnostic**: Compares portfolio balance, active strategies, engine state, and risk settings across backend, Cortex, and Walter layers. Detects discrepancies with configurable thresholds (10% for balance, absolute counts for strategies/trades) and classifies severity (high/medium/low). Provides both JSON and markdown output formats for programmatic and human-readable analysis.
+- **ContextRefreshCoordinator**: Fetches latest trading status from backend API, synchronizes Cortex snapshots, updates Walter semantic memory, and emits WebSocket events for real-time UI updates. Achieves ~272ms average refresh latency with comprehensive metrics tracking (total refreshes, failures, average latency, last refresh timestamp).
+- **SystemHealthMonitor Integration**: Tracks context refresh metrics including `lastContextRefreshISO`, `avgContextLatencyMs`, `totalContextRefreshes`, and `failedContextRefreshes`. Enables system-wide visibility into data synchronization health.
+- **NLAI Command Support**: Walter responds to natural language commands for manual context refresh ("refresh your data", "update context", "reload live values") and truth checking ("check system truth", "verify data alignment", "are systems in sync").
+- **Discrepancy Alert System**: Automatically logs high-severity misalignments (portfolio balance divergence >10%, strategy count mismatches) as `[TruthAlert]` warnings with detailed field-level diagnostics. Medium/low severity discrepancies trigger advisory warnings.
+- **API Endpoints**: GET `/api/system/truth-check` (JSON/markdown comparison report), POST `/api/context/refresh` (manual refresh trigger), GET `/api/context/metrics` (refresh operation statistics).
+
+This infrastructure ensures Walter maintains accurate, real-time awareness of system state, enabling confident AI-driven recommendations and proactive detection of data drift across architectural layers.
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.

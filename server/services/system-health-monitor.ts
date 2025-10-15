@@ -47,6 +47,13 @@ export interface HealthMetrics {
     avgFeesPerTrade: number;
     ratePressure: string;
   };
+  contextRefresh?: {
+    lastRefreshISO: string | null;
+    avgLatencyMs: number;
+    totalRefreshes: number;
+    failedRefreshes: number;
+    lastDiscrepancyCount: number;
+  };
 }
 
 export interface HealthStatus {
@@ -80,6 +87,14 @@ class SystemHealthMonitor {
   private schedulerStats = {
     cortexSync: { startTime: Date.now(), lastRun: null as string | null },
     analytics: { startTime: Date.now(), lastRun: null as string | null },
+  };
+
+  private contextRefreshStats = {
+    lastRefreshISO: null as string | null,
+    refreshLatencies: [] as number[],
+    totalRefreshes: 0,
+    failedRefreshes: 0,
+    lastDiscrepancyCount: 0,
   };
 
   private thresholds: AnomalyThresholds = {
@@ -133,6 +148,23 @@ class SystemHealthMonitor {
   // Update scheduler stats
   updateSchedulerRun(scheduler: 'cortexSync' | 'analytics'): void {
     this.schedulerStats[scheduler].lastRun = new Date().toISOString();
+  }
+
+  // Phase 8.5 Addendum H: Track context refresh operations
+  recordContextRefresh(latencyMs: number, success: boolean, discrepancyCount: number = 0): void {
+    this.contextRefreshStats.lastRefreshISO = new Date().toISOString();
+    this.contextRefreshStats.totalRefreshes++;
+    
+    if (!success) {
+      this.contextRefreshStats.failedRefreshes++;
+    }
+
+    this.contextRefreshStats.refreshLatencies.push(latencyMs);
+    if (this.contextRefreshStats.refreshLatencies.length > 100) {
+      this.contextRefreshStats.refreshLatencies.shift();
+    }
+
+    this.contextRefreshStats.lastDiscrepancyCount = discrepancyCount;
   }
 
   // Calculate average latency
@@ -216,6 +248,25 @@ class SystemHealthMonitor {
         byCategory: transformedByCategory,
       },
       execution: this.getExecutionMetrics(),
+      contextRefresh: this.getContextRefreshMetrics(),
+    };
+  }
+
+  // Phase 8.5 Addendum H: Get context refresh metrics
+  private getContextRefreshMetrics() {
+    const avgLatency = this.contextRefreshStats.refreshLatencies.length > 0
+      ? Math.round(
+          this.contextRefreshStats.refreshLatencies.reduce((a, b) => a + b, 0) / 
+          this.contextRefreshStats.refreshLatencies.length
+        )
+      : 0;
+
+    return {
+      lastRefreshISO: this.contextRefreshStats.lastRefreshISO,
+      avgLatencyMs: avgLatency,
+      totalRefreshes: this.contextRefreshStats.totalRefreshes,
+      failedRefreshes: this.contextRefreshStats.failedRefreshes,
+      lastDiscrepancyCount: this.contextRefreshStats.lastDiscrepancyCount,
     };
   }
 
