@@ -1,65 +1,65 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-15T07:59:04.325Z",
+    "timestamp": "2025-10-15T08:00:35.023Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-15T07:59:04.324Z",
+        "lastUpdate": "2025-10-15T08:00:35.023Z",
         "stale": false,
-        "hitRate": "0.0%",
-        "cacheSize": 2,
+        "hitRate": "68.2%",
+        "cacheSize": 3,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-15T07:59:04.324Z",
+        "lastUpdate": "2025-10-15T08:00:35.023Z",
         "stale": false,
-        "hitRate": "0.0%",
-        "cacheSize": 2,
+        "hitRate": "68.2%",
+        "cacheSize": 3,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-15T07:59:04.324Z",
+        "lastUpdate": "2025-10-15T08:00:35.023Z",
         "stale": false,
-        "hitRate": "0.0%",
-        "cacheSize": 2,
+        "hitRate": "68.2%",
+        "cacheSize": 3,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-15T07:59:04.324Z",
+        "lastUpdate": "2025-10-15T08:00:35.023Z",
         "stale": false,
-        "hitRate": "0.0%",
-        "cacheSize": 2,
+        "hitRate": "68.2%",
+        "cacheSize": 3,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-15T07:59:04.324Z",
+        "lastUpdate": "2025-10-15T08:00:35.023Z",
         "stale": false,
-        "hitRate": "0.0%",
-        "cacheSize": 2,
+        "hitRate": "68.2%",
+        "cacheSize": 3,
         "ttl": 30
       }
     },
     "overallStats": {
       "modulesActive": 5,
-      "totalCacheSize": 2,
-      "overallHitRate": "0.0%",
-      "totalHits": 0,
-      "totalMisses": 3
+      "totalCacheSize": 3,
+      "overallHitRate": "68.2%",
+      "totalHits": 30,
+      "totalMisses": 14
     },
     "recentChanges": [],
-    "systemHealth": "critical"
+    "systemHealth": "healthy"
   },
   "ui_snapshot": {
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-15T07:59:04.325Z"
+      "timestamp": "2025-10-15T08:00:35.023Z"
     }
   },
-  "last_sync": "2025-10-15T07:59:04.325Z",
+  "last_sync": "2025-10-15T08:00:35.023Z",
   "memory": {}
 }
