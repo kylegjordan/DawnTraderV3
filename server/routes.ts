@@ -849,7 +849,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const engineActive = isPaperSimRunning;
       
       // Get enabled strategies from strategy_settings table (dynamic array)
-      const strategySettingsList = await storage.listStrategySettings({ userId, mode });
+      const strategySettingsList = await storage.listStrategySettings({ userId, mode: mode as 'live' | 'paper' });
       const activeStrategies = strategySettingsList
         .filter(s => s.enabled)
         .map(s => s.strategy);
@@ -875,7 +875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Consistency check: Compare backend strategies with Cortex snapshot
       try {
-        const cortexSnapshot = cortex.get(`strategy:summary:${mode}:${userId}`);
+        const cortexSnapshot = cortexCore.get(`strategy:summary:${mode}:${userId}`);
         if (cortexSnapshot) {
           const cortexStrategies = cortexSnapshot.filter((s: any) => s.enabled).map((s: any) => s.strategy);
           if (cortexStrategies.length !== activeStrategies.length) {
