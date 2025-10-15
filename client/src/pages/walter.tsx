@@ -544,8 +544,8 @@ export default function WalterPage() {
 
   return (
     <div className="px-2 sm:px-3 lg:px-4 pt-0 pb-2 max-w-full overflow-hidden h-screen flex flex-col">
-      <div className="flex items-center justify-between mb-0">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2 pt-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Walter</h1>
           <ModeIndicator />
         </div>
@@ -768,7 +768,7 @@ export default function WalterPage() {
         <Card className="flex-1 flex flex-col min-h-0 border-0 shadow-none">
           {/* Chat Header */}
           {selectedChatId && chatData?.chat && (
-            <div className="px-2 pt-0 pb-2 flex items-center justify-between">
+            <div className="px-1 pt-2 pb-1 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-medium">{chatData.chat.title}</h2>
                 {chatData.chat.isApprovalThread && currentApproval && (
