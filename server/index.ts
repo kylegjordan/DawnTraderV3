@@ -76,6 +76,10 @@ app.use((req, res, next) => {
   const { seedTestUser } = await import('./startup/test-user-seeder');
   await seedTestUser();
 
+  // Phase 8.5 Addendum F: Sync all strategies for all users on startup
+  const { strategySyncService } = await import('./services/strategy-sync');
+  await strategySyncService.syncAllUsers();
+
   // Phase 8.4 Addendum E.1: Run file persistence self-test
   const { filePersistence } = await import('./services/file-persistence');
   const selfTestPassed = await filePersistence.runStartupSelfTest();
