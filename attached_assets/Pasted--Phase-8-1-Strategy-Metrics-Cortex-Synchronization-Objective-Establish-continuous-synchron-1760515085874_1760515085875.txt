@@ -1,0 +1,129 @@
+⚙️ Phase 8.1 — Strategy Metrics & Cortex Synchronization
+🎯 Objective
+
+Establish continuous synchronization between all active Bob modules (especially StrategyBob and MetricsBob) and the Hybrid Cortex memory layer so Walter and the AI reasoning engine always access fresh, accurate trading data in real time.
+
+The goal is for every strategy, metric, and diagnostic value to be cached inside Cortex (through Redis or local file provider) with automatic refresh cycles, ensuring Walter’s insights and trade evaluations always use the most recent data.
+
+🧩 Action Steps
+1. Confirm Cortex Initialization
+
+Check that the CortexCore service initializes successfully at app startup.
+
+Review console logs for:
+
+[CortexCore] ✅ Initialized successfully
+
+[Cortex] 📸 Snapshots synced successfully
+
+Confirm that the Cortex scheduler is running and syncing every 30 seconds.
+
+Verify that Redis or the file-based provider is connected with no errors.
+
+2. Verify Purpose Context
+
+Confirm that Walter’s Purpose statement is being read from the Goals Engine tab or /goals/purpose.yaml.
+
+Check logs for:
+
+[Walter] Purpose loaded from Goals Engine
+
+[Cortex] Injected purpose into reasoning context
+
+Validate that Walter’s Purpose appears in /api/cortex/status or /api/cortex/snapshot/ui.
+Purpose should read:
+
+“Use every available resource to build and generate wealth for Kyle and his family.”
+
+3. Activate Strategy Data Synchronization
+
+Ensure that each Bob module (StrategyBob, MetricsBob, DataBob, InsightBob, TradeBob) is included in the Cortex snapshot cycle.
+
+Confirm that these modules push fresh data into Cortex every 30 seconds.
+
+Validate that timestamps for each snapshot update continuously (with no stale entries older than 60 seconds).
+
+4. Confirm Strategy Statistics Refresh
+
+Review logs to confirm automatic calculation of:
+
+Win rate
+
+Average return
+
+Volatility
+
+Sharpe ratio
+
+Max drawdown
+
+Trade frequency
+
+Each metric should appear under [StrategyBob], [MetricsBob], or [InsightBob] log entries.
+
+Confirm that Cortex holds these values and makes them available to Walter via the Cortex context.
+
+5. Validate Data Flow → Walter
+
+Trigger a Walter reasoning cycle (e.g., by running a diagnostic or query).
+
+Confirm logs show Cortex data being referenced:
+
+[Walter] Pulling latest Cortex snapshots for context
+
+[Walter] Using updated strategy metrics from Cortex
+
+Ensure Walter’s prompt includes both Purpose and live metrics data for decision making.
+
+6. Run Cache Integrity Checks
+
+Verify that the Cortex cache (through Redis or file provider) contains:
+
+bob_snapshots entries for each Bob module
+
+strategy_stats entries for active strategies
+
+Confirm TTL values for short-term (5 min) and long-term (24 h) entries are working as intended.
+
+Check for no expired or missing keys during live sync.
+
+7. Generate Verification Reports
+
+Produce a Cortex Status Report (log or API readout) showing:
+
+All modules connected and syncing successfully
+
+Latest snapshot timestamps
+
+Current cache size and uptime status
+
+Verify that Walter and Bob reference the same context version number or timestamp in logs.
+
+8. Confirm Self-Repair Behavior (on Sync Error)
+
+Temporarily pause Redis or Cortex to simulate a failure.
+
+Observe that Bob or CortexCore attempts auto-reconnect and self-healing without manual intervention.
+
+Logs should show: [CortexCore] Reconnected after failure or equivalent.
+
+🧾 Testing and Verification Checklist
+✅ Check	Expected Result
+CortexCore and scheduler initialize properly	Startup logs show successful sync messages
+Purpose statement loaded and injected into Walter’s context	Appears in logs and Cortex snapshot
+StrategyBob and MetricsBob push fresh data to Cortex	Snapshot timestamps < 60 s
+Computed metrics (logs show win rate, Sharpe, etc.)	Values updated regularly and accessible via API
+Walter references Cortex metrics in reasoning	Logs confirm context injection from Cortex
+Redis/file cache contains active strategy stats	Cache keys visible and not expired
+System recovers from temporary sync failure	Auto-reconnect confirmed in logs
+🏁 Deliverables for Phase 8.1 Completion
+
+CortexCore Status Logs confirming all Bob modules sync every 30 seconds.
+
+Strategy Performance Snapshots cached in Cortex and visible via API.
+
+Walter Prompt Verification Log showing Purpose + strategy metrics combined in context.
+
+Cache Integrity Report showing active TTL timers and successful reconnections after forced failure test.
+
+Final Phase 8.1 Summary Entry in replit.md, documenting the results and marking Phase 8.1 as complete.
