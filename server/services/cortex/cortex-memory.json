@@ -1,54 +1,54 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-15T07:44:05.544Z",
+    "timestamp": "2025-10-15T07:44:35.545Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-15T07:44:05.544Z",
+        "lastUpdate": "2025-10-15T07:44:35.545Z",
         "stale": false,
-        "hitRate": "74.2%",
-        "cacheSize": 3,
+        "hitRate": "74.6%",
+        "cacheSize": 2,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-15T07:44:05.544Z",
+        "lastUpdate": "2025-10-15T07:44:35.545Z",
         "stale": false,
-        "hitRate": "74.2%",
-        "cacheSize": 3,
+        "hitRate": "74.6%",
+        "cacheSize": 2,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-15T07:44:05.544Z",
+        "lastUpdate": "2025-10-15T07:44:35.545Z",
         "stale": false,
-        "hitRate": "74.2%",
-        "cacheSize": 3,
+        "hitRate": "74.6%",
+        "cacheSize": 2,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-15T07:44:05.544Z",
+        "lastUpdate": "2025-10-15T07:44:35.545Z",
         "stale": false,
-        "hitRate": "74.2%",
-        "cacheSize": 3,
+        "hitRate": "74.6%",
+        "cacheSize": 2,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-15T07:44:05.544Z",
+        "lastUpdate": "2025-10-15T07:44:35.545Z",
         "stale": false,
-        "hitRate": "74.2%",
-        "cacheSize": 3,
+        "hitRate": "74.6%",
+        "cacheSize": 2,
         "ttl": 30
       }
     },
     "overallStats": {
       "modulesActive": 5,
-      "totalCacheSize": 3,
-      "overallHitRate": "74.2%",
-      "totalHits": 89,
-      "totalMisses": 31
+      "totalCacheSize": 2,
+      "overallHitRate": "74.6%",
+      "totalHits": 100,
+      "totalMisses": 34
     },
     "recentChanges": [],
     "systemHealth": "healthy"
@@ -57,9 +57,9 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-15T07:44:05.544Z"
+      "timestamp": "2025-10-15T07:44:35.545Z"
     }
   },
-  "last_sync": "2025-10-15T07:44:05.544Z",
+  "last_sync": "2025-10-15T07:44:35.545Z",
   "memory": {}
 }
