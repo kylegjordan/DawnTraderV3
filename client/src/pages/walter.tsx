@@ -804,6 +804,8 @@ export default function WalterPage() {
                                     pinChatMutation.mutate({ chatId: chat.id, pinned: !chat.pinned });
                                   }}
                                   title={chat.pinned ? "Unpin chat" : "Pin chat"}
+                                  aria-label={chat.pinned ? "Unpin chat" : "Pin chat"}
+                                  aria-pressed={chat.pinned}
                                   data-testid={`button-pin-chat-${chat.id}`}
                                 >
                                   <Star className={cn("w-3 h-3", chat.pinned && "fill-current")} />
