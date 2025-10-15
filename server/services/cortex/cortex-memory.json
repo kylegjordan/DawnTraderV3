@@ -1,60 +1,60 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-15T15:37:18.547Z",
+    "timestamp": "2025-10-15T15:38:18.552Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-15T15:37:18.546Z",
+        "lastUpdate": "2025-10-15T15:38:18.548Z",
         "stale": false,
-        "hitRate": "68.8%",
+        "hitRate": "72.5%",
         "cacheSize": 0,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-15T15:37:18.546Z",
+        "lastUpdate": "2025-10-15T15:38:18.548Z",
         "stale": false,
-        "hitRate": "68.8%",
+        "hitRate": "72.5%",
         "cacheSize": 0,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-15T15:37:18.546Z",
+        "lastUpdate": "2025-10-15T15:38:18.548Z",
         "stale": false,
-        "hitRate": "68.8%",
+        "hitRate": "72.5%",
         "cacheSize": 0,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-15T15:37:18.546Z",
+        "lastUpdate": "2025-10-15T15:38:18.548Z",
         "stale": false,
-        "hitRate": "68.8%",
+        "hitRate": "72.5%",
         "cacheSize": 0,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-15T15:37:18.546Z",
+        "lastUpdate": "2025-10-15T15:38:18.548Z",
         "stale": false,
-        "hitRate": "68.8%",
+        "hitRate": "72.5%",
         "cacheSize": 0,
         "ttl": 30
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-10-15T15:37:18.546Z",
+        "lastUpdate": "2025-10-15T15:38:18.548Z",
         "stale": false,
-        "hitRate": "68.8%",
+        "hitRate": "72.5%",
         "cacheSize": 0,
         "ttl": 30
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-10-15T15:37:18.546Z",
+        "lastUpdate": "2025-10-15T15:38:18.548Z",
         "stale": false,
-        "hitRate": "68.8%",
+        "hitRate": "72.5%",
         "cacheSize": 0,
         "ttl": 30
       }
@@ -62,9 +62,9 @@
     "overallStats": {
       "modulesActive": 7,
       "totalCacheSize": 0,
-      "overallHitRate": "68.8%",
-      "totalHits": 22,
-      "totalMisses": 10
+      "overallHitRate": "72.5%",
+      "totalHits": 29,
+      "totalMisses": 11
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -129,23 +129,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-10-15T15:37:18.547Z",
+        "timestamp": "2025-10-15T15:38:18.552Z",
         "system": {
           "cpuUsage": 51.7,
           "memoryUsage": {
             "total": 67436744704,
-            "used": 42170384384,
-            "free": 25266360320,
+            "used": 42276716544,
+            "free": 25160028160,
             "percentUsed": 63
           },
-          "uptime": 184
+          "uptime": 244
         },
         "cache": {
-          "hitRate": 74,
-          "missRate": 26,
-          "totalRequests": 27,
-          "hits": 20,
-          "misses": 7
+          "hitRate": 77,
+          "missRate": 23,
+          "totalRequests": 35,
+          "hits": 27,
+          "misses": 8
         },
         "latency": {
           "cortex": null,
@@ -154,11 +154,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 184,
-            "lastRun": "2025-10-15T15:36:48.547Z"
+            "uptime": 244,
+            "lastRun": "2025-10-15T15:37:48.552Z"
           },
           "analytics": {
-            "uptime": 184,
+            "uptime": 244,
             "lastRun": "2025-10-15T15:34:19.693Z"
           }
         }
@@ -169,10 +169,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-15T15:37:18.546Z"
+      "timestamp": "2025-10-15T15:38:18.548Z"
     }
   },
-  "last_sync": "2025-10-15T15:37:18.548Z",
+  "last_sync": "2025-10-15T15:38:18.552Z",
   "memory": {
     "analytics_live_1": {
       "value": {
