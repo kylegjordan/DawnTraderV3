@@ -24,6 +24,14 @@ interface ModuleInsight {
   ttl: number;
 }
 
+interface AnalyticsSnapshot {
+  strategy_analytics?: any;
+  portfolio_summary?: any;
+  computed_at?: string;
+  user_id?: string;
+  mode?: string;
+}
+
 interface InsightSummary {
   timestamp: string;
   modules: Record<string, ModuleInsight>;
@@ -36,6 +44,10 @@ interface InsightSummary {
   };
   recentChanges: string[];
   systemHealth: 'healthy' | 'degraded' | 'critical';
+  analytics?: {
+    live?: AnalyticsSnapshot;
+    paper?: AnalyticsSnapshot;
+  };
 }
 
 class InsightBob {
@@ -117,12 +129,16 @@ class InsightBob {
     // Get recent changes
     const recentChanges = this.getRecentChanges();
 
+    // Phase 8.2: Include analytics data from Cortex
+    const analytics = await this.getAnalyticsData(context.userId);
+
     const summary: InsightSummary = {
       timestamp: new Date().toISOString(),
       modules,
       overallStats,
       recentChanges,
-      systemHealth
+      systemHealth,
+      analytics
     };
 
     const duration = Date.now() - start;
@@ -193,6 +209,31 @@ class InsightBob {
     return this.recentChanges
       .filter(change => change.timestamp > cutoff)
       .map(change => change.message);
+  }
+
+  /**
+   * Phase 8.2: Get analytics data from Cortex cache
+   */
+  private async getAnalyticsData(userId?: string): Promise<{ live?: AnalyticsSnapshot; paper?: AnalyticsSnapshot } | undefined> {
+    try {
+      const { analyticsScheduler } = await import('./cortex/analytics-scheduler');
+      const user = userId || '1'; // Default to user 1 if not provided
+      
+      const liveAnalytics = analyticsScheduler.getAnalytics(user, 'live');
+      const paperAnalytics = analyticsScheduler.getAnalytics(user, 'paper');
+      
+      if (!liveAnalytics && !paperAnalytics) {
+        return undefined;
+      }
+      
+      return {
+        live: liveAnalytics || undefined,
+        paper: paperAnalytics || undefined
+      };
+    } catch (error) {
+      console.error(`[${this.MODULE_NAME}] ❌ Failed to fetch analytics:`, error);
+      return undefined;
+    }
   }
 
   // ========================================
