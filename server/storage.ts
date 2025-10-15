@@ -473,9 +473,11 @@ export interface IStorage {
   getWalterChats(userId: string, status?: string): Promise<WalterChat[]>;
   getWalterChatById(id: string): Promise<WalterChat | undefined>;
   updateWalterChat(id: string, updates: Partial<WalterChat>): Promise<WalterChat>;
+  deleteWalterChat(id: string): Promise<void>;
   
   createWalterChatLog(log: InsertWalterChatLog): Promise<WalterChatLog>;
   getWalterChatLogs(chatSessionId: string, limit?: number): Promise<WalterChatLog[]>;
+  deleteWalterChatMessages(chatSessionId: string): Promise<void>;
   
   createWalterApprovalsAudit(audit: InsertWalterApprovalsAudit): Promise<WalterApprovalsAudit>;
   getWalterApprovalsAudit(approvalId: string): Promise<WalterApprovalsAudit[]>;
@@ -2630,6 +2632,10 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return chat;
   }
+
+  async deleteWalterChat(id: string): Promise<void> {
+    await db.delete(walterChats).where(eq(walterChats.id, id));
+  }
   
   async createWalterChatLog(log: InsertWalterChatLog): Promise<WalterChatLog> {
     const [chatLog] = await db.insert(walterChatLogs).values(log).returning();
@@ -2641,6 +2647,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(walterChatLogs.chatSessionId, chatSessionId))
       .orderBy(asc(walterChatLogs.timestamp))
       .limit(limit);
+  }
+
+  async deleteWalterChatMessages(chatSessionId: string): Promise<void> {
+    await db.delete(walterChatLogs).where(eq(walterChatLogs.chatSessionId, chatSessionId));
   }
   
   async createWalterApprovalsAudit(audit: InsertWalterApprovalsAudit): Promise<WalterApprovalsAudit> {

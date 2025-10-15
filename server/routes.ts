@@ -6174,6 +6174,37 @@ Please:
       res.status(500).json({ ok: false, error: error.message });
     }
   });
+
+  // Phase 8.4: DELETE Walter chat
+  app.delete('/api/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      
+      const chat = await storage.getWalterChatById(id);
+      
+      if (!chat) {
+        return res.status(404).json({ ok: false, error: 'Chat not found' });
+      }
+      
+      if (chat.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      // Delete all messages in the chat
+      await storage.deleteWalterChatMessages(id);
+      
+      // Delete the chat itself
+      await storage.deleteWalterChat(id);
+      
+      console.log(`[Walter] Deleted chat ${id} for user ${userId}`);
+      
+      res.json({ ok: true, message: 'Chat deleted successfully' });
+    } catch (error: any) {
+      console.error('[Walter] Error deleting chat:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
   
   // POST send message to Walter chat
   app.post('/api/walter/chats/:id/messages', authenticateToken, async (req: AuthenticatedRequest, res) => {
