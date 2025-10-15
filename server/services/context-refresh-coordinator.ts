@@ -33,6 +33,7 @@ export interface RefreshMetrics {
   totalRefreshes: number;
   failedRefreshes: number;
   lastError: string | null;
+  lastLivePortfolio: number | null; // Phase 8.5 Addendum I
 }
 
 class ContextRefreshCoordinator extends EventEmitter {
@@ -42,7 +43,8 @@ class ContextRefreshCoordinator extends EventEmitter {
     avgLatencyMs: 0,
     totalRefreshes: 0,
     failedRefreshes: 0,
-    lastError: null
+    lastError: null,
+    lastLivePortfolio: null
   };
   private latencyHistory: number[] = [];
   private readonly MAX_LATENCY_SAMPLES = 100;
@@ -75,9 +77,10 @@ class ContextRefreshCoordinator extends EventEmitter {
         return await this.refresh(userId, mode, 'resync');
       }
 
-      // Calculate latency and update metrics
+      // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
       const latencyMs = Date.now() - start;
       this.updateMetrics(latencyMs, true);
+      this.metrics.lastLivePortfolio = freshData.portfolioBalance;
 
       // Record in SystemHealthMonitor with actual discrepancy count (Phase 8.5 Addendum H)
       systemHealthMonitor.recordContextRefresh(latencyMs, true, discrepanciesFound);
@@ -299,7 +302,8 @@ class ContextRefreshCoordinator extends EventEmitter {
       avgLatencyMs: 0,
       totalRefreshes: 0,
       failedRefreshes: 0,
-      lastError: null
+      lastError: null,
+      lastLivePortfolio: null
     };
     this.latencyHistory = [];
   }

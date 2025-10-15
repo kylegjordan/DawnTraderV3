@@ -53,6 +53,8 @@ export interface HealthMetrics {
     totalRefreshes: number;
     failedRefreshes: number;
     lastDiscrepancyCount: number;
+    lastContextSource: string | null; // Phase 8.5 Addendum I
+    lastRefreshDelta: number; // Phase 8.5 Addendum I
   };
 }
 
@@ -95,6 +97,8 @@ class SystemHealthMonitor {
     totalRefreshes: 0,
     failedRefreshes: 0,
     lastDiscrepancyCount: 0,
+    lastContextSource: null as string | null, // Phase 8.5 Addendum I
+    lastRefreshDelta: 0, // Phase 8.5 Addendum I
   };
 
   private thresholds: AnomalyThresholds = {
@@ -151,6 +155,7 @@ class SystemHealthMonitor {
   }
 
   // Phase 8.5 Addendum H: Track context refresh operations
+  // Phase 8.5 Addendum I: Track source and delta
   recordContextRefresh(latencyMs: number, success: boolean, discrepancyCount: number = 0): void {
     this.contextRefreshStats.lastRefreshISO = new Date().toISOString();
     this.contextRefreshStats.totalRefreshes++;
@@ -165,6 +170,12 @@ class SystemHealthMonitor {
     }
 
     this.contextRefreshStats.lastDiscrepancyCount = discrepancyCount;
+    
+    // Phase 8.5 Addendum I: Mark source as live-api when refresh succeeds with 0 discrepancies
+    if (success && discrepancyCount === 0) {
+      this.contextRefreshStats.lastContextSource = 'live-api';
+      this.contextRefreshStats.lastRefreshDelta = 0;
+    }
   }
 
   // Calculate average latency
@@ -253,6 +264,7 @@ class SystemHealthMonitor {
   }
 
   // Phase 8.5 Addendum H: Get context refresh metrics
+  // Phase 8.5 Addendum I: Include source and delta
   private getContextRefreshMetrics() {
     const avgLatency = this.contextRefreshStats.refreshLatencies.length > 0
       ? Math.round(
@@ -267,6 +279,8 @@ class SystemHealthMonitor {
       totalRefreshes: this.contextRefreshStats.totalRefreshes,
       failedRefreshes: this.contextRefreshStats.failedRefreshes,
       lastDiscrepancyCount: this.contextRefreshStats.lastDiscrepancyCount,
+      lastContextSource: this.contextRefreshStats.lastContextSource,
+      lastRefreshDelta: this.contextRefreshStats.lastRefreshDelta,
     };
   }
 
