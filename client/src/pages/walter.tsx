@@ -16,7 +16,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { cn } from '@/lib/utils';
-import ModeBanner from '@/components/mode-banner';
+import { ModeIndicator } from '@/components/goals/mode-indicator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -545,11 +545,12 @@ export default function WalterPage() {
 
   return (
     <div className="p-2 sm:p-3 lg:p-4 space-y-1 max-w-full overflow-hidden h-screen flex flex-col">
-      <ModeBanner />
-      
       <div className="flex items-center justify-between">
         <div className="max-w-xs lg:max-w-80">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Walter AI Co-Pilot</h1>
+          <div className="flex items-center gap-2 mb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Walter</h1>
+            <ModeIndicator />
+          </div>
           <p className="text-muted-foreground text-sm">
             Your AI SysAdmin for system configuration and optimization
           </p>
