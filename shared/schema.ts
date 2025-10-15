@@ -633,7 +633,7 @@ export const walterMemory = pgTable("walter_memory", {
   type: walterMemoryTypeEnum("type").notNull(), // observation, decision, result, goal, lesson
   content: text("content").notNull(), // Memory content
   importance: integer("importance").default(3).notNull(), // 1-5 scale for recall weighting
-  chatId: varchar("chat_id").references(() => walterChats.id), // Optional link to source chat
+  chatId: varchar("chat_id").references(() => walterChats.id, { onDelete: 'set null' }), // Optional link to source chat
   metadata: jsonb("metadata"), // Additional context (strategy name, symbols, etc.)
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 }, (table) => ({
