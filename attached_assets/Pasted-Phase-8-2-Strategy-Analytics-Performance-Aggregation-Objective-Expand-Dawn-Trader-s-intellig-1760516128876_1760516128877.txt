@@ -1,0 +1,132 @@
+Phase 8.2 — Strategy Analytics & Performance Aggregation
+🎯 Objective
+
+Expand Dawn Trader’s intelligence layer by computing and caching derived performance analytics for every active strategy.
+The goal is to transform raw data from Bob modules into actionable insights — so Walter and InsightBob can reason about comparative performance, risk balance, and trend strength in real time.
+
+🧩 Action Steps
+1. Verify Phase 8.1 Integrity Baseline
+
+Confirm that the Cortex still syncs every 30 seconds and reports modulesActive = 7.
+
+Ensure all timestamps in cortex-memory.json are < 60 seconds old.
+
+Check logs for [CortexCore] 📸 Snapshots synced successfully and [InsightBob] ✅ Insight summary generated.
+
+2. Create Performance Aggregation Cycle
+
+Introduce a scheduled analytics pass (every 15 minutes) that compiles strategy-level and portfolio-level performance summaries.
+
+Each pass should compute:
+
+Cumulative P/L % and absolute value
+
+Rolling Sharpe Ratio (7 day window)
+
+Max Drawdown %
+
+Win Rate and Average Return per Trade
+
+Trade Frequency per hour and per day
+
+Results stored in Cortex under strategy_analytics.
+
+3. Add Portfolio Aggregation
+
+Combine all strategies to produce:
+
+Total Equity Curve
+
+Portfolio-level Volatility and Sharpe
+
+Capital Allocation Weightings
+
+Diversification Index (variance correlation metric)
+
+Cache this under portfolio_summary.
+
+4. Integrate Analytics with InsightBob and Walter
+
+Verify that InsightBob reads the new strategy_analytics cache and adds it to its insight summaries.
+
+Confirm Walter uses the aggregated data in prompt context logs:
+
+[Walter] Using aggregated strategy performance metrics from Cortex.
+
+5. Implement Logging and Report Cycle
+
+Every 30 minutes, InsightBob should output a concise performance summary to logs and /logs/strategy-analytics.log.
+
+Ensure each entry shows:
+
+Timestamp
+
+Best and Worst Performing Strategies
+
+Portfolio P/L Δ since last cycle
+
+Risk Metric Shift (SD, Sharpe, Drawdown)
+
+6. Validate Cache Integrity and TTL
+
+Verify that strategy_analytics and portfolio_summary are cached with TTL = 15 minutes and auto-refresh on each scheduler run.
+
+Check that old entries expire and new ones replace them without stale overlap.
+
+Confirm [CortexCore] Refreshed analytics cache appears in logs.
+
+7. Confirm Purpose-Aligned Reasoning
+
+Trigger Walter to produce a short report or decision summary.
+
+Check that his context includes:
+
+Purpose statement (wealth generation mission)
+
+Latest analytics from Cortex
+
+Decision alignment notes (e.g., “Strategy Alpha best supports long-term wealth growth”).
+
+8. Run Cache and Performance Diagnostics
+
+Check /api/cortex/status to see new entries for strategy_analytics and portfolio_summary.
+
+Validate that analytics update timestamps are recent (< 15 min).
+
+Compare calculated values with database metrics for accuracy (variance < 1%).
+
+9. Generate Phase 8.2 Verification Report
+
+Produce a Cortex Analytics Report (log or console output) containing:
+
+Strategy count and active status
+
+Last analytics timestamp
+
+Sharpe ratio and volatility averages
+
+Portfolio diversification score
+
+Include report summary in replit.md under Phase 8.2.
+
+🧾 Testing & Verification Checklist
+✅ Check	Expected Result
+All 7 Bob modules still syncing every 30 s	Logs show continuous Cortex sync
+strategy_analytics cache created and refreshed	New section visible in Cortex status
+Derived metrics (Sharpe, Drawdown, Win Rate) computed	Values appear and update < 15 min interval
+Portfolio aggregation active	portfolio_summary present in cache
+InsightBob includes analytics data in summaries	Logs show “Using aggregated analytics data”
+Walter references Purpose + analytics in context	Logs confirm alignment with Purpose
+TTL and cache rotation verified	No stale entries; expiry < 15 min
+Cortex Analytics Report generated	replit.md updated with Phase 8.2 completion
+🏁 Deliverables for Phase 8.2 Completion
+
+Cortex Analytics Layer active with strategy_analytics and portfolio_summary caches.
+
+Derived Performance Metrics computed and validated across all strategies.
+
+Walter Prompt Logs confirming injection of analytics data alongside Purpose.
+
+30-Minute Performance Summary Logs verified and timestamped.
+
+Phase 8.2 Verification Documentation appended to replit.md.
