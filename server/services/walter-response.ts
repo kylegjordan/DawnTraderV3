@@ -111,10 +111,10 @@ export async function generateWalterResponse(
 }
 
 /**
- * Format InsightBob data into context string (Phase 7.7)
+ * Format InsightBob data into context string (Phase 7.7 + 8.2)
  */
 function formatInsightContext(insight: any): string {
-  const { modules, overallStats, systemHealth, recentChanges } = insight;
+  const { modules, overallStats, systemHealth, recentChanges, analytics } = insight;
   
   let context = `System Introspection (Bob Core):\n`;
   context += `- Active Modules: ${overallStats.modulesActive} (${Object.keys(modules).join(', ')})\n`;
@@ -126,6 +126,35 @@ function formatInsightContext(insight: any): string {
     recentChanges.slice(0, 3).forEach((change: string) => {
       context += `  • ${change}\n`;
     });
+  }
+  
+  // Phase 8.2: Include analytics data
+  if (analytics) {
+    context += `\nPerformance Analytics:\n`;
+    
+    if (analytics.live) {
+      const { strategy_analytics, portfolio_summary } = analytics.live;
+      if (strategy_analytics) {
+        context += `- LIVE Mode:\n`;
+        context += `  • Strategies: ${strategy_analytics.totalStrategies} (${strategy_analytics.bestPerformer || 'N/A'} performing best)\n`;
+        context += `  • Avg Sharpe: ${strategy_analytics.averageSharpe}, Avg Win Rate: ${strategy_analytics.averageWinRate}%\n`;
+      }
+      if (portfolio_summary) {
+        context += `  • Portfolio: ${portfolio_summary.totalPLPercent.toFixed(2)}% return, Sharpe: ${portfolio_summary.portfolioSharpe}\n`;
+      }
+    }
+    
+    if (analytics.paper) {
+      const { strategy_analytics, portfolio_summary } = analytics.paper;
+      if (strategy_analytics) {
+        context += `- PAPER Mode:\n`;
+        context += `  • Strategies: ${strategy_analytics.totalStrategies} (${strategy_analytics.bestPerformer || 'N/A'} performing best)\n`;
+        context += `  • Avg Sharpe: ${strategy_analytics.averageSharpe}, Avg Win Rate: ${strategy_analytics.averageWinRate}%\n`;
+      }
+      if (portfolio_summary) {
+        context += `  • Portfolio: ${portfolio_summary.totalPLPercent.toFixed(2)}% return, Sharpe: ${portfolio_summary.portfolioSharpe}\n`;
+      }
+    }
   }
   
   return context;
