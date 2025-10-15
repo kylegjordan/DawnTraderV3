@@ -32,6 +32,34 @@ A **Contextual Intent Engine (CIE)** elevates Walter with semantic understanding
 
 **Phase 8.4 Addendum E.1 - Enhanced File Persistence Metrics & Full Integration** extends file persistence tracking with category-specific counters and comprehensive integration across all file generators. `FilePersistenceService` enhanced with detailed metrics including `reportsSaved`, `logsSaved`, `exportsSaved`, `analysisSaved` with per-category latency tracking and slow write warnings (>2000ms). Append mode support added for log files via `{ append: true }` option. All file generators fully integrated: `HealthReportScheduler` (reports category), `IntentDecisionLogger` (logs category with append), `CommandLogger` (logs/command_history/ subdirectory with append), `WalterResponse` (exports category for chat exports), and `Paper48HrSimulation` (logs category for trading_sessions/, trading_summaries/ subdirectories, analysis category for AI behavioral summaries). Metrics integrated into `SystemHealthMonitor` hourly health reports and Walter's System Diagnostics context. Startup self-test validates persistence layer with degraded status on failure. Type-safe transformations between DetailedMetrics and HealthMetrics ensure consistency. All file operations now tracked with category-specific counters for complete observability.
 
+**Phase 8.5 - Real-Time Execution Layer** establishes a production-grade execution infrastructure with WebSocket market data, comprehensive timing audits, slippage modeling, and paper-to-live parity gates. Core components include:
+
+- **MarketDataWebSocket**: Kraken WebSocket client with automatic reconnection, heartbeat detection (15s timeout), and tick/orderbook streaming. Emits 'tick', 'orderbook', 'connected', 'disconnected' events for real-time market data distribution.
+
+- **ExecutionTimingService**: Order lifecycle tracker capturing timing marks (t_decide, t_submit, t_ack, t_fill) for latency analysis. Generates Order Audit Records with submit-to-ack, ack-to-fill, and total execution times. Exports timing data to CSV (`./logs/execution-timing-YYYYMMDD-HHmmss.csv`) and integrates metrics into health monitoring.
+
+- **SlippageFeeModelingService**: Real-time slippage and fee simulation for paper trading. Calculates price impact from order book depth, applies volatility-based micro-moves (10-50 bps based on VIX-equivalent), and models Kraken maker/taker fees (0.16%/0.26%). Tracks per-strategy net P&L with fee deductions for realistic performance metrics.
+
+- **RateControlService**: Token bucket rate limiter for Kraken API endpoints (private: 15 req/s, public: 1 req/s). Features priority execution queue, backpressure detection (LOW/MEDIUM/HIGH levels at 50%/75%/90% capacity), and automatic throttling with comprehensive logging.
+
+- **MarketDataCoordinator**: Orchestrates WebSocket and REST market data sources with automatic fallback. Routes real-time ticks to StrategyBob and Cortex, manages WS reconnection state, and ensures continuous data flow with latency tracking.
+
+- **RealtimePaperExecutor**: Enhanced paper trading engine integrating all execution services. Implements concurrent order limits (max 10), kill-switch triggers on rate/latency degradation, and real-time execution with slippage/fee modeling. Provides comprehensive execution status including market data source, rate control backpressure, and concurrency metrics.
+
+- **ParityGateService**: Paper-to-live readiness validator with strict thresholds: execution latency <150ms, slippage <20bps, fees >0 (validates fee modeling), rate limit throttle <10%, WebSocket uptime >99%. Generates parity reports to `./reports/parity-gate-report-YYYYMMDD-HHmmss.md` with pass/fail analysis and blocking reasons.
+
+**Integration Points:**
+- SystemHealthMonitor extended with execution metrics: avgExecutionMs, avgSlippageBps, avgFeesPerTrade, wsUptime, rateBackpressure (tracked hourly)
+- Walter context enriched with real-time execution statistics via formatInsightContext
+- API endpoints: `GET /api/execution/metrics` (live execution stats), `GET /api/execution/timing/export` (CSV export), `GET /api/execution/parity-check` (run readiness check), `POST /api/execution/parity-report` (generate parity report)
+
+**Feature Flags & Configuration:**
+- WebSocket market data: Auto-enabled with REST fallback
+- Execution timing: Always active during paper/live trading
+- Slippage modeling: Paper mode only (disabled in live)
+- Rate controls: Global enforcement with per-endpoint limits
+- Parity gate: Manual validation before live trading activation
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.
