@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-15T23:12:07.983Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has not generated any opportunities or made adjustments recently, which could indicate a malfunction or misconfiguration."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system shows no active trades and a win rate of 0, which is unusual if strategies are actively being executed."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load average and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI system configuration and logs to ensure it is correctly set up to generate opportunities and make adjustments."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate trading strategies and their execution to ensure they are functioning as intended and adjust parameters if necessary."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough investigation of CPU usage to identify and resolve any bottlenecks or inefficient processes.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Check the AI system's logs and configuration to diagnose why it is not generating opportunities or making adjustments.",
+      "rationale": "Ensuring the AI system functions correctly is essential for identifying trading opportunities and optimizing strategy performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review the trading strategies and their execution logs to understand why there are no active trades and a win rate of 0.",
+      "rationale": "Ensuring trading strategies are active and effective is crucial for achieving positive trading outcomes."
+    }
+  ],
+  "urgencyLevel": "high"
+}

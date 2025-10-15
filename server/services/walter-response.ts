@@ -20,6 +20,7 @@ import { insightBob } from './bob-insight';
 import { uiBob } from './bob-ui';
 import { cortexCore } from './cortex/cortex-core';
 import { nlaiInterpreter } from './nlai-interpreter';
+import { contextRefreshCoordinator } from './context-refresh-coordinator';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -58,6 +59,29 @@ export async function generateWalterResponse(
   userMessage: string
 ): Promise<string> {
   try {
+    // Phase 8.5 Addendum H: Auto-refresh context if stale (>30s)
+    const user = await storage.getUser(userId);
+    const tradingMode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+    const refreshMetrics = contextRefreshCoordinator.getMetrics();
+    
+    if (refreshMetrics.lastRefreshISO) {
+      const lastRefreshTime = new Date(refreshMetrics.lastRefreshISO).getTime();
+      const ageSeconds = (Date.now() - lastRefreshTime) / 1000;
+      const TTL_SECONDS = 30;
+      
+      if (ageSeconds > TTL_SECONDS) {
+        console.log(`[Walter-AutoRefresh] Context stale (${Math.round(ageSeconds)}s old), auto-refreshing...`);
+        await contextRefreshCoordinator.refresh(userId, tradingMode, 'direct');
+        console.log(`[Walter-AutoRefresh] ✅ Context refreshed before responding`);
+      } else {
+        console.log(`[Walter-AutoRefresh] Context fresh (${Math.round(ageSeconds)}s old, TTL=${TTL_SECONDS}s)`);
+      }
+    } else {
+      console.log(`[Walter-AutoRefresh] No previous refresh, triggering initial refresh...`);
+      await contextRefreshCoordinator.refresh(userId, tradingMode, 'direct');
+      console.log(`[Walter-AutoRefresh] ✅ Initial context refresh complete`);
+    }
+
     // 1. Gather context including expert principles
     const context = await gatherContext(userId, chatId, userMessage);
 
