@@ -41,6 +41,7 @@ import { strategyBob } from "./services/bob-strategy";
 import { tradeBob } from "./services/bob-trade";
 import { insightBob } from "./services/bob-insight";
 import { uiBob } from "./services/bob-ui";
+import { cortexCore } from "./services/cortex/cortex-core";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -1620,6 +1621,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('[BobCore] ⚠️ Prefetch failed:', error);
       res.status(500).json({ error: 'Prefetch failed', details: error.message });
+    }
+  });
+
+  // ========================================
+  // CORTEX CORE - PHASE 8.0
+  // Hybrid memory layer for Walter context
+  // ========================================
+
+  // Cortex status endpoint - provides memory and sync status
+  app.get('/api/cortex/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const status = cortexCore.getStatus();
+      res.json(status);
+    } catch (error: any) {
+      console.error('[Cortex] Error fetching status:', error);
+      res.status(500).json({ error: 'Failed to fetch Cortex status' });
+    }
+  });
+
+  // Cortex snapshot endpoint - get Bob/UI snapshots
+  app.get('/api/cortex/snapshot', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const type = req.query.type as 'bob' | 'ui' | undefined;
+      
+      if (type && !['bob', 'ui'].includes(type)) {
+        return res.status(400).json({ error: 'Invalid snapshot type. Must be "bob" or "ui"' });
+      }
+
+      if (type) {
+        const snapshot = cortexCore.getSnapshot(type);
+        res.json({ type, snapshot });
+      } else {
+        // Return both snapshots
+        const bobSnapshot = cortexCore.getSnapshot('bob');
+        const uiSnapshot = cortexCore.getSnapshot('ui');
+        res.json({ bob: bobSnapshot, ui: uiSnapshot });
+      }
+    } catch (error: any) {
+      console.error('[Cortex] Error fetching snapshot:', error);
+      res.status(500).json({ error: 'Failed to fetch snapshot' });
+    }
+  });
+
+  // Cortex flush endpoint - clear memory cache
+  app.post('/api/cortex/flush', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      await cortexCore.flush();
+      res.json({ success: true, message: 'Memory flushed' });
+    } catch (error: any) {
+      console.error('[Cortex] Error flushing memory:', error);
+      res.status(500).json({ error: 'Failed to flush memory' });
+    }
+  });
+
+  // Cortex force sync endpoint - manually trigger snapshot sync
+  app.post('/api/cortex/force-sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      // Define snapshot fetch functions
+      const fetchBobSnapshot = async () => {
+        return await insightBob.getInsightSummary();
+      };
+
+      const fetchUISnapshot = async () => {
+        const userId = req.user!.id;
+        const mode = (req.query.mode as 'live' | 'paper') || 'live';
+        return await uiBob.getUIState(userId, mode);
+      };
+
+      await cortexCore.forceSync(fetchBobSnapshot, fetchUISnapshot);
+      res.json({ success: true, message: 'Force sync completed' });
+    } catch (error: any) {
+      console.error('[Cortex] Error during force sync:', error);
+      res.status(500).json({ error: 'Failed to force sync' });
     }
   });
 
