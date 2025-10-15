@@ -165,10 +165,11 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
     const metrics = await riskManager.getPortfolioMetrics(userId);
 
     // Phase 8.5 Addendum F: Get portfolio value from portfolio_state table
+    // Fallback to 1000 to match PortfolioAggregator.INITIAL_CAPITAL
     const portfolioState = await storage.getPortfolioState({ userId, mode });
     const portfolioValue = portfolioState 
       ? parseFloat(portfolioState.balance) 
-      : (settings?.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 50000);
+      : 1000;
     
     const riskPerTrade = settings?.riskPerTrade 
       ? parseFloat(settings.riskPerTrade) 
@@ -206,9 +207,9 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
     };
   } catch (error) {
     console.error('[BehavioralTemplate] Error fetching user context:', error);
-    // Return safe defaults
+    // Return safe defaults (portfolioValue matches PortfolioAggregator.INITIAL_CAPITAL)
     return {
-      portfolioValue: 50000,
+      portfolioValue: 1000,
       riskPerTrade: 0,
       dailyLossKillSwitch: 7.0,
       maxExposurePercent: 100,
