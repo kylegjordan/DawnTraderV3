@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { systemHealthMonitor } from './system-health-monitor';
 import { selfRepairService } from './self-repair';
+import { filePersistence } from './file-persistence';
 
 class HealthReportScheduler {
   private readonly MODULE_NAME = 'HealthReportScheduler';
@@ -118,6 +119,28 @@ class HealthReportScheduler {
     report += `SCHEDULER STATUS:\n`;
     report += `  Cortex Sync:      Uptime ${Math.floor(metrics.schedulers.cortexSync.uptime / 60)}m, Last Run: ${metrics.schedulers.cortexSync.lastRun || 'N/A'}\n`;
     report += `  Analytics:        Uptime ${Math.floor(metrics.schedulers.analytics.uptime / 60)}m, Last Run: ${metrics.schedulers.analytics.lastRun || 'N/A'}\n\n`;
+
+    // File Persistence (Phase 8.4 Addendum E)
+    if (metrics.filePersistence) {
+      const fp = metrics.filePersistence;
+      report += `FILE PERSISTENCE:\n`;
+      report += `  Total Saved:      ${fp.successCount} files\n`;
+      report += `  Failed:           ${fp.failureCount} files\n`;
+      report += `  Timeouts:         ${fp.timeoutCount} files\n`;
+      report += `  Avg Latency:      ${fp.avgLatencyMs}ms\n`;
+      
+      // Category breakdown
+      const categories = Object.entries(fp.byCategory).filter(([_, stats]) => stats.success > 0 || stats.failed > 0);
+      if (categories.length > 0) {
+        report += `  By Category:\n`;
+        categories.forEach(([cat, stats]) => {
+          const status = stats.failed === 0 ? 'OK' : `${stats.failed} warning${stats.failed !== 1 ? 's' : ''}`;
+          const avgLatency = stats.success > 0 ? Math.round(stats.avgLatencyMs / stats.success) : 0;
+          report += `    ${cat.padEnd(12)} ${status} (${stats.success} saved, ${avgLatency}ms avg)\n`;
+        });
+      }
+      report += `\n`;
+    }
 
     // Recovery Statistics
     report += `RECOVERY STATISTICS:\n`;

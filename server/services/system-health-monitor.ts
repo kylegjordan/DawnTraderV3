@@ -1,5 +1,6 @@
 import os from 'os';
 import { performance } from 'perf_hooks';
+import { filePersistence } from './file-persistence';
 
 export interface HealthMetrics {
   timestamp: string;
@@ -28,6 +29,13 @@ export interface HealthMetrics {
   schedulers: {
     cortexSync: { uptime: number; lastRun: string | null };
     analytics: { uptime: number; lastRun: string | null };
+  };
+  filePersistence?: {
+    successCount: number;
+    failureCount: number;
+    timeoutCount: number;
+    avgLatencyMs: number;
+    byCategory: Record<string, { success: number; failed: number; avgLatencyMs: number }>;
   };
 }
 
@@ -146,6 +154,11 @@ class SystemHealthMonitor {
     const now = Date.now();
     const uptime = Math.floor((now - this.startTime) / 1000);
 
+    const fileMetrics = filePersistence.getMetrics();
+    const avgFileLatency = fileMetrics.successCount > 0 
+      ? Math.round(fileMetrics.totalLatencyMs / fileMetrics.successCount)
+      : 0;
+
     return {
       timestamp: new Date().toISOString(),
       system: {
@@ -179,6 +192,13 @@ class SystemHealthMonitor {
           uptime: Math.floor((now - this.schedulerStats.analytics.startTime) / 1000),
           lastRun: this.schedulerStats.analytics.lastRun,
         },
+      },
+      filePersistence: {
+        successCount: fileMetrics.successCount,
+        failureCount: fileMetrics.failureCount,
+        timeoutCount: fileMetrics.timeoutCount,
+        avgLatencyMs: avgFileLatency,
+        byCategory: fileMetrics.byCategory,
       },
     };
   }
