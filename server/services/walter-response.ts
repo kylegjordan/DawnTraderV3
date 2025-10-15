@@ -179,6 +179,12 @@ function formatInsightContext(insight: any): string {
     context += `- Uptime: ${Math.floor(metrics.system.uptime / 3600)}h ${Math.floor((metrics.system.uptime % 3600) / 60)}m\n`;
     context += `- Resources: CPU ${metrics.system.cpuUsage}%, Memory ${metrics.system.memoryUsage.percentUsed}%\n`;
     
+    // Phase 8.4 Addendum E.1: File Persistence Stats
+    if (metrics.filePersistence) {
+      const fp = metrics.filePersistence;
+      context += `- File Operations: ${fp.successCount} saved, ${fp.failureCount} failed, ${fp.timeoutCount} timeouts (avg ${fp.avgLatencyMs}ms)\n`;
+    }
+    
     if (criticalIssues && criticalIssues.length > 0) {
       context += `- CRITICAL: ${criticalIssues.length} issue(s) - ${criticalIssues[0]}\n`;
     } else if (warnings && warnings.length > 0) {
