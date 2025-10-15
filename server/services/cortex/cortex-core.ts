@@ -105,9 +105,33 @@ class CortexCore {
       console.log('[CortexCore] ✅ Initialized successfully');
       console.log(`[CortexCore] Active modules: ${this.config?.registry.active_modules.join(', ')}`);
       console.log(`[CortexCore] Memory TTL: ${this.config?.memory.short_term_ttl}s (short) / ${this.config?.memory.long_term_ttl}s (long)`);
+      
+      // Phase 8.5 Addendum H: Setup context refresh event listener
+      await this.setupContextRefreshListener();
     } catch (error) {
       console.error('[CortexCore] ❌ Initialization failed:', error);
       this.enabled = false;
+    }
+  }
+
+  /**
+   * Phase 8.5 Addendum H: Setup event listener for context refresh
+   */
+  private async setupContextRefreshListener(): Promise<void> {
+    try {
+      const { contextRefreshCoordinator } = await import('../context-refresh-coordinator');
+      
+      contextRefreshCoordinator.on('contextRefreshed', (event: any) => {
+        console.log(`[CortexSync] Context refreshed event received (source=${event.source}, userId=${event.userId}, mode=${event.mode})`);
+        console.log(`[CortexSync] Portfolio: $${event.portfolioBalance}, Active Strategies: ${event.activeStrategiesCount}, Discrepancies: ${event.discrepanciesFound}`);
+        
+        // Note: Cortex cache is already updated by ContextRefreshCoordinator.updateCortex()
+        // This listener is for monitoring and potential future actions
+      });
+      
+      console.log('[CortexCore] ✅ Context refresh event listener registered');
+    } catch (error) {
+      console.error('[CortexCore] ⚠️  Failed to setup context refresh listener:', error);
     }
   }
 
