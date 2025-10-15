@@ -1,0 +1,174 @@
+You said:
+Yes.  Please, draft the full Phase 8.4 Addendum C instruction brief (Replit-ready, no code) so I can paste it straight into Replit.
+ChatGPT said:
+
+Perfect, Kyle — below is your Phase 8.4 Addendum C: Contextual Intent Engine instruction brief written in the same format and tone as the previous phases (no code).
+You can paste this directly into Replit so it knows exactly what to do.
+
+⚙️ Phase 8.4 Addendum C — Contextual Intent Engine (CIE)
+Natural-Language Comprehension Upgrade for Walter AI
+🎯 Objective
+
+Transform Walter’s Natural-Language Action Interpreter (NLAI) from a simple rule-based matcher into a Contextual Intent Engine (CIE) that interprets user messages conversationally, understands context, and routes actions correctly.
+This ensures Walter can respond to any natural phrasing without false positives (e.g., “THE,” “YOUR”) and can consistently trigger the right system actions — such as starting simulations, generating reports, or running analyses — based on meaning rather than keywords.
+
+🧩 Action Steps
+1️⃣ Build Intent Classifier
+
+Replace or augment the existing NLAI keyword/regex logic with a lightweight Intent Classifier.
+
+The classifier should evaluate each message and output both intent and confidence score, for example:
+
+{ "intent": "simulation_control", "action": "start", "confidence": 0.94 }
+
+
+Supported top-level intents:
+
+simulation_control (start / stop / restart)
+
+analysis_request (analyze / screen / compare)
+
+report_generation (summary / log / results)
+
+status_check (system / simulation / health / progress)
+
+general_chat (conversational, non-action)
+
+The classifier can use a small local model, embedding similarity, or intent-scoring heuristic — it must run locally with < 10 ms latency.
+
+2️⃣ Integrate with Cortex Memory for Context Awareness
+
+Extend Cortex Memory to hold a short “conversation snapshot” for each session:
+
+Current topic (e.g., Simulation, Diagnostics, Analysis)
+
+Last executed intent and timestamp
+
+Active system phase (e.g., Phase 8.4)
+
+On each new input, the interpreter checks this snapshot before deciding intent.
+Example: if the last intent was simulation_control, and user says “start again,” interpret as restart simulation — not analysis.
+
+The snapshot expires automatically after 5 minutes of inactivity to avoid stale context.
+
+3️⃣ Add Semantic Guardrail Layer
+
+Implement a semantic filter that validates ticker/asset names before triggering any analysis_request.
+
+Only fire the analysis action if the word matches a known ticker pattern and appears after “analyze,” “look at,” or “check on.”
+
+Common English words (“THE,” “YOUR,” “AND”) must never route to analysis.
+
+Maintain a small local whitelist or connect to the market data symbol list for reference.
+
+Log all blocked false-positives for transparency.
+
+4️⃣ Re-route High-Level Actions through Execution Broker
+
+Confirm the Execution Broker now receives structured actions directly from the Intent Classifier output rather than from keyword triggers.
+
+Preserve all existing endpoints:
+
+PaperTradeEngine.start() / .stop()
+
+SystemHealthMonitor.report()
+
+ReportService.generate()
+
+AnalysisService.run(pair)
+
+Ensure Walter’s conversational response includes:
+
+Detected Intent
+
+Confidence Score
+
+Action Executed (and result)
+
+5️⃣ Enhance Walter’s Reasoning Loop
+
+When building his reasoning prompt, Walter must include:
+
+His Purpose (wealth generation for Kyle and family).
+
+Current Cortex Context snapshot.
+
+Detected intent + confidence summary.
+
+This allows Walter to reason transparently:
+
+“I understood your request as a high-confidence simulation start command. Beginning Phase 8.4 Dry-Run Simulation now…”
+
+6️⃣ Audit & Logging Improvements
+
+Every interpreter decision logs an entry to /logs/intent-decisions.log with:
+
+Raw user input
+
+Detected intent + confidence
+
+Context snapshot used
+
+Action executed (if any)
+
+Include summary stats each day in the system-health report: average confidence, mis-routes detected, corrections applied.
+
+7️⃣ Testing and Verification
+
+Run conversational end-to-end tests:
+
+Say “Start the paper-trade simulation for 10 minutes” → should trigger simulation_control.start.
+
+Say “Stop it” → triggers simulation_control.stop.
+
+Say “Analyze AAPL and tell me what you see” → triggers analysis_request for AAPL.
+
+Say “What’s the system health look like?” → triggers status_check.
+
+Say “Let’s talk about performance trends” → routes to general_chat.
+Verify:
+
+Confidence scores > 0.80 for true actions.
+
+False positives = 0 for common words.
+
+PaperTradeEngine and widgets update correctly.
+
+🧾 Verification Checklist
+✅ Check	Expected Result
+Intent Classifier active	Each user message returns intent + confidence
+Context snapshot stored	Cortex shows last intent and topic
+Semantic guardrail	No “analysis requested” for common words
+PaperTradeEngine triggers naturally	Paper Mode → ACTIVE on plain English commands
+Action transparency	Logs show intent → confidence → result
+Regression test Addenda A & B	No latency > 5 % increase; UI unchanged
+Documentation updated	replit.md Addendum C section + screenshots
+🏁 Deliverables
+
+Contextual Intent Engine integrated with Walter AI.
+
+Cortex Context Snapshot support for short-term conversational memory.
+
+Semantic Guardrail Layer filtering invalid ticker triggers.
+
+Updated Execution Broker routing through classifier output.
+
+Comprehensive Intent Decision Logging.
+
+All Addendum C tests passed and verified.
+
+replit.md updated with Addendum C details, test results, and architecture diagram.
+
+✅ Acceptance Criteria
+
+Walter interprets and executes conversational requests contextually, not by keyword.
+
+No unintended “analysis requested” actions for normal speech.
+
+Natural-language simulation commands start and stop the PaperTradeEngine correctly.
+
+Average intent confidence > 0.85.
+
+End-to-end latency increase ≤ 5 %.
+
+Architect review PASS and documentation complete.

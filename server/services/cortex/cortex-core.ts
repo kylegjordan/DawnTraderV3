@@ -37,6 +37,23 @@ interface CortexStatus {
   health: 'healthy' | 'degraded' | 'offline';
 }
 
+// Phase 8.4 Addendum C: Conversation Snapshot for CIE
+interface ConversationSnapshot {
+  userId: string;
+  currentTopic: string | null;
+  lastIntent: string | null;
+  lastIntentTimestamp: number;
+  activePhase: string;
+  expiresAt: number;
+}
+
+interface ConversationContext {
+  topic: string | null;
+  lastIntent: string | null;
+  minutesSinceLastIntent: number;
+  activePhase: string;
+}
+
 class CortexCore {
   private config: CortexConfig | null = null;
   private memory: CortexMemory;
@@ -223,6 +240,66 @@ class CortexCore {
       active_modules: activeModules,
       health
     };
+  }
+
+  /**
+   * Phase 8.4 Addendum C: Store conversation snapshot
+   * Expires after 5 minutes of inactivity
+   */
+  setConversationSnapshot(
+    userId: string,
+    topic: string | null,
+    intent: string | null,
+    phase: string = 'Phase 8.4'
+  ): void {
+    if (!this.enabled) return;
+
+    const CONVERSATION_TTL = 300; // 5 minutes
+    const snapshot: ConversationSnapshot = {
+      userId,
+      currentTopic: topic,
+      lastIntent: intent,
+      lastIntentTimestamp: Date.now(),
+      activePhase: phase,
+      expiresAt: Date.now() + (CONVERSATION_TTL * 1000),
+    };
+
+    this.set(`conversation:${userId}`, snapshot, CONVERSATION_TTL);
+    console.log(
+      `[CortexCore] 💭 Conversation snapshot stored for user ${userId}: topic="${topic}", intent="${intent}"`
+    );
+  }
+
+  /**
+   * Phase 8.4 Addendum C: Get conversation context
+   * Returns null if expired or not found
+   */
+  getConversationContext(userId: string): ConversationContext | null {
+    if (!this.enabled) return null;
+
+    const snapshot = this.get(`conversation:${userId}`) as ConversationSnapshot | null;
+    if (!snapshot) return null;
+
+    const minutesSinceLastIntent = Math.floor(
+      (Date.now() - snapshot.lastIntentTimestamp) / 60000
+    );
+
+    return {
+      topic: snapshot.currentTopic,
+      lastIntent: snapshot.lastIntent,
+      minutesSinceLastIntent,
+      activePhase: snapshot.activePhase,
+    };
+  }
+
+  /**
+   * Phase 8.4 Addendum C: Clear conversation snapshot
+   */
+  clearConversationSnapshot(userId: string): void {
+    if (!this.enabled) return;
+
+    delete this.memory.memory[`conversation:${userId}`];
+    console.log(`[CortexCore] 🧹 Conversation snapshot cleared for user ${userId}`);
   }
 
   private cleanExpired(): void {

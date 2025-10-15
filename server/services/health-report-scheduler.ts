@@ -54,7 +54,17 @@ class HealthReportScheduler {
     try {
       const health = systemHealthMonitor.analyzeHealth();
       const repairStats = selfRepairService.getStats();
-      const report = this.formatReport(health.metrics, health.status, health.warnings, health.criticalIssues, repairStats);
+      
+      // Phase 8.4 Addendum C: Get intent classification stats
+      let intentSummary = '';
+      try {
+        const { intentDecisionLogger } = await import('./intent-decision-logger');
+        intentSummary = await intentDecisionLogger.getDailySummary();
+      } catch (error) {
+        console.warn(`[${this.MODULE_NAME}] Intent stats unavailable:`, error);
+      }
+      
+      const report = this.formatReport(health.metrics, health.status, health.warnings, health.criticalIssues, repairStats, intentSummary);
 
       // Append to log file
       await this.appendToLog(report);
@@ -71,7 +81,7 @@ class HealthReportScheduler {
   /**
    * Format the health report
    */
-  private formatReport(metrics: any, status: string, warnings: string[], criticalIssues: string[], repairStats: any): string {
+  private formatReport(metrics: any, status: string, warnings: string[], criticalIssues: string[], repairStats: any, intentSummary?: string): string {
     const timestamp = new Date().toISOString();
     const separator = '='.repeat(80);
     const uptimeHours = Math.floor(metrics.system.uptime / 3600);
@@ -115,6 +125,11 @@ class HealthReportScheduler {
     report += `  Successful:       ${repairStats.successfulRepairs}\n`;
     report += `  Failed:           ${repairStats.failedRepairs}\n`;
     report += `  Last Repair:      ${repairStats.lastRepair || 'None'}\n\n`;
+
+    // Phase 8.4 Addendum C: Intent Classification Stats
+    if (intentSummary) {
+      report += intentSummary + '\n';
+    }
 
     // Warnings
     if (warnings.length > 0) {

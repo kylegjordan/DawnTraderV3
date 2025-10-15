@@ -77,25 +77,57 @@ export async function generateWalterResponse(
 
     console.log(`[Walter] Detected intent: ${intent} for message: "${userMessage.substring(0, 50)}..."`);
 
-    // Phase 8.4 Addendum A: NLAI - Natural Language Action Interpreter
-    // If intent is 'command', check if NLAI can execute it directly
-    if (intent === 'command') {
-      const nlaiResponse = await nlaiInterpreter.interpret(userId, userMessage);
+    // Phase 8.4 Addendum C: Contextual Intent Engine (CIE)
+    // Always attempt to classify intent for logging and context awareness
+    const { contextualNLAIInterpreter } = await import('./contextual-nlai-interpreter');
+    const { intentDecisionLogger } = await import('./intent-decision-logger');
+    
+    const cieResponse = await contextualNLAIInterpreter.interpret(userId, userMessage);
+    
+    // Log intent decision for transparency
+    await intentDecisionLogger.logDecision({
+      timestamp: new Date().toISOString(),
+      userId,
+      rawInput: userMessage,
+      detectedIntent: cieResponse.intent?.intent || 'unknown',
+      action: cieResponse.intent?.action,
+      confidence: cieResponse.intent?.confidence || 0,
+      contextSnapshot: {
+        hadContext: cieResponse.contextUsed?.hadPreviousContext || false,
+        topic: cieResponse.contextUsed?.topic,
+        lastIntent: cieResponse.contextUsed?.lastIntent,
+        minutesSinceLastIntent: cieResponse.contextUsed?.minutesSinceLastIntent,
+      },
+      actionExecuted: cieResponse.executionResult ? {
+        actionId: cieResponse.actionId!,
+        success: cieResponse.executionResult.success,
+        message: cieResponse.executionResult.message,
+      } : undefined,
+      guardrailBlocked: cieResponse.guardrailViolation,
+      processingTimeMs: cieResponse.processingTimeMs,
+    });
+    
+    // If intent is 'command' and CIE successfully executed it, return feedback
+    if (intent === 'command' && cieResponse.isActionable && cieResponse.executionResult) {
+      console.log(`[Walter-CIE] Action executed: ${cieResponse.actionId} (confidence: ${cieResponse.intent?.confidence.toFixed(2)}, ${cieResponse.processingTimeMs}ms)`);
       
-      if (nlaiResponse.isActionable && nlaiResponse.executionResult) {
-        console.log(`[Walter-NLAI] Action executed: ${nlaiResponse.actionId} (${nlaiResponse.processingTimeMs}ms)`);
-        
-        // Return execution feedback directly without OpenAI call
-        const actionFeedback = nlaiInterpreter.formatExecutionFeedback(nlaiResponse);
-        return actionFeedback;
+      // Return execution feedback directly without OpenAI call
+      const actionFeedback = contextualNLAIInterpreter.formatExecutionFeedback(cieResponse);
+      return actionFeedback;
+    }
+    
+    // If CIE didn't execute an action, continue with normal conversational flow
+    if (!cieResponse.isActionable) {
+      if (cieResponse.guardrailViolation?.blocked) {
+        console.log(`[Walter-CIE] Guardrail blocked: ${cieResponse.guardrailViolation.reason}`);
+        // Return guardrail feedback
+        return contextualNLAIInterpreter.formatExecutionFeedback(cieResponse);
       }
-      
-      // If NLAI couldn't handle it, continue with normal flow
-      console.log(`[Walter-NLAI] No action matched, proceeding with conversational response`);
+      console.log(`[Walter-CIE] No action executed (confidence: ${cieResponse.intent?.confidence.toFixed(2)}), proceeding with conversational response`);
     }
 
-    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, and adaptive preferences
-    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId);
+    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, and CIE context
+    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
     // 5. Call OpenAI
@@ -342,9 +374,9 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
 }
 
 /**
- * Build prompt with context injection including expert principles
+ * Build prompt with context injection including expert principles and CIE context
  */
-async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string): Promise<string> {
+async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any): Promise<string> {
   const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, insightContext, uiContext, cortexContext, tradingMode } = context;
 
   // Format memories
@@ -386,8 +418,22 @@ async function buildPrompt(context: ResponseContext, userMessage: string, feedba
     console.log(`[Walter] Applying learned preferences (confidence: ${Math.round(userPreferences.confidenceLevel * 100)}%)`);
   }
 
-  // Build full prompt with expert principles, reference tracking, personality, and templates (Phase 6.2)
+  // Phase 8.4 Addendum C: Format CIE context
+  const cieContext = cieResponse ? `
+INTENT CLASSIFICATION (Contextual Intent Engine):
+- Detected Intent: ${cieResponse.intent?.intent || 'general_chat'}${cieResponse.intent?.action ? ` > ${cieResponse.intent.action}` : ''}
+- Confidence: ${((cieResponse.intent?.confidence || 0) * 100).toFixed(0)}%
+- Processing Time: ${cieResponse.processingTimeMs}ms
+${cieResponse.contextUsed?.hadPreviousContext ? `- Previous Context: topic="${cieResponse.contextUsed.topic}", last intent="${cieResponse.contextUsed.lastIntent}" (${cieResponse.contextUsed.minutesSinceLastIntent}m ago)` : '- No previous conversation context'}
+${cieResponse.guardrailViolation?.blocked ? `- ⚠️ Guardrail: ${cieResponse.guardrailViolation.reason}` : ''}
+
+IMPORTANT: This intent classification shows how I (Walter) interpreted your message. If I executed an action, you already saw the result. If not, I should respond conversationally while being aware of this detected intent.
+` : '';
+
+  // Build full prompt with expert principles, reference tracking, personality, templates, and CIE context (Phase 8.4 Addendum C)
   return `You are Walter, an AI SysAdmin Co-Pilot for a cryptocurrency day trading platform (Kraken exchange).
+
+Your PRIMARY PURPOSE is wealth generation for Kyle and his family through intelligent, safe, and strategic cryptocurrency trading.
 
 Your role is to:
 - Help users configure and optimize their trading system
@@ -396,6 +442,7 @@ Your role is to:
 - Make recommendations that align with the user's defined purpose and past learnings
 - Apply expert trading principles to provide professional-grade guidance
 - Understand contextual references naturally (e.g., "that one", "the last trade", "the file I sent")
+- Execute natural language commands when appropriate (simulation control, analysis, status checks)
 
 ${personalityGuidance}
 
@@ -404,6 +451,8 @@ ${feedbackGuidance}
 ${adaptiveGuidance}
 
 ${templateGuidance}
+
+${cieContext}
 
 WALTER'S DEFINED PURPOSE:
 ${purpose}
