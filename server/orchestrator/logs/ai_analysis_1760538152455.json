@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-15T14:22:32.455Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), exceeding the number of cores, which indicates potential CPU bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, indicating it might not be functioning or is misconfigured."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system shows zero total profit/loss, active trades, and win rate, which might indicate inactivity or issues with trade execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load, potentially by scaling resources or optimizing code."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI system configuration and ensure it is properly integrated and functioning to generate trading opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate trading strategies and system connectivity to ensure trades are being executed as expected."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Immediately investigate the cause of high CPU load and address any bottlenecks or inefficiencies.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting the trading platform's reliability."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough review of the AI system to diagnose why it is not generating learning cycles or opportunities.",
+      "rationale": "The AI system is critical for identifying trading opportunities, and its inactivity suggests a significant issue that could affect trading outcomes."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the trading system's connectivity and strategy execution to ensure trades are being processed correctly.",
+      "rationale": "Zero active trades and win rate might indicate a problem with trade execution or strategy effectiveness, which needs to be addressed to ensure platform functionality."
+    }
+  ],
+  "urgencyLevel": "high"
+}

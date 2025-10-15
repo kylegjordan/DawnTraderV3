@@ -155,7 +155,10 @@ import {
   walterApprovalsAudit,
   type WalterMemory,
   type InsertWalterMemory,
-  walterMemory
+  walterMemory,
+  type WalterUserPreferences,
+  type InsertWalterUserPreferences,
+  walterUserPreferences
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -488,6 +491,14 @@ export interface IStorage {
   getWalterMemory(id: string): Promise<WalterMemory | undefined>;
   updateWalterMemory(id: string, updates: Partial<WalterMemory>): Promise<WalterMemory>;
   deleteWalterMemory(id: string): Promise<void>;
+  
+  // Walter User Preferences methods (Phase 8.4 Addendum B)
+  getWalterUserPreferences(userId: string): Promise<WalterUserPreferences | undefined>;
+  upsertWalterUserPreferences(userId: string, preferences: Partial<InsertWalterUserPreferences>): Promise<WalterUserPreferences>;
+  
+  // Chat Pin methods (Phase 8.4 Addendum B)
+  pinWalterChat(chatId: string): Promise<WalterChat>;
+  unpinWalterChat(chatId: string): Promise<WalterChat>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2691,6 +2702,47 @@ export class DatabaseStorage implements IStorage {
   
   async deleteWalterMemory(id: string): Promise<void> {
     await db.delete(walterMemory).where(eq(walterMemory.id, id));
+  }
+  
+  // Walter User Preferences methods (Phase 8.4 Addendum B)
+  async getWalterUserPreferences(userId: string): Promise<WalterUserPreferences | undefined> {
+    const [prefs] = await db.select().from(walterUserPreferences)
+      .where(eq(walterUserPreferences.userId, userId));
+    return prefs || undefined;
+  }
+  
+  async upsertWalterUserPreferences(userId: string, preferences: Partial<InsertWalterUserPreferences>): Promise<WalterUserPreferences> {
+    const existing = await this.getWalterUserPreferences(userId);
+    
+    if (existing) {
+      const [updated] = await db.update(walterUserPreferences)
+        .set({ ...preferences, updatedAt: new Date() })
+        .where(eq(walterUserPreferences.userId, userId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(walterUserPreferences)
+        .values({ userId, ...preferences })
+        .returning();
+      return created;
+    }
+  }
+  
+  // Chat Pin methods (Phase 8.4 Addendum B)
+  async pinWalterChat(chatId: string): Promise<WalterChat> {
+    const [chat] = await db.update(walterChats)
+      .set({ pinned: true, pinnedAt: new Date() })
+      .where(eq(walterChats.id, chatId))
+      .returning();
+    return chat;
+  }
+  
+  async unpinWalterChat(chatId: string): Promise<WalterChat> {
+    const [chat] = await db.update(walterChats)
+      .set({ pinned: false, pinnedAt: null })
+      .where(eq(walterChats.id, chatId))
+      .returning();
+    return chat;
   }
 
   // Expert Updates methods (Phase 5.8 - Task 5)

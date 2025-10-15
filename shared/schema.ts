@@ -42,6 +42,9 @@ export const walterChatStatusEnum = pgEnum("walter_chat_status", ["active", "arc
 export const walterMemoryTypeEnum = pgEnum("walter_memory_type", ["observation", "decision", "result", "goal", "lesson"]);
 export const patchSeverityEnum = pgEnum("patch_severity", ["critical", "high", "medium", "low", "info"]);
 export const patchStatusEnum = pgEnum("patch_status", ["pending", "approved", "rejected", "applied"]);
+export const walterThemeEnum = pgEnum("walter_theme", ["light", "dark", "system"]);
+export const walterToneEnum = pgEnum("walter_tone", ["professional", "analytical", "warm", "concise"]);
+export const walterViewModeEnum = pgEnum("walter_view_mode", ["compact", "expanded"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -555,6 +558,8 @@ export const walterChats = pgTable("walter_chats", {
   approvalId: varchar("approval_id"), // Added without reference to avoid circular inference
   messageCount: integer("message_count").default(0), // Total messages in session
   lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  pinned: boolean("pinned").default(false).notNull(), // Phase 8.4 Addendum B: Pin chat to top
+  pinnedAt: timestamp("pinned_at", { withTimezone: true }), // Phase 8.4 Addendum B: When pinned
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
@@ -638,6 +643,19 @@ export const walterMemory = pgTable("walter_memory", {
   // Check constraint for importance range 1-5
   importanceCheck: sql`CHECK (importance >= 1 AND importance <= 5)`,
 }));
+
+// Walter user preferences (Phase 8.4 Addendum B - UI and behavior settings)
+export const walterUserPreferences = pgTable("walter_user_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  viewMode: walterViewModeEnum("view_mode").default("compact").notNull(), // Compact or Expanded layout
+  theme: walterThemeEnum("theme").default("system").notNull(), // Light, Dark, or System
+  tone: walterToneEnum("tone").default("professional").notNull(), // Assistant tone: Professional, Analytical, Warm, Concise
+  sendKeyPreference: varchar("send_key_preference", { length: 20 }).default("enter").notNull(), // 'enter' or 'shift_enter'
+  sidebarCollapsed: boolean("sidebar_collapsed").default(false).notNull(), // Sidebar collapse state
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
 
 // Filter diagnostics (screening health metrics)
 export const filterDiagnostics = pgTable("filter_diagnostics", {
@@ -1630,6 +1648,12 @@ export const insertWalterMemorySchema = createInsertSchema(walterMemory).omit({
   timestamp: true,
 });
 
+export const insertWalterUserPreferencesSchema = createInsertSchema(walterUserPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertPatchProposalSchema = createInsertSchema(patchProposals).omit({
   id: true,
   createdAt: true,
@@ -1992,6 +2016,9 @@ export type WalterPurpose = typeof walterPurpose.$inferSelect;
 
 export type InsertWalterMemory = z.infer<typeof insertWalterMemorySchema>;
 export type WalterMemory = typeof walterMemory.$inferSelect;
+
+export type InsertWalterUserPreferences = z.infer<typeof insertWalterUserPreferencesSchema>;
+export type WalterUserPreferences = typeof walterUserPreferences.$inferSelect;
 
 export type InsertPatchProposal = z.infer<typeof insertPatchProposalSchema>;
 export type PatchProposal = typeof patchProposals.$inferSelect;

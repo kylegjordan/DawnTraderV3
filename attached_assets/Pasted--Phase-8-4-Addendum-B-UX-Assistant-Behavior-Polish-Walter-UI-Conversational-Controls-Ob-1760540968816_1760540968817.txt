@@ -1,0 +1,166 @@
+⚙️ Phase 8.4 – Addendum B
+UX & Assistant-Behavior Polish (Walter UI + Conversational Controls)
+🎯 Objective
+
+Polish Walter’s workspace for high-efficiency daily use and clearer AI interaction. Improve layout flexibility, conversation management, export options, and assistant tone controls — without changing backend trading logic.
+
+🧩 Action Steps
+1) Workspace & Layout Flexibility
+
+Add a View Toggle in the Walter header: Compact | Expanded.
+
+Compact = current spacing; Expanded = increased max width and line length for dense reviews.
+
+Make the chat list panel collapsible (chevron icon). Remember its state per user.
+
+Enable sticky input/footer: input stays visible when scrolling long chats.
+
+Ensure the main chat pane fills available viewport height under the top bar (Live/Paper, status, clocks).
+
+Checks
+
+Toggling views reflows content without reloading the page.
+
+Collapsing the sidebar increases chat width and persists after refresh.
+
+No overlap between the input area and the bottom of long transcripts.
+
+2) Conversation Management Enhancements
+
+Add Pin Chat (star icon) to keep selected chats at the top.
+
+Add Export Chat menu on each chat: Export → PDF and Export → Markdown (.md).
+
+Show a sidebar footer with: Chats: <count> | Storage: <approx MB>.
+
+Confirm Archive and Delete remain accessible; require confirm dialog for Delete.
+
+Checks
+
+Pinned chats sort above others; unpin returns to normal order.
+
+Exports include timestamps, speaker labels, system notices (e.g., “Action started/complete”).
+
+Storage counter updates after archive/delete.
+
+3) Dynamic Input & Typing Comfort
+
+Keep auto-expanding input (min 3 lines; max 10 lines) with internal scroll past max.
+
+Support Shift+Enter = newline; Enter = send (toggleable in Settings → Keyboard).
+
+Add token/char soft counter under input (updates as you type).
+
+Checks
+
+Input expansion is smooth; no layout jump.
+
+Keyboard preference persists across sessions.
+
+Counter hides on empty field; shows during typing.
+
+4) Assistant Behavior Controls (Tone & Style)
+
+In Goals Engine → Purpose, add a Tone & Style selector:
+
+Professional, Analytical, Warm, Concise (single select).
+
+Walter adapts phrasing and formatting to the selected style without changing decisions.
+
+Persist selection in user settings; surface current tone under Walter’s nameplate (pill badge).
+
+Checks
+
+Changing tone immediately affects the next response.
+
+Logs show “Tone profile applied: <choice>”.
+
+No change to trading actions, only wording/formatting.
+
+5) Visual Theme Options
+
+Add Theme toggle in Walter header: Light | Dark | System.
+
+Ensure accessible contrast (WCAG AA) and legible code/log blocks in both themes.
+
+Checks
+
+Theme persists per user.
+
+No color collisions with status badges (Healthy/Degraded/Critical).
+
+6) Action Feedback & Progress Cues (UX Only)
+
+When Walter triggers an action (e.g., Start Simulation), show a non-blocking status bar above the input:
+
+Starting Phase 8.4…, Running (mm:ss)…, Completed ✓, or Failed ×.
+
+Provide a small “View details” link to the relevant log/report.
+
+Checks
+
+Status bar appears only during active operations and clears on completion/failure.
+
+Clicking “View details” opens the latest log/report in a new panel/tab.
+
+7) Persistence & Settings
+
+Add Walter Settings (gear icon) with:
+
+Default View (Compact/Expanded)
+
+Default Send key (Enter vs Shift+Enter)
+
+Default Tone & Style (mirror of Goals Engine setting)
+
+Theme (Light/Dark/System)
+
+Sidebar collapsed (on/off)
+
+Store per-user; load on page init.
+
+Checks
+
+All settings persist after reload and across sessions.
+
+Changing a setting updates UI immediately (no refresh required).
+
+🧪 Testing & Verification Checklist
+Area	Test	Expected Result
+Layout	Toggle Compact/Expanded	Immediate reflow, no reload
+Sidebar	Collapse/expand	Width adjusts; state persists
+Input	Multi-line typing & Shift+Enter	Expands to max; newline/send behaviors correct
+Pins	Pin/unpin multiple chats	Pinned sort order stable
+Export	Export to PDF/MD	Files include timestamps and roles
+Storage	Delete/archive chats	Counter updates; archive list shows items
+Tone	Switch tone & send message	Wording changes; content fidelity preserved
+Theme	Light/Dark/System	Readable UI; status badges distinct
+Progress	Start an action	Status bar appears; links to logs/reports
+Settings	Change defaults	Persist and apply instantly
+🏁 Deliverables
+
+Updated Walter UI with Compact/Expanded views, collapsible sidebar, sticky input, and improved vertical space.
+
+Conversation tools: Pin, Export (PDF/MD), archive/delete confirmations, sidebar storage counters.
+
+Typing comfort: Auto-expand input, send-key preference, soft counter.
+
+Assistant tone control integrated with Goals Engine and visible badge in UI.
+
+Theme support: Light/Dark/System with compliant contrast.
+
+Action progress bar and deep link to logs/reports.
+
+Settings panel with full persistence.
+
+replit.md updated with Addendum B: features, settings map, test results, and screenshots.
+
+📌 Acceptance Criteria
+
+Natural-language actions from Addendum A still work; Addendum B does not increase end-to-end response latency by more than 5%.
+
+All new UI state (view, theme, tone, keyboard preference, sidebar) persists per user.
+
+Exports generate within 2 seconds for typical chats (<1,000 messages).
+
+All features validated on Chrome, Edge, Safari (desktop), 1200px–1920px widths.
