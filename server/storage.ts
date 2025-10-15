@@ -158,7 +158,10 @@ import {
   walterMemory,
   type WalterUserPreferences,
   type InsertWalterUserPreferences,
-  walterUserPreferences
+  walterUserPreferences,
+  type PortfolioState,
+  type InsertPortfolioState,
+  portfolioState
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -499,6 +502,11 @@ export interface IStorage {
   // Chat Pin methods (Phase 8.4 Addendum B)
   pinWalterChat(chatId: string): Promise<WalterChat>;
   unpinWalterChat(chatId: string): Promise<WalterChat>;
+  
+  // Portfolio State methods (Phase 8.5 Addendum F)
+  getPortfolioState(params: { userId: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined>;
+  upsertPortfolioState(data: InsertPortfolioState & { userId: string; mode: 'live' | 'paper' }): Promise<PortfolioState>;
+  updatePortfolioBalance(userId: string, mode: 'live' | 'paper', balance: number): Promise<PortfolioState>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2744,6 +2752,41 @@ export class DatabaseStorage implements IStorage {
       .where(eq(walterChats.id, chatId))
       .returning();
     return chat;
+  }
+  
+  // Portfolio State methods (Phase 8.5 Addendum F)
+  async getPortfolioState(params: { userId: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined> {
+    const [state] = await db.select().from(portfolioState)
+      .where(and(
+        eq(portfolioState.userId, params.userId),
+        eq(portfolioState.mode, params.mode)
+      ));
+    return state || undefined;
+  }
+  
+  async upsertPortfolioState(data: InsertPortfolioState & { userId: string; mode: 'live' | 'paper' }): Promise<PortfolioState> {
+    const existing = await this.getPortfolioState({ userId: data.userId, mode: data.mode });
+    
+    if (existing) {
+      const [updated] = await db.update(portfolioState)
+        .set({ balance: data.balance, lastUpdate: new Date() })
+        .where(and(
+          eq(portfolioState.userId, data.userId),
+          eq(portfolioState.mode, data.mode)
+        ))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(portfolioState)
+        .values(data)
+        .returning();
+      return created;
+    }
+  }
+  
+  async updatePortfolioBalance(userId: string, mode: 'live' | 'paper', balance: number): Promise<PortfolioState> {
+    const balanceDecimal = balance.toString();
+    return await this.upsertPortfolioState({ userId, mode, balance: balanceDecimal });
   }
 
   // Expert Updates methods (Phase 5.8 - Task 5)

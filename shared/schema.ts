@@ -671,6 +671,18 @@ export const filterDiagnostics = pgTable("filter_diagnostics", {
   metadata: jsonb("metadata"), // Additional diagnostic data
 });
 
+// Portfolio state (Phase 8.5 Addendum F - unified portfolio tracking)
+export const portfolioState = pgTable("portfolio_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  balance: decimal("balance", { precision: 20, scale: 2 }).notNull().default("1000.00"),
+  lastUpdate: timestamp("last_update", { withTimezone: true }).defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueUserMode: uniqueIndex("portfolio_state_user_mode_idx").on(table.userId, table.mode),
+}));
+
 // ===== PAPER TRADING TABLES (Isolated from Live) =====
 
 // Paper trades (simulated trades - completely isolated from live)
@@ -1654,6 +1666,12 @@ export const insertWalterUserPreferencesSchema = createInsertSchema(walterUserPr
   updatedAt: true,
 });
 
+export const insertPortfolioStateSchema = createInsertSchema(portfolioState).omit({
+  id: true,
+  lastUpdate: true,
+  createdAt: true,
+});
+
 export const insertPatchProposalSchema = createInsertSchema(patchProposals).omit({
   id: true,
   createdAt: true,
@@ -2019,6 +2037,9 @@ export type WalterMemory = typeof walterMemory.$inferSelect;
 
 export type InsertWalterUserPreferences = z.infer<typeof insertWalterUserPreferencesSchema>;
 export type WalterUserPreferences = typeof walterUserPreferences.$inferSelect;
+
+export type InsertPortfolioState = z.infer<typeof insertPortfolioStateSchema>;
+export type PortfolioState = typeof portfolioState.$inferSelect;
 
 export type InsertPatchProposal = z.infer<typeof insertPatchProposalSchema>;
 export type PatchProposal = typeof patchProposals.$inferSelect;

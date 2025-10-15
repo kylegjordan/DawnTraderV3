@@ -1,0 +1,132 @@
+🧩 Phase 8.5 Addendum F — Trading Status & Portfolio Sync
+🎯 Objective
+
+Unify the portfolio value and enabled-strategy data across the Dashboard, Walter, and Cortex so all read from a single database truth.
+Replace hardcoded defaults ($50 000) and partial strategy listings with live database-driven values.
+
+1 · Verify Current Behavior
+
+Call /api/trading/status → confirm it returns $50 000 and only three strategies.
+
+Note where the Dashboard displays $800 for paper trading.
+
+Identify the source service or state file providing that value (usually PaperExecutionEngine, PortfolioManager, or paper-metrics).
+
+Confirm which table holds paper-balance data, if any (paper_portfolio, user_balance, or none).
+
+2 · Create/Confirm Unified Table in DB
+
+Create a portfolio_state table (if missing) with fields:
+
+id, user_id, mode (paper | live), balance, last_update.
+
+Insert a record for your test user with:
+
+mode = paper
+
+balance = 800 USD
+
+Add indexes on user_id + mode.
+
+3 · Update Backend Trading Status Logic
+
+In /api/trading/status, remove the hard-coded $50 000.
+
+Query portfolio_state.balance by user_id and mode.
+
+If no record exists, create one with a default balance ($1 000) and return that value.
+
+Verify the returned JSON now shows "Portfolio Value": 800 USD.
+
+4 · Sync Strategies with Database
+
+On server startup (or user login):
+
+Fetch all known strategy names from StrategyBob (should be 8).
+
+Compare to entries in strategy_settings for that user + mode.
+
+Insert any missing strategies with enabled = true and default params.
+
+Re-test /api/trading/status → confirm it lists all 8 enabled strategies.
+
+Log a [StrategySync] entry showing counts before/after.
+
+5 · Integrate with Walter & Cortex
+
+In walter-response.ts, extend formatInsightContext to include:
+
+portfolio_balance (from DB)
+
+enabled_strategies[] (from strategy_settings)
+
+In cortex-core.ts, ensure snapshots include the same data under tradingStatus.
+
+Verify that Walter, when asked “read trading status,” now reports the correct $800 and 8 strategies.
+
+6 · Integrate with Dashboard UI
+
+Confirm the Dashboard’s balance widget uses /api/trading/status.balance instead of local state.
+
+Ensure polling every 5 seconds continues to update both balance and strategy list.
+
+Test refresh: values should persist accurately after reload.
+
+7 · Testing & Verification
+
+Call /api/trading/status → expect:
+
+"Portfolio Value": 800,
+"Enabled Strategies": [8 items],
+"Mode": "paper"
+
+
+Ask Walter: “Read trading status.” → He must report identical values.
+
+Switch mode to live → verify a separate record is created in portfolio_state.
+
+Restart server → ensure data persists and syncs on boot.
+
+8 · System Health Integration
+
+Add portfolio_state_sync to SystemHealthMonitor metrics:
+
+lastSync timestamp
+
+mismatched strategy count (if any)
+
+balanceSource (“database”)
+
+Include these values in the hourly health report and Walter’s diagnostic context.
+
+9 · Architect Review and Logging
+
+Request architect review of portfolio and strategy synchronization implementation.
+
+Verify logs show:
+
+[PortfolioSync] Synced user 6c59... mode=paper balance=800
+[StrategySync] 8/8 strategies active
+
+
+Confirm no LSP errors and no warnings in console.
+
+10 · Validation and Documentation
+
+Run final test: Dashboard → Walter → API → Cortex all show same values.
+
+Update replit.md with Phase 8.5 Addendum F summary and verification results.
+
+Mark phase complete after architect approval.
+
+✅ Expected Outcome
+
+/api/trading/status, Dashboard, and Walter all show Portfolio Value = $800 (accurate).
+
+All 8 strategies visible and enabled.
+
+Database is the single source of truth.
+
+Health monitor logs [PortfolioSync] and [StrategySync] successfully.
+
+Walter and Cortex contexts reflect identical data.
