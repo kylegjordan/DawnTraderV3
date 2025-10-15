@@ -1,6 +1,8 @@
 import os from 'os';
 import { performance } from 'perf_hooks';
 import { filePersistence } from './file-persistence';
+import { realtimePaperExecutor } from './realtime-paper-executor';
+import { executionTiming } from './execution-timing';
 
 export interface HealthMetrics {
   timestamp: string;
@@ -36,6 +38,14 @@ export interface HealthMetrics {
     timeoutCount: number;
     avgLatencyMs: number;
     byCategory: Record<string, { success: number; failed: number; avgLatencyMs: number }>;
+  };
+  execution?: {
+    marketDataSource: 'ws' | 'rest_fallback' | 'N/A';
+    lastTickAgeMs: number;
+    avgSubmitAckMs: number;
+    avgSlippageBps: number;
+    avgFeesPerTrade: number;
+    ratePressure: string;
   };
 }
 
@@ -205,7 +215,35 @@ class SystemHealthMonitor {
         avgLatencyMs: fileStats.latency.overall,
         byCategory: transformedByCategory,
       },
+      execution: this.getExecutionMetrics(),
     };
+  }
+
+  // Get execution layer metrics (Phase 8.5)
+  private getExecutionMetrics() {
+    try {
+      const executorStatus = realtimePaperExecutor.getStatus();
+      const execTimingMetrics = executionTiming.getMetrics(10);
+
+      return {
+        marketDataSource: executorStatus.marketData.source as 'ws' | 'rest_fallback' | 'N/A',
+        lastTickAgeMs: executorStatus.marketData.lastTickAgeMs,
+        avgSubmitAckMs: execTimingMetrics.avgSubmitAckMs,
+        avgSlippageBps: execTimingMetrics.avgSlippageBps,
+        avgFeesPerTrade: execTimingMetrics.avgFeesPerTrade,
+        ratePressure: executorStatus.rateControl.backpressure,
+      };
+    } catch (error) {
+      // Return default values if executor not initialized
+      return {
+        marketDataSource: 'N/A' as const,
+        lastTickAgeMs: -1,
+        avgSubmitAckMs: 0,
+        avgSlippageBps: 0,
+        avgFeesPerTrade: 0,
+        ratePressure: 'NONE',
+      };
+    }
   }
 
   // Analyze health status with anomaly detection

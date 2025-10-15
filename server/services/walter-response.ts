@@ -185,6 +185,29 @@ function formatInsightContext(insight: any): string {
       context += `- File Operations: ${fp.successCount} saved, ${fp.failureCount} failed, ${fp.timeoutCount} timeouts (avg ${fp.avgLatencyMs}ms)\n`;
     }
     
+    // Phase 8.5: Real-Time Execution Metrics
+    if (metrics.execution) {
+      const ex = metrics.execution;
+      context += `- Execution Layer:\n`;
+      context += `  • Market Data: ${ex.marketDataSource || 'N/A'}`;
+      if (ex.lastTickAgeMs !== undefined) {
+        context += ` (tick age: ${ex.lastTickAgeMs}ms)`;
+      }
+      context += `\n`;
+      if (ex.avgSubmitAckMs !== undefined) {
+        context += `  • Latency: ${ex.avgSubmitAckMs}ms (submit→ack)\n`;
+      }
+      if (ex.avgSlippageBps !== undefined) {
+        context += `  • Slippage: ${ex.avgSlippageBps.toFixed(2)} bps avg\n`;
+      }
+      if (ex.avgFeesPerTrade !== undefined) {
+        context += `  • Fees: $${ex.avgFeesPerTrade.toFixed(2)} per trade\n`;
+      }
+      if (ex.ratePressure) {
+        context += `  • Rate Pressure: ${ex.ratePressure}\n`;
+      }
+    }
+    
     if (criticalIssues && criticalIssues.length > 0) {
       context += `- CRITICAL: ${criticalIssues.length} issue(s) - ${criticalIssues[0]}\n`;
     } else if (warnings && warnings.length > 0) {
