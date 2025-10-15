@@ -1,54 +1,54 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-15T08:03:05.023Z",
+    "timestamp": "2025-10-15T08:03:35.023Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-15T08:03:05.023Z",
+        "lastUpdate": "2025-10-15T08:03:35.023Z",
         "stale": false,
         "hitRate": "73.0%",
-        "cacheSize": 1,
+        "cacheSize": 3,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-15T08:03:05.023Z",
+        "lastUpdate": "2025-10-15T08:03:35.023Z",
         "stale": false,
         "hitRate": "73.0%",
-        "cacheSize": 1,
+        "cacheSize": 3,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-15T08:03:05.023Z",
+        "lastUpdate": "2025-10-15T08:03:35.023Z",
         "stale": false,
         "hitRate": "73.0%",
-        "cacheSize": 1,
+        "cacheSize": 3,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-15T08:03:05.023Z",
+        "lastUpdate": "2025-10-15T08:03:35.023Z",
         "stale": false,
         "hitRate": "73.0%",
-        "cacheSize": 1,
+        "cacheSize": 3,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-15T08:03:05.023Z",
+        "lastUpdate": "2025-10-15T08:03:35.023Z",
         "stale": false,
         "hitRate": "73.0%",
-        "cacheSize": 1,
+        "cacheSize": 3,
         "ttl": 30
       }
     },
     "overallStats": {
       "modulesActive": 5,
-      "totalCacheSize": 1,
+      "totalCacheSize": 3,
       "overallHitRate": "73.0%",
-      "totalHits": 81,
-      "totalMisses": 30
+      "totalHits": 92,
+      "totalMisses": 34
     },
     "recentChanges": [],
     "systemHealth": "healthy"
@@ -57,9 +57,9 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-15T08:03:05.023Z"
+      "timestamp": "2025-10-15T08:03:35.023Z"
     }
   },
-  "last_sync": "2025-10-15T08:03:05.023Z",
+  "last_sync": "2025-10-15T08:03:35.023Z",
   "memory": {}
 }
