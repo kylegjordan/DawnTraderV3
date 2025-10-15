@@ -1,0 +1,95 @@
+⚙️ Phase 8.4 Addendum A — Natural-Language Action Interpreter + Interface Enhancements
+🎯 Objective
+
+Establish a Natural-Language Action Interpreter (NLAI) that lets Walter understand and execute conversational commands directly (e.g., “Please start the paper-trade simulation”) — while also upgrading the Walter UI Console for better usability, chat management, and expanded typing space.
+
+🧩 Action Steps
+1. Implement Natural-Language Action Interpreter (NLAI)
+
+Create a lightweight Intent Interpreter layer between Walter’s language engine and backend services.
+
+Interpreter receives Walter’s structured intent (verb + object) and matches it to an Action Registry.
+
+Registry entries include:
+
+start simulation / run phase 8.4 / begin trading → PaperTradeEngine.start()
+
+stop simulation / end trading → PaperTradeEngine.stop()
+
+generate report / compile summary → ReportService.generate()
+
+check health / system status → SystemHealthMonitor.report()
+
+Add an Execution Broker that dispatches the action to Bob Core modules or system APIs asynchronously and logs confirmations.
+
+2. Integrate NLAI with Walter
+
+Modify Walter’s response cycle so detected intents route through the Interpreter instead of returning “Unknown action.”
+
+Maintain stateless design – Interpreter must complete in < 10 ms per request.
+
+Confirm Walter’s chat now replies with execution feedback, e.g. “Phase 8.4 simulation started successfully – monitoring live data.”
+
+3. Preserve System Performance
+
+Keep all execution heavy-lifting in Bob Core; Walter only passes structured intent JSON.
+
+Use asynchronous task handling so Walter remains responsive during long-running jobs.
+
+Verify post-deployment latency increase < 5 %.
+
+4. Add Chat Management Features
+
+Implement chat deletion and archiving:
+
+Each chat entry shows “Archive” and “Delete” icons beside “Rename.”
+
+Confirm deletion removes chat and associated messages safely.
+
+Archiving moves chat to a collapsible “Archived Chats” section for later reference.
+
+5. Enhance Chat Interface and Usability
+
+Enable dynamic input box resizing – the text field expands vertically as the user types multiple lines (same behavior as ChatGPT).
+
+Increase chat window height to maximize vertical space within the Walter panel.
+
+Respect existing top bar (Live/Paper status, UTC clock).
+
+Allow main chat panel to fill remaining viewport height.
+
+Adjust bottom margin and button layout to eliminate unused white space below the input area.
+
+Preserve sidebar width and navigation layout.
+
+6. Testing and Verification
+
+In chat, issue: “Walter, please start Phase 8.4 Dry-Run Simulation now.”
+
+Expect Walter to confirm initiation and Paper Mode status → ACTIVE.
+
+Repeat with “Stop,” “Check system health,” and “Generate report” to verify NLAI action mapping.
+
+Confirm chat deletion/archiving buttons appear and function correctly.
+
+Test input-box expansion and window resizing across different screen resolutions.
+
+🧾 Verification Checklist
+✅ Check	Expected Result
+Walter executes natural-language commands	Simulation starts/stops on plain-English requests
+“Unknown action” no longer appears	All mapped intents succeed
+Response latency < 5 % increase	Walter remains responsive
+Chat deletion & archiving active	Chats removable or storable
+Dynamic input box	Expands smoothly with typing
+Chat window	Utilizes more vertical space
+🏁 Deliverables
+
+Natural-Language Action Interpreter service + registry integrated with Walter.
+
+Execution Broker routing to Bob Core modules.
+
+Updated Walter UI supporting chat deletion, archiving, and dynamic layout.
+
+Functional confirmation: Walter executes conversational commands without delay.
+
+Phase 8.4 Addendum A entry added to replit.md, documenting new interpreter layer and UI enhancements.

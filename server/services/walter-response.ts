@@ -19,6 +19,7 @@ import { walterDataPipeline } from './walter-data-pipeline';
 import { insightBob } from './bob-insight';
 import { uiBob } from './bob-ui';
 import { cortexCore } from './cortex/cortex-core';
+import { nlaiInterpreter } from './nlai-interpreter';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -76,11 +77,28 @@ export async function generateWalterResponse(
 
     console.log(`[Walter] Detected intent: ${intent} for message: "${userMessage.substring(0, 50)}..."`);
 
+    // Phase 8.4 Addendum A: NLAI - Natural Language Action Interpreter
+    // If intent is 'command', check if NLAI can execute it directly
+    if (intent === 'command') {
+      const nlaiResponse = await nlaiInterpreter.interpret(userId, userMessage);
+      
+      if (nlaiResponse.isActionable && nlaiResponse.executionResult) {
+        console.log(`[Walter-NLAI] Action executed: ${nlaiResponse.actionId} (${nlaiResponse.processingTimeMs}ms)`);
+        
+        // Return execution feedback directly without OpenAI call
+        const actionFeedback = nlaiInterpreter.formatExecutionFeedback(nlaiResponse);
+        return actionFeedback;
+      }
+      
+      // If NLAI couldn't handle it, continue with normal flow
+      console.log(`[Walter-NLAI] No action matched, proceeding with conversational response`);
+    }
+
     // 4. Build prompt with behavioral enhancement, feedback acknowledgment, and adaptive preferences
     const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
-    // 4. Call OpenAI
+    // 5. Call OpenAI
     const response = await callOpenAI(enhancedPrompt, userMessage);
 
     // 5. Validate response against behavioral requirements (Task 10)
