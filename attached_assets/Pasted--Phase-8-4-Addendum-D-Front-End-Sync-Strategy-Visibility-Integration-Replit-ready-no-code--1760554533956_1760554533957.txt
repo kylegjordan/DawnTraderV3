@@ -1,0 +1,118 @@
+🧩 Phase 8.4 Addendum D – Front-End Sync + Strategy Visibility Integration
+
+(Replit-ready, no code)
+
+🎯 Objective
+
+Ensure full synchronization between Walter’s backend trading engine and the front-end dashboard, while verifying that all enabled strategies are visible to both Cortex and Walter.
+
+This addendum resolves:
+
+UI showing Paper Mode: Stopped when backend reports engineActive: true.
+
+Walter listing only 3 of 8 strategies during Paper Mode, despite all being enabled.
+
+🧠 Action Steps
+1️⃣ Front-End and Back-End Sync Validation
+
+Verify that the front-end trading widget correctly polls /api/trading/status for both Live and Paper modes.
+
+Confirm the polling hook continues running after simulation start, and not limited to live mode only.
+
+Ensure the widget re-fetches /api/trading/status when:
+
+engineActive changes (true/false)
+
+[TradeEngine] start_ack or [TradeEngine] stop_ack logs are emitted
+
+Adjust caching or fetch configuration:
+
+Disable or reduce stale caching (e.g., revalidateOnFocus: true, revalidateOnInterval: 5000)
+
+Ensure updates every 5 seconds or less for smooth real-time display
+
+Test: When Walter starts a simulation, “Paper Mode” in the UI switches to Active within 3 seconds, and returns to Stopped when he ends it.
+
+2️⃣ Active Strategy Visibility Across System
+
+Validate that all 8 enabled strategies for Paper Mode are properly surfaced from StrategyBob and passed through the full chain:
+
+StrategyBob → BobCore → Cortex Snapshot → Walter Context
+
+
+Specifically verify:
+
+StrategyBob.listActive() or equivalent returns all active strategies, not a hardcoded subset.
+
+CortexCore.fetchBobSnapshot() captures the complete strategy list when syncing with Cortex.
+
+formatCortexContext() and buildPrompt() in Walter’s reasoning layer reference this full list, not static strategy names.
+
+/api/trading/status exposes activeStrategies[] as a dynamic array reflecting all currently enabled strategies.
+
+paper-run-1.log shows initialization of all 8 strategies during simulation startup.
+
+If Walter intentionally narrows his focus to a smaller subset, ensure he explains that reasoning based on confidence scores or volatility conditions — not due to missing visibility.
+
+3️⃣ Unified Diagnostics and Logging
+
+Add a lightweight consistency check to /api/trading/status:
+
+Compare backend engine’s activeStrategies count to Cortex snapshot’s recorded list.
+
+If mismatch > 0, emit warning:
+
+[CortexSync] Strategy visibility mismatch detected: backend=8, cortex=3
+
+
+Log visibility and sync results to /logs/system-health.log alongside existing status reports.
+
+4️⃣ Testing and Verification
+
+Perform an integrated test sequence after updates:
+
+Start a 10-minute Paper Mode simulation via Walter’s conversational request.
+
+Confirm /api/trading/status reports:
+
+engineActive: true
+
+mode: "paper"
+
+activeStrategies: 8
+
+Check the dashboard updates to Active and displays refreshed counts (filteredPairs, readyToBuy, activeTrades > 0).
+
+Mid-run, refresh the dashboard manually — data should remain consistent and not reset.
+
+When Walter stops the simulation:
+
+UI returns to Stopped
+
+engineActive: false
+
+[TradeEngine] stop_ack appears in logs
+
+Validate /logs/paper-trade/paper-run-1.log includes all 8 strategy initializations.
+
+✅ Acceptance Criteria
+Check	Expected Result
+Front-End Status Sync	UI updates within 3 seconds of engine start/stop
+Caching/Fetch Policy	revalidateOnInterval=5000ms confirmed
+/api/trading/status	Shows all active strategies (8 total)
+Cortex Snapshot	Matches backend list
+Walter Context	References all active strategies in reasoning
+Strategy Visibility Log	[CortexSync] Strategy visibility mismatch absent
+Architect Review	Pass – no stale UI or missing strategies
+Documentation	Addendum D section added to replit.md
+🧾 Deliverables
+
+Updated polling and state refresh mechanism for dashboard widget.
+
+Verified real-time synchronization between backend engine state and UI.
+
+Confirmed strategy visibility through StrategyBob → Cortex → Walter pipeline.
+
+Log validation proving parity between backend and Cortex active strategy sets.
+
+Updated replit.md with Addendum D details and test verification.

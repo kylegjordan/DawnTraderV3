@@ -133,9 +133,13 @@ export interface PortfolioMetrics {
 }
 
 export interface TradingStatus {
-  tradingStatus: 'active' | 'stopped';
-  tradingMode: 'live' | 'paper';
-  engineRunning: boolean;
+  mode: 'live' | 'paper';
+  engineActive: boolean;
+  activeStrategies: number;
+  filteredPairs: number;
+  readyToBuy: number;
+  activeTrades: number;
+  lastTickISO: string;
 }
 
 export interface MarketOverview {

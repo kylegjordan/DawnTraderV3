@@ -200,7 +200,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   // Determine if trading is active based on current mode
   const isActive = currentMode === 'paper' 
     ? paperSimStatus?.isRunning || false
-    : tradingStatus?.tradingStatus === 'active';
+    : tradingStatus?.engineActive || false;
 
   return (
     <header 
