@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-15T15:57:18.685Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals, which may indicate potential performance bottlenecks or insufficient CPU resources."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, no opportunities generated, and no adjustments made, indicating potential issues with AI functionality or configuration."
+    },
+    {
+      "severity": "low",
+      "message": "Trading system shows no active trades or profit/loss activity, which may be expected but should be confirmed as intentional."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider scaling up CPU resources or optimizing processes to reduce load average and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI system configuration and logs to ensure it is functioning correctly and generating trading opportunities as expected."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Evaluate memory usage patterns to ensure efficient use of available resources, potentially freeing up memory for other processes."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Investigate the cause of high CPU load and take corrective actions such as optimizing processes or increasing CPU capacity.",
+      "rationale": "High CPU load can lead to degraded system performance and impact trading operations, requiring prompt attention."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Check AI system logs and configurations to diagnose why no learning cycles or opportunities are being generated.",
+      "rationale": "The AI system is crucial for generating trading opportunities, and its inactivity could impact trading performance."
+    },
+    {
+      "urgencyLevel": "low",
+      "action": "Confirm with the trading team whether the lack of active trades and P&L activity is expected.",
+      "rationale": "Ensuring that the trading system is operating as intended helps maintain operational integrity."
+    }
+  ],
+  "urgencyLevel": "high"
+}

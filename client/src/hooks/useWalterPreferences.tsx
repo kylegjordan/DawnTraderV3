@@ -16,10 +16,17 @@ export function useWalterPreferences() {
 
   const updatePreferencesMutation = useMutation({
     mutationFn: async (updates: Partial<WalterPreferences>) => {
-      return await apiRequest('PUT', '/api/walter/preferences', updates);
+      console.log('[useWalterPreferences] Updating preferences:', updates);
+      const result = await apiRequest('PUT', '/api/walter/preferences', updates);
+      console.log('[useWalterPreferences] Update successful:', result);
+      return result;
     },
     onSuccess: () => {
+      console.log('[useWalterPreferences] Invalidating query cache');
       queryClient.invalidateQueries({ queryKey: ['/api/walter/preferences'] });
+    },
+    onError: (error) => {
+      console.error('[useWalterPreferences] Update failed:', error);
     },
   });
 
