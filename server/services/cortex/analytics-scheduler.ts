@@ -25,6 +25,7 @@ class AnalyticsScheduler {
   private interval: NodeJS.Timeout | null = null;
   private config: AnalyticsSchedulerConfig;
   private lastRun: string | null = null;
+  private lastLogTimestamp: number | null = null; // Track logging separately
 
   constructor() {
     this.config = {
@@ -127,13 +128,22 @@ class AnalyticsScheduler {
       console.log(`[${this.MODULE_NAME}]   - Best: ${strategySnapshot.bestPerformer || 'N/A'}`);
       console.log(`[${this.MODULE_NAME}]   - Portfolio Sharpe: ${portfolioSnapshot.portfolioSharpe}`);
 
-      // Log to file every 30 minutes (every 2nd cycle if interval is 15min)
-      const shouldLog = this.lastRun 
-        ? (Date.now() - new Date(this.lastRun).getTime()) >= 30 * 60 * 1000
-        : true;
+      // Log to file every 30 minutes (using separate timestamp tracker)
+      const now = Date.now();
+      const shouldLog = this.lastLogTimestamp === null 
+        ? true 
+        : (now - this.lastLogTimestamp) >= 30 * 60 * 1000;
+
+      // Diagnostic logging for cadence visibility
+      if (this.lastLogTimestamp !== null && mode === 'live') {
+        const minutesSinceLastLog = Math.floor((now - this.lastLogTimestamp) / 60000);
+        console.log(`[${this.MODULE_NAME}] 📊 Log check: ${minutesSinceLastLog}m since last log (threshold: 30m, shouldLog: ${shouldLog})`);
+      }
 
       if (shouldLog && mode === 'live') { // Only log once per cycle
         await this.logPerformanceSummary(strategySnapshot, portfolioSnapshot);
+        this.lastLogTimestamp = now; // Update log timestamp only when we actually log
+        console.log(`[${this.MODULE_NAME}] 📅 Next performance summary in 30 minutes`);
       }
 
     } catch (error) {
