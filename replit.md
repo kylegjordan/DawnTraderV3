@@ -54,6 +54,17 @@ A **Contextual Intent Engine (CIE)** elevates Walter with semantic understanding
 
 This infrastructure ensures Walter maintains accurate, real-time awareness of system state, enabling confident AI-driven recommendations and proactive detection of data drift across architectural layers. Auto-refresh integration eliminates stale context issues, while the Dashboard Truth Panel provides full transparency into cross-layer synchronization health.
 
+**Live Source Enforcement & Verification (Phase 8.5 Addendum I)** eliminates all stale or cached data sources to ensure every context refresh pulls from the live backend state. Core changes include:
+- **ContextRefreshCoordinator**: Now fetches data directly from `portfolio_state` table without fallback to hardcoded defaults (removed 1000 fallback). Matches `/api/trading/status` logic exactly for consistency. Includes `liveAPIUsed` markers in logs and `lastLivePortfolio` metric tracking. Auto-triggers resync when discrepancies detected after refresh.
+- **SystemTruthDiagnostic**: Eliminated hardcoded fallback values (changed from 1000 to 0 when no portfolio state exists). Added `liveAPIUsed: true` flag to truth comparison results to verify live data usage.
+- **PortfolioAggregator**: Deprecated `INITIAL_CAPITAL` constant. Now uses actual `portfolio_state.balance` or 0 if no state exists (no fallback to 1000).
+- **SystemHealthMonitor**: Extended with `lastContextSource` and `lastRefreshDelta` fields to track data source provenance. Sets `lastContextSource = "live-api"` and `lastRefreshDelta = 0` when successful live refresh completes with 0 discrepancies.
+- **Metrics Tracking**: ContextRefreshCoordinator metrics extended with `lastLivePortfolio` field. Already includes `refreshCount` (as `totalRefreshes`) and `avgRefreshLatency` (as `avgLatencyMs`).
+- **Log Markers**: All live API fetches log `[ContextSource] live-api ✓` markers for auditing. Logs include source and portfolio values (e.g., `source=live-api portfolio=800 strategies=3`).
+- **Auto-Resync Logic**: When truth check detects discrepancies after refresh, system automatically triggers secondary refresh with `source='resync'` to resolve misalignments without manual intervention.
+
+This ensures all context layers (Backend, Cortex, Walter) always reflect true live system state from `portfolio_state` table, eliminating phantom balance mismatches and ensuring data integrity across the platform.
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.
