@@ -543,8 +543,8 @@ export default function WalterPage() {
   const pendingApprovalsCount = approvalsData?.filter(a => a.status === 'pending').length || 0;
 
   return (
-    <div className="p-2 sm:p-3 lg:p-4 max-w-full overflow-hidden h-screen flex flex-col">
-      <div className="flex items-center justify-between mb-2">
+    <div className="px-2 sm:px-3 lg:px-4 pt-0 pb-2 max-w-full overflow-hidden h-screen flex flex-col">
+      <div className="flex items-center justify-between mb-0">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Walter</h1>
           <ModeIndicator />
