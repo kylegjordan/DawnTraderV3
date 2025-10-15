@@ -88,7 +88,7 @@ export default function WalterPage() {
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = '60px'; // Reset to min height
+      textarea.style.height = '120px'; // Reset to min height
       const scrollHeight = textarea.scrollHeight;
       const maxHeight = 200; // Max 200px
       textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
@@ -1013,7 +1013,7 @@ export default function WalterPage() {
                       onPaste={handlePaste}
                       placeholder="Ask Walter anything... (drag & drop files or paste images)"
                       className="resize-none pr-12 overflow-y-auto"
-                      style={{ minHeight: '60px', maxHeight: '200px' }}
+                      style={{ minHeight: '120px', maxHeight: '200px' }}
                       disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
                       data-testid="input-message"
                     />
