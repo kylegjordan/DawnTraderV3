@@ -135,7 +135,8 @@ export interface PortfolioMetrics {
 export interface TradingStatus {
   mode: 'live' | 'paper';
   engineActive: boolean;
-  activeStrategies: number;
+  activeStrategies: string[];
+  activeStrategiesCount: number;
   filteredPairs: number;
   readyToBuy: number;
   activeTrades: number;

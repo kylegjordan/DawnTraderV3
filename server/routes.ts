@@ -841,11 +841,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
       
       // Check if paper simulation is running (system-wide)
       const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
       const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
       const engineActive = isPaperSimRunning;
+      
+      // Get enabled strategies from strategy_settings table (dynamic array)
+      const strategySettingsList = await storage.listStrategySettings({ userId, mode });
+      const activeStrategies = strategySettingsList
+        .filter(s => s.enabled)
+        .map(s => s.strategy);
       
       // Get watchlist pairs (filtered pairs)
       const watchlist = await storage.getWatchlist(userId);
@@ -866,10 +873,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get last tick timestamp
       const lastTickISO = new Date().toISOString();
       
+      // Consistency check: Compare backend strategies with Cortex snapshot
+      try {
+        const cortexSnapshot = cortex.get(`strategy:summary:${mode}:${userId}`);
+        if (cortexSnapshot) {
+          const cortexStrategies = cortexSnapshot.filter((s: any) => s.enabled).map((s: any) => s.strategy);
+          if (cortexStrategies.length !== activeStrategies.length) {
+            console.warn(`[CortexSync] Strategy visibility mismatch detected: backend=${activeStrategies.length}, cortex=${cortexStrategies.length}`);
+          }
+        }
+      } catch (cortexError) {
+        // Cortex check is non-critical, don't fail the request
+      }
+      
       res.json({
-        mode: user?.tradingMode || 'paper',
+        mode,
         engineActive,
-        activeStrategies: 8, // Fixed: 8 automated strategies available
+        activeStrategies,
+        activeStrategiesCount: activeStrategies.length,
         filteredPairs,
         readyToBuy,
         activeTrades: activeTradesCount,
