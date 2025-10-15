@@ -7,6 +7,8 @@
  * - Returning unified responses with fallback support
  * 
  * This is a transparent optimization layer - does not change Walter behavior
+ * 
+ * Phase 8.3: Integrated with SystemHealthMonitor for diagnostics
  */
 
 import { nanoid } from 'nanoid';
@@ -48,6 +50,7 @@ interface CacheStats {
 /**
  * Bob Core Coordinator
  * Manages modules, caching, parallel fetching, and fallback behavior
+ * Phase 8.3: Integrated with SystemHealthMonitor for diagnostic tracking
  */
 class BobCoreCoordinator {
   private cache: Map<string, CacheEntry> = new Map();
@@ -59,10 +62,22 @@ class BobCoreCoordinator {
     fallbacks: 0,
     errors: 0
   };
+  
+  // Phase 8.3: Optional health monitor for diagnostics
+  private healthMonitor: any = null;
 
   constructor() {
     // Start cleanup interval to remove expired cache entries
     setInterval(() => this.cleanupExpiredEntries(), 10000); // Every 10 seconds
+  }
+
+  /**
+   * Set health monitor for diagnostic tracking (Phase 8.3)
+   * Allows injection after both modules are loaded to avoid circular deps
+   */
+  setHealthMonitor(monitor: any) {
+    this.healthMonitor = monitor;
+    console.log('[BobCore] 🏥 Health monitor integrated');
   }
 
   /**
@@ -99,12 +114,18 @@ class BobCoreCoordinator {
     // Check if cache hit and not expired
     if (cached && cached.expiresAt > now) {
       this.stats.hits++;
+      if (this.healthMonitor) {
+        this.healthMonitor.recordCacheHit();
+      }
       console.log(`[BobCore] ✅ CACHE_HIT: ${key} (TTL: ${Math.round((cached.expiresAt - now) / 1000)}s remaining)`);
       return cached.value as T;
     }
 
     // Cache miss - fetch data
     this.stats.misses++;
+    if (this.healthMonitor) {
+      this.healthMonitor.recordCacheMiss();
+    }
     const startTime = Date.now();
     console.log(`[BobCore] ❌ CACHE_MISS: ${key} - fetching...`);
 

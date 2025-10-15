@@ -7,6 +7,7 @@
 
 import { bobCore, FetchContext } from './bob-core';
 import { systemHealthService } from './system-health-service';
+import { systemHealthMonitor } from './system-health-monitor';
 
 /**
  * MetricsBob Module
@@ -27,6 +28,7 @@ class MetricsBobModule {
 
     fetchFunctions.set('systemHealth', this.fetchSystemHealth.bind(this));
     fetchFunctions.set('paperSimStatus', this.fetchPaperSimStatus.bind(this));
+    fetchFunctions.set('systemHealthMetrics', this.fetchSystemHealthMetrics.bind(this));
 
     bobCore.registerModule(this.MODULE_NAME, fetchFunctions);
   }
@@ -85,6 +87,26 @@ class MetricsBobModule {
   }
 
   /**
+   * Fetch detailed system health metrics from SystemHealthMonitor
+   * Phase 8.3 - System Health & Diagnostic Intelligence
+   */
+  private async fetchSystemHealthMetrics(context: FetchContext): Promise<any> {
+    const startTime = Date.now();
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching system health metrics`);
+
+    try {
+      const healthStatus = systemHealthMonitor.analyzeHealth();
+      const duration = Date.now() - startTime;
+      
+      console.log(`[${this.MODULE_NAME}] ✅ System health metrics fetched in ${duration}ms (status: ${healthStatus.status})`);
+      return healthStatus;
+    } catch (error: any) {
+      console.error(`[${this.MODULE_NAME}] ❌ System health metrics fetch failed:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Get system health with caching
    * Public API for routes to use
    */
@@ -115,6 +137,23 @@ class MetricsBobModule {
       ttl,
       context,
       ['metrics', 'paperSim', 'paper']
+    );
+  }
+
+  /**
+   * Get detailed system health metrics with caching
+   * Public API for routes to use (Phase 8.3)
+   */
+  async getSystemHealthMetrics(ttl: number = 5): Promise<any> {
+    const key = `metrics:systemHealthMonitor`;
+    const context: FetchContext = { mode: 'live' };
+
+    return await bobCore.fetchOrServe(
+      key,
+      () => this.fetchSystemHealthMetrics(context),
+      ttl,
+      context,
+      ['metrics', 'healthMonitor']
     );
   }
 

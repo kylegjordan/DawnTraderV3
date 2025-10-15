@@ -349,5 +349,15 @@ app.use((req, res, next) => {
     } catch (error) {
       console.error('[AnalyticsScheduler] ⚠️ Startup failed:', error);
     }
+
+    // Phase 8.3: Integrate SystemHealthMonitor with BobCore
+    try {
+      const { systemHealthMonitor } = await import('./services/system-health-monitor');
+      const { bobCore } = await import('./services/bob-core');
+      bobCore.setHealthMonitor(systemHealthMonitor);
+      console.log('[SystemHealthMonitor] ✅ Integrated with BobCore');
+    } catch (error) {
+      console.error('[SystemHealthMonitor] ⚠️ Integration failed:', error);
+    }
   });
 })();
