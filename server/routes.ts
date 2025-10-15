@@ -874,6 +874,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get last tick timestamp
       const lastTickISO = new Date().toISOString();
       
+      // Get portfolio balance from portfolio_state (Phase 8.5 Addendum F)
+      const portfolioState = await storage.getPortfolioState({ userId, mode });
+      const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 0;
+      
       // Consistency check: Compare backend strategies with Cortex snapshot
       try {
         const cortexSnapshot = cortexCore.get(`strategy:summary:${mode}:${userId}`);
@@ -895,6 +899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filteredPairs,
         readyToBuy,
         activeTrades: activeTradesCount,
+        portfolioBalance,
         lastTickISO
       });
     } catch (error) {
