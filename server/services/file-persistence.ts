@@ -126,9 +126,9 @@ class FilePersistenceService {
     category: FileCategory,
     filename: string,
     content: string | Buffer,
-    options: { timeout?: number; skipVerification?: boolean } = {}
+    options: { timeout?: number; skipVerification?: boolean; append?: boolean } = {}
   ): Promise<FileSaveResult> {
-    const { timeout = 5000, skipVerification = false } = options;
+    const { timeout = 5000, skipVerification = false, append = false } = options;
     const startTime = Date.now();
     this.metrics.totalOperations++;
 
@@ -140,7 +140,9 @@ class FilePersistenceService {
       const basePath = this.BASE_PATHS[category];
       const filePath = path.join(basePath, filename);
       
-      const writePromise = fs.writeFile(filePath, content, 'utf-8');
+      const writePromise = append 
+        ? fs.appendFile(filePath, content, 'utf-8')
+        : fs.writeFile(filePath, content, 'utf-8');
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('File write timeout')), timeout)
       );
@@ -189,7 +191,11 @@ class FilePersistenceService {
           await fs.mkdir(tmpDir, { recursive: true });
           const tmpFilePath = path.join(tmpDir, filename);
           
-          await fs.writeFile(tmpFilePath, content, 'utf-8');
+          if (append) {
+            await fs.appendFile(tmpFilePath, content, 'utf-8');
+          } else {
+            await fs.writeFile(tmpFilePath, content, 'utf-8');
+          }
           
           if (!skipVerification) {
             await fs.access(tmpFilePath);

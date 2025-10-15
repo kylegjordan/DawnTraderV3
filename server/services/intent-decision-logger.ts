@@ -8,6 +8,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type { IntentClassification } from './intent-classifier';
+import { filePersistence } from './file-persistence';
 
 export interface IntentDecisionLog {
   timestamp: string;
@@ -66,11 +67,8 @@ export class IntentDecisionLogger {
       // Format log entry
       const logEntry = this.formatLogEntry(log);
 
-      // Ensure log directory exists
-      await fs.mkdir(this.LOG_DIR, { recursive: true });
-
-      // Append to log file
-      await fs.appendFile(this.LOG_FILE, logEntry + '\n', 'utf-8');
+      // Append to log file using filePersistence
+      await filePersistence.saveFile('log', 'intent-decisions.log', logEntry + '\n', { append: true });
 
       // Check and rotate log if needed
       await this.rotateIfNeeded();

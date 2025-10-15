@@ -130,12 +130,12 @@ class HealthReportScheduler {
       report += `  Avg Latency:      ${fp.avgLatencyMs}ms\n`;
       
       // Category breakdown
-      const categories = Object.entries(fp.byCategory).filter(([_, stats]) => stats.success > 0 || stats.failed > 0);
+      const categories = Object.entries(fp.byCategory).filter(([_, stats]) => (stats as any).success > 0 || (stats as any).failed > 0);
       if (categories.length > 0) {
         report += `  By Category:\n`;
-        categories.forEach(([cat, stats]) => {
+        categories.forEach(([cat, stats]: [string, any]) => {
           const status = stats.failed === 0 ? 'OK' : `${stats.failed} warning${stats.failed !== 1 ? 's' : ''}`;
-          const avgLatency = stats.success > 0 ? Math.round(stats.avgLatencyMs / stats.success) : 0;
+          const avgLatency = stats.avgLatencyMs || 0;
           report += `    ${cat.padEnd(12)} ${status} (${stats.success} saved, ${avgLatency}ms avg)\n`;
         });
       }
@@ -195,7 +195,7 @@ class HealthReportScheduler {
    */
   private async appendToLog(report: string): Promise<void> {
     try {
-      await fs.appendFile(this.logPath, report, 'utf8');
+      await filePersistence.saveFile('log', 'system-health.log', report, { append: true });
     } catch (error: any) {
       console.error(`[${this.MODULE_NAME}] ❌ Failed to write log:`, error.message);
       throw error;

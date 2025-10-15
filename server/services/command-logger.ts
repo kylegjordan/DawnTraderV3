@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import type { ParsedIntent } from './intent-parser';
 import type { CommandResult } from './command-router';
+import { filePersistence } from './file-persistence';
 
 interface CommandLogEntry {
   timestamp: string;
@@ -81,13 +82,13 @@ class CommandLogger {
 
       // Log to date-specific file
       const dateStr = new Date().toISOString().split('T')[0];
-      const logFile = path.join(this.logsDir, `commands_${dateStr}.jsonl`);
+      const fileName = `commands_${dateStr}.jsonl`;
       
-      await fs.appendFile(logFile, JSON.stringify(entry) + '\n');
+      await filePersistence.saveFile('log', fileName, JSON.stringify(entry) + '\n', { append: true });
 
       // Also log to user-specific file
-      const userLogFile = path.join(this.logsDir, `user_${userId}_${dateStr}.jsonl`);
-      await fs.appendFile(userLogFile, JSON.stringify(entry) + '\n');
+      const userFileName = `user_${userId}_${dateStr}.jsonl`;
+      await filePersistence.saveFile('log', userFileName, JSON.stringify(entry) + '\n', { append: true });
 
       console.log(`[CommandLogger] Logged command: ${intent.type} - ${intent.action} ${intent.entity} (User: ${userId})`);
     } catch (error) {
@@ -119,9 +120,9 @@ class CommandLogger {
       };
 
       const dateStr = new Date().toISOString().split('T')[0];
-      const logFile = path.join(this.logsDir, `confirmations_${dateStr}.jsonl`);
+      const fileName = `confirmations_${dateStr}.jsonl`;
       
-      await fs.appendFile(logFile, JSON.stringify(entry) + '\n');
+      await filePersistence.saveFile('log', fileName, JSON.stringify(entry) + '\n', { append: true });
 
       console.log(`[CommandLogger] Logged confirmation: ${confirmationId} - ${confirmed ? 'accepted' : 'rejected'} (User: ${userId})`);
     } catch (error) {

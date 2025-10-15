@@ -827,40 +827,34 @@ function logBehavioralTest(
   response: string,
   validation: ValidationResult
 ): void {
-  import('fs').then(fs => {
-    import('path').then(path => {
-      const logEntry = {
-        timestamp: new Date().toISOString(),
-        userId,
-        userMessage,
-        detectedIntent: intent,
-        walterResponse: response,
-        validation: {
-          passed: validation.passed,
-          tone: validation.tone,
-          safetyCompliant: validation.safetyCompliant,
-          usedContext: validation.usedContext,
-          issues: validation.issues,
-          templateMatch: validation.templateMatch
+  import('./file-persistence').then(({ filePersistence }) => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      userId,
+      userMessage,
+      detectedIntent: intent,
+      walterResponse: response,
+      validation: {
+        passed: validation.passed,
+        tone: validation.tone,
+        safetyCompliant: validation.safetyCompliant,
+        usedContext: validation.usedContext,
+        issues: validation.issues,
+        templateMatch: validation.templateMatch
+      }
+    };
+
+    // Append log entry using filePersistence
+    filePersistence.saveFile('log', 'behavioral-tests.log', JSON.stringify(logEntry) + '\n', { append: true })
+      .then(() => {
+        // Console log for monitoring
+        console.log(`[Behavioral Test] ${validation.passed ? '✅ PASS' : '❌ FAIL'} - Intent: ${intent}, Match: ${validation.templateMatch}%`);
+        if (!validation.passed) {
+          console.log(`[Behavioral Test] Issues: ${validation.issues.join(', ')}`);
         }
-      };
-
-      const logDir = path.join(process.cwd(), 'logs');
-      const logFile = path.join(logDir, 'behavioral-tests.log');
-
-      // Ensure logs directory exists
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
-      }
-
-      // Append log entry
-      fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n');
-
-      // Console log for monitoring
-      console.log(`[Behavioral Test] ${validation.passed ? '✅ PASS' : '❌ FAIL'} - Intent: ${intent}, Match: ${validation.templateMatch}%`);
-      if (!validation.passed) {
-        console.log(`[Behavioral Test] Issues: ${validation.issues.join(', ')}`);
-      }
-    });
+      })
+      .catch((error) => {
+        console.error('[Behavioral Test] Error logging:', error);
+      });
   });
 }

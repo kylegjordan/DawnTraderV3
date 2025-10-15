@@ -3,6 +3,7 @@ import { PaperExecutionEngine } from './paper-execution-engine';
 import { PaperPortfolioManager } from './paper-portfolio-manager';
 import fs from 'fs';
 import path from 'path';
+import { filePersistence } from './file-persistence';
 
 interface SimulationConfig {
   startingBalance: number;
@@ -233,15 +234,10 @@ export class Paper48HrSimulation {
       trades: []
     };
 
-    const sessionPath = path.join(
-      process.cwd(),
-      'logs',
-      'trading_sessions',
-      `${this.sessionId}.json`
-    );
+    const fileName = `${this.sessionId}.json`;
 
-    fs.writeFileSync(sessionPath, JSON.stringify(sessionLog, null, 2));
-    console.log(`📝 Session log initialized: ${sessionPath}`);
+    await filePersistence.saveFile('report', fileName, JSON.stringify(sessionLog, null, 2));
+    console.log(`📝 Session log initialized: ${fileName}`);
   }
 
   private async logConsoleUpdate(): Promise<void> {
@@ -265,15 +261,10 @@ export class Paper48HrSimulation {
   private async generateRollingSummary(): Promise<void> {
     try {
       const summary = await this.getCurrentSummary();
-      const summaryPath = path.join(
-        process.cwd(),
-        'logs',
-        'trading_summaries',
-        `summary_${Date.now()}.json`
-      );
+      const fileName = `summary_${Date.now()}.json`;
 
-      fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
-      console.log(`📊 6-hour summary generated: ${summaryPath}`);
+      await filePersistence.saveFile('report', fileName, JSON.stringify(summary, null, 2));
+      console.log(`📊 6-hour summary generated: ${fileName}`);
     } catch (error) {
       console.error(`[48HrSim:${this.userId}] Error generating rolling summary:`, error);
     }
@@ -285,8 +276,8 @@ export class Paper48HrSimulation {
       summary.endTime = new Date().toISOString();
       summary.status = completed ? 'completed' : 'interrupted';
 
-      const fullPath = path.join(process.cwd(), reportPath);
-      fs.writeFileSync(fullPath, JSON.stringify(summary, null, 2));
+      const fileName = reportPath.split('/').pop() || 'trading_summary.json';
+      await filePersistence.saveFile('report', fileName, JSON.stringify(summary, null, 2));
 
       // Display final results
       console.log(`\n${'='.repeat(70)}`);
@@ -327,15 +318,10 @@ export class Paper48HrSimulation {
         recommendations: this.generateRecommendations(allTrades)
       };
 
-      const analysisPath = path.join(
-        process.cwd(),
-        'logs',
-        'ai_analysis',
-        'ai_trading_behavior_summary.json'
-      );
+      const fileName = 'ai_trading_behavior_summary.json';
 
-      fs.writeFileSync(analysisPath, JSON.stringify(analysis, null, 2));
-      console.log(`🤖 AI analysis generated: ${analysisPath}`);
+      await filePersistence.saveFile('analysis', fileName, JSON.stringify(analysis, null, 2));
+      console.log(`🤖 AI analysis generated: ${fileName}`);
     } catch (error) {
       console.error(`[48HrSim:${this.userId}] Error generating AI analysis:`, error);
     }
