@@ -85,7 +85,7 @@ class InsightBob {
     
     // Get module-specific insights
     const modules: Record<string, ModuleInsight> = {};
-    const moduleNames = ['MetricsBob', 'DataBob', 'ConfigBob', 'StrategyBob', 'TradeBob'];
+    const moduleNames = ['MetricsBob', 'DataBob', 'ConfigBob', 'StrategyBob', 'TradeBob', 'InsightBob', 'UIBob'];
     
     for (const moduleName of moduleNames) {
       const module = bobCore.getModule(moduleName);

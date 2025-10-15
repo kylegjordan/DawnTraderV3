@@ -1,54 +1,70 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-15T08:03:35.023Z",
+    "timestamp": "2025-10-15T08:10:48.460Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-15T08:03:35.023Z",
+        "lastUpdate": "2025-10-15T08:10:48.459Z",
         "stale": false,
-        "hitRate": "73.0%",
+        "hitRate": "70.5%",
         "cacheSize": 3,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-15T08:03:35.023Z",
+        "lastUpdate": "2025-10-15T08:10:48.460Z",
         "stale": false,
-        "hitRate": "73.0%",
+        "hitRate": "70.5%",
         "cacheSize": 3,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-15T08:03:35.023Z",
+        "lastUpdate": "2025-10-15T08:10:48.460Z",
         "stale": false,
-        "hitRate": "73.0%",
+        "hitRate": "70.5%",
         "cacheSize": 3,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-15T08:03:35.023Z",
+        "lastUpdate": "2025-10-15T08:10:48.460Z",
         "stale": false,
-        "hitRate": "73.0%",
+        "hitRate": "70.5%",
         "cacheSize": 3,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-15T08:03:35.023Z",
+        "lastUpdate": "2025-10-15T08:10:48.460Z",
         "stale": false,
-        "hitRate": "73.0%",
+        "hitRate": "70.5%",
+        "cacheSize": 3,
+        "ttl": 30
+      },
+      "InsightBob": {
+        "name": "InsightBob",
+        "lastUpdate": "2025-10-15T08:10:48.460Z",
+        "stale": false,
+        "hitRate": "70.5%",
+        "cacheSize": 3,
+        "ttl": 30
+      },
+      "UIBob": {
+        "name": "UIBob",
+        "lastUpdate": "2025-10-15T08:10:48.460Z",
+        "stale": false,
+        "hitRate": "70.5%",
         "cacheSize": 3,
         "ttl": 30
       }
     },
     "overallStats": {
-      "modulesActive": 5,
+      "modulesActive": 7,
       "totalCacheSize": 3,
-      "overallHitRate": "73.0%",
-      "totalHits": 92,
-      "totalMisses": 34
+      "overallHitRate": "70.5%",
+      "totalHits": 31,
+      "totalMisses": 13
     },
     "recentChanges": [],
     "systemHealth": "healthy"
@@ -57,9 +73,9 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-15T08:03:35.023Z"
+      "timestamp": "2025-10-15T08:10:48.460Z"
     }
   },
-  "last_sync": "2025-10-15T08:03:35.023Z",
+  "last_sync": "2025-10-15T08:10:48.460Z",
   "memory": {}
 }
