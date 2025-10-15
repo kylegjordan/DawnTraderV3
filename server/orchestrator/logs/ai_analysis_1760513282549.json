@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-15T07:28:02.549Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "High CPU load average across all time intervals, indicating potential overutilization or inefficiency."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero opportunities generated, and no adjustments made, suggesting it may not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Zero active trades and total profit/loss, indicating potential issues with trading strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance bottlenecks."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI algorithms to ensure they are generating opportunities and making adjustments as expected."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments or new strategies to improve trading outcomes."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough investigation of the CPU load to identify processes causing high usage and optimize or redistribute workloads.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Perform a diagnostic check on the AI system to ensure it is operational and capable of learning and generating trading opportunities.",
+      "rationale": "Ensuring the AI system is functioning correctly is crucial for maintaining competitive trading strategies."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the current market conditions and the performance of active trading strategies to determine if adjustments are needed.",
+      "rationale": "Adapting trading strategies to current market conditions can improve profitability and trading success."
+    }
+  ],
+  "urgencyLevel": "high"
+}

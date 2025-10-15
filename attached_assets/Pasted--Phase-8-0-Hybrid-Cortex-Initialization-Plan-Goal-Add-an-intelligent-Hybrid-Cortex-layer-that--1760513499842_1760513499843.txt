@@ -1,0 +1,155 @@
+🧠 Phase 8.0 Hybrid Cortex Initialization Plan
+
+Goal: Add an intelligent “Hybrid Cortex” layer that stores short-term memory, orchestrates tasks, and provides local reasoning capacity between Bob Core and Walter.
+Type: No-code configuration + low-touch integration steps
+Duration: ~2 hours setup / 30 min validation
+
+1️⃣ Create the Cortex Environment
+a. Add Cortex Service Container
+
+In your workspace (Replit / Node runtime), open your existing services folder.
+
+Add a new folder: /server/services/cortex
+
+Inside, create these placeholder files (no code yet—just create files):
+
+cortex-config.yaml – settings for memory TTL, vector size, and storage type.
+
+cortex-memory.json – empty file to store cached conversation and context states.
+
+cortex-registry.json – list of all Mini-Bobs (local reasoners) to be declared later.
+
+b. Prepare Local Memory Store
+
+In Replit Secrets or your .env file, add:
+
+CORTEX_MEMORY_PROVIDER=redis
+REDIS_URL=redis://localhost:6379
+
+
+If you don’t want Redis, specify:
+
+CORTEX_MEMORY_PROVIDER=file
+CORTEX_MEMORY_PATH=server/services/cortex/cortex-memory.json
+
+2️⃣ Configure Knowledge Cache Schema
+
+In cortex-config.yaml, enter (as plain YAML text):
+
+memory:
+  short_term_ttl: 300
+  long_term_ttl: 86400
+  vector_dimensions: 1024
+  embedding_model: text-embedding-3-small
+registry:
+  active_modules:
+    - DataBob
+    - MetricsBob
+    - ConfigBob
+    - StrategyBob
+    - TradeBob
+    - InsightBob
+    - UIBob
+orchestration:
+  mode: passive
+  refresh_interval: 30
+
+
+This defines TTLs (Time to Live), active Bob modules for snapshot sync, and an orchestration heartbeat interval.
+
+3️⃣ Initialize Memory Snapshots (No Code Needed)
+
+From the dashboard, call (via Postman or browser):
+
+GET /api/bob/insight → copy output into cortex-memory.json under "bob_snapshot"
+
+GET /api/ui/state → append under "ui_snapshot"
+
+Save file.
+This creates the first Cortex snapshot so Walter can retrieve context instantly.
+
+4️⃣ Define Cortex Bridge Settings
+
+In your system-settings or admin panel (no coding):
+
+Setting	Description	Suggested Value
+Enable Hybrid Cortex	Turns the layer on	✅ Enabled
+Cortex Memory TTL	Time for ephemeral memory	300 s
+Cortex Sync Frequency	How often Bob Core pushes state	30 s
+Cortex Mini-Bobs	Number of local reasoners	0 (for now)
+Fallback to Walter	When local reasoning fails	✅ Yes
+
+Save and restart the service runtime.
+No code — this just tells the system to load Cortex files and register them.
+
+5️⃣ Add Hybrid Cortex Telemetry Hooks
+
+Use your no-code logging interface (same panel you used for InsightBob):
+
+Create a new log channel called cortex.log.
+
+Map the following sources to it:
+
+/api/bob/insight updates
+
+/api/ui/state changes
+
+/api/walter/context events
+
+Verify entries appear every 30 seconds as Bob Core syncs.
+
+6️⃣ Create the Cortex Dashboard View
+
+Without code, in your UI builder or admin console:
+
+Add new tab → “Cortex Memory”.
+
+Bind to:
+
+cortex-memory.json → Table view of keys + TTL.
+
+cortex-registry.json → List view of Mini-Bobs.
+
+cortex.log → Live console feed.
+
+Include buttons for: Flush Memory, Force Sync, Inspect Snapshot.
+
+7️⃣ Run Validation Routine
+
+Open browser and navigate to /api/cortex/status.
+
+Expected fields: memory_size, modules_synced, last_refresh.
+
+Ask Walter a contextual question:
+
+“What was the last module update?”
+He should reference InsightBob data via Cortex memory.
+
+Watch cortex.log to see memory fetch events.
+
+8️⃣ Operational Checklist
+Checkpoint	Expected Result
+Redis/file store active	✅ CORTEX_MEMORY_PROVIDER validated
+Cortex heartbeat logs appear	✅ Every 30 s
+Bob snapshot visible in memory	✅ “bob_snapshot” object exists
+Walter references context	✅ He answers based on state
+Flush Memory button works	✅ TTL reset confirmed
+9️⃣ Optional Extensions (after stabilization)
+
+Mini-Bobs: Declare one in cortex-registry.json to run local logic later.
+
+Vector Memory: Add LlamaIndex or LangChain embedding store if Redis available.
+
+Knowledge Sync: Schedule hourly snapshot uploads to Bob Core for long-term storage.
+
+✅ Completion Outcome
+
+After Phase 8.0 Initialization:
+
+You have a live Hybrid Cortex service with memory TTL, state sync, and local persistence.
+
+Walter can query Cortex for context before calling OpenAI (instant state awareness).
+
+Bob Core pushes updates automatically — no code change required.
+
+You can observe Cortex activity and flush memory from your dashboard.
