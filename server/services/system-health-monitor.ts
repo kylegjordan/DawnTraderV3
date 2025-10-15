@@ -237,6 +237,32 @@ class SystemHealthMonitor {
       warnings.push(`CPU usage high: ${metrics.system.cpuUsage}%`);
     }
 
+    // Check scheduler health - warn if no runs in last 5 minutes
+    const now = Date.now();
+    const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+    
+    if (metrics.schedulers.cortexSync.lastRun) {
+      const lastRunTime = new Date(metrics.schedulers.cortexSync.lastRun).getTime();
+      const timeSinceLastRun = now - lastRunTime;
+      
+      if (timeSinceLastRun > STALE_THRESHOLD_MS) {
+        warnings.push(`Cortex sync scheduler inactive: last run ${Math.floor(timeSinceLastRun / 60000)}m ago`);
+      }
+    } else if (metrics.schedulers.cortexSync.uptime > 120) { // Only warn after 2 min uptime
+      warnings.push(`Cortex sync scheduler has never run (uptime: ${Math.floor(metrics.schedulers.cortexSync.uptime / 60)}m)`);
+    }
+
+    if (metrics.schedulers.analytics.lastRun) {
+      const lastRunTime = new Date(metrics.schedulers.analytics.lastRun).getTime();
+      const timeSinceLastRun = now - lastRunTime;
+      
+      if (timeSinceLastRun > STALE_THRESHOLD_MS) {
+        warnings.push(`Analytics scheduler inactive: last run ${Math.floor(timeSinceLastRun / 60000)}m ago`);
+      }
+    } else if (metrics.schedulers.analytics.uptime > 120) {
+      warnings.push(`Analytics scheduler has never run (uptime: ${Math.floor(metrics.schedulers.analytics.uptime / 60)}m)`);
+    }
+
     const status = criticalIssues.length > 0 
       ? 'critical' 
       : warnings.length > 0 

@@ -1809,6 +1809,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Phase 8.3: Health Log Viewer - Returns recent health reports
+  app.get('/api/system/health-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const logPath = path.join(process.cwd(), 'logs/system-health.log');
+      
+      const content = await fs.readFile(logPath, 'utf-8');
+      const lines = content.split('\n');
+      const limit = parseInt(req.query.limit as string) || 100;
+      
+      // Return last N lines
+      const recentLines = lines.slice(-limit).join('\n');
+      
+      res.type('text/plain').send(recentLines);
+    } catch (error: any) {
+      console.error('[HealthLogs] Error:', error);
+      res.status(500).json({ 
+        error: 'Failed to read health logs', 
+        message: error.message 
+      });
+    }
+  });
+
   app.post('/api/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     

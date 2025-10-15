@@ -91,6 +91,14 @@ class AnalyticsScheduler {
       const duration = Date.now() - cycleStart;
       console.log(`[${this.MODULE_NAME}] ✅ Analytics cycle completed in ${duration}ms`);
 
+      // Phase 8.3: Track scheduler run for health monitoring
+      try {
+        const { systemHealthMonitor } = await import('../system-health-monitor');
+        systemHealthMonitor.updateSchedulerRun('analytics');
+      } catch (err) {
+        // Health monitor not available, continue
+      }
+
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] ❌ Analytics cycle failed:`, error);
     }

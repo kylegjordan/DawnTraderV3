@@ -125,6 +125,14 @@ class CortexCore {
 
       await this.saveMemory();
       console.log('[CortexCore] 📸 Snapshots synced successfully');
+      
+      // Phase 8.3: Track scheduler run for health monitoring
+      try {
+        const { systemHealthMonitor } = await import('../system-health-monitor');
+        systemHealthMonitor.updateSchedulerRun('cortexSync');
+      } catch (err) {
+        // Health monitor not available, continue
+      }
     } catch (error) {
       console.error('[CortexCore] ❌ Sync failed:', error);
     }
