@@ -1,0 +1,140 @@
+Phase 8.3 — System Health & Diagnostic Intelligence
+🎯 Objective
+
+Transform Dawn Trader into a self-aware, self-healing system that continuously monitors performance, detects anomalies, and automatically responds to recoverable issues.
+The goal is for MetricsBob, CortexCore, and Walter to cooperate in producing live Health Reports and executing automatic corrections before the 10-minute dry-run simulation begins.
+
+🧩 Action Steps
+1. Verify Baseline Integrity
+
+Confirm all 7 Bob modules still sync every 30 seconds.
+
+Ensure analytics caches (strategy_analytics, portfolio_summary) refresh every 15 minutes.
+
+Check log lines for:
+
+[CortexCore] 📸 Snapshots synced successfully
+
+[AnalyticsScheduler] ✅ Analytics cycle completed
+
+2. Establish System Health Monitors
+
+Create health metrics for:
+
+Redis / Cortex latency
+
+Database query times
+
+API response latency
+
+Scheduler uptime intervals
+
+Cache hit rate (% success > 80 %)
+
+Have MetricsBob record these values and expose them to Cortex as system_health.
+
+3. Introduce Anomaly Detection Rules
+
+Define thresholds for key indicators:
+
+Redis latency > 200 ms = Warning
+
+DB latency > 500 ms = Warning
+
+Cache hit rate < 60 % = Warning
+
+Miss rate > 40 % or stale data > 90 s = Critical
+
+Configure Walter to receive these flags through Cortex and note them in diagnostic summaries.
+
+4. Implement Self-Repair Actions
+
+If a Critical flag occurs, CortexCore should attempt:
+
+Auto-restart affected sync cycle
+
+Reconnect Redis or Database service
+
+Retry API requests up to 3 times
+
+Verify that logs show recovery messages (e.g., [CortexCore] Reconnected after failure).
+
+5. Generate Automated Health Reports
+
+Every hour, MetricsBob should produce a System Health Report containing:
+
+CPU usage, memory usage, and uptime
+
+Cache hit rate and miss rate
+
+Average module latencies
+
+Count of recoveries performed
+
+Overall status (Healthy, Degraded, Critical)
+
+Store each report in /logs/system-health.log and cache a summary in Cortex under system_health.
+
+6. Integrate Health Awareness into Walter
+
+Ensure Walter’s context includes a summary of system health status.
+
+Verify prompt logs contain entries like:
+
+[Walter] System status: Healthy (99.2% uptime, 83% cache hit rate)
+
+Walter should prioritize analysis or actions that improve health metrics when issues are detected.
+
+7. Add API Endpoints for Diagnostics
+
+/api/system/health → returns current status snapshot
+
+/api/system/recover → manually trigger self-repair cycle (for testing)
+
+Confirm both respond with HTTP 200 and structured JSON data.
+
+8. Validate End-to-End Diagnostics
+
+Simulate a failure (e.g., pause Redis for 60 s).
+
+Observe that Warnings escalate to Critical, then auto-recover.
+
+Verify entries in system-health.log show incident → recovery timeline.
+
+Confirm Cortex cache and Bob modules continue syncing post-recovery.
+
+9. Generate Verification Report & Update Docs
+
+Produce a final Phase 8.3 System Health Report showing:
+
+Uptime percentage
+
+Average latency across modules
+
+Cache hit rate improvement
+
+Number of auto-recoveries triggered
+
+Append results to replit.md under Phase 8.3 with “Architect Review Passed” status.
+
+🧾 Testing & Verification Checklist
+✅ Check	Expected Result
+7 Bob modules sync normally	Logs show continuous Cortex updates
+System health metrics collected & cached	system_health visible in Cortex
+Warnings triggered at thresholds	Logs show graded alerts (Warn/Critical)
+Auto-repair cycles execute on Critical	Recovery confirmed in logs
+Hourly Health Reports generated	/logs/system-health.log updates regularly
+Walter context includes health summary	Appears in AI prompt context
+API diagnostics respond correctly	200 OK with JSON status output
+Recovery simulation successful	Cortex returns to healthy state post-test
+🏁 Deliverables for Phase 8.3 Completion
+
+Live System Health Monitor active and visible via logs + API.
+
+Auto-Recovery Mechanism validated for Redis and DB latency failures.
+
+Hourly System Health Reports stored and cached in Cortex.
+
+Walter Reasoning Integration showing purpose-aligned responses to system health conditions.
+
+Phase 8.3 Documentation added to replit.md with verification results and architect approval.
