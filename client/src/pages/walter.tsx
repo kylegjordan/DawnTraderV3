@@ -544,7 +544,7 @@ export default function WalterPage() {
   const pendingApprovalsCount = approvalsData?.filter(a => a.status === 'pending').length || 0;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-4 max-w-full overflow-hidden h-screen flex flex-col">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-1 max-w-full overflow-hidden h-screen flex flex-col">
       <ModeBanner />
       
       <div className="flex items-center justify-between">
