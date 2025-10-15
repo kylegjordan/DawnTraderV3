@@ -6875,8 +6875,12 @@ Summary:`;
           markdown += `---\n\n`;
         }
         
+        // Save export file via FilePersistenceService
+        const fileName = `${chat.title || 'chat'}-${id}.md`;
+        await filePersistence.saveFile('export', fileName, markdown);
+        
         res.setHeader('Content-Type', 'text/markdown');
-        res.setHeader('Content-Disposition', `attachment; filename="${chat.title || 'chat'}-${id}.md"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
         res.send(markdown);
       } else if (format === 'pdf') {
         // For PDF, we'll return JSON with message data that frontend can convert
