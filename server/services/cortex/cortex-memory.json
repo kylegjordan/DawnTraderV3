@@ -1,6 +1,65 @@
 {
-  "bob_snapshot": null,
-  "ui_snapshot": null,
-  "last_sync": null,
+  "bob_snapshot": {
+    "timestamp": "2025-10-15T07:37:35.534Z",
+    "modules": {
+      "MetricsBob": {
+        "name": "MetricsBob",
+        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "stale": false,
+        "hitRate": "50.0%",
+        "cacheSize": 5,
+        "ttl": 30
+      },
+      "DataBob": {
+        "name": "DataBob",
+        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "stale": false,
+        "hitRate": "50.0%",
+        "cacheSize": 5,
+        "ttl": 30
+      },
+      "ConfigBob": {
+        "name": "ConfigBob",
+        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "stale": false,
+        "hitRate": "50.0%",
+        "cacheSize": 5,
+        "ttl": 30
+      },
+      "StrategyBob": {
+        "name": "StrategyBob",
+        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "stale": false,
+        "hitRate": "50.0%",
+        "cacheSize": 5,
+        "ttl": 30
+      },
+      "TradeBob": {
+        "name": "TradeBob",
+        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "stale": false,
+        "hitRate": "50.0%",
+        "cacheSize": 5,
+        "ttl": 30
+      }
+    },
+    "overallStats": {
+      "modulesActive": 5,
+      "totalCacheSize": 5,
+      "overallHitRate": "50.0%",
+      "totalHits": 6,
+      "totalMisses": 6
+    },
+    "recentChanges": [],
+    "systemHealth": "degraded"
+  },
+  "ui_snapshot": {
+    "current": {
+      "view": "Dashboard",
+      "mode": "live",
+      "timestamp": "2025-10-15T07:37:35.534Z"
+    }
+  },
+  "last_sync": "2025-10-15T07:37:35.534Z",
   "memory": {}
 }

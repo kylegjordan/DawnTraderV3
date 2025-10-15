@@ -309,5 +309,36 @@ app.use((req, res, next) => {
     } catch (error) {
       console.error('[BobCore] ⚠️ Server startup prefetch failed:', error);
     }
+
+    // Phase 8.0: Initialize Cortex and start sync scheduler
+    try {
+      const { cortexCore } = await import('./services/cortex/cortex-core');
+      const { insightBob } = await import('./services/bob-insight');
+      const { uiBob } = await import('./services/bob-ui');
+      
+      await cortexCore.initialize();
+      
+      // Define snapshot fetch functions
+      const fetchBobSnapshot = async () => {
+        return await insightBob.getInsightSummary();
+      };
+      
+      const fetchUISnapshot = async () => {
+        // Get a default UI state (live mode, no specific user)
+        return { 
+          current: { 
+            view: 'Dashboard', 
+            mode: 'live' as const, 
+            timestamp: new Date().toISOString() 
+          } 
+        };
+      };
+      
+      // Start sync scheduler
+      await cortexCore.startSync(fetchBobSnapshot, fetchUISnapshot);
+      console.log('[Cortex] ✅ Initialized and sync scheduler started');
+    } catch (error) {
+      console.error('[Cortex] ⚠️ Initialization failed:', error);
+    }
   });
 })();
