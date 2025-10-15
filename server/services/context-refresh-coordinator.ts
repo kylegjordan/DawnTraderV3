@@ -19,7 +19,7 @@ const MODULE_NAME = 'ContextRefresh';
 export interface RefreshResult {
   success: boolean;
   latencyMs: number;
-  source: 'api' | 'direct';
+  source: 'api' | 'direct' | 'resync';
   timestamp: string;
   userId: string;
   mode: 'live' | 'paper';
@@ -50,7 +50,7 @@ class ContextRefreshCoordinator extends EventEmitter {
   /**
    * Refresh live context for a user - fetch from backend, update Cortex, emit events
    */
-  async refresh(userId: string, mode: 'live' | 'paper', source: 'api' | 'direct' = 'direct'): Promise<RefreshResult> {
+  async refresh(userId: string, mode: 'live' | 'paper', source: 'api' | 'direct' | 'resync' = 'direct'): Promise<RefreshResult> {
     console.log(`[${this.MODULE_NAME}] 🔄 Refreshing context for user ${userId} (${mode}, source=${source})`);
     const start = Date.now();
 
@@ -67,6 +67,13 @@ class ContextRefreshCoordinator extends EventEmitter {
       // Run truth check to detect any remaining discrepancies
       const truthCheck = await systemTruthDiagnostic.runTruthCheck(userId, mode);
       const discrepanciesFound = truthCheck.discrepancies.length;
+
+      // Phase 8.5 Addendum I: Auto-resync if discrepancies detected
+      if (discrepanciesFound > 0 && source !== 'resync') {
+        console.log(`[${this.MODULE_NAME}] [TruthSync] mismatch detected (${discrepanciesFound} discrepancies) → forced resync`);
+        // Trigger secondary refresh to resolve misalignments
+        return await this.refresh(userId, mode, 'resync');
+      }
 
       // Calculate latency and update metrics
       const latencyMs = Date.now() - start;
@@ -124,8 +131,11 @@ class ContextRefreshCoordinator extends EventEmitter {
 
   /**
    * Fetch fresh data from backend (portfolio, strategies, settings)
+   * Phase 8.5 Addendum I: Uses live API source - matches /api/trading/status logic exactly
    */
   private async fetchFreshData(userId: string, mode: 'live' | 'paper') {
+    console.log(`[${this.MODULE_NAME}] [ContextSource] live-api ✓`);
+    
     // Fetch in parallel
     const [portfolioState, strategies, settings, user] = await Promise.all([
       storage.getPortfolioState({ userId, mode }),
@@ -138,14 +148,15 @@ class ContextRefreshCoordinator extends EventEmitter {
     const globalSession = (global as any).getGlobalSession?.();
     const engineActive = !!(globalSession && globalSession.isRunning);
 
-    // Extract data
-    const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 1000;
+    // Extract data - NO FALLBACK to 1000 (Phase 8.5 Addendum I)
+    // Use actual portfolio_state balance or 0 (matches /api/trading/status)
+    const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 0;
     const activeStrategies = strategies
       .filter(s => s.enabled)
       .map(s => s.strategy)
       .sort();
 
-    return {
+    const freshData = {
       portfolioBalance,
       activeStrategies,
       activeStrategiesCount: activeStrategies.length,
@@ -154,8 +165,13 @@ class ContextRefreshCoordinator extends EventEmitter {
       riskPerTrade: settings?.riskPerTrade ? parseFloat(settings.riskPerTrade.toString()) : 0,
       dailyLossKillSwitch: settings?.dailyLossKillSwitch ? parseFloat(settings.dailyLossKillSwitch.toString()) : 7.0,
       maxExposurePercent: settings?.maxExposurePercent ? parseFloat(settings.maxExposurePercent.toString()) : 100,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      source: 'live-api' as const
     };
+
+    console.log(`[${this.MODULE_NAME}] source=live-api portfolio=${portfolioBalance} strategies=${activeStrategies.length}`);
+    
+    return freshData;
   }
 
   /**

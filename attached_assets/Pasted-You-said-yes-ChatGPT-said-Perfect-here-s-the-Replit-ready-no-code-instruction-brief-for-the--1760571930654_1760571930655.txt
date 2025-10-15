@@ -1,0 +1,181 @@
+You said:
+yes
+ChatGPT said:
+
+Perfect ✅ — here’s the Replit-ready, no-code instruction brief for the next stage.
+You can paste this directly into Replit just like the previous implementation phases.
+
+Phase 8.5 Addendum I — Live Source Enforcement & Verification
+
+Objective:
+Eliminate all stale or cached data sources so that every refresh and diagnostic pulls only from the live backend API (/api/trading/status).
+This ensures Walter, Cortex, and the dashboard always reflect the real system truth — fixing the $1 000 vs $800 mismatch and the 3-strategy discrepancy.
+
+🧭 High-Level Goal
+
+Replace every cached or fallback context source with live API calls, add verification checks after each refresh, and log the data origin (“live-api”) in all contexts.
+
+🔧 Implementation Steps (11 tasks)
+1️⃣ Update ContextRefreshCoordinator
+
+File: server/services/context-refresh-coordinator.ts
+
+In the refreshContext() (or run()) method:
+
+Remove or comment out any use of fetchUserContext() or getUserSummary().
+
+Perform an authenticated GET /api/trading/status call instead.
+
+Parse portfolioBalance, activeStrategies, engineActive, and mode.
+
+Write these values directly into:
+
+Cortex snapshot (cortexCore.updateSnapshot())
+
+Walter’s semantic memory (walterMemory.storeContext())
+
+Log:
+
+[ContextRefresh] source=live-api portfolio=800 strategies=8 latency=XYZms
+
+2️⃣ Add “Source Verification” Check
+
+After each refresh completes:
+
+Call /api/system/truth-check
+
+Compare backend vs cortex vs walter
+
+If mismatch > 0, trigger immediate secondary refresh (run("resync"))
+
+Log [TruthSync] mismatch detected → forced resync
+
+3️⃣ Modify SystemTruthDiagnostic
+
+File: server/services/system-truth-diagnostic.ts
+
+Ensure all backend comparisons call /api/trading/status
+(no calls to PortfolioAggregator or cached analytics).
+
+Add new field to diagnostic output:
+
+"liveAPIUsed": true
+
+4️⃣ Update Walter Response Pipeline
+
+File: server/services/walter-response.ts
+
+For commands like “read trading status” or “refresh context,”
+use ContextRefreshCoordinator.getLatest()
+(which now pulls from live API) instead of cached context.
+
+Include freshness metadata in the reply:
+
+source: live-api
+
+lastRefreshISO
+
+latencyMs
+
+5️⃣ Add Verification Logging to SystemHealthMonitor
+
+File: server/services/system-health-monitor.ts
+
+Add fields:
+
+lastContextSource
+
+lastRefreshDelta
+
+On each successful live-source refresh:
+
+lastContextSource = "live-api"
+lastRefreshDelta = 0
+
+6️⃣ Deprecate Old PortfolioAggregator Fallback
+
+File: server/services/portfolio-aggregator.ts
+
+Comment out or remove:
+
+const INITIAL_CAPITAL = 1000;
+
+
+All downstream logic should use portfolio_state.balance
+(retrieved from /api/trading/status).
+
+7️⃣ Extend Context Refresh Metrics
+
+In ContextRefreshCoordinator, maintain a counter:
+
+refreshCount
+
+avgRefreshLatency
+
+lastLivePortfolio
+
+Expose these via /api/context/metrics
+
+8️⃣ Add Log Consistency Markers
+
+In each layer (Walter, Cortex, Backend):
+add log markers like
+
+[ContextSource] live-api ✓
+[ContextSource] cached ✗
+
+
+Useful for confirming that live data is always used.
+
+9️⃣ Retest End-to-End Refresh
+
+Run manually:
+
+curl -s -X POST http://localhost:5000/api/context/refresh
+curl -s http://localhost:5000/api/system/truth-check
+
+
+Expect output:
+
+"portfolioBalance": 800,
+"activeStrategiesCount": 8,
+"source": "live-api"
+
+🔟 Validate via Walter Chat
+
+Ask: “Refresh your trading context from the live system.”
+
+Expected reply:
+
+Portfolio Value: $800
+Enabled Strategies: 8
+Source: Live API ✓
+
+
+Verify no $1000 default appears again.
+
+11️⃣ Update Documentation
+
+In replit.md, add section:
+“Phase 8.5 Addendum I — Live Source Enforcement & Verification”
+
+Include implementation summary, API examples, and confirmation steps.
+
+✅ Completion Checklist
+Check	Expected Result
+/api/trading/status → 800 / 8 strategies	✅ Live data confirmed
+/api/context/refresh → source=live-api	✅ Logs show live source
+/api/system/truth-check → no mismatch	✅ Data aligned
+Walter reply → “Portfolio $800, Strategies 8”	✅ Context updated
+System health → lastContextSource: live-api	✅ Metrics correct
+
+Deliverables:
+
+Updated ContextRefreshCoordinator & SystemTruthDiagnostic services
+
+Verified truth alignment and live API enforcement
+
+Updated documentation and health reports
+
+Expected Outcome:
+Walter, Bob, and Cortex now always use true live system data for every refresh, making the entire system immune to stale context errors.

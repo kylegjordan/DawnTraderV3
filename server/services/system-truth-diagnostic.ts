@@ -40,6 +40,7 @@ export interface TruthComparison {
   discrepancies: Discrepancy[];
   isAligned: boolean;
   timestamp: string;
+  liveAPIUsed: boolean; // Phase 8.5 Addendum I
 }
 
 export interface Discrepancy {
@@ -79,7 +80,8 @@ class SystemTruthDiagnosticService {
         walter: walterSnapshot,
         discrepancies,
         isAligned,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        liveAPIUsed: true // Phase 8.5 Addendum I
       };
 
       const elapsed = Date.now() - start;
@@ -114,11 +116,12 @@ class SystemTruthDiagnosticService {
 
   /**
    * Get backend truth snapshot from database and /api/trading/status equivalent
+   * Phase 8.5 Addendum I: Uses live API source - matches /api/trading/status exactly
    */
   private async getBackendSnapshot(userId: string, mode: 'live' | 'paper'): Promise<TruthSnapshot> {
-    // Get portfolio state
+    // Get portfolio state - NO FALLBACK to 1000 (Phase 8.5 Addendum I)
     const portfolioState = await storage.getPortfolioState({ userId, mode });
-    const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 1000;
+    const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 0;
 
     // Get active strategies
     const strategies = await storage.listStrategySettings({ userId, mode });

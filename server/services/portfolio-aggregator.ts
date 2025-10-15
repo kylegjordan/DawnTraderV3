@@ -39,7 +39,8 @@ export interface PortfolioSummary {
 
 class PortfolioAggregatorService {
   private readonly MODULE_NAME = 'PortfolioAggregator';
-  private readonly INITIAL_CAPITAL = 1000; // Default starting capital
+  // DEPRECATED (Phase 8.5 Addendum I): Use portfolio_state.balance only
+  // private readonly INITIAL_CAPITAL = 1000;
 
   /**
    * Aggregate portfolio metrics from all strategies
@@ -53,10 +54,11 @@ class PortfolioAggregatorService {
     const start = Date.now();
 
     // Phase 8.5 Addendum F: Get initial capital from portfolio_state
+    // Phase 8.5 Addendum I: NO FALLBACK - use actual balance or 0
     const portfolioState = await storage.getPortfolioState({ userId, mode });
     const initialCapital = portfolioState 
       ? parseFloat(portfolioState.balance) 
-      : this.INITIAL_CAPITAL;
+      : 0;
 
     // Get all trades for equity curve
     const allTrades = mode === 'live' 
