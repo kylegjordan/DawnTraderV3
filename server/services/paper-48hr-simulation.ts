@@ -234,9 +234,9 @@ export class Paper48HrSimulation {
       trades: []
     };
 
-    const fileName = `${this.sessionId}.json`;
+    const fileName = `trading_sessions/${this.sessionId}.json`;
 
-    await filePersistence.saveFile('report', fileName, JSON.stringify(sessionLog, null, 2));
+    await filePersistence.saveFile('log', fileName, JSON.stringify(sessionLog, null, 2));
     console.log(`📝 Session log initialized: ${fileName}`);
   }
 
@@ -261,9 +261,9 @@ export class Paper48HrSimulation {
   private async generateRollingSummary(): Promise<void> {
     try {
       const summary = await this.getCurrentSummary();
-      const fileName = `summary_${Date.now()}.json`;
+      const fileName = `trading_summaries/summary_${Date.now()}.json`;
 
-      await filePersistence.saveFile('report', fileName, JSON.stringify(summary, null, 2));
+      await filePersistence.saveFile('log', fileName, JSON.stringify(summary, null, 2));
       console.log(`📊 6-hour summary generated: ${fileName}`);
     } catch (error) {
       console.error(`[48HrSim:${this.userId}] Error generating rolling summary:`, error);
@@ -276,8 +276,10 @@ export class Paper48HrSimulation {
       summary.endTime = new Date().toISOString();
       summary.status = completed ? 'completed' : 'interrupted';
 
-      const fileName = reportPath.split('/').pop() || 'trading_summary.json';
-      await filePersistence.saveFile('report', fileName, JSON.stringify(summary, null, 2));
+      // Extract filename from reportPath and add subdirectory
+      const baseName = reportPath.split('/').pop() || 'trading_summary.json';
+      const fileName = `trading_summaries/${baseName}`;
+      await filePersistence.saveFile('log', fileName, JSON.stringify(summary, null, 2));
 
       // Display final results
       console.log(`\n${'='.repeat(70)}`);

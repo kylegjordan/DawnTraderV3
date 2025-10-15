@@ -80,14 +80,14 @@ class CommandLogger {
         executionTimeMs,
       };
 
-      // Log to date-specific file
+      // Log to date-specific file (with subdirectory path)
       const dateStr = new Date().toISOString().split('T')[0];
-      const fileName = `commands_${dateStr}.jsonl`;
+      const fileName = `command_history/commands_${dateStr}.jsonl`;
       
       await filePersistence.saveFile('log', fileName, JSON.stringify(entry) + '\n', { append: true });
 
       // Also log to user-specific file
-      const userFileName = `user_${userId}_${dateStr}.jsonl`;
+      const userFileName = `command_history/user_${userId}_${dateStr}.jsonl`;
       await filePersistence.saveFile('log', userFileName, JSON.stringify(entry) + '\n', { append: true });
 
       console.log(`[CommandLogger] Logged command: ${intent.type} - ${intent.action} ${intent.entity} (User: ${userId})`);
@@ -120,7 +120,7 @@ class CommandLogger {
       };
 
       const dateStr = new Date().toISOString().split('T')[0];
-      const fileName = `confirmations_${dateStr}.jsonl`;
+      const fileName = `command_history/confirmations_${dateStr}.jsonl`;
       
       await filePersistence.saveFile('log', fileName, JSON.stringify(entry) + '\n', { append: true });
 
