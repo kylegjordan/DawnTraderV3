@@ -10,6 +10,14 @@ import { useToast } from '@/hooks/use-toast';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { cn } from '@/lib/utils';
 import { useTradingMode } from '@/contexts/trading-mode-context';
+import { ChatFileAttachment } from './walter/chat-file-attachment';
+
+interface FileAttachment {
+  filename: string;
+  category: 'report' | 'log' | 'export' | 'analysis';
+  url: string;
+  size?: string;
+}
 
 interface Message {
   role: 'user' | 'assistant';
@@ -19,6 +27,9 @@ interface Message {
     timestamp: string;
     mode: string;
     sources: string[];
+  };
+  metadata?: {
+    files?: FileAttachment[];
   };
 }
 
@@ -395,6 +406,11 @@ export default function WalterFloatingAssistant({ pageContext = 'Dashboard' }: W
                   )}
                 >
                   <p className="whitespace-pre-wrap">{msg.message}</p>
+                  
+                  {/* Phase 8.4 Addendum E: File attachments */}
+                  {msg.metadata?.files && msg.metadata.files.length > 0 && (
+                    <ChatFileAttachment files={msg.metadata.files} />
+                  )}
                   
                   {/* Phase 7.1b Deliverable 5: Provenance footer */}
                   {msg.provenance && (
