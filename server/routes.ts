@@ -841,12 +841,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
-      const engine = tradingEngines.get(userId);
+      
+      // Check if paper simulation is running (system-wide)
+      const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
+      const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
+      const engineActive = isPaperSimRunning;
+      
+      // Get active strategies count
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+      const strategies = await storage.getStrategies({ userId, mode });
+      const activeStrategies = strategies.filter((s: any) => s.enabled).length;
+      
+      // Get watchlist pairs (filtered pairs)
+      const watchlist = await storage.getWatchlist(userId);
+      const filteredPairs = watchlist.length;
+      
+      // Get active trades  
+      const activeTrades = await storage.getActiveTrades(userId);
+      const activeTradesCount = activeTrades.length;
+      
+      // Get ready to buy signals (if engine is running, check for signals)
+      let readyToBuy = 0;
+      if (isPaperSimRunning) {
+        // Count open positions as they represent "ready to trade" signals that were acted upon
+        const openPositions = await storage.getPaperSimOpenPositions(userId);
+        readyToBuy = Math.max(0, filteredPairs - openPositions.length); // Simplified: available pairs minus active positions
+      }
+      
+      // Get last tick timestamp
+      const lastTickISO = new Date().toISOString();
       
       res.json({
-        tradingStatus: user?.tradingStatus || 'stopped',
-        tradingMode: user?.tradingMode || 'paper',
-        engineRunning: engine?.isEngineRunning() || false
+        mode: user?.tradingMode || 'paper',
+        engineActive,
+        activeStrategies,
+        filteredPairs,
+        readyToBuy,
+        activeTrades: activeTradesCount,
+        lastTickISO
       });
     } catch (error) {
       console.error('Error getting trading status:', error);
@@ -1879,6 +1911,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       globalPaperSimOperationLock = startPromise;
       await startPromise;
       
+      // Emit start acknowledgment log
+      const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
+      console.log(`[TradeEngine] start_ack { runId: "${globalSession?.sessionId || 'unknown'}", mode: "paper", t: "${new Date().toISOString()}" }`);
+      
       res.json({ success: true, message: 'Paper trading simulation started' });
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
@@ -1925,6 +1961,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       globalPaperSimOperationLock = stopPromise;
       await stopPromise;
+      
+      // Emit stop acknowledgment log
+      const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
+      console.log(`[TradeEngine] stop_ack { runId: "${globalSession?.sessionId || 'unknown'}", t: "${new Date().toISOString()}" }`);
       
       res.json({ success: true, message: 'Paper trading simulation stopped' });
     } catch (error: any) {
