@@ -1,0 +1,296 @@
+Phase 8.5 — Real-Time Execution Layer
+
+Objective: Bring DawnTrader’s execution closer to live-market reality by adding real-time market data (WebSockets), order-lifecycle timing, slippage & fee modeling in simulation, adaptive rate controls, and visibility throughout (Walter, Cortex, UI, health logs).
+
+0) Pre-flight (do first)
+
+✅ Confirm Phase 8.4 E/E.1 is green (file exports persist, health report shows file metrics).
+
+✅ Confirm /api/trading/status returns mode, engineActive, and activeStrategies[].
+
+✅ Make sure Paper mode is selected and at least 8 strategies are enabled for PAPER.
+
+Deliverables: Screenshot or log snippet of /api/trading/status showing mode: "paper", engineActive: false, and 8 strategies.
+
+1) Real-time Market Data via WebSockets (MD Feed)
+
+Goal: Replace/augment REST polling with streaming prices for faster, truer signals.
+
+Actions
+
+Add a MarketData WS client that subscribes to order book / ticker streams (Kraken public WS).
+
+Route incoming ticks to StrategyBob (and Cortex snapshot) with timestamps.
+
+Keep the REST poller as a fallback only (feature-flagged), and record which source produced each signal (source: "ws" | "rest_fallback").
+
+Add reconnect logic (backoff, resubscribe lists) and heartbeat detection.
+
+Checks
+
+Health log line each minute:
+[MD] WS connected ✔ / reconnects: 0 / lastTickAgeMs: <150
+
+StrategyBob shows marketDataSource: "ws" in the Cortex snapshot.
+
+If WS drops, fallback kicks in and is logged: [MD] Fallback=REST (WS stale > 2s).
+
+Deliverables
+
+Health log entries proving WS active and last tick latency.
+
+Cortex snapshot includes marketDataSource and lastWsTickISO.
+
+2) Execution Timing & Order Lifecycle Audit (EX Timing)
+
+Goal: Measure the real delay from “decide to trade” to “order acknowledged/filled”.
+
+Actions
+
+Emit timing marks for each order:
+
+t_decide (signal fired)
+
+t_submit (request dispatched)
+
+t_ack (exchange acknowledged)
+
+t_fill (simulated fill in paper mode; later real fill in live)
+
+Persist an Order Audit Record with these timestamps, the selected venue price, and the observed tick at each stage.
+
+Summarize per-order and rolling averages (last 10 / last hour).
+
+Checks
+
+Health log entry per 10 orders:
+[EXEC] avg_submit_ack_ms=XXX / ack_fill_ms=YYY (n=10)
+
+Exported CSV/MD in ./exports/ named exec-timing-YYYYMMDD_HHMM.csv.
+
+Deliverables
+
+One execution timing file with at least 10 sample orders.
+
+Health log snippet summarizing averages.
+
+3) Slippage & Fee Modeling in Paper Mode (Realism)
+
+Goal: Make paper results conservatively match live outcomes.
+
+Actions
+
+Slippage model:
+
+Price impact from order book snapshot at t_submit (use WS best bid/ask and depth).
+
+Add a small stochastic “micro-move” component based on short-term volatility.
+
+Record intendedPrice, modeledFillPrice, slippage_bps.
+
+Fee model:
+
+Apply Kraken taker/maker fees (use configured defaults; store in settings).
+
+Record fees_paid per order and include in P&L.
+
+Add per-strategy aggregates: gross P&L, slippage cost, fees, net P&L.
+
+Checks
+
+Paper trade report includes columns: intendedPrice, fillPrice, slippage_bps, fees, netPnl.
+
+Health log line after each simulation:
+[SIM] slippage_bps(avg)=X.X / fees(avg_per_trade)=Y.Y
+
+Deliverables
+
+Updated paper simulation report in ./reports/ with slippage & fee fields.
+
+Cortex/Walter context shows net P&L (not gross).
+
+4) Adaptive Rate Controls & Backpressure (Kraken Limits)
+
+Goal: Never exceed exchange limits; degrade gracefully.
+
+Actions
+
+Add per-endpoint token buckets for private (orders/cancels/status) and public (REST fallback).
+
+Centralize order dispatch via an Execution Queue with priorities (cancels > entries > status).
+
+If quota tightens, delay non-critical requests and log backpressure.
+
+Checks
+
+Health log sample:
+[RATE] private: used=8/15(3s) / queued=2 / backpressure=LOW
+
+No Rate limit exceeded errors during 10-min test.
+
+Deliverables
+
+Rate dashboard counters added to the health report section.
+
+One controlled backpressure event logged (e.g., during synthetic burst).
+
+5) TradeEngine Concurrency & Safety
+
+Goal: Execute several strategies concurrently without collisions.
+
+Actions
+
+Limit max concurrent submits per symbol and per account.
+
+Enforce strategy cooldowns and mutual-exclusion rules (e.g., no opposing orders in the same bar).
+
+Add kill-switch triggers (daily loss, cascading WS failure, latency > threshold).
+
+Checks
+
+Intentional stress test shows throttling messages, not failures.
+
+Kill-switch simulated once and logged, then self-repair resets safely.
+
+Deliverables
+
+Health log section:
+[ENGINE] concurrent=K / throttled=N / kills=0 / recoveries=1
+
+6) Walter, Cortex, and CIE Integration (Observability)
+
+Goal: Walter understands execution reality and reports it correctly.
+
+Actions
+
+Extend formatInsightContext() with:
+
+marketDataSource, avg_exec_latency_ms, avg_slippage_bps, fees_last10, rate_pressure.
+
+Update CIE/NLAI actions so “start simulation” triggers the new real-time path, and status/ summary include the new fields.
+
+Walter’s summary lines should reference net P&L and explicitly mention slippage & fees.
+
+Checks
+
+Ask Walter “status” mid-run; he reports exec latency & data source.
+
+Ask Walter “summary”; he lists slippage & fees, not just gross P&L.
+
+Deliverables
+
+Chat transcript showing Walter’s new status + summary with the metrics above.
+
+7) UI/Dashboard Enhancements (Live Signal)
+
+Goal: Make the front end reflect real-time execution.
+
+Actions
+
+Add a Real-Time Execution panel:
+
+engineActive, marketDataSource, avg_submit_ack_ms, avg_slippage_bps, fees_total, orders/min, rate_pressure.
+
+Add a mini ticker heartbeat indicator (WS age < 2s = green; fallback = amber; stale > 5s = red).
+
+Show net P&L per strategy (with tooltips: gross – slippage – fees).
+
+Checks
+
+Panel updates within 1–2s when simulation starts/stops.
+
+Tooltip math matches the paper report exports.
+
+Deliverables
+
+Screenshot of dashboard during a run with all fields populated.
+
+8) Paper-to-Live Parity Gate (Readiness)
+
+Goal: Prevent going live until realism thresholds are met.
+
+Actions
+
+Add a parity checklist computed after every simulation:
+
+avg submit→ack ≤ 250 ms
+
+slippage_bps (median) ≤ configurable target
+
+no rate-limit errors
+
+WS uptime ≥ 99% during run
+
+fees modeled and included in net P&L
+
+If any fail → block live toggle and show reasons.
+
+Checks
+
+Run a 10-minute sim; parity gate displays pass/fail with causes.
+
+Deliverables
+
+Parity report saved to ./reports/parity-gate-YYYYMMDD_HHMM.md.
+
+9) QA: 10-Minute Real-Time Simulation (Acceptance)
+
+Goal: Prove the new execution layer under load.
+
+Actions
+
+Start a 10-minute paper run using the new WS + execution path.
+
+Mid-run, verify:
+
+WS heartbeat green, engineActive: true, rate pressure LOW.
+
+Execution timing and slippage metrics updating.
+
+End-run, export the Execution Timing CSV and Simulation Summary MD.
+
+Checks
+
+Health log shows all sections (MD, EXEC, RATE, SIM) with non-zero samples.
+
+Exports present in ./exports/ and referenced in chat.
+
+Deliverables
+
+reports/phase-8.5-simulation-summary.md (must include net P&L, slippage, fees, latencies).
+
+exports/exec-timing-*.csv with ≥ 15 trades.
+
+Screenshot of dashboard’s real-time panel during the run.
+
+10) Documentation & Rollback
+
+Actions
+
+Update replit.md with:
+
+New metrics, dashboards, endpoints touched, and toggles.
+
+“How to read” the execution timing and slippage sections.
+
+Add a feature flag note: EXEC_REALTIME_ENABLED, MD_WS_ENABLED, with defaults and rollback steps.
+
+Deliverables
+
+replit.md updated.
+
+One-pager “Go-Live Readiness Checklist” added to ./reports/.
+
+Success Criteria (must pass)
+
+WS feed active ≥ 99% during the 10-minute run (no stale > 5s).
+
+avg_submit_ack_ms ≤ 250 ms, avg_slippage_bps within configured bounds.
+
+exportsSaved and reportsSaved increment during the run.
+
+Walter’s chat summaries report net P&L, slippage, fees, and exec latency.
+
+No Rate limit exceeded errors; backpressure logged but controlled.
+
+Parity gate passes or clearly flags blocking reasons.

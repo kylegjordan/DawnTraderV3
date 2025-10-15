@@ -6161,7 +6161,7 @@ Please:
         
         // Search in titles
         chats.forEach(chat => {
-          if (chat.title.toLowerCase().includes(searchLower)) {
+          if (chat.title?.toLowerCase().includes(searchLower)) {
             matchingChatIds.add(chat.id);
           }
         });
