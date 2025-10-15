@@ -14,12 +14,12 @@ import {
 export function useTrading() {
   const queryClient = useQueryClient();
 
-  // Trading status and control
+  // Trading status and control (Phase 8.4 Production: Poll every 5s for real-time engine status)
   const { data: tradingStatus, isLoading: statusLoading } = useQuery<TradingStatus>({
     queryKey: ['/api/trading/status'],
-    refetchInterval: 30000,
-    staleTime: 30000,
-    refetchOnWindowFocus: false
+    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
+    staleTime: 0, // Always fetch fresh data
+    refetchOnWindowFocus: true
   });
 
   // Paper trading simulation status (SYSTEM-WIDE - all users see the same status)
