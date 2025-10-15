@@ -35,7 +35,7 @@ export interface ContextualNLAIResponse {
 
 export class ContextualNLAIInterpreter {
   private readonly MODULE_NAME = 'Contextual-NLAI';
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.70;
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.80; // Phase 8.4 Production: Require 80% confidence to execute actions
 
   /**
    * Interpret user message with full context awareness
