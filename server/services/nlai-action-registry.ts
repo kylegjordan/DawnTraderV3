@@ -133,7 +133,7 @@ export class NLAIActionRegistry {
       handler: async (userId: string, intent: ActionIntent) => {
         try {
           const baseUrl = process.env.API_URL || 'http://localhost:5000';
-          const response = await fetch(`${baseUrl}/api/system/health-metrics`, {
+          const response = await fetch(`${baseUrl}/api/system/health`, {
             method: 'GET',
             headers: {
               'x-user-id': userId,
@@ -150,12 +150,12 @@ export class NLAIActionRegistry {
           }
 
           const healthData = await response.json();
-          const { overallStatus, cpu, memory, cache, schedulers } = healthData;
-
-          let statusMessage = `System Health: ${overallStatus}\n`;
-          statusMessage += `CPU: ${cpu.usagePercent.toFixed(1)}% | Memory: ${memory.usagePercent.toFixed(1)}%\n`;
-          statusMessage += `Cache Hit Rate: ${cache.hitRate}% | `;
-          statusMessage += `Schedulers: ${schedulers.cortexSync.status === 'active' && schedulers.analytics.status === 'active' ? 'Running' : 'Issues Detected'}`;
+          
+          let statusMessage = `System Health: ${healthData.backend}\n`;
+          statusMessage += `Paper Trading: ${healthData.paperTrading?.isRunning ? 'Active' : 'Inactive'}`;
+          if (healthData.orchestrator) {
+            statusMessage += `\nAI Orchestrator: ${healthData.orchestrator.status}`;
+          }
 
           return {
             success: true,
