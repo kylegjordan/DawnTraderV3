@@ -1,65 +1,65 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-15T07:37:35.534Z",
+    "timestamp": "2025-10-15T07:41:05.539Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "lastUpdate": "2025-10-15T07:41:05.539Z",
         "stale": false,
-        "hitRate": "50.0%",
-        "cacheSize": 5,
+        "hitRate": "73.3%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "lastUpdate": "2025-10-15T07:41:05.539Z",
         "stale": false,
-        "hitRate": "50.0%",
-        "cacheSize": 5,
+        "hitRate": "73.3%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "lastUpdate": "2025-10-15T07:41:05.539Z",
         "stale": false,
-        "hitRate": "50.0%",
-        "cacheSize": 5,
+        "hitRate": "73.3%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "lastUpdate": "2025-10-15T07:41:05.539Z",
         "stale": false,
-        "hitRate": "50.0%",
-        "cacheSize": 5,
+        "hitRate": "73.3%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-15T07:37:35.534Z",
+        "lastUpdate": "2025-10-15T07:41:05.539Z",
         "stale": false,
-        "hitRate": "50.0%",
-        "cacheSize": 5,
+        "hitRate": "73.3%",
+        "cacheSize": 1,
         "ttl": 30
       }
     },
     "overallStats": {
       "modulesActive": 5,
-      "totalCacheSize": 5,
-      "overallHitRate": "50.0%",
-      "totalHits": 6,
-      "totalMisses": 6
+      "totalCacheSize": 1,
+      "overallHitRate": "73.3%",
+      "totalHits": 63,
+      "totalMisses": 23
     },
     "recentChanges": [],
-    "systemHealth": "degraded"
+    "systemHealth": "healthy"
   },
   "ui_snapshot": {
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-15T07:37:35.534Z"
+      "timestamp": "2025-10-15T07:41:05.539Z"
     }
   },
-  "last_sync": "2025-10-15T07:37:35.534Z",
+  "last_sync": "2025-10-15T07:41:05.539Z",
   "memory": {}
 }

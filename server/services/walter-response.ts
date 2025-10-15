@@ -18,6 +18,7 @@ import { inferUserPreferences, buildAdaptiveGuidance } from './walter-adaptive-h
 import { walterDataPipeline } from './walter-data-pipeline';
 import { insightBob } from './bob-insight';
 import { uiBob } from './bob-ui';
+import { cortexCore } from './cortex/cortex-core';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -35,6 +36,7 @@ interface ResponseContext {
   dashboardContext: string | null; // Phase 7.1: Live dashboard data
   insightContext: string | null; // Phase 7.7: InsightBob system introspection
   uiContext: string | null; // Phase 7.7: UIBob current UI state
+  cortexContext: string | null; // Phase 8.0: Cortex memory layer
   tradingMode: 'live' | 'paper';
 }
 
@@ -153,6 +155,32 @@ function formatUIContext(uiState: any): string {
 }
 
 /**
+ * Format Cortex data into context string (Phase 8.0)
+ */
+function formatCortexContext(cortexSnapshot: any): string {
+  if (!cortexSnapshot) return '';
+  
+  const { bob_snapshot, ui_snapshot, last_sync } = cortexSnapshot;
+  
+  let context = `Cortex Memory Layer:\n`;
+  if (last_sync) {
+    const syncTime = new Date(last_sync);
+    const minutesAgo = Math.floor((Date.now() - syncTime.getTime()) / 60000);
+    context += `- Last Sync: ${minutesAgo === 0 ? 'Just now' : `${minutesAgo}m ago`}\n`;
+  }
+  
+  if (bob_snapshot && bob_snapshot.systemHealth) {
+    context += `- Cached System Status: ${bob_snapshot.systemHealth}\n`;
+  }
+  
+  if (ui_snapshot && ui_snapshot.current) {
+    context += `- Cached UI State: ${ui_snapshot.current.view} (${ui_snapshot.current.mode})\n`;
+  }
+  
+  return context;
+}
+
+/**
  * Gather all context: purpose, memories, chat history, summary, expert principles
  */
 async function gatherContext(userId: string, chatId: string, userMessage: string): Promise<ResponseContext> {
@@ -172,8 +200,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       throw new Error('Chat not found');
     }
 
-    // Gather context in parallel including expert principles, dashboard data, InsightBob, and UIBob (Phase 7.7)
-    const [purposeText, memories, chatHistory, expertPrinciples, dashboardData, insightData, uiStateData] = await Promise.all([
+    // Gather context in parallel including expert principles, dashboard data, InsightBob, UIBob, and Cortex (Phase 8.0)
+    const [purposeText, memories, chatHistory, expertPrinciples, dashboardData, insightData, uiStateData, cortexSnapshot] = await Promise.all([
       getWalterPurpose(userId),
       getHighImportanceMemories(userId, 5), // Top 5 high-importance memories
       storage.getWalterChatLogs(chatId, memoryDepth),
@@ -185,7 +213,8 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       }),
       walterDataPipeline.getDashboardData(userId, tradingMode),
       insightBob.isEnabled() ? insightBob.getInsightSummary() : Promise.resolve(null),
-      uiBob.isEnabled() ? uiBob.getUIState(userId, tradingMode) : Promise.resolve(null)
+      uiBob.isEnabled() ? uiBob.getUIState(userId, tradingMode) : Promise.resolve(null),
+      cortexCore.getStatus().health !== 'offline' ? Promise.resolve(cortexCore.getSnapshot('bob')) : Promise.resolve(null)
     ]);
 
     // Format dashboard data into context
@@ -196,6 +225,9 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
     
     // Format UIBob data into context (Phase 7.7)
     const uiContext = uiStateData ? formatUIContext(uiStateData) : null;
+
+    // Format Cortex data into context (Phase 8.0)
+    const cortexContext = cortexSnapshot ? formatCortexContext(cortexSnapshot) : null;
 
     // Phase 6.2: Extract and resolve conversation references
     const entities = await referenceTracker.extractEntitiesFromChat(userId, chatId, chatHistory);
@@ -210,6 +242,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
     console.log(`[Walter] Loaded dashboard data for ${tradingMode} mode`);
     if (insightContext) console.log(`[Walter] Loaded InsightBob system introspection`);
     if (uiContext) console.log(`[Walter] Loaded UIBob current view: ${uiStateData?.current.view}`);
+    if (cortexContext) console.log(`[Walter] Loaded Cortex memory layer`);
 
     return {
       purpose: purposeText,
@@ -222,6 +255,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       dashboardContext,
       insightContext,
       uiContext,
+      cortexContext,
       tradingMode
     };
   } catch (error) {
@@ -239,6 +273,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
       dashboardContext: null,
       insightContext: null,
       uiContext: null,
+      cortexContext: null,
       tradingMode: 'paper'
     };
   }
@@ -248,7 +283,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
  * Build prompt with context injection including expert principles
  */
 async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string): Promise<string> {
-  const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, insightContext, uiContext, tradingMode } = context;
+  const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, insightContext, uiContext, cortexContext, tradingMode } = context;
 
   // Format memories
   const memoriesText = memories.length > 0
@@ -332,7 +367,7 @@ IMPORTANT: This dashboard data represents the EXACT current state of the system 
 
 ---
 
-${uiContext ? `CURRENT USER VIEW:\n${uiContext}\n\nIMPORTANT: The user is currently viewing the ${uiContext.split('viewing: ')[1]?.split('\n')[0]} screen. Provide context-aware responses based on what they're looking at.\n\n---\n\n` : ''}${insightContext ? `SYSTEM INTROSPECTION:\n${insightContext}\n\nIMPORTANT: Use this system health data to answer questions about recent changes, performance, or technical status.\n\n---\n\n` : ''}CONVERSATION CONTEXT:
+${uiContext ? `CURRENT USER VIEW:\n${uiContext}\n\nIMPORTANT: The user is currently viewing the ${uiContext.split('viewing: ')[1]?.split('\n')[0]} screen. Provide context-aware responses based on what they're looking at.\n\n---\n\n` : ''}${insightContext ? `SYSTEM INTROSPECTION:\n${insightContext}\n\nIMPORTANT: Use this system health data to answer questions about recent changes, performance, or technical status.\n\n---\n\n` : ''}${cortexContext ? `${cortexContext}\n\nIMPORTANT: This represents recent system snapshots cached in the Cortex memory layer for faster context retrieval.\n\n---\n\n` : ''}CONVERSATION CONTEXT:
 ${contextText}
 
 ---
