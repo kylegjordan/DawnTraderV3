@@ -548,7 +548,7 @@ export default function WalterPage() {
       <ModeBanner />
       
       <div className="flex items-center justify-between">
-        <div>
+        <div className="max-w-xs lg:max-w-80">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Walter AI Co-Pilot</h1>
           <p className="text-muted-foreground text-sm">
             Your AI SysAdmin for system configuration and optimization
