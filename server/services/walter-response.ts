@@ -111,15 +111,30 @@ export async function generateWalterResponse(
 }
 
 /**
- * Format InsightBob data into context string (Phase 7.7 + 8.2)
+ * Format InsightBob data into context string (Phase 7.7 + 8.2 + 8.3)
  */
 function formatInsightContext(insight: any): string {
-  const { modules, overallStats, systemHealth, recentChanges, analytics } = insight;
+  const { modules, overallStats, systemHealth, recentChanges, analytics, healthMetrics } = insight;
   
   let context = `System Introspection (Bob Core):\n`;
   context += `- Active Modules: ${overallStats.modulesActive} (${Object.keys(modules).join(', ')})\n`;
   context += `- Cache Performance: ${overallStats.overallHitRate} hit rate\n`;
   context += `- System Health: ${systemHealth}\n`;
+  
+  // Phase 8.3: Include detailed health metrics
+  if (healthMetrics) {
+    const { status, metrics, warnings, criticalIssues } = healthMetrics;
+    context += `\nSystem Diagnostics (Phase 8.3):\n`;
+    context += `- Overall Status: ${status.toUpperCase()}\n`;
+    context += `- Uptime: ${Math.floor(metrics.system.uptime / 3600)}h ${Math.floor((metrics.system.uptime % 3600) / 60)}m\n`;
+    context += `- Resources: CPU ${metrics.system.cpuUsage}%, Memory ${metrics.system.memoryUsage.percentUsed}%\n`;
+    
+    if (criticalIssues && criticalIssues.length > 0) {
+      context += `- CRITICAL: ${criticalIssues.length} issue(s) - ${criticalIssues[0]}\n`;
+    } else if (warnings && warnings.length > 0) {
+      context += `- Warnings: ${warnings.length} warning(s)\n`;
+    }
+  }
   
   if (recentChanges && recentChanges.length > 0) {
     context += `- Recent Changes:\n`;

@@ -232,6 +232,16 @@ class BobCoreCoordinator {
   }
 
   /**
+   * Invalidate all cache entries (Phase 8.3 - for self-repair)
+   */
+  invalidateAll(): number {
+    const count = this.cache.size;
+    this.cache.clear();
+    console.log(`[BobCore] 🗑️ INVALIDATED_ALL: Cleared ${count} cache entries`);
+    return count;
+  }
+
+  /**
    * Clean up expired cache entries
    */
   private cleanupExpiredEntries() {

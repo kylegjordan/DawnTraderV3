@@ -48,6 +48,7 @@ interface InsightSummary {
     live?: AnalyticsSnapshot;
     paper?: AnalyticsSnapshot;
   };
+  healthMetrics?: any; // Phase 8.3: System health diagnostics
 }
 
 class InsightBob {
@@ -132,13 +133,17 @@ class InsightBob {
     // Phase 8.2: Include analytics data from Cortex
     const analytics = await this.getAnalyticsData(context.userId);
 
+    // Phase 8.3: Include health metrics from SystemHealthMonitor
+    const healthMetrics = await this.getHealthMetrics();
+
     const summary: InsightSummary = {
       timestamp: new Date().toISOString(),
       modules,
       overallStats,
       recentChanges,
       systemHealth,
-      analytics
+      analytics,
+      healthMetrics // Phase 8.3
     };
 
     const duration = Date.now() - start;
@@ -232,6 +237,20 @@ class InsightBob {
       };
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] ❌ Failed to fetch analytics:`, error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Phase 8.3: Get health metrics from SystemHealthMonitor
+   */
+  private async getHealthMetrics(): Promise<any> {
+    try {
+      const { systemHealthMonitor } = await import('./system-health-monitor');
+      const healthStatus = systemHealthMonitor.analyzeHealth();
+      return healthStatus;
+    } catch (error) {
+      console.error(`[${this.MODULE_NAME}] ❌ Failed to fetch health metrics:`, error);
       return undefined;
     }
   }
