@@ -42,6 +42,7 @@ import { tradeBob } from "./services/bob-trade";
 import { insightBob } from "./services/bob-insight";
 import { uiBob } from "./services/bob-ui";
 import { cortexCore } from "./services/cortex/cortex-core";
+import { filePersistence } from "./services/file-persistence";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -3223,6 +3224,75 @@ Provide specific, actionable recommendations.`,
     } catch (error) {
       console.error('Error generating report:', error);
       res.status(500).json({ error: 'Failed to generate report' });
+    }
+  });
+
+  // File Download API - Persistent Files
+  app.get('/api/files/download/:category/:filename', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { category, filename } = req.params;
+      
+      if (!['report', 'log', 'export', 'analysis'].includes(category)) {
+        return res.status(400).json({ error: 'Invalid file category' });
+      }
+
+      const filePath = filePersistence.getDownloadPath(category as any, filename);
+      const exists = await filePersistence.fileExists(category as any, filename);
+
+      if (!exists) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+
+      const result = await filePersistence.readFile(category as any, filename);
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+
+      const ext = path.extname(filename).toLowerCase();
+      const contentTypes: Record<string, string> = {
+        '.md': 'text/markdown',
+        '.json': 'application/json',
+        '.csv': 'text/csv',
+        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        '.log': 'text/plain',
+        '.txt': 'text/plain',
+      };
+
+      res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+      res.send(result.content);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      res.status(500).json({ error: 'Failed to download file' });
+    }
+  });
+
+  // List Files API
+  app.get('/api/files/list/:category', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { category } = req.params;
+      
+      if (!['report', 'log', 'export', 'analysis'].includes(category)) {
+        return res.status(400).json({ error: 'Invalid file category' });
+      }
+
+      const files = await filePersistence.listFiles(category as any);
+      res.json({ files });
+    } catch (error) {
+      console.error('Error listing files:', error);
+      res.status(500).json({ error: 'Failed to list files' });
+    }
+  });
+
+  // File Persistence Metrics API
+  app.get('/api/files/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const metrics = filePersistence.getMetrics();
+      const healthSummary = filePersistence.getHealthSummary();
+      res.json({ metrics, healthSummary });
+    } catch (error) {
+      console.error('Error getting file metrics:', error);
+      res.status(500).json({ error: 'Failed to get file metrics' });
     }
   });
 

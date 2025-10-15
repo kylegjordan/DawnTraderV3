@@ -1,0 +1,159 @@
+Phase 8.4 Addendum E — Persistent File Output, Chat File Sharing & Message-Lock Fix
+
+Objective:
+Ensure Walter’s generated reports, logs, and Excel exports are stored in persistent Replit project directories (not ephemeral runtime memory) and can be safely shared inside chat without freezing the input field or stalling the UI.
+
+Task 1 – Redirect File-Save Paths to Persistent Storage
+
+Goal:
+Guarantee all runtime-generated files (Markdown, logs, Excel) are written to your project’s persistent workspace so they survive restarts and appear in Replit’s file browser.
+
+Actions:
+
+Review all file-writing locations under /tmp and /home/runner/workspace.
+
+Redirect all save operations to:
+
+Reports → ./reports/
+
+Logs → ./logs/
+
+Excel/CSV exports → ./exports/
+
+Implement a post-save check: confirm the file exists in the persistent directory before returning success to Walter.
+
+Emit a console confirmation log:
+
+[FilePersistence] ✅ Saved successfully at ./reports/phase-8.5-verification-summary.md
+
+
+Verification:
+
+Run ls -lh ./reports in the Replit shell → new files must appear immediately.
+
+Confirm file timestamps persist after server restart.
+
+Task 2 – Add File-Share Acknowledgment & Download Links in Chat
+
+Goal:
+Enable Walter to share downloadable links for created files directly in the chat thread, instead of silently failing.
+
+Actions:
+
+Extend the chat message renderer to recognize message payloads containing file paths or URLs.
+
+Display a link block (e.g., “📄 Download Excel Report”) when Walter posts any file creation acknowledgment.
+
+Sanitize file paths before display to avoid exposing internal runtime directories.
+
+If file verification fails, show:
+
+“I couldn’t attach the file here, but you can find it in /reports/ on Replit.”
+
+Verification:
+
+Ask Walter to “generate an Excel report of today’s trades.”
+
+Ensure the file link appears in the chat and opens/downloads correctly.
+
+Task 3 – Fix Chat Input Freeze / Timeout Handling
+
+Goal:
+Prevent chat UI lock-ups when Walter’s file generation takes too long or fails silently.
+
+Actions:
+
+Add a 5-second async timeout to all file-return events.
+
+If no file link is returned within 5 seconds, release the input field and display a fallback message:
+
+“The file is being generated; I’ll post the link once it’s ready.”
+
+Ensure pending messages are queued so the user can continue chatting even while files are generating.
+
+Verification:
+
+Trigger a long-running file creation.
+
+Confirm the chat remains responsive and the file link posts later once ready.
+
+Task 4 – Add Explicit “No-Capability” Response Handling
+
+Goal:
+Ensure Walter never says “Sure, I’ll do that” for tasks outside his capability or blocked by context.
+
+Actions:
+
+Add a validation step before executing any file or external action intent.
+
+If the capability or resource isn’t available, respond with:
+
+“I can’t perform that action right now, but here’s what I can do instead.”
+
+Log all declined actions in /logs/system-behavior.log.
+
+Verification:
+
+Request an impossible file export (“Create a 3D chart video”).
+
+Walter should decline gracefully, without freezing or producing errors.
+
+Task 5 – Integrate File Save Confirmation into System Health Report
+
+Goal:
+Audit file-generation reliability and confirm persistent path usage in daily health summaries.
+
+Actions:
+
+Update the SystemHealthMonitor to record:
+
+Successful file saves (by type: report, log, Excel)
+
+Any failed or timed-out saves
+
+Average save latency
+
+Append to logs/system-health.log:
+
+[FilePersistence] Reports: OK (3 saved)
+[FilePersistence] Exports: 1 warning (timeout)
+
+
+Verification:
+
+Generate multiple reports, then check the hourly health log for matching entries.
+
+Task 6 – Architect & Testing Review
+
+Goal:
+Validate full persistence, UI responsiveness, and behavioral correctness.
+
+Actions:
+
+Run an end-to-end test:
+
+“Generate a trade summary Excel file.”
+
+Observe download link.
+
+Refresh Replit → verify file still present.
+
+Review console logs for confirmation messages.
+
+Submit implementation for architect approval.
+
+Deliverables:
+
+✅ Persistent directories: /reports/, /logs/, /exports/
+
+✅ Working chat-file links (Markdown & Excel)
+
+✅ No chat freeze during long writes
+
+✅ System health entries confirm persistence
+
+✅ Updated replit.md with Phase 8.4 Addendum E summary
+
+Expected Outcome:
+Walter can now safely generate, verify, and share Markdown, log, and Excel files in chat.
+All outputs persist in the visible Replit file tree, the chat remains responsive, and he clearly communicates any limitations or pending file actions.
