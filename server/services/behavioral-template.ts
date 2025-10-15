@@ -164,10 +164,11 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
     // Get portfolio metrics
     const metrics = await riskManager.getPortfolioMetrics(userId);
 
-    // Parse settings with defaults
-    const portfolioValue = settings?.portfolioValue 
-      ? parseFloat(settings.portfolioValue.toString()) 
-      : 50000;
+    // Phase 8.5 Addendum F: Get portfolio value from portfolio_state table
+    const portfolioState = await storage.getPortfolioState({ userId, mode });
+    const portfolioValue = portfolioState 
+      ? parseFloat(portfolioState.balance) 
+      : (settings?.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 50000);
     
     const riskPerTrade = settings?.riskPerTrade 
       ? parseFloat(settings.riskPerTrade) 

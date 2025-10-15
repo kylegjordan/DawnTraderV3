@@ -52,6 +52,12 @@ class PortfolioAggregatorService {
     console.log(`[${this.MODULE_NAME}] 📊 Aggregating portfolio (user: ${userId}, mode: ${mode})`);
     const start = Date.now();
 
+    // Phase 8.5 Addendum F: Get initial capital from portfolio_state
+    const portfolioState = await storage.getPortfolioState({ userId, mode });
+    const initialCapital = portfolioState 
+      ? parseFloat(portfolioState.balance) 
+      : this.INITIAL_CAPITAL;
+
     // Get all trades for equity curve
     const allTrades = mode === 'live' 
       ? await storage.getTrades(userId, { limit: 10000 })
@@ -64,11 +70,11 @@ class PortfolioAggregatorService {
       sum + parseFloat(t.realizedPL || '0'), 0
     );
 
-    const totalEquity = this.INITIAL_CAPITAL + totalPL;
-    const totalPLPercent = (totalPL / this.INITIAL_CAPITAL) * 100;
+    const totalEquity = initialCapital + totalPL;
+    const totalPLPercent = initialCapital > 0 ? (totalPL / initialCapital) * 100 : 0;
 
     // Build equity curve
-    const equityCurve = this.buildEquityCurve(closedTrades);
+    const equityCurve = this.buildEquityCurve(closedTrades, initialCapital);
 
     // Calculate portfolio volatility
     const portfolioVolatility = this.calculatePortfolioVolatility(closedTrades);
@@ -108,7 +114,7 @@ class PortfolioAggregatorService {
   /**
    * Build equity curve from trade history
    */
-  private buildEquityCurve(trades: any[]): EquityPoint[] {
+  private buildEquityCurve(trades: any[], initialCapital: number): EquityPoint[] {
     const sortedTrades = [...trades].sort((a, b) => 
       new Date(a.exitTime || 0).getTime() - new Date(b.exitTime || 0).getTime()
     );
@@ -120,7 +126,7 @@ class PortfolioAggregatorService {
       runningPL += parseFloat(trade.realizedPL || '0');
       curve.push({
         timestamp: trade.exitTime || new Date().toISOString(),
-        value: this.INITIAL_CAPITAL + runningPL,
+        value: initialCapital + runningPL,
         cumulativePL: runningPL
       });
     }

@@ -16,6 +16,7 @@ interface DashboardData {
   tradingActivity: any;
   tradingResults: any;
   tradingAverages: any;
+  tradingStatus: any; // Phase 8.5 Addendum F: portfolio balance + active strategies
 }
 
 export class WalterDataPipeline {
@@ -65,12 +66,14 @@ export class WalterDataPipeline {
       const token = this.generateToken(userId, user.username);
 
       // Fetch all dashboard data in parallel with mode parameter
-      const [systemHealth, goalsSummary, tradingActivity, tradingResults, tradingAverages] = await Promise.all([
+      // Phase 8.5 Addendum F: Added /api/trading/status for portfolio balance + strategies
+      const [systemHealth, goalsSummary, tradingActivity, tradingResults, tradingAverages, tradingStatus] = await Promise.all([
         this.fetchWithAuth('/api/system/health', token),
         this.fetchWithAuth(`/api/goals/summary?mode=${mode}`, token),
         this.fetchWithAuth(`/api/trading/activity?mode=${mode}&period=1d`, token),
         this.fetchWithAuth(`/api/trading/results?mode=${mode}&period=1d`, token),
-        this.fetchWithAuth(`/api/trading/averages?mode=${mode}&period=1d`, token)
+        this.fetchWithAuth(`/api/trading/averages?mode=${mode}&period=1d`, token),
+        this.fetchWithAuth('/api/trading/status', token)
       ]);
 
       console.log(`[WalterDataPipeline] Fetched dashboard data for ${mode} mode`);
@@ -80,7 +83,8 @@ export class WalterDataPipeline {
         goalsSummary,
         tradingActivity,
         tradingResults,
-        tradingAverages
+        tradingAverages,
+        tradingStatus
       };
     } catch (error) {
       console.error('[WalterDataPipeline] Error fetching dashboard data:', error);
@@ -90,7 +94,8 @@ export class WalterDataPipeline {
         goalsSummary: null,
         tradingActivity: null,
         tradingResults: null,
-        tradingAverages: null
+        tradingAverages: null,
+        tradingStatus: null
       };
     }
   }
@@ -99,12 +104,23 @@ export class WalterDataPipeline {
    * Format dashboard data into natural language context for Walter
    */
   formatDashboardContext(data: DashboardData, mode: 'live' | 'paper'): string {
-    const { systemHealth, goalsSummary, tradingActivity, tradingResults, tradingAverages } = data;
+    const { systemHealth, goalsSummary, tradingActivity, tradingResults, tradingAverages, tradingStatus } = data;
 
     const parts: string[] = [];
 
     // Current mode
     parts.push(`CURRENT TRADING MODE: ${mode.toUpperCase()}`);
+
+    // Phase 8.5 Addendum F: Portfolio State & Active Strategies
+    if (tradingStatus) {
+      parts.push(`\nPORTFOLIO STATE (${mode.toUpperCase()} MODE):`);
+      parts.push(`- Portfolio Balance: $${tradingStatus.portfolioBalance?.toFixed(2) || '0.00'}`);
+      parts.push(`- Active Strategies: ${tradingStatus.activeStrategiesCount || 0} enabled${tradingStatus.activeStrategies && tradingStatus.activeStrategies.length > 0 ? ` (${tradingStatus.activeStrategies.join(', ')})` : ''}`);
+      parts.push(`- Filtered Pairs: ${tradingStatus.filteredPairs || 0}`);
+      parts.push(`- Ready to Buy: ${tradingStatus.readyToBuy || 0}`);
+      parts.push(`- Active Trades: ${tradingStatus.activeTrades || 0}`);
+      parts.push(`- Engine Status: ${tradingStatus.engineActive ? 'ACTIVE' : 'INACTIVE'}`);
+    }
 
     // System health
     if (systemHealth) {
