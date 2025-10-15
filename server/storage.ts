@@ -2618,17 +2618,18 @@ export class DatabaseStorage implements IStorage {
   }
   
   async getWalterChats(userId: string, status?: string): Promise<WalterChat[]> {
+    // Phase 8.4 Addendum B: Sort pinned chats first, then by lastMessageAt
     if (status) {
       return await db.select().from(walterChats)
         .where(and(
           eq(walterChats.userId, userId),
           eq(walterChats.status, status as any)
         ))
-        .orderBy(desc(walterChats.lastMessageAt));
+        .orderBy(desc(walterChats.pinned), desc(walterChats.lastMessageAt));
     }
     return await db.select().from(walterChats)
       .where(eq(walterChats.userId, userId))
-      .orderBy(desc(walterChats.lastMessageAt));
+      .orderBy(desc(walterChats.pinned), desc(walterChats.lastMessageAt));
   }
   
   async getWalterChatById(id: string): Promise<WalterChat | undefined> {

@@ -9,13 +9,15 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Bot, Send, User, Mic, MicOff, Loader2, MessageSquare, 
-  Plus, Archive, Search, Filter, Check, X, AlertCircle, Upload, FileText, Pencil, Trash2 
+  Plus, Archive, Search, Filter, Check, X, AlertCircle, Upload, FileText, Pencil, Trash2,
+  Star, Download, ChevronLeft, ChevronRight, Settings
 } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { cn } from '@/lib/utils';
 import { ModeIndicator } from '@/components/goals/mode-indicator';
+import { useWalterPreferences } from '@/hooks/useWalterPreferences';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +46,7 @@ interface WalterChat {
   lastMessageAt: Date;
   createdAt: Date;
   archivedAt?: Date;
+  pinned?: boolean;
 }
 
 interface WalterApproval {
@@ -82,6 +85,7 @@ export default function WalterPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast} = useToast();
   const { isRecording, startRecording, stopRecording, audioBlob, error: recorderError } = useAudioRecorder();
+  const { preferences, updatePreferences } = useWalterPreferences();
 
   // Phase 8.4: Dynamic textarea resizing (ChatGPT-style)
   useEffect(() => {
@@ -301,6 +305,51 @@ export default function WalterPage() {
       toast({
         title: "Rename Failed",
         description: error.message || "Could not rename chat",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Phase 8.4 Addendum B: Pin/Unpin chat
+  const pinChatMutation = useMutation({
+    mutationFn: async ({ chatId, pinned }: { chatId: string; pinned: boolean }) => {
+      await apiRequest('POST', `/api/walter/chats/${chatId}/${pinned ? 'pin' : 'unpin'}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/walter/chats'] });
+    }
+  });
+
+  // Phase 8.4 Addendum B: Export chat
+  const exportChatMutation = useMutation({
+    mutationFn: async ({ chatId, format }: { chatId: string; format: 'pdf' | 'markdown' }) => {
+      const response = await fetch(`/api/walter/chats/${chatId}/export?format=${format}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `walter-chat-${chatId}.${format === 'pdf' ? 'pdf' : 'md'}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    },
+    onSuccess: (_, vars) => {
+      toast({
+        title: "Export Complete",
+        description: `Chat exported as ${vars.format.toUpperCase()}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Export Failed",
+        description: error.message || "Could not export chat",
         variant: "destructive"
       });
     }
@@ -548,6 +597,46 @@ export default function WalterPage() {
         <div className="flex items-center gap-2 pt-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Walter</h1>
           <ModeIndicator />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Badge 
+                variant="outline" 
+                className="cursor-pointer hover:bg-muted text-xs px-2 py-0.5" 
+                data-testid="badge-tone-selector"
+              >
+                {preferences.tone === 'professional' && '💼 Professional'}
+                {preferences.tone === 'analytical' && '🔬 Analytical'}
+                {preferences.tone === 'warm' && '🌟 Warm'}
+                {preferences.tone === 'concise' && '⚡ Concise'}
+              </Badge>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem 
+                onClick={() => updatePreferences({ tone: 'professional' })}
+                data-testid="tone-professional"
+              >
+                💼 Professional
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => updatePreferences({ tone: 'analytical' })}
+                data-testid="tone-analytical"
+              >
+                🔬 Analytical
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => updatePreferences({ tone: 'warm' })}
+                data-testid="tone-warm"
+              >
+                🌟 Warm
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => updatePreferences({ tone: 'concise' })}
+                data-testid="tone-concise"
+              >
+                ⚡ Concise
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         {pendingApprovalsCount > 0 && (
           <Badge variant="destructive" className="text-lg px-4 py-2" data-testid="badge-pending-approvals">
@@ -558,8 +647,9 @@ export default function WalterPage() {
 
       <div className="flex-1 flex gap-4 min-h-0">
         {/* Left Sidebar - Chat Sessions */}
-        <div className="hidden lg:flex lg:w-80 flex-col gap-2">
-          <Card className="flex-1 p-4 min-h-0 flex flex-col">
+        {!preferences.sidebarCollapsed && (
+          <div className="hidden lg:flex lg:w-80 flex-col gap-2">
+            <Card className="flex-1 p-4 min-h-0 flex flex-col relative">
             {/* Search and Filters */}
             <div className="space-y-2 mb-3">
               <div className="relative">
@@ -705,6 +795,24 @@ export default function WalterPage() {
                                   variant="ghost"
                                   className={cn(
                                     "h-5 w-5 p-0",
+                                    chat.pinned 
+                                      ? "text-yellow-500 hover:text-yellow-600" 
+                                      : (selectedChatId === chat.id ? "text-primary-foreground hover:text-primary-foreground" : "text-muted-foreground hover:text-foreground")
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    pinChatMutation.mutate({ chatId: chat.id, pinned: !chat.pinned });
+                                  }}
+                                  title={chat.pinned ? "Unpin chat" : "Pin chat"}
+                                  data-testid={`button-pin-chat-${chat.id}`}
+                                >
+                                  <Star className={cn("w-3 h-3", chat.pinned && "fill-current")} />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className={cn(
+                                    "h-5 w-5 p-0",
                                     selectedChatId === chat.id ? "text-primary-foreground hover:text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                                   )}
                                   onClick={(e) => {
@@ -761,8 +869,32 @@ export default function WalterPage() {
                 )}
               </div>
             </ScrollArea>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute -right-3 top-1/2 -translate-y-1/2 h-8 w-6 p-0 rounded-r-md border-l-0"
+                onClick={() => updatePreferences({ sidebarCollapsed: true })}
+                title="Collapse sidebar"
+                data-testid="button-collapse-sidebar"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
           </Card>
         </div>
+        )}
+        
+        {preferences.sidebarCollapsed && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="hidden lg:flex h-8 w-6 p-0"
+            onClick={() => updatePreferences({ sidebarCollapsed: false })}
+            title="Expand sidebar"
+            data-testid="button-expand-sidebar"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        )}
 
         {/* Central Chat Area */}
         <Card className="flex-1 flex flex-col min-h-0 border-0 shadow-none">
@@ -777,19 +909,50 @@ export default function WalterPage() {
                   </p>
                 )}
               </div>
-              {chatData.chat.status === 'active' && !chatData.chat.isApprovalThread && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => archiveChatMutation.mutate(selectedChatId)}
-                  disabled={archiveChatMutation.isPending}
-                  title="Archive chat"
-                  data-testid="button-archive-chat"
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                </Button>
-              )}
+              <div className="flex items-center gap-1">
+                {chatData.chat.status === 'active' && !chatData.chat.isApprovalThread && (
+                  <>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          title="Export chat"
+                          data-testid="button-export-chat"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem 
+                          onClick={() => exportChatMutation.mutate({ chatId: selectedChatId, format: 'markdown' })}
+                          data-testid="export-markdown"
+                        >
+                          Export as Markdown
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => exportChatMutation.mutate({ chatId: selectedChatId, format: 'pdf' })}
+                          data-testid="export-pdf"
+                        >
+                          Export as PDF
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => archiveChatMutation.mutate(selectedChatId)}
+                      disabled={archiveChatMutation.isPending}
+                      title="Archive chat"
+                      data-testid="button-archive-chat"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           )}
 

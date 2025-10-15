@@ -6612,6 +6612,171 @@ Summary:`;
     }
   });
 
+  // ==================== Walter UI Preferences & UX API (Phase 8.4 Addendum B) ====================
+  
+  // GET user's Walter UI preferences
+  app.get('/api/walter/preferences', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const preferences = await storage.getWalterUserPreferences(userId);
+      
+      // Return defaults if no preferences exist
+      if (!preferences) {
+        return res.json({
+          ok: true,
+          preferences: {
+            viewMode: 'compact',
+            theme: 'system',
+            tone: 'professional',
+            sendKeyPreference: 'enter',
+            sidebarCollapsed: false
+          }
+        });
+      }
+      
+      res.json({ ok: true, preferences });
+    } catch (error: any) {
+      console.error('[Walter] Error fetching preferences:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // PUT update user's Walter UI preferences
+  app.put('/api/walter/preferences', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { viewMode, theme, tone, sendKeyPreference, sidebarCollapsed } = req.body;
+      
+      const updates: any = {};
+      if (viewMode !== undefined) updates.viewMode = viewMode;
+      if (theme !== undefined) updates.theme = theme;
+      if (tone !== undefined) updates.tone = tone;
+      if (sendKeyPreference !== undefined) updates.sendKeyPreference = sendKeyPreference;
+      if (sidebarCollapsed !== undefined) updates.sidebarCollapsed = sidebarCollapsed;
+      
+      const preferences = await storage.upsertWalterUserPreferences(userId, updates);
+      
+      console.log(`[Walter] Updated preferences for user ${userId}:`, updates);
+      res.json({ ok: true, preferences });
+    } catch (error: any) {
+      console.error('[Walter] Error updating preferences:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // POST pin a Walter chat
+  app.post('/api/walter/chats/:id/pin', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      
+      // Verify ownership
+      const chat = await storage.getWalterChatById(id);
+      if (!chat) {
+        return res.status(404).json({ ok: false, error: 'Chat not found' });
+      }
+      if (chat.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      const updatedChat = await storage.pinWalterChat(id);
+      console.log(`[Walter] Pinned chat ${id} for user ${userId}`);
+      
+      res.json({ ok: true, chat: updatedChat });
+    } catch (error: any) {
+      console.error('[Walter] Error pinning chat:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // POST unpin a Walter chat
+  app.post('/api/walter/chats/:id/unpin', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      
+      // Verify ownership
+      const chat = await storage.getWalterChatById(id);
+      if (!chat) {
+        return res.status(404).json({ ok: false, error: 'Chat not found' });
+      }
+      if (chat.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      const updatedChat = await storage.unpinWalterChat(id);
+      console.log(`[Walter] Unpinned chat ${id} for user ${userId}`);
+      
+      res.json({ ok: true, chat: updatedChat });
+    } catch (error: any) {
+      console.error('[Walter] Error unpinning chat:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+  
+  // GET export Walter chat (PDF or Markdown)
+  app.get('/api/walter/chats/:id/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const format = (req.query.format as string) || 'markdown';
+      
+      // Verify ownership
+      const chat = await storage.getWalterChatById(id);
+      if (!chat) {
+        return res.status(404).json({ ok: false, error: 'Chat not found' });
+      }
+      if (chat.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+      
+      // Get all messages
+      const messages = await storage.getWalterChatLogs(id, 10000);
+      
+      if (format === 'markdown') {
+        // Generate Markdown export
+        let markdown = `# ${chat.title || 'Walter Chat'}\n\n`;
+        markdown += `**Created:** ${chat.createdAt ? new Date(chat.createdAt).toLocaleString() : 'Unknown'}\n`;
+        markdown += `**Messages:** ${messages.length}\n`;
+        markdown += `**Status:** ${chat.status}\n\n`;
+        markdown += `---\n\n`;
+        
+        for (const msg of messages) {
+          const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : 'Unknown';
+          const role = msg.role === 'user' ? '👤 **User**' : msg.role === 'assistant' ? '🤖 **Walter**' : '⚙️ **System**';
+          markdown += `### ${role} - ${timestamp}\n\n`;
+          markdown += `${msg.content}\n\n`;
+          markdown += `---\n\n`;
+        }
+        
+        res.setHeader('Content-Type', 'text/markdown');
+        res.setHeader('Content-Disposition', `attachment; filename="${chat.title || 'chat'}-${id}.md"`);
+        res.send(markdown);
+      } else if (format === 'pdf') {
+        // For PDF, we'll return JSON with message data that frontend can convert
+        // A proper PDF generation would require a library like puppeteer or pdfkit
+        res.json({
+          ok: true,
+          message: 'PDF export coming soon. Please use Markdown export for now.',
+          data: {
+            title: chat.title,
+            created: chat.createdAt,
+            messages: messages.map(m => ({
+              role: m.role,
+              content: m.content,
+              timestamp: m.timestamp
+            }))
+          }
+        });
+      } else {
+        res.status(400).json({ ok: false, error: 'Invalid format. Use "markdown" or "pdf"' });
+      }
+    } catch (error: any) {
+      console.error('[Walter] Error exporting chat:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // ==================== Semantic Memory API (Milestone 15) ====================
   
   // Search semantic memories by similarity
