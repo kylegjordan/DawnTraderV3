@@ -76,6 +76,13 @@ app.use((req, res, next) => {
   const { seedTestUser } = await import('./startup/test-user-seeder');
   await seedTestUser();
 
+  // Phase 8.4 Addendum E.1: Run file persistence self-test
+  const { filePersistence } = await import('./services/file-persistence');
+  const selfTestPassed = await filePersistence.runStartupSelfTest();
+  if (!selfTestPassed) {
+    console.warn('[Server] File persistence self-test failed - system running in DEGRADED mode');
+  }
+
   // Start database monitoring
   databaseMonitor.startDailyChecks();
 

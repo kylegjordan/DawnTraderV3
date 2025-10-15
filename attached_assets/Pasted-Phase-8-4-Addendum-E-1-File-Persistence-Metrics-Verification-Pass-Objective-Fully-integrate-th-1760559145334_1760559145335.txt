@@ -1,0 +1,177 @@
+Phase 8.4 Addendum E.1 — File Persistence Metrics & Verification Pass
+
+Objective:
+Fully integrate the FilePersistenceService with system-wide reporting so that every file generation (report, log, or export) is properly counted, verified, and reflected in the System Health Monitor.
+This ensures you can audit exactly how many files Walter generates, how long each save took, and whether all outputs persist correctly.
+
+Task 1 – Wire Metrics Counters to File Persistence Events
+
+Goal:
+Make sure every successful or failed file save updates system counters.
+
+Actions
+
+In FilePersistenceService, verify that onSuccess() and onFailure() emit events or update shared counters.
+
+Add counters for:
+
+reportsSaved
+
+logsSaved
+
+exportsSaved
+
+fallbackWrites
+
+saveErrors
+
+Update SystemHealthMonitor to consume these counters each cycle.
+
+After each successful file write, append:
+
+[FilePersistence] ✅ Saved report: phase-8.5-verification-summary.md (7324 bytes, 185 ms)
+
+
+to the console and /logs/system-health.log.
+
+Verification
+
+Run a single file generation (e.g., “generate system health report”).
+
+Check /logs/system-health.log → entries for “Reports: 1 saved”, “Exports: 0”, etc.
+
+Confirm the counters reset correctly at each health-monitor interval.
+
+Task 2 – Integrate Counters Across All Generators
+
+Goal:
+Ensure every service that creates a file calls the persistence layer and increments metrics.
+
+Actions
+
+Confirm these modules use FilePersistenceService:
+
+SystemHealthMonitor
+
+AnalyticsScheduler
+
+PaperTradeEngine (report & log outputs)
+
+WalterResponse (chat export / Excel / Markdown)
+
+Add a simple callback or emit event (fileSaved) that updates metrics on each success/failure.
+
+Log all file creation paths with a timestamp and duration.
+
+Verification
+
+Trigger at least one export from each module (Health Report, Trade Summary, Analytics).
+
+Verify each increments its respective counter.
+
+Confirm timestamps line up across modules.
+
+Task 3 – Add Performance Metrics for Save Latency
+
+Goal:
+Track how long file operations take and detect slow writes.
+
+Actions
+
+Capture startTime and endTime for every save operation.
+
+Compute average save latency per file type each hour.
+
+Append latency data to health logs:
+
+[FilePersistence] Avg Save Latency (Reports): 182 ms (3 samples)
+
+
+Trigger a “warning” status if any file save > 2000 ms.
+
+Verification
+
+Generate multiple reports; confirm latency lines appear in the health log.
+
+Simulate a delayed save (>2 s) and check that a warning is recorded.
+
+Task 4 – Add Cumulative File Stats to Health Report and UI
+
+Goal:
+Surface persistence metrics in both the logs and Walter’s context.
+
+Actions
+
+Extend SystemHealthMonitor.generateReport() to include:
+
+Total files saved (last hour / today)
+
+Failed or fallback saves
+
+Average latency (ms)
+
+Last saved file name
+
+Update Walter’s health-summary context so he can say:
+
+“In the past hour, I saved 5 reports and 2 exports with average latency 220 ms and no failures.”
+
+Display this summary in the System Health tab of the dashboard.
+
+Verification
+
+Run a health report.
+
+Confirm the file stats appear in both the console and Walter’s summary responses.
+
+Task 5 – Implement Health Report Auto-Validation on Startup
+
+Goal:
+Ensure counters initialize correctly and self-test every time the system starts.
+
+Actions
+
+On startup, FilePersistenceService runs a self-test:
+
+Creates a small temp file.
+
+Verifies read/write/delete cycle.
+
+Logs result (OK or FAIL) to system-health.log.
+
+On failure, mark status as DEGRADED and trigger SelfRepairService fallback to /tmp.
+
+Verification
+
+Restart the application.
+
+Check startup logs for [FilePersistence] Self-test: OK (persistent write verified).
+
+Task 6 – Architect Review and Smoke Test
+
+Goal:
+Verify metrics and persistence counters behave consistently under load.
+
+Actions
+
+Generate 3–5 files (reports, logs, Excel).
+
+Confirm all appear in /reports or /exports.
+
+Inspect system-health.log → should show accurate counts and latency averages.
+
+Ask architect to review console and log output for correctness and performance (< 2 ms overhead per file).
+
+Deliverables
+
+✅ Accurate metrics for all file operations
+
+✅ System health report includes file stats
+
+✅ Startup self-test validation
+
+✅ Updated replit.md with Addendum E.1 summary
+
+Expected Outcome:
+Every report, log, and export now leaves a traceable audit in your system health data.
+Walter can confidently state how many files he created, how fast they saved, and whether any fallbacks were used—ensuring you have complete visibility and trust in the persistence layer.

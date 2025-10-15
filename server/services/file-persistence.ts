@@ -4,17 +4,39 @@ import path from 'path';
 export type FileCategory = 'report' | 'log' | 'export' | 'analysis';
 export type FileFormat = 'md' | 'json' | 'log' | 'csv' | 'xlsx' | 'txt';
 
-interface FileMetrics {
-  successCount: number;
-  failureCount: number;
-  timeoutCount: number;
-  totalLatencyMs: number;
-  byCategory: Record<FileCategory, { success: number; failed: number; avgLatencyMs: number }>;
+interface DetailedMetrics {
+  reportsSaved: number;
+  logsSaved: number;
+  exportsSaved: number;
+  analysisSaved: number;
+  fallbackWrites: number;
+  saveErrors: number;
+  timeouts: number;
+  totalOperations: number;
+  lastSavedFile: string | null;
+  latency: {
+    total: number;
+    count: number;
+    average: number;
+    max: number;
+    byCategory: Record<FileCategory, { total: number; count: number; average: number; max: number }>;
+  };
+}
+
+interface FileSaveResult {
+  success: boolean;
+  path?: string;
+  error?: string;
+  url?: string;
+  bytes?: number;
+  latencyMs?: number;
+  usedFallback?: boolean;
 }
 
 class FilePersistenceService {
   private static instance: FilePersistenceService;
-  private metrics: FileMetrics;
+  private metrics: DetailedMetrics;
+  private selfTestPassed: boolean = false;
   
   private readonly BASE_PATHS = {
     report: path.join(process.cwd(), 'reports'),
@@ -25,15 +47,26 @@ class FilePersistenceService {
 
   private constructor() {
     this.metrics = {
-      successCount: 0,
-      failureCount: 0,
-      timeoutCount: 0,
-      totalLatencyMs: 0,
-      byCategory: {
-        report: { success: 0, failed: 0, avgLatencyMs: 0 },
-        log: { success: 0, failed: 0, avgLatencyMs: 0 },
-        export: { success: 0, failed: 0, avgLatencyMs: 0 },
-        analysis: { success: 0, failed: 0, avgLatencyMs: 0 },
+      reportsSaved: 0,
+      logsSaved: 0,
+      exportsSaved: 0,
+      analysisSaved: 0,
+      fallbackWrites: 0,
+      saveErrors: 0,
+      timeouts: 0,
+      totalOperations: 0,
+      lastSavedFile: null,
+      latency: {
+        total: 0,
+        count: 0,
+        average: 0,
+        max: 0,
+        byCategory: {
+          report: { total: 0, count: 0, average: 0, max: 0 },
+          log: { total: 0, count: 0, average: 0, max: 0 },
+          export: { total: 0, count: 0, average: 0, max: 0 },
+          analysis: { total: 0, count: 0, average: 0, max: 0 },
+        },
       },
     };
     this.ensureDirectories();
@@ -56,14 +89,50 @@ class FilePersistenceService {
     }
   }
 
+  async runStartupSelfTest(): Promise<boolean> {
+    const testFilename = `self-test-${Date.now()}.tmp`;
+    const testContent = 'File persistence self-test';
+    
+    try {
+      console.log('[FilePersistence] Running startup self-test...');
+      
+      // Test persistent directory write
+      const testPath = path.join(this.BASE_PATHS.log, testFilename);
+      await fs.writeFile(testPath, testContent, 'utf-8');
+      
+      // Verify read
+      const readContent = await fs.readFile(testPath, 'utf-8');
+      if (readContent !== testContent) {
+        throw new Error('Read content does not match written content');
+      }
+      
+      // Clean up
+      await fs.unlink(testPath);
+      
+      this.selfTestPassed = true;
+      console.log('[FilePersistence] ✅ Self-test: OK (persistent write verified)');
+      
+      return true;
+    } catch (error: any) {
+      this.selfTestPassed = false;
+      console.error('[FilePersistence] ❌ Self-test: FAILED -', error.message);
+      console.error('[FilePersistence] ⚠️ System marked as DEGRADED - will use /tmp fallback');
+      
+      return false;
+    }
+  }
+
   async saveFile(
     category: FileCategory,
     filename: string,
     content: string | Buffer,
     options: { timeout?: number; skipVerification?: boolean } = {}
-  ): Promise<{ success: boolean; path?: string; error?: string; url?: string }> {
+  ): Promise<FileSaveResult> {
     const { timeout = 5000, skipVerification = false } = options;
     const startTime = Date.now();
+    this.metrics.totalOperations++;
+
+    const contentSize = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(content, 'utf-8');
 
     try {
       await this.ensureDirectories();
@@ -87,23 +156,32 @@ class FilePersistenceService {
       }
 
       const latency = Date.now() - startTime;
-      this.updateMetrics(category, true, latency);
+      this.updateMetrics(category, true, latency, false);
+      this.metrics.lastSavedFile = filename;
 
       const relativePath = path.relative(process.cwd(), filePath);
       const downloadUrl = `/api/files/download/${category}/${filename}`;
 
-      console.log(`[FilePersistence] ✅ Saved successfully at ./${relativePath} (${latency}ms)`);
+      // Check for slow writes
+      if (latency > 2000) {
+        console.warn(`[FilePersistence] ⚠️ SLOW WRITE: ${category}/${filename} (${latency}ms, ${contentSize} bytes)`);
+      } else {
+        console.log(`[FilePersistence] ✅ Saved ${category}: ${filename} (${contentSize} bytes, ${latency}ms)`);
+      }
 
       return {
         success: true,
         path: relativePath,
         url: downloadUrl,
+        bytes: contentSize,
+        latencyMs: latency,
+        usedFallback: false,
       };
     } catch (error: any) {
       const latency = Date.now() - startTime;
       
       if (error.message === 'File write timeout') {
-        this.metrics.timeoutCount++;
+        this.metrics.timeouts++;
         console.warn(`[FilePersistence] ⏱️ Timeout writing ${category}/${filename} (${timeout}ms), attempting /tmp fallback...`);
         
         try {
@@ -118,32 +196,38 @@ class FilePersistenceService {
           }
           
           const fallbackLatency = Date.now() - startTime;
-          this.updateMetrics(category, true, fallbackLatency);
+          this.updateMetrics(category, true, fallbackLatency, true);
+          this.metrics.lastSavedFile = filename;
           
-          console.log(`[FilePersistence] ⚠️ Fallback successful: ${tmpFilePath} (${fallbackLatency}ms)`);
+          console.log(`[FilePersistence] ⚠️ Fallback successful: ${tmpFilePath} (${contentSize} bytes, ${fallbackLatency}ms)`);
           
           return {
             success: true,
             path: tmpFilePath,
             url: `/api/files/download/${category}/${filename}`,
+            bytes: contentSize,
+            latencyMs: fallbackLatency,
+            usedFallback: true,
           };
         } catch (fallbackError: any) {
-          this.updateMetrics(category, false, latency);
+          this.updateMetrics(category, false, latency, false);
           console.error(`[FilePersistence] ❌ Fallback failed for ${category}/${filename}:`, fallbackError.message);
           
           return {
             success: false,
             error: `Timeout and fallback failed: ${fallbackError.message}`,
+            latencyMs: latency,
           };
         }
       } else {
-        this.updateMetrics(category, false, latency);
+        this.updateMetrics(category, false, latency, false);
         console.error(`[FilePersistence] ❌ Failed to save ${category}/${filename}:`, error.message);
       }
 
       return {
         success: false,
         error: error.message,
+        latencyMs: latency,
       };
     }
   }
@@ -197,41 +281,140 @@ class FilePersistenceService {
     }
   }
 
-  getMetrics(): FileMetrics {
+  getMetrics(): DetailedMetrics {
     return { ...this.metrics };
   }
 
   getHealthSummary(): string {
-    const { successCount, failureCount, timeoutCount, byCategory } = this.metrics;
+    const { reportsSaved, logsSaved, exportsSaved, analysisSaved, fallbackWrites, saveErrors, timeouts, latency, lastSavedFile } = this.metrics;
     const lines: string[] = [];
 
-    lines.push(`[FilePersistence] Total: ${successCount} saved, ${failureCount} failed, ${timeoutCount} timeouts`);
+    const totalSaved = reportsSaved + logsSaved + exportsSaved + analysisSaved;
+    lines.push(`[FilePersistence] Total: ${totalSaved} saved, ${saveErrors} errors, ${fallbackWrites} fallbacks, ${timeouts} timeouts`);
     
-    for (const [cat, stats] of Object.entries(byCategory)) {
-      if (stats.success > 0 || stats.failed > 0) {
-        const avgLatency = stats.success > 0 ? Math.round(stats.avgLatencyMs / stats.success) : 0;
-        const status = stats.failed === 0 ? 'OK' : `${stats.failed} warning${stats.failed !== 1 ? 's' : ''}`;
-        lines.push(`[FilePersistence] ${cat}: ${status} (${stats.success} saved, ${avgLatency}ms avg)`);
-      }
+    if (reportsSaved > 0) {
+      const avgLatency = Math.round(latency.byCategory.report.average);
+      lines.push(`[FilePersistence] Reports: ${reportsSaved} saved (${avgLatency}ms avg)`);
+    }
+    
+    if (logsSaved > 0) {
+      const avgLatency = Math.round(latency.byCategory.log.average);
+      lines.push(`[FilePersistence] Logs: ${logsSaved} saved (${avgLatency}ms avg)`);
+    }
+    
+    if (exportsSaved > 0) {
+      const avgLatency = Math.round(latency.byCategory.export.average);
+      lines.push(`[FilePersistence] Exports: ${exportsSaved} saved (${avgLatency}ms avg)`);
+    }
+
+    if (lastSavedFile) {
+      lines.push(`[FilePersistence] Last saved: ${lastSavedFile}`);
+    }
+
+    if (latency.max > 2000) {
+      lines.push(`[FilePersistence] ⚠️ Slow write detected: ${latency.max}ms (max)`);
     }
 
     return lines.join('\n');
   }
 
-  private updateMetrics(category: FileCategory, success: boolean, latencyMs: number): void {
+  getDetailedStats() {
+    const { reportsSaved, logsSaved, exportsSaved, analysisSaved, fallbackWrites, saveErrors, timeouts, totalOperations, lastSavedFile, latency } = this.metrics;
+    
+    return {
+      summary: {
+        totalOperations,
+        totalSaved: reportsSaved + logsSaved + exportsSaved + analysisSaved,
+        saveErrors,
+        fallbackWrites,
+        timeouts,
+        lastSavedFile,
+      },
+      byCategory: {
+        reports: { saved: reportsSaved, avgLatency: Math.round(latency.byCategory.report.average) },
+        logs: { saved: logsSaved, avgLatency: Math.round(latency.byCategory.log.average) },
+        exports: { saved: exportsSaved, avgLatency: Math.round(latency.byCategory.export.average) },
+        analysis: { saved: analysisSaved, avgLatency: Math.round(latency.byCategory.analysis.average) },
+      },
+      latency: {
+        overall: Math.round(latency.average),
+        max: latency.max,
+        slowWriteDetected: latency.max > 2000,
+      },
+      status: this.selfTestPassed ? 'OK' : 'DEGRADED',
+    };
+  }
+
+  resetMetrics(): void {
+    this.metrics = {
+      reportsSaved: 0,
+      logsSaved: 0,
+      exportsSaved: 0,
+      analysisSaved: 0,
+      fallbackWrites: 0,
+      saveErrors: 0,
+      timeouts: 0,
+      totalOperations: 0,
+      lastSavedFile: null,
+      latency: {
+        total: 0,
+        count: 0,
+        average: 0,
+        max: 0,
+        byCategory: {
+          report: { total: 0, count: 0, average: 0, max: 0 },
+          log: { total: 0, count: 0, average: 0, max: 0 },
+          export: { total: 0, count: 0, average: 0, max: 0 },
+          analysis: { total: 0, count: 0, average: 0, max: 0 },
+        },
+      },
+    };
+  }
+
+  private updateMetrics(category: FileCategory, success: boolean, latencyMs: number, usedFallback: boolean): void {
     if (success) {
-      this.metrics.successCount++;
-      this.metrics.byCategory[category].success++;
-      this.metrics.byCategory[category].avgLatencyMs += latencyMs;
+      // Update category-specific counters
+      switch (category) {
+        case 'report':
+          this.metrics.reportsSaved++;
+          break;
+        case 'log':
+          this.metrics.logsSaved++;
+          break;
+        case 'export':
+          this.metrics.exportsSaved++;
+          break;
+        case 'analysis':
+          this.metrics.analysisSaved++;
+          break;
+      }
+
+      if (usedFallback) {
+        this.metrics.fallbackWrites++;
+      }
+
+      // Update latency metrics
+      this.metrics.latency.total += latencyMs;
+      this.metrics.latency.count++;
+      this.metrics.latency.average = this.metrics.latency.total / this.metrics.latency.count;
+      this.metrics.latency.max = Math.max(this.metrics.latency.max, latencyMs);
+
+      const categoryLatency = this.metrics.latency.byCategory[category];
+      categoryLatency.total += latencyMs;
+      categoryLatency.count++;
+      categoryLatency.average = categoryLatency.total / categoryLatency.count;
+      categoryLatency.max = Math.max(categoryLatency.max, latencyMs);
     } else {
-      this.metrics.failureCount++;
-      this.metrics.byCategory[category].failed++;
+      this.metrics.saveErrors++;
     }
-    this.metrics.totalLatencyMs += latencyMs;
   }
 
   getDownloadPath(category: FileCategory, filename: string): string {
     return path.join(this.BASE_PATHS[category], filename);
+  }
+
+  getSelfTestStatus(): boolean {
+    return this.selfTestPassed;
   }
 }
 

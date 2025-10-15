@@ -154,10 +154,15 @@ class SystemHealthMonitor {
     const now = Date.now();
     const uptime = Math.floor((now - this.startTime) / 1000);
 
-    const fileMetrics = filePersistence.getMetrics();
-    const avgFileLatency = fileMetrics.successCount > 0 
-      ? Math.round(fileMetrics.totalLatencyMs / fileMetrics.successCount)
-      : 0;
+    const fileStats = filePersistence.getDetailedStats();
+
+    // Transform byCategory to match expected format
+    const transformedByCategory: Record<string, { success: number; failed: number; avgLatencyMs: number }> = {
+      report: { success: fileStats.byCategory.reports.saved, failed: 0, avgLatencyMs: fileStats.byCategory.reports.avgLatency },
+      log: { success: fileStats.byCategory.logs.saved, failed: 0, avgLatencyMs: fileStats.byCategory.logs.avgLatency },
+      export: { success: fileStats.byCategory.exports.saved, failed: 0, avgLatencyMs: fileStats.byCategory.exports.avgLatency },
+      analysis: { success: fileStats.byCategory.analysis.saved, failed: 0, avgLatencyMs: fileStats.byCategory.analysis.avgLatency },
+    };
 
     return {
       timestamp: new Date().toISOString(),
@@ -194,11 +199,11 @@ class SystemHealthMonitor {
         },
       },
       filePersistence: {
-        successCount: fileMetrics.successCount,
-        failureCount: fileMetrics.failureCount,
-        timeoutCount: fileMetrics.timeoutCount,
-        avgLatencyMs: avgFileLatency,
-        byCategory: fileMetrics.byCategory,
+        successCount: fileStats.summary.totalSaved,
+        failureCount: fileStats.summary.saveErrors,
+        timeoutCount: fileStats.summary.timeouts,
+        avgLatencyMs: fileStats.latency.overall,
+        byCategory: transformedByCategory,
       },
     };
   }
