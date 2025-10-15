@@ -104,7 +104,38 @@ class FilePersistenceService {
       
       if (error.message === 'File write timeout') {
         this.metrics.timeoutCount++;
-        console.error(`[FilePersistence] ⏱️ Timeout writing ${category}/${filename} (${timeout}ms)`);
+        console.warn(`[FilePersistence] ⏱️ Timeout writing ${category}/${filename} (${timeout}ms), attempting /tmp fallback...`);
+        
+        try {
+          const tmpDir = path.join('/tmp', category);
+          await fs.mkdir(tmpDir, { recursive: true });
+          const tmpFilePath = path.join(tmpDir, filename);
+          
+          await fs.writeFile(tmpFilePath, content, 'utf-8');
+          
+          if (!skipVerification) {
+            await fs.access(tmpFilePath);
+          }
+          
+          const fallbackLatency = Date.now() - startTime;
+          this.updateMetrics(category, true, fallbackLatency);
+          
+          console.log(`[FilePersistence] ⚠️ Fallback successful: ${tmpFilePath} (${fallbackLatency}ms)`);
+          
+          return {
+            success: true,
+            path: tmpFilePath,
+            url: `/api/files/download/${category}/${filename}`,
+          };
+        } catch (fallbackError: any) {
+          this.updateMetrics(category, false, latency);
+          console.error(`[FilePersistence] ❌ Fallback failed for ${category}/${filename}:`, fallbackError.message);
+          
+          return {
+            success: false,
+            error: `Timeout and fallback failed: ${fallbackError.message}`,
+          };
+        }
       } else {
         this.updateMetrics(category, false, latency);
         console.error(`[FilePersistence] ❌ Failed to save ${category}/${filename}:`, error.message);
@@ -128,7 +159,14 @@ class FilePersistenceService {
       
       return { success: true, content };
     } catch (error: any) {
-      return { success: false, error: error.message };
+      try {
+        const tmpPath = path.join('/tmp', category, filename);
+        const content = await fs.readFile(tmpPath, 'utf-8');
+        console.log(`[FilePersistence] Read from /tmp fallback: ${tmpPath}`);
+        return { success: true, content };
+      } catch (tmpError: any) {
+        return { success: false, error: error.message };
+      }
     }
   }
 
@@ -139,7 +177,13 @@ class FilePersistenceService {
       await fs.access(filePath);
       return true;
     } catch {
-      return false;
+      try {
+        const tmpPath = path.join('/tmp', category, filename);
+        await fs.access(tmpPath);
+        return true;
+      } catch {
+        return false;
+      }
     }
   }
 
