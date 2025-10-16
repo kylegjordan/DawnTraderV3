@@ -684,6 +684,7 @@ export const learningFragments = pgTable("learning_fragments", {
   eventCategory: varchar("event_category", { length: 100 }), // Categorized pattern (e.g., "large_profitable_trade", "risk_spike")
   userContext: jsonb("user_context"), // Active strategies, portfolio state at time of event
   responseEffectiveness: integer("response_effectiveness"), // 1-10 rating (if available from user feedback)
+  traceId: varchar("trace_id", { length: 32 }), // Phase 8.6.4: Provenance tracking
   improvementSuggestion: text("improvement_suggestion"), // AI-identified areas for narrative improvement
   
   // Provenance and linking

@@ -9,6 +9,7 @@
 
 import { bobCore, FetchContext } from './bob-core';
 import { storage } from '../storage';
+import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 
 class StrategyBobModule {
   private readonly MODULE_NAME = 'StrategyBob';
@@ -38,7 +39,7 @@ class StrategyBobModule {
   private async fetchPerformance(context: FetchContext & { days?: number }): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId, days = 7 } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching performance (mode: ${mode}, days: ${days})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching performance (mode: ${mode}, days: ${days})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -112,6 +113,23 @@ class StrategyBobModule {
       }
 
       const elapsed = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchPerformance',
+          sourceTable: 'trades',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: elapsed,
+          rowCount: recentTrades.length,
+          metadata: { days, strategyCount: strategyMetrics.length }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Performance fetched in ${elapsed}ms`);
 
       return {
@@ -132,7 +150,7 @@ class StrategyBobModule {
   private async fetchSignals(context: FetchContext & { limit?: number }): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId, limit = 50 } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching signals (mode: ${mode}, limit: ${limit})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching signals (mode: ${mode}, limit: ${limit})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -143,6 +161,23 @@ class StrategyBobModule {
       const signals = await storage.getHistoricSignals(userId, limit);
 
       const elapsed = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchSignals',
+          sourceTable: 'historic_signals',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: elapsed,
+          rowCount: signals.length,
+          metadata: { limit }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Signals fetched in ${elapsed}ms (${signals.length} signals)`);
 
       return signals;
@@ -159,7 +194,7 @@ class StrategyBobModule {
   private async fetchSummary(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching summary (mode: ${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching summary (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -169,6 +204,23 @@ class StrategyBobModule {
       const settings = await storage.listStrategySettings({ userId, mode: mode as 'live' | 'paper' });
 
       const elapsed = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchSummary',
+          sourceTable: 'strategy_settings',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: elapsed,
+          rowCount: settings.length,
+          metadata: { strategyCount: settings.length }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Summary fetched in ${elapsed}ms (${settings.length} strategies)`);
 
       return settings;

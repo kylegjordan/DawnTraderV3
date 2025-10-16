@@ -36,6 +36,7 @@ interface FetchContext {
   mode: 'live' | 'paper';
   userId?: string;
   token?: string;
+  traceId?: string; // Phase 8.6.4: Provenance tracking
 }
 
 interface CacheStats {

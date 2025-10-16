@@ -11,8 +11,8 @@
 import { provenanceLogger } from './provenance-logger';
 import { schemaAuditService } from './schema-audit';
 import { db } from '../db';
-import { learningFragments } from '@shared/schema';
-import { gte } from 'drizzle-orm';
+import { learningFragments, bobTraceLog, dataLineage } from '@shared/schema';
+import { gte, count, sql } from 'drizzle-orm';
 
 export interface GovernanceReport {
   timestamp: Date;
@@ -31,6 +31,19 @@ export interface GovernanceReport {
     tablesWithGlobalContext: number;
     tablesWithMode: number;
     compliancePercentage: number;
+  };
+  // Phase 8.6.4: BoB & Cortex Lineage Integration
+  bobExecutionMetrics: {
+    total24h: number;
+    byModule: Record<string, number>;
+    avgExecutionTimeMs: number;
+  };
+  cortexWriteCount24h: number;
+  lineageContinuity: {
+    totalTraces: number;
+    completeChains: number;
+    continuityPercentage: number;
+    staleEventsPercentage: number;
   };
   summary: string;
   recommendations: string[];
@@ -89,6 +102,119 @@ class ProvenanceGovernanceService {
   }
 
   /**
+   * Phase 8.6.4: Get BoB execution metrics for last 24 hours
+   */
+  private async getBobExecutionMetrics(): Promise<{
+    total24h: number;
+    byModule: Record<string, number>;
+    avgExecutionTimeMs: number;
+  }> {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    try {
+      const traces = await db
+        .select()
+        .from(bobTraceLog)
+        .where(gte(bobTraceLog.timestamp, oneDayAgo));
+      
+      const byModule: Record<string, number> = {};
+      let totalExecutionTime = 0;
+      
+      traces.forEach(trace => {
+        byModule[trace.bobModule] = (byModule[trace.bobModule] || 0) + 1;
+        totalExecutionTime += trace.executionTimeMs || 0;
+      });
+      
+      return {
+        total24h: traces.length,
+        byModule,
+        avgExecutionTimeMs: traces.length > 0 ? totalExecutionTime / traces.length : 0,
+      };
+    } catch (error) {
+      console.error('[ProvenanceGovernance] Error getting BoB execution metrics:', error);
+      return { total24h: 0, byModule: {}, avgExecutionTimeMs: 0 };
+    }
+  }
+
+  /**
+   * Phase 8.6.4: Get Cortex write count for last 24 hours
+   */
+  private async getCortexWriteCount(): Promise<number> {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    try {
+      const result = await db
+        .select({ count: count() })
+        .from(dataLineage)
+        .where(sql`${dataLineage.timestamp} >= ${oneDayAgo} AND ${dataLineage.originatingService} = 'cortex'`);
+      
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('[ProvenanceGovernance] Error getting Cortex write count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Phase 8.6.4: Calculate lineage continuity percentage
+   */
+  private async getLineageContinuity(): Promise<{
+    totalTraces: number;
+    completeChains: number;
+    continuityPercentage: number;
+    staleEventsPercentage: number;
+  }> {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    try {
+      // Get all unique trace IDs in last 24h
+      const traces = await db
+        .select()
+        .from(dataLineage)
+        .where(gte(dataLineage.timestamp, oneDayAgo));
+      
+      const traceIds = [...new Set(traces.map(t => t.traceId))];
+      const totalTraces = traceIds.length;
+      
+      // Count complete chains (traces with all 3 layers: Database -> BoB -> Cortex)
+      let completeChains = 0;
+      let staleEvents = 0;
+      
+      for (const traceId of traceIds) {
+        const chain = traces.filter(t => t.traceId === traceId);
+        const services = new Set(chain.map(t => t.originatingService));
+        
+        // Complete chain has database read, bob processing, and cortex cache
+        // Using bob as indicator of BoB layer activity
+        if (chain.some(t => t.sourceTable) && services.has('bob') && services.has('cortex')) {
+          completeChains++;
+        }
+        
+        // Check for stale events (>5 min old)
+        const oldestEvent = Math.min(...chain.map(t => new Date(t.timestamp).getTime()));
+        if (Date.now() - oldestEvent > 5 * 60 * 1000) {
+          staleEvents++;
+        }
+      }
+      
+      return {
+        totalTraces,
+        completeChains,
+        continuityPercentage: totalTraces > 0 ? (completeChains / totalTraces) * 100 : 100,
+        staleEventsPercentage: totalTraces > 0 ? (staleEvents / totalTraces) * 100 : 0,
+      };
+    } catch (error) {
+      console.error('[ProvenanceGovernance] Error calculating lineage continuity:', error);
+      return {
+        totalTraces: 0,
+        completeChains: 0,
+        continuityPercentage: 0,
+        staleEventsPercentage: 0,
+      };
+    }
+  }
+
+  /**
    * Generate daily governance report
    */
   async generateDailyReport(): Promise<GovernanceReport> {
@@ -105,6 +231,11 @@ class ProvenanceGovernanceService {
     
     // Get SSOT compliance from schema audit
     const schemaAudit = await schemaAuditService.generateAuditReport();
+    
+    // Phase 8.6.4: Get new BoB, Cortex, and lineage metrics
+    const bobMetrics = await this.getBobExecutionMetrics();
+    const cortexWriteCount = await this.getCortexWriteCount();
+    const lineageContinuity = await this.getLineageContinuity();
     
     const report: GovernanceReport = {
       timestamp: new Date(),
@@ -125,6 +256,9 @@ class ProvenanceGovernanceService {
       provenanceCoverage,
       learningFragments: learningStats,
       ssotCompliance: schemaAudit.ssotCompliance,
+      bobExecutionMetrics: bobMetrics,
+      cortexWriteCount24h: cortexWriteCount,
+      lineageContinuity,
       summary: '',
       recommendations: [],
     };
@@ -153,11 +287,23 @@ class ProvenanceGovernanceService {
       report.recommendations.push(`Investigate ${staleComponents.join(', ')} for data freshness issues`);
     }
     
+    // Phase 8.6.4: Check lineage continuity targets
+    if (report.lineageContinuity.continuityPercentage < 99) {
+      report.recommendations.push(`Lineage continuity at ${report.lineageContinuity.continuityPercentage.toFixed(1)}% - target is ≥99%`);
+    }
+    
+    if (report.lineageContinuity.staleEventsPercentage > 1) {
+      report.recommendations.push(`Stale events at ${report.lineageContinuity.staleEventsPercentage.toFixed(1)}% - target is ≤1%`);
+    }
+    
     console.log('[ProvenanceGovernance] ✅ Report generated:');
     console.log(`  Freshness: BoB=${report.freshness.bob.status}, Cortex=${report.freshness.cortex.status}, Walter=${report.freshness.walter.status}`);
     console.log(`  Provenance Coverage: ${report.provenanceCoverage.toFixed(1)}%`);
     console.log(`  Learning Fragments (24h): ${report.learningFragments.total24h} (${report.learningFragments.byMode.live} live, ${report.learningFragments.byMode.paper} paper)`);
     console.log(`  SSOT Compliance: ${report.ssotCompliance.compliancePercentage.toFixed(1)}%`);
+    console.log(`  BoB Executions (24h): ${report.bobExecutionMetrics.total24h} (avg ${report.bobExecutionMetrics.avgExecutionTimeMs.toFixed(1)}ms)`);
+    console.log(`  Cortex Writes (24h): ${report.cortexWriteCount24h}`);
+    console.log(`  Lineage Continuity: ${report.lineageContinuity.continuityPercentage.toFixed(1)}% (${report.lineageContinuity.staleEventsPercentage.toFixed(1)}% stale)`);
     
     return report;
   }

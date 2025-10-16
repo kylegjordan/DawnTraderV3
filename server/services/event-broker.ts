@@ -23,6 +23,7 @@ export interface BrokerEventPayload {
   metadata?: {
     portfolioBalance?: number;
     activeStrategies?: string[];
+    traceId?: string; // Phase 8.6.4: Provenance tracking
     [key: string]: any;
   };
 }
@@ -46,7 +47,8 @@ class EventBroker extends EventEmitter {
         ...payload.metadata
       },
       timestamp: new Date(),
-      userId: payload.userId
+      userId: payload.userId,
+      traceId: payload.metadata?.traceId // Phase 8.6.4: Pass traceId for provenance
     };
     
     // Route through cognitive interpreter

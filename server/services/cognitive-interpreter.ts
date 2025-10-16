@@ -23,6 +23,7 @@ export interface ExecutionEvent {
   data: any;
   timestamp: Date;
   userId: string;
+  traceId?: string; // Phase 8.6.4: Provenance tracking
 }
 
 export interface InterpretedResponse {
@@ -434,9 +435,8 @@ export class CognitiveInterpreter {
     event: ExecutionEvent,
     interpretation: InterpretedResponse
   ): Promise<void> {
-    // Get user's global context
-    const user = await storage.users.get(event.userId);
-    const globalContextId = user?.globalContextId || 'default';
+    // Phase 8.5 Addendum F: Global context is always 'default'
+    const globalContextId = 'default';
     
     // Categorize the event for pattern analysis
     const eventCategory = this.categorizeEvent(event, interpretation);
@@ -464,7 +464,8 @@ export class CognitiveInterpreter {
       userContext,
       originalEventData: interpretation.provenance.originalData,
       source: interpretation.provenance.source,
-      interpretedBy: interpretation.provenance.interpretedBy
+      interpretedBy: interpretation.provenance.interpretedBy,
+      traceId: event.traceId // Phase 8.6.4: Inherit traceId from event
     };
     
     // Store in database via Learning Bob

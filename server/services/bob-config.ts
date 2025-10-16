@@ -10,6 +10,7 @@ import { bobCore, FetchContext } from './bob-core';
 import { db } from '../db';
 import { userGoalsLive, userGoalsPaper, guardrails, screenerFilters, strategySettings, walterPurpose } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
+import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 
 /**
  * ConfigBob Module
@@ -45,7 +46,7 @@ class ConfigBobModule {
   private async fetchGoals(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching goals (mode: ${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching goals (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -76,6 +77,23 @@ class ConfigBobModule {
       };
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchGoals',
+          sourceTable: mode === 'live' ? 'user_goals_live' : 'user_goals_paper',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: formattedGoals.length,
+          metadata: { hasGoals: response.hasGoals, goalCount: formattedGoals.length }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Goals fetched in ${duration}ms`);
       
       return response;
@@ -92,7 +110,7 @@ class ConfigBobModule {
   private async fetchGuardrails(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching guardrails (mode: ${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching guardrails (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -107,6 +125,23 @@ class ConfigBobModule {
       });
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchGuardrails',
+          sourceTable: 'guardrails',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: guardrailsData ? 1 : 0,
+          metadata: { hasGuardrails: !!guardrailsData }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Guardrails fetched in ${duration}ms`);
       
       return guardrailsData || null;
@@ -123,7 +158,7 @@ class ConfigBobModule {
   private async fetchScreeners(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching screeners (mode: ${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching screeners (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -138,6 +173,23 @@ class ConfigBobModule {
       });
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchScreeners',
+          sourceTable: 'screener_filters',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: screenersData ? 1 : 0,
+          metadata: { hasScreeners: !!screenersData }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Screeners fetched in ${duration}ms`);
       
       return screenersData || null;
@@ -154,7 +206,7 @@ class ConfigBobModule {
   private async fetchStrategies(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching strategies (mode: ${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching strategies (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -169,6 +221,23 @@ class ConfigBobModule {
       });
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchStrategies',
+          sourceTable: 'strategy_settings',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: strategiesData.length,
+          metadata: { strategyCount: strategiesData.length }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Strategies fetched in ${duration}ms`);
       
       return strategiesData;
@@ -185,7 +254,7 @@ class ConfigBobModule {
   private async fetchPurpose(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching purpose (mode: ${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching purpose (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -205,6 +274,23 @@ class ConfigBobModule {
       };
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchPurpose',
+          sourceTable: 'walter_purpose',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: purposeData ? 1 : 0,
+          metadata: { hasPurpose: !!purposeData }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Purpose fetched in ${duration}ms`);
       
       return response;

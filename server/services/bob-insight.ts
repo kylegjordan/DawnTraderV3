@@ -1,4 +1,5 @@
 import { bobCore, type FetchContext } from './bob-core';
+import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 
 /**
  * InsightBob - System Introspection & Meta-Information Module (Phase 7.7)
@@ -90,7 +91,7 @@ class InsightBob {
    * Fetch comprehensive system insight summary
    */
   private async fetchInsightSummary(context: FetchContext): Promise<InsightSummary> {
-    console.log(`[${this.MODULE_NAME}] 🔍 Generating insight summary`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Generating insight summary${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
     
     const start = Date.now();
     const bobStats = bobCore.getStats();
@@ -147,6 +148,27 @@ class InsightBob {
     };
 
     const duration = Date.now() - start;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (context.traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId: context.traceId,
+        bobModule: this.MODULE_NAME,
+        operation: 'fetchInsightSummary',
+        sourceTable: 'bob_cache_stats',
+        mode: context.mode,
+        globalContextId: 'default',
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: 1,
+        metadata: { 
+          modulesActive: summary.overallStats.modulesActive, 
+          systemHealth: summary.systemHealth,
+          totalCacheSize: summary.overallStats.totalCacheSize 
+        }
+      });
+    }
+    
     console.log(`[${this.MODULE_NAME}] ✅ Insight summary generated in ${duration}ms`);
     
     return summary;

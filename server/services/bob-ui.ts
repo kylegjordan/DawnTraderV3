@@ -1,4 +1,5 @@
 import { bobCore, type FetchContext } from './bob-core';
+import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 
 /**
  * UIBob - UI Visibility & Context Tracking Module (Phase 7.7)
@@ -66,24 +67,40 @@ class UIBob {
    * Fetch current UI state for a user
    */
   private async fetchUIState(context: FetchContext & { userId?: string }): Promise<UIContext> {
+    const startTime = Date.now();
     const userId = context.userId || 'default';
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching UI state for user ${userId}`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching UI state for user ${userId}${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
     
     const state = this.userStates.get(userId);
     
-    if (!state) {
-      // Return default state if not yet set
-      return {
-        current: {
-          view: 'Dashboard',
-          mode: context.mode || 'live',
-          timestamp: new Date().toISOString()
-        },
-        sessionStart: new Date().toISOString()
-      };
+    const result = state || {
+      current: {
+        view: 'Dashboard',
+        mode: context.mode || 'live',
+        timestamp: new Date().toISOString()
+      },
+      sessionStart: new Date().toISOString()
+    };
+    
+    const duration = Date.now() - startTime;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (context.traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId: context.traceId,
+        bobModule: this.MODULE_NAME,
+        operation: 'fetchUIState',
+        sourceTable: 'ui_state_memory',
+        mode: context.mode,
+        globalContextId: 'default',
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: 1,
+        metadata: { userId, view: result.current.view, hasState: !!state }
+      });
     }
     
-    return state;
+    return result;
   }
 
   // ========================================

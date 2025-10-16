@@ -2,6 +2,7 @@ import { bobCore, type FetchContext } from './bob-core';
 import { db } from '../db';
 import { trades } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
+import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 
 /**
  * TradeBob - Trade & Execution Optimization Module (Phase 7.6)
@@ -56,7 +57,7 @@ class TradeBob {
    */
   private async fetchActiveTrades(context: FetchContext): Promise<any> {
     const { userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching all active trades (live + paper)`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching all active trades (live + paper)${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
     
     const start = Date.now();
     const result = await db.query.trades.findMany({
@@ -68,6 +69,23 @@ class TradeBob {
     });
     
     const duration = Date.now() - start;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (context.traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId: context.traceId,
+        bobModule: this.MODULE_NAME,
+        operation: 'fetchActiveTrades',
+        sourceTable: 'trades',
+        mode: context.mode,
+        globalContextId: 'default',
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: result.length,
+        metadata: { tradeCount: result.length }
+      });
+    }
+    
     console.log(`[${this.MODULE_NAME}] ✅ Active trades fetched in ${duration}ms (${result.length} trades)`);
     return result;
   }
@@ -78,7 +96,7 @@ class TradeBob {
    */
   private async fetchOpenPaperTrades(context: FetchContext): Promise<any> {
     const { userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching open paper trades`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching open paper trades${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
     
     const start = Date.now();
     const result = await db.query.trades.findMany({
@@ -91,6 +109,23 @@ class TradeBob {
     });
     
     const duration = Date.now() - start;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (context.traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId: context.traceId,
+        bobModule: this.MODULE_NAME,
+        operation: 'fetchOpenPaperTrades',
+        sourceTable: 'trades',
+        mode: 'paper',
+        globalContextId: 'default',
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: result.length,
+        metadata: { tradeCount: result.length }
+      });
+    }
+    
     console.log(`[${this.MODULE_NAME}] ✅ Open paper trades fetched in ${duration}ms (${result.length} trades)`);
     return result;
   }

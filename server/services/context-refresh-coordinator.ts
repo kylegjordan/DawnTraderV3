@@ -376,8 +376,8 @@ class ContextRefreshCoordinator extends EventEmitter {
       // Log live mode data flow
       await provenanceLogger.logLineage({
         traceId,
-        originatingService: 'database',
-        targetService: 'bob',
+        originatingService: 'bob',
+        targetService: 'cortex',
         sourceTable: 'portfolio_state',
         mode: 'live',
         globalContextId,
@@ -393,8 +393,8 @@ class ContextRefreshCoordinator extends EventEmitter {
       // Log paper mode data flow
       await provenanceLogger.logLineage({
         traceId,
-        originatingService: 'database',
-        targetService: 'bob',
+        originatingService: 'bob',
+        targetService: 'cortex',
         sourceTable: 'portfolio_state',
         mode: 'paper',
         globalContextId,
@@ -474,7 +474,12 @@ class ContextRefreshCoordinator extends EventEmitter {
       refreshed_by: 'ContextRefreshCoordinator'
     };
     
-    cortexCore.set(cacheKey, cortexData, ttl);
+    // Phase 8.6.4: Pass provenance metadata to Cortex
+    cortexCore.set(cacheKey, cortexData, ttl, { 
+      traceId,
+      mode,
+      sourceTable: 'portfolio_state' 
+    });
 
     // Phase 8.6.3: Log provenance - Cortex → Walter data flow
     if (traceId) {

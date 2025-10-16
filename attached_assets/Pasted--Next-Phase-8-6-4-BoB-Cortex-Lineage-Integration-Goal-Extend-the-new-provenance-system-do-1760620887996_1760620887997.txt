@@ -1,0 +1,76 @@
+🚀 Next Phase: 8.6.4 — BoB & Cortex Lineage Integration
+🎯 Goal
+
+Extend the new provenance system downward so each BoB and Cortex process explicitly records:
+
+source table
+
+query or computation
+
+output destination
+
+trace ID continuity
+
+This ensures that when Walter or the dashboard presents a value, we can reconstruct every intermediate computation and cache involved — a full lineage chain.
+
+🧱 Implementation Tasks (No Code)
+
+Deep-Trace Hooks in BoBs
+
+Add read/write tracing inside each BoB module (metrics, risk, strategy, portfolio).
+
+Pass trace ID to each sub-function so the lineage can connect BoB logic to specific database calls.
+
+Cortex Memory Bridge
+
+Embed provenance metadata (trace ID, mode, source_table) in every Cortex memory update.
+
+When Walter reads from Cortex, the lineage chain stays intact.
+
+Event Broker Integration
+
+Route all BoB → Cortex updates through the Event Broker.
+
+Ensure learning fragments automatically inherit the same trace ID.
+
+Legacy Schema Cleanup Validation
+
+Confirm no BoB or Cortex process references any legacy_ table name.
+
+Trigger a provenance-warning if such access occurs.
+
+Lineage Graph UI Extension
+
+Add BoB and Cortex nodes to the Data Lineage dashboard tab.
+
+Show freshness, execution time, and trace ID continuity visually.
+
+Automated Coverage Tests
+
+Verify that every refresh cycle produces at least one lineage record per BoB.
+
+Ensure > 99 % continuity (no missing trace IDs between layers).
+
+Governance Report Upgrade
+
+Extend daily reports to include BoB execution metrics, Cortex write counts, and lineage completeness ratio.
+
+✅ Acceptance Criteria
+
+BoB and Cortex layers generate provenance records automatically with trace ID continuity.
+
+Learning Fragments include trace IDs for each captured event.
+
+No live service reads from any legacy_ table.
+
+Lineage dashboard visualizes complete flow: Database → BoB → Cortex → Walter → UI.
+
+Governance report shows ≥ 99 % lineage continuity and ≤ 1 % stale events (> 5 min old).
+
+📘 Notes for Replit
+
+Proceed immediately with Phase 8.6.4 – BoB & Cortex Lineage Integration using the above task list.
+
+Maintain 8.6.3’s provenance logs active for 48 hours to gather baseline data before switching the new trace hooks fully on.
+
+Archive current governance reports (they’ll serve as the “before” state for continuity metrics).

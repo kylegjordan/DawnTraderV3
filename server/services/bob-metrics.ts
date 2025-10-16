@@ -8,6 +8,7 @@
 import { bobCore, FetchContext } from './bob-core';
 import { systemHealthService } from './system-health-service';
 import { systemHealthMonitor } from './system-health-monitor';
+import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 
 /**
  * MetricsBob Module
@@ -38,15 +39,31 @@ class MetricsBobModule {
    * Mirrors /api/system/health endpoint
    * Requires userId for goals/database checks
    */
-  private async fetchSystemHealth(context: FetchContext): Promise<any> {
+  private async fetchSystemHealth(context: FetchContext & { traceId?: string }): Promise<any> {
     const startTime = Date.now();
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching system health (mode: ${context.mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching system health (mode: ${context.mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       // Use a default userId if not provided (for system-wide health)
       const userId = context.userId || '00000000-0000-0000-0000-000000000000';
       const health = await systemHealthService.getHealthStatus(userId);
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchSystemHealth',
+          sourceTable: 'system_health_metrics',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: 1,
+          metadata: { userId, health: health }
+        });
+      }
       
       console.log(`[${this.MODULE_NAME}] ✅ System health fetched in ${duration}ms`);
       return health;
@@ -62,7 +79,7 @@ class MetricsBobModule {
    */
   private async fetchPaperSimStatus(context: FetchContext): Promise<any> {
     const startTime = Date.now();
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching paper-sim status`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching paper-sim status${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       // Use global session tracking (same as /api/paper-sim/status endpoint)
@@ -77,6 +94,23 @@ class MetricsBobModule {
       } : null;
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchPaperSimStatus',
+          sourceTable: 'global_session',
+          mode: 'paper',
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: 1,
+          metadata: { isRunning, sessionInfo }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Paper-sim status fetched in ${duration}ms`);
       
       return { isRunning, sessionInfo };
@@ -92,11 +126,27 @@ class MetricsBobModule {
    */
   private async fetchSystemHealthMetrics(context: FetchContext): Promise<any> {
     const startTime = Date.now();
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching system health metrics`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching system health metrics${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       const healthStatus = systemHealthMonitor.analyzeHealth();
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchSystemHealthMetrics',
+          sourceTable: 'system_health_monitor',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: 1,
+          metadata: { status: healthStatus.status }
+        });
+      }
       
       console.log(`[${this.MODULE_NAME}] ✅ System health metrics fetched in ${duration}ms (status: ${healthStatus.status})`);
       return healthStatus;

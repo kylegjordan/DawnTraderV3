@@ -9,6 +9,7 @@ import { bobCore, FetchContext } from './bob-core';
 import { db } from '../db';
 import { trades } from '@shared/schema';
 import { eq, and, gte, sql, desc } from 'drizzle-orm';
+import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 
 /**
  * DataBob Module
@@ -41,7 +42,7 @@ class DataBobModule {
   private async fetchResults(context: FetchContext & { period?: string }): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', period = 'today', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching results (mode: ${mode}, period: ${period})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching results (mode: ${mode}, period: ${period})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -95,6 +96,23 @@ class DataBobModule {
       };
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchResults',
+          sourceTable: 'trades',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: tradesData.length,
+          metadata: { period, totalEarnings: results.totalEarnings, winRate: results.winRate }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Results fetched in ${duration}ms`);
       
       return results;
@@ -111,7 +129,7 @@ class DataBobModule {
   private async fetchAverages(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching averages (mode: ${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching averages (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -153,6 +171,23 @@ class DataBobModule {
       };
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchAverages',
+          sourceTable: 'trades',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: allTrades.length,
+          metadata: { avgDailyEarnings: averages.avgDailyEarnings, avgMonthlyEarnings: averages.avgMonthlyEarnings }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Averages fetched in ${duration}ms`);
       
       return averages;
@@ -169,7 +204,7 @@ class DataBobModule {
   private async fetchActivity(context: FetchContext & { limit?: number }): Promise<any> {
     const startTime = Date.now();
     const { mode = 'live', limit = 50, userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching activity (mode: ${mode}, limit: ${limit})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Fetching activity (mode: ${mode}, limit: ${limit})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
       if (!userId) {
@@ -213,6 +248,23 @@ class DataBobModule {
       };
 
       const duration = Date.now() - startTime;
+      
+      // Phase 8.6.4: BoB deep-trace logging
+      if (context.traceId) {
+        await provenanceLogger.logBobTrace({
+          traceId: context.traceId,
+          bobModule: this.MODULE_NAME,
+          operation: 'fetchActivity',
+          sourceTable: 'trades',
+          mode: context.mode,
+          globalContextId: 'default',
+          cacheHit: false,
+          executionTimeMs: duration,
+          rowCount: todayTrades.length,
+          metadata: { limit, totalTrades, totalEarnings: activity.totalEarnings }
+        });
+      }
+      
       console.log(`[${this.MODULE_NAME}] ✅ Activity fetched in ${duration}ms`);
       
       return activity;

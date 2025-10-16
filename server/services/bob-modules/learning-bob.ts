@@ -11,6 +11,7 @@
 import { db } from "../../db";
 import { learningFragments, type InsertLearningFragment, type LearningFragment } from "../../../shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { provenanceLogger } from "../provenance-logger"; // Phase 8.6.4: BoB deep-trace
 
 export interface LearningFragmentStats {
   totalFragments: number;
@@ -46,8 +47,9 @@ class LearningBobModule {
   /**
    * Get learning fragment statistics
    */
-  async getStats(globalContextId: string, mode: 'live' | 'paper'): Promise<LearningFragmentStats> {
-    console.log(`[LearningBob] 📊 Fetching stats for ${globalContextId} (${mode})`);
+  async getStats(globalContextId: string, mode: 'live' | 'paper', traceId?: string): Promise<LearningFragmentStats> {
+    const startTime = Date.now();
+    console.log(`[LearningBob] 📊 Fetching stats for ${globalContextId} (${mode})${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const fragments = await db.select()
       .from(learningFragments)
@@ -91,6 +93,27 @@ class LearningBobModule {
       recentFragments: fragments.slice(0, 20), // Last 20 fragments
     };
 
+    const duration = Date.now() - startTime;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId,
+        bobModule: 'LearningBob',
+        operation: 'getStats',
+        sourceTable: 'learning_fragments',
+        mode,
+        globalContextId,
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: fragments.length,
+        metadata: { 
+          totalFragments: stats.totalFragments,
+          bySignificance: stats.bySignificance 
+        }
+      });
+    }
+
     console.log(`[LearningBob] ✅ Stats generated: ${stats.totalFragments} fragments`);
     return stats;
   }
@@ -102,9 +125,11 @@ class LearningBobModule {
     globalContextId: string,
     mode: 'live' | 'paper',
     eventType: string,
-    limit: number = 50
+    limit: number = 50,
+    traceId?: string
   ): Promise<LearningFragment[]> {
-    console.log(`[LearningBob] 🔍 Fetching recent ${eventType} fragments`);
+    const startTime = Date.now();
+    console.log(`[LearningBob] 🔍 Fetching recent ${eventType} fragments${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const fragments = await db.select()
       .from(learningFragments)
@@ -116,6 +141,24 @@ class LearningBobModule {
       .orderBy(desc(learningFragments.timestamp))
       .limit(limit);
 
+    const duration = Date.now() - startTime;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId,
+        bobModule: 'LearningBob',
+        operation: 'getRecentByType',
+        sourceTable: 'learning_fragments',
+        mode,
+        globalContextId,
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: fragments.length,
+        metadata: { eventType, limit }
+      });
+    }
+
     console.log(`[LearningBob] ✅ Found ${fragments.length} ${eventType} fragments`);
     return fragments;
   }
@@ -126,9 +169,11 @@ class LearningBobModule {
   async getCriticalFragments(
     globalContextId: string,
     mode: 'live' | 'paper',
-    limit: number = 20
+    limit: number = 20,
+    traceId?: string
   ): Promise<LearningFragment[]> {
-    console.log(`[LearningBob] 🚨 Fetching critical fragments`);
+    const startTime = Date.now();
+    console.log(`[LearningBob] 🚨 Fetching critical fragments${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const fragments = await db.select()
       .from(learningFragments)
@@ -139,6 +184,24 @@ class LearningBobModule {
       ))
       .orderBy(desc(learningFragments.timestamp))
       .limit(limit);
+
+    const duration = Date.now() - startTime;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId,
+        bobModule: 'LearningBob',
+        operation: 'getCriticalFragments',
+        sourceTable: 'learning_fragments',
+        mode,
+        globalContextId,
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: fragments.length,
+        metadata: { limit, significance: 'critical' }
+      });
+    }
 
     console.log(`[LearningBob] ✅ Found ${fragments.length} critical fragments`);
     return fragments;
@@ -151,9 +214,11 @@ class LearningBobModule {
     globalContextId: string,
     mode: 'live' | 'paper',
     category: string,
-    limit: number = 50
+    limit: number = 50,
+    traceId?: string
   ): Promise<LearningFragment[]> {
-    console.log(`[LearningBob] 📂 Fetching fragments for category: ${category}`);
+    const startTime = Date.now();
+    console.log(`[LearningBob] 📂 Fetching fragments for category: ${category}${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const fragments = await db.select()
       .from(learningFragments)
@@ -164,6 +229,24 @@ class LearningBobModule {
       ))
       .orderBy(desc(learningFragments.timestamp))
       .limit(limit);
+
+    const duration = Date.now() - startTime;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId,
+        bobModule: 'LearningBob',
+        operation: 'getByCategory',
+        sourceTable: 'learning_fragments',
+        mode,
+        globalContextId,
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: fragments.length,
+        metadata: { category, limit }
+      });
+    }
 
     console.log(`[LearningBob] ✅ Found ${fragments.length} fragments in category ${category}`);
     return fragments;
@@ -188,9 +271,11 @@ class LearningBobModule {
   async getUnanalyzed(
     globalContextId: string,
     mode: 'live' | 'paper',
-    limit: number = 100
+    limit: number = 100,
+    traceId?: string
   ): Promise<LearningFragment[]> {
-    console.log(`[LearningBob] 🔄 Fetching unanalyzed fragments`);
+    const startTime = Date.now();
+    console.log(`[LearningBob] 🔄 Fetching unanalyzed fragments${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const fragments = await db.select()
       .from(learningFragments)
@@ -201,6 +286,24 @@ class LearningBobModule {
       ))
       .orderBy(desc(learningFragments.timestamp))
       .limit(limit);
+
+    const duration = Date.now() - startTime;
+    
+    // Phase 8.6.4: BoB deep-trace logging
+    if (traceId) {
+      await provenanceLogger.logBobTrace({
+        traceId,
+        bobModule: 'LearningBob',
+        operation: 'getUnanalyzed',
+        sourceTable: 'learning_fragments',
+        mode,
+        globalContextId,
+        cacheHit: false,
+        executionTimeMs: duration,
+        rowCount: fragments.length,
+        metadata: { limit, analyzed: false }
+      });
+    }
 
     console.log(`[LearningBob] ✅ Found ${fragments.length} unanalyzed fragments`);
     return fragments;

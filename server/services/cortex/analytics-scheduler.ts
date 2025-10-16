@@ -1,6 +1,7 @@
 import { cortexCore } from './cortex-core';
 import { strategyAnalytics } from '../strategy-analytics';
 import { portfolioAggregator } from '../portfolio-aggregator';
+import { provenanceLogger } from '../provenance-logger'; // Phase 8.6.4
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -123,13 +124,20 @@ class AnalyticsScheduler {
       const ttl = this.config.intervalMinutes * 60;
       const cacheKey = `analytics_${mode}_${userId}`;
       
+      // Phase 8.6.4: Generate traceId for scheduled analytics
+      const traceId = provenanceLogger.generateTraceId();
+      
       cortexCore.set(cacheKey, {
         strategy_analytics: strategySnapshot,
         portfolio_summary: portfolioSnapshot,
         computed_at: new Date().toISOString(),
         user_id: userId,
         mode
-      }, ttl);
+      }, ttl, {
+        traceId,
+        mode,
+        sourceTable: 'strategy_settings'
+      });
 
       console.log(`[${this.MODULE_NAME}] 💾 Cached analytics for user=${userId}, mode=${mode} (TTL: ${ttl}s)`);
       console.log(`[${this.MODULE_NAME}]   - Strategies: ${strategySnapshot.totalStrategies}`);

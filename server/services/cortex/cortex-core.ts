@@ -187,14 +187,20 @@ class CortexCore {
     }
   }
 
-  set(key: string, value: any, ttl?: number): void {
+  set(key: string, value: any, ttl?: number, provenanceMeta?: { traceId?: string; mode?: string; sourceTable?: string }): void {
     if (!this.enabled) return;
 
     const effectiveTtl = ttl || this.config?.memory.short_term_ttl || 300;
+    
+    // Phase 8.6.4: Embed provenance metadata in Cortex entries
     this.memory.memory[key] = {
       value,
       ttl: effectiveTtl,
-      expires_at: Date.now() + (effectiveTtl * 1000)
+      expires_at: Date.now() + (effectiveTtl * 1000),
+      // Provenance metadata for traceability
+      ...(provenanceMeta?.traceId && { traceId: provenanceMeta.traceId }),
+      ...(provenanceMeta?.mode && { mode: provenanceMeta.mode }),
+      ...(provenanceMeta?.sourceTable && { sourceTable: provenanceMeta.sourceTable }),
     };
   }
 
