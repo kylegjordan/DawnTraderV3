@@ -48,6 +48,75 @@ export class WalterCognitiveLayer {
   // Phase 8.6.1: Permanent conversational mode with temporary overrides
   private userTonePreferences: Map<string, TonePreferences> = new Map();
   private temporaryToneOverrides: Map<string, { profile: ToneProfile; expiresAt: Date }> = new Map();
+  
+  // Phase 8.6.4 Addendum B: Cognitive Retraining Map
+  // Immutable authoritative schema bindings for goals, strategies, and balances
+  private readonly RETRAINING_MAP: Readonly<{
+    goals: { live: string; paper: string };
+    strategies: { table: string; globalContextId: string };
+    balances: { table: string };
+    frozen: boolean;
+  }> = Object.freeze({
+    goals: {
+      live: 'user_goals_live',
+      paper: 'user_goals_paper'
+    },
+    strategies: {
+      table: 'strategy_settings',
+      globalContextId: 'global_context_id'
+    },
+    balances: {
+      table: 'portfolio_state'
+    },
+    frozen: true
+  });
+  
+  constructor() {
+    console.log(`[${this.MODULE_NAME}] [LearningAlignment] Cognitive source map loaded and frozen.`);
+    console.log(`[${this.MODULE_NAME}] Authoritative bindings:`);
+    console.log(`  - Goals (live): ${this.RETRAINING_MAP.goals.live}`);
+    console.log(`  - Goals (paper): ${this.RETRAINING_MAP.goals.paper}`);
+    console.log(`  - Strategies: ${this.RETRAINING_MAP.strategies.table} (${this.RETRAINING_MAP.strategies.globalContextId})`);
+    console.log(`  - Balances: ${this.RETRAINING_MAP.balances.table}`);
+    console.log(`  - Status: FROZEN=${this.RETRAINING_MAP.frozen}`);
+  }
+  
+  /**
+   * Get authoritative table name for a given data domain and mode
+   */
+  getAuthoritativeSource(domain: 'goals' | 'strategies' | 'balances', mode?: 'live' | 'paper'): string {
+    switch (domain) {
+      case 'goals':
+        if (!mode) throw new Error('Mode required for goals domain');
+        return mode === 'live' ? this.RETRAINING_MAP.goals.live : this.RETRAINING_MAP.goals.paper;
+      case 'strategies':
+        return this.RETRAINING_MAP.strategies.table;
+      case 'balances':
+        return this.RETRAINING_MAP.balances.table;
+      default:
+        throw new Error(`Unknown domain: ${domain}`);
+    }
+  }
+  
+  /**
+   * Verify if a source table is authoritative
+   */
+  isAuthoritativeSource(sourceTable: string): boolean {
+    const authoritativeTables = [
+      this.RETRAINING_MAP.goals.live,
+      this.RETRAINING_MAP.goals.paper,
+      this.RETRAINING_MAP.strategies.table,
+      this.RETRAINING_MAP.balances.table
+    ];
+    return authoritativeTables.includes(sourceTable);
+  }
+  
+  /**
+   * Get the complete retraining map (read-only)
+   */
+  getRetrainingMap() {
+    return this.RETRAINING_MAP;
+  }
 
   /**
    * Phase 8.6.1: Set temporary tone override (auto-reverts after one response)
