@@ -46,6 +46,8 @@ export const walterThemeEnum = pgEnum("walter_theme", ["light", "dark", "system"
 export const walterToneEnum = pgEnum("walter_tone", ["professional", "analytical", "warm", "concise"]);
 export const walterViewModeEnum = pgEnum("walter_view_mode", ["compact", "expanded"]);
 export const userRoleEnum = pgEnum("user_role", ["owner", "editor", "viewer"]);
+export const eventSignificanceEnum = pgEnum("event_significance", ["minor", "significant", "critical"]);
+export const executionEventTypeEnum = pgEnum("execution_event_type", ["trade", "balance_update", "risk_report", "engine_event", "anomaly", "strategy_signal"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -662,6 +664,43 @@ export const walterUserPreferences = pgTable("walter_user_preferences", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
+
+// Learning Fragments (Phase 8.6.1 - cognitive layer learning and improvement)
+export const learningFragments = pgTable("learning_fragments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  eventType: executionEventTypeEnum("event_type").notNull(),
+  significance: eventSignificanceEnum("significance").notNull(),
+  
+  // Event data and interpretation
+  narrative: text("narrative").notNull(),
+  reasoning: text("reasoning"),
+  implications: text("implications").array(),
+  actionableSuggestion: text("actionable_suggestion"),
+  followUpQuestion: text("follow_up_question"),
+  
+  // Learning metadata
+  eventCategory: varchar("event_category", { length: 100 }), // Categorized pattern (e.g., "large_profitable_trade", "risk_spike")
+  userContext: jsonb("user_context"), // Active strategies, portfolio state at time of event
+  responseEffectiveness: integer("response_effectiveness"), // 1-10 rating (if available from user feedback)
+  improvementSuggestion: text("improvement_suggestion"), // AI-identified areas for narrative improvement
+  
+  // Provenance and linking
+  originalEventData: jsonb("original_event_data").notNull(), // Complete original execution event
+  source: varchar("source", { length: 50 }).default("ExecutionCore").notNull(),
+  interpretedBy: varchar("interpreted_by", { length: 50 }).default("CognitiveLayer").notNull(),
+  
+  // Timestamps
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+  analyzedAt: timestamp("analyzed_at", { withTimezone: true }), // When this fragment was analyzed for learning
+}, (table) => ({
+  globalContextModeIdx: index("learning_fragments_context_mode_idx").on(table.globalContextId, table.mode),
+  eventTypeIdx: index("learning_fragments_event_type_idx").on(table.eventType),
+  significanceIdx: index("learning_fragments_significance_idx").on(table.significance),
+  timestampIdx: index("learning_fragments_timestamp_idx").on(table.timestamp),
+  categoryIdx: index("learning_fragments_category_idx").on(table.eventCategory),
+}));
 
 // Filter diagnostics (screening health metrics)
 export const filterDiagnostics = pgTable("filter_diagnostics", {
@@ -1673,6 +1712,11 @@ export const insertWalterUserPreferencesSchema = createInsertSchema(walterUserPr
   updatedAt: true,
 });
 
+export const insertLearningFragmentSchema = createInsertSchema(learningFragments).omit({
+  id: true,
+  timestamp: true,
+});
+
 export const insertPortfolioStateSchema = createInsertSchema(portfolioState).omit({
   id: true,
   lastUpdate: true,
@@ -2044,6 +2088,9 @@ export type WalterMemory = typeof walterMemory.$inferSelect;
 
 export type InsertWalterUserPreferences = z.infer<typeof insertWalterUserPreferencesSchema>;
 export type WalterUserPreferences = typeof walterUserPreferences.$inferSelect;
+
+export type InsertLearningFragment = z.infer<typeof insertLearningFragmentSchema>;
+export type LearningFragment = typeof learningFragments.$inferSelect;
 
 export type InsertPortfolioState = z.infer<typeof insertPortfolioStateSchema>;
 export type PortfolioState = typeof portfolioState.$inferSelect;

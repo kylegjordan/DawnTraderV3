@@ -12,6 +12,8 @@
  */
 
 import { storage } from '../storage';
+import { learningBob } from './bob-modules/learning-bob';
+import type { InsertLearningFragment } from '../../shared/schema';
 
 export type EventSignificance = 'minor' | 'significant' | 'critical';
 
@@ -64,7 +66,7 @@ export class CognitiveInterpreter {
     // Generate narrative based on event type and significance
     const interpretation = await this.generateNarrative(event, significance);
     
-    return {
+    const response: InterpretedResponse = {
       ...interpretation,
       significance,
       provenance: {
@@ -74,6 +76,13 @@ export class CognitiveInterpreter {
         timestamp: new Date()
       }
     };
+    
+    // Save learning fragment asynchronously (fire-and-forget)
+    this.saveLearningFragment(event, response).catch(err => {
+      console.error(`[${this.MODULE_NAME}] Failed to save learning fragment:`, err);
+    });
+    
+    return response;
   }
 
   /**
@@ -418,7 +427,91 @@ export class CognitiveInterpreter {
   }
 
   /**
+   * Save learning fragment to database
+   * Phase 8.6.1 - Persistent learning storage
+   */
+  private async saveLearningFragment(
+    event: ExecutionEvent,
+    interpretation: InterpretedResponse
+  ): Promise<void> {
+    // Get user's global context
+    const user = await storage.users.get(event.userId);
+    const globalContextId = user?.globalContextId || 'default';
+    
+    // Categorize the event for pattern analysis
+    const eventCategory = this.categorizeEvent(event, interpretation);
+    
+    // Get user context (active strategies, portfolio state)
+    const userContext = {
+      userId: event.userId,
+      activeStrategies: event.data.activeStrategies || [],
+      portfolioBalance: event.data.portfolioBalance,
+      timestamp: new Date()
+    };
+    
+    // Create learning fragment for database
+    const fragment: InsertLearningFragment = {
+      globalContextId,
+      mode: event.mode,
+      eventType: event.type as any,
+      significance: interpretation.significance as any,
+      narrative: interpretation.narrative,
+      reasoning: interpretation.reasoning,
+      implications: interpretation.implications || null,
+      actionableSuggestion: interpretation.actionableSuggestion,
+      followUpQuestion: interpretation.followUpQuestion,
+      eventCategory,
+      userContext,
+      originalEventData: interpretation.provenance.originalData,
+      source: interpretation.provenance.source,
+      interpretedBy: interpretation.provenance.interpretedBy
+    };
+    
+    // Store in database via Learning Bob
+    await learningBob.storeFragment(fragment);
+    
+    console.log(`[${this.MODULE_NAME}] 💾 Learning fragment saved: ${eventCategory}`);
+  }
+  
+  /**
+   * Categorize event for pattern analysis
+   */
+  private categorizeEvent(event: ExecutionEvent, interpretation: InterpretedResponse): string {
+    const { type, data } = event;
+    const { significance } = interpretation;
+    
+    switch (type) {
+      case 'trade':
+        if (data.pnl > 0) return `profitable_${significance}_trade`;
+        if (data.pnl < 0) return `losing_${significance}_trade`;
+        return `${significance}_trade`;
+      
+      case 'balance_update':
+        if (data.changePercent > 0) return `balance_increase_${significance}`;
+        if (data.changePercent < 0) return `balance_decrease_${significance}`;
+        return `balance_stable`;
+      
+      case 'risk_report':
+        if (data.riskLevel === 'high') return `high_risk_${significance}`;
+        return `risk_report_${significance}`;
+      
+      case 'engine_event':
+        return `engine_${data.eventType}_${significance}`;
+      
+      case 'anomaly':
+        return `anomaly_${data.anomalyType || 'unknown'}`;
+      
+      case 'strategy_signal':
+        return `signal_${data.signal}_${significance}`;
+      
+      default:
+        return `${type}_${significance}`;
+    }
+  }
+
+  /**
    * Create a learning fragment from an interpreted event
+   * @deprecated Use saveLearningFragment instead for persistent storage
    */
   async createLearningFragment(
     event: ExecutionEvent,
