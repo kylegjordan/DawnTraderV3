@@ -64,15 +64,19 @@ export async function generateWalterResponse(
   userMessage: string
 ): Promise<string> {
   try {
-    // Phase 8.5 Addendum J: Force live context refresh before EVERY response
+    // Phase 8.5 Addendum K.4: Force DUAL-MODE context refresh before EVERY response
+    // This ensures Walter always has visibility into BOTH live and paper modes
     const user = await storage.getUser(userId);
     const tradingMode = (user?.tradingMode || 'paper') as 'live' | 'paper';
     
-    console.log(`[WalterResponse] [Addendum-J] Forcing live context rehydration...`);
-    const { refreshResult, freshData } = await contextRefreshCoordinator.ensureFreshContext(userId, tradingMode);
+    console.log(`[WalterResponse] [Addendum-K.4] Forcing dual-mode context rehydration...`);
+    const { dualModeData, latencyMs } = await contextRefreshCoordinator.ensureFreshDualContext(userId);
     
     console.log(
-      `[WalterResponse] Rehydrated context → portfolio=${freshData.portfolioBalance} strategies=${freshData.activeStrategiesCount} source=live-api`
+      `[WalterResponse] Rehydrated dual-mode context (${latencyMs}ms) → ` +
+      `live=$${dualModeData.live.portfolioBalance} (${dualModeData.live.engineStatus}), ` +
+      `paper=$${dualModeData.paper.portfolioBalance} (${dualModeData.paper.engineStatus}) ` +
+      `source=live-api`
     );
 
     // 1. Gather context including expert principles
@@ -143,8 +147,8 @@ export async function generateWalterResponse(
       console.log(`[Walter-CIE] No action executed (confidence: ${cieResponse.intent?.confidence.toFixed(2)}), proceeding with conversational response`);
     }
 
-    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, CIE context, and FRESH LIVE DATA
-    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, freshData);
+    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, CIE context, and FRESH DUAL-MODE DATA
+    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, dualModeData);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
     // 5. Call OpenAI
@@ -422,7 +426,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
 /**
  * Build prompt with context injection including expert principles and CIE context
  */
-async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any, freshData?: any): Promise<string> {
+async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any, dualModeData?: any): Promise<string> {
   const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, insightContext, uiContext, cortexContext, tradingMode } = context;
 
   // Format memories
@@ -500,15 +504,28 @@ ${templateGuidance}
 
 ${cieContext}
 
-${freshData ? `⚡ LIVE SYSTEM STATE (Just Refreshed - ${new Date().toISOString()}):
-📊 Portfolio Balance: $${freshData.portfolioBalance} (${tradingMode.toUpperCase()} mode)
-🎯 Active Strategies: ${freshData.activeStrategiesCount > 0 ? freshData.activeStrategies.join(', ') : 'None'}
-🔄 Trading Engine: ${freshData.engineActive ? 'RUNNING' : 'STOPPED'}
-⚙️ Risk Per Trade: $${freshData.riskPerTrade}
-🛡️ Daily Loss Kill Switch: ${freshData.dailyLossKillSwitch}%
-📈 Max Exposure: ${freshData.maxExposurePercent}%
+${dualModeData ? `⚡ LIVE SYSTEM STATE (Just Refreshed - ${new Date().toISOString()}):
 
-CRITICAL: This is the ACTUAL live system state fetched directly from the database. When answering questions about portfolio balance, active strategies, or system status, ALWAYS use these values above - they are the ground truth. Ignore any conflicting cached data below.
+📊 LIVE MODE:
+   Portfolio Balance: $${dualModeData.live.portfolioBalance}
+   Active Strategies: ${dualModeData.live.activeStrategiesCount > 0 ? dualModeData.live.activeStrategies.join(', ') : 'None'}
+   Engine Status: ${dualModeData.live.engineStatus.toUpperCase()}${dualModeData.live.engineStatus === 'stopped' ? ' (Data Static - Last synced: ' + new Date(dualModeData.live.lastSyncAt).toLocaleString() + ')' : ''}
+   Context Age: ${dualModeData.live.contextAge}s
+
+📊 PAPER MODE:
+   Portfolio Balance: $${dualModeData.paper.portfolioBalance}
+   Active Strategies: ${dualModeData.paper.activeStrategiesCount > 0 ? dualModeData.paper.activeStrategies.join(', ') : 'None'}
+   Engine Status: ${dualModeData.paper.engineStatus.toUpperCase()}${dualModeData.paper.engineStatus === 'stopped' ? ' (Data Static - Last synced: ' + new Date(dualModeData.paper.lastSyncAt).toLocaleString() + ')' : ''}
+   Context Age: ${dualModeData.paper.contextAge}s
+
+⚙️ GLOBAL SETTINGS:
+   Risk Per Trade: $${dualModeData.settings.riskPerTrade}
+   Daily Loss Kill Switch: ${dualModeData.settings.dailyLossKillSwitch}%
+   Max Exposure: ${dualModeData.settings.maxExposurePercent}%
+
+👤 USER'S CURRENT MODE: ${tradingMode.toUpperCase()}
+
+CRITICAL: This is the ACTUAL live system state fetched directly from the database for BOTH modes. When answering questions about portfolio balance, active strategies, or system status, ALWAYS use these values above - they are the ground truth. The engine status shows whether trading is active or paused. When engines are stopped, data is static but still accurate (shows last known state). Ignore any conflicting cached data below.
 
 ---
 
