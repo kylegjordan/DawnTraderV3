@@ -80,6 +80,10 @@ app.use((req, res, next) => {
   const { strategySyncService } = await import('./services/strategy-sync');
   await strategySyncService.syncAllUsers();
 
+  // Phase 8.5 Addendum K.4.1: Initialize portfolio_state table with both live and paper entries
+  const { initializePortfolioState } = await import('./startup/portfolio-initializer');
+  await initializePortfolioState();
+
   // Phase 8.4 Addendum E.1: Run file persistence self-test
   const { filePersistence } = await import('./services/file-persistence');
   const selfTestPassed = await filePersistence.runStartupSelfTest();
