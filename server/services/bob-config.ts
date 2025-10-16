@@ -102,6 +102,7 @@ class ConfigBobModule {
           sourceTable: mode === 'live' ? 'user_goals_live' : 'user_goals_paper',
           mode: context.mode,
           globalContextId: 'default',
+          operation: 'read',
           metadata: { note: `BoB → Cortex: goals (${mode})` }
         });
 
@@ -112,6 +113,7 @@ class ConfigBobModule {
           sourceTable: mode === 'live' ? 'user_goals_live' : 'user_goals_paper',
           mode: context.mode,
           globalContextId: 'default',
+          operation: 'read',
           metadata: { note: `Cortex → Walter: goals (${mode})` }
         });
       }
@@ -162,6 +164,29 @@ class ConfigBobModule {
           rowCount: guardrailsData ? 1 : 0,
           metadata: { hasGuardrails: !!guardrailsData }
         });
+
+        // Log data lineage: BoB → Cortex → Walter
+        await provenanceLogger.logLineage({
+          traceId: context.traceId,
+          originatingService: 'bob',
+          targetService: 'cortex',
+          sourceTable: 'guardrails',
+          mode: context.mode,
+          globalContextId: 'default',
+          operation: 'read',
+          metadata: { note: `BoB → Cortex: guardrails (${mode})` }
+        });
+
+        await provenanceLogger.logLineage({
+          traceId: context.traceId,
+          originatingService: 'cortex',
+          targetService: 'walter',
+          sourceTable: 'guardrails',
+          mode: context.mode,
+          globalContextId: 'default',
+          operation: 'read',
+          metadata: { note: `Cortex → Walter: guardrails (${mode})` }
+        });
       }
       
       console.log(`[${this.MODULE_NAME}] ✅ Guardrails fetched in ${duration}ms`);
@@ -209,6 +234,29 @@ class ConfigBobModule {
           executionTimeMs: duration,
           rowCount: screenersData ? 1 : 0,
           metadata: { hasScreeners: !!screenersData }
+        });
+
+        // Log data lineage: BoB → Cortex → Walter
+        await provenanceLogger.logLineage({
+          traceId: context.traceId,
+          originatingService: 'bob',
+          targetService: 'cortex',
+          sourceTable: 'screener_filters',
+          mode: context.mode,
+          globalContextId: 'default',
+          operation: 'read',
+          metadata: { note: `BoB → Cortex: screeners (${mode})` }
+        });
+
+        await provenanceLogger.logLineage({
+          traceId: context.traceId,
+          originatingService: 'cortex',
+          targetService: 'walter',
+          sourceTable: 'screener_filters',
+          mode: context.mode,
+          globalContextId: 'default',
+          operation: 'read',
+          metadata: { note: `Cortex → Walter: screeners (${mode})` }
         });
       }
       
@@ -267,6 +315,7 @@ class ConfigBobModule {
           sourceTable: 'strategy_settings',
           mode: context.mode,
           globalContextId: 'default',
+          operation: 'read',
           metadata: { note: `BoB → Cortex: strategies (${mode})` }
         });
 
@@ -277,6 +326,7 @@ class ConfigBobModule {
           sourceTable: 'strategy_settings',
           mode: context.mode,
           globalContextId: 'default',
+          operation: 'read',
           metadata: { note: `Cortex → Walter: strategies (${mode})` }
         });
       }
