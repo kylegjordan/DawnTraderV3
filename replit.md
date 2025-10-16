@@ -36,6 +36,8 @@ The system incorporates a multi-module intelligent caching system (Bob Core) for
 
 **Data Provenance & Source Governance** establishes complete end-to-end traceability for all data flows from database to UI, implementing a single source of truth policy with correlation tracking using `data_lineage` and `bob_trace_log` tables.
 
+**Phase 8.6.4: BoB & Cortex Lineage Integration** extends provenance deeper into BoB modules and Cortex with >99% trace continuity. All 8 BoB modules (MetricsBob, DataBob, ConfigBob, StrategyBob, TradeBob, InsightBob, LearningBob, UIBob) instrumented with deep-trace hooks via provenanceLogger.logBobTrace(). Cortex memory bridge embeds provenance metadata (traceId, mode, sourceTable) in all cache updates. Event Broker routes BoB→Cortex updates with traceId inheritance to learning_fragments. Governance reports upgraded with BoB execution metrics, Cortex write counts, and lineage completeness ratio (≥99% continuity, ≤1% stale events).
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.
