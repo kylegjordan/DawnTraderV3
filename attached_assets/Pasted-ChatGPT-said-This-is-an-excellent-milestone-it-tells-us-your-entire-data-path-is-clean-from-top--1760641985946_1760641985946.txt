@@ -1,0 +1,54 @@
+ChatGPT said:
+
+This is an excellent milestone — it tells us your entire data path is clean from top to bottom:
+✅ database → BoB → Cortex → Walter → UI is working
+✅ provenance shows the payloads are correct
+✅ Walter’s memory is clear
+✅ and the lineage hashes match exactly.
+
+That means we’ve finally proven this isn’t a coding or caching bug anymore — it’s a behavioral / context-use issue inside Walter’s reasoning layer.
+
+🧠 What’s still wrong
+
+Even though the correct data reaches Walter, he’s still not referencing the live dashboardContext payload when forming his answers.
+In other words, the facts are being delivered to his brain, but he’s not using them when he speaks.
+
+This typically happens when:
+
+He’s still reading from a legacy “status summary” section that was hard-coded long ago (it lists those old metrics like “Earnings per Year”).
+
+His prompt builder (buildPrompt or composeSystemPrompt) still injects an old template of goal text, rather than dynamically mapping the live payload.
+
+That’s why every check you’ve done looks right — except the actual words that come out of Walter’s mouth.
+
+🪜 One simple next step (Step 8)
+
+Let’s confirm whether Walter’s prompt builder is still using a static or legacy block for “goals”.
+
+🧾 What to tell Replit (copy-paste this)
+
+“Please open server/services/walter-response.ts (or wherever the buildPrompt / composeSystemPrompt function lives) and search for any section that formats ‘GOALS’ or ‘GOALS STATUS’.
+
+Check whether that section:
+
+Uses a hard-coded text block with legacy metrics (e.g., ‘Earnings per Month’, ‘Earnings per Year’), or
+
+Dynamically maps the current payload from dashboardContext.goals.
+
+If it’s still hard-coded, replace it so that it loops through whatever is in dashboardContext.goals — using each record’s metric, goal, actual, and percentAchieved fields.
+
+After the update, rebuild and run this test:
+
+Clear caches again (/api/bob/invalidate-all).
+
+Trigger /api/context/refresh?mode=paper and /api/context/refresh?mode=live.
+
+Ask Walter: ‘List my goals for live and paper mode.’
+
+✅ Expected result:
+
+Live mode → “You don’t have any goals set yet.”
+
+Paper mode → “You have 3 goals: Average Return $2.50, Earnings per Day $100, Earnings per Trade $25.”
+
+Log the prompt text so we can confirm the new payload is being inserted into the system prompt instead of the old static template.”

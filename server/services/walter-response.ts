@@ -169,6 +169,15 @@ export async function generateWalterResponse(
     const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, dualModeData);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
+    // Phase 8.6.4 Debug: Log dashboard context to verify goals are fresh
+    console.log('[WalterPromptDebug] Dashboard Context Preview:');
+    const dashboardLines = context.dashboardContext?.split('\n') || [];
+    const goalsSection = dashboardLines.slice(
+      dashboardLines.findIndex(line => line.includes('GOALS STATUS')),
+      dashboardLines.findIndex(line => line.includes('GOALS STATUS')) + 10
+    ).filter(line => line.length > 0);
+    goalsSection.forEach(line => console.log(`  ${line}`));
+
     // 5. Call OpenAI
     const response = await callOpenAI(enhancedPrompt, userMessage);
 
