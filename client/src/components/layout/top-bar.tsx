@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -45,6 +46,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     isStopping 
   } = useTrading();
   const { toast } = useToast();
+  const { canEdit, role } = useUserRole();
   const queryClient = useQueryClient();
   const [utcTimeDate, setUtcTimeDate] = useState<string>('');
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
@@ -230,9 +232,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               <Switch
                 checked={isActive}
                 onCheckedChange={handleTradingToggle}
-                disabled={isStarting || isStopping}
+                disabled={isStarting || isStopping || !canEdit}
                 className="data-[state=checked]:bg-success"
                 data-testid="switch-trading"
+                title={!canEdit ? `Viewers cannot control trading (Role: ${role})` : ''}
               />
               <div className="flex items-center gap-1">
                 <span className={`status-dot ${isActive ? 'active' : 'inactive'}`} />

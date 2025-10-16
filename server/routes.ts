@@ -327,7 +327,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user: { 
           id: user.id, 
           username: user.username,
-          isAdmin: user.isAdmin || false
+          isAdmin: user.isAdmin || false,
+          role: user.role || 'viewer'
         } 
       });
     } catch (error) {
