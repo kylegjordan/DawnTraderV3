@@ -48,6 +48,9 @@ class ContextRefreshCoordinator extends EventEmitter {
   };
   private latencyHistory: number[] = [];
   private readonly MAX_LATENCY_SAMPLES = 100;
+  
+  // Phase 8.5 Addendum J: Track last context to prevent duplicate memory entries
+  private lastContextByUser: Map<string, string> = new Map();
 
   /**
    * Refresh live context for a user - fetch from backend, update Cortex, emit events
@@ -95,6 +98,9 @@ class ContextRefreshCoordinator extends EventEmitter {
         activeStrategiesCount: freshData.activeStrategies.length,
         discrepanciesFound
       });
+
+      // Phase 8.5 Addendum J: Emit contextUpdated event for Walter rehydration
+      this.emit('contextUpdated', userId);
 
       console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${latencyMs}ms (${discrepanciesFound} discrepancies detected)`);
 
@@ -208,13 +214,24 @@ class ContextRefreshCoordinator extends EventEmitter {
   }
 
   /**
-   * Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
+   * Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H + J)
+   * Phase 8.5 Addendum J: Only creates memory if context has changed (prevents duplicate entries)
    */
   private async updateWalterMemory(userId: string, mode: 'live' | 'paper', freshData: any) {
-    console.log(`[${this.MODULE_NAME}] 🧠 Updating Walter memory for user ${userId} (${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🧠 Checking Walter memory for user ${userId} (${mode})`);
 
     const memoryContent = `Context refreshed: Portfolio balance $${freshData.portfolioBalance}, ${freshData.activeStrategiesCount} strategies active (${freshData.activeStrategies.join(', ')}), engine ${freshData.engineActive ? 'running' : 'stopped'}, mode: ${mode}`;
 
+    // Phase 8.5 Addendum J: Check if context has changed
+    const userKey = `${userId}:${mode}`;
+    const lastContext = this.lastContextByUser.get(userKey);
+    
+    if (lastContext === memoryContent) {
+      console.log(`[${this.MODULE_NAME}] ⏭️  Context unchanged, skipping duplicate memory entry`);
+      return;
+    }
+
+    // Context has changed, create memory and update tracking
     await createMemory(
       userId,
       'observation',
@@ -229,7 +246,8 @@ class ContextRefreshCoordinator extends EventEmitter {
       }
     );
 
-    console.log(`[${this.MODULE_NAME}] ✅ Walter memory updated`);
+    this.lastContextByUser.set(userKey, memoryContent);
+    console.log(`[${this.MODULE_NAME}] ✅ Walter memory updated (context changed)`);
   }
 
   /**
@@ -306,6 +324,104 @@ class ContextRefreshCoordinator extends EventEmitter {
       lastLivePortfolio: null
     };
     this.latencyHistory = [];
+  }
+
+  /**
+   * Phase 8.5 Addendum J: Force live context refresh (always refreshes, no staleness check)
+   * Returns both refresh result and fresh data payload to avoid redundant fetches
+   */
+  async ensureFreshContext(userId: string, mode: 'live' | 'paper' = 'paper'): Promise<{ refreshResult: RefreshResult; freshData: any }> {
+    console.log(`[${this.MODULE_NAME}] [Addendum-J] Forcing live context refresh for user ${userId}`);
+    
+    // Fetch fresh data once
+    const freshData = await this.fetchFreshData(userId, mode);
+    
+    // Perform full refresh using that data
+    const refreshResult = await this.performRefreshWithData(userId, mode, freshData, 'direct');
+    
+    return { refreshResult, freshData };
+  }
+
+  /**
+   * Internal method: Perform refresh using already-fetched data (avoids redundant fetch)
+   */
+  private async performRefreshWithData(userId: string, mode: 'live' | 'paper', freshData: any, source: 'api' | 'direct' | 'resync'): Promise<RefreshResult> {
+    const start = Date.now();
+
+    try {
+      // Update Cortex cache with fresh data
+      await this.updateCortex(userId, mode, freshData);
+
+      // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
+      await this.updateWalterMemory(userId, mode, freshData);
+
+      // Run truth check to detect any remaining discrepancies
+      const truthCheck = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+      const discrepanciesFound = truthCheck.discrepancies.length;
+
+      // Phase 8.5 Addendum I: Auto-resync if discrepancies detected
+      if (discrepanciesFound > 0 && source !== 'resync') {
+        console.log(`[${this.MODULE_NAME}] [TruthSync] mismatch detected (${discrepanciesFound} discrepancies) → forced resync`);
+        // Trigger secondary refresh to resolve misalignments
+        return await this.refresh(userId, mode, 'resync');
+      }
+
+      // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
+      const latencyMs = Date.now() - start;
+      this.updateMetrics(latencyMs, true);
+      this.metrics.lastLivePortfolio = freshData.portfolioBalance;
+
+      // Record in SystemHealthMonitor with actual discrepancy count (Phase 8.5 Addendum H)
+      systemHealthMonitor.recordContextRefresh(latencyMs, true, discrepanciesFound);
+
+      // Emit WebSocket event for real-time UI updates
+      this.emit('contextRefreshed', {
+        userId,
+        mode,
+        source,
+        timestamp: new Date().toISOString(),
+        portfolioBalance: freshData.portfolioBalance,
+        activeStrategiesCount: freshData.activeStrategies.length,
+        discrepanciesFound
+      });
+
+      // Phase 8.5 Addendum J: Emit contextUpdated event for Walter rehydration
+      this.emit('contextUpdated', userId);
+
+      console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${latencyMs}ms (${discrepanciesFound} discrepancies detected)`);
+
+      const result: RefreshResult = {
+        success: true,
+        latencyMs,
+        source,
+        timestamp: new Date().toISOString(),
+        userId,
+        mode,
+        discrepanciesFound
+      };
+
+      return result;
+    } catch (error) {
+      const latencyMs = Date.now() - start;
+      this.updateMetrics(latencyMs, false);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Record failure in SystemHealthMonitor (Phase 8.5 Addendum H)
+      systemHealthMonitor.recordContextRefresh(latencyMs, false, 0);
+      
+      console.error(`[${this.MODULE_NAME}] ❌ Context refresh failed:`, error);
+
+      return {
+        success: false,
+        latencyMs,
+        source,
+        timestamp: new Date().toISOString(),
+        userId,
+        mode,
+        discrepanciesFound: 0,
+        error: errorMessage
+      };
+    }
   }
 }
 

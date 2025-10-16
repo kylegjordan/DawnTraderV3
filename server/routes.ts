@@ -6633,11 +6633,16 @@ Please:
         aiResponse = await generateWalterResponse(userId, id, content.trim());
       }
       
+      // Phase 8.5 Addendum J: Add live data source metadata to Walter responses
       const assistantMessage = await storage.createWalterChatLog({
         chatSessionId: id,
         userId,
         role: 'assistant',
         content: aiResponse,
+        metadata: {
+          dataSource: 'live-api',
+          refreshedAt: new Date().toISOString()
+        }
       });
       
       // Phase 6.3: Log Walter response to file

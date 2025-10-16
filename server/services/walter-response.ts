@@ -27,6 +27,11 @@ import { storage } from '../storage';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const expertContext = new ExpertContextService();
 
+// Phase 8.5 Addendum J: Listen for context updates and log rehydration
+contextRefreshCoordinator.on('contextUpdated', async (userId: string) => {
+  console.log(`[WalterResponse] Context updated event received for user ${userId} - memory will be rehydrated on next response`);
+});
+
 interface ResponseContext {
   purpose: string;
   memories: WalterMemory[];
@@ -59,28 +64,16 @@ export async function generateWalterResponse(
   userMessage: string
 ): Promise<string> {
   try {
-    // Phase 8.5 Addendum H: Auto-refresh context if stale (>30s)
+    // Phase 8.5 Addendum J: Force live context refresh before EVERY response
     const user = await storage.getUser(userId);
     const tradingMode = (user?.tradingMode || 'paper') as 'live' | 'paper';
-    const refreshMetrics = contextRefreshCoordinator.getMetrics();
     
-    if (refreshMetrics.lastRefreshISO) {
-      const lastRefreshTime = new Date(refreshMetrics.lastRefreshISO).getTime();
-      const ageSeconds = (Date.now() - lastRefreshTime) / 1000;
-      const TTL_SECONDS = 30;
-      
-      if (ageSeconds > TTL_SECONDS) {
-        console.log(`[Walter-AutoRefresh] Context stale (${Math.round(ageSeconds)}s old), auto-refreshing...`);
-        await contextRefreshCoordinator.refresh(userId, tradingMode, 'direct');
-        console.log(`[Walter-AutoRefresh] ✅ Context refreshed before responding`);
-      } else {
-        console.log(`[Walter-AutoRefresh] Context fresh (${Math.round(ageSeconds)}s old, TTL=${TTL_SECONDS}s)`);
-      }
-    } else {
-      console.log(`[Walter-AutoRefresh] No previous refresh, triggering initial refresh...`);
-      await contextRefreshCoordinator.refresh(userId, tradingMode, 'direct');
-      console.log(`[Walter-AutoRefresh] ✅ Initial context refresh complete`);
-    }
+    console.log(`[WalterResponse] [Addendum-J] Forcing live context rehydration...`);
+    const { refreshResult, freshData } = await contextRefreshCoordinator.ensureFreshContext(userId, tradingMode);
+    
+    console.log(
+      `[WalterResponse] Rehydrated context → portfolio=${freshData.portfolioBalance} strategies=${freshData.activeStrategiesCount} source=live-api`
+    );
 
     // 1. Gather context including expert principles
     const context = await gatherContext(userId, chatId, userMessage);

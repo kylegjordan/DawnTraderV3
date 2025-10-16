@@ -65,6 +65,16 @@ This infrastructure ensures Walter maintains accurate, real-time awareness of sy
 
 This ensures all context layers (Backend, Cortex, Walter) always reflect true live system state from `portfolio_state` table, eliminating phantom balance mismatches and ensuring data integrity across the platform.
 
+**Walter Context Rehydration on Response (Phase 8.5 Addendum J)** forces live context refresh before every Walter response, eliminating all in-memory staleness. Core changes include:
+- **ensureFreshContext() Method**: Added to ContextRefreshCoordinator to force live context refresh without staleness checks. Called at the start of every `generateWalterResponse()` to guarantee fresh data.
+- **getLatestContext() Method**: Added to ContextRefreshCoordinator to retrieve fresh portfolio balance, active strategies, and settings immediately after refresh. Returns live data for Walter's response generation.
+- **contextUpdated Event**: ContextRefreshCoordinator now emits `contextUpdated` event after successful refresh, enabling Walter to rehydrate memory when live data arrives.
+- **Event Listener**: Walter response service listens for `contextUpdated` events and logs rehydration notifications for transparency.
+- **Response Metadata**: All Walter chat responses now include metadata with `dataSource: 'live-api'` and `refreshedAt: ISO timestamp` stored in `walterChatLogs.metadata` jsonb field.
+- **Rehydration Logging**: Detailed logs show `[Addendum-J] Forcing live context rehydration...` and `Rehydrated context → portfolio=X strategies=Y source=live-api` for every response.
+
+This ensures Walter always "speaks" from the latest live data, with no cached or stale values. Portfolio balances, strategy counts, and settings are refreshed on every message, guaranteeing accuracy and eliminating user confusion from outdated information.
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.

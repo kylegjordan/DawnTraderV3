@@ -1,0 +1,105 @@
+🧠 Phase 8.5 Addendum J — Walter Context Rehydration on Response
+Objective
+
+Eliminate stale in-memory data in Walter’s chat responses by forcing a live-source context reload immediately before every message is generated.
+After this patch, Walter will always “speak” from the latest /api/trading/status data (e.g. $800 and 8 strategies).
+
+Implementation Tasks
+1️⃣ Update Walter Response Pipeline
+
+File: server/services/walter-response.ts
+
+At the top of generateWalterResponse() (or inside handleUserMessage() if that wraps it):
+
+// 🔄 Ensure Walter always uses the latest live context
+await contextRefreshCoordinator.ensureFreshContext(userId);
+const latestContext = await contextRefreshCoordinator.getLatestContext(userId);
+
+
+Replace any use of cachedContext, userContext, or similar variables with latestContext.
+This forces a live context rehydration before every reply.
+
+2️⃣ Rehydrate After Every Refresh Event
+
+File: server/services/context-refresh-coordinator.ts
+
+At the end of the refresh method, emit a global event:
+
+emitter.emit("contextUpdated", userId);
+
+
+File: server/services/walter-response.ts
+
+Listen for that event:
+
+emitter.on("contextUpdated", async (userId) => {
+  await walterMemory.rehydrate(userId);
+  console.log(`[WalterResponse] Context rehydrated for ${userId}`);
+});
+
+
+This guarantees Walter’s working memory is refreshed the moment new live data arrives.
+
+3️⃣ Add source and refreshedAt Flags
+
+Inside Walter’s reply object (typically finalResponse or messagePayload):
+
+dataSource: "live-api",
+refreshedAt: new Date().toISOString(),
+
+
+These fields confirm that the reply came from a live source and include a timestamp for diagnostics.
+
+4️⃣ Add Detailed Logging
+
+After the rehydration call, insert:
+
+console.log(
+  `[WalterResponse] Rehydrated context → portfolio=${latestContext.portfolioBalance} strategies=${latestContext.activeStrategiesCount} source=live-api`
+);
+
+
+You should see this line in /tmp/logs/Start_application_*.log whenever Walter answers.
+
+5️⃣ End-to-End Verification
+
+Run the following tests once the server restarts:
+
+# Trigger a manual context refresh
+curl -s -X POST http://localhost:5000/api/context/refresh | jq
+
+# Check system truth alignment
+curl -s http://localhost:5000/api/system/truth-check | jq
+
+
+Then, in chat say:
+
+“Please refresh your data from the live system.”
+
+✅ Expected chat output
+
+Portfolio Value: $800
+Enabled Strategies: 8
+Source: live-api ✓
+
+
+✅ Expected log entry
+
+[WalterResponse] Rehydrated context → portfolio=800 strategies=8 source=live-api
+
+Completion Checklist
+✅ Check	Expected Result
+Walter replies using live data	✅
+$1 000 fallback gone	✅
+“source: live-api” present	✅
+Log shows rehydration event	✅
+/api/system/truth-check = 0 discrepancies	✅
+Result
+
+After this addendum:
+
+Walter’s in-memory context refreshes on every message.
+
+Chat replies always reflect live backend data.
+
+No stale caches, no outdated balances.
