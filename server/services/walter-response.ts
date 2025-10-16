@@ -143,8 +143,8 @@ export async function generateWalterResponse(
       console.log(`[Walter-CIE] No action executed (confidence: ${cieResponse.intent?.confidence.toFixed(2)}), proceeding with conversational response`);
     }
 
-    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, and CIE context
-    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse);
+    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, CIE context, and FRESH LIVE DATA
+    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, freshData);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
     // 5. Call OpenAI
@@ -422,7 +422,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
 /**
  * Build prompt with context injection including expert principles and CIE context
  */
-async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any): Promise<string> {
+async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any, freshData?: any): Promise<string> {
   const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, insightContext, uiContext, cortexContext, tradingMode } = context;
 
   // Format memories
@@ -500,7 +500,19 @@ ${templateGuidance}
 
 ${cieContext}
 
-WALTER'S DEFINED PURPOSE:
+${freshData ? `⚡ LIVE SYSTEM STATE (Just Refreshed - ${new Date().toISOString()}):
+📊 Portfolio Balance: $${freshData.portfolioBalance} (${tradingMode.toUpperCase()} mode)
+🎯 Active Strategies: ${freshData.activeStrategiesCount > 0 ? freshData.activeStrategies.join(', ') : 'None'}
+🔄 Trading Engine: ${freshData.engineActive ? 'RUNNING' : 'STOPPED'}
+⚙️ Risk Per Trade: $${freshData.riskPerTrade}
+🛡️ Daily Loss Kill Switch: ${freshData.dailyLossKillSwitch}%
+📈 Max Exposure: ${freshData.maxExposurePercent}%
+
+CRITICAL: This is the ACTUAL live system state fetched directly from the database. When answering questions about portfolio balance, active strategies, or system status, ALWAYS use these values above - they are the ground truth. Ignore any conflicting cached data below.
+
+---
+
+` : ''}WALTER'S DEFINED PURPOSE:
 ${purpose}
 
 ---

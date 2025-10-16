@@ -1,0 +1,69 @@
+🧩 Phase 8.5 Addendum K.1 — Context Overwrite and UI Binding Fix
+
+Goal: Ensure Walter always speaks from the latest live backend data (no more $1 000 vs $800 mismatch) and guarantee the System Truth Sync panel correctly displays data instead of staying empty.
+
+📋 Task List
+
+Fix Walter Context Rehydration Timing
+
+Adjust the Walter response service so that the context refresh and memory update are performed before the AI prompt is built or any response is generated.
+
+Confirm that the refresh call and memory overwrite complete successfully before OpenAI is invoked.
+
+Add a log confirmation message showing the context was rehydrated and memory replaced.
+
+This ensures that when Walter says “Source: live-api ✓,” it truly reflects the freshly pulled portfolio and strategy data.
+
+Correct System Truth Sync Panel Data Binding
+
+In the dashboard logic, verify that the 30-second polling task receives the actual JSON data from /api/system/truth-check and assigns it to the component’s state, not the raw response object.
+
+Confirm that the System Truth Sync panel uses the correct prop name for the data being passed from the dashboard page.
+
+Once bound correctly, the panel should populate automatically with live comparison data (Backend ↔ Cortex ↔ Walter).
+
+Verify UI and Telemetry
+
+Check that the System Truth Sync section now displays:
+
+Portfolio balance (showing $800 for all layers)
+
+Active strategy count
+
+Engine status and mode
+
+Any discrepancy indicators (high/medium/low severity)
+
+Ensure the Data Flow Trace (Dev Only) continues recording the last 5 API calls with durations and statuses.
+
+System Restart and Validation
+
+Restart the application to clear cached sessions.
+
+Verify in the logs that:
+
+[ContextRehydration] memory replaced appears before [OpenAI] generating reply
+
+/api/system/truth-check returns 200 with aligned values
+
+Dashboard panel auto-populates within 30 seconds of load
+
+Ask Walter to “read the trading status” again and confirm he now reports the correct live portfolio ($800) and all 8 strategies.
+
+Architect Review and Documentation
+
+After verifying correct live synchronization, submit for architect review to confirm no duplicate queries or memory writes occur.
+
+Update replit.md with a short section for Addendum K.1, noting that it resolves the “stale $1000 context issue” and completes the UI binding for truth telemetry.
+
+✅ Expected Results after Implementation
+
+Walter always reports the current live portfolio and strategy data.
+
+System Truth Sync panel shows real-time comparison results with color-coded status.
+
+Data Flow Trace panel continues to log requests accurately.
+
+Context re-hydration latency remains under 1 second.
+
+All architectural layers — Backend, Cortex, and Walter — stay in continuous agreement.
