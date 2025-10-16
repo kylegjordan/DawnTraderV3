@@ -858,7 +858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map(s => s.strategy);
       
       // Get watchlist pairs (filtered pairs)
-      const watchlist = await storage.getWatchlist(userId);
+      const watchlist = await storage.getWatchlist({ userId, mode });
       const filteredPairs = watchlist.length;
       
       // Get active trades  
