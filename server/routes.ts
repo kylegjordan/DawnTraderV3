@@ -877,8 +877,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
       const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
       
-      // TODO: Add live engine status tracking (currently always false until live trading implemented)
-      const isLiveEngineRunning = false;
+      // Phase 8.5 Addendum K.4.1: Check live engine status from tradingEngines map
+      const liveEngine = tradingEngines.get(userId);
+      const isLiveEngineRunning = !!(liveEngine && liveEngine.isEngineRunning());
       
       // Fetch data for BOTH modes in parallel
       const [
@@ -909,6 +910,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .filter(s => s.enabled)
         .map(s => s.strategy);
       
+      // Phase 8.5 Addendum K.4.1: Log database-sourced data
+      console.log(`[Addendum-K.4.1] LiveDataSource = Database (balance: $${liveBalance}, strategies: ${liveActiveStrategies.length}, engine: ${isLiveEngineRunning ? 'running' : 'stopped'})`);
+      console.log(`[Addendum-K.4.1] PaperDataSource = Database (balance: $${paperBalance}, strategies: ${paperActiveStrategies.length}, engine: ${isPaperSimRunning ? 'running' : 'stopped'})`);
+      
       // Calculate metrics for current mode
       const filteredPairs = watchlist.length;
       const activeTradesCount = activeTrades.length;
@@ -922,22 +927,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const lastTickISO = new Date().toISOString();
       
-      // Return dual-mode structure
+      // Return dual-mode structure with source metadata (Phase 8.5 Addendum K.4.1)
       res.json({
         currentMode,
+        dataSource: 'database', // Phase 8.5 Addendum K.4.1: Always sourced from database
         live: {
           portfolioBalance: liveBalance,
           activeStrategies: liveActiveStrategies,
           activeStrategiesCount: liveActiveStrategies.length,
           engineActive: isLiveEngineRunning,
-          engineStatus: isLiveEngineRunning ? 'running' : 'stopped'
+          engineStatus: isLiveEngineRunning ? 'running' : 'stopped',
+          dataSource: 'database'
         },
         paper: {
           portfolioBalance: paperBalance,
           activeStrategies: paperActiveStrategies,
           activeStrategiesCount: paperActiveStrategies.length,
           engineActive: isPaperSimRunning,
-          engineStatus: isPaperSimRunning ? 'running' : 'stopped'
+          engineStatus: isPaperSimRunning ? 'running' : 'stopped',
+          dataSource: 'database'
         },
         // Legacy fields for backwards compatibility (use current mode)
         mode: currentMode,
