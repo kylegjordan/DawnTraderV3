@@ -45,6 +45,21 @@ export interface GovernanceReport {
     continuityPercentage: number;
     staleEventsPercentage: number;
   };
+  // Phase 8.6.4 Addendum B: Schema Binding Validation
+  schemaBindings: {
+    goals: { tables: string[]; status: 'valid' | 'invalid' };
+    strategies: { table: string; status: 'valid' | 'invalid' };
+    portfolio: { table: string; status: 'valid' | 'invalid' };
+    overallStatus: 'valid' | 'invalid';
+    validatedMappings: Record<string, string[]>;
+  };
+  // Phase 8.6.4 Addendum B: Learning Alignment Metrics
+  learningAlignment?: {
+    validatedBindingsPercentage: number;
+    legacyReferencesQuarantined: number;
+    autoLearningLockStatus: 'locked' | 'unlocked';
+    lastAlignmentTimestamp: Date | null;
+  };
   summary: string;
   recommendations: string[];
 }
@@ -156,6 +171,104 @@ class ProvenanceGovernanceService {
   }
 
   /**
+   * Phase 8.6.4 Addendum B: Validate schema bindings
+   * Confirms authoritative data sources and detects legacy references
+   */
+  private async validateSchemaBindings(): Promise<{
+    goals: { tables: string[]; status: 'valid' | 'invalid' };
+    strategies: { table: string; status: 'valid' | 'invalid' };
+    portfolio: { table: string; status: 'valid' | 'invalid' };
+    overallStatus: 'valid' | 'invalid';
+    validatedMappings: Record<string, string[]>;
+  }> {
+    console.log('[SchemaBindingValidation] Validating authoritative data sources...');
+    
+    // Define authoritative schema bindings
+    const authoritativeBindings = {
+      goals: ['user_goals_live', 'user_goals_paper'],
+      strategies: ['strategy_settings'],
+      portfolio: ['portfolio_state'],
+    };
+    
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    try {
+      // Check what tables are actually being referenced in recent traces
+      const recentTraces = await db
+        .select()
+        .from(dataLineage)
+        .where(gte(dataLineage.timestamp, oneDayAgo));
+      
+      const recentBobTraces = await db
+        .select()
+        .from(bobTraceLog)
+        .where(gte(bobTraceLog.timestamp, oneDayAgo));
+      
+      // Collect all referenced source tables
+      const referencedTables = new Set<string>();
+      recentTraces.forEach(t => {
+        if (t.sourceTable) referencedTables.add(t.sourceTable);
+      });
+      recentBobTraces.forEach(t => {
+        if (t.sourceTable) referencedTables.add(t.sourceTable);
+      });
+      
+      // Validate each binding
+      const goalsValid = authoritativeBindings.goals.some(t => referencedTables.has(t)) || referencedTables.size === 0;
+      const strategiesValid = referencedTables.has(authoritativeBindings.strategies[0]) || referencedTables.size === 0;
+      const portfolioValid = referencedTables.has(authoritativeBindings.portfolio[0]) || referencedTables.size === 0;
+      
+      // Check for any legacy table references (tables not in authoritative list)
+      const allAuthoritativeTables = [
+        ...authoritativeBindings.goals,
+        ...authoritativeBindings.strategies,
+        ...authoritativeBindings.portfolio,
+      ];
+      
+      const legacyReferences = Array.from(referencedTables).filter(
+        t => !allAuthoritativeTables.includes(t) && !t.startsWith('cortex_') && !t.startsWith('walter_')
+      );
+      
+      const overallStatus: 'valid' | 'invalid' = 
+        goalsValid && strategiesValid && portfolioValid && legacyReferences.length === 0
+          ? 'valid'
+          : 'invalid';
+      
+      console.log('[SchemaBindingValidation] Validated source_table mapping:');
+      console.log(`  Goals → ${authoritativeBindings.goals.join(', ')} [${goalsValid ? 'VALID' : 'INVALID'}]`);
+      console.log(`  Strategies → ${authoritativeBindings.strategies[0]} [${strategiesValid ? 'VALID' : 'INVALID'}]`);
+      console.log(`  Portfolio → ${authoritativeBindings.portfolio[0]} [${portfolioValid ? 'VALID' : 'INVALID'}]`);
+      console.log(`  Overall Binding Status: ${overallStatus.toUpperCase()}`);
+      
+      if (legacyReferences.length > 0) {
+        console.warn(`[SchemaBindingValidation] ⚠️ Legacy table references detected: ${legacyReferences.join(', ')}`);
+      }
+      
+      return {
+        goals: { tables: authoritativeBindings.goals, status: goalsValid ? 'valid' : 'invalid' },
+        strategies: { table: authoritativeBindings.strategies[0], status: strategiesValid ? 'valid' : 'invalid' },
+        portfolio: { table: authoritativeBindings.portfolio[0], status: portfolioValid ? 'valid' : 'invalid' },
+        overallStatus,
+        validatedMappings: {
+          goals: authoritativeBindings.goals,
+          strategies: authoritativeBindings.strategies,
+          portfolio: authoritativeBindings.portfolio,
+          legacyReferences,
+        },
+      };
+    } catch (error) {
+      console.error('[SchemaBindingValidation] Error validating schema bindings:', error);
+      return {
+        goals: { tables: authoritativeBindings.goals, status: 'invalid' },
+        strategies: { table: authoritativeBindings.strategies[0], status: 'invalid' },
+        portfolio: { table: authoritativeBindings.portfolio[0], status: 'invalid' },
+        overallStatus: 'invalid',
+        validatedMappings: authoritativeBindings,
+      };
+    }
+  }
+
+  /**
    * Phase 8.6.4: Calculate lineage continuity percentage
    */
   private async getLineageContinuity(): Promise<{
@@ -237,6 +350,9 @@ class ProvenanceGovernanceService {
     const cortexWriteCount = await this.getCortexWriteCount();
     const lineageContinuity = await this.getLineageContinuity();
     
+    // Phase 8.6.4 Addendum B: Schema binding validation
+    const schemaBindings = await this.validateSchemaBindings();
+    
     const report: GovernanceReport = {
       timestamp: new Date(),
       freshness: {
@@ -259,6 +375,7 @@ class ProvenanceGovernanceService {
       bobExecutionMetrics: bobMetrics,
       cortexWriteCount24h: cortexWriteCount,
       lineageContinuity,
+      schemaBindings,
       summary: '',
       recommendations: [],
     };
@@ -296,6 +413,23 @@ class ProvenanceGovernanceService {
       report.recommendations.push(`Stale events at ${report.lineageContinuity.staleEventsPercentage.toFixed(1)}% - target is ≤1%`);
     }
     
+    // Phase 8.6.4 Addendum B: Check schema binding status
+    if (report.schemaBindings.overallStatus === 'invalid') {
+      const invalidBindings = [];
+      if (report.schemaBindings.goals.status === 'invalid') invalidBindings.push('goals');
+      if (report.schemaBindings.strategies.status === 'invalid') invalidBindings.push('strategies');
+      if (report.schemaBindings.portfolio.status === 'invalid') invalidBindings.push('portfolio');
+      
+      if (invalidBindings.length > 0) {
+        report.recommendations.push(`Schema bindings invalid for: ${invalidBindings.join(', ')} - verify authoritative tables`);
+      }
+      
+      const legacyRefs = report.schemaBindings.validatedMappings.legacyReferences || [];
+      if (legacyRefs.length > 0) {
+        report.recommendations.push(`Legacy table references detected: ${legacyRefs.join(', ')} - quarantine for review`);
+      }
+    }
+    
     console.log('[ProvenanceGovernance] ✅ Report generated:');
     console.log(`  Freshness: BoB=${report.freshness.bob.status}, Cortex=${report.freshness.cortex.status}, Walter=${report.freshness.walter.status}`);
     console.log(`  Provenance Coverage: ${report.provenanceCoverage.toFixed(1)}%`);
@@ -304,6 +438,7 @@ class ProvenanceGovernanceService {
     console.log(`  BoB Executions (24h): ${report.bobExecutionMetrics.total24h} (avg ${report.bobExecutionMetrics.avgExecutionTimeMs.toFixed(1)}ms)`);
     console.log(`  Cortex Writes (24h): ${report.cortexWriteCount24h}`);
     console.log(`  Lineage Continuity: ${report.lineageContinuity.continuityPercentage.toFixed(1)}% (${report.lineageContinuity.staleEventsPercentage.toFixed(1)}% stale)`);
+    console.log(`  Schema Bindings: ${report.schemaBindings.overallStatus.toUpperCase()}`);
     
     return report;
   }
