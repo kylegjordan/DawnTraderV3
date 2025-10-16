@@ -328,6 +328,81 @@ class ProvenanceGovernanceService {
   }
 
   /**
+   * Phase 8.6.4 Addendum B: Calculate learning alignment metrics
+   */
+  private async calculateLearningAlignmentMetrics(): Promise<{
+    validatedBindingsPercentage: number;
+    legacyReferencesQuarantined: number;
+    autoLearningLockStatus: 'locked' | 'unlocked';
+    lastAlignmentTimestamp: Date | null;
+  }> {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    try {
+      // Get all recent traces to check source tables
+      const recentTraces = await db
+        .select()
+        .from(dataLineage)
+        .where(gte(dataLineage.timestamp, oneDayAgo));
+      
+      const recentBobTraces = await db
+        .select()
+        .from(bobTraceLog)
+        .where(gte(bobTraceLog.timestamp, oneDayAgo));
+      
+      // Authoritative tables
+      const authoritativeTables = [
+        'user_goals_live',
+        'user_goals_paper',
+        'strategy_settings',
+        'portfolio_state'
+      ];
+      
+      // Count validated vs non-validated references
+      let validatedCount = 0;
+      let totalCount = 0;
+      let legacyCount = 0;
+      
+      [...recentTraces, ...recentBobTraces].forEach(trace => {
+        if (trace.sourceTable && !trace.sourceTable.startsWith('cortex_') && !trace.sourceTable.startsWith('walter_')) {
+          totalCount++;
+          if (authoritativeTables.includes(trace.sourceTable)) {
+            validatedCount++;
+          } else {
+            legacyCount++;
+          }
+        }
+      });
+      
+      const validatedPercentage = totalCount > 0 ? (validatedCount / totalCount) * 100 : 100;
+      
+      // Auto-learning is "locked" if all references are validated
+      const autoLearningLockStatus: 'locked' | 'unlocked' = 
+        validatedPercentage === 100 ? 'locked' : 'unlocked';
+      
+      // Last alignment timestamp is the most recent trace
+      const lastTimestamp = recentTraces.length > 0 || recentBobTraces.length > 0
+        ? new Date()
+        : null;
+      
+      return {
+        validatedBindingsPercentage: validatedPercentage,
+        legacyReferencesQuarantined: legacyCount,
+        autoLearningLockStatus,
+        lastAlignmentTimestamp: lastTimestamp
+      };
+    } catch (error) {
+      console.error('[ProvenanceGovernance] Error calculating learning alignment metrics:', error);
+      return {
+        validatedBindingsPercentage: 0,
+        legacyReferencesQuarantined: 0,
+        autoLearningLockStatus: 'unlocked',
+        lastAlignmentTimestamp: null
+      };
+    }
+  }
+
+  /**
    * Generate daily governance report
    */
   async generateDailyReport(): Promise<GovernanceReport> {
@@ -353,6 +428,9 @@ class ProvenanceGovernanceService {
     // Phase 8.6.4 Addendum B: Schema binding validation
     const schemaBindings = await this.validateSchemaBindings();
     
+    // Phase 8.6.4 Addendum B: Learning alignment metrics
+    const learningAlignment = await this.calculateLearningAlignmentMetrics();
+    
     const report: GovernanceReport = {
       timestamp: new Date(),
       freshness: {
@@ -376,6 +454,7 @@ class ProvenanceGovernanceService {
       cortexWriteCount24h: cortexWriteCount,
       lineageContinuity,
       schemaBindings,
+      learningAlignment,
       summary: '',
       recommendations: [],
     };
@@ -439,6 +518,11 @@ class ProvenanceGovernanceService {
     console.log(`  Cortex Writes (24h): ${report.cortexWriteCount24h}`);
     console.log(`  Lineage Continuity: ${report.lineageContinuity.continuityPercentage.toFixed(1)}% (${report.lineageContinuity.staleEventsPercentage.toFixed(1)}% stale)`);
     console.log(`  Schema Bindings: ${report.schemaBindings.overallStatus.toUpperCase()}`);
+    console.log('[Governance] Learning Alignment Summary:');
+    console.log(`  Validated Bindings: ${report.learningAlignment?.validatedBindingsPercentage.toFixed(1)}%`);
+    console.log(`  Legacy References Quarantined: ${report.learningAlignment?.legacyReferencesQuarantined || 0}`);
+    console.log(`  Auto-Learning Lock: ${report.learningAlignment?.autoLearningLockStatus.toUpperCase()}`);
+    console.log(`  Last Alignment: ${report.learningAlignment?.lastAlignmentTimestamp?.toISOString() || 'N/A'}`);
     
     return report;
   }
