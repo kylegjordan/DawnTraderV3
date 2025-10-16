@@ -140,15 +140,17 @@ class ContextRefreshCoordinator extends EventEmitter {
 
   /**
    * Fetch fresh data from backend (portfolio, strategies, settings)
-   * Phase 8.5 Addendum I: Uses live API source - matches /api/trading/status logic exactly
+   * Phase 8.5 Addendum K.3: Uses global context for shared data
    */
   private async fetchFreshData(userId: string, mode: 'live' | 'paper') {
-    console.log(`[${this.MODULE_NAME}] [ContextSource] live-api ✓`);
+    console.log(`[${this.MODULE_NAME}] [ContextSource] live-api ✓ (global context)`);
     
-    // Fetch in parallel
+    const globalContextId = 'default';
+    
+    // Fetch in parallel - using global context for shared data
     const [portfolioState, strategies, settings, user] = await Promise.all([
-      storage.getPortfolioState({ userId, mode }),
-      storage.listStrategySettings({ userId, mode }),
+      storage.getPortfolioState({ globalContextId, mode }),
+      storage.listStrategySettings({ globalContextId, mode }),
       storage.getTradingSettings(userId),
       storage.getUser(userId)
     ]);
@@ -178,7 +180,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       source: 'live-api' as const
     };
 
-    console.log(`[${this.MODULE_NAME}] source=live-api portfolio=${portfolioBalance} strategies=${activeStrategies.length}`);
+    console.log(`[${this.MODULE_NAME}] source=live-api (global) portfolio=${portfolioBalance} strategies=${activeStrategies.length}`);
     
     return freshData;
   }

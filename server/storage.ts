@@ -203,8 +203,8 @@ export interface IStorage {
   deleteOldScreenerResults(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
 
   // Strategy settings methods
-  getStrategySettings(params: { userId: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null>;
-  listStrategySettings(params: { userId: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]>;
+  getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null>;
+  listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]>;
   upsertStrategySettings(row: InsertStrategySettings): Promise<StrategySettings>;
   insertStrategySettingsAudit(row: InsertStrategySettingsAudit): Promise<void>;
   listStrategySettingsAudit(params: { userId: string; limit?: number }): Promise<StrategySettingsAudit[]>;
@@ -504,9 +504,9 @@ export interface IStorage {
   unpinWalterChat(chatId: string): Promise<WalterChat>;
   
   // Portfolio State methods (Phase 8.5 Addendum F)
-  getPortfolioState(params: { userId: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined>;
-  upsertPortfolioState(data: InsertPortfolioState & { userId: string; mode: 'live' | 'paper' }): Promise<PortfolioState>;
-  updatePortfolioBalance(userId: string, mode: 'live' | 'paper', balance: number): Promise<PortfolioState>;
+  getPortfolioState(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined>;
+  upsertPortfolioState(data: InsertPortfolioState & { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState>;
+  updatePortfolioBalance(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; balance: number }): Promise<PortfolioState>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -743,14 +743,15 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
-  // Strategy settings methods
-  async getStrategySettings(params: { userId: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null> {
+  // Strategy settings methods (Phase 8.5 Addendum K.3 - Global Context)
+  async getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null> {
+    const contextId = params.globalContextId || 'default';
     const [result] = await db
       .select()
       .from(strategySettings)
       .where(
         and(
-          eq(strategySettings.userId, params.userId),
+          eq(strategySettings.globalContextId, contextId),
           eq(strategySettings.mode, params.mode),
           eq(strategySettings.strategy, params.strategy as any)
         )
@@ -758,13 +759,14 @@ export class DatabaseStorage implements IStorage {
     return result || null;
   }
 
-  async listStrategySettings(params: { userId: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]> {
+  async listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]> {
+    const contextId = params.globalContextId || 'default';
     return await db
       .select()
       .from(strategySettings)
       .where(
         and(
-          eq(strategySettings.userId, params.userId),
+          eq(strategySettings.globalContextId, contextId),
           eq(strategySettings.mode, params.mode)
         )
       )
@@ -2754,39 +2756,46 @@ export class DatabaseStorage implements IStorage {
     return chat;
   }
   
-  // Portfolio State methods (Phase 8.5 Addendum F)
-  async getPortfolioState(params: { userId: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined> {
+  // Portfolio State methods (Phase 8.5 Addendum K.3 - Global Context)
+  async getPortfolioState(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined> {
+    const contextId = params.globalContextId || 'default';
     const [state] = await db.select().from(portfolioState)
       .where(and(
-        eq(portfolioState.userId, params.userId),
+        eq(portfolioState.globalContextId, contextId),
         eq(portfolioState.mode, params.mode)
       ));
     return state || undefined;
   }
   
-  async upsertPortfolioState(data: InsertPortfolioState & { userId: string; mode: 'live' | 'paper' }): Promise<PortfolioState> {
-    const existing = await this.getPortfolioState({ userId: data.userId, mode: data.mode });
+  async upsertPortfolioState(data: InsertPortfolioState & { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState> {
+    const contextId = data.globalContextId || 'default';
+    const existing = await this.getPortfolioState({ globalContextId: contextId, mode: data.mode });
     
     if (existing) {
       const [updated] = await db.update(portfolioState)
-        .set({ balance: data.balance, lastUpdate: new Date() })
+        .set({ balance: data.balance, lastUpdate: new Date(), userId: data.userId })
         .where(and(
-          eq(portfolioState.userId, data.userId),
+          eq(portfolioState.globalContextId, contextId),
           eq(portfolioState.mode, data.mode)
         ))
         .returning();
       return updated;
     } else {
       const [created] = await db.insert(portfolioState)
-        .values(data)
+        .values({ ...data, globalContextId: contextId })
         .returning();
       return created;
     }
   }
   
-  async updatePortfolioBalance(userId: string, mode: 'live' | 'paper', balance: number): Promise<PortfolioState> {
-    const balanceDecimal = balance.toString();
-    return await this.upsertPortfolioState({ userId, mode, balance: balanceDecimal });
+  async updatePortfolioBalance(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; balance: number }): Promise<PortfolioState> {
+    const balanceDecimal = params.balance.toString();
+    return await this.upsertPortfolioState({ 
+      globalContextId: params.globalContextId || 'default',
+      userId: params.userId,
+      mode: params.mode, 
+      balance: balanceDecimal 
+    });
   }
 
   // Expert Updates methods (Phase 5.8 - Task 5)

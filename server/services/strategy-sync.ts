@@ -1,10 +1,11 @@
 import { storage } from '../storage';
 
 /**
- * StrategySync Service (Phase 8.5 Addendum F)
+ * StrategySync Service (Phase 8.5 Addendum K.3 - Global Context)
  * 
- * Ensures all 8 core trading strategies exist in strategy_settings for every user.
+ * Ensures all 8 core trading strategies exist in strategy_settings for the global context.
  * Runs on application startup to maintain data integrity across Dashboard, Walter, and Cortex.
+ * Uses global context instead of per-user strategies (shared workspace).
  */
 
 // All 8 core strategies
@@ -20,16 +21,17 @@ const CORE_STRATEGIES = [
 ] as const;
 
 const MODES: ('live' | 'paper')[] = ['live', 'paper'];
+const GLOBAL_CONTEXT_ID = 'default';
 
 export class StrategySyncService {
   /**
-   * Sync all strategies for a specific user and mode
+   * Sync all strategies for global context and mode
    */
-  async syncUserStrategies(userId: string, mode: 'live' | 'paper'): Promise<{
+  async syncGlobalStrategies(mode: 'live' | 'paper'): Promise<{
     added: string[];
     existing: number;
   }> {
-    const existingStrategies = await storage.listStrategySettings({ userId, mode });
+    const existingStrategies = await storage.listStrategySettings({ globalContextId: GLOBAL_CONTEXT_ID, mode });
     const existingStrategyNames = new Set(existingStrategies.map(s => s.strategy));
     
     const missing = CORE_STRATEGIES.filter(strategy => !existingStrategyNames.has(strategy));
@@ -38,11 +40,10 @@ export class StrategySyncService {
     // Insert missing strategies with enabled=false by default
     for (const strategy of missing) {
       await storage.upsertStrategySettings({
-        userId,
+        globalContextId: GLOBAL_CONTEXT_ID,
         mode,
         strategy,
         enabled: false,
-        // Default parameters (can be adjusted per strategy later)
         params: JSON.stringify({
           riskLevel: 'medium',
           maxPositionSize: 0.1,
@@ -52,7 +53,7 @@ export class StrategySyncService {
     }
     
     if (added.length > 0) {
-      console.log(`[StrategySync] Added ${added.length} missing strategies for user ${userId} in ${mode} mode: ${added.join(', ')}`);
+      console.log(`[StrategySync] Added ${added.length} missing strategies for global context in ${mode} mode: ${added.join(', ')}`);
     }
     
     return {
@@ -62,35 +63,29 @@ export class StrategySyncService {
   }
   
   /**
-   * Sync all strategies for all users
+   * Sync all strategies for all modes (global context)
    */
   async syncAllUsers(): Promise<{
     totalAdded: number;
     usersProcessed: number;
   }> {
     const startTime = Date.now();
-    console.log('[StrategySync] Starting full strategy sync...');
+    console.log('[StrategySync] Starting global strategy sync...');
     
     let totalAdded = 0;
-    let usersProcessed = 0;
     
-    // Get all users
-    const users = await storage.getAllUsers();
-    
-    for (const user of users) {
-      for (const mode of MODES) {
-        const result = await this.syncUserStrategies(user.id, mode);
-        totalAdded += result.added.length;
-      }
-      usersProcessed++;
+    // Sync for each mode (live and paper) in global context
+    for (const mode of MODES) {
+      const result = await this.syncGlobalStrategies(mode);
+      totalAdded += result.added.length;
     }
     
     const duration = Date.now() - startTime;
-    console.log(`[StrategySync] Completed in ${duration}ms: ${usersProcessed} users processed, ${totalAdded} strategies added`);
+    console.log(`[StrategySync] Completed in ${duration}ms: global context processed, ${totalAdded} strategies added`);
     
     return {
       totalAdded,
-      usersProcessed,
+      usersProcessed: 1, // Global context = 1 "user"
     };
   }
   
@@ -102,10 +97,10 @@ export class StrategySyncService {
   }
   
   /**
-   * Verify all strategies exist for a user
+   * Verify all strategies exist for global context and mode
    */
   async verifyUserStrategies(userId: string, mode: 'live' | 'paper'): Promise<boolean> {
-    const existingStrategies = await storage.listStrategySettings({ userId, mode });
+    const existingStrategies = await storage.listStrategySettings({ globalContextId: GLOBAL_CONTEXT_ID, mode });
     const existingStrategyNames = new Set(existingStrategies.map(s => s.strategy));
     
     return CORE_STRATEGIES.every(strategy => existingStrategyNames.has(strategy));
