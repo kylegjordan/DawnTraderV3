@@ -34,6 +34,8 @@ The system incorporates a multi-module intelligent caching system (Bob Core) for
 
 **Chat Route Alignment & UI Telemetry Binding** integrates UI with backend telemetry. The Dashboard polls `/api/system/truth-check` for real-time truth data. A Global Request Trace System tracks API calls, and Walter assistant messages display a "Source: live-api ✓" badge indicating fresh data.
 
+**Direct Fresh Data Injection (Addendum K.1)** ensures Walter's prompt receives live system state directly. Fresh portfolio balance, active strategies, engine status, and mode are fetched via `ensureFreshContext()` and injected as a LIVE SYSTEM STATE block in Walter's system prompt. This eliminates reliance on potentially stale semantic memory retrieval. All fallback logic defaults to $0 (not $1000) when portfolio_state is absent, enforcing consistency with Addendum I live source rules.
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.
