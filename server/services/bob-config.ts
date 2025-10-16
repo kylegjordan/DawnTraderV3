@@ -93,6 +93,27 @@ class ConfigBobModule {
           rowCount: formattedGoals.length,
           metadata: { hasGoals: response.hasGoals, goalCount: formattedGoals.length }
         });
+
+        // Log data lineage: BoB → Cortex → Walter
+        await provenanceLogger.logLineage({
+          traceId: context.traceId,
+          originatingService: 'bob',
+          targetService: 'cortex',
+          sourceTable: mode === 'live' ? 'user_goals_live' : 'user_goals_paper',
+          mode: context.mode,
+          globalContextId: 'default',
+          metadata: { note: `BoB → Cortex: goals (${mode})` }
+        });
+
+        await provenanceLogger.logLineage({
+          traceId: context.traceId,
+          originatingService: 'cortex',
+          targetService: 'walter',
+          sourceTable: mode === 'live' ? 'user_goals_live' : 'user_goals_paper',
+          mode: context.mode,
+          globalContextId: 'default',
+          metadata: { note: `Cortex → Walter: goals (${mode})` }
+        });
       }
       
       console.log(`[${this.MODULE_NAME}] ✅ Goals fetched in ${duration}ms`);
@@ -236,6 +257,27 @@ class ConfigBobModule {
           executionTimeMs: duration,
           rowCount: strategiesData.length,
           metadata: { strategyCount: strategiesData.length }
+        });
+
+        // Log data lineage: BoB → Cortex → Walter
+        await provenanceLogger.logLineage({
+          traceId: context.traceId,
+          originatingService: 'bob',
+          targetService: 'cortex',
+          sourceTable: 'strategy_settings',
+          mode: context.mode,
+          globalContextId: 'default',
+          metadata: { note: `BoB → Cortex: strategies (${mode})` }
+        });
+
+        await provenanceLogger.logLineage({
+          traceId: context.traceId,
+          originatingService: 'cortex',
+          targetService: 'walter',
+          sourceTable: 'strategy_settings',
+          mode: context.mode,
+          globalContextId: 'default',
+          metadata: { note: `Cortex → Walter: strategies (${mode})` }
         });
       }
       
