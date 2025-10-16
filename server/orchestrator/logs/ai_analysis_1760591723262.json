@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-10-16T05:15:23.261Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "Trading system has zero active and closed trades with a win rate and ROI of 0, indicating potential operational issues or downtime."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has zero recent learning cycles, average confidence, opportunities generated, and adjustments made, suggesting it is not functioning as expected."
+    },
+    {
+      "severity": "low",
+      "message": "CPU load average is relatively high (5.54, 6.99, 6.43) compared to the number of cores (8), which may indicate potential performance bottlenecks."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "medium",
+      "recommendation": "Investigate and optimize AI system processes to ensure learning cycles and opportunity generation are functioning."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Consider optimizing CPU-intensive tasks or balancing load across cores to reduce the average load."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate and resolve the trading system's inactivity and zero performance metrics.",
+      "rationale": "The trading platform's core functionality is compromised, affecting revenue and user trust."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Assess and troubleshoot the AI system to ensure it is operational and contributing to trading strategies.",
+      "rationale": "AI is a key component for generating trading opportunities and improving decision-making."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Monitor CPU load and consider redistributing tasks or upgrading hardware if persistent high load is observed.",
+      "rationale": "Ensuring optimal CPU performance can prevent potential slowdowns and improve system responsiveness."
+    }
+  ],
+  "urgencyLevel": "critical"
+}

@@ -87,6 +87,7 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     username: string;
     isAdmin?: boolean;
+    role?: 'owner' | 'editor' | 'viewer';
   };
   mode?: 'live' | 'paper';
 }
@@ -107,13 +108,14 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
     
-    // Fetch user from database to get admin status
+    // Fetch user from database to get admin status and role
     const user = await storage.getUser(decoded.id);
     
     req.user = { 
       id: decoded.id, 
       username: decoded.username,
-      isAdmin: user?.isAdmin || false
+      isAdmin: user?.isAdmin || false,
+      role: user?.role || 'viewer'
     };
     next();
   } catch (error) {
@@ -127,6 +129,27 @@ function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFuncti
     return res.status(403).json({ 
       error: 'Access denied',
       message: 'Admin privileges required'
+    });
+  }
+  next();
+}
+
+// RBAC Middleware - Role-Based Access Control for global context
+function requireOwner(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (req.user?.role !== 'owner') {
+    return res.status(403).json({ 
+      error: 'Access denied',
+      message: 'Owner role required to perform this action'
+    });
+  }
+  next();
+}
+
+function requireEditor(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  if (req.user?.role !== 'owner' && req.user?.role !== 'editor') {
+    return res.status(403).json({ 
+      error: 'Access denied',
+      message: 'Editor or Owner role required to perform this action'
     });
   }
   next();
@@ -644,7 +667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.put('/api/guardrails', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
@@ -787,7 +810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trading Engine Control
-  app.post('/api/trading/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/trading/start', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode } = req.body; // 'live' or 'paper'
@@ -820,7 +843,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/trading/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/trading/stop', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -3802,7 +3825,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/kill-switch/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/kill-switch/reset', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { notes } = req.body;
@@ -6039,7 +6062,7 @@ Please:
 
   // PUT save settings (validated) + audit + hot-reload
   // Phase 8.5 Addendum K.3: Uses global context for shared strategies
-  app.put('/api/strategies/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.put('/api/strategies/settings', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const globalContextId = 'default';
