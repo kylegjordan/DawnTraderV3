@@ -1,0 +1,85 @@
+Phase 8.5 Addendum K.4 — “Live Mode Visibility Synchronization”
+🎯 Objective
+
+Guarantee that both Walter AI and the dashboard UI consistently display live-mode portfolio balances and strategy configurations directly from the global database — regardless of whether the live trading engine is active or paused.
+
+🧩 Phase Goals
+
+Prevent Walter from ever saying “no live balance” or “no strategies enabled.”
+
+Ensure that /api/trading/status always includes current live-mode data from the global context.
+
+Keep the System Truth Sync and Goals Engine panels populated, marking data as idle when the engine is off.
+
+Preserve full parity between live and paper modes in all data views.
+
+⚙️ Implementation Tasks (Conceptual)
+
+1. Extend Context Refresh Coordinator
+
+Add automatic retrieval of both live and paper portfolio states from the global portfolio_state table.
+
+Store a flag such as engineActive: true/false for visibility but never omit the record.
+
+The Coordinator should now deliver complete dual-mode data to Walter and the UI.
+
+2. Enhance System Truth Diagnostic
+
+When the live engine is off, output the last known live-mode data with a label engineStatus: "stopped" instead of omitting it.
+
+Display the age of the last update so you know the snapshot’s freshness.
+
+3. Modify Walter Response Service
+
+Ensure Walter’s prompt always includes a Live System State section populated from the database, not engine memory.
+
+Example:
+
+“Live Mode Portfolio Value: $834 (Trading paused)”
+“Active Strategies: VWAP Pullback, ABCD Long, … (8 total)”
+
+Walter will now present complete context while clearly stating that trading is currently paused.
+
+4. Update Dashboard Panels
+
+System Truth Sync: Show “Engine Stopped – Data Static” instead of “No Data.”
+
+Goals Engine: Confirm that both modes display identical parameter sets; no further edits needed.
+
+5. Add Health Monitor Field
+
+Include a new metric lastLiveSyncAt and contextAge so the dashboard can indicate when live data was last refreshed.
+
+6. Testing and Verification
+
+Stop the live engine.
+
+Open /api/trading/status — verify it still returns a live balance and all 8 strategies under mode:"live".
+
+Ask Walter AI:
+
+“What’s my current live portfolio balance?”
+He should now respond with the correct figure (≈ $834) and the note “Trading engine is paused.”
+
+Run /api/system/truth-check — confirm backend, Cortex, and Walter all agree.
+
+✅ Expected Outcome
+
+After successful deployment:
+
+Walter AI always shows accurate live and paper data — engine state only affects trade execution, not visibility.
+
+Dashboard panels remain populated in idle mode, with clear “stopped” status.
+
+Truth Sync and Health Monitor stay consistent across all layers.
+
+The system achieves full live/paper parity and continuous transparency.
+
+🧠 Architectural Note
+
+This addendum completes the visibility layer for the global context architecture introduced in K.3 and secured under RBAC (K.2).
+From this point onward:
+
+Walter draws data directly from the global database, not transient engine memory.
+
+The live engine becomes purely an executor, never the single source of truth.
