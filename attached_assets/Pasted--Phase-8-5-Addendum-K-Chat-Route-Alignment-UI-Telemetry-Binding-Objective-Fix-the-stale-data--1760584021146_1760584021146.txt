@@ -1,0 +1,170 @@
+⚙️ Phase 8.5 Addendum K — Chat Route Alignment & UI Telemetry Binding
+Objective
+
+Fix the stale-data and empty-dashboard problems by:
+
+Routing all Walter chat messages through the correct backend path
+(/api/walter/chats/:id/messages) so each response passes through the real-time context pipeline.
+
+Wiring the dashboard telemetry panels to call the backend truth-check endpoints at regular intervals and show live data.
+
+Implementation Tasks
+1️⃣ Fix Chat Route Mapping
+
+Files:
+
+client/src/lib/api.ts
+
+client/src/components/walter/chat-input.tsx (or equivalent)
+
+Actions:
+
+Locate where chat messages are sent (the POST request that currently calls /api/walter/chat).
+
+Replace it with:
+
+// Use active chat ID from state or route params
+const chatId = currentChatId || "default";
+const url = `/api/walter/chats/${chatId}/messages`;
+
+await api.post(url, { message: inputMessage });
+
+
+Remove or deprecate any legacy /api/walter/chat references.
+
+Confirm that the backend receives requests on /api/walter/chats/:id/messages and logs [WalterResponse] Rehydrated context → ….
+
+2️⃣ Add Telemetry Hooks to Dashboard
+
+File: client/src/pages/dashboard.tsx
+
+Import React Query or useEffect interval logic to poll every 30 seconds:
+
+useEffect(() => {
+  const fetchTruthData = async () => {
+    const { data } = await api.get("/api/system/truth-check");
+    setTruthData(data);
+  };
+  fetchTruthData();
+  const timer = setInterval(fetchTruthData, 30000);
+  return () => clearInterval(timer);
+}, []);
+
+
+Pass truthData into the SystemTruthPanel component props.
+
+3️⃣ Populate System Truth Sync Panel
+
+File: client/src/components/dashboard/system-truth-panel.tsx
+
+Replace the current No Data placeholder with a dynamic table:
+
+{truthData ? (
+  <Table>
+    <thead>
+      <tr>
+        <th>Field</th><th>Backend</th><th>Cortex</th><th>Walter</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {truthData.comparisons.map((row) => (
+        <tr key={row.field}>
+          <td>{row.field}</td>
+          <td>{row.backend}</td>
+          <td>{row.cortex}</td>
+          <td>{row.walter}</td>
+          <td>{row.status}</td>
+        </tr>
+      ))}
+    </tbody>
+  </Table>
+) : (
+  <p>No Data yet — waiting for sync…</p>
+)}
+
+
+Add color indicators:
+
+✅ All equal → green
+
+⚠️ Partial mismatch → yellow
+
+❌ Mismatch > threshold → red
+
+4️⃣ Bind Data Flow Trace (Dev Only)
+
+File: client/src/components/dashboard/data-flow-trace.tsx
+
+Intercept Axios/Fetch requests in api.ts and push a record into a small in-memory array:
+
+api.interceptors.response.use((response) => {
+  logTrace({
+    endpoint: response.config.url,
+    method: response.config.method,
+    latency: Date.now() - response.config.metadata.start,
+    status: response.status,
+  });
+  return response;
+});
+
+
+Display the last 5 records in a simple table with columns:
+Time | Endpoint | Method | Latency (ms) | Status.
+
+5️⃣ Add “Live Data Source” Badge
+
+File: client/src/components/walter/chat-header.tsx
+
+At the top of the Walter chat window, under the title:
+
+<Badge variant="outline" color="green">
+  Source: live-api ✓ (last refresh {formatDistanceToNow(lastRefresh)} ago)
+</Badge>
+
+
+Populate lastRefresh from the response metadata (refreshedAt) returned by Walter.
+
+6️⃣ Verify and Test
+
+After the server restarts:
+
+# 1. Trigger manual context refresh
+curl -s -X POST http://localhost:5000/api/context/refresh -H "Authorization: Bearer $TOKEN"
+
+# 2. Run a truth-check
+curl -s http://localhost:5000/api/system/truth-check -H "Authorization: Bearer $TOKEN" | jq
+
+
+Then in chat:
+
+“Please refresh your data from the live system.”
+
+✅ Expected:
+
+Portfolio Value: $800  
+Enabled Strategies: 8  
+Source: live-api ✓
+
+
+✅ Dashboard:
+
+System Truth Sync now displays backend / Cortex / Walter comparisons
+
+Data Flow Trace shows recent GET/POST requests with latency < 1 s
+
+Completion Checklist
+✅ Check	Expected Result
+Chat route uses /api/walter/chats/:id/messages	✅
+Live data rehydration logs appear	✅
+Truth panel auto-updates every 30 s	✅
+Data Flow Trace shows API activity	✅
+“Source: live-api” badge visible in chat	✅
+Result
+
+After Addendum K:
+
+Walter’s UI messages always flow through the real backend route.
+
+Every chat reply comes from a freshly rehydrated live context.
+
+The dashboard truth and telemetry panels stay continuously populated and color-coded.

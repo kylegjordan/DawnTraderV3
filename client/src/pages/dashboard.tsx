@@ -18,10 +18,34 @@ import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel
 import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
 import AlertBanner from "@/components/alerts/alert-banner";
 import { useSystemHealth } from "@/hooks/use-system-health";
+import { useState, useEffect } from "react";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Dashboard() {
   // Enable auto-resync polling every 12s (detects backend changes and auto-refreshes widgets)
   useSystemHealth();
+
+  // Phase 8.5 Addendum K: System Truth telemetry polling
+  const [truthData, setTruthData] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchTruthData = async () => {
+      try {
+        const response = await apiRequest('GET', '/api/system/truth-check');
+        setTruthData(response);
+      } catch (error) {
+        console.error('[Dashboard] Error fetching truth data:', error);
+      }
+    };
+
+    // Initial fetch
+    fetchTruthData();
+
+    // Poll every 30 seconds
+    const timer = setInterval(fetchTruthData, 30000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-testid="dashboard-page">
@@ -76,7 +100,7 @@ export default function Dashboard() {
       <FilterHealthWidget />
 
       {/* System Truth Synchronization Panel */}
-      <SystemTruthPanel />
+      <SystemTruthPanel truthData={truthData} />
 
       {/* Developer-Only Data Flow Trace */}
       <DataFlowTracePanel />
