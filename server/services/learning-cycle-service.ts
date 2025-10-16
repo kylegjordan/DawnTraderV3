@@ -13,6 +13,10 @@
 
 import { learningBob } from './bob-modules/learning-bob';
 import { storage } from '../storage';
+import { 
+  paperLiveTransferService, 
+  feedbackIntegrationService 
+} from './phase-8.6.5-enhancements';
 
 interface LearningPattern {
   category: 'user_preference' | 'effective_phrasing' | 'problematic_area' | 'clarity_issue';
@@ -148,11 +152,29 @@ class LearningCycleService {
 
       this.lastAnalysisTime = now;
       
+      // Phase 8.6.5 Task 8: Paper→Live Knowledge Transfer
+      console.log(`[${this.MODULE_NAME}] 🔄 Running Paper→Live knowledge transfer...`);
+      const transferResult = await paperLiveTransferService.promoteLearnings(globalContextId);
+      console.log(
+        `[${this.MODULE_NAME}] Transfer complete: ${transferResult.promoted} promoted, ` +
+        `${transferResult.skipped} skipped`
+      );
+
+      // Phase 8.6.5 Task 9: Feed learnings to Strategy guardrails
+      console.log(`[${this.MODULE_NAME}] 📊 Updating strategy guardrails from learnings...`);
+      const liveGuardrails = await feedbackIntegrationService.feedToStrategyGuardrails(globalContextId, 'live');
+      const paperGuardrails = await feedbackIntegrationService.feedToStrategyGuardrails(globalContextId, 'paper');
+      console.log(
+        `[${this.MODULE_NAME}] Guardrails updated: ${liveGuardrails.guardrailsUpdated} live, ` +
+        `${paperGuardrails.guardrailsUpdated} paper`
+      );
+      
       console.log(
         `[${this.MODULE_NAME}] ✅ Analysis complete - ` +
         `${report.patterns.length} patterns detected, ` +
         `${report.styleRecommendations.length} recommendations generated, ` +
-        `${fragments.length} fragments marked as analyzed`
+        `${fragments.length} fragments marked as analyzed, ` +
+        `${transferResult.promoted} learnings promoted to live`
       );
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] Analysis cycle failed:`, error);

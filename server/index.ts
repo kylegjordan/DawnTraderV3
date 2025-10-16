@@ -92,6 +92,10 @@ app.use((req, res, next) => {
   const { corpusDomainService } = await import('./services/corpus-domain-service');
   await corpusDomainService.initialize();
 
+  // Phase 8.6.5: Register API routes for enhancements
+  const { registerPhase865Routes } = await import('./routes-phase-8.6.5');
+  registerPhase865Routes(app);
+
   // Phase 8.4 Addendum E.1: Run file persistence self-test
   const { filePersistence } = await import('./services/file-persistence');
   const selfTestPassed = await filePersistence.runStartupSelfTest();
