@@ -862,70 +862,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Phase 8.5 Addendum K.3: Uses global context for shared strategies
+  // Phase 8.5 Addendum K.4: Returns DUAL-MODE data (both live and paper) regardless of engine status
   app.get('/api/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const globalContextId = 'default';
       const user = await storage.getUser(userId);
-      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+      const currentMode = (user?.tradingMode || 'paper') as 'live' | 'paper';
       
-      // Check if paper simulation is running (system-wide)
+      // Check paper simulation engine status (system-wide)
       const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
       const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
-      const engineActive = isPaperSimRunning;
       
-      // Get enabled strategies from strategy_settings table (global context)
-      const strategySettingsList = await storage.listStrategySettings({ globalContextId, mode: mode as 'live' | 'paper' });
-      const activeStrategies = strategySettingsList
+      // TODO: Add live engine status tracking (currently always false until live trading implemented)
+      const isLiveEngineRunning = false;
+      
+      // Fetch data for BOTH modes in parallel
+      const [
+        livePortfolioState,
+        paperPortfolioState,
+        liveStrategies,
+        paperStrategies,
+        watchlist,
+        activeTrades
+      ] = await Promise.all([
+        storage.getPortfolioState({ globalContextId, mode: 'live' }),
+        storage.getPortfolioState({ globalContextId, mode: 'paper' }),
+        storage.listStrategySettings({ globalContextId, mode: 'live' }),
+        storage.listStrategySettings({ globalContextId, mode: 'paper' }),
+        storage.getWatchlist({ userId, mode: currentMode }),
+        storage.getActiveTrades(userId)
+      ]);
+      
+      // Process live mode data
+      const liveBalance = livePortfolioState ? parseFloat(livePortfolioState.balance) : 0;
+      const liveActiveStrategies = liveStrategies
         .filter(s => s.enabled)
         .map(s => s.strategy);
       
-      // Get watchlist pairs (filtered pairs)
-      const watchlist = await storage.getWatchlist({ userId, mode });
-      const filteredPairs = watchlist.length;
+      // Process paper mode data
+      const paperBalance = paperPortfolioState ? parseFloat(paperPortfolioState.balance) : 0;
+      const paperActiveStrategies = paperStrategies
+        .filter(s => s.enabled)
+        .map(s => s.strategy);
       
-      // Get active trades  
-      const activeTrades = await storage.getActiveTrades(userId);
+      // Calculate metrics for current mode
+      const filteredPairs = watchlist.length;
       const activeTradesCount = activeTrades.length;
       
-      // Get ready to buy signals (if engine is running, check for signals)
+      // Get ready to buy signals (if paper engine is running)
       let readyToBuy = 0;
-      if (isPaperSimRunning) {
-        // Count open positions as they represent "ready to trade" signals that were acted upon
+      if (isPaperSimRunning && currentMode === 'paper') {
         const openPositions = await storage.getPaperSimOpenPositions(userId);
-        readyToBuy = Math.max(0, filteredPairs - openPositions.length); // Simplified: available pairs minus active positions
+        readyToBuy = Math.max(0, filteredPairs - openPositions.length);
       }
       
-      // Get last tick timestamp
       const lastTickISO = new Date().toISOString();
       
-      // Get portfolio balance from portfolio_state (Phase 8.5 Addendum K.3: global context)
-      const portfolioState = await storage.getPortfolioState({ globalContextId, mode });
-      const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 0;
-      
-      // Consistency check: Compare backend strategies with Cortex snapshot
-      try {
-        const cortexSnapshot = cortexCore.get(`strategy:summary:${mode}:${userId}`);
-        if (cortexSnapshot) {
-          const cortexStrategies = cortexSnapshot.filter((s: any) => s.enabled).map((s: any) => s.strategy);
-          if (cortexStrategies.length !== activeStrategies.length) {
-            console.warn(`[CortexSync] Strategy visibility mismatch detected: backend=${activeStrategies.length}, cortex=${cortexStrategies.length}`);
-          }
-        }
-      } catch (cortexError) {
-        // Cortex check is non-critical, don't fail the request
-      }
-      
+      // Return dual-mode structure
       res.json({
-        mode,
-        engineActive,
-        activeStrategies,
-        activeStrategiesCount: activeStrategies.length,
+        currentMode,
+        live: {
+          portfolioBalance: liveBalance,
+          activeStrategies: liveActiveStrategies,
+          activeStrategiesCount: liveActiveStrategies.length,
+          engineActive: isLiveEngineRunning,
+          engineStatus: isLiveEngineRunning ? 'running' : 'stopped'
+        },
+        paper: {
+          portfolioBalance: paperBalance,
+          activeStrategies: paperActiveStrategies,
+          activeStrategiesCount: paperActiveStrategies.length,
+          engineActive: isPaperSimRunning,
+          engineStatus: isPaperSimRunning ? 'running' : 'stopped'
+        },
+        // Legacy fields for backwards compatibility (use current mode)
+        mode: currentMode,
+        engineActive: currentMode === 'paper' ? isPaperSimRunning : isLiveEngineRunning,
+        activeStrategies: currentMode === 'paper' ? paperActiveStrategies : liveActiveStrategies,
+        activeStrategiesCount: currentMode === 'paper' ? paperActiveStrategies.length : liveActiveStrategies.length,
+        portfolioBalance: currentMode === 'paper' ? paperBalance : liveBalance,
         filteredPairs,
         readyToBuy,
         activeTrades: activeTradesCount,
-        portfolioBalance,
         lastTickISO
       });
     } catch (error) {
