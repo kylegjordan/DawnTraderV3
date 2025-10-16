@@ -776,7 +776,7 @@ export class DatabaseStorage implements IStorage {
       .insert(strategySettings)
       .values(row)
       .onConflictDoUpdate({
-        target: [strategySettings.userId, strategySettings.mode, strategySettings.strategy],
+        target: [strategySettings.globalContextId, strategySettings.mode, strategySettings.strategy],
         set: {
           enabled: row.enabled ?? true,
           params: row.params,

@@ -45,6 +45,7 @@ export const patchStatusEnum = pgEnum("patch_status", ["pending", "approved", "r
 export const walterThemeEnum = pgEnum("walter_theme", ["light", "dark", "system"]);
 export const walterToneEnum = pgEnum("walter_tone", ["professional", "analytical", "warm", "concise"]);
 export const walterViewModeEnum = pgEnum("walter_view_mode", ["compact", "expanded"]);
+export const userRoleEnum = pgEnum("user_role", ["owner", "editor", "viewer"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -55,6 +56,8 @@ export const users = pgTable("users", {
   displayName: text("display_name"),
   timezone: varchar("timezone", { length: 50 }).default("UTC"),
   isAdmin: boolean("is_admin").default(false).notNull(),
+  role: userRoleEnum("role").default("viewer").notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   tradingMode: tradingModeEnum("trading_mode").default("paper"),
   tradingStatus: tradingStatusEnum("trading_status").default("stopped"),
   approvalMatrix: jsonb("approval_matrix").default(sql`'{
@@ -85,7 +88,8 @@ export const users = pgTable("users", {
 // Trading settings
 export const tradingSettings = pgTable("trading_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
+  userId: varchar("user_id").references(() => users.id),
   riskPerTrade: decimal("risk_per_trade", { precision: 10, scale: 2 }).default("150.00"),
   maxExposurePercent: decimal("max_exposure_percent", { precision: 5, scale: 2 }).default("25.00"),
   maxOpenTrades: integer("max_open_trades").default(3),
@@ -199,7 +203,8 @@ export const screenerFilters = pgTable("screener_filters", {
 // Strategy Settings (per mode, per user, per strategy)
 export const strategySettings = pgTable("strategy_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
+  userId: varchar("user_id").references(() => users.id),
   mode: tradingModeEnum("mode").notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
   enabled: boolean("enabled").notNull().default(true),
@@ -208,7 +213,7 @@ export const strategySettings = pgTable("strategy_settings", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueUserModeStrategy: uniqueIndex("strategy_settings_user_mode_strategy_idx").on(table.userId, table.mode, table.strategy),
+  uniqueGlobalContextModeStrategy: uniqueIndex("strategy_settings_global_context_mode_strategy_idx").on(table.globalContextId, table.mode, table.strategy),
 }));
 
 // Strategy Settings Audit Log
@@ -551,7 +556,8 @@ export const dailyBriefs = pgTable("daily_briefs", {
 // Walter chats (multi-chat session management)
 export const walterChats = pgTable("walter_chats", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
+  userId: varchar("user_id").references(() => users.id),
   title: text("title").default("New Chat"), // Chat session title
   status: walterChatStatusEnum("status").default("active"),
   isApprovalThread: boolean("is_approval_thread").default(false), // True if auto-created for approval
@@ -674,13 +680,14 @@ export const filterDiagnostics = pgTable("filter_diagnostics", {
 // Portfolio state (Phase 8.5 Addendum F - unified portfolio tracking)
 export const portfolioState = pgTable("portfolio_state", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
+  userId: varchar("user_id").references(() => users.id),
   mode: tradingModeEnum("mode").notNull(),
   balance: decimal("balance", { precision: 20, scale: 2 }).notNull().default("1000.00"),
   lastUpdate: timestamp("last_update", { withTimezone: true }).defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueUserMode: uniqueIndex("portfolio_state_user_mode_idx").on(table.userId, table.mode),
+  uniqueGlobalContextMode: uniqueIndex("portfolio_state_global_context_mode_idx").on(table.globalContextId, table.mode),
 }));
 
 // ===== PAPER TRADING TABLES (Isolated from Live) =====

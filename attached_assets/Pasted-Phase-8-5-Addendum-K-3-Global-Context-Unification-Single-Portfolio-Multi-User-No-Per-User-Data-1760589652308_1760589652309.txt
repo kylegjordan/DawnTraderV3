@@ -1,0 +1,178 @@
+Phase 8.5 Addendum K.3 — Global Context Unification (Single-Portfolio / Multi-User, No Per-User Data Silos)
+
+Goal: Make the whole app operate on a single, shared portfolio and state for everyone who signs in. Users differ only by permissions (e.g., view-only), not by data. This eliminates “$800 vs $1000” and “3 vs 8 strategies” drift caused by per-user scoping.
+
+Scope (what becomes global)
+
+Portfolio state (balances, equity curve, mode, risk settings)
+
+Strategy settings (enabled flags + params)
+
+Engine status (engineActive, mode, backpressure)
+
+Signals, orders, fills, P&L
+
+Health/metrics and Truth Sync snapshots
+
+Walter/Cortex context, insights, and chat history
+
+Reports/exports/logs (file persistence)
+
+Live vs Paper remains a mode dimension of the one shared portfolio (not a user dimension).
+
+Pre-flight (do these first)
+
+Freeze write paths to strategy/portfolio for a few minutes (keep the UI up; just pause background writers).
+
+Identify the canonical portfolio (the one you see on the Dashboard).
+
+Pick the “primary login” you’ll keep (e.g., you) and any additional viewers (e.g., testuser123, your wife later).
+
+Snapshot current DB and /reports as a safety restore point.
+
+Open the Dashboard → Data Flow Trace so you can watch calls as you proceed.
+
+Implementation Tasks (Replit runbook, no code)
+A) Data Model Realignment (Global truth)
+
+Convert these resources from per-user to global scope:
+
+portfolio_state, strategy_settings, orders, fills, positions, risk_limits, engine_state, health_metrics, ai_context, walter_chat_*.
+
+Retain mode (paper/live) on every relevant record.
+
+Keep any user_id columns only for audit (who clicked what), not for lookups.
+
+Introduce a single context key (e.g., global_context_id = "default") to group shared data, if your storage layer needs a key.
+
+B) Read/Write Path Unification
+
+Update all services to resolve data by (global_context_id, mode) only.
+
+Replace every “get by user” call with “get global”.
+
+Ensure writes (strategy toggles, risk changes) update the global records in one place.
+
+C) Walter & Cortex
+
+Walter: always builds prompts from the global context; chats log to a shared conversation space.
+
+Cortex: caches and snapshots only the global strategy/portfolio state; dedupe any user-scoped caches.
+
+Truth Sync compares Backend ↔ Cortex ↔ Walter for the global context, not per-user.
+
+D) API Contract
+
+Keep endpoints but change their behavior to ignore user scoping:
+
+Trading status, portfolio, strategies, risk, health, execution metrics → always return the global view for the requested mode.
+
+Walter chat endpoints → operate on a shared chat space (everyone sees the same threads).
+
+If an endpoint currently requires userId, accept it but ignore it (compatibility shim) and log a deprecation warning.
+
+E) UI Adjustments
+
+Dashboard, Walter, Trading, Goals, Reports:
+
+Remove any UI state that filters by user.
+
+Visibly show mode (PAPER/LIVE) and “Shared Workspace” label so it’s obvious data is common.
+
+Add a small banner in Walter’s chat: “Shared chat (everyone can see these messages).”
+
+F) Roles & Permissions (simple)
+
+Define roles:
+
+Owner: full control.
+
+Editor: can change strategies/risk.
+
+Viewer: read-only (wife’s account later).
+
+Enforce permissions in the route guards; they gate actions, not visibility.
+
+G) Data Migration (one time)
+
+Choose the source of truth tables (likely your current account).
+
+Merge/overwrite any other user-scoped rows into the single global set:
+
+Portfolio balance & risk → keep canonical.
+
+Strategy flags/params → keep canonical.
+
+Orders/fills/trades → union into the global history (dedupe by id/hash).
+
+Chats → merge all conversations into the shared chat space, keeping timestamps and author names.
+
+Mark legacy per-user rows as archived for audit.
+
+H) Telemetry & Truth Sync
+
+System Truth Sync panel must now:
+
+Query only the global context (per mode).
+
+Show green when Backend=Cortex=Walter agree (portfolio balance, engineActive, strategies).
+
+Data Flow Trace should clearly tag requests with scope: global.
+
+Verification (acceptance checklist)
+
+Backend
+
+GET trading status (paper) returns the same numbers for every user.
+
+GET trading status (live) returns the same numbers for every user.
+
+GET strategies returns all 8 correctly for paper/live.
+
+Orders/fills list identical across users.
+
+Walter & Chat
+
+Asking “What’s my paper portfolio value?” returns the same answer from any account.
+
+A chat started by one user is visible and continues seamlessly for all others.
+
+Message badge shows Source: live-api and correct “refreshed Xs ago”.
+
+Truth Sync
+
+Panel populates with comparisons and turns green after a refresh.
+
+No “per-user discrepancy” warnings appear.
+
+Roles
+
+Viewer can see everything but cannot toggle a strategy or change risk.
+
+Editor can change; Owner can also manage roles.
+
+Rollback Plan (if needed)
+
+Toggle a feature flag GLOBAL_CONTEXT_ENABLED=false to temporarily re-enable per-user reads (compatibility mode).
+
+Restore DB snapshot if you need to undo the merge.
+
+Revert chat view to user-scoped if shared chat causes issues (keep the merged archive for later).
+
+Post-Migration Guardrails
+
+Add a “singleton drift” alert: if any write tries to persist a user-scoped row for a global resource, log and block it.
+
+Turn on hourly Truth Sync auto-check; if drift is detected, auto-refresh Cortex and Walter.
+
+Log every settings change with {who, when, what} since all users affect the same data.
+
+Done When
+
+Any user sees the same portfolio balance, strategies, engine status, and trades for each mode.
+
+Walter gives identical answers regardless of who asks.
+
+System Truth Sync shows no discrepancies for the global context.
+
+View-only account can log in and see everything without mutating anything.
