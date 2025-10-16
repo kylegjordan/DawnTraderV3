@@ -383,5 +383,14 @@ app.use((req, res, next) => {
     } catch (error) {
       console.error('[HealthReportScheduler] ⚠️ Startup failed:', error);
     }
+
+    // Phase 8.6.1: Start Learning Cycle Service (24-hour analysis cycle)
+    try {
+      const { learningCycleService } = await import('./services/learning-cycle-service');
+      learningCycleService.start();
+      console.log('[LearningCycleService] ✅ Started successfully');
+    } catch (error) {
+      console.error('[LearningCycleService] ⚠️ Startup failed:', error);
+    }
   });
 })();
