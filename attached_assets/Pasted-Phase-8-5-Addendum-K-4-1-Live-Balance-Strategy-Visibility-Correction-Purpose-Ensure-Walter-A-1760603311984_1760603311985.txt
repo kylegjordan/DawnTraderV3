@@ -1,0 +1,124 @@
+Phase 8.5 Addendum K.4.1 — Live Balance & Strategy Visibility Correction
+🧭 Purpose
+
+Ensure Walter AI, the dashboard, and the backend truth system always display accurate live-mode balances and strategies, even when the trading engine is stopped.
+This eliminates false zeros, missing strategy lists, and dependency on in-memory engine objects.
+
+Problem Summary
+
+When the live trading engine is stopped, the in-memory tradingEngines map and engine caches are empty.
+Walter’s prompt and the /api/trading/status endpoint still read from those runtime objects, not from the persistent database snapshot (portfolio_state + strategy_settings).
+As a result, Walter shows:
+
+“Live Mode: $0 (The trading engine is currently stopped)”
+
+“Live Mode: No strategies enabled”
+
+while the actual database has valid balances and 8 enabled strategies.
+
+Objectives
+
+Make live-mode balance and strategy data always come from the database, never from runtime engine memory.
+
+Maintain correct engine-status reporting (running vs stopped) without hiding live data.
+
+Synchronize all layers — Backend / Cortex / Walter — to use the same global truth.
+
+Confirm parity through the System Truth Sync diagnostics panel.
+
+Tasks Overview
+1️⃣ Unify Live & Paper Data Retrieval
+
+Modify the Context Refresh Coordinator so fetchDualModeData() always retrieves both live and paper records directly from:
+
+portfolio_state (for balances, exposure, limits)
+
+strategy_settings (for enabled strategies and parameters)
+
+No conditional engine check — the database is always queried for both modes.
+
+2️⃣ Rebuild Walter’s Prompt Assembly
+
+Update the LIVE SYSTEM STATE block in Walter’s prompt to use the freshData.live snapshot instead of engine memory.
+
+Always display:
+
+Portfolio Balance
+
+Enabled Strategies
+
+Engine Status
+
+If the engine is stopped, prepend “(Trading paused)” but still show balance + strategies.
+
+3️⃣ Correct /api/trading/status Response
+
+Ensure this endpoint now returns a dual-mode object where:
+
+Both modes’ balances and strategies come from the database.
+
+Engine status fields (engineActive) are checked separately using TradingEngine.isEngineRunning().
+
+Add an internal metadata flag such as "source": "database" for verification.
+
+4️⃣ Update System Truth Sync
+
+Extend the diagnostic schema to verify:
+
+liveBalanceBackend = liveBalanceCortex = liveBalanceWalter
+
+liveStrategiesBackend = liveStrategiesCortex = liveStrategiesWalter
+
+Trigger a low-severity alert if any layer diverges for longer than 30 seconds.
+
+5️⃣ Validate Behavior
+
+Stop both engines → Ask Walter:
+
+“What’s my current portfolio balance and enabled strategies for live and paper modes?”
+
+Expect:
+
+PAPER Mode: $800 (8 strategies)
+LIVE Mode: $834 (8 strategies, Trading paused)
+
+
+Restart Live engine → Re-ask → should update to “Trading engine running” automatically.
+
+Confirm System Truth Sync panel shows “All Layers Aligned ✓”.
+
+6️⃣ Documentation and Logs
+
+Add a K.4.1 section to replit.md summarizing:
+
+Purpose and outcome
+
+Live vs Paper snapshot examples
+
+Validation steps and truth-sync criteria
+
+Annotate logs with:
+
+[Addendum-K.4.1] LiveDataSource = Database
+
+[Addendum-K.4.1] Strategies Fetched (Mode: Live, Count: 8)
+
+✅ Expected Results
+Component	Before	After
+Walter AI	Reported $0 and no strategies when engine stopped	Always reports database balances and strategies (+ engine status)
+Dashboard	Showed empty live data on stop	Displays static snapshot for live mode
+/api/trading/status	Returned live = 0 when engine off	Returns live balance + strategies from database
+Truth Sync Panel	Could not compare live data	Tracks live and paper values for 3-layer parity
+🧱 Outcome
+
+After implementing Addendum K.4.1:
+
+Live-mode balances and strategies remain visible at all times.
+
+Walter AI and the dashboard display identical information sourced directly from the database.
+
+Engine status is accurately reported without masking data.
+
+System Truth Sync verifies alignment across all layers.
+
+Full live/paper transparency achieved even when the engine is idle or stopped.
