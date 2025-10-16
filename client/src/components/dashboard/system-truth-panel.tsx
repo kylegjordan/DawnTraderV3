@@ -61,13 +61,21 @@ interface ContextRefreshMetrics {
   lastError: string | null;
 }
 
-export function SystemTruthPanel() {
-  // Fetch truth check data
-  const { data: truthData, isLoading: truthLoading, error: truthError, refetch: refetchTruth } = useQuery<{ ok: boolean; result: TruthCheckResult }>({
+interface SystemTruthPanelProps {
+  truthData?: { ok: boolean; result: TruthCheckResult } | null;
+}
+
+export function SystemTruthPanel({ truthData: propTruthData }: SystemTruthPanelProps) {
+  // Fetch truth check data (fallback if no prop provided)
+  const { data: queryTruthData, isLoading: truthLoading, error: truthError, refetch: refetchTruth } = useQuery<{ ok: boolean; result: TruthCheckResult }>({
     queryKey: ['/api/system/truth-check'],
     refetchInterval: 30000, // Auto-refresh every 30 seconds
     retry: 1,
+    enabled: !propTruthData, // Only query if prop not provided
   });
+
+  // Use prop data if available, otherwise use query data
+  const truthData = propTruthData || queryTruthData;
 
   // Fetch context refresh metrics
   const { data: metricsData } = useQuery<{ ok: boolean; metrics: ContextRefreshMetrics }>({

@@ -20,11 +20,34 @@ export function getGlobalTradingMode(): 'live' | 'paper' {
   return currentTradingMode;
 }
 
+// Phase 8.5 Addendum K: Global request trace recorder
+type TraceCallback = (trace: {
+  method: string;
+  endpoint: string;
+  status: number | 'pending' | 'error';
+  duration: number | null;
+  mode: 'live' | 'paper';
+  error?: string;
+}) => void;
+
+let globalTraceCallback: TraceCallback | null = null;
+
+export function setRequestTraceCallback(callback: TraceCallback | null) {
+  globalTraceCallback = callback;
+}
+
+function recordTrace(trace: Parameters<TraceCallback>[0]) {
+  if (globalTraceCallback && import.meta.env.DEV) {
+    globalTraceCallback(trace);
+  }
+}
+
 export async function apiRequest<T = any>(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<T> {
+  const startTime = Date.now();
   const token = await ensureValidToken();
   
   const headers: Record<string, string> = {
@@ -33,21 +56,48 @@ export async function apiRequest<T = any>(
     "x-app-mode": currentTradingMode
   };
 
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  try {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
 
-  await throwIfResNotOk(res);
-  
-  // For DELETE requests or 204 responses, return empty object
-  if (method === 'DELETE' || res.status === 204) {
-    return {} as T;
+    const duration = Date.now() - startTime;
+
+    await throwIfResNotOk(res);
+    
+    // Phase 8.5 Addendum K: Record successful trace
+    recordTrace({
+      method,
+      endpoint: url,
+      status: res.status,
+      duration,
+      mode: currentTradingMode,
+    });
+    
+    // For DELETE requests or 204 responses, return empty object
+    if (method === 'DELETE' || res.status === 204) {
+      return {} as T;
+    }
+    
+    return await res.json();
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    
+    // Phase 8.5 Addendum K: Record error trace
+    recordTrace({
+      method,
+      endpoint: url,
+      status: 'error',
+      duration,
+      mode: currentTradingMode,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    
+    throw error;
   }
-  
-  return await res.json();
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

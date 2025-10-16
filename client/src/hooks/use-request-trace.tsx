@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { setRequestTraceCallback } from '@/lib/queryClient';
 
 export interface RequestTrace {
   id: string;
@@ -41,6 +42,12 @@ export function RequestTraceProvider({ children }: { children: ReactNode }) {
   const clearTraces = useCallback(() => {
     setTraces([]);
   }, []);
+
+  // Phase 8.5 Addendum K: Register trace callback with global system
+  useEffect(() => {
+    setRequestTraceCallback(addTrace);
+    return () => setRequestTraceCallback(null);
+  }, [addTrace]);
 
   return (
     <RequestTraceContext.Provider value={{ traces, addTrace, updateTrace, clearTraces }}>

@@ -10,10 +10,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Bot, Send, User, Mic, MicOff, Loader2, MessageSquare, 
   Plus, Archive, Search, Filter, Check, X, AlertCircle, Upload, FileText, Pencil, Trash2,
-  Star, Download, ChevronLeft, ChevronRight, Settings
+  Star, Download, ChevronLeft, ChevronRight, Settings, CheckCircle2
 } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { formatDistanceToNow } from 'date-fns';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { cn } from '@/lib/utils';
 import { ModeIndicator } from '@/components/goals/mode-indicator';
@@ -1055,6 +1056,13 @@ export default function WalterPage() {
                             : "bg-muted"
                         )}
                       >
+                        {/* Phase 8.5 Addendum K: Live Data Source Badge */}
+                        {msg.role === 'assistant' && msg.metadata?.dataSource === 'live-api' && msg.metadata?.refreshedAt && (
+                          <Badge variant="outline" className="mb-2 text-xs border-green-600 text-green-600 dark:border-green-500 dark:text-green-500" data-testid="badge-live-source">
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            Source: live-api ✓ (refreshed {formatDistanceToNow(new Date(msg.metadata.refreshedAt), { addSuffix: true })})
+                          </Badge>
+                        )}
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                         <p className="text-xs opacity-70 mt-2">
                           {new Date(msg.timestamp).toLocaleTimeString()}
