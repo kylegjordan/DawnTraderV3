@@ -66,14 +66,16 @@ This infrastructure ensures Walter maintains accurate, real-time awareness of sy
 This ensures all context layers (Backend, Cortex, Walter) always reflect true live system state from `portfolio_state` table, eliminating phantom balance mismatches and ensuring data integrity across the platform.
 
 **Walter Context Rehydration on Response (Phase 8.5 Addendum J)** forces live context refresh before every Walter response, eliminating all in-memory staleness. Core changes include:
-- **ensureFreshContext() Method**: Added to ContextRefreshCoordinator to force live context refresh without staleness checks. Called at the start of every `generateWalterResponse()` to guarantee fresh data.
-- **getLatestContext() Method**: Added to ContextRefreshCoordinator to retrieve fresh portfolio balance, active strategies, and settings immediately after refresh. Returns live data for Walter's response generation.
-- **contextUpdated Event**: ContextRefreshCoordinator now emits `contextUpdated` event after successful refresh, enabling Walter to rehydrate memory when live data arrives.
+- **ensureFreshContext() Method**: Added to ContextRefreshCoordinator to force live context refresh without staleness checks. Called at the start of every `generateWalterResponse()` to guarantee fresh data. Returns both `refreshResult` and `freshData` in a single response to avoid redundant database fetches.
+- **performRefreshWithData() Method**: Internal method that performs full refresh (Cortex update, Walter memory, truth check, metrics) using already-fetched data, eliminating duplicate storage queries.
+- **Single Fetch Per Response**: Walter now calls `ensureFreshContext()` once and destructures the returned data. No redundant `getLatestContext()` call, reducing database load.
+- **Memory Deduplication**: Added `lastContextByUser` Map tracking last context content per user/mode. Only creates semantic memory entry when portfolio/strategies/engine state actually changes, preventing runaway memory growth from identical refresh entries.
+- **contextUpdated Event**: ContextRefreshCoordinator emits `contextUpdated` event after successful refresh, enabling Walter to rehydrate memory when live data arrives.
 - **Event Listener**: Walter response service listens for `contextUpdated` events and logs rehydration notifications for transparency.
 - **Response Metadata**: All Walter chat responses now include metadata with `dataSource: 'live-api'` and `refreshedAt: ISO timestamp` stored in `walterChatLogs.metadata` jsonb field.
-- **Rehydration Logging**: Detailed logs show `[Addendum-J] Forcing live context rehydration...` and `Rehydrated context → portfolio=X strategies=Y source=live-api` for every response.
+- **Rehydration Logging**: Detailed logs show `[Addendum-J] Forcing live context rehydration...` and `Rehydrated context → portfolio=X strategies=Y source=live-api` for every response. Memory deduplication logs "Context unchanged, skipping duplicate memory entry" when no change detected.
 
-This ensures Walter always "speaks" from the latest live data, with no cached or stale values. Portfolio balances, strategy counts, and settings are refreshed on every message, guaranteeing accuracy and eliminating user confusion from outdated information.
+This ensures Walter always "speaks" from the latest live data, with no cached or stale values. Portfolio balances, strategy counts, and settings are refreshed on every message with optimal performance (single fetch per response, bounded memory growth), guaranteeing accuracy and eliminating user confusion from outdated information.
 
 ## External Dependencies
 
