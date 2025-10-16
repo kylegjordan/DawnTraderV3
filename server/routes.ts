@@ -6222,8 +6222,15 @@ Please:
         reason: req.body?.reason || 'manual update',
       });
 
-      // Hot-reload into engine
-      await EngineSettingsBus.publish({ userId, mode });
+      // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+      const { configChangeHandler } = await import('./services/config-change-handler');
+      await configChangeHandler.handleConfigChange({
+        userId,
+        mode,
+        configType: 'strategies',
+        source: 'api',
+        globalContextId
+      });
 
       return res.json({ ok: true, saved, approvalRequired: false });
     } catch (error: any) {
@@ -6329,8 +6336,15 @@ Please:
           reason: `Approved via Walter (Approval ID: ${id})`,
         });
         
-        // Hot-reload into engine with the correct mode
-        await EngineSettingsBus.publish({ userId, mode: approval.mode as any });
+        // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+        const { configChangeHandler } = await import('./services/config-change-handler');
+        await configChangeHandler.handleConfigChange({
+          userId,
+          mode: approval.mode as 'live' | 'paper',
+          configType: 'strategies',
+          source: 'api',
+          globalContextId: 'default'
+        });
       }
       
       // Update approval status
@@ -8095,6 +8109,17 @@ Summary:`;
         const result = await storage.upsertStrategySettings(updateData);
 
         console.info(`[Orchestrator] Strategy updated: ${validated.strategy}.${validated.field} (${validated.mode} mode)`);
+        
+        // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+        const { configChangeHandler } = await import('./services/config-change-handler');
+        await configChangeHandler.handleConfigChange({
+          userId,
+          mode: validated.mode,
+          configType: 'strategies',
+          source: 'direct',
+          globalContextId: 'default'
+        });
+        
         res.json({ success: true, message: 'Strategy updated successfully', data: result });
       } else {
         res.json({ success: true, message: 'Strategy update proposal logged for review' });
@@ -8400,6 +8425,16 @@ Important: Extract the exact field names and numeric values from the user's requ
                   };
                   await storage.upsertStrategySettings(updateData);
                   console.info(`[Walter] Updated strategy ${interpretation.actionDetails.strategy}.${interpretation.actionDetails.field} (${mode} mode)`);
+                  
+                  // Phase 8.6.5: Invalidate caches and refresh context
+                  const { configChangeHandler: strategyHandler } = await import('./services/config-change-handler');
+                  await strategyHandler.handleConfigChange({
+                    userId,
+                    mode,
+                    configType: 'strategies',
+                    source: 'direct',
+                    globalContextId: 'default'
+                  });
                 }
               }
               break;
