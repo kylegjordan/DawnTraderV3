@@ -87,6 +87,40 @@ export async function generateWalterResponse(
       return toneChange.message;
     }
 
+    // Phase 8.6: Detect commands early and route through Intent Gateway for validation
+    // Commands bypass conversational flow and get direct validation/execution
+    const intent = detectIntent(userMessage);
+    if (intent === 'command') {
+      console.log(`[Walter-Cognitive] Command detected, checking Intent Gateway validation...`);
+      
+      // Build reasoning context for command validation
+      const reasoningContext = {
+        userIntent: userMessage,
+        currentMode: tradingMode,
+        portfolioBalance: dualModeData[tradingMode].portfolioBalance,
+        activeStrategies: dualModeData[tradingMode].activeStrategies,
+        recentActions: [],
+        userRole: user?.role || 'viewer'
+      };
+      
+      // Route through cognitive layer for Intent Gateway validation
+      const cognitiveResponse = await cognitiveLayer.processMessage(userId, userMessage, reasoningContext);
+      
+      // Cognitive layer returns response for commands (either blocked or explanation)
+      // Format it as a natural language response
+      let response = cognitiveResponse.mainResponse;
+      if (cognitiveResponse.strategicOptions && cognitiveResponse.strategicOptions.length > 0) {
+        response += '\n\n' + cognitiveResponse.strategicOptions.join('\n');
+      }
+      if (cognitiveResponse.followUpQuestion) {
+        response += '\n\n' + cognitiveResponse.followUpQuestion;
+      }
+      return response;
+    }
+
+    // If not a command, continue with conversational flow
+    console.log(`[Walter-Cognitive] Not a command (intent: ${intent}), proceeding with conversational response`);
+
     // 1. Gather context including expert principles
     const context = await gatherContext(userId, chatId, userMessage);
 
@@ -106,8 +140,7 @@ export async function generateWalterResponse(
 
     console.log(`[Walter] Detected intent: ${intent} for message: "${userMessage.substring(0, 50)}..."`);
 
-    // Phase 8.4 Addendum C: Contextual Intent Engine (CIE)
-    // Always attempt to classify intent for logging and context awareness
+    // Legacy CIE logging for transparency (now cognitive layer handles execution)
     const { contextualNLAIInterpreter } = await import('./contextual-nlai-interpreter');
     const { intentDecisionLogger } = await import('./intent-decision-logger');
     
@@ -127,33 +160,10 @@ export async function generateWalterResponse(
         lastIntent: cieResponse.contextUsed?.lastIntent,
         minutesSinceLastIntent: cieResponse.contextUsed?.minutesSinceLastIntent,
       },
-      actionExecuted: cieResponse.executionResult ? {
-        actionId: cieResponse.actionId!,
-        success: cieResponse.executionResult.success,
-        message: cieResponse.executionResult.message,
-      } : undefined,
+      actionExecuted: undefined, // Cognitive layer now handles execution
       guardrailBlocked: cieResponse.guardrailViolation,
       processingTimeMs: cieResponse.processingTimeMs,
     });
-    
-    // If intent is 'command' and CIE successfully executed it, return feedback
-    if (intent === 'command' && cieResponse.isActionable && cieResponse.executionResult) {
-      console.log(`[Walter-CIE] Action executed: ${cieResponse.actionId} (confidence: ${cieResponse.intent?.confidence.toFixed(2)}, ${cieResponse.processingTimeMs}ms)`);
-      
-      // Return execution feedback directly without OpenAI call
-      const actionFeedback = contextualNLAIInterpreter.formatExecutionFeedback(cieResponse);
-      return actionFeedback;
-    }
-    
-    // If CIE didn't execute an action, continue with normal conversational flow
-    if (!cieResponse.isActionable) {
-      if (cieResponse.guardrailViolation?.blocked) {
-        console.log(`[Walter-CIE] Guardrail blocked: ${cieResponse.guardrailViolation.reason}`);
-        // Return guardrail feedback
-        return contextualNLAIInterpreter.formatExecutionFeedback(cieResponse);
-      }
-      console.log(`[Walter-CIE] No action executed (confidence: ${cieResponse.intent?.confidence.toFixed(2)}), proceeding with conversational response`);
-    }
 
     // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, CIE context, and FRESH DUAL-MODE DATA
     const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, dualModeData);
