@@ -96,6 +96,12 @@ app.use((req, res, next) => {
   const { registerPhase865Routes } = await import('./routes-phase-8.6.5');
   registerPhase865Routes(app);
 
+  // Phase 8.6.5 Validation: Register provenance debug routes and enable verbose mode
+  const provenanceDebugRoutes = await import('./routes-provenance-debug');
+  app.use(provenanceDebugRoutes.default);
+  const { provenanceDebug } = await import('./services/provenance-debug');
+  provenanceDebug.enableVerboseMode();
+
   // Phase 8.4 Addendum E.1: Run file persistence self-test
   const { filePersistence } = await import('./services/file-persistence');
   const selfTestPassed = await filePersistence.runStartupSelfTest();
