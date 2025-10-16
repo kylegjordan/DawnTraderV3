@@ -86,7 +86,7 @@ export function SystemTruthPanel({ truthData: propTruthData }: SystemTruthPanelP
 
   // Manual refresh mutation
   const refreshMutation = useMutation({
-    mutationFn: () => apiRequest('/api/context/refresh', 'POST', {}),
+    mutationFn: () => apiRequest('POST', '/api/context/refresh', {}),
     onSuccess: () => {
       // Refetch truth check data after refresh
       setTimeout(() => {
