@@ -2013,12 +2013,52 @@ export const expertResponseLogs = pgTable("expert_response_logs", {
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 });
 
+// Phase 8.6.3: Data Lineage & Provenance Tracking
+export const dataLineage = pgTable("data_lineage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traceId: varchar("trace_id", { length: 50 }).notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  originatingService: varchar("originating_service", { length: 50 }).notNull(), // 'bob', 'cortex', 'walter', 'ui'
+  targetService: varchar("target_service", { length: 50 }), // Destination service (if applicable)
+  sourceTable: varchar("source_table", { length: 100 }), // Database table or API endpoint
+  mode: tradingModeEnum("mode"),
+  globalContextId: varchar("global_context_id", { length: 50 }),
+  dataHash: varchar("data_hash", { length: 64 }), // SHA-256 hash of data
+  rowCount: integer("row_count"),
+  operation: varchar("operation", { length: 20 }), // 'read', 'write', 'aggregate'
+  metadata: jsonb("metadata"), // Additional context
+}, (table) => ({
+  traceIdIdx: index("data_lineage_trace_id_idx").on(table.traceId),
+  timestampIdx: index("data_lineage_timestamp_idx").on(table.timestamp),
+}));
+
+export const bobTraceLog = pgTable("bob_trace_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traceId: varchar("trace_id", { length: 50 }).notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  bobModule: varchar("bob_module", { length: 50 }).notNull(), // 'MetricsBob', 'DataBob', etc.
+  operation: varchar("operation", { length: 50 }).notNull(), // 'fetch', 'cache', 'invalidate'
+  sourceTable: varchar("source_table", { length: 100 }),
+  mode: tradingModeEnum("mode"),
+  globalContextId: varchar("global_context_id", { length: 50 }),
+  cacheHit: boolean("cache_hit"),
+  executionTimeMs: integer("execution_time_ms"),
+  rowCount: integer("row_count"),
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  traceIdIdx: index("bob_trace_log_trace_id_idx").on(table.traceId),
+  bobModuleIdx: index("bob_trace_log_bob_module_idx").on(table.bobModule),
+  timestampIdx: index("bob_trace_log_timestamp_idx").on(table.timestamp),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
 export const insertExpertUpdateSchema = createInsertSchema(expertUpdates);
 export const insertExpertComplianceReportSchema = createInsertSchema(expertComplianceReports);
 export const insertExpertResponseLogSchema = createInsertSchema(expertResponseLogs);
+export const insertDataLineageSchema = createInsertSchema(dataLineage);
+export const insertBobTraceLogSchema = createInsertSchema(bobTraceLog);
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2035,6 +2075,12 @@ export type ExpertComplianceReport = typeof expertComplianceReports.$inferSelect
 
 export type InsertExpertResponseLog = z.infer<typeof insertExpertResponseLogSchema>;
 export type ExpertResponseLog = typeof expertResponseLogs.$inferSelect;
+
+export type InsertDataLineage = z.infer<typeof insertDataLineageSchema>;
+export type DataLineage = typeof dataLineage.$inferSelect;
+
+export type InsertBobTraceLog = z.infer<typeof insertBobTraceLogSchema>;
+export type BobTraceLog = typeof bobTraceLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

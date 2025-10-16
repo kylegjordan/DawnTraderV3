@@ -1,0 +1,169 @@
+🧩 Phase 8.6.3 – Data Provenance & Source Governance
+
+(with integrated legacy-schema audit groundwork for Phase 8.6.4)
+
+🎯 Objective
+
+Create a complete and verifiable “map of truth” that tracks every piece of data shown in the UI or reported by Walter back to its exact origin.
+Establish a Single Source of Truth (SSOT) policy for all BoB, Cortex, and Walter data flows and quarantine legacy schema to prevent contamination of live data.
+
+🧱 Implementation Tasks
+Task 1 – Activate Provenance Tracking Core
+
+Enable the Provenance Logger service that records every data retrieval and write between:
+
+BoBs → Cortex
+
+Cortex → Walter
+
+Walter → UI requests
+
+For each transaction, log:
+
+timestamp (UTC ISO)
+
+originating service (Bob, Cortex, Walter)
+
+table or API endpoint
+
+mode (live/paper)
+
+data hash and row count
+
+Store provenance records in a new data_lineage table.
+
+Display summary freshness indicators in the System Truth Sync Panel.
+
+Task 2 – Schema Discovery & Legacy Identification
+
+Query the entire database structure (information_schema.tables, columns) and export the list.
+
+Cross-reference each table against shared/schema.ts.
+
+Classify:
+
+🟢 Active – referenced in current schema
+
+🟡 Legacy – referenced in code comments or deprecated modules
+
+🔴 Orphaned – no references found
+
+Generate a Schema Audit Report listing classification, last modified date, and row count.
+
+Task 3 – Legacy Schema Quarantine
+
+For every 🔴 and 🟡 table:
+
+Rename with prefix legacy_YYYYMM (e.g., legacy_strategy_settings_202510).
+
+Move definitions to /server/schema/legacy/.
+
+Revoke write permissions for non-admin users.
+
+Add warnings to logs if any live service accesses these tables.
+
+Retain read-only access for 30 days for forensic comparison.
+
+After 30 days of clean operation → archive or drop the table.
+
+Task 4 – Cortex Provenance Bridge
+
+Embed the Provenance Hook inside Cortex’s context-refresh cycle.
+
+Record source and freshness metadata for each fact (balance, goals, guardrails, strategies).
+
+Ensure every Cortex record includes:
+
+globalContextId
+
+mode (live/paper)
+
+source_table (reference to BoB or aggregator)
+
+If any record arrives without source metadata, raise a TruthSyncWarning.
+
+Task 5 – BoB Deep-Trace Hooks
+
+Add lightweight trace logging to each BoB for every read/write.
+
+Each log entry must carry a trace_id passed up through Cortex to Walter.
+
+Store all BoB trace entries in bob_trace_log.
+
+Synchronize trace IDs with data_lineage entries for cross-layer correlation.
+
+Task 6 – Lineage Visualizer
+
+Merge data_lineage and bob_trace_log into a single graph.
+
+Add a Data Lineage tab on the dashboard showing:
+
+Node = component (Walter, Cortex, BoB, DB table)
+
+Edge = data flow with timestamp
+
+Color = freshness (green < 1 min, yellow 1–5 min, red > 5 min)
+
+Provide hover details for mode, row count, and last update source.
+
+Task 7 – Learning Fragment Verification
+
+Confirm that each event captured by the Event Broker generates a matching record in learning_fragments.
+
+Flag discrepancies (BoB event without fragment or fragment without event) as medium-severity alerts.
+
+Summarize daily learning capture counts by mode.
+
+Task 8 – Reporting & Governance
+
+Add a scheduled daily report summarizing:
+
+Freshness by layer (BoB/Cortex/Walter)
+
+Number of legacy access attempts
+
+Provenance coverage percentage
+
+Learning fragment capture stats
+
+Include these metrics in the System Health Dashboard.
+
+Mark any component < 95 % coverage as “Out of Sync”.
+
+Task 9 – Regression Gate & Protection
+
+Modify build pipeline to fail if new schema definitions do not include globalContextId and mode.
+
+Prevent writes to tables outside the SSOT registry.
+
+Block deployment if any service touches legacy_ tables.
+
+📄 Deliverables
+
+Data Lineage Database Map (JSON + visual graph)
+
+Schema Audit Report with legacy classification
+
+System Truth Sync Panel updated with freshness and provenance metrics
+
+Daily Governance Report emailed to admin account
+
+✅ Acceptance Criteria
+
+Every Walter response and UI data point can be traced to a BoB source with timestamps.
+
+No active service reads from legacy tables.
+
+All Cortex entries contain source metadata and mode tags.
+
+Learning Fragments populate automatically and match event logs 1-to-1.
+
+System Truth Sync shows zero red (> 5 min stale) connections after 24 hours.
+
+📘 Notes for Replit
+
+Execute Phase 8.6.3 before Phase 8.6.4.
+
+Once the provenance core and legacy audit are stable (confirmed via logs and dashboard), proceed directly to Phase 8.6.4 to extend traceability down to BoB execution modules.
+
+Maintain all archived schemas for 30 days before deletion or cold storage transfer.

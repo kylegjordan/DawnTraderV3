@@ -13,6 +13,7 @@ import { systemHealthMonitor } from './system-health-monitor';
 import { EventEmitter } from 'events';
 import { createMemory } from './walter-memory';
 import { systemTruthDiagnostic } from './system-truth-diagnostic';
+import { provenanceLogger } from './provenance-logger'; // Phase 8.6.3: Provenance tracking
 
 const MODULE_NAME = 'ContextRefresh';
 
@@ -92,15 +93,18 @@ class ContextRefreshCoordinator extends EventEmitter {
     console.log(`[${this.MODULE_NAME}] 🔄 Refreshing context for user ${userId} (${mode}, source=${source})`);
     const start = Date.now();
 
+    // Phase 8.6.3: Generate trace ID for provenance tracking
+    const traceId = provenanceLogger.generateTraceId();
+
     try {
       // Fetch fresh data from backend
-      const freshData = await this.fetchFreshData(userId, mode);
+      const freshData = await this.fetchFreshData(userId, mode, traceId);
 
       // Update Cortex cache with fresh data
-      await this.updateCortex(userId, mode, freshData);
+      await this.updateCortex(userId, mode, freshData, traceId);
 
       // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
-      await this.updateWalterMemory(userId, mode, freshData);
+      await this.updateWalterMemory(userId, mode, freshData, traceId);
 
       // Run truth check to detect any remaining discrepancies
       const truthCheck = await systemTruthDiagnostic.runTruthCheck(userId, mode);
@@ -174,9 +178,11 @@ class ContextRefreshCoordinator extends EventEmitter {
   /**
    * Fetch fresh data from backend (portfolio, strategies, settings)
    * Phase 8.5 Addendum K.3: Uses global context for shared data
+   * Phase 8.6.3: Added traceId for provenance tracking
    */
-  private async fetchFreshData(userId: string, mode: 'live' | 'paper') {
-    console.log(`[${this.MODULE_NAME}] [ContextSource] live-api ✓ (global context)`);
+  private async fetchFreshData(userId: string, mode: 'live' | 'paper', traceId?: string) {
+    const fetchStartTime = Date.now(); // Phase 8.6.3: Track execution time for BoB trace
+    console.log(`[${this.MODULE_NAME}] [ContextSource] live-api ✓ (global context)${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const globalContextId = 'default';
     
@@ -222,6 +228,43 @@ class ContextRefreshCoordinator extends EventEmitter {
       source: 'live-api' as const
     };
 
+    // Phase 8.6.3: Log provenance - Backend → Cortex data flow
+    if (traceId) {
+      // Log lineage (data flow between services)
+      await provenanceLogger.logLineage({
+        traceId,
+        originatingService: 'bob', // Data originates from database via BoB layer
+        targetService: 'cortex',
+        sourceTable: 'portfolio_state',
+        mode,
+        globalContextId,
+        operation: 'read',
+        data: freshData,
+        metadata: { 
+          userId,
+          tables: ['portfolio_state', 'strategy_settings', 'trading_settings']
+        }
+      });
+
+      // Log BoB module trace (module-level operation tracking)
+      await provenanceLogger.logBobTrace({
+        traceId,
+        bobModule: 'ContextRefreshCoordinator',
+        operation: 'fetchFreshData',
+        sourceTable: 'portfolio_state',
+        mode,
+        globalContextId,
+        cacheHit: false,
+        executionTimeMs: Date.now() - fetchStartTime,
+        rowCount: activeStrategies.length + 1, // portfolio + strategies
+        metadata: {
+          userId,
+          portfolioBalance,
+          activeStrategiesCount: activeStrategies.length
+        }
+      });
+    }
+
     console.log(`[${this.MODULE_NAME}] source=live-api (global) portfolio=${portfolioBalance} strategies=${activeStrategies.length}`);
     
     return freshData;
@@ -230,9 +273,11 @@ class ContextRefreshCoordinator extends EventEmitter {
   /**
    * Phase 8.5 Addendum K.4: Fetch BOTH live and paper mode data simultaneously
    * This ensures Walter and dashboard always have complete visibility regardless of engine status
+   * Phase 8.6.3: Added traceId for provenance tracking
    */
-  private async fetchDualModeData(userId: string): Promise<DualModeData> {
-    console.log(`[${this.MODULE_NAME}] [Addendum-K.4] Fetching dual-mode data (live + paper)`);
+  private async fetchDualModeData(userId: string, traceId?: string): Promise<DualModeData> {
+    const fetchStartTime = Date.now(); // Phase 8.6.3: Track execution time for BoB trace
+    console.log(`[${this.MODULE_NAME}] [Addendum-K.4] Fetching dual-mode data (live + paper)${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const globalContextId = 'default';
     const now = new Date().toISOString();
@@ -324,13 +369,88 @@ class ContextRefreshCoordinator extends EventEmitter {
       `paper=$${paperBalance} (${paperActiveStrategies.length} strategies, ${paperEngineActive ? 'running' : 'stopped'})`
     );
 
+    // Phase 8.6.3: Log provenance - Database → BoB for both modes
+    if (traceId) {
+      const executionTimeMs = Date.now() - fetchStartTime;
+      
+      // Log live mode data flow
+      await provenanceLogger.logLineage({
+        traceId,
+        originatingService: 'database',
+        targetService: 'bob',
+        sourceTable: 'portfolio_state',
+        mode: 'live',
+        globalContextId,
+        operation: 'read',
+        data: dualModeData.live,
+        metadata: { 
+          userId,
+          tables: ['portfolio_state', 'strategy_settings', 'trading_settings'],
+          modeType: 'live'
+        }
+      });
+
+      // Log paper mode data flow
+      await provenanceLogger.logLineage({
+        traceId,
+        originatingService: 'database',
+        targetService: 'bob',
+        sourceTable: 'portfolio_state',
+        mode: 'paper',
+        globalContextId,
+        operation: 'read',
+        data: dualModeData.paper,
+        metadata: { 
+          userId,
+          tables: ['portfolio_state', 'strategy_settings', 'trading_settings'],
+          modeType: 'paper'
+        }
+      });
+
+      // Log BoB module traces for both modes
+      await provenanceLogger.logBobTrace({
+        traceId,
+        bobModule: 'ContextRefreshCoordinator',
+        operation: 'fetchDualModeData_live',
+        sourceTable: 'portfolio_state',
+        mode: 'live',
+        globalContextId,
+        cacheHit: false,
+        executionTimeMs,
+        rowCount: liveActiveStrategies.length + 1,
+        metadata: {
+          userId,
+          portfolioBalance: liveBalance,
+          activeStrategiesCount: liveActiveStrategies.length
+        }
+      });
+
+      await provenanceLogger.logBobTrace({
+        traceId,
+        bobModule: 'ContextRefreshCoordinator',
+        operation: 'fetchDualModeData_paper',
+        sourceTable: 'portfolio_state',
+        mode: 'paper',
+        globalContextId,
+        cacheHit: false,
+        executionTimeMs,
+        rowCount: paperActiveStrategies.length + 1,
+        metadata: {
+          userId,
+          portfolioBalance: paperBalance,
+          activeStrategiesCount: paperActiveStrategies.length
+        }
+      });
+    }
+
     return dualModeData;
   }
 
   /**
    * Update Cortex cache with fresh data
+   * Phase 8.6.3: Added traceId for provenance tracking
    */
-  private async updateCortex(userId: string, mode: 'live' | 'paper', freshData: any) {
+  private async updateCortex(userId: string, mode: 'live' | 'paper', freshData: any, traceId?: string) {
     console.log(`[${this.MODULE_NAME}] 💾 Updating Cortex cache for user ${userId} (${mode})`);
 
     // Recompute analytics with fresh data
@@ -345,14 +465,28 @@ class ContextRefreshCoordinator extends EventEmitter {
     const ttl = 900; // 15 minutes
     const cacheKey = `analytics_${mode}_${userId}`;
     
-    cortexCore.set(cacheKey, {
+    const cortexData = {
       strategy_analytics: strategySnapshot,
       portfolio_summary: portfolioSnapshot,
       computed_at: new Date().toISOString(),
       user_id: userId,
       mode,
       refreshed_by: 'ContextRefreshCoordinator'
-    }, ttl);
+    };
+    
+    cortexCore.set(cacheKey, cortexData, ttl);
+
+    // Phase 8.6.3: Log provenance - Cortex → Walter data flow
+    if (traceId) {
+      await provenanceLogger.logCortexToWalter({
+        traceId,
+        sourceTable: 'cortex_cache',
+        mode,
+        globalContextId: 'default',
+        data: cortexData,
+        contextType: 'analytics_snapshot',
+      });
+    }
 
     console.log(`[${this.MODULE_NAME}] ✅ Cortex cache updated (key: ${cacheKey}, TTL: ${ttl}s)`);
   }
@@ -361,8 +495,8 @@ class ContextRefreshCoordinator extends EventEmitter {
    * Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H + J)
    * Phase 8.5 Addendum J: Only creates memory if context has changed (prevents duplicate entries)
    */
-  private async updateWalterMemory(userId: string, mode: 'live' | 'paper', freshData: any) {
-    console.log(`[${this.MODULE_NAME}] 🧠 Checking Walter memory for user ${userId} (${mode})`);
+  private async updateWalterMemory(userId: string, mode: 'live' | 'paper', freshData: any, traceId?: string) {
+    console.log(`[${this.MODULE_NAME}] 🧠 Checking Walter memory for user ${userId} (${mode})${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
 
     const memoryContent = `Context refreshed: Portfolio balance $${freshData.portfolioBalance}, ${freshData.activeStrategiesCount} strategies active (${freshData.activeStrategies.join(', ')}), engine ${freshData.engineActive ? 'running' : 'stopped'}, mode: ${mode}`;
 
@@ -391,6 +525,19 @@ class ContextRefreshCoordinator extends EventEmitter {
     );
 
     this.lastContextByUser.set(userKey, memoryContent);
+    
+    // Phase 8.6.3: Log provenance - Walter → UI data flow
+    if (traceId) {
+      await provenanceLogger.logWalterToUI({
+        traceId,
+        endpoint: '/api/walter/context',
+        mode,
+        globalContextId: 'default',
+        data: { memoryContent, ...freshData },
+        userId,
+      });
+    }
+    
     console.log(`[${this.MODULE_NAME}] ✅ Walter memory updated (context changed)`);
   }
 
@@ -481,11 +628,14 @@ class ContextRefreshCoordinator extends EventEmitter {
   async ensureFreshContext(userId: string, mode: 'live' | 'paper' = 'paper'): Promise<{ refreshResult: RefreshResult; freshData: any }> {
     console.log(`[${this.MODULE_NAME}] [Addendum-J] Forcing live context refresh for user ${userId}`);
     
-    // Fetch fresh data once
-    const freshData = await this.fetchFreshData(userId, mode);
+    // Phase 8.6.3: Generate trace ID for provenance tracking
+    const traceId = provenanceLogger.generateTraceId();
     
-    // Perform full refresh using that data
-    const refreshResult = await this.performRefreshWithData(userId, mode, freshData, 'direct');
+    // Fetch fresh data once
+    const freshData = await this.fetchFreshData(userId, mode, traceId);
+    
+    // Perform full refresh using that data (Phase 8.6.3: pass traceId for correlation)
+    const refreshResult = await this.performRefreshWithData(userId, mode, freshData, 'direct', traceId);
     
     return { refreshResult, freshData };
   }
@@ -498,12 +648,14 @@ class ContextRefreshCoordinator extends EventEmitter {
     console.log(`[${this.MODULE_NAME}] [Addendum-K.4] Forcing dual-mode context refresh for user ${userId}`);
     
     const start = Date.now();
+    // Phase 8.6.3: Generate trace ID for provenance tracking
+    const traceId = provenanceLogger.generateTraceId();
     
     try {
-      // Fetch both live and paper data simultaneously
-      const dualModeData = await this.fetchDualModeData(userId);
+      // Fetch both live and paper data simultaneously (Phase 8.6.3: with traceId)
+      const dualModeData = await this.fetchDualModeData(userId, traceId);
       
-      // Update Cortex cache for both modes in parallel
+      // Update Cortex cache for both modes in parallel (Phase 8.6.3: with traceId)
       await Promise.all([
         this.updateCortex(userId, 'live', {
           portfolioBalance: dualModeData.live.portfolioBalance,
@@ -514,7 +666,7 @@ class ContextRefreshCoordinator extends EventEmitter {
           ...dualModeData.settings,
           timestamp: dualModeData.timestamp,
           source: 'live-api' as const
-        }),
+        }, traceId),
         this.updateCortex(userId, 'paper', {
           portfolioBalance: dualModeData.paper.portfolioBalance,
           activeStrategies: dualModeData.paper.activeStrategies,
@@ -524,10 +676,10 @@ class ContextRefreshCoordinator extends EventEmitter {
           ...dualModeData.settings,
           timestamp: dualModeData.timestamp,
           source: 'live-api' as const
-        })
+        }, traceId)
       ]);
       
-      // Update Walter's memory for both modes
+      // Update Walter's memory for both modes (Phase 8.6.3: with traceId)
       await Promise.all([
         this.updateWalterMemory(userId, 'live', {
           portfolioBalance: dualModeData.live.portfolioBalance,
@@ -535,14 +687,14 @@ class ContextRefreshCoordinator extends EventEmitter {
           activeStrategiesCount: dualModeData.live.activeStrategiesCount,
           engineActive: dualModeData.live.engineActive,
           mode: 'live'
-        }),
+        }, traceId),
         this.updateWalterMemory(userId, 'paper', {
           portfolioBalance: dualModeData.paper.portfolioBalance,
           activeStrategies: dualModeData.paper.activeStrategies,
           activeStrategiesCount: dualModeData.paper.activeStrategiesCount,
           engineActive: dualModeData.paper.engineActive,
           mode: 'paper'
-        })
+        }, traceId)
       ]);
       
       const latencyMs = Date.now() - start;
@@ -564,16 +716,19 @@ class ContextRefreshCoordinator extends EventEmitter {
 
   /**
    * Internal method: Perform refresh using already-fetched data (avoids redundant fetch)
+   * Phase 8.6.3: Accepts optional traceId from caller to maintain provenance chain
    */
-  private async performRefreshWithData(userId: string, mode: 'live' | 'paper', freshData: any, source: 'api' | 'direct' | 'resync'): Promise<RefreshResult> {
+  private async performRefreshWithData(userId: string, mode: 'live' | 'paper', freshData: any, source: 'api' | 'direct' | 'resync', traceId?: string): Promise<RefreshResult> {
     const start = Date.now();
+    // Phase 8.6.3: Use provided traceId or generate new one
+    const finalTraceId = traceId || provenanceLogger.generateTraceId();
 
     try {
       // Update Cortex cache with fresh data
-      await this.updateCortex(userId, mode, freshData);
+      await this.updateCortex(userId, mode, freshData, finalTraceId);
 
       // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
-      await this.updateWalterMemory(userId, mode, freshData);
+      await this.updateWalterMemory(userId, mode, freshData, finalTraceId);
 
       // Run truth check to detect any remaining discrepancies
       const truthCheck = await systemTruthDiagnostic.runTruthCheck(userId, mode);
