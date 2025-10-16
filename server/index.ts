@@ -84,6 +84,10 @@ app.use((req, res, next) => {
   const { initializePortfolioState } = await import('./startup/portfolio-initializer');
   await initializePortfolioState();
 
+  // Phase 8.6.5 Task 1: Initialize Purpose Layer - Restore system.purpose semantic nodes
+  const { purposeLayer } = await import('./services/purpose-layer');
+  await purposeLayer.initialize();
+
   // Phase 8.4 Addendum E.1: Run file persistence self-test
   const { filePersistence } = await import('./services/file-persistence');
   const selfTestPassed = await filePersistence.runStartupSelfTest();

@@ -1,0 +1,210 @@
+🧩 Phase 8.6.5 — Learning Alignment & Memory Refit
+
+(Purpose & Corpus Reintegration + Continuous Learning System with Paper → Live Knowledge Transfer)
+
+🎯 Primary Objective
+
+Create a permanently aligned, self-improving intelligence framework in which Walter:
+
+Operates from validated data sources (user_goals_live, user_goals_paper, strategy_settings, portfolio_state)
+
+Speaks and reasons from Purpose and multi-domain Corpus knowledge
+
+Learns continuously from every trade (paper and live)
+
+Transfers proven insights from paper mode into live strategy tuning
+
+Maintains full provenance and audit transparency across all learning flows
+
+🔧 Implementation Tasks & Details
+Task 1 — Purpose Layer Reintegration
+
+Restore system.purpose semantic node in Walter Memory; mirror to Cortex.CoreValues.Purpose.
+
+Tag with provenance:meta/purpose, set read-only.
+
+Log at startup:
+
+[CognitiveLayer] Purpose node loaded → Cortex.CoreValues.Purpose (protected, read-only)
+
+
+Validation Check: Ask Walter “What is your core purpose?” → response must match stored purpose verbatim.
+
+Task 2 — Corpus Domain Rebinding
+
+Re-register domain knowledge modules within Cortex:
+
+Domain	Cortex Path	Expected Usage
+Trading & Risk Mgmt	Cortex.Domain.Trading	Strategy logic + pattern learning
+Systems Architecture / DevOps	Cortex.Domain.Engineering	Backend reasoning + system health
+Front-End UX	Cortex.Domain.Frontend	Interface feedback + usability logic
+General Advisory	Cortex.Domain.General	Conversational context + decision analysis
+
+Each domain must log:
+
+[Cortex] Domain validated: <name> | hash=<source_hash> | confidence=1.0
+
+
+Deliverable: Governance report lists “4/4 active domains validated ✓”.
+
+Task 3 — Secure-Core Mode Toggle
+
+Implement flag secureCoreMode.
+
+true = Trading & Governance only (active for live operations)
+
+false = Full cognitive access (all domains + purpose reasoning)
+
+Allow verbal command: “Enable full cognitive access.” / “Return to secure core mode.”
+
+Validation Check: Mode switch appears in logs and Walter acknowledges verbally.
+
+Task 4 — Learning Alignment Refit
+
+Rebuild Cognitive Layer relationships between Purpose, Corpus, and schema data.
+
+Actions
+
+Run Learning Cycle Service to re-weight BoB facts (0.9–1.0) vs Cortex insight (0.6–0.8).
+
+Store composite weights in learning_fragments with traceId.
+
+Confirm alignment log:
+
+[LearningCycle] Alignment pass complete → 100% validated bindings, Purpose integration confirmed
+
+
+Testing
+
+Ask Walter a cross-domain question (e.g., “How can we optimize system latency based on trade load?”).
+
+Response must blend Engineering domain knowledge with Trading data insight.
+
+Task 5 — Continuous Learning & Adaptive Insight System
+
+Create real-time feedback loop that turns trading events into structured learning data.
+
+5.1 Event Capture
+
+Extend Event Broker to record trade events (open/update/close/cancel) in both modes.
+
+Metadata fields: symbol, entry/exit prices, P/L, risk, indicators, timestamp, market volatility.
+
+Each event tagged with traceId and mode.
+
+5.2 Insight Synthesis
+
+Cognitive Interpreter analyzes event vs expectancy models.
+
+Generate learning statements, e.g.:
+“VWAP Pullback in paper mode under low volume yielded +2.1 R expectancy; increase live confidence score.”
+
+5.3 Learning Fragment Storage
+
+Persist in learning_fragments with:
+
+mode, strategy_id, symbol, lesson_type, traceId, confidence_score.
+
+source=TradingEngine, analyzed_by=CognitiveInterpreter.
+
+Paper and Live entries kept distinct but cross-referenced by lesson_hash.
+
+5.4 Paper → Live Knowledge Transfer
+
+Nightly Learning Cycle Service compares paper mode fragments to live strategies.
+
+Criteria for promotion of paper learnings to live context:
+
+≥ 5 occurrences of pattern with confidence ≥ 0.8
+
+Positive expectancy > threshold defined in Goals Engine
+
+Provenance check passes (no stale data)
+
+Promoted insights are marked status=adopted and flagged as inputs for Strategy Bob and Risk Manager on next session start.
+
+Logged event:
+
+[LearningTransfer] Promoted 12 paper-mode insights → live strategy tuning (validated)
+
+5.5 Feedback Integration
+
+Learning Bob aggregates validated fragments into daily Pattern Reports.
+
+Cortex ingests summary into Cortex.Domain.Trading.Learnings.
+
+Strategy Bob uses weighted expectancy data to adjust guardrails or entry filters.
+
+5.6 Governance & Audit
+
+Add metrics to daily report:
+
+Metric	Target	Description
+fragments_created_last_24h	≥ 1 per trade event	Continuous capture check
+promotion_success_rate	≥ 90%	Paper → Live adoptions validated
+learning_retention_rate	≥ 95%	Insights still referenced after 7 days
+provenance_integrity	100%	All traceIds resolved end-to-end
+5.7 Testing Checks
+
+Paper Mode Simulation: Run 10 trades → verify learning_fragments created.
+
+Promotion Validation: Next cycle shows promoted records with status=adopted.
+
+Live Strategy Check: Ask Walter “What did we learn from paper trading yesterday?” → must recall specific insights and how they affect live strategy.
+
+Task 6 — Governance & Validation Update
+
+Expand provenance-governance.ts with Cognitive Health and Learning metrics:
+
+PurposeNodeIntegrity ✓/✗
+
+CorpusDomainsActive count (4 expected)
+
+SecureCoreStatus true/false
+
+LearningFragmentsCount
+
+PromotionSuccessRate
+
+LearningRetentionRate
+
+Deliverable: Governance report includes section: “Cognitive and Learning Health Metrics.”
+
+Task 7 — Conversational Integration Testing
+
+After deployment:
+
+Ask Walter to describe Purpose → exact verbatim text.
+
+Ask for most recent learning from paper mode → contextually accurate insight.
+
+Ask how that learning is being applied to live strategy → mentions promotion event and affected guardrail or variable.
+
+Ask for domain question outside Trading → verify Cortex domain response appears when Full Cognitive Mode enabled.
+
+Task 8 — Documentation Update
+
+Add section to replit.md:
+Phase 8.6.5 — Learning Alignment & Memory Refit (Expanded with Continuous Learning and Paper→Live Transfer)
+Include:
+
+Diagram of event→learning fragment→promotion flow
+
+Updated Governance Metrics definitions
+
+Secure-Core toggle instructions
+
+✅ Expected Deliverables & Verification Checklist
+Category	Deliverable	Validation Check
+Purpose	Protected purpose node loaded	Walter restates purpose
+Corpus	4 domains validated	Governance report 4/4 active
+Learning Loop	learning_fragments created + promoted	DB and logs confirm
+Paper→Live	Adopted insights affect live guardrails	Walter explains promotion
+Governance	New metrics visible in report	All values within targets
+Conversational	Reasoned answers w/ traceable facts	Dialogue tests pass
+📣 Instruction to Replit
+
+Implement Phase 8.6.5 — Learning Alignment & Memory Refit (Expanded).
+Ensure that continuous learning event capture, paper mode fragment promotion, and live feedback integration are fully active for both modes.
+Validate Purpose and Corpus bindings, governance metrics, and conversation tests as outlined above.
+Deliver a final governance report and validation log confirming successful Paper→Live knowledge transfer and system stability.
