@@ -815,6 +815,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.info(`[Screeners] User ${userId} updated screener filters for ${mode} mode`);
 
+      // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+      const { configChangeHandler } = await import('./services/config-change-handler');
+      await configChangeHandler.handleConfigChange({
+        userId,
+        mode,
+        configType: 'screeners',
+        source: 'api'
+      });
+
       res.json(screenerData);
     } catch (error) {
       console.error('Error updating screener filters:', error);
@@ -8429,6 +8438,15 @@ Important: Extract the exact field names and numeric values from the user's requ
                   };
                   await storage.upsertScreenerFilters(updateData);
                   console.info(`[Walter] Updated filter ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
+                  
+                  // Phase 8.6.5: Invalidate caches and refresh context
+                  const { configChangeHandler: filtersHandler } = await import('./services/config-change-handler');
+                  await filtersHandler.handleConfigChange({
+                    userId,
+                    mode,
+                    configType: 'screeners',
+                    source: 'direct'
+                  });
                 }
               }
               break;
