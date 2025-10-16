@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-16T21:37:38.158Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential over-utilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics indicate no active trades and zero total profit/loss, which may be unusual if trading activity is expected."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart the AI module to ensure it is operating and contributing to trading strategies."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate trading strategies and market conditions to ensure alignment with platform goals and expected activity."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve any underlying issues.",
+      "rationale": "Sustained high CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart the AI module and verify its configuration to ensure it is actively learning and generating trading opportunities.",
+      "rationale": "The AI module is not performing as expected, which could impact the platform's ability to identify and act on trading opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review current trading strategies and market conditions to determine if adjustments are needed to align with platform objectives.",
+      "rationale": "Zero active trades and total P/L may indicate a misalignment with market conditions or strategy execution issues."
+    }
+  ],
+  "urgencyLevel": "high"
+}

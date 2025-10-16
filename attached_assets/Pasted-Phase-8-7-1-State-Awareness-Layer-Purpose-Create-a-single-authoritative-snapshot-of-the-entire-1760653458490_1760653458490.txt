@@ -1,0 +1,98 @@
+Phase 8.7.1 — State Awareness Layer
+
+Purpose
+Create a single, authoritative “snapshot” of the entire Dawn Trader environment that Walter (and every UI component) can query before generating responses or executing actions. This guarantees that all reasoning and execution use live, verified data.
+
+Tasks
+Task 1 — Build the State Awareness Service
+
+File: server/services/state-awareness.ts
+
+Responsibilities:
+
+Collect verified data from existing BoBs and Cortex.
+
+Aggregate into one structured JSON payload.
+
+Cache for ≤5 seconds to balance performance and freshness.
+
+Data Sources:
+
+Portfolio State → portfolio_state
+
+Strategies Enabled → strategy_settings
+
+Goals → user_goals_live / user_goals_paper
+
+Guardrails → guardrails
+
+Screeners → screener_filters
+
+Trading Engine Status → from Trading Engine API
+
+Output Schema:
+
+{
+  "timestamp": "2025-10-18T12:00:00Z",
+  "trading": { "paper": "active", "live": "stopped" },
+  "balances": { "paper": 800, "live": 834.11 },
+  "strategies": { "paper": 8, "live": 4 },
+  "goals": { "paper": 3, "live": 0 },
+  "guardrails": { "paper": {...}, "live": {...} },
+  "screeners": { "paper": {...}, "live": {...} }
+}
+
+Task 2 — Create Read Endpoints
+
+GET /api/state/summary → returns the JSON snapshot
+
+GET /api/state/debug → returns snapshot + data source provenance info
+
+Both endpoints use cache headers and attach traceId for lineage.
+
+Task 3 — Integrate with Walter Response Flow
+
+In walter-response.ts, pre-fetch /api/state/summary before any reply.
+
+Insert payload under new section “LIVE SYSTEM STATE” in the system prompt.
+
+If fetch fails, Walter must say:
+“System state unavailable; please retry or refresh context.”
+
+Task 4 — Provenance Logging
+
+Each snapshot write logs to data_lineage with:
+from="bob", to="state_layer", traceId, row_count, and data_hash.
+
+Enables full trace through to Walter’s responses.
+
+Task 5 — Testing & Validation
+Test #	Action	Expected Result
+1	Call /api/state/summary	Returns JSON payload with all keys and timestamps < 5 s old.
+2	Toggle trading modes	Endpoint reflects new status within 2 s.
+3	Add/remove strategy	Strategy counts update in real time.
+4	Modify goals/guardrails	Updated values appear after refresh.
+5	Ask Walter: “What’s my trading status and goals?”	Response matches /state/summary exactly.
+Task 6 — Deliverables
+
+New service file state-awareness.ts
+
+New API routes (/api/state/summary, /api/state/debug)
+
+Updated walter-response.ts to use the state layer
+
+Provenance entries visible in data_lineage
+
+Documentation in replit.md with example payload and test cases
+
+Acceptance Criteria
+
+✅ State snapshot returns all core data within 5 seconds
+✅ Walter always uses latest state before replying
+✅ Provenance trace confirmed for every refresh
+✅ No stale cache or mismatched data across layers
+
+Next Phase
+
+Once Phase 8.7.1 is verified and passing tests (accurate state snapshot + provenance traces):
+→ Proceed to Phase 8.7.2 — Intent Execution Framework, which will enable Walter to act on this state safely.
