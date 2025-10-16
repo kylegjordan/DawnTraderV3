@@ -88,6 +88,10 @@ app.use((req, res, next) => {
   const { purposeLayer } = await import('./services/purpose-layer');
   await purposeLayer.initialize();
 
+  // Phase 8.6.5 Task 2: Initialize Corpus Domains - Re-register domain knowledge modules
+  const { corpusDomainService } = await import('./services/corpus-domain-service');
+  await corpusDomainService.initialize();
+
   // Phase 8.4 Addendum E.1: Run file persistence self-test
   const { filePersistence } = await import('./services/file-persistence');
   const selfTestPassed = await filePersistence.runStartupSelfTest();
