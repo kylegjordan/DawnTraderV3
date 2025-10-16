@@ -21,6 +21,7 @@ import { uiBob } from './bob-ui';
 import { cortexCore } from './cortex/cortex-core';
 import { nlaiInterpreter } from './nlai-interpreter';
 import { contextRefreshCoordinator } from './context-refresh-coordinator';
+import { cognitiveLayer } from './walter-cognitive-layer';
 import OpenAI from 'openai';
 import { storage } from '../storage';
 
@@ -78,6 +79,13 @@ export async function generateWalterResponse(
       `paper=$${dualModeData.paper.portfolioBalance} (${dualModeData.paper.engineStatus}) ` +
       `source=live-api`
     );
+
+    // Phase 8.6: Check for tone change commands
+    const toneChange = await cognitiveLayer.handleToneChange(userId, userMessage);
+    if (toneChange.changed) {
+      console.log(`[Walter-Cognitive] Tone changed to ${toneChange.newTone} for user ${userId}`);
+      return toneChange.message;
+    }
 
     // 1. Gather context including expert principles
     const context = await gatherContext(userId, chatId, userMessage);
