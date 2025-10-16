@@ -1,0 +1,67 @@
+🔧 Phase 8.6.4 Addendum A — Context Rebinding & Cache Purge
+🎯 Objective
+
+Ensure Walter’s cognitive layer and Cortex refresh paths reference the new globalContextId-based tables for both modes and clear all obsolete snapshot data that were created before 8.6.3.
+
+🧱 Implementation Tasks
+
+Task 1 – Cortex Goal Binding
+
+Locate the getGoalsState() call inside the Cortex Goal module or context-refresh coordinator.
+
+Re-map its source to the portfolio_goals_state table instead of risk_settings.
+
+Tag provenance entries with source_table: "portfolio_goals_state" for both live/paper.
+
+Task 2 – Strategy Fetch Alignment
+
+Update fetchStrategySettings() (and any internal variants) to reference strategy_settings_global.
+
+Ensure filters use WHERE globalContextId = 'default' AND mode = :mode.
+
+Verify 8 strategies appear in live and paper contexts.
+
+Task 3 – Walter Memory Flush
+
+Purge cached memory objects of type goal_metrics and strategy_status from walter_memory.
+
+Rebuild them via fresh provenance fetch.
+
+Confirm in logs: [Rebuild] Walter memory domain=goals,strategy → live-api ✓.
+
+Task 4 – Provenance Verification
+
+Check that new lineage records in data_lineage show:
+source_table: portfolio_goals_state and strategy_settings_global
+for both modes.
+
+Confirm trace IDs persist from BoB → Cortex → Walter.
+
+Task 5 – Testing
+
+Ask Walter:
+
+“What are my goal settings for live mode?”
+
+“Which strategies are enabled for live mode?”
+
+Verify output matches UI.
+
+Dashboard Truth Sync should show zero discrepancies.
+
+✅ Acceptance Criteria
+
+Walter retrieves live data from the correct post-migration tables.
+
+Legacy risk metric fields no longer appear in goal responses.
+
+Enabled strategies for live mode display correctly.
+
+Provenance logs confirm current (non-legacy) table access.
+
+No stale cache references remain in Walter’s semantic memory.
+
+📘 Note for Replit
+
+Run Addendum A immediately after 8.6.4 synchronization completes.
+Once verified, archive all legacy risk_settings and strategy_settings tables under legacy_202510 prefix for safe deprecation.
