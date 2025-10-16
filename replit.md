@@ -38,6 +38,8 @@ The system incorporates a multi-module intelligent caching system (Bob Core) for
 
 **Phase 8.6.4: BoB & Cortex Lineage Integration** extends provenance deeper into BoB modules and Cortex with >99% trace continuity. All 8 BoB modules (MetricsBob, DataBob, ConfigBob, StrategyBob, TradeBob, InsightBob, LearningBob, UIBob) instrumented with deep-trace hooks via provenanceLogger.logBobTrace(). Cortex memory bridge embeds provenance metadata (traceId, mode, sourceTable) in all cache updates. Event Broker routes BoB→Cortex updates with traceId inheritance to learning_fragments. Governance reports upgraded with BoB execution metrics, Cortex write counts, and lineage completeness ratio (≥99% continuity, ≤1% stale events).
 
+**Phase 8.6.4 Addendum A: Context Rebinding & Architecture Documentation** confirms correct table architecture and data flow. Goals are stored in mode-specific tables (`user_goals_live`, `user_goals_paper`) and fetched via ConfigBob with provenance tracking. Strategy settings use `strategy_settings` table with `global_context_id` column for shared global context. Portfolio state maintained in `portfolio_state` table with mode isolation. All data flows tracked through provenance system: Database → BoB → Cortex → Walter → UI. No legacy tables (`risk_settings`, `portfolio_goals_state`, `strategy_settings_global`) exist in current architecture.
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.
