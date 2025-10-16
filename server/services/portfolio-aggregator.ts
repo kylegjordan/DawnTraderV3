@@ -44,18 +44,19 @@ class PortfolioAggregatorService {
 
   /**
    * Aggregate portfolio metrics from all strategies
+   * Phase 8.5 Addendum K.3: Uses global context for shared portfolio
    */
   async aggregatePortfolio(
     userId: string, 
     mode: 'live' | 'paper',
     strategyMetrics: StrategyMetrics[]
   ): Promise<PortfolioSummary> {
-    console.log(`[${this.MODULE_NAME}] 📊 Aggregating portfolio (user: ${userId}, mode: ${mode})`);
+    console.log(`[${this.MODULE_NAME}] 📊 Aggregating portfolio (global context, mode: ${mode})`);
     const start = Date.now();
 
-    // Phase 8.5 Addendum F: Get initial capital from portfolio_state
-    // Phase 8.5 Addendum I: NO FALLBACK - use actual balance or 0
-    const portfolioState = await storage.getPortfolioState({ userId, mode });
+    // Phase 8.5 Addendum K.3: Use global context for shared portfolio
+    const globalContextId = 'default';
+    const portfolioState = await storage.getPortfolioState({ globalContextId, mode });
     const initialCapital = portfolioState 
       ? parseFloat(portfolioState.balance) 
       : 0;

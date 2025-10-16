@@ -838,9 +838,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Phase 8.5 Addendum K.3: Uses global context for shared strategies
   app.get('/api/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const globalContextId = 'default';
       const user = await storage.getUser(userId);
       const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
       
@@ -849,8 +851,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
       const engineActive = isPaperSimRunning;
       
-      // Get enabled strategies from strategy_settings table (dynamic array)
-      const strategySettingsList = await storage.listStrategySettings({ userId, mode: mode as 'live' | 'paper' });
+      // Get enabled strategies from strategy_settings table (global context)
+      const strategySettingsList = await storage.listStrategySettings({ globalContextId, mode: mode as 'live' | 'paper' });
       const activeStrategies = strategySettingsList
         .filter(s => s.enabled)
         .map(s => s.strategy);
@@ -874,8 +876,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get last tick timestamp
       const lastTickISO = new Date().toISOString();
       
-      // Get portfolio balance from portfolio_state (Phase 8.5 Addendum F)
-      const portfolioState = await storage.getPortfolioState({ userId, mode });
+      // Get portfolio balance from portfolio_state (Phase 8.5 Addendum K.3: global context)
+      const portfolioState = await storage.getPortfolioState({ globalContextId, mode });
       const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 0;
       
       // Consistency check: Compare backend strategies with Cortex snapshot
@@ -5973,13 +5975,14 @@ Please:
   // Strategy Settings Routes
   
   // GET current settings for a specific strategy
+  // Phase 8.5 Addendum K.3: Uses global context for shared strategies
   app.get('/api/strategies/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
+      const globalContextId = 'default';
       const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       const strategy = String(req.query.strategy);
       
-      const row = await storage.getStrategySettings({ userId, mode, strategy });
+      const row = await storage.getStrategySettings({ globalContextId, mode, strategy });
       return res.json(row ?? {});
     } catch (error: any) {
       console.error('Error fetching strategy settings:', error);
@@ -5988,17 +5991,17 @@ Please:
   });
 
   // GET all settings for a mode
-  // Phase 7.4: ConfigBob transparent routing for strategies endpoint
+  // Phase 8.5 Addendum K.3: Uses global context for shared strategies
   app.get('/api/strategies/settings/all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
+      const globalContextId = 'default';
       const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       
       // Phase 7.4: Try ConfigBob first if enabled
       if (bobCore.isEnabled()) {
         try {
           console.log('[BobRouting] 🎯 Using ConfigBob for /api/strategies/settings/all');
-          const rows = await configBob.getStrategies(userId, mode);
+          const rows = await configBob.getStrategies(globalContextId, mode);
           return res.json(rows);
         } catch (bobError: any) {
           console.error('[BobRouting] ⚠️ ConfigBob failed, using original handler:', bobError.message);
@@ -6006,7 +6009,7 @@ Please:
         }
       }
 
-      const rows = await storage.listStrategySettings({ userId, mode });
+      const rows = await storage.listStrategySettings({ globalContextId, mode });
       return res.json(rows);
     } catch (error: any) {
       console.error('Error fetching all strategy settings:', error);
@@ -6035,9 +6038,11 @@ Please:
   });
 
   // PUT save settings (validated) + audit + hot-reload
+  // Phase 8.5 Addendum K.3: Uses global context for shared strategies
   app.put('/api/strategies/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const globalContextId = 'default';
       const mode = (req.body?.mode === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
       const strategy = String(req.body?.strategy);
       const enabled = req.body?.enabled !== undefined ? Boolean(req.body.enabled) : true;
@@ -6050,7 +6055,7 @@ Please:
         return res.status(400).json({ ok: false, errors: parse.error.flatten() });
       }
 
-      const prev = await storage.getStrategySettings({ userId, mode, strategy });
+      const prev = await storage.getStrategySettings({ globalContextId, mode, strategy });
       
       // RISK EVALUATION LOGIC (Phase 5.4 Part 2)
       // Calculate projected portfolio risk
@@ -6145,7 +6150,7 @@ Please:
       
       // Risk < 20%: Execute immediately (existing behavior)
       const saved = await storage.upsertStrategySettings({
-        userId,
+        globalContextId,
         mode,
         strategy: strategy as any,
         enabled,

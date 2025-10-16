@@ -36,6 +36,8 @@ The system incorporates a multi-module intelligent caching system (Bob Core) for
 
 **Direct Fresh Data Injection (Addendum K.1)** ensures Walter's prompt receives live system state directly. Fresh portfolio balance, active strategies, engine status, and mode are fetched via `ensureFreshContext()` and injected as a LIVE SYSTEM STATE block in Walter's system prompt. This eliminates reliance on potentially stale semantic memory retrieval. All fallback logic defaults to $0 (not $1000) when portfolio_state is absent, enforcing consistency with Addendum I live source rules.
 
+**Global Context Unification (Addendum K.3)** establishes a shared workspace architecture where all users operate within a single global context. The system uses `globalContextId = 'default'` for all shared resources including portfolio state, strategy settings, and trading configuration. Users are differentiated by roles (owner/editor/viewer) stored in the `users` table. This eliminates per-user data duplication—the system now maintains exactly 16 strategies (8 live + 8 paper) instead of 48+ duplicates. Critical services updated: `ContextRefreshCoordinator`, `StrategySync`, `PortfolioAggregator`, and API routes `/api/trading/status`, `/api/strategies/settings`. The migration consolidated all data to a single canonical portfolio ($800 in paper mode) and assigned all existing users the 'owner' role. Walter chat history preserved with global context linkage via `walter_chats.global_context_id`.
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.
