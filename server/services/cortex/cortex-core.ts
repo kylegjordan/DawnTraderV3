@@ -332,6 +332,38 @@ class CortexCore {
     console.log(`[CortexCore] 🧹 Conversation snapshot cleared for user ${userId}`);
   }
 
+  /**
+   * Phase 8.6.5 Addendum: Delete specific cache entry
+   * Used for invalidating config caches after updates
+   */
+  delete(key: string): void {
+    if (!this.enabled) return;
+
+    if (this.memory.memory[key]) {
+      delete this.memory.memory[key];
+      console.log(`[CortexCore] 🗑️ Deleted cache entry: ${key}`);
+    }
+  }
+
+  /**
+   * Phase 8.6.5 Addendum: Delete multiple cache entries matching a pattern
+   */
+  deletePattern(pattern: string): void {
+    if (!this.enabled) return;
+
+    let deleted = 0;
+    for (const key of Object.keys(this.memory.memory)) {
+      if (key.includes(pattern)) {
+        delete this.memory.memory[key];
+        deleted++;
+      }
+    }
+
+    if (deleted > 0) {
+      console.log(`[CortexCore] 🗑️ Deleted ${deleted} cache entries matching pattern: ${pattern}`);
+    }
+  }
+
   private cleanExpired(): void {
     const now = Date.now();
     let cleaned = 0;
