@@ -55,6 +55,11 @@ class ConfigChangeHandler {
         console.log(`[${this.MODULE_NAME}] ✅ Cortex cache cleared for global context: ${globalCortexKey}`);
       }
 
+      // Step 3.5: Invalidate StateAwarenessService cache for this user
+      const { stateAwarenessService } = await import('./state-awareness');
+      stateAwarenessService.invalidateCache(userId);
+      console.log(`[${this.MODULE_NAME}] ✅ StateAwareness cache invalidated for user ${userId.substring(0, 8)}`);
+
       // Step 4: Trigger ContextRefreshCoordinator to re-sync all layers
       // This ensures Walter AI gets fresh data
       const refreshResult = await contextRefreshCoordinator.refresh(userId, mode, source);
@@ -89,6 +94,10 @@ class ConfigChangeHandler {
     configTypes.forEach(type => {
       cortexCore.delete(`config:${type}:${mode}:${userId}`);
     });
+    
+    // Invalidate StateAwarenessService cache for this user
+    const { stateAwarenessService } = await import('./state-awareness');
+    stateAwarenessService.invalidateCache(userId);
     
     // Trigger full context refresh
     await contextRefreshCoordinator.refresh(userId, mode, 'direct');

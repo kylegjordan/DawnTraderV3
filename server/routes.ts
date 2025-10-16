@@ -2090,7 +2090,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { stateAwarenessService } = await import('./services/state-awareness');
       
       const snapshot = await stateAwarenessService.getStateSnapshot(userId, { 
-        bypassCache: true,
         includeProvenance: true 
       });
       

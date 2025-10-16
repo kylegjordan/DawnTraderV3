@@ -49,24 +49,53 @@ interface StateSnapshotDebug extends StateSnapshot {
   };
 }
 
+interface CacheEntry {
+  snapshot: StateSnapshot;
+  provenance: {
+    traceId: string;
+    sources: {
+      portfolio: string;
+      strategies: string;
+      goals: string;
+      guardrails: string;
+      screeners: string;
+      tradingStatus: string;
+    };
+    dataHash: string;
+    generatedAt: string;
+  };
+  timestamp: number;
+}
+
 class StateAwarenessService {
-  private cache: StateSnapshot | null = null;
-  private cacheTimestamp: number = 0;
+  private cache: Map<string, CacheEntry> = new Map();
   private readonly CACHE_TTL_MS = 5000; // 5 seconds as per spec
   private readonly SERVICE_NAME = 'StateAwareness';
 
   /**
    * Get the current system state snapshot
    * Uses 5-second cache to balance performance and freshness
+   * Per-user cache ensures data isolation
    */
   async getStateSnapshot(userId: string, options: { bypassCache?: boolean; includeProvenance?: boolean } = {}): Promise<StateSnapshot | StateSnapshotDebug> {
     const now = Date.now();
-    const cacheAge = now - this.cacheTimestamp;
+    const cacheKey = userId;
+    const cached = this.cache.get(cacheKey);
+    const cacheAge = cached ? now - cached.timestamp : Infinity;
 
     // Return cached data if still valid and not bypassing cache
-    if (!options.bypassCache && this.cache && cacheAge < this.CACHE_TTL_MS) {
-      console.log(`[${this.SERVICE_NAME}] ✅ CACHE_HIT: State snapshot (age: ${cacheAge}ms, TTL: ${this.CACHE_TTL_MS}ms)`);
-      return this.cache;
+    if (!options.bypassCache && cached && cacheAge < this.CACHE_TTL_MS) {
+      console.log(`[${this.SERVICE_NAME}] ✅ CACHE_HIT: State snapshot for user ${userId.substring(0, 8)} (age: ${cacheAge}ms, TTL: ${this.CACHE_TTL_MS}ms)`);
+      
+      // Include provenance if requested (for debug endpoint)
+      if (options.includeProvenance) {
+        return {
+          ...cached.snapshot,
+          provenance: cached.provenance,
+        } as StateSnapshotDebug;
+      }
+      
+      return cached.snapshot;
     }
 
     console.log(`[${this.SERVICE_NAME}] 🔄 Generating fresh state snapshot for user ${userId.substring(0, 8)}...`);
@@ -118,34 +147,40 @@ class StateAwarenessService {
         },
       };
 
-      // Update cache
-      this.cache = snapshot;
-      this.cacheTimestamp = now;
-
-      const duration = Date.now() - startTime;
-      console.log(`[${this.SERVICE_NAME}] ✅ State snapshot generated in ${duration}ms [trace: ${traceId.substring(0, 12)}...]`);
-
       // Log provenance
       const dataHash = this.generateDataHash(snapshot);
       await this.logProvenance(traceId, snapshot, dataHash, userId);
+
+      // Build provenance metadata
+      const provenance = {
+        traceId,
+        sources: {
+          portfolio: 'portfolio_state',
+          strategies: 'strategy_settings',
+          goals: 'user_goals_live/user_goals_paper',
+          guardrails: 'guardrails',
+          screeners: 'screener_filters',
+          tradingStatus: 'trading_engine',
+        },
+        dataHash,
+        generatedAt: snapshot.timestamp,
+      };
+
+      // Update per-user cache with snapshot AND provenance
+      this.cache.set(cacheKey, {
+        snapshot,
+        provenance,
+        timestamp: now,
+      });
+
+      const duration = Date.now() - startTime;
+      console.log(`[${this.SERVICE_NAME}] ✅ State snapshot generated in ${duration}ms [trace: ${traceId.substring(0, 12)}...] for user ${userId.substring(0, 8)}`);
 
       // Return with provenance if requested (for debug endpoint)
       if (options.includeProvenance) {
         return {
           ...snapshot,
-          provenance: {
-            traceId,
-            sources: {
-              portfolio: 'portfolio_state',
-              strategies: 'strategy_settings',
-              goals: 'user_goals_live/user_goals_paper',
-              guardrails: 'guardrails',
-              screeners: 'screener_filters',
-              tradingStatus: 'trading_engine',
-            },
-            dataHash,
-            generatedAt: snapshot.timestamp,
-          },
+          provenance,
         } as StateSnapshotDebug;
       }
 
@@ -313,11 +348,17 @@ class StateAwarenessService {
 
   /**
    * Invalidate the cache (used when config changes occur)
+   * @param userId - Optional user ID to invalidate only that user's cache, or undefined to clear all
    */
-  invalidateCache(): void {
-    console.log(`[${this.SERVICE_NAME}] 🗑️ Cache invalidated`);
-    this.cache = null;
-    this.cacheTimestamp = 0;
+  invalidateCache(userId?: string): void {
+    if (userId) {
+      const deleted = this.cache.delete(userId);
+      console.log(`[${this.SERVICE_NAME}] 🗑️ Cache invalidated for user ${userId.substring(0, 8)} (existed: ${deleted})`);
+    } else {
+      const size = this.cache.size;
+      this.cache.clear();
+      console.log(`[${this.SERVICE_NAME}] 🗑️ Cache invalidated for all users (cleared ${size} entries)`);
+    }
   }
 }
 
