@@ -74,7 +74,7 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
               <TrendingUp className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground">CryptoTrader</h1>
+              <h1 className="text-lg font-bold text-foreground">The Dawn Trader</h1>
               <p className="text-xs text-muted-foreground">Pro Platform</p>
             </div>
           </div>
