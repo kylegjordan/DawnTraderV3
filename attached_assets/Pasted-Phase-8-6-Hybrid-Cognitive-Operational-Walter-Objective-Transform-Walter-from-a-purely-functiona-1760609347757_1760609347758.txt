@@ -1,0 +1,201 @@
+Phase 8.6 — Hybrid Cognitive-Operational Walter
+
+Objective:
+Transform Walter from a purely functional executor into a dual-layer intelligence system that can reason conversationally, explain technical data clearly, and manage trading operations safely — without ever compromising accuracy, data integrity, or control.
+
+Scope
+
+Add a Cognitive Reasoning Layer above the existing Execution Core.
+
+Maintain strict separation between conversation and operations.
+
+Allow mode-aware interaction (Live vs Paper) with full memory independence.
+
+Introduce tone-and-intent flexibility so Walter can shift from technical to conversational modes on demand.
+
+Enforce anti-JSON and symbol-validation controls to stop random parser triggers.
+
+Expand visibility and trust through transparent dashboards and acknowledgment behavior.
+
+Phase 8.6 Tasks
+Task 1 – Create Dual-Layer Architecture
+
+Establish two cooperating services:
+
+Execution Core: deterministic trading layer (engines, risk, synchronization).
+
+Cognitive Layer: interprets user intent, explains logic, generates human-style responses.
+
+Introduce an Intent Gateway between them:
+
+Converts conversational requests into validated operational commands.
+
+Logs every approved intent; rejects unverified or malformed ones.
+
+All trading commands must still originate from Execution Core authorization.
+
+Task 2 – Mode Independence and Persistence
+
+Keep Live and Paper data sets fully separate for:
+
+Strategies + parameters
+
+Guardrails + risk rules
+
+Goals + performance targets
+
+Screeners + filters
+
+Both modes persist in storage under distinct context IDs.
+
+Implement cross-mode utilities:
+
+“Copy Live → Paper” (seed experiments).
+
+“Promote Paper → Live” (explicit, audited).
+
+Never auto-mirror variables between modes.
+
+Task 3 – Conversational Intelligence and Tone Control
+
+Add a Reasoning Profile Manager that supports three tones:
+
+Technical: concise metrics and logs.
+
+Conversational: clear, human explanation.
+
+Advisory/Strategic: scenario analysis and options.
+
+Commands:
+
+“Walter, go technical.”
+
+“Simplify this for Kasia.”
+
+“Return to advisory mode.”
+
+Tone preference persists per session.
+
+Task 4 – Intent and Acknowledgment Framework
+
+Every response begins with a quick reflection of user intent:
+
+“You’re exploring whether to raise your paper-mode risk cap; here’s what that implies.”
+
+Always include:
+
+Direct answer
+
+One-to-two strategic options or implications
+
+A follow-up question to keep dialogue active
+
+Ensures Walter behaves as a reasoning partner, not a one-line bot.
+
+Task 5 – Parser Reliability and JSON Suppression
+
+Install a Symbol Validator that accepts only legitimate tickers.
+
+Apply a confidence threshold (≥ 0.95) before any pair or analysis action.
+
+If threshold fails → ask clarification instead of executing.
+
+Add a post-processor that strips JSON unless the user explicitly asks for structured data.
+
+Log all parser rejections for audit.
+
+Task 6 – Dashboard and Visibility Enhancements
+
+Extend dashboard with:
+
+Trade Ledger: open / closed / pending per mode.
+
+Symbol Watchlist: active screeners + filters.
+
+Portfolio Ledger: realized/unrealized P&L + Kraken balance reconciliation.
+
+System Health View: heartbeat timestamps per service.
+
+Ensure Walter and dashboard draw data from the same verified endpoints so reported figures match exactly.
+
+Task 7 – Safety and Integrity Guards
+
+Cognitive Layer cannot execute trades directly.
+
+All operational commands flow through the Intent Gateway, validated by:
+
+Authentication token
+
+Role (RBAC: owner/editor/viewer)
+
+Risk and guardrail checks
+
+Engine refuses any command outside these constraints.
+
+Every approved or blocked intent is logged with timestamp and rationale.
+
+Task 8 – Pre-Simulation Verification Checklist
+
+Before next simulation:
+
+✅ Live & Paper profiles exist and remain independent.
+
+✅ All guardrails and variables persist after restarts.
+
+✅ Dashboard panels populate correctly for both modes.
+
+✅ Kraken balance reconciles within ±0.5 USD.
+
+✅ Walter draws exclusively from live API / database (no cache).
+
+✅ No JSON or symbol-parser misfires appear in logs.
+
+Task 9 – Documentation and Training
+
+Update replit.md with:
+
+Phase 8.6 summary
+
+Cognitive Layer diagram and Intent Gateway flow
+
+Tone commands and user examples
+
+Troubleshooting guide (JSON suppression, symbol validation)
+
+Add a short “Working with Walter” guide for new users:
+
+How to switch tones
+
+How to compare Live/Paper settings
+
+How to read system status outputs
+
+Task 10 – Final Review & Go/No-Go
+
+Run full integration test:
+
+Cognitive responses verified (acknowledgment + options + question).
+
+Execution layer unaffected.
+
+Live & Paper data intact.
+
+Parser safety confirmed.
+
+Architect sign-off required before simulation restart.
+
+Expected Outcome
+
+After successful completion:
+
+Walter communicates with human warmth + technical precision.
+
+Live and Paper modes remain independent yet accessible in one workspace.
+
+Conversations yield acknowledged intent, options, and insights, not one-liners.
+
+No stray JSON, no invalid symbol parsing, no data cross-pollution.
+
+System health and balances stay verifiable at all times.
+
+The platform now operates as a Cognitive-Operational Hybrid — reliable enough for live trading, yet collaborative enough for real strategic thinking. 🚀
