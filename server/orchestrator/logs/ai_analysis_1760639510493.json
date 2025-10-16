@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-16T18:31:50.493Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential CPU bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, confidence, or generated opportunities, suggesting it may not be functioning as expected."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show no active trades and a win rate of 0, which could indicate issues with strategy performance or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider upgrading CPU resources or optimizing existing processes to reduce load."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Investigate and potentially reconfigure AI strategies to ensure they are actively learning and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and adjust trading strategies to improve engagement and performance metrics."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU-intensive processes and optimize or redistribute workloads.",
+      "rationale": "High CPU load can lead to performance degradation and affect system stability and responsiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Evaluate the AI module's configuration and logs to diagnose why it is not generating opportunities or learning.",
+      "rationale": "Ensuring the AI module is functioning correctly is crucial for maintaining competitive trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the current trading strategies and market conditions to identify reasons for lack of active trades and zero win rate.",
+      "rationale": "Improving strategy performance is essential to achieving positive trading outcomes and profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}

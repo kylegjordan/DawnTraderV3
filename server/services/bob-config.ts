@@ -103,7 +103,11 @@ class ConfigBobModule {
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
-          metadata: { note: `BoB → Cortex: goals (${mode})` }
+          data: response,
+          metadata: { 
+            note: `BoB → Cortex: goals (${mode})`,
+            payload: response // Store actual data for debugging
+          }
         });
 
         await provenanceLogger.logLineage({
@@ -114,7 +118,11 @@ class ConfigBobModule {
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
-          metadata: { note: `Cortex → Walter: goals (${mode})` }
+          data: response,
+          metadata: { 
+            note: `Cortex → Walter: goals (${mode})`,
+            payload: response // Store actual data for debugging
+          }
         });
       }
       
@@ -174,7 +182,11 @@ class ConfigBobModule {
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
-          metadata: { note: `BoB → Cortex: guardrails (${mode})` }
+          data: guardrailsData,
+          metadata: { 
+            note: `BoB → Cortex: guardrails (${mode})`,
+            payload: guardrailsData // Store actual data for debugging
+          }
         });
 
         await provenanceLogger.logLineage({
@@ -185,7 +197,11 @@ class ConfigBobModule {
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
-          metadata: { note: `Cortex → Walter: guardrails (${mode})` }
+          data: guardrailsData,
+          metadata: { 
+            note: `Cortex → Walter: guardrails (${mode})`,
+            payload: guardrailsData // Store actual data for debugging
+          }
         });
       }
       
@@ -245,7 +261,11 @@ class ConfigBobModule {
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
-          metadata: { note: `BoB → Cortex: screeners (${mode})` }
+          data: screenersData,
+          metadata: { 
+            note: `BoB → Cortex: screeners (${mode})`,
+            payload: screenersData // Store actual data for debugging
+          }
         });
 
         await provenanceLogger.logLineage({
@@ -256,7 +276,11 @@ class ConfigBobModule {
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
-          metadata: { note: `Cortex → Walter: screeners (${mode})` }
+          data: screenersData,
+          metadata: { 
+            note: `Cortex → Walter: screeners (${mode})`,
+            payload: screenersData // Store actual data for debugging
+          }
         });
       }
       
@@ -316,7 +340,11 @@ class ConfigBobModule {
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
-          metadata: { note: `BoB → Cortex: strategies (${mode})` }
+          data: strategiesData,
+          metadata: { 
+            note: `BoB → Cortex: strategies (${mode})`,
+            payload: strategiesData // Store actual data for debugging
+          }
         });
 
         await provenanceLogger.logLineage({
@@ -327,7 +355,11 @@ class ConfigBobModule {
           mode: context.mode,
           globalContextId: 'default',
           operation: 'read',
-          metadata: { note: `Cortex → Walter: strategies (${mode})` }
+          data: strategiesData,
+          metadata: { 
+            note: `Cortex → Walter: strategies (${mode})`,
+            payload: strategiesData // Store actual data for debugging
+          }
         });
       }
       
