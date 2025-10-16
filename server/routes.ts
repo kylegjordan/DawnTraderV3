@@ -56,6 +56,9 @@ export const loginLimiter = rateLimit({
 const tradingEngines = new Map<string, TradingEngine>();
 const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
+
+// Expose tradingEngines globally for context refresh coordinator (Phase 8.5 Addendum K.4)
+(global as any).tradingEngines = tradingEngines;
 const riskManager = new RiskManager();
 const commandRouter = new CommandRouter(tradingEngines);
 

@@ -188,9 +188,18 @@ class ContextRefreshCoordinator extends EventEmitter {
       storage.getUser(userId)
     ]);
 
-    // Get global session for engineActive status
-    const globalSession = (global as any).getGlobalSession?.();
-    const engineActive = !!(globalSession && globalSession.isRunning);
+    // Get engine status based on mode (Phase 8.5 Addendum K.4: Accurate engine status)
+    let engineActive = false;
+    if (mode === 'paper') {
+      // Paper mode: check global session
+      const globalSession = (global as any).getGlobalSession?.();
+      engineActive = !!(globalSession && globalSession.isRunning);
+    } else {
+      // Live mode: check tradingEngines map
+      const tradingEngines = (global as any).tradingEngines as Map<string, any> | undefined;
+      const liveEngine = tradingEngines?.get(userId);
+      engineActive = !!(liveEngine && liveEngine.isEngineRunning?.());
+    }
 
     // Extract data - NO FALLBACK to 1000 (Phase 8.5 Addendum I)
     // Use actual portfolio_state balance or 0 (matches /api/trading/status)
@@ -245,12 +254,15 @@ class ContextRefreshCoordinator extends EventEmitter {
       storage.getUser(userId)
     ]);
 
-    // Get global session for paper engine status
+    // Get engine status for both modes
+    // Paper engine: uses global session
     const globalSession = (global as any).getGlobalSession?.();
     const paperEngineActive = !!(globalSession && globalSession.isRunning);
     
-    // TODO: Add live engine status tracking (currently always false until live trading implemented)
-    const liveEngineActive = false;
+    // Live engine: check tradingEngines map (exposed globally from routes.ts)
+    const tradingEngines = (global as any).tradingEngines as Map<string, any> | undefined;
+    const liveEngine = tradingEngines?.get(userId);
+    const liveEngineActive = !!(liveEngine && liveEngine.isEngineRunning?.());
 
     // Process live mode data
     const liveBalance = livePortfolioState ? parseFloat(livePortfolioState.balance) : 0;
