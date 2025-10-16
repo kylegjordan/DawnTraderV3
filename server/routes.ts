@@ -685,6 +685,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.info(`[Guardrails] User ${userId} updated guardrails for ${mode} mode`);
 
+      // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+      const { configChangeHandler } = await import('./services/config-change-handler');
+      await configChangeHandler.handleConfigChange({
+        userId,
+        mode,
+        configType: 'guardrails',
+        source: 'api'
+      });
+
       res.json(guardrailsData);
     } catch (error) {
       console.error('Error updating guardrails:', error);
@@ -8049,6 +8058,16 @@ Summary:`;
         const result = await storage.upsertGuardrails(updateData);
 
         console.info(`[Orchestrator] Guardrail updated: ${validated.field} = ${validated.value} (${validated.mode} mode)`);
+        
+        // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
+        const { configChangeHandler } = await import('./services/config-change-handler');
+        await configChangeHandler.handleConfigChange({
+          userId,
+          mode: validated.mode,
+          configType: 'guardrails',
+          source: 'direct'
+        });
+        
         res.json({ success: true, message: 'Guardrail updated successfully', data: result });
       } else {
         res.json({ success: true, message: 'Guardrail update proposal logged for review' });
@@ -8384,6 +8403,15 @@ Important: Extract the exact field names and numeric values from the user's requ
                   };
                   await storage.upsertGuardrails(updateData);
                   console.info(`[Walter] Updated ${interpretation.actionType === 'risk' ? 'risk parameter' : 'guardrail'} ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
+                  
+                  // Phase 8.6.5: Invalidate caches and refresh context
+                  const { configChangeHandler: guardrailsHandler } = await import('./services/config-change-handler');
+                  await guardrailsHandler.handleConfigChange({
+                    userId,
+                    mode,
+                    configType: 'guardrails',
+                    source: 'direct'
+                  });
                 }
               }
               break;
