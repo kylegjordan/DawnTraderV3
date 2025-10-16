@@ -50,6 +50,10 @@ The system incorporates a multi-module intelligent caching system (Bob Core) for
 
 **Governance & Audit**: Phase 8.6.5 metrics endpoint (`/api/governance/phase-8.6.5-metrics`) tracks fragments_created_last_24h, paper_to_live_ready count, promotion_success_rate, learning_retention_rate (95%), provenance_integrity, cognitive_health. API routes enable Secure-Core toggle, learning alignment validation, cross-mode lesson queries, promotion management, and pattern reports. System initialized on startup: Purpose Layer (4 nodes), Corpus Domains (4/4 validated), API routes registered.
 
+**Phase 8.7.1: State Awareness Layer** provides a single authoritative snapshot of the entire system state for Walter and UI components. **StateAwarenessService** (`state-awareness.ts`) aggregates real-time data from multiple sources: portfolio balances (both modes), enabled strategies, goals, guardrails, screener filters, and trading engine status. State snapshots are cached for 5 seconds to balance performance and freshness. **API Endpoints**: `GET /api/state/summary` returns the snapshot JSON, `GET /api/state/debug` includes provenance metadata (traceId, sources, dataHash). **Walter Integration**: State snapshot is pre-fetched before every Walter response and injected into system prompt as "AUTHORITATIVE SYSTEM STATE SNAPSHOT" block, ensuring Walter always uses latest verified data. If state fetch fails, Walter responds: "System state unavailable; please retry or refresh context." **Provenance**: Each snapshot write logs to `data_lineage` table with traceId, row count, and SHA-256 data hash for complete audit trail. **ConfigChangeHandler Integration**: State cache auto-invalidates on configuration changes (strategies, guardrails, screeners) to maintain real-time accuracy.
+
+**Test Credentials**: For functionality testing, use username: `testuser123`, password: `SecurePass123!`
+
 ## External Dependencies
 
 -   **Kraken Exchange API**: Market data, trade execution, account management.
