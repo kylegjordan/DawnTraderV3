@@ -1,0 +1,123 @@
+🧠 Phase 8.6.4 Addendum B — Validation & Learning Alignment
+🎯 Objective
+
+Ensure Walter’s cognitive and learning layers automatically recognize the new global-context data bindings introduced in Addendum A, forget obsolete schema paths, and keep all future self-learning anchored to verified sources.
+
+🪜 Implementation Tasks
+Task 1 – Schema Binding Validation
+
+Confirm that the following schema references are the only active data sources for both modes:
+
+Goals → portfolio_goals_state
+
+Strategies → strategy_settings_global
+
+Portfolio → portfolio_state
+
+Add validation logs in the ProvenanceGovernanceService showing:
+Validated source_table mapping: {goals, strategies, portfolio}
+
+Governance report must include a “Binding Status: Valid/Invalid” column.
+
+Task 2 – Cognitive Retraining Map
+
+In walter-cognitive-layer, create a Retraining Map defining authoritative data origins:
+
+goals → portfolio_goals_state
+strategies → strategy_settings_global
+balances → portfolio_state
+
+
+On startup, Walter should automatically load this map into memory and tag it as immutable (frozen=true).
+
+Log line: [LearningAlignment] Cognitive source map loaded and frozen.
+
+Task 3 – Memory Sanitization
+
+Purge all walter_memory entries where domain = goals, strategy_status, risk_metrics, or legacy_snapshot.
+
+Rebuild each domain from live provenance data.
+
+Confirm rebuild by logging:
+[MemoryRebuild] goals,strategy domains refreshed from live-api ✓
+
+Task 4 – BoB and Cortex Learning Alignment
+
+Update the Learning Bob and Cognitive Interpreter so any new learning fragment stores its source_table from the Retraining Map.
+
+On each learning cycle, verify that fragment sources match the map.
+
+If any fragment references legacy tables, quarantine it under legacy_learning and log:
+[LearningAlignment] Quarantined fragment with legacy reference.
+
+Task 5 – Provenance Cross-Check
+
+Generate a test lineage run (trace_validation=true) and verify the following traceId path for both live and paper modes:
+
+Database → BoB → Cortex → Walter → UI
+
+
+Expected source_table sequence:
+
+goals → portfolio_goals_state
+
+strategies → strategy_settings_global
+
+balances → portfolio_state
+
+Report continuity ≥ 99 %.
+
+Governance report should show “Provenance Continuity: PASS”.
+
+Task 6 – Auto-Learning Lock
+
+Enable an autoLearningLock flag so that, after successful validation, Walter cannot relearn from any unverified source until manually unlocked.
+
+Log confirmation:
+[LearningAlignment] Auto-learning locked to validated schema.
+
+Task 7 – Verification Testing
+
+Perform the following conversational checks in chat mode:
+
+“Where do you get my goals data?” → Must reply portfolio_goals_state.
+
+“Which table contains my strategy settings?” → Must reply strategy_settings_global.
+
+“Show my enabled strategies for live mode.” → Must match UI list.
+
+“Show my goal settings for paper mode.” → Must match dashboard values.
+All responses should display Source: live-api ✓ and correct timestamps.
+
+Task 8 – Governance Report Update
+
+Extend daily governance report with a new section:
+Learning Alignment Metrics
+
+Validated Bindings (% of total)
+
+Legacy References (quarantined count)
+
+Auto-Learning Lock Status
+
+Last Alignment Timestamp
+
+Report header: [Governance] Learning Alignment Summary.
+
+Task 9 – Final Architect Verification
+
+Architect to confirm:
+
+100 % of learning fragments, BoB modules, and Cortex caches reference current schema.
+
+No residual legacy tables appear in logs or provenance chains.
+
+Walter’s cognitive responses match verified live data.
+
+✅ Acceptance Criteria
+Area	Expected Result
+Cognitive Bindings	Only new global tables referenced
+Memory Integrity	No legacy domains remain
+Provenance Chain	99–100 % continuity confirmed
+Chat Responses	Match UI data, source = live-api ✓
+Governance Report	Learning Alignment = PASS
