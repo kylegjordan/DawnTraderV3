@@ -134,7 +134,7 @@ export async function generateWalterResponse(
     }
 
     // 3. Detect intent and fetch behavioral context (Task 10)
-    const intent = detectIntent(userMessage);
+    // (intent already detected above for command routing)
     const userContext = await fetchUserContext(userId);
     const behavioralGuidance = getBehavioralGuidance(intent, userContext);
 

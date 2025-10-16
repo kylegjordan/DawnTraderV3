@@ -1,0 +1,150 @@
+Phase 8.6.1 — Unified Conversational Walter
+
+Objective:
+Make Walter permanently conversational while preserving factual accuracy and operational integrity.
+All system outputs—whether from live or paper trading, Bob, or the Cortex—will now pass through Walter’s Cognitive Layer before being spoken, ensuring every fact is accompanied by context, reasoning, and (when appropriate) suggestions.
+
+Scope
+
+This addendum extends Phase 8.6 by:
+
+Removing the “two-mode” user experience (no manual tone switching).
+
+Making the Cognitive Layer the permanent gateway for all communication.
+
+Adding reflective reasoning and learning feedback for ongoing improvement.
+
+Keeping Live and Paper data completely independent.
+
+Preventing any data alteration—facts remain untouched, commentary is additive.
+
+Implementation Tasks
+Task 1 — Route All Output Through Cognitive Layer
+
+Ensure every message from the Execution Core (trades, balances, risk reports, engine events) is first sent to the Cognitive Interpreter.
+
+Interpreter responsibilities:
+
+Translate data into natural-language narratives.
+
+Preserve factual accuracy (read-only source).
+
+Attach reasoning (“why it happened”) and implications (“what to consider next”).
+
+All user-visible messages originate from the Cognitive Layer.
+
+Task 2 — Enable Continuous Conversational Mode
+
+Remove dependency on manual tone commands.
+
+Default interaction style: Conversational + Analytical + Advisory.
+
+Tone modifiers (“go technical,” “simplify,” etc.) remain available as temporary overrides but revert automatically to conversational style after one reply.
+
+Maintain full conversational continuity across turns; follow-ups like “why?” or “what next?” draw on prior context automatically.
+
+Task 3 — Implement Reflective Feedback Loop
+
+After each major report or end-of-session summary:
+
+Cognitive Layer generates a short Learning Fragment (e.g., “VWAP Pullback losses increased under low-volume conditions”).
+
+Stores fragment in Cortex/Bob memory with tags: {mode, strategy, date, result}.
+
+Learning fragments inform future commentary and simulation analysis.
+
+No strategy code is modified—feedback is observational only.
+
+Task 4 — Adaptive Narrative Depth
+
+Create narrative-selection rules:
+
+Minor event → 1–2 sentence summary.
+
+Significant deviation → expanded commentary + 1 or 2 suggestions.
+
+Critical event → full causal explanation + recommendations + optional follow-up question.
+
+Walter automatically chooses appropriate length and detail.
+
+Always provide at least one actionable insight when context allows.
+
+Task 5 — Preserve Data Integrity
+
+Execution Core remains the single source of truth.
+
+Cognitive Layer may annotate but never modify numerical or textual data.
+
+Each message includes internal provenance tags:
+
+[source=ExecutionCore] and [interpretedBy=CognitiveLayer]
+
+System Truth Panel and logs verify identical figures before and after interpretation.
+
+Task 6 — Conversational Context Memory
+
+Maintain rolling dialogue context (recent 10–15 messages) so Walter can reference previous exchanges fluidly.
+
+Context expires gracefully after inactivity to prevent drift.
+
+When restarted, Walter retrieves last stored state summary from Cortex to resume naturally (“Last time we discussed tightening VWAP stops…”).
+
+Task 7 — Enhanced Error and Anomaly Reporting
+
+When inconsistencies or anomalies appear (e.g., live balance ≠ Kraken balance):
+
+Cognitive Layer reports the discrepancy conversationally.
+
+Adds reasoned interpretation (“Kraken API latency detected—data 5 min old”).
+
+Suggests follow-up action (“Shall I refresh now or wait for the next sync?”).
+
+Task 8 — Learning and Improvement Cycle
+
+Schedule periodic analysis of stored Learning Fragments.
+
+Generate “Cognitive Summary Reports” (weekly or after simulations) highlighting patterns and actionable learnings.
+
+Cognitive Layer adjusts future commentary style based on observed results.
+
+Task 9 — Testing & Validation
+Area	Expected Behavior
+Conversation Flow	All replies conversational by default. No JSON or robotic phrasing.
+Data Accuracy	Balances, trades, and metrics identical pre- and post-interpretation.
+Reflections	Every factual report includes a reason or insight line.
+Learning Fragments	Stored after each report, visible in logs.
+Error Reporting	Anomalies described with cause and next-step options.
+Mode Separation	Live/Paper data independent; commentary draws from correct mode.
+Task 10 — Documentation & Review
+
+Update replit.md with:
+
+Architectural diagram showing Execution Core → Cognitive Layer → User flow.
+
+Examples of factual + reasoned responses.
+
+Learning Fragment schema description.
+
+Troubleshooting guide (if facts and commentary ever mismatch).
+
+Obtain architect approval confirming:
+
+100 % conversational output path
+
+Zero data mutation
+
+Verified learning storage
+
+Expected Outcome
+
+After Phase 8.6.1 deployment:
+
+Walter communicates entirely through the Cognitive Layer — one voice, one personality.
+
+Every fact from the Execution Core arrives accurate, reasoned, and human-readable.
+
+You can discuss outcomes, causes, and next steps naturally—no tone commands, no technical toggles.
+
+System learns continuously from performance outcomes without endangering live data.
+
+The result: a Conversational Analyst that reports, reflects, and improves alongside you. 🚀

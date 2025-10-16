@@ -45,34 +45,59 @@ export interface ReasoningContext {
 export class WalterCognitiveLayer {
   private readonly MODULE_NAME = 'CognitiveLayer';
   
-  // Session-based tone preferences (in-memory for now)
+  // Phase 8.6.1: Permanent conversational mode with temporary overrides
   private userTonePreferences: Map<string, TonePreferences> = new Map();
+  private temporaryToneOverrides: Map<string, { profile: ToneProfile; expiresAt: Date }> = new Map();
 
   /**
-   * Set user's tone preference
+   * Phase 8.6.1: Set temporary tone override (auto-reverts after one response)
    */
-  setTonePreference(userId: string, profile: ToneProfile): void {
-    const existing = this.userTonePreferences.get(userId) || this.getDefaultTonePreferences();
-    this.userTonePreferences.set(userId, {
-      ...existing,
-      profile
+  setTemporaryToneOverride(userId: string, profile: ToneProfile): void {
+    this.temporaryToneOverrides.set(userId, {
+      profile,
+      expiresAt: new Date(Date.now() + 60000) // Expires in 1 minute
     });
-    console.log(`[${this.MODULE_NAME}] User ${userId} tone set to: ${profile}`);
+    console.log(`[${this.MODULE_NAME}] User ${userId} temporary tone override: ${profile} (auto-reverts to conversational)`);
   }
 
   /**
-   * Get user's current tone preference
+   * Phase 8.6.1: Get current tone (checks for temporary override first)
    */
   getTonePreference(userId: string): TonePreferences {
-    return this.userTonePreferences.get(userId) || this.getDefaultTonePreferences();
+    // Check for temporary override
+    const tempOverride = this.temporaryToneOverrides.get(userId);
+    if (tempOverride && tempOverride.expiresAt > new Date()) {
+      return {
+        profile: tempOverride.profile,
+        verbosity: 'moderate',
+        includeMetrics: true,
+        includeOptions: true
+      };
+    }
+    
+    // Clear expired override
+    if (tempOverride) {
+      this.temporaryToneOverrides.delete(userId);
+    }
+    
+    // Always default to conversational (Phase 8.6.1)
+    return this.getDefaultTonePreferences();
   }
 
   /**
-   * Default tone preferences
+   * Phase 8.6.1: Clear temporary override (called after response sent)
+   */
+  clearTemporaryOverride(userId: string): void {
+    this.temporaryToneOverrides.delete(userId);
+    console.log(`[${this.MODULE_NAME}] User ${userId} reverted to conversational mode`);
+  }
+
+  /**
+   * Phase 8.6.1: Default is always Conversational + Analytical + Advisory
    */
   private getDefaultTonePreferences(): TonePreferences {
     return {
-      profile: 'conversational',
+      profile: 'conversational', // Permanent default
       verbosity: 'moderate',
       includeMetrics: true,
       includeOptions: true
@@ -351,7 +376,7 @@ export class WalterCognitiveLayer {
   }
 
   /**
-   * Handle tone change command
+   * Phase 8.6.1: Handle temporary tone override (auto-reverts after one response)
    */
   async handleToneChange(
     userId: string,
@@ -360,35 +385,35 @@ export class WalterCognitiveLayer {
     const msg = userMessage.toLowerCase();
 
     if (msg.includes('technical') || msg.includes('go technical')) {
-      this.setTonePreference(userId, 'technical');
+      this.setTemporaryToneOverride(userId, 'technical');
       return {
         changed: true,
         newTone: 'technical',
-        message: '📊 Switching to technical mode - responses will be concise with metrics and data.'
+        message: '📊 Temporarily switching to technical mode for this response. (Auto-reverts to conversational after reply)'
       };
     }
 
     if (msg.includes('conversational') || msg.includes('simplify') || msg.includes('casual')) {
-      this.setTonePreference(userId, 'conversational');
+      // Already conversational by default, just acknowledge
       return {
         changed: true,
         newTone: 'conversational',
-        message: 'Switching to conversational mode - I\'ll explain things in everyday language.'
+        message: 'Already in conversational mode - I explain things in everyday language by default.'
       };
     }
 
     if (msg.includes('advisory') || msg.includes('strategic')) {
-      this.setTonePreference(userId, 'advisory');
+      this.setTemporaryToneOverride(userId, 'advisory');
       return {
         changed: true,
         newTone: 'advisory',
-        message: 'Switching to advisory mode - I\'ll provide scenario analysis and strategic options.'
+        message: '🎯 Temporarily switching to advisory mode for this response. (Auto-reverts to conversational after reply)'
       };
     }
 
     return {
       changed: false,
-      message: 'I support three tones: Technical, Conversational, and Advisory. Which would you prefer?'
+      message: 'I support three tones: Technical, Conversational (default), and Advisory. Which would you prefer?'
     };
   }
 }
