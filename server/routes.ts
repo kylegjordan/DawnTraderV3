@@ -2063,6 +2063,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== Phase 8.7.1: State Awareness Layer ====================
+
+  // GET /api/state/summary - Get authoritative system state snapshot
+  app.get('/api/state/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { stateAwarenessService } = await import('./services/state-awareness');
+      
+      const snapshot = await stateAwarenessService.getStateSnapshot(userId);
+      
+      res.json(snapshot);
+    } catch (error: any) {
+      console.error('[StateAwareness] Error fetching snapshot:', error);
+      res.status(500).json({ 
+        error: 'Failed to fetch system state', 
+        message: error.message 
+      });
+    }
+  });
+
+  // GET /api/state/debug - Get system state snapshot with provenance info
+  app.get('/api/state/debug', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { stateAwarenessService } = await import('./services/state-awareness');
+      
+      const snapshot = await stateAwarenessService.getStateSnapshot(userId, { 
+        bypassCache: true,
+        includeProvenance: true 
+      });
+      
+      res.json(snapshot);
+    } catch (error: any) {
+      console.error('[StateAwareness] Error fetching debug snapshot:', error);
+      res.status(500).json({ 
+        error: 'Failed to fetch system state (debug)', 
+        message: error.message 
+      });
+    }
+  });
+
   // ==================== Phase 8.5: Real-Time Execution Layer ====================
 
   // Get execution metrics

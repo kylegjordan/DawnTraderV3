@@ -215,10 +215,11 @@ class StateAwarenessService {
 
     return result ? {
       maxDailyLoss: result.maxDailyLoss ? parseFloat(result.maxDailyLoss) : null,
+      maxDrawdown: result.maxDrawdown ? parseFloat(result.maxDrawdown) : null,
       maxPositionSize: result.maxPositionSize ? parseFloat(result.maxPositionSize) : null,
-      maxConcurrentTrades: result.maxConcurrentTrades,
-      minWinRate: result.minWinRate ? parseFloat(result.minWinRate) : null,
-      stopLossPercent: result.stopLossPercent ? parseFloat(result.stopLossPercent) : null,
+      maxOpenPositions: result.maxOpenPositions,
+      riskPerTrade: result.riskPerTrade ? parseFloat(result.riskPerTrade) : null,
+      aiCanAdjust: result.aiCanAdjust,
     } : null;
   }
 
@@ -234,11 +235,18 @@ class StateAwarenessService {
     });
 
     return result ? {
-      minVolume24h: result.minVolume24h ? parseFloat(result.minVolume24h) : null,
-      minPriceChange: result.minPriceChange ? parseFloat(result.minPriceChange) : null,
-      maxPriceChange: result.maxPriceChange ? parseFloat(result.maxPriceChange) : null,
+      minVolume: result.minVolume ? parseFloat(result.minVolume) : null,
+      minPrice: result.minPrice ? parseFloat(result.minPrice) : null,
+      maxPrice: result.maxPrice ? parseFloat(result.maxPrice) : null,
+      minMarketCap: result.minMarketCap ? parseFloat(result.minMarketCap) : null,
+      maxBidAskSpread: result.maxBidAskSpread ? parseFloat(result.maxBidAskSpread) : null,
+      rsiMin: result.rsiMin,
+      rsiMax: result.rsiMax,
+      volatilityMin: result.volatilityMin ? parseFloat(result.volatilityMin) : null,
+      volatilityMax: result.volatilityMax ? parseFloat(result.volatilityMax) : null,
+      excludeStablecoins: result.excludeStablecoins,
       minLiquidity: result.minLiquidity ? parseFloat(result.minLiquidity) : null,
-      excludedPairs: result.excludedPairs || [],
+      allowRegulatedOnly: result.allowRegulatedOnly,
     } : null;
   }
 
