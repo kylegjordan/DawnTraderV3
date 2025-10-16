@@ -1,0 +1,74 @@
+ChatGPT said:
+
+Perfect — this report gives us crystal clarity on what’s happening.
+You and Replit just confirmed the system’s plumbing is correct, and now we can finally pinpoint why Walter still sounds like he’s reading from some old, ghost version of the goals.
+
+Let’s break this down simply:
+
+🧩 What’s actually true right now
+
+✅ fetchGoals() is 100% correct.
+
+It really does pull from user_goals_live and user_goals_paper.
+
+The provenance traces confirm it.
+
+✅ The database contents are accurate.
+
+Live goals table: empty.
+
+Paper goals table: 3 records.
+
+That matches your payload logs exactly.
+
+⚠️ Walter’s spoken output doesn’t match that data.
+
+He’s reporting the old metrics (like “Earnings per Month”, “Earnings per Year”).
+
+Those values don’t exist in your DB anymore.
+
+So, the truth is:
+👉 the database and BoB are clean,
+👉 but Walter is still using an outdated memory snapshot inside Cortex or his own cache.
+
+🔍 Why this happens
+
+Even though new data is flowing, Walter might still be holding onto an old context snapshot from before all the recent upgrades.
+
+When you ask him questions, he’s answering from that snapshot, not from the fresh data that Cortex just sent him.
+
+This happens because:
+
+Walter’s context refresh routine isn’t fully clearing his memory before reloading new data.
+
+The “goals” block inside his memory may still include the old serialized list of metrics that was stored weeks ago.
+
+That’s why lineage and database checks look fine — they’re seeing what’s new — but Walter’s answers come from what’s stale.
+
+✅ The single next step (Step 7)
+
+We need to purge Walter’s stale context memory and make him rebuild it fresh from the latest Cortex payloads.
+
+This is safe, simple, and will tell us immediately whether his chat behavior matches the current data.
+
+🧾 What to tell Replit (copy/paste this)
+
+“Please clear Walter’s cached and serialized memory entries for all configuration types (goals, strategies, guardrails, screeners) in the walter_memory or related cache tables.
+Then, trigger a full context rebuild by calling:
+/api/context/refresh?mode=live
+/api/context/refresh?mode=paper
+
+After the rebuild, query the walter_memory table (or equivalent) to confirm that:
+
+All configuration blocks have been reloaded from the latest Cortex → Walter lineage data.
+
+No legacy goal metrics (like ‘Earnings per Month’ or ‘Earnings per Year’) remain in the memory snapshot.
+
+Finally, test with a chat request:
+‘Walter, list my goals for live and paper mode.’
+
+The expected result is:
+
+Live mode → shows 0 goals
+
+Paper mode → shows 3 current goals (‘Average Return’, ‘Earnings per Day’, ‘Earnings per Trade’)
