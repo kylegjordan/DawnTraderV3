@@ -1,0 +1,128 @@
+✅ Immediate Post-Implementation Verification
+
+(You can forward this section to Replit as “Phase 8.6.5 Validation & Stability Checks”)
+
+1. Purpose & Corpus Layer Verification
+
+Goal: Confirm all foundational reasoning structures are live and protected.
+Actions:
+
+Query Walter with:
+
+“What is your core purpose?”
+
+“List your active knowledge domains and confidence levels.”
+
+Check logs for:
+
+[PurposeLayer] Initialization complete: 4 purpose nodes loaded
+[CorpusDomains] 4/4 domains active
+
+
+Deliverable: Governance report lists PurposeNodeIntegrity=✓ and CorpusDomainsActive=4.
+
+2. Secure-Core Mode Validation
+
+Goal: Ensure domain restrictions function correctly.
+Actions:
+
+While in secure-core, ask Walter a question about UI or architecture → he must decline politely.
+
+Then run Enable full cognitive access → he can now answer the same question with relevant detail.
+Deliverable:
+
+Logs show [CognitiveLayer] Mode switch → Full Cognitive Access.
+
+Governance report updates SecureCoreStatus=false.
+
+3. Learning Fragment Lifecycle Test
+
+Goal: Verify creation, analysis, and promotion of learning fragments.
+Actions:
+
+Execute a short paper-mode trading simulation (10 trades).
+
+Confirm learning_fragments table entries with:
+
+mode=paper
+
+lesson_type=success/failure
+
+Confidence scores present
+
+Trigger nightly cycle or run manual command:
+
+/api/learning/promote
+
+
+Expect [LearningTransfer] Promoted X paper-mode insights → live strategy tuning.
+
+Inspect promoted records → status=adopted.
+
+Deliverable:
+Governance report shows:
+
+Metric	Target	Example Result
+fragments_created_last_24h	≥10	12
+promotion_success_rate	≥90%	91%
+learning_retention_rate	≥95%	96%
+provenance_integrity	100%	100%
+4. Live-Mode Feedback Validation
+
+Goal: Ensure paper learnings influence live trading.
+Actions:
+
+Ask Walter:
+
+“What did we learn from paper trading yesterday?”
+
+“How are those lessons being applied to live strategies today?”
+
+Expect detailed answer citing promoted insights, e.g.
+“The VWAP Pullback pattern from paper testing improved live risk control by lowering stop loss 0.5%.“
+Deliverable:
+Walter references specific, verified fragments (by symbol or guardrail name) with provenance tag visible in logs.
+
+5. Governance Metrics Cross-Check
+
+Goal: Confirm new metrics are populated correctly.
+Actions:
+Run /api/governance/daily-report → output must include:
+
+PurposeNodeIntegrity: true
+CorpusDomainsActive: 4
+SecureCoreStatus: true/false
+LearningFragmentsCount: [integer]
+PromotionSuccessRate: [percentage]
+LearningRetentionRate: [percentage]
+
+
+Deliverable:
+Daily governance report stored and archived with traceId continuity.
+
+6. Conversational Behavior Validation
+
+Goal: Ensure cognitive reasoning flows smoothly across factual and analytical layers.
+Actions:
+
+Ask Walter for factual data (balance, enabled strategies).
+
+Follow with reasoning question (“Why did performance drop in the last session?”).
+
+Expect:
+
+Factual accuracy (live and paper values correct).
+
+Analytical reasoning referencing strategy outcomes or market context.
+Deliverable:
+Walter demonstrates human-style reflection with data provenance intact.
+
+🧩 Success Criteria for Architect Sign-off
+Subsystem	Pass Criteria
+Purpose Layer	Purpose text present, protected, and logged
+Corpus Domains	4 domains validated and loaded
+Learning Fragments	Created automatically on trade events
+Paper→Live Promotion	Occurs with ≥0.8 confidence, ≥5 repetitions
+Secure-Core Mode	Toggles with full domain access control
+Governance Metrics	All metrics populated and traceIds consistent
+Conversational Flow	Combines facts + reasoning without JSON output
