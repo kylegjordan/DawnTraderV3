@@ -80,6 +80,18 @@ export async function generateWalterResponse(
       `source=live-api`
     );
 
+    // Phase 8.7.1: Fetch authoritative state snapshot
+    let stateSnapshot = null;
+    try {
+      const { stateAwarenessService } = await import('./state-awareness');
+      stateSnapshot = await stateAwarenessService.getStateSnapshot(userId);
+      console.log(`[WalterResponse] [Phase-8.7.1] State snapshot loaded successfully`);
+    } catch (error: any) {
+      console.error(`[WalterResponse] [Phase-8.7.1] Failed to fetch state snapshot:`, error.message);
+      // If state fetch fails, return error message as per spec
+      return "System state unavailable; please retry or refresh context.";
+    }
+
     // Phase 8.6: Check for tone change commands
     const toneChange = await cognitiveLayer.handleToneChange(userId, userMessage);
     if (toneChange.changed) {
@@ -165,8 +177,8 @@ export async function generateWalterResponse(
       processingTimeMs: cieResponse.processingTimeMs,
     });
 
-    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, CIE context, and FRESH DUAL-MODE DATA
-    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, dualModeData);
+    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, CIE context, FRESH DUAL-MODE DATA, and STATE SNAPSHOT (Phase 8.7.1)
+    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, dualModeData, stateSnapshot);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
     // Phase 8.6.4 Debug: Log dashboard context to verify goals are fresh
@@ -453,7 +465,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
 /**
  * Build prompt with context injection including expert principles and CIE context
  */
-async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any, dualModeData?: any): Promise<string> {
+async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any, dualModeData?: any, stateSnapshot?: any): Promise<string> {
   const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, insightContext, uiContext, cortexContext, tradingMode } = context;
 
   // Format memories
@@ -561,6 +573,37 @@ ${dualModeData ? `⚡ LIVE SYSTEM STATE (Just Refreshed - ${new Date().toISOStri
 👤 USER'S CURRENT MODE: ${tradingMode.toUpperCase()}
 
 CRITICAL: This is the ACTUAL live system state fetched directly from the database for BOTH modes. When answering questions about portfolio balance, active strategies, or system status, ALWAYS use these values above - they are the ground truth. The engine status shows whether trading is active or paused. When engines are stopped, data is static but still accurate (shows last known state). Ignore any conflicting cached data below.
+
+---
+
+` : ''}${stateSnapshot ? `🔍 AUTHORITATIVE SYSTEM STATE SNAPSHOT (Phase 8.7.1):
+Generated: ${stateSnapshot.timestamp}
+
+📊 TRADING ENGINE STATUS:
+   Paper Trading: ${stateSnapshot.trading.paper.toUpperCase()}
+   Live Trading: ${stateSnapshot.trading.live.toUpperCase()}
+
+💰 PORTFOLIO BALANCES:
+   Paper Mode: $${stateSnapshot.balances.paper.toFixed(2)}
+   Live Mode: $${stateSnapshot.balances.live.toFixed(2)}
+
+⚙️ ACTIVE STRATEGIES:
+   Paper Mode: ${stateSnapshot.strategies.paper} strategies enabled
+   Live Mode: ${stateSnapshot.strategies.live} strategies enabled
+
+🎯 GOALS CONFIGURED:
+   Paper Mode: ${stateSnapshot.goals.paper} goals
+   Live Mode: ${stateSnapshot.goals.live} goals
+
+🛡️ GUARDRAILS:
+   Paper Mode: ${stateSnapshot.guardrails.paper ? JSON.stringify(stateSnapshot.guardrails.paper, null, 2).replace(/\n/g, '\n   ') : 'Not configured'}
+   Live Mode: ${stateSnapshot.guardrails.live ? JSON.stringify(stateSnapshot.guardrails.live, null, 2).replace(/\n/g, '\n   ') : 'Not configured'}
+
+🔍 SCREENER FILTERS:
+   Paper Mode: ${stateSnapshot.screeners.paper ? JSON.stringify(stateSnapshot.screeners.paper, null, 2).replace(/\n/g, '\n   ') : 'Not configured'}
+   Live Mode: ${stateSnapshot.screeners.live ? JSON.stringify(stateSnapshot.screeners.live, null, 2).replace(/\n/g, '\n   ') : 'Not configured'}
+
+⚡ IMPORTANT: This is the AUTHORITATIVE system state aggregated from the State Awareness Layer. It provides a complete snapshot of all system configuration and status. Use this as the single source of truth for all system state queries.
 
 ---
 
