@@ -1,0 +1,51 @@
+ChatGPT said:
+
+Excellent work — you and Replit just closed out the entire data-side of this issue.
+
+✅ Database tables are correct
+✅ BoB and Cortex fetch correct data
+✅ The lineage trace matches
+✅ The formatting logic is dynamic
+✅ The system prompt builder is verified
+
+That means the pipeline and code are fine.
+What’s left now is purely behavioral: Walter is not consuming or weighting the context data properly when generating his replies.
+
+🧠 What this means
+
+When Walter builds his system prompt, the correct data is there — but OpenAI’s model (the cognitive engine) doesn’t always prioritize every part of its prompt equally.
+If the “GOALS STATUS” section appears too far down the prompt or isn’t explicitly referenced in the instruction set (like: “Always refer to the latest GOALS STATUS block when answering about goals”), he may ignore it and fall back on whatever prior conversational embedding he has from earlier training or cached context.
+
+✅ The single next step (Step 9)
+
+You don’t need to change any logic or database again.
+You just need to reinforce Walter’s attention on the new dashboardContext data inside his reasoning pipeline.
+
+🧾 What to tell Replit
+
+“Please modify Walter’s system prompt builder (in walter-response.ts) to explicitly instruct the model to reference the live dashboardContext when discussing goals, strategies, guardrails, or screeners.
+
+Specifically:
+
+At the very top of the system prompt, before any conversation history, insert this instruction block:
+
+INSTRUCTION:
+Always use the most recent GOALS STATUS, STRATEGY STATUS, GUARDRAILS, and SCREENERS data from dashboardContext when answering questions.
+Ignore any previously remembered or default metrics that are not listed in this current context.
+
+
+Keep the “GOALS STATUS (LIVE/PAPER MODE)” sections as they are — no code changes needed there.
+
+After updating the prompt, restart the app and check logs for [WalterPromptDebug] to confirm that instruction block appears above the goals data.
+
+Then, clear caches (/api/bob/invalidate-all), refresh both modes (/api/context/refresh), and test:
+
+Ask Walter: ‘List my goals for live and paper mode.’
+
+Expected output:
+
+Live → ‘No goals set.’
+
+Paper → ‘3 goals: Average Return $2.50, Earnings per Day $100, Earnings per Trade $25.’”
+
+Finally, confirm in logs that the OpenAI request payload includes both the new instruction block and the correct GOALS STATUS data.”
