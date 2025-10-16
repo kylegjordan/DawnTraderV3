@@ -11,6 +11,7 @@ import { db } from '../db';
 import { userGoalsLive, userGoalsPaper, guardrails, screenerFilters, strategySettings, walterPurpose } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
+import { nanoid } from 'nanoid'; // For generating traceIds
 
 /**
  * ConfigBob Module
@@ -313,7 +314,8 @@ class ConfigBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `config:goals:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
+    const traceId = `trace_${nanoid(16)}`;
+    const context: FetchContext = { mode, userId, traceId };
 
     return await bobCore.fetchOrServe(
       key,
@@ -333,7 +335,8 @@ class ConfigBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `config:guardrails:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
+    const traceId = `trace_${nanoid(16)}`;
+    const context: FetchContext = { mode, userId, traceId };
 
     return await bobCore.fetchOrServe(
       key,
@@ -353,7 +356,8 @@ class ConfigBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `config:screeners:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
+    const traceId = `trace_${nanoid(16)}`;
+    const context: FetchContext = { mode, userId, traceId };
 
     return await bobCore.fetchOrServe(
       key,
@@ -373,7 +377,8 @@ class ConfigBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `config:strategies:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
+    const traceId = `trace_${nanoid(16)}`;
+    const context: FetchContext = { mode, userId, traceId };
 
     return await bobCore.fetchOrServe(
       key,
@@ -393,7 +398,8 @@ class ConfigBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `config:purpose:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
+    const traceId = `trace_${nanoid(16)}`;
+    const context: FetchContext = { mode, userId, traceId };
 
     return await bobCore.fetchOrServe(
       key,

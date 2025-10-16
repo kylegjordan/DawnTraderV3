@@ -10,6 +10,7 @@
 import { bobCore, FetchContext } from './bob-core';
 import { storage } from '../storage';
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
+import { nanoid } from 'nanoid'; // For generating traceIds
 
 class StrategyBobModule {
   private readonly MODULE_NAME = 'StrategyBob';
@@ -240,7 +241,8 @@ class StrategyBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `strategy:performance:${mode}:${userId}:${days}`;
-    const context = { mode, userId, days } as FetchContext & { days?: number };
+    const traceId = `trace_${nanoid(16)}`;
+    const context = { mode, userId, days, traceId } as FetchContext & { days?: number };
 
     return await bobCore.fetchOrServe(
       key,
@@ -261,7 +263,8 @@ class StrategyBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `strategy:signals:${mode}:${userId}:${limit}`;
-    const context = { mode, userId, limit } as FetchContext & { limit?: number };
+    const traceId = `trace_${nanoid(16)}`;
+    const context = { mode, userId, limit, traceId } as FetchContext & { limit?: number };
 
     return await bobCore.fetchOrServe(
       key,
@@ -281,7 +284,8 @@ class StrategyBobModule {
     ttl?: number
   ): Promise<any> {
     const key = `strategy:summary:${mode}:${userId}`;
-    const context: FetchContext = { mode, userId };
+    const traceId = `trace_${nanoid(16)}`;
+    const context: FetchContext = { mode, userId, traceId };
 
     return await bobCore.fetchOrServe(
       key,
