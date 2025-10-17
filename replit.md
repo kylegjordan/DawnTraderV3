@@ -40,6 +40,9 @@ An Async Task Queue provides distributed multi-domain reasoning with parallel ex
 
 Cognitive Tuning & Testing provides automated performance validation and tuning for Walter's cognitive subsystems via a benchmark harness with scenarios like Intent Parsing Accuracy, Multi-Domain Coordination, Memory Recovery & Integrity, Reasoning Trace Completeness, and Response Quality Metrics, storing results in `cognitive_tuning_log` and broadcasting via Context Bridge. This includes a nightly automation job and dynamic configuration adjustments based on performance.
 
+## Documentation
+- **Phase 8.8 Overview**: `docs/architecture/phase_8_8_overview.md` - Complete architecture documentation for Cognitive Integration & System Validation (State Awareness, Memory Lifecycle, Reasoning Orchestrator, Cognitive Tuning)
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
