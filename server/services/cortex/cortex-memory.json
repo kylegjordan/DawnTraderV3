@@ -1,60 +1,60 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-17T16:51:12.470Z",
+    "timestamp": "2025-10-17T16:52:12.470Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-17T16:51:12.467Z",
+        "lastUpdate": "2025-10-17T16:52:12.468Z",
         "stale": false,
-        "hitRate": "72.2%",
+        "hitRate": "73.0%",
         "cacheSize": 2,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-17T16:51:12.467Z",
+        "lastUpdate": "2025-10-17T16:52:12.468Z",
         "stale": false,
-        "hitRate": "72.2%",
+        "hitRate": "73.0%",
         "cacheSize": 2,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-17T16:51:12.467Z",
+        "lastUpdate": "2025-10-17T16:52:12.468Z",
         "stale": false,
-        "hitRate": "72.2%",
+        "hitRate": "73.0%",
         "cacheSize": 2,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-17T16:51:12.467Z",
+        "lastUpdate": "2025-10-17T16:52:12.468Z",
         "stale": false,
-        "hitRate": "72.2%",
+        "hitRate": "73.0%",
         "cacheSize": 2,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-17T16:51:12.467Z",
+        "lastUpdate": "2025-10-17T16:52:12.468Z",
         "stale": false,
-        "hitRate": "72.2%",
+        "hitRate": "73.0%",
         "cacheSize": 2,
         "ttl": 30
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-10-17T16:51:12.468Z",
+        "lastUpdate": "2025-10-17T16:52:12.468Z",
         "stale": false,
-        "hitRate": "72.2%",
+        "hitRate": "73.0%",
         "cacheSize": 2,
         "ttl": 30
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-10-17T16:51:12.468Z",
+        "lastUpdate": "2025-10-17T16:52:12.468Z",
         "stale": false,
-        "hitRate": "72.2%",
+        "hitRate": "73.0%",
         "cacheSize": 2,
         "ttl": 30
       }
@@ -62,9 +62,9 @@
     "overallStats": {
       "modulesActive": 7,
       "totalCacheSize": 2,
-      "overallHitRate": "72.2%",
-      "totalHits": 26,
-      "totalMisses": 10
+      "overallHitRate": "73.0%",
+      "totalHits": 46,
+      "totalMisses": 17
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -129,23 +129,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-10-17T16:51:12.469Z",
+        "timestamp": "2025-10-17T16:52:12.470Z",
         "system": {
           "cpuUsage": 52.2,
           "memoryUsage": {
             "total": 67436748800,
-            "used": 29948624896,
-            "free": 37488123904,
+            "used": 29851361280,
+            "free": 37585387520,
             "percentUsed": 44
           },
-          "uptime": 122
+          "uptime": 182
         },
         "cache": {
           "hitRate": 74,
           "missRate": 26,
-          "totalRequests": 31,
-          "hits": 23,
-          "misses": 8
+          "totalRequests": 58,
+          "hits": 43,
+          "misses": 15
         },
         "latency": {
           "cortex": null,
@@ -154,11 +154,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 122,
-            "lastRun": "2025-10-17T16:50:42.470Z"
+            "uptime": 182,
+            "lastRun": "2025-10-17T16:51:42.473Z"
           },
           "analytics": {
-            "uptime": 122,
+            "uptime": 182,
             "lastRun": "2025-10-17T16:49:12.890Z"
           }
         },
@@ -214,10 +214,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-17T16:51:12.468Z"
+      "timestamp": "2025-10-17T16:52:12.469Z"
     }
   },
-  "last_sync": "2025-10-17T16:51:12.470Z",
+  "last_sync": "2025-10-17T16:52:12.470Z",
   "memory": {
     "analytics_live_1": {
       "value": {
