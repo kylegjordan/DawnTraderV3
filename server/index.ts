@@ -175,9 +175,11 @@ app.use((req, res, next) => {
       const { optimizationAnalysisTask } = await import('./services/optimization-analysis-task');
       const { weeklyExpertInsightsTask } = await import('./services/weekly-expert-insights-task');
       const { registerLearningFeedbackJob } = await import('./jobs/learning-feedback');
+      const { registerCognitiveTuningJob } = await import('./jobs/cognitive-tuning-job');
 
       // Register tasks
       registerLearningFeedbackJob();
+      registerCognitiveTuningJob();
       schedulerRegistry.registerTask({
         name: screenerRecalibrationTask.name,
         description: screenerRecalibrationTask.description,
