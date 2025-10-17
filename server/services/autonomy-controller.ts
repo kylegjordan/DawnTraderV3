@@ -205,6 +205,41 @@ class AutonomyControllerService {
         }
       }).catch((err: any) => console.error('[AutonomyController] Learning profile check failed:', err));
 
+      // Phase 9.3: Strategic Simulation & Memory Hooks
+      // 1. Extract lessons from recent simulations (async, don't block)
+      const { simulationEngine, strategicMemory } = await import('./simulation-engine').then(async (m) => {
+        const memory = await import('./strategic-memory');
+        return { simulationEngine: m.simulationEngine, strategicMemory: memory.strategicMemory };
+      }).catch(() => ({ simulationEngine: null, strategicMemory: null }));
+
+      if (strategicMemory) {
+        strategicMemory.extractLessonsFromSimulations(userId, 'paper').catch((err: any) =>
+          console.error('[AutonomyController] Lesson extraction failed:', err)
+        );
+      }
+
+      // 2. Run risk assessment simulation if health score is concerning (async, don't block)
+      if (simulationEngine && healthScore < this.config.healthThresholds.warning) {
+        console.log('[AutonomyController] 🎯 Triggering risk assessment simulation');
+        simulationEngine.runSimulation(
+          userId,
+          {
+            type: 'risk_assessment',
+            description: `Risk assessment triggered by low health score: ${healthScore.toFixed(2)}`,
+            inputState: {
+              portfolioBalance: assessmentResult.systemMetrics.system?.balance || 0,
+              healthScore,
+              cognitiveScore,
+            },
+            actions: {
+              mitigationStrategy: 'defensive',
+              stopLossAdjustment: 'tighten',
+            },
+          },
+          'paper'
+        ).catch((err: any) => console.error('[AutonomyController] Risk simulation failed:', err));
+      }
+
       return {
         runId,
         timestamp: new Date(),
