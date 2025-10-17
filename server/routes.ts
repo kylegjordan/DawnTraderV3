@@ -9617,6 +9617,228 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 9.2: Strategic Plan Management
+  app.post('/api/strategic/plans', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { strategicPlannerService } = await import('./services/strategic-planner');
+      const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
+      
+      const plan = await strategicPlannerService.createPlan(req.user!.id, req.body, mode);
+      
+      const validation = await strategicPolicyGuard.validateStrategicPlan(plan.planId, req.user!.id, mode);
+      
+      res.json({ ok: true, plan, validation });
+    } catch (error: any) {
+      console.error('[Strategic] Plan creation failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/strategic/plans', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { strategicPlannerService } = await import('./services/strategic-planner');
+      
+      const plans = await strategicPlannerService.getPlansByUser(req.user!.id);
+      
+      res.json({ ok: true, plans });
+    } catch (error: any) {
+      console.error('[Strategic] Plans fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/strategic/plans/active', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { strategicPlannerService } = await import('./services/strategic-planner');
+      
+      const plans = await strategicPlannerService.getActivePlans(req.user!.id);
+      
+      res.json({ ok: true, plans });
+    } catch (error: any) {
+      console.error('[Strategic] Active plans fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/strategic/plans/:planId/progress', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { strategicPlannerService } = await import('./services/strategic-planner');
+      
+      const plan = await strategicPlannerService.updatePlanProgress(
+        req.params.planId,
+        req.body,
+        req.user!.id,
+        mode
+      );
+      
+      res.json({ ok: true, plan });
+    } catch (error: any) {
+      console.error('[Strategic] Plan progress update failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/strategic/plans/:planId/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { strategicPlannerService } = await import('./services/strategic-planner');
+      const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
+      
+      if (req.body.status === 'active') {
+        const enforcement = await strategicPolicyGuard.enforceGuardrails(
+          'activate_plan',
+          { planId: req.params.planId, alignmentScore: 0.8 },
+          req.user!.id,
+          mode
+        );
+        
+        if (!enforcement.allowed) {
+          return res.status(403).json({ error: enforcement.reason });
+        }
+      }
+      
+      const plan = await strategicPlannerService.updatePlanStatus(
+        req.params.planId,
+        req.body.status,
+        req.user!.id,
+        mode
+      );
+      
+      res.json({ ok: true, plan });
+    } catch (error: any) {
+      console.error('[Strategic] Plan status update failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/strategic/recommendations', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { strategicPlannerService } = await import('./services/strategic-planner');
+      
+      const recommendations = await strategicPlannerService.generateRecommendations(req.user!.id, mode);
+      
+      res.json({ ok: true, recommendations });
+    } catch (error: any) {
+      console.error('[Strategic] Recommendations generation failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Phase 9.2: Learning Profile Management
+  app.post('/api/learning/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { continuousLearningEngine } = await import('./services/continuous-learning');
+      
+      const profile = await continuousLearningEngine.initializeProfile(req.user!.id, req.body.weights, mode);
+      
+      res.json({ ok: true, profile });
+    } catch (error: any) {
+      console.error('[Learning] Profile initialization failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/learning/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { continuousLearningEngine } = await import('./services/continuous-learning');
+      
+      const profile = await continuousLearningEngine.getProfileByUser(req.user!.id);
+      
+      res.json({ ok: true, profile });
+    } catch (error: any) {
+      console.error('[Learning] Profile fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/learning/profile/:profileId/weights', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { continuousLearningEngine } = await import('./services/continuous-learning');
+      const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
+      
+      const validation = await strategicPolicyGuard.validateWeightAdjustment(
+        req.params.profileId,
+        req.body.weights,
+        req.body.rationale,
+        req.user!.id,
+        mode
+      );
+      
+      if (!validation.approved) {
+        return res.status(403).json({ error: 'Weight adjustment rejected', violations: validation.violations });
+      }
+      
+      const profile = await continuousLearningEngine.adjustWeights(
+        req.params.profileId,
+        req.body.weights,
+        req.body.rationale,
+        req.user!.id,
+        mode
+      );
+      
+      res.json({ ok: true, profile, validation });
+    } catch (error: any) {
+      console.error('[Learning] Weight adjustment failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/learning/profile/:profileId/phase', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { continuousLearningEngine } = await import('./services/continuous-learning');
+      
+      const profile = await continuousLearningEngine.updatePhase(
+        req.params.profileId,
+        req.body.phase,
+        req.user!.id,
+        mode
+      );
+      
+      res.json({ ok: true, profile });
+    } catch (error: any) {
+      console.error('[Learning] Phase update failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/learning/profile/:profileId/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { continuousLearningEngine } = await import('./services/continuous-learning');
+      
+      const evaluation = await continuousLearningEngine.evaluatePerformance(
+        req.params.profileId,
+        req.user!.id,
+        mode
+      );
+      
+      res.json({ ok: true, evaluation });
+    } catch (error: any) {
+      console.error('[Learning] Performance evaluation failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Phase 9.2: Policy Compliance
+  app.get('/api/strategic/compliance', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
+      
+      const status = await strategicPolicyGuard.getComplianceStatus(req.user!.id);
+      
+      res.json({ ok: true, status });
+    } catch (error: any) {
+      console.error('[Strategic] Compliance status fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
