@@ -1,0 +1,166 @@
+🧭 Replit Implementation Instructions – Phase 9.2: Strategic Planner & Continuous Learning Model
+
+You are now implementing Phase 9.2, which builds on the Adaptive Learning & Goal Alignment Foundation (Phase 9.0).
+This phase gives Walter long-range planning and continuous learning capabilities, enabling him to form strategies, connect daily actions to long-term objectives, and refine reasoning through feedback loops.
+
+🧩 Objectives
+
+Strategic Planner Service – Create a core service to generate, monitor, and adapt multi-stage objectives (strategic plans).
+
+Continuous Learning Engine – Develop an embedded system that updates cognitive weights and behavioral tendencies based on outcome metrics.
+
+Experience Linker – Connect recent awareness and autonomy data to longer-term strategy tracking.
+
+Strategic Policy Guard – Integrate high-level policy and safety constraints into planning decisions.
+
+UI Integration – Add a “Strategy” tab to the System Monitoring Panel for visualization of active plans, progress, and learning trends.
+
+⚙️ Task Sequence
+
+Schema Update
+
+Extend shared/schema.ts with:
+
+strategic_plan_log table for high-level goals, phases, success criteria, and current progress.
+
+learning_weight_profile table for adaptive model parameters and revision history.
+
+Enum definitions for plan status (draft, active, paused, completed) and learning phase (observation, adjustment, evaluation).
+
+Add insert schemas and type exports.
+
+Deploy Schema
+
+Run npm run db:push (use --force if needed).
+
+Verify successful table creation in DB logs.
+
+Create Core Services
+
+server/services/strategic-planner.ts
+
+Handles creation, updating, evaluation, and completion of strategic plans.
+
+Interacts with adaptive-objective-engine and experience-memory for goal alignment.
+
+server/services/continuous-learning.ts
+
+Processes experience feedback and updates learning_weight_profile.
+
+Implements scheduled evaluation tasks via internal cron.
+
+Broadcasts learning updates through Context Bridge.
+
+server/services/strategic-policy-guard.ts
+
+Performs alignment verification for strategic decisions using the same framework as Alignment Verifier.
+
+Scheduler Integration
+
+Register periodic update tasks for:
+
+Strategy evaluation (every 3 hours).
+
+Learning model update (every 6 hours).
+
+Confirm log entries for scheduler initialization.
+
+API Endpoints
+
+Add endpoints in server/routes.ts:
+
+GET /api/strategy/active – Fetch current strategic plans.
+
+POST /api/strategy/create – Add new strategic plan.
+
+POST /api/strategy/evaluate – Trigger manual evaluation.
+
+GET /api/learning/weights – Retrieve current learning weights.
+
+POST /api/learning/retrain – Manually update learning parameters.
+
+Ensure each route extracts user mode and passes it to broadcasts.
+
+Autonomy Integration
+
+Modify Autonomy Controller to:
+
+Check Strategic Planner for active plans before executing major actions.
+
+Notify Continuous Learning Engine after execution for reinforcement feedback.
+
+Awareness Integration
+
+Update Awareness Core to include strategic and learning summaries in awareness state generation (e.g., current objective focus, learning phase, confidence trend).
+
+UI Enhancement
+
+Open client/src/components/system/enhanced-system-monitoring.tsx.
+
+Increase tab grid count (+1) and add a new tab labeled “Strategy” (use the Target icon).
+
+Add TabsContent value="strategy" section showing:
+
+Active plans list with status badges and progress bars.
+
+Learning weight charts (e.g., confidence vs time).
+
+Buttons for Trigger Evaluation and Manual Retraining.
+
+Ensure API calls use correct parameter order (method, url, data).
+
+Testing
+
+Verify scheduler startup logs (StrategicPlannerScheduler and ContinuousLearningScheduler).
+
+Run end-to-end UI tests:
+
+Create a strategic plan.
+
+Trigger evaluation.
+
+Observe learning weights update in UI.
+
+Validate audit logs and Context Bridge broadcasts.
+
+Documentation & Review
+
+Update replit.md with:
+
+Schema changes and API endpoints.
+
+Description of Strategic Planner and Learning Engine architecture.
+
+Integration points with Autonomy and Awareness Layers.
+
+Testing and validation results.
+
+Notify architect for final review.
+
+🧠 Expected Outcome
+
+Upon completion of Phase 9.2, Walter will be able to:
+
+Formulate and pursue long-term plans based on goals and policies.
+
+Adapt reasoning and behavior over time through continuous learning loops.
+
+Maintain alignment between strategic intent and operational actions.
+
+Present transparent progress and learning metrics through the “Strategy” tab UI.
+
+✅ Deliverables Checklist
+
+ Database tables: strategic_plan_log, learning_weight_profile
+
+ Services: Strategic Planner, Continuous Learning, Strategic Policy Guard
+
+ Scheduler tasks operational
+
+ API layer complete and mode-aware
+
+ Autonomy and Awareness integration tested
+
+ “Strategy” tab functional in UI
+
+ Documentation and architect review complete

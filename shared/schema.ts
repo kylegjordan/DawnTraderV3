@@ -58,6 +58,8 @@ export const awarenessEmotionalStateEnum = pgEnum("awareness_emotional_state", [
 export const alignmentStatusEnum = pgEnum("alignment_status", ["compliant", "at_risk", "violated"]);
 export const policyTypeEnum = pgEnum("policy_type", ["ethical", "functional", "operational", "risk"]);
 export const alignmentVerificationResultEnum = pgEnum("alignment_verification_result", ["approved", "flagged", "rejected"]);
+export const planStatusEnum = pgEnum("plan_status", ["draft", "active", "paused", "completed"]);
+export const learningPhaseEnum = pgEnum("learning_phase", ["observation", "adjustment", "evaluation"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -2321,6 +2323,52 @@ export const goalAlignmentProfile = pgTable("goal_alignment_profile", {
   currentStatusIdx: index("goal_alignment_profile_current_status_idx").on(table.currentStatus),
 }));
 
+// Phase 9.2: Strategic Plan Log - Long-range Goals and Strategies
+export const strategicPlanLog = pgTable("strategic_plan_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: varchar("plan_id", { length: 50 }).notNull().unique(),
+  userId: varchar("user_id", { length: 50 }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  status: planStatusEnum("status").default("draft").notNull(),
+  phases: jsonb("phases").notNull(), // Array of phases with milestones
+  successCriteria: jsonb("success_criteria").notNull(), // Measurable goals
+  currentProgress: jsonb("current_progress").default(sql`'{}'::jsonb`).notNull(), // Progress tracking
+  linkedExperiences: text("linked_experiences").array().default(sql`ARRAY[]::text[]`), // Reference to experience_memory_log
+  alignmentScore: doublePrecision("alignment_score").default(0), // Alignment with current policies
+  metadata: jsonb("metadata"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  planIdIdx: index("strategic_plan_log_plan_id_idx").on(table.planId),
+  userIdIdx: index("strategic_plan_log_user_id_idx").on(table.userId),
+  statusIdx: index("strategic_plan_log_status_idx").on(table.status),
+}));
+
+// Phase 9.2: Learning Weight Profile - Adaptive Model Parameters
+export const learningWeightProfile = pgTable("learning_weight_profile", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  profileId: varchar("profile_id", { length: 50 }).notNull().unique(),
+  userId: varchar("user_id", { length: 50 }),
+  currentPhase: learningPhaseEnum("current_phase").default("observation").notNull(),
+  cognitiveWeights: jsonb("cognitive_weights").notNull(), // e.g., {"reasoning": 0.8, "exploration": 0.2}
+  behavioralTendencies: jsonb("behavioral_tendencies").default(sql`'{}'::jsonb`).notNull(), // Learned patterns
+  performanceMetrics: jsonb("performance_metrics").default(sql`'{}'::jsonb`).notNull(), // Outcome tracking
+  feedbackHistory: jsonb("feedback_history").array().default(sql`ARRAY[]::jsonb[]`), // Learning iterations
+  confidenceScore: doublePrecision("confidence_score").default(0.5), // Model confidence 0-1
+  lastRetraining: timestamp("last_retraining", { withTimezone: true }),
+  revisionHistory: jsonb("revision_history"), // Record of weight changes over time
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  profileIdIdx: index("learning_weight_profile_profile_id_idx").on(table.profileId),
+  userIdIdx: index("learning_weight_profile_user_id_idx").on(table.userId),
+  currentPhaseIdx: index("learning_weight_profile_current_phase_idx").on(table.currentPhase),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2342,6 +2390,8 @@ export const insertExperienceMemoryLogSchema = createInsertSchema(experienceMemo
 export const insertAlignmentPolicySchema = createInsertSchema(alignmentPolicies).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAlignmentAuditLogSchema = createInsertSchema(alignmentAuditLog).omit({ id: true, timestamp: true });
 export const insertGoalAlignmentProfileSchema = createInsertSchema(goalAlignmentProfile).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertStrategicPlanLogSchema = createInsertSchema(strategicPlanLog).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertLearningWeightProfileSchema = createInsertSchema(learningWeightProfile).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2403,6 +2453,12 @@ export type AlignmentAuditLog = typeof alignmentAuditLog.$inferSelect;
 
 export type InsertGoalAlignmentProfile = z.infer<typeof insertGoalAlignmentProfileSchema>;
 export type GoalAlignmentProfile = typeof goalAlignmentProfile.$inferSelect;
+
+export type InsertStrategicPlanLog = z.infer<typeof insertStrategicPlanLogSchema>;
+export type StrategicPlanLog = typeof strategicPlanLog.$inferSelect;
+
+export type InsertLearningWeightProfile = z.infer<typeof insertLearningWeightProfileSchema>;
+export type LearningWeightProfile = typeof learningWeightProfile.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
