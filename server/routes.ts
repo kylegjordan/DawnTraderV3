@@ -9839,6 +9839,142 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 9.3: Strategic Simulation & Memory
+  app.post('/api/simulation/run', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { simulationEngine } = await import('./services/simulation-engine');
+      
+      const simulation = await simulationEngine.runSimulation(
+        req.user!.id,
+        req.body,
+        mode
+      );
+      
+      res.json({ ok: true, simulation });
+    } catch (error: any) {
+      console.error('[Simulation] Run simulation failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/simulation/list', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { simulationEngine } = await import('./services/simulation-engine');
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      
+      const simulations = await simulationEngine.getSimulations(req.user!.id, limit);
+      
+      res.json({ ok: true, simulations });
+    } catch (error: any) {
+      console.error('[Simulation] Get simulations failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/simulation/:simulationId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { simulationEngine } = await import('./services/simulation-engine');
+      
+      const result = await simulationEngine.getSimulationResults(req.params.simulationId);
+      
+      if (!result.simulation) {
+        return res.status(404).json({ error: 'Simulation not found' });
+      }
+      
+      res.json({ ok: true, ...result });
+    } catch (error: any) {
+      console.error('[Simulation] Get simulation failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/simulation/:simulationId/outcome', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { simulationEngine } = await import('./services/simulation-engine');
+      
+      const simulation = await simulationEngine.updateActualOutcome(
+        req.params.simulationId,
+        req.body.actualOutcome,
+        req.user!.id,
+        mode
+      );
+      
+      if (!simulation) {
+        return res.status(404).json({ error: 'Simulation not found' });
+      }
+      
+      res.json({ ok: true, simulation });
+    } catch (error: any) {
+      console.error('[Simulation] Update outcome failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/simulation/decision', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { simulationEngine } = await import('./services/simulation-engine');
+      
+      const trace = await simulationEngine.simulateDecision(
+        req.user!.id,
+        req.body,
+        mode
+      );
+      
+      res.json({ ok: true, trace });
+    } catch (error: any) {
+      console.error('[Simulation] Simulate decision failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/strategic/memory/capture', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { strategicMemory } = await import('./services/strategic-memory');
+      
+      const snapshot = await strategicMemory.captureLesson(
+        req.user!.id,
+        req.body,
+        mode
+      );
+      
+      res.json({ ok: true, snapshot });
+    } catch (error: any) {
+      console.error('[Memory] Capture lesson failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/strategic/memory/lessons', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { strategicMemory } = await import('./services/strategic-memory');
+      
+      const lessons = await strategicMemory.getLessons(req.user!.id);
+      
+      res.json({ ok: true, lessons });
+    } catch (error: any) {
+      console.error('[Memory] Get lessons failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/strategic/memory/extract', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { strategicMemory } = await import('./services/strategic-memory');
+      
+      const lessons = await strategicMemory.extractLessonsFromSimulations(req.user!.id, mode);
+      
+      res.json({ ok: true, lessons });
+    } catch (error: any) {
+      console.error('[Memory] Extract lessons failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 

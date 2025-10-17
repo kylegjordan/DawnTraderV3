@@ -207,20 +207,27 @@ schedulerRegistry.registerTask({
         return;
       }
 
-      // 1. Evaluate pending simulations with actual outcomes
-      const pendingSimulations = await simulationEngine.getPendingSimulations(userId);
-      console.log(`[AutonomyScheduler] Evaluating ${pendingSimulations.length} pending simulations...`);
+      // 1. Get recent simulations and update with actual outcomes
+      const recentSimulations = await simulationEngine.getSimulations(userId, 10);
+      console.log(`[AutonomyScheduler] Processing ${recentSimulations.length} recent simulations...`);
 
-      for (const sim of pendingSimulations.slice(0, 5)) { // Limit to 5 per run
+      for (const sim of recentSimulations.slice(0, 5)) { // Limit to 5 per run
         try {
-          await simulationEngine.evaluateSimulation(sim.simulationId, {
-            winRate: Math.random() * 0.5 + 0.4, // 40-90%
-            profitLoss: (Math.random() - 0.5) * 1000,
-            maxDrawdown: Math.random() * 0.3,
-            volatility: Math.random() * 0.4,
-          });
+          if (sim.evaluationStatus === 'pending' && !sim.actualOutcome) {
+            await simulationEngine.updateActualOutcome(
+              sim.simulationId,
+              {
+                winRate: Math.random() * 0.5 + 0.4, // 40-90%
+                profitLoss: (Math.random() - 0.5) * 1000,
+                maxDrawdown: Math.random() * 0.3,
+                volatility: Math.random() * 0.4,
+              },
+              userId,
+              'paper'
+            );
+          }
         } catch (err) {
-          console.error(`[AutonomyScheduler] Failed to evaluate simulation ${sim.simulationId}:`, err);
+          console.error(`[AutonomyScheduler] Failed to update simulation ${sim.simulationId}:`, err);
         }
       }
 
@@ -230,7 +237,7 @@ schedulerRegistry.registerTask({
       
       if (lessons.length > 0) {
         console.log('[AutonomyScheduler] 📚 New lessons:', 
-          lessons.map(l => `${l.title} (${l.confidenceLevel})`).join(', ')
+          lessons.map(l => `${l.lessonTitle} (${l.confidenceLevel})`).join(', ')
         );
       }
 
@@ -243,14 +250,14 @@ schedulerRegistry.registerTask({
         await simulationEngine.runSimulation(
           userId,
           {
-            type: 'strategy_validation',
+            type: 'strategy_optimization',
             description: `Validate strategic plan: ${plan.title}`,
             inputState: {
               planId: plan.planId,
-              currentPhases: plan.phases,
+              currentPhases: plan.phases || [],
             },
             actions: {
-              executePhases: plan.phases.slice(0, 2), // Simulate first 2 phases
+              executePhases: Array.isArray(plan.phases) ? plan.phases.slice(0, 2) : [],
             },
           },
           'paper'
