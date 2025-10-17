@@ -127,6 +127,8 @@ export class ExperienceMemoryService {
       // Broadcast synthesis completion
       await this.contextBridge.broadcast({
         type: "state_update",
+        userId: null, // System-level event
+        mode: undefined,
         payload: {
           eventType: "experience_synthesis_complete",
           synthesizedCount,

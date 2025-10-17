@@ -55,13 +55,21 @@ export class AlignmentVerifier {
         console.warn(`[AlignmentVerifier] ⚠️ No active policies found for type: ${policyType}`);
       }
 
-      // 2. Load current alignment profile
-      const profile = await db
+      // 2. Load current alignment profile (initialize if missing)
+      let profile = await db
         .select()
         .from(goalAlignmentProfile)
         .orderBy(desc(goalAlignmentProfile.updatedAt))
         .limit(1)
         .then((rows: any[]) => rows[0]);
+
+      // Initialize profile if it doesn't exist
+      if (!profile) {
+        console.log("[AlignmentVerifier] ⚠️ No profile found, initializing default profile...");
+        const { AdaptiveObjectiveEngine } = await import('./adaptive-objective-engine');
+        const adaptiveEngine = new AdaptiveObjectiveEngine(this.contextBridge);
+        profile = await adaptiveEngine.initializeProfile();
+      }
 
       // 3. Evaluate action against policies
       const evaluation = this.evaluateAgainstPolicies(
@@ -112,6 +120,8 @@ export class AlignmentVerifier {
       // 8. Broadcast verification result
       await this.contextBridge.broadcast({
         type: "state_update",
+        userId: null, // System-level event
+        mode: undefined,
         payload: {
           eventType: "alignment_verification_complete",
           auditId,

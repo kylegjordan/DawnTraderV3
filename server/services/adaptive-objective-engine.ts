@@ -243,6 +243,8 @@ export class AdaptiveObjectiveEngine {
       // Broadcast alignment update
       await this.contextBridge.broadcast({
         type: "state_update",
+        userId: null, // System-level event
+        mode: undefined,
         payload: {
           eventType: "alignment_weights_updated",
           previousWeights,
