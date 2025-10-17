@@ -2103,6 +2103,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== Phase 8.7.2: Intent Execution Framework ====================
+
+  // POST /api/intent/execute - Execute validated intent
+  app.post('/api/intent/execute', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const userRole = req.user!.role as 'owner' | 'editor' | 'viewer';
+      const intent = req.body;
+      const traceId = req.body.traceId || undefined;
+      
+      if (!intent.action) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Intent action is required',
+          message: 'Please provide an action field in the intent payload'
+        });
+      }
+      
+      const { intentExecutor } = await import('./services/intent-executor');
+      
+      const result = await intentExecutor.execute({
+        userId,
+        userRole,
+        intent,
+        traceId
+      });
+      
+      if (!result.success && result.error?.includes('Permission denied')) {
+        return res.status(403).json(result);
+      }
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error('[IntentExecutor] Error executing intent:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to execute intent', 
+        message: error.message 
+      });
+    }
+  });
+
+  // GET /api/intent/audit - Get intent audit history
+  app.get('/api/intent/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const traceId = req.query.traceId as string | undefined;
+      const action = req.query.action as string | undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      
+      const { intentExecutor } = await import('./services/intent-executor');
+      
+      const history = await intentExecutor.getAuditHistory({
+        userId,
+        traceId,
+        action,
+        limit
+      });
+      
+      res.json({
+        success: true,
+        data: history,
+        count: history.length
+      });
+    } catch (error: any) {
+      console.error('[IntentExecutor] Error fetching audit history:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch audit history', 
+        message: error.message 
+      });
+    }
+  });
+
   // ==================== Phase 8.5: Real-Time Execution Layer ====================
 
   // Get execution metrics
