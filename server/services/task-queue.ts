@@ -75,45 +75,58 @@ class TaskQueueService {
 
   /**
    * Fetch next available task for a specific domain (with optimistic locking)
-   * Uses FOR UPDATE SKIP LOCKED to prevent race conditions
+   * Uses FOR UPDATE SKIP LOCKED within transaction to prevent race conditions
+   * Phase 8.8.3 Fix: Enforces retry delay via retry_at timestamp
    */
   async fetchNextTask(domain?: string): Promise<ReasoningTask | null> {
     try {
-      // Use raw SQL for FOR UPDATE SKIP LOCKED (not supported by Drizzle ORM directly)
-      const query = domain
-        ? sql`
-            SELECT * FROM reasoning_queue
-            WHERE status = 'pending'
-            AND task_type LIKE ${`%${domain}%`}
-            ORDER BY created_at ASC
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
-          `
-        : sql`
-            SELECT * FROM reasoning_queue
-            WHERE status = 'pending'
-            ORDER BY created_at ASC
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
-          `;
+      // Phase 8.8.3 Fix: Wrap fetch-and-lock in transaction to maintain row lock
+      const task = await db.transaction(async (tx) => {
+        // Use raw SQL for FOR UPDATE SKIP LOCKED
+        // Phase 8.8.3: Add retry_at check to enforce exponential backoff delay
+        const query = domain
+          ? sql`
+              SELECT * FROM reasoning_queue
+              WHERE status = 'pending'
+              AND (retry_at IS NULL OR retry_at <= NOW())
+              AND task_type LIKE ${`%${domain}%`}
+              ORDER BY created_at ASC
+              LIMIT 1
+              FOR UPDATE SKIP LOCKED
+            `
+          : sql`
+              SELECT * FROM reasoning_queue
+              WHERE status = 'pending'
+              AND (retry_at IS NULL OR retry_at <= NOW())
+              ORDER BY created_at ASC
+              LIMIT 1
+              FOR UPDATE SKIP LOCKED
+            `;
 
-      const result = await db.execute(query);
-      const rows = result.rows as any[];
+        const result = await tx.execute(query);
+        const rows = result.rows as any[];
 
-      if (!rows || rows.length === 0) {
+        if (!rows || rows.length === 0) {
+          return null;
+        }
+
+        const selectedTask = rows[0];
+
+        // Mark as in_progress and lock (within same transaction)
+        await tx.update(reasoningQueue)
+          .set({
+            status: "in_progress",
+            lockedAt: new Date(),
+            lockedBy: this.workerId,
+          })
+          .where(eq(reasoningQueue.id, selectedTask.id));
+
+        return selectedTask;
+      });
+
+      if (!task) {
         return null;
       }
-
-      const task = rows[0];
-
-      // Mark as in_progress and lock
-      await db.update(reasoningQueue)
-        .set({
-          status: "in_progress",
-          lockedAt: new Date(),
-          lockedBy: this.workerId,
-        })
-        .where(eq(reasoningQueue.id, task.id));
 
       console.log(`[TaskQueue] 🔒 Task locked: ${task.id} (worker: ${this.workerId})`);
 
@@ -171,30 +184,28 @@ class TaskQueueService {
 
   /**
    * Mark task as failed (with retry logic)
+   * Phase 8.8.3 Fix: Sets retry_at timestamp to enforce exponential backoff delay
    */
   async markTaskFailed(id: string, error: string, retryCount: number = 0): Promise<void> {
     const maxRetries = 3;
 
     if (retryCount < maxRetries) {
-      // Retry with exponential backoff
+      // Phase 8.8.3 Fix: Calculate retry_at timestamp with exponential backoff
       const backoffMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+      const retryAt = new Date(Date.now() + backoffMs);
       
       await db.update(reasoningQueue)
         .set({
           status: "pending", // Reset to pending for retry
           retryCount: retryCount + 1,
           errorMessage: error,
+          retryAt, // Phase 8.8.3 Fix: Set retry_at to enforce delay
           lockedAt: null,
           lockedBy: null,
         })
         .where(eq(reasoningQueue.id, id));
 
-      console.log(`[TaskQueue] 🔄 Task retry scheduled: ${id} (attempt ${retryCount + 1}/${maxRetries}, backoff: ${backoffMs}ms)`);
-
-      // Wait for backoff before allowing retry
-      setTimeout(() => {
-        console.log(`[TaskQueue] ⏰ Task ready for retry: ${id}`);
-      }, backoffMs);
+      console.log(`[TaskQueue] 🔄 Task retry scheduled: ${id} (attempt ${retryCount + 1}/${maxRetries}, backoff: ${backoffMs}ms, retry at: ${retryAt.toISOString()})`);
     } else {
       // Max retries exceeded, mark as permanently failed
       await db.update(reasoningQueue)

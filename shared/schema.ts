@@ -2124,6 +2124,7 @@ export const reasoningQueue = pgTable("reasoning_queue", {
   result: jsonb("result"),
   errorMessage: text("error_message"),
   retryCount: integer("retry_count").default(0).notNull(), // Phase 8.8.3: Track retry attempts
+  retryAt: timestamp("retry_at", { withTimezone: true }), // Phase 8.8.3: Enforce exponential backoff delay
   lockedAt: timestamp("locked_at", { withTimezone: true }),
   lockedBy: varchar("locked_by", { length: 100 }), // Worker ID
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
