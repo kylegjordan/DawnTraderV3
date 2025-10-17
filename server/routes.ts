@@ -12,7 +12,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
