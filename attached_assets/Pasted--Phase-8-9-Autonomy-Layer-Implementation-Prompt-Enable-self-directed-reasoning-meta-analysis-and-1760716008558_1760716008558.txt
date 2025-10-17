@@ -1,0 +1,123 @@
+🧠 Phase 8.9 Autonomy Layer Implementation Prompt
+Enable self-directed reasoning, meta-analysis, and continuous improvement.
+Objective
+
+Introduce autonomous reasoning behavior in the Dawn Trader system by giving Walter the ability to self-trigger tasks, evaluate its own reasoning quality, and adjust its internal heuristics.
+This phase builds upon the fully validated 8.7–8.8 infrastructure to enable persistent, self-aware operational cycles.
+
+Scope of Work
+
+Implement the four interlinked subsystems:
+
+ID	Component	Function
+8.9.1 Autonomy Controller	Governs self-triggered reasoning and periodic self-checks.	
+8.9.2 Meta-Reasoning Engine	Performs recursive validation and correction of reasoning traces.	
+8.9.3 Curiosity & Exploration Engine	Generates exploratory queries to expand domain understanding.	
+8.9.4 Self-Optimization Cycle	Analyzes long-term performance metrics and tunes system parameters automatically.	
+Task 1 – Create Autonomy Controller Skeleton
+
+Goal: Establish the control layer responsible for self-initiated reasoning tasks.
+Steps:
+
+Add a new service file named server/services/autonomy-controller.ts.
+
+Define methods for:
+
+scheduleSelfCheck() – runs periodic health and cognitive performance evaluations.
+
+triggerSelfReasoning() – queues self-generated intents (e.g., “verify trading logic coherence”).
+
+recordAssessment() – logs internal evaluation results to a new table autonomy_audit_log.
+
+Register the controller for hourly checks via the scheduler (Node-Cron or existing job manager).
+
+Log controller start events in the system console and Context Bridge feed.
+
+Task 2 – Implement Meta-Reasoning Engine
+
+Goal: Add a layer that audits reasoning traces and detects logical inconsistencies.
+Steps:
+
+Add server/services/meta-reasoning-engine.ts.
+
+Provide methods for:
+
+analyzeTraceIntegrity(traceId) – verifies coherence, recursion, and decision accuracy.
+
+generateCorrectionPlan(traceId) – creates a plan for self-correction when errors detected.
+
+executeCorrectionPlan(plan) – applies structured adjustments to reasoning parameters.
+
+Integrate with existing reasoning-orchestrator and cognitive-tuner.
+
+Record results in a new table meta_reasoning_log.
+
+Task 3 – Add Curiosity & Exploration Engine
+
+Goal: Allow Walter to autonomously expand its domain knowledge by generating new exploratory reasoning tasks.
+Steps:
+
+Add server/services/curiosity-engine.ts.
+
+Define functions for:
+
+generateExplorationPrompts() – creates new questions or tests based on recent benchmark data.
+
+evaluateExplorationResults() – scores the usefulness of exploration outcomes.
+
+Link exploration runs with existing cognitive tuning schema for unified performance tracking.
+
+Broadcast discovery summaries to the UX Monitor tab for live visualization.
+
+Task 4 – Implement Self-Optimization Cycle
+
+Goal: Enable long-term adaptive improvement by adjusting parameters based on system metrics.
+Steps:
+
+Add server/services/self-optimizer.ts.
+
+Implement:
+
+evaluatePerformanceTrends() – analyzes orchestrator latency, success ratios, and goal alignment.
+
+updateHeuristics() – adjusts thresholds or retry intervals dynamically.
+
+logOptimizationEvent() – records optimization decisions in the audit log.
+
+Schedule a daily optimization run (e.g., 02:30 UTC).
+
+Confirm metrics updates appear in /api/system/health and the System Monitor panel.
+
+Task 5 – Integrate and Document
+
+Goal: Link all four autonomy subsystems into a unified control loop and document for traceability.
+Steps:
+
+Connect Autonomy Controller → Meta-Reasoning Engine → Curiosity Engine → Self-Optimizer in sequence.
+
+Ensure each component logs events with a shared runId for trace linkage.
+
+Verify context updates appear in the UX Monitor tab.
+
+Update replit.md with a new section:
+“Phase 8.9 – Autonomy Layer Integration and Architecture Overview.”
+
+Summarize the following:
+
+Architecture flow diagram description.
+
+Key triggers and scheduling intervals.
+
+Interactions with 8.7–8.8 subsystems.
+
+Expected autonomy behaviors (self-evaluation, exploration, and optimization).
+
+Expected Outcomes
+
+Walter autonomously triggers and evaluates reasoning sessions.
+
+Cognitive metrics feed continuous improvement loops.
+
+Self-correction and parameter tuning occur without manual intervention.
+
+All autonomy events visible via UX Monitor and recorded in audit tables.

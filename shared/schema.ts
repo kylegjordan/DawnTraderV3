@@ -52,6 +52,8 @@ export const executionEventTypeEnum = pgEnum("execution_event_type", ["trade", "
 export const reasoningQueueStatusEnum = pgEnum("reasoning_queue_status", ["pending", "in_progress", "completed", "failed"]);
 export const memoryAuditStatusEnum = pgEnum("memory_audit_status", ["VERIFIED", "UNVERIFIED", "REPAIRED"]);
 export const cognitiveTestResultEnum = pgEnum("cognitive_test_result", ["PASS", "WARN", "FAIL"]);
+export const autonomyActionTypeEnum = pgEnum("autonomy_action_type", ["self_check", "self_reasoning", "exploration", "optimization"]);
+export const metaAnalysisResultEnum = pgEnum("meta_analysis_result", ["coherent", "inconsistent", "requires_correction"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -2176,6 +2178,48 @@ export const cognitiveTuningLog = pgTable("cognitive_tuning_log", {
   createdAtIdx: index("cognitive_tuning_log_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 8.9.1: Autonomy Controller - Audit Log
+export const autonomyAuditLog = pgTable("autonomy_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  runId: varchar("run_id", { length: 50 }).notNull(), // Self-check session ID
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  actionType: autonomyActionTypeEnum("action_type").notNull(), // self_check, self_reasoning, exploration, optimization
+  triggerSource: varchar("trigger_source", { length: 50 }).notNull(), // 'scheduled', 'manual', 'threshold_breach'
+  traceId: varchar("trace_id", { length: 50 }).references(() => reasoningTrace.traceId),
+  assessmentResult: jsonb("assessment_result").notNull(), // Health scores, cognitive metrics, etc.
+  actionsTriggered: text("actions_triggered").array().default(sql`ARRAY[]::text[]`), // Follow-up actions initiated
+  success: boolean("success").notNull(),
+  executionTimeMs: integer("execution_time_ms"),
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  runIdIdx: index("autonomy_audit_log_run_id_idx").on(table.runId),
+  actionTypeIdx: index("autonomy_audit_log_action_type_idx").on(table.actionType),
+  timestampIdx: index("autonomy_audit_log_timestamp_idx").on(table.timestamp),
+  traceIdIdx: index("autonomy_audit_log_trace_id_idx").on(table.traceId),
+}));
+
+// Phase 8.9.2: Meta-Reasoning Engine - Analysis Log
+export const metaReasoningLog = pgTable("meta_reasoning_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  analysisId: varchar("analysis_id", { length: 50 }).notNull().unique(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  targetTraceId: varchar("target_trace_id", { length: 50 }).references(() => reasoningTrace.traceId).notNull(),
+  analysisResult: metaAnalysisResultEnum("analysis_result").notNull(), // coherent, inconsistent, requires_correction
+  integrityScore: doublePrecision("integrity_score"), // 0-1 coherence score
+  detectedIssues: jsonb("detected_issues"), // Array of identified problems
+  correctionPlan: jsonb("correction_plan"), // Structured plan for fixes
+  correctionApplied: boolean("correction_applied").default(false),
+  correctionResult: jsonb("correction_result"), // Outcome of correction if applied
+  executionTimeMs: integer("execution_time_ms"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  analysisIdIdx: index("meta_reasoning_log_analysis_id_idx").on(table.analysisId),
+  targetTraceIdIdx: index("meta_reasoning_log_target_trace_id_idx").on(table.targetTraceId),
+  analysisResultIdx: index("meta_reasoning_log_analysis_result_idx").on(table.analysisResult),
+  timestampIdx: index("meta_reasoning_log_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2190,6 +2234,8 @@ export const insertReasoningTraceSchema = createInsertSchema(reasoningTrace);
 export const insertReasoningQueueSchema = createInsertSchema(reasoningQueue);
 export const insertMemoryAuditLogSchema = createInsertSchema(memoryAuditLog).omit({ id: true, createdAt: true });
 export const insertCognitiveTuningLogSchema = createInsertSchema(cognitiveTuningLog).omit({ id: true, createdAt: true });
+export const insertAutonomyAuditLogSchema = createInsertSchema(autonomyAuditLog).omit({ id: true, timestamp: true });
+export const insertMetaReasoningLogSchema = createInsertSchema(metaReasoningLog).omit({ id: true, timestamp: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2230,6 +2276,12 @@ export type MemoryAuditLog = typeof memoryAuditLog.$inferSelect;
 
 export type InsertCognitiveTuningLog = z.infer<typeof insertCognitiveTuningLogSchema>;
 export type CognitiveTuningLog = typeof cognitiveTuningLog.$inferSelect;
+
+export type InsertAutonomyAuditLog = z.infer<typeof insertAutonomyAuditLogSchema>;
+export type AutonomyAuditLog = typeof autonomyAuditLog.$inferSelect;
+
+export type InsertMetaReasoningLog = z.infer<typeof insertMetaReasoningLogSchema>;
+export type MetaReasoningLog = typeof metaReasoningLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
