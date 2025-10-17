@@ -2113,6 +2113,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== Phase 8.8.4: Cognitive Tuning & Testing ====================
+
+  // GET /api/cognitive/status - Get latest cognitive benchmark summary
+  app.get('/api/cognitive/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { cognitiveTuner } = await import('./services/cognitive-tuner');
+      const status = await cognitiveTuner.getStatus();
+      
+      res.json({
+        ok: true,
+        status,
+      });
+    } catch (error: any) {
+      console.error('[CognitiveTuner] Error fetching status:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch cognitive status',
+        message: error.message,
+      });
+    }
+  });
+
+  // POST /api/cognitive/run - Trigger new cognitive benchmark (admin-only)
+  app.post('/api/cognitive/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const user = await storage.getUser(userId);
+      
+      // Check if user has owner role
+      if (user?.role !== 'owner') {
+        return res.status(403).json({
+          ok: false,
+          error: 'Forbidden',
+          message: 'Only owners can run cognitive benchmarks',
+        });
+      }
+
+      const { cognitiveTuner } = await import('./services/cognitive-tuner');
+      const results = await cognitiveTuner.runFullBenchmark(userId);
+      
+      res.json({
+        ok: true,
+        results,
+        summary: {
+          totalTests: results.length,
+          passedTests: results.filter(r => r.result === 'PASS').length,
+          avgLatencyMs: results.reduce((sum, r) => sum + r.avgLatencyMs, 0) / results.length,
+        },
+      });
+    } catch (error: any) {
+      console.error('[CognitiveTuner] Error running benchmark:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to run cognitive benchmark',
+        message: error.message,
+      });
+    }
+  });
+
   // ==================== Phase 8.7.1: State Awareness Layer ====================
 
   // GET /api/state/summary - Get authoritative system state snapshot
