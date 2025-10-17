@@ -77,10 +77,11 @@ class ReasoningOrchestrator {
 
       // Log to data lineage for provenance
       await db.insert(dataLineage).values({
-        sourceTable: 'reasoning_trace',
-        targetTable: 'walter_response',
-        operation: 'REASONING_PLAN_CREATED',
         traceId,
+        originatingService: 'reasoning_orchestrator',
+        targetService: 'walter',
+        sourceTable: 'reasoning_trace',
+        operation: 'write',
         metadata: {
           userId: request.userId,
           intentAction: request.intentAction,
@@ -260,10 +261,11 @@ class ReasoningOrchestrator {
 
       // Log to data lineage
       await db.insert(dataLineage).values({
-        sourceTable: 'reasoning_trace',
-        targetTable: 'walter_chat_logs',
-        operation: 'REASONING_COMPLETED',
         traceId,
+        originatingService: 'reasoning_orchestrator',
+        targetService: 'walter',
+        sourceTable: 'reasoning_trace',
+        operation: 'write',
         metadata: {
           status,
           summary: outcomeSummary.substring(0, 200),
