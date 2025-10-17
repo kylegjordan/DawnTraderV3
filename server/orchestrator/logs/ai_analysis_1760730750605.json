@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-17T19:52:30.605Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is high across all intervals (7.92, 9.15, 10.27) which is close to or exceeding the number of CPU cores (8)."
+    },
+    {
+      "severity": "medium",
+      "message": "AI subsystem shows no recent learning cycles, zero average confidence, and no opportunities generated or adjustments made."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading subsystem has a win rate and ROI of 0 with no active trades, indicating potential issues with strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider scaling up CPU resources or optimizing current processes to reduce load."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and update AI learning algorithms to ensure they are functioning and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate current trading strategies for effectiveness and market suitability."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Investigate and address high CPU load to prevent potential system slowdowns or failures.",
+      "rationale": "High CPU load can lead to degraded system performance and affect trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Audit AI subsystem to diagnose why no learning cycles or opportunities are being generated.",
+      "rationale": "AI is crucial for identifying trading opportunities and its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Assess and possibly revise trading strategies to improve win rate and ROI.",
+      "rationale": "Current strategies are not yielding positive results, which could impact profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}

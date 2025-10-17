@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-17T21:12:32.427Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or a bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system shows zero active trades and total P&L, indicating a lack of trading activity which may not align with expected operations."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system responsiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI processes to ensure they are functioning and contributing to trading decisions."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate trading strategies and market conditions to ensure alignment with platform goals and potential profitability."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve the underlying cause.",
+      "rationale": "High CPU load can lead to system instability, affecting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart or debug the AI system to restore its learning and decision-making capabilities.",
+      "rationale": "AI inactivity can result in missed trading opportunities and reduced platform efficiency."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the inactive trading strategies and market conditions to determine if adjustments or new strategies are needed.",
+      "rationale": "Ensuring active and profitable trading strategies is essential for platform success and user satisfaction."
+    }
+  ],
+  "urgencyLevel": "high"
+}
