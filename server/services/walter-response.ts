@@ -212,6 +212,63 @@ export async function generateWalterResponse(
     // 8. Extract and store memory if needed (expert principles already logged in getRelevantPrinciples)
     await extractAndStoreMemory(userId, chatId, userMessage, response);
 
+    // Phase 8.7.2: Detect and execute intent objects from Walter's response
+    const { detectedIntent, cleanedResponse } = detectAndExtractIntent(response);
+    if (detectedIntent) {
+      console.log(`[WalterResponse] [Phase-8.7.2] Intent detected in response:`, detectedIntent);
+      
+      const { intentExecutor } = await import('./intent-executor');
+      const { stateAwarenessService } = await import('./state-awareness');
+      const userRole = user?.role as 'owner' | 'editor' | 'viewer';
+      
+      // Get pre-execution state
+      const preStateSnapshot = await stateAwarenessService.getStateSnapshot(userId);
+      
+      // Execute intent
+      const executionResult = await intentExecutor.execute({
+        userId,
+        userRole,
+        intent: detectedIntent
+      });
+      
+      // Get post-execution state
+      const postStateSnapshot = await stateAwarenessService.getStateSnapshot(userId);
+      
+      // Append execution results to response
+      let finalResponse = cleanedResponse;
+      if (executionResult.success) {
+        finalResponse += `\n\n✅ **Action Executed Successfully**\n`;
+        finalResponse += `${executionResult.message}\n`;
+        finalResponse += `Trace ID: ${executionResult.traceId}\n`;
+        finalResponse += `Execution Time: ${executionResult.executionTimeMs}ms\n`;
+        
+        // Show state change if any
+        const stateChanged = JSON.stringify(preStateSnapshot) !== JSON.stringify(postStateSnapshot);
+        if (stateChanged) {
+          finalResponse += `\n📊 **System State Updated**\n`;
+          if (detectedIntent.mode) {
+            const mode = detectedIntent.mode;
+            if (preStateSnapshot.balances[mode] !== postStateSnapshot.balances[mode]) {
+              finalResponse += `Balance (${mode}): $${preStateSnapshot.balances[mode]} → $${postStateSnapshot.balances[mode]}\n`;
+            }
+            if (preStateSnapshot.strategies[mode] !== postStateSnapshot.strategies[mode]) {
+              finalResponse += `Active Strategies (${mode}): ${preStateSnapshot.strategies[mode]} → ${postStateSnapshot.strategies[mode]}\n`;
+            }
+            if (preStateSnapshot.trading[mode] !== postStateSnapshot.trading[mode]) {
+              finalResponse += `Trading Status (${mode}): ${preStateSnapshot.trading[mode]} → ${postStateSnapshot.trading[mode]}\n`;
+            }
+          }
+        }
+      } else {
+        finalResponse += `\n\n❌ **Action Failed**\n`;
+        finalResponse += `${executionResult.error}\n`;
+        finalResponse += `Trace ID: ${executionResult.traceId}\n`;
+      }
+      
+      // Phase 7.1c Deliverable 1 & 3: Apply universal stringification
+      return ensureNaturalLanguageResponse(finalResponse);
+    }
+
     // Phase 7.1c Deliverable 1 & 3: Apply universal stringification
     return ensureNaturalLanguageResponse(response);
   } catch (error) {
@@ -952,6 +1009,30 @@ export function ensureNaturalLanguageResponse(response: any): string {
   
   // Fallback for any other type
   return "I processed your request, but the response format was unexpected. Could you try asking in a different way?";
+}
+
+/**
+ * Phase 8.7.2: Detect and extract intent objects from Walter's response
+ * Looks for [INTENT]...[/INTENT] markers containing JSON intent objects
+ */
+function detectAndExtractIntent(response: string): { detectedIntent: any | null; cleanedResponse: string } {
+  const intentPattern = /\[INTENT\](.*?)\[\/INTENT\]/s;
+  const match = response.match(intentPattern);
+  
+  if (!match) {
+    return { detectedIntent: null, cleanedResponse: response };
+  }
+  
+  try {
+    const intentJson = match[1].trim();
+    const detectedIntent = JSON.parse(intentJson);
+    const cleanedResponse = response.replace(match[0], '').trim();
+    
+    return { detectedIntent, cleanedResponse };
+  } catch (error) {
+    console.error('[WalterResponse] Failed to parse intent JSON:', error);
+    return { detectedIntent: null, cleanedResponse: response };
+  }
 }
 
 /**
