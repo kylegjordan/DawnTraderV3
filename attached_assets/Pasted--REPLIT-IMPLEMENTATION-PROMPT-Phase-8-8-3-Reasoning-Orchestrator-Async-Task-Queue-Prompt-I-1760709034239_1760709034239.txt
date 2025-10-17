@@ -1,0 +1,98 @@
+⚙️ REPLIT IMPLEMENTATION PROMPT — Phase 8.8.3: Reasoning Orchestrator & Async Task Queue
+
+Prompt:
+
+Implement Phase 8.8.3 – Reasoning Orchestrator & Async Task Queue.
+
+Goal: Enable Walter to coordinate concurrent reasoning across multiple “Bob” domains (DevOpsBob, FullStackBob, UXBob) using an asynchronous task queue with real-time Context Bridge feedback and provenance-tracked results.
+
+Core Requirements
+
+Async Task Queue (server/services/task-queue.ts)
+
+Implement PostgreSQL-based queue table reasoning_queue (using FOR UPDATE SKIP LOCKED for concurrency).
+
+Methods:
+
+enqueueTask(domain, payload, priority) → insert and return task id
+
+fetchNextTask(domain) → retrieve and lock next pending task
+
+markTaskComplete(taskId, result) → update status and store output
+
+markTaskFailed(taskId, error) → capture failures for re-queue logic
+
+Include retry policy (3 attempts, exponential delay 1s / 2s / 4s).
+
+Expose queue metrics (counts by domain, status).
+
+Reasoning Orchestrator (server/services/reasoning-orchestrator.ts)
+
+Imports and registers domain Bobs: DevOpsBob, FullStackBob, UXBob.
+
+Continuously polls task-queue via async loop (using setInterval or scheduler).
+
+Routes tasks to appropriate Bob and awaits domain-specific reasoning.
+
+Persists results to reasoning_trace table with traceId and timestamp.
+
+Broadcasts progress and completion events through Context Bridge (reasoning_update, reasoning_complete).
+
+Handles task timeouts (> 60 s → mark failed).
+
+Prevents overlapping domain writes via optimistic locking.
+
+Domain Bobs (server/bobs/devops-bob.ts, fullstack-bob.ts, ux-bob.ts)
+
+Each Bob implements async process(task) returning structured output:
+
+{ summary: string, insights: string[], confidence: number }
+
+
+For now, use mocked behavior (e.g., simulate GPT-4o mini responses).
+
+Integration
+
+Hook Reasoning Orchestrator startup in server/index.ts after Memory Lifecycle initialization.
+
+Register it in the scheduler system (“reasoning-orchestrator” task).
+
+Add API routes in server/routes.ts:
+
+POST /api/reasoning/enqueue → add new reasoning task
+
+GET /api/reasoning/status → return queue metrics and recent traces
+
+Link broadcasts to Context Bridge for frontend updates.
+
+Testing & Validation
+
+Verify multi-domain reasoning runs concurrently without conflict.
+
+Confirm trace entries record domain, summary, confidence.
+
+Ensure failed tasks auto-retry (up to 3×).
+
+Confirm Context Bridge receives reasoning_update events.
+
+Documentation
+
+Update replit.md with “Phase 8.8.3 – Reasoning Orchestrator & Async Task Queue”:
+
+Architecture overview (diagram or textual)
+
+Example payloads and API usage
+
+Log example (traceId, domain, confidence, status)
+
+Integration notes with Memory Lifecycle and Cognitive Tuner
+
+Completion Checklist
+
+✅ task-queue.ts created and operational
+✅ reasoning-orchestrator.ts running and polling tasks
+✅ All three Bobs registered and producing output
+✅ Context Bridge broadcasting reasoning_update events
+✅ Endpoints return metrics and recent traces
+✅ Replit test suite passes multi-domain reasoning validation
+✅ replit.md updated with implementation summary

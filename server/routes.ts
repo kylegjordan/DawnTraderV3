@@ -7465,6 +7465,84 @@ Summary:`;
     }
   });
 
+  // ==================== Reasoning Orchestrator API (Phase 8.8.3) ====================
+  
+  // POST enqueue a new reasoning task
+  app.post('/api/reasoning/enqueue', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reasoningOrchestrator } = await import('./services/reasoning-orchestrator');
+      const userId = req.user!.id;
+      const { intentAction, userMessage, systemState, mode = 'paper' } = req.body;
+
+      if (!intentAction || !userMessage) {
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'Missing required fields: intentAction, userMessage' 
+        });
+      }
+
+      // Create reasoning plan
+      const plan = await reasoningOrchestrator.createPlan({
+        userId,
+        intentAction,
+        userMessage,
+        systemState,
+        mode
+      });
+
+      res.json({
+        ok: true,
+        traceId: plan.traceId,
+        steps: plan.steps.length,
+        domainContext: plan.domainContext,
+        status: plan.status
+      });
+    } catch (error: any) {
+      console.error('[API] Error enqueueing reasoning task:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET reasoning queue status and recent traces
+  app.get('/api/reasoning/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { taskQueue } = await import('./services/task-queue');
+
+      // Get queue metrics
+      const metrics = await taskQueue.getQueueStats();
+
+      // Get recent traces for this user
+      const recentTraces = await db
+        .select({
+          traceId: reasoningTrace.traceId,
+          intentAction: reasoningTrace.intentAction,
+          status: reasoningTrace.status,
+          domainContext: reasoningTrace.domainContext,
+          createdAt: reasoningTrace.createdAt
+        })
+        .from(reasoningTrace)
+        .where(eq(reasoningTrace.userId, userId))
+        .orderBy(sql`${reasoningTrace.createdAt} DESC`)
+        .limit(10);
+
+      res.json({
+        ok: true,
+        metrics: {
+          totalPending: metrics.pending || 0,
+          totalInProgress: metrics.in_progress || 0,
+          totalCompleted: metrics.completed || 0,
+          totalFailed: metrics.failed || 0,
+          ...metrics
+        },
+        recentTraces
+      });
+    } catch (error: any) {
+      console.error('[API] Error getting reasoning status:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // ==================== Reasoning Orchestrator Debug API (Phase 8.8.1) ====================
   
   // GET reasoning trace by ID for debugging
