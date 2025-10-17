@@ -103,6 +103,24 @@ class AwarenessCoreService {
       // 7. Detect anomalies
       const anomalyDetected = healthScore < 0.3 || cognitiveScore < 0.4;
       
+      // Phase 9.0: Get adaptive learning metrics
+      const { ExperienceMemoryService } = await import('./experience-memory');
+      const { AdaptiveObjectiveEngine } = await import('./adaptive-objective-engine');
+      const { contextBridge } = await import('./context-bridge');
+      
+      const experienceMemory = new ExperienceMemoryService(contextBridge);
+      const adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
+      
+      // Get recent experience insights
+      const recentExperiences = await experienceMemory.getRecentExperiences(5);
+      const experienceInsightCount = recentExperiences.length;
+      
+      // Get current alignment profile
+      const alignmentProfile = await adaptiveEngine.getCurrentProfile();
+      const alignmentScore = alignmentProfile 
+        ? Object.values(alignmentProfile.objectives || {}).reduce((sum: number, val: any) => sum + (parseFloat(val) || 0), 0) / Object.keys(alignmentProfile.objectives || {}).length
+        : 0.5;
+      
       // 8. Build awareness state
       const awarenessState: AwarenessState = {
         stateId,
@@ -121,6 +139,13 @@ class AwarenessCoreService {
           systemMetrics: {
             memory: systemMetrics.system?.memoryUsage?.percentUsed,
             cacheHitRate: systemMetrics.cache?.hitRate,
+          },
+          // Phase 9.0: Adaptive Learning Metrics
+          adaptiveLearning: {
+            experienceInsightCount,
+            alignmentScore,
+            alignmentStatus: alignmentProfile?.currentStatus || 'unknown',
+            lastAdjustment: alignmentProfile?.lastAdjustment,
           },
         },
       };
@@ -141,8 +166,7 @@ class AwarenessCoreService {
         metadata: awarenessState.metadata as any,
       });
       
-      // 10. Emit Context Bridge event
-      const { contextBridge } = await import('./context-bridge');
+      // 10. Emit Context Bridge event (note: contextBridge already imported above in Phase 9.0)
       await contextBridge.broadcast({
         type: 'state_update',
         userId: userId || null,
@@ -156,6 +180,10 @@ class AwarenessCoreService {
           missionFocus,
           confidenceScore,
           anomalyDetected,
+          // Phase 9.0: Include adaptive learning metrics
+          experienceInsightCount,
+          alignmentScore,
+          alignmentStatus: alignmentProfile?.currentStatus || 'unknown',
         },
       });
       
