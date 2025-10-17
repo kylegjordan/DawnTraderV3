@@ -55,6 +55,9 @@ export const cognitiveTestResultEnum = pgEnum("cognitive_test_result", ["PASS", 
 export const autonomyActionTypeEnum = pgEnum("autonomy_action_type", ["self_check", "self_reasoning", "exploration", "optimization"]);
 export const metaAnalysisResultEnum = pgEnum("meta_analysis_result", ["coherent", "inconsistent", "requires_correction"]);
 export const awarenessEmotionalStateEnum = pgEnum("awareness_emotional_state", ["stable", "focused", "alert", "fatigued", "overloaded", "recovering"]);
+export const alignmentStatusEnum = pgEnum("alignment_status", ["compliant", "at_risk", "violated"]);
+export const policyTypeEnum = pgEnum("policy_type", ["ethical", "functional", "operational", "risk"]);
+export const alignmentVerificationResultEnum = pgEnum("alignment_verification_result", ["approved", "flagged", "rejected"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -2245,6 +2248,79 @@ export const awarenessStateLog = pgTable("awareness_state_log", {
   userIdIdx: index("awareness_state_log_user_id_idx").on(table.userId),
 }));
 
+// Phase 9.0: Experience Memory - Learned Lessons and Insights
+export const experienceMemoryLog = pgTable("experience_memory_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  memoryId: varchar("memory_id", { length: 50 }).notNull().unique(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  contextDomain: varchar("context_domain", { length: 50 }).notNull(), // e.g., "trading", "system", "cognitive"
+  insight: text("insight").notNull(), // The learned lesson or pattern
+  confidence: doublePrecision("confidence").notNull(), // 0-1 confidence score
+  impact: varchar("impact", { length: 20 }).notNull(), // "high", "medium", "low"
+  recommendation: text("recommendation"), // Actionable recommendation
+  sourceEvents: jsonb("source_events"), // References to autonomy/awareness events
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  memoryIdIdx: index("experience_memory_log_memory_id_idx").on(table.memoryId),
+  timestampIdx: index("experience_memory_log_timestamp_idx").on(table.timestamp),
+  contextDomainIdx: index("experience_memory_log_context_domain_idx").on(table.contextDomain),
+  impactIdx: index("experience_memory_log_impact_idx").on(table.impact),
+}));
+
+// Phase 9.0: Alignment Policies - Ethical and Functional Boundaries
+export const alignmentPolicies = pgTable("alignment_policies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  policyId: varchar("policy_id", { length: 50 }).notNull().unique(),
+  policyType: policyTypeEnum("policy_type").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  constraints: jsonb("constraints").notNull(), // Policy rules and thresholds
+  isActive: boolean("is_active").default(true).notNull(),
+  priority: integer("priority").default(0).notNull(), // Higher = more important
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  policyIdIdx: index("alignment_policies_policy_id_idx").on(table.policyId),
+  policyTypeIdx: index("alignment_policies_policy_type_idx").on(table.policyType),
+  isActiveIdx: index("alignment_policies_is_active_idx").on(table.isActive),
+}));
+
+// Phase 9.0: Alignment Audit Log - Verification Results
+export const alignmentAuditLog = pgTable("alignment_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  auditId: varchar("audit_id", { length: 50 }).notNull().unique(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  verificationResult: alignmentVerificationResultEnum("verification_result").notNull(),
+  proposedChange: jsonb("proposed_change").notNull(), // The change being validated
+  violatedPolicies: text("violated_policies").array().default(sql`ARRAY[]::text[]`),
+  alignmentScore: doublePrecision("alignment_score"), // 0-1 score for how aligned the change is
+  recommendations: text("recommendations").array().default(sql`ARRAY[]::text[]`),
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  auditIdIdx: index("alignment_audit_log_audit_id_idx").on(table.auditId),
+  timestampIdx: index("alignment_audit_log_timestamp_idx").on(table.timestamp),
+  verificationResultIdx: index("alignment_audit_log_verification_result_idx").on(table.verificationResult),
+}));
+
+// Phase 9.0: Goal Alignment Profile - Current Objectives and Weights
+export const goalAlignmentProfile = pgTable("goal_alignment_profile", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  profileId: varchar("profile_id", { length: 50 }).notNull().unique(),
+  userId: varchar("user_id", { length: 50 }),
+  objectives: jsonb("objectives").notNull(), // e.g., {"performance": 0.7, "exploration": 0.3}
+  targetMetrics: jsonb("target_metrics").notNull(), // Target values for key metrics
+  currentStatus: alignmentStatusEnum("current_status").default("compliant").notNull(),
+  lastAdjustment: timestamp("last_adjustment", { withTimezone: true }),
+  adjustmentHistory: jsonb("adjustment_history"), // Record of weight changes
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  profileIdIdx: index("goal_alignment_profile_profile_id_idx").on(table.profileId),
+  userIdIdx: index("goal_alignment_profile_user_id_idx").on(table.userId),
+  currentStatusIdx: index("goal_alignment_profile_current_status_idx").on(table.currentStatus),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2262,6 +2338,10 @@ export const insertCognitiveTuningLogSchema = createInsertSchema(cognitiveTuning
 export const insertAutonomyAuditLogSchema = createInsertSchema(autonomyAuditLog).omit({ id: true, timestamp: true });
 export const insertMetaReasoningLogSchema = createInsertSchema(metaReasoningLog).omit({ id: true, timestamp: true, createdAt: true });
 export const insertAwarenessStateLogSchema = createInsertSchema(awarenessStateLog).omit({ id: true, timestamp: true });
+export const insertExperienceMemoryLogSchema = createInsertSchema(experienceMemoryLog).omit({ id: true, timestamp: true });
+export const insertAlignmentPolicySchema = createInsertSchema(alignmentPolicies).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAlignmentAuditLogSchema = createInsertSchema(alignmentAuditLog).omit({ id: true, timestamp: true });
+export const insertGoalAlignmentProfileSchema = createInsertSchema(goalAlignmentProfile).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2311,6 +2391,18 @@ export type MetaReasoningLog = typeof metaReasoningLog.$inferSelect;
 
 export type InsertAwarenessStateLog = z.infer<typeof insertAwarenessStateLogSchema>;
 export type AwarenessStateLog = typeof awarenessStateLog.$inferSelect;
+
+export type InsertExperienceMemoryLog = z.infer<typeof insertExperienceMemoryLogSchema>;
+export type ExperienceMemoryLog = typeof experienceMemoryLog.$inferSelect;
+
+export type InsertAlignmentPolicy = z.infer<typeof insertAlignmentPolicySchema>;
+export type AlignmentPolicy = typeof alignmentPolicies.$inferSelect;
+
+export type InsertAlignmentAuditLog = z.infer<typeof insertAlignmentAuditLogSchema>;
+export type AlignmentAuditLog = typeof alignmentAuditLog.$inferSelect;
+
+export type InsertGoalAlignmentProfile = z.infer<typeof insertGoalAlignmentProfileSchema>;
+export type GoalAlignmentProfile = typeof goalAlignmentProfile.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

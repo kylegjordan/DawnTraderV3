@@ -1,0 +1,168 @@
+⚙️ Phase 9.0 — Adaptive Learning & Goal Alignment Foundation Implementation Prompt
+Objective
+
+Implement the foundation of Adaptive Learning and Goal Alignment, enabling Walter to evolve intelligently based on experience and stay aligned with long-term objectives.
+This phase builds upon the 8.94 Awareness Layer and introduces mechanisms for continuous learning, experience synthesis, and goal consistency verification.
+
+Core Concept
+
+Walter will gain the capacity to:
+
+Learn from Experience: use historical awareness and autonomy logs to extract performance trends and behavioral insights.
+
+Adapt Behavior: update decision weights and reasoning priorities according to outcomes.
+
+Align Goals: ensure new behaviors remain within user-defined ethical, functional, and operational boundaries.
+
+Evaluate Performance Drift: detect when reasoning patterns deviate from intended objectives.
+
+Task 1 — Create the Experience Memory Service
+
+Goal: Persist learned lessons and detected behavioral trends.
+Steps:
+
+Create server/services/experience-memory.ts.
+
+Responsibilities:
+
+Periodically read from autonomy_audit_log and awareness_state_log.
+
+Extract lessons (e.g., correlations between low health and high latency).
+
+Aggregate these into a new experience_memory_log table with fields:
+
+timestamp, context_domain, insight, confidence, impact, recommendation.
+
+Provide a method synthesizeExperiences() that updates this log daily.
+
+Expose read access to other subsystems via the Context Bridge.
+
+Task 2 — Add the Adaptive Objective Engine
+
+Goal: Translate experiences into behavioral adjustments.
+Steps:
+
+Create server/services/adaptive-objective-engine.ts.
+
+Responsibilities:
+
+Read from experience_memory_log and generate adaptive parameters (e.g., tuning focus weights, optimizing decision latency).
+
+Maintain a goal_alignment_profile structure storing:
+
+Current objectives (e.g., reliability > exploration)
+
+Target metrics and thresholds
+
+Last adjustment timestamp
+
+Provide methods:
+
+evaluatePerformanceDrift() – compares current metrics to targets.
+
+updateAlignmentWeights() – adjusts tuning parameters accordingly.
+
+Persist updates in the database for audit transparency.
+
+Task 3 — Implement the Alignment Verifier
+
+Goal: Validate that adaptive changes remain safe and goal-aligned.
+Steps:
+
+Create server/services/alignment-verifier.ts.
+
+Responsibilities:
+
+Inspect recent modifications proposed by Adaptive Objective Engine.
+
+Cross-check against ethical / functional policies (stored in alignment_policies table).
+
+Reject or flag any change that violates constraints.
+
+Log results in alignment_audit_log.
+
+Expose an endpoint /api/alignment/verify for admin validation.
+
+Task 4 — Update the Autonomy Controller and Awareness Core Integration
+
+Goal: Connect adaptive and verification systems into the existing cognitive loop.
+Steps:
+
+In autonomy-controller.ts, add hooks after each self-check cycle:
+
+Call ExperienceMemory.synthesizeExperiences()
+
+Call AdaptiveObjectiveEngine.evaluatePerformanceDrift()
+
+Call AlignmentVerifier.validateChanges()
+
+In awareness-core.ts, append adaptive metrics to the awareness state model.
+
+Confirm all new services register during startup and broadcast events like:
+
+experience_synthesis_complete
+
+alignment_validation_passed
+
+alignment_violation_detected
+
+Task 5 — Add the Goal Alignment Panel to the System Monitoring UI
+
+Goal: Visualize adaptive learning, goal status, and alignment metrics.
+Steps:
+
+Open client/src/components/system/enhanced-system-monitoring.tsx.
+
+Add a new tab: 🎯 Alignment.
+
+Display:
+
+Current Objectives and Weights (e.g., Performance 0.7, Exploration 0.3)
+
+Alignment Status (Compliant / At Risk / Violated)
+
+Recent Lessons from Experience Memory (Top 3 entries)
+
+Last Adjustment Timestamp and Confidence Levels.
+
+Auto-refresh on alignment_validation_passed and alignment_violation_detected events.
+
+Task 6 — Validation & Testing
+
+Goal: Ensure Adaptive Learning and Goal Alignment operate safely.
+Steps:
+
+Simulate a drift scenario (e.g., health score drops below 0.5 with increased latency).
+
+Verify the Adaptive Objective Engine adjusts weights and updates alignment profile.
+
+Verify the Alignment Verifier logs a review of the change.
+
+Trigger a manual alignment check via POST /api/alignment/verify.
+
+Confirm logs show end-to-end flow:
+[AdaptiveObjectiveEngine] Performance drift detected → Alignment validated ✅.
+
+Task 7 — Documentation Update
+
+Goal: Record Phase 9.0 architecture and adaptive learning flow.
+Steps:
+
+Update replit.md with a new section: “Phase 9.0 – Adaptive Learning & Goal Alignment”.
+Include:
+
+System diagram (Awareness → Experience Memory → Adaptive Objective Engine → Alignment Verifier).
+
+New tables and service descriptions.
+
+Example alignment log entry and adaptive cycle summary.
+
+Add a future-work note preparing for Phase 9.2 (Strategic Planner and Continuous Learning Model).
+
+Expected Outcome
+
+✅ Experience Memory Service aggregates insights and patterns.
+✅ Adaptive Objective Engine adjusts decision weights automatically.
+✅ Alignment Verifier ensures changes respect boundaries.
+✅ Goal Alignment Panel provides real-time transparency.
+✅ System is self-correcting and self-aligning without manual intervention.
