@@ -90,7 +90,7 @@ export class AdaptiveObjectiveEngine {
   /**
    * Evaluate performance drift against target metrics
    */
-  async evaluatePerformanceDrift(): Promise<PerformanceDriftAnalysis> {
+  async evaluatePerformanceDrift(mode?: 'live' | 'paper'): Promise<PerformanceDriftAnalysis> {
     console.log("[AdaptiveEngine] 📊 Evaluating performance drift...");
     
     try {
@@ -184,7 +184,8 @@ export class AdaptiveObjectiveEngine {
    */
   async updateAlignmentWeights(
     driftAnalysis: PerformanceDriftAnalysis,
-    confidence: number = 0.7
+    confidence: number = 0.7,
+    mode?: 'live' | 'paper'
   ): Promise<AlignmentWeightUpdate> {
     console.log("[AdaptiveEngine] ⚙️  Updating alignment weights...");
     
@@ -244,7 +245,7 @@ export class AdaptiveObjectiveEngine {
       await this.contextBridge.broadcast({
         type: "state_update",
         userId: null, // System-level event
-        mode: undefined,
+        mode: mode, // Include mode if provided (user-initiated) or undefined (autonomous)
         payload: {
           eventType: "alignment_weights_updated",
           previousWeights,

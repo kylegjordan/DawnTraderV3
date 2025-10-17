@@ -27,6 +27,7 @@ export class AlignmentVerifier {
     actionParams: Record<string, any>;
     policyType: string;
     requestedBy: string;
+    mode?: 'live' | 'paper';
   }): Promise<{
     approved: boolean;
     alignmentScore: number;
@@ -34,7 +35,7 @@ export class AlignmentVerifier {
     constraints: string[];
     warnings: string[];
   }> {
-    const { actionType, actionParams, policyType, requestedBy } = params;
+    const { actionType, actionParams, policyType, requestedBy, mode } = params;
     const auditId = `audit-${nanoid()}`;
 
     console.log(`[AlignmentVerifier] 🔍 Verifying action: ${actionType} (type: ${policyType})`);
@@ -121,7 +122,7 @@ export class AlignmentVerifier {
       await this.contextBridge.broadcast({
         type: "state_update",
         userId: null, // System-level event
-        mode: undefined,
+        mode: mode, // Include mode if provided (user-initiated) or undefined (autonomous)
         payload: {
           eventType: "alignment_verification_complete",
           auditId,

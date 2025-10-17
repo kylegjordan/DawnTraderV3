@@ -26,7 +26,7 @@ export class ExperienceMemoryService {
    * Synthesize experiences from autonomy and awareness logs
    * Extracts patterns and lessons learned from recent system behavior
    */
-  async synthesizeExperiences(): Promise<ExperienceSynthesisResult> {
+  async synthesizeExperiences(mode?: 'live' | 'paper'): Promise<ExperienceSynthesisResult> {
     console.log("[ExperienceMemory] 🧠 Starting experience synthesis...");
     
     try {
@@ -128,7 +128,7 @@ export class ExperienceMemoryService {
       await this.contextBridge.broadcast({
         type: "state_update",
         userId: null, // System-level event
-        mode: undefined,
+        mode: mode, // Include mode if provided (user-initiated) or undefined (autonomous)
         payload: {
           eventType: "experience_synthesis_complete",
           synthesizedCount,

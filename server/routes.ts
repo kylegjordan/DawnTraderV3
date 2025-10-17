@@ -9483,6 +9483,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   // Verify action alignment
   app.post('/api/alignment/verify', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { AlignmentVerifier } = await import('./services/alignment-verifier');
       const { contextBridge } = await import('./services/context-bridge');
       
@@ -9498,7 +9499,8 @@ Important: Extract the exact field names and numeric values from the user's requ
         actionType,
         actionParams: actionParams || {},
         policyType,
-        requestedBy: requestedBy || req.user?.username || 'unknown'
+        requestedBy: requestedBy || req.user?.username || 'unknown',
+        mode
       });
       
       res.json({ ok: true, verification: result });
@@ -9529,12 +9531,13 @@ Important: Extract the exact field names and numeric values from the user's requ
   // Trigger experience synthesis
   app.post('/api/alignment/synthesize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { ExperienceMemoryService } = await import('./services/experience-memory');
       const { contextBridge } = await import('./services/context-bridge');
       
       const experienceMemory = new ExperienceMemoryService(contextBridge);
       
-      const result = await experienceMemory.synthesizeExperiences();
+      const result = await experienceMemory.synthesizeExperiences(mode);
       
       res.json({ ok: true, synthesis: result });
     } catch (error: any) {
@@ -9564,12 +9567,13 @@ Important: Extract the exact field names and numeric values from the user's requ
   // Evaluate performance drift
   app.post('/api/alignment/evaluate-drift', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
       const { contextBridge } = await import('./services/context-bridge');
       
       const adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
       
-      const drift = await adaptiveEngine.evaluatePerformanceDrift();
+      const drift = await adaptiveEngine.evaluatePerformanceDrift(mode);
       
       res.json({ ok: true, drift });
     } catch (error: any) {
