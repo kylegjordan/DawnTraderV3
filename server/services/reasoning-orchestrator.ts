@@ -30,13 +30,114 @@ export interface ReasoningRequest {
   mode?: 'live' | 'paper';
 }
 
+type DomainHandler = (task: any) => Promise<any>;
+
 class ReasoningOrchestrator {
   private workerId: string;
   private workerInterval: NodeJS.Timeout | null = null;
   private isWorkerRunning = false;
+  private domainHandlers: Map<string, DomainHandler> = new Map(); // Phase 8.8.3: Domain registration
 
   constructor() {
     this.workerId = `worker_${nanoid(8)}`;
+    this.registerDefaultDomains(); // Phase 8.8.3: Auto-register Bob domains
+  }
+
+  /**
+   * Phase 8.8.3: Register domain-specific handlers
+   */
+  registerDomain(domain: string, handler: DomainHandler): void {
+    this.domainHandlers.set(domain.toLowerCase(), handler);
+    console.log(`[ReasoningOrchestrator] Domain registered: ${domain}`);
+  }
+
+  /**
+   * Phase 8.8.3: Register default Bob domains
+   */
+  private async registerDefaultDomains(): Promise<void> {
+    // DevOpsBob: System health, deployment, CI/CD
+    this.registerDomain('devops', async (task) => {
+      const { devopsBob } = await import('./bobs/devops-bob');
+      return await devopsBob.analyzeTask(task);
+    });
+
+    // FullStackBob: Code generation, error repair, schema analysis
+    this.registerDomain('fullstack', async (task) => {
+      const { fullstackBob } = await import('./bobs/fullstack-bob');
+      return await fullstackBob.analyzeTask(task);
+    });
+
+    // UXBob: UI layout, user flows, interface feedback
+    this.registerDomain('ux', async (task) => {
+      const { uxBob } = await import('./bobs/ux-bob');
+      return await uxBob.analyzeTask(task);
+    });
+
+    console.log('[ReasoningOrchestrator] Default domains registered (DevOps, FullStack, UX)');
+  }
+
+  /**
+   * Phase 8.8.3: Aggregate findings from multiple domain tasks
+   */
+  async aggregateFindings(traceId: string, domainResults: Array<{domain: string, result: any}>): Promise<any> {
+    const aggregated = {
+      traceId,
+      timestamp: new Date().toISOString(),
+      domains: domainResults.map(dr => dr.domain),
+      findings: domainResults,
+      summary: '',
+      confidence: 0,
+      provenance: {
+        sources: domainResults.map(dr => ({
+          domain: dr.domain,
+          confidence: dr.result?.confidence || 0.5,
+        })),
+      },
+    };
+
+    // Calculate aggregate confidence (weighted average)
+    const totalConfidence = domainResults.reduce((sum, dr) => 
+      sum + (dr.result?.confidence || 0.5), 0
+    );
+    aggregated.confidence = domainResults.length > 0 
+      ? totalConfidence / domainResults.length 
+      : 0;
+
+    // Generate summary
+    const summaries = domainResults
+      .map(dr => `${dr.domain}: ${dr.result?.summary || 'No summary'}`)
+      .join('; ');
+    aggregated.summary = `Multi-domain analysis (${domainResults.length} domains): ${summaries}`;
+
+    console.log(`[ReasoningOrchestrator] Aggregated ${domainResults.length} domain results (confidence: ${aggregated.confidence.toFixed(2)})`);
+
+    return aggregated;
+  }
+
+  /**
+   * Phase 8.8.3: Process task through registered domain handler
+   */
+  async processTask(task: any): Promise<any> {
+    const domain = this.extractDomainFromTaskType(task.taskType);
+    const handler = this.domainHandlers.get(domain.toLowerCase());
+
+    if (handler) {
+      console.log(`[ReasoningOrchestrator] Processing task ${task.id} via ${domain} handler`);
+      return await handler(task);
+    } else {
+      console.log(`[ReasoningOrchestrator] No handler for domain ${domain}, using default execution`);
+      return await this.executeTask(task);
+    }
+  }
+
+  /**
+   * Extract domain from task type (e.g., 'query_bob_devops' -> 'devops')
+   */
+  private extractDomainFromTaskType(taskType: string): string {
+    if (taskType.includes('devops')) return 'devops';
+    if (taskType.includes('fullstack')) return 'fullstack';
+    if (taskType.includes('ux')) return 'ux';
+    return 'general';
   }
 
   /**

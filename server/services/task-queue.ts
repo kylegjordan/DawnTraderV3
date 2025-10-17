@@ -183,7 +183,7 @@ class TaskQueueService {
         .set({
           status: "pending", // Reset to pending for retry
           retryCount: retryCount + 1,
-          error,
+          errorMessage: error,
           lockedAt: null,
           lockedBy: null,
         })
@@ -200,7 +200,7 @@ class TaskQueueService {
       await db.update(reasoningQueue)
         .set({
           status: "failed",
-          error: `Max retries (${maxRetries}) exceeded: ${error}`,
+          errorMessage: `Max retries (${maxRetries}) exceeded: ${error}`,
           completedAt: new Date(),
         })
         .where(eq(reasoningQueue.id, id));
@@ -236,7 +236,11 @@ class TaskQueueService {
   private async broadcastQueueEvent(event: any): Promise<void> {
     try {
       const { contextBridge } = await import('./context-bridge');
-      await contextBridge.broadcast('queue_event', event);
+      await contextBridge.broadcast({
+        eventType: 'queue_event',
+        payload: event,
+        userId: event.userId || undefined,
+      });
     } catch (error) {
       // Context Bridge may not be available, fail silently
       console.log("[TaskQueue] Context Bridge not available for broadcast");
