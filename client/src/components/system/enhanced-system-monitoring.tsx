@@ -22,7 +22,8 @@ import {
   TrendingUp,
   Check,
   Monitor,
-  Brain
+  Brain,
+  Target
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -371,7 +372,7 @@ export default function EnhancedSystemMonitoring() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-8" data-testid="tabs-system-monitoring">
+        <TabsList className="grid w-full grid-cols-9" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -395,6 +396,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="alignment" data-testid="tab-alignment">
             <CheckCircle2 className="w-4 h-4 mr-2" />
             Alignment
+          </TabsTrigger>
+          <TabsTrigger value="strategy" data-testid="tab-strategy">
+            <Target className="w-4 h-4 mr-2" />
+            Strategy
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -834,6 +839,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 8: Goal Alignment - Adaptive Learning & Policy Alignment */}
         <TabsContent value="alignment" className="space-y-4">
           <AlignmentTab />
+        </TabsContent>
+
+        {/* Tab 7: Strategy & Learning */}
+        <TabsContent value="strategy" className="space-y-4">
+          <StrategyTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -1323,6 +1333,228 @@ function AlignmentTab() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function StrategyTab() {
+  const { toast } = useToast();
+  
+  // Fetch strategic plans
+  const { data: plansData, isLoading: plansLoading, refetch: refetchPlans } = useQuery({
+    queryKey: ['/api/strategic/plans'],
+    refetchInterval: 30000,
+  });
+  
+  // Fetch learning profile
+  const { data: learningData, isLoading: learningLoading, refetch: refetchLearning } = useQuery({
+    queryKey: ['/api/learning/profile'],
+    refetchInterval: 30000,
+  });
+  
+  // Fetch compliance status
+  const { data: complianceData, isLoading: complianceLoading } = useQuery({
+    queryKey: ['/api/strategic/compliance'],
+    refetchInterval: 60000,
+  });
+  
+  const plans = (plansData as any)?.plans || [];
+  const learningProfile = (learningData as any)?.profile;
+  const compliance = (complianceData as any)?.status;
+  
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      active: 'bg-green-500',
+      draft: 'bg-gray-500',
+      paused: 'bg-yellow-500',
+      completed: 'bg-blue-500',
+    };
+    return colors[status] || 'bg-gray-500';
+  };
+  
+  const getPhaseColor = (phase: string) => {
+    const colors: Record<string, string> = {
+      observation: 'bg-blue-500',
+      adjustment: 'bg-yellow-500',
+      evaluation: 'bg-green-500',
+    };
+    return colors[phase] || 'bg-gray-500';
+  };
+  
+  return (
+    <div className="space-y-4">
+      {/* Strategic Plans Overview */}
+      <Card data-testid="card-strategic-plans">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="w-5 h-5" />
+            Strategic Plans
+          </CardTitle>
+          <CardDescription>Long-range planning and execution tracking</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {plansLoading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : plans.length > 0 ? (
+            <div className="space-y-3">
+              {plans.map((plan: any, idx: number) => (
+                <div 
+                  key={plan.planId} 
+                  className="p-3 rounded-lg bg-muted/50 space-y-2"
+                  data-testid={`plan-${idx}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium">{plan.title}</div>
+                    <Badge variant="outline" className="gap-1">
+                      <div className={`w-2 h-2 rounded-full ${getStatusColor(plan.status)}`}></div>
+                      {plan.status}
+                    </Badge>
+                  </div>
+                  {plan.description && (
+                    <div className="text-sm text-muted-foreground">{plan.description}</div>
+                  )}
+                  {plan.currentProgress && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span>Progress</span>
+                        <span className="font-medium">
+                          {(plan.currentProgress as any)?.completionPercent || 0}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-1.5">
+                        <div 
+                          className="bg-primary h-1.5 rounded-full transition-all"
+                          style={{ width: `${(plan.currentProgress as any)?.completionPercent || 0}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                  {plan.alignmentScore !== null && (
+                    <div className="text-xs">
+                      Alignment Score: <span className="font-medium">{plan.alignmentScore?.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No strategic plans available</p>
+              <p className="text-sm mt-1">Plans will appear here once created</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Learning Profile */}
+      <Card data-testid="card-learning-profile">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="w-5 h-5" />
+            Continuous Learning Profile
+          </CardTitle>
+          <CardDescription>Adaptive learning and weight optimization</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {learningLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : learningProfile ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div data-testid="metric-learning-phase">
+                  <div className="text-sm text-muted-foreground">Current Phase</div>
+                  <Badge className="mt-1 gap-1">
+                    <div className={`w-2 h-2 rounded-full ${getPhaseColor(learningProfile.currentPhase)}`}></div>
+                    {learningProfile.currentPhase}
+                  </Badge>
+                </div>
+                <div data-testid="metric-learning-confidence">
+                  <div className="text-sm text-muted-foreground">Confidence Score</div>
+                  <div className="text-2xl font-bold mt-1">
+                    {(learningProfile.confidenceScore * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div data-testid="metric-learning-iterations">
+                  <div className="text-sm text-muted-foreground">Iterations</div>
+                  <div className="text-2xl font-bold mt-1">
+                    {learningProfile.iterationCount || 0}
+                  </div>
+                </div>
+              </div>
+              
+              {learningProfile.cognitiveWeights && (
+                <div>
+                  <div className="text-sm font-medium mb-2">Cognitive Weights:</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(learningProfile.cognitiveWeights as Record<string, any>).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between text-sm p-2 rounded bg-muted/30">
+                        <span className="text-muted-foreground capitalize">{key}:</span>
+                        <span className="font-medium">{typeof value === 'number' ? value.toFixed(2) : value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No learning profile available</p>
+              <p className="text-sm mt-1">Profile will be created automatically</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Policy Compliance */}
+      <Card data-testid="card-policy-compliance">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5" />
+            Policy Compliance Status
+          </CardTitle>
+          <CardDescription>Strategic policy enforcement and guardrails</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {complianceLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : compliance ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Overall Compliance</span>
+                <Badge variant={compliance.compliant ? 'default' : 'destructive'}>
+                  {compliance.compliant ? 'Compliant' : 'Non-Compliant'}
+                </Badge>
+              </div>
+              {compliance.activePolicies && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Active Policies: {compliance.activePolicies.length}
+                  </div>
+                  <div className="space-y-1">
+                    {compliance.activePolicies.slice(0, 5).map((policy: any, idx: number) => (
+                      <div 
+                        key={idx} 
+                        className="flex items-center gap-2 text-sm p-2 rounded bg-muted/30"
+                        data-testid={`policy-${idx}`}
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <span>{policy.policyType || 'Unknown Policy'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <CheckCircle2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No compliance data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

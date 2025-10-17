@@ -121,6 +121,25 @@ class AwarenessCoreService {
         ? Object.values(alignmentProfile.objectives || {}).reduce((sum: number, val: any) => sum + (parseFloat(val) || 0), 0) / Object.keys(alignmentProfile.objectives || {}).length
         : 0.5;
       
+      // Phase 9.2: Get strategic planning and continuous learning metrics
+      const { strategicPlannerService } = await import('./strategic-planner');
+      const { continuousLearningEngine } = await import('./continuous-learning');
+      
+      // Get active strategic plans
+      const activePlans = userId ? await strategicPlannerService.getActivePlans(userId) : [];
+      const activePlanCount = activePlans.length;
+      const avgPlanProgress = activePlans.length > 0 
+        ? activePlans.reduce((sum, plan) => {
+            const progress = plan.currentProgress as any;
+            return sum + (progress?.completionPercent || 0);
+          }, 0) / activePlans.length
+        : 0;
+      
+      // Get learning profile status
+      const learningProfile = userId ? await continuousLearningEngine.getProfileByUser(userId) : null;
+      const learningPhase = learningProfile?.currentPhase || 'observation';
+      const learningConfidence = learningProfile?.confidenceScore || 0;
+      
       // 8. Build awareness state
       const awarenessState: AwarenessState = {
         stateId,
@@ -146,6 +165,13 @@ class AwarenessCoreService {
             alignmentScore,
             alignmentStatus: alignmentProfile?.currentStatus || 'unknown',
             lastAdjustment: alignmentProfile?.lastAdjustment,
+          },
+          // Phase 9.2: Strategic Planning & Continuous Learning Metrics
+          strategicPlanning: {
+            activePlanCount,
+            avgPlanProgress,
+            learningPhase,
+            learningConfidence,
           },
         },
       };
@@ -184,6 +210,11 @@ class AwarenessCoreService {
           experienceInsightCount,
           alignmentScore,
           alignmentStatus: alignmentProfile?.currentStatus || 'unknown',
+          // Phase 9.2: Include strategic planning metrics
+          activePlanCount,
+          avgPlanProgress,
+          learningPhase,
+          learningConfidence,
         },
       });
       

@@ -8,6 +8,8 @@ import { systemHealthMonitor } from './system-health-monitor';
 import { ExperienceMemoryService } from './experience-memory';
 import { AdaptiveObjectiveEngine } from './adaptive-objective-engine';
 import { AlignmentVerifier } from './alignment-verifier';
+import { strategicPlannerService } from './strategic-planner';
+import { continuousLearningEngine } from './continuous-learning';
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -173,6 +175,35 @@ class AutonomyControllerService {
       this.adaptiveEngine.evaluatePerformanceDrift().catch((err: any) => 
         console.error('[AutonomyController] Drift evaluation failed:', err)
       );
+
+      // Phase 9.2: Strategic Planning & Continuous Learning Hooks
+      // 1. Check for active strategic plans and generate recommendations if needed (async, don't block)
+      strategicPlannerService.getActivePlans(userId).then(async (plans) => {
+        if (plans.length === 0) {
+          console.log('[AutonomyController] 📋 No active strategic plans, generating recommendations');
+          await strategicPlannerService.generateRecommendations(userId, 'paper').catch((err: any) =>
+            console.error('[AutonomyController] Strategic recommendations failed:', err)
+          );
+        }
+      }).catch((err: any) => console.error('[AutonomyController] Strategic plan check failed:', err));
+
+      // 2. Evaluate learning profile performance and apply recommendations (async, don't block)
+      continuousLearningEngine.getProfileByUser(userId).then(async (profile) => {
+        if (profile) {
+          const evaluation = await continuousLearningEngine.evaluatePerformance(
+            profile.profileId,
+            userId,
+            'paper'
+          ).catch((err: any) => {
+            console.error('[AutonomyController] Learning evaluation failed:', err);
+            return null;
+          });
+          
+          if (evaluation && evaluation.recommendations.length > 0) {
+            console.log(`[AutonomyController] 🎓 Learning recommendations: ${evaluation.recommendations.join('; ')}`);
+          }
+        }
+      }).catch((err: any) => console.error('[AutonomyController] Learning profile check failed:', err));
 
       return {
         runId,
