@@ -143,6 +143,10 @@ class IntentExecutionService {
           result = await this.executeGuardrailsUpdate(userId, intent);
           break;
           
+        case 'execute_trade':
+          result = await this.executeTradeIntent(userId, intent, traceId);
+          break;
+          
         default:
           throw new Error(`Unknown intent action: ${intent.action}`);
       }
@@ -413,6 +417,99 @@ class IntentExecutionService {
       message: `Guardrails updated successfully in ${mode} mode`,
       data: { guardrails: guardrailsData, mode }
     };
+  }
+
+  private async executeTradeIntent(userId: string, intent: IntentPayload, traceId: string): Promise<any> {
+    const { storage } = await import('../storage');
+    const mode = (intent.mode || 'paper') as 'live' | 'paper';
+    const signal = intent.signal;
+    
+    if (!signal || !signal.symbol || !signal.strategy) {
+      throw new Error('Valid trade signal is required (symbol, strategy, prices)');
+    }
+
+    console.log(`[IntentExecutor] Validating trade intent for ${signal.symbol} in ${mode} mode`);
+
+    const { preExecutionValidator } = await import('./pre-execution-validator');
+    
+    const validationResult = await preExecutionValidator.validateTrade({
+      userId,
+      signal,
+      mode,
+      traceId
+    });
+
+    if (!validationResult.canExecute) {
+      console.log(`[IntentExecutor] Trade validation failed: ${validationResult.blockReason}`);
+      throw new Error(`Trade validation failed: ${validationResult.blockReason}`);
+    }
+
+    console.log(`[IntentExecutor] Trade validation passed (goal alignment: ${validationResult.goalAlignmentScore}%)`);
+
+    const user = await storage.getUser(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (mode === 'live') {
+      const tradingEngines = (global as any).tradingEngines;
+      let engine = tradingEngines?.get(userId);
+      
+      if (!engine) {
+        const apiKey = process.env.KRAKEN_API_KEY;
+        const apiSecret = process.env.KRAKEN_API_SECRET;
+        
+        if (!apiKey || !apiSecret) {
+          throw new Error('Kraken API credentials not configured');
+        }
+        
+        const { TradingEngine } = await import('./trading-engine');
+        engine = new TradingEngine(userId, apiKey, apiSecret);
+        tradingEngines?.set(userId, engine);
+      }
+      
+      const trade = await engine.processSignal(signal, mode);
+      
+      if (!trade) {
+        throw new Error('Trade execution failed - signal rejected by trading engine');
+      }
+      
+      return {
+        message: `Trade executed successfully: ${signal.symbol} ${signal.strategy}`,
+        data: { 
+          trade,
+          validation: {
+            goalAlignmentScore: validationResult.goalAlignmentScore,
+            slippageEstimate: validationResult.slippageEstimate,
+            fees: validationResult.fees
+          }
+        }
+      };
+    } else {
+      const globalPaperManager = (global as any).globalPaperPortfolioManager;
+      
+      if (!globalPaperManager) {
+        throw new Error('Paper trading simulation not running - start paper trading first');
+      }
+      
+      const trade = await globalPaperManager.processSignal(signal);
+      
+      if (!trade) {
+        throw new Error('Paper trade execution failed - signal rejected');
+      }
+      
+      return {
+        message: `Paper trade executed successfully: ${signal.symbol} ${signal.strategy}`,
+        data: { 
+          trade,
+          validation: {
+            goalAlignmentScore: validationResult.goalAlignmentScore,
+            slippageEstimate: validationResult.slippageEstimate,
+            fees: validationResult.fees
+          }
+        }
+      };
+    }
   }
 
   // ==================== Audit Logging ====================

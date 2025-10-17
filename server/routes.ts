@@ -883,6 +883,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Phase 8.7.3: Pre-Execution Validator - Validate trade intent before execution
+  app.post('/api/trading/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { signal, mode, traceId } = req.body;
+
+      if (!signal || !signal.symbol || !signal.strategy) {
+        return res.status(400).json({ error: 'Invalid trade signal: missing symbol or strategy' });
+      }
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ error: 'Invalid mode: must be "live" or "paper"' });
+      }
+
+      const { preExecutionValidator } = await import('./services/pre-execution-validator');
+      
+      const validationResult = await preExecutionValidator.validateTrade({
+        userId,
+        signal,
+        mode,
+        traceId
+      });
+
+      res.json(validationResult);
+    } catch (error: any) {
+      console.error('Error validating trade:', error);
+      res.status(500).json({ 
+        error: 'Trade validation failed',
+        message: error.message 
+      });
+    }
+  });
+
   // Phase 8.5 Addendum K.4: Returns DUAL-MODE data (both live and paper) regardless of engine status
   app.get('/api/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

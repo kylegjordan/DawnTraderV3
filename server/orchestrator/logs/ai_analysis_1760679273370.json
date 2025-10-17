@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-17T05:34:33.370Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential performance bottlenecks."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting a possible malfunction or misconfiguration."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero active trades and a win rate of 0%, which could indicate issues with strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI module configuration and logs to ensure it is functioning correctly and generating trading opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate and adjust active trading strategies to improve trade activation and performance metrics."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Immediately investigate the high CPU load to identify and resolve the underlying cause.",
+      "rationale": "Sustained high CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough review of the AI module to diagnose and fix issues preventing learning and opportunity generation.",
+      "rationale": "The AI module is crucial for identifying trading opportunities, and its malfunction can severely impact trading effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze current trading strategies and market conditions to make necessary adjustments for better trade execution.",
+      "rationale": "Improving strategy effectiveness can enhance trading outcomes and profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}
