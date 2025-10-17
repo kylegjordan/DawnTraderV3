@@ -1,0 +1,103 @@
+🧩 Phase 8.7.2 — Intent Execution Framework
+Purpose
+
+Give Walter the ability to safely execute validated actions (start/stop trading, enable strategies, update goals, etc.) through structured, logged “intents.”
+This builds on the State Awareness Layer by using its verified data for pre- and post-checks before performing any action.
+
+Tasks
+Task 1 — Create the Intent Execution Service
+
+File: server/services/intent-executor.ts
+
+Responsibilities:
+
+Accept structured intent objects such as
+{ "action": "start_trading", "mode": "paper" }.
+
+Validate user role and current system state via /api/state/summary.
+
+Route validated intents to the appropriate internal API:
+
+/api/trading/start / /api/trading/stop
+
+/api/strategies/update
+
+/api/goals/update, etc.
+
+Return a standardized response:
+
+{
+  "success": true,
+  "message": "Paper trading started",
+  "traceId": "trace_ABC123"
+}
+
+
+Log every intent to intent_audit_log with userId, timestamp, intent payload, and traceId.
+
+Task 2 — Expose API Endpoints
+
+POST /api/intent/execute → executes validated intent.
+
+GET /api/intent/audit → returns recent intent history (filter by userId or traceId).
+Both endpoints must return JSON with traceId and execution_time (ms).
+
+Task 3 — Integrate with Walter Response Flow
+
+File: server/services/walter-response.ts
+
+After parsing Walter’s output, detect an intent object.
+
+If present, route it to /api/intent/execute.
+
+After execution, call /api/state/summary again to confirm state change.
+
+Append execution results and traceId to Walter’s reply context.
+
+If execution fails, return a clear message:
+“Action failed (validation error or permission denied).”
+
+Task 4 — Role-Based Access Control (RBAC)
+
+Define roles: owner, editor, viewer.
+
+Only owners/editors may trigger mutating intents.
+
+Return HTTP 403 with message “Permission denied for this intent” when blocked.
+
+Task 5 — Provenance and Audit Logging
+
+Every execution writes a row to intent_audit_log:
+traceId, userId, intent, preStateHash, postStateHash, result.
+Provide a debug endpoint or query to review intent traces.
+
+Task 6 — Testing & Validation
+Test #	Action	Expected Result
+1	POST /api/intent/execute with start_trading	Returns success:true, traceId, state changes to “active”
+2	Send stop_trading intent	Trading status = “stopped”
+3	Enable strategy	Strategy count +1 in /state/summary
+4	Viewer role tries to execute	Returns HTTP 403
+5	Call /api/intent/audit	Shows latest intent logs with traceIds and state hashes
+Deliverables
+
+intent-executor.ts service
+
+/api/intent/execute and /api/intent/audit routes
+
+Updated walter-response.ts with intent routing logic
+
+intent_audit_log table and provenance entries
+
+Documentation in replit.md with examples and test outputs
+
+Acceptance Criteria
+
+✅ Intent actions validated and executed securely
+✅ Traceable audit records for each intent
+✅ RBAC enforcement confirmed
+✅ State change visible via /state/summary within 2 seconds
+✅ Walter responds with action confirmation and traceId
+
+Next Phase (after approval)
+
+Proceed to 8.7.3 — Context Bridge Unification, connecting the Widget and Panel Walters to this shared execution and state layer so both instances operate on a single brain and intent pipeline.

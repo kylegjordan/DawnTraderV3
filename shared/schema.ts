@@ -2052,6 +2052,29 @@ export const bobTraceLog = pgTable("bob_trace_log", {
   timestampIdx: index("bob_trace_log_timestamp_idx").on(table.timestamp),
 }));
 
+// Phase 8.7.2: Intent Execution Framework - Audit Log
+export const intentAuditLog = pgTable("intent_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traceId: varchar("trace_id", { length: 50 }).notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  userRole: userRoleEnum("user_role").notNull(),
+  intentAction: varchar("intent_action", { length: 100 }).notNull(),
+  intentPayload: jsonb("intent_payload").notNull(),
+  preStateHash: varchar("pre_state_hash", { length: 64 }),
+  postStateHash: varchar("post_state_hash", { length: 64 }),
+  success: boolean("success").notNull(),
+  result: jsonb("result"),
+  executionTimeMs: integer("execution_time_ms"),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  traceIdIdx: index("intent_audit_log_trace_id_idx").on(table.traceId),
+  userIdIdx: index("intent_audit_log_user_id_idx").on(table.userId),
+  timestampIdx: index("intent_audit_log_timestamp_idx").on(table.timestamp),
+  intentActionIdx: index("intent_audit_log_intent_action_idx").on(table.intentAction),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2060,6 +2083,7 @@ export const insertExpertComplianceReportSchema = createInsertSchema(expertCompl
 export const insertExpertResponseLogSchema = createInsertSchema(expertResponseLogs);
 export const insertDataLineageSchema = createInsertSchema(dataLineage);
 export const insertBobTraceLogSchema = createInsertSchema(bobTraceLog);
+export const insertIntentAuditLogSchema = createInsertSchema(intentAuditLog);
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2082,6 +2106,9 @@ export type DataLineage = typeof dataLineage.$inferSelect;
 
 export type InsertBobTraceLog = z.infer<typeof insertBobTraceLogSchema>;
 export type BobTraceLog = typeof bobTraceLog.$inferSelect;
+
+export type InsertIntentAuditLog = z.infer<typeof insertIntentAuditLogSchema>;
+export type IntentAuditLog = typeof intentAuditLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
