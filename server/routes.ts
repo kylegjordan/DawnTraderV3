@@ -9975,6 +9975,71 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 9.4: Reflective Intelligence API Endpoints
+  app.post('/api/reflection/reflect', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
+      
+      const reflection = await reflectiveIntelligence.reflect(
+        req.user!.id,
+        req.body,
+        mode
+      );
+      
+      res.json({ ok: true, reflection });
+    } catch (error: any) {
+      console.error('[Reflection] Reflect failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/reflection/audit', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
+      
+      const audit = await reflectiveIntelligence.auditDecision(
+        req.user!.id,
+        req.body,
+        mode
+      );
+      
+      res.json({ ok: true, audit });
+    } catch (error: any) {
+      console.error('[Reflection] Audit failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/reflection/list', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const reflections = await reflectiveIntelligence.getReflections(req.user!.id, limit);
+      
+      res.json({ ok: true, reflections });
+    } catch (error: any) {
+      console.error('[Reflection] Get reflections failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/reflection/audits', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const audits = await reflectiveIntelligence.getDecisionAudits(req.user!.id, limit);
+      
+      res.json({ ok: true, audits });
+    } catch (error: any) {
+      console.error('[Reflection] Get audits failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 

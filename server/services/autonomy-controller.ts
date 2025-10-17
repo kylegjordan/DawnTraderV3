@@ -240,6 +240,46 @@ class AutonomyControllerService {
         ).catch((err: any) => console.error('[AutonomyController] Risk simulation failed:', err));
       }
 
+      // Phase 9.4: Reflective Intelligence Hooks
+      // 1. Trigger surface reflection on self-check results (async, don't block)
+      const { reflectiveIntelligence } = await import('./reflective-intelligence').then((m) => ({
+        reflectiveIntelligence: m.reflectiveIntelligence,
+      })).catch(() => ({ reflectiveIntelligence: null }));
+
+      if (reflectiveIntelligence) {
+        reflectiveIntelligence.reflect(
+          userId,
+          {
+            triggerSource: 'autonomy_self_check',
+            depth: 'surface',
+            subjectArea: 'system_health_check',
+            contextData: {
+              healthScore,
+              cognitiveScore,
+              issuesDetected,
+            },
+          },
+          'paper'
+        ).catch((err: any) => console.error('[AutonomyController] Reflection failed:', err));
+      }
+
+      // 2. Audit recent decision quality if issues were detected (async, don't block)
+      if (reflectiveIntelligence && issuesDetected.length > 0) {
+        console.log('[AutonomyController] 🔍 Auditing decision quality due to detected issues');
+        reflectiveIntelligence.auditDecision(
+          userId,
+          {
+            decisionId: runId,
+            decisionType: 'autonomy_self_check',
+            initialReasoning: `Automated self-check with ${issuesDetected.length} issues`,
+            outcomeObserved: `Issues: ${issuesDetected.join('; ')}`,
+            qualityRating: healthScore < this.config.healthThresholds.critical ? 'poor' : 'fair',
+            accuracyScore: cognitiveScore,
+          },
+          'paper'
+        ).catch((err: any) => console.error('[AutonomyController] Decision audit failed:', err));
+      }
+
       return {
         runId,
         timestamp: new Date(),
