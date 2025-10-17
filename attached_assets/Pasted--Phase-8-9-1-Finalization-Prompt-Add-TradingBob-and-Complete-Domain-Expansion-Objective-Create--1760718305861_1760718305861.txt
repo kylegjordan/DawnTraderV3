@@ -1,0 +1,82 @@
+⚙️ Phase 8.9.1 Finalization Prompt – Add TradingBob and Complete Domain Expansion
+Objective
+
+Create and integrate a dedicated TradingBob domain agent to handle market, portfolio, and risk-related reasoning tasks.
+This ensures the Autonomy Controller and Reasoning Orchestrator can invoke specialized trading logic during self-checks, cognitive tuning, and self-optimization cycles.
+
+Task 1 – Create TradingBob Service
+
+Goal: Provide a focused Bob module for trading-domain cognition.
+Steps:
+
+Add a new file: server/services/bobs/trading-bob.ts
+
+Extend the common Bob interface or BaseBob class used by other domain Bobs.
+
+Implement methods:
+
+analyzeMarketData(context) – interpret market trends, indicators, and volatility cues.
+
+evaluateRiskCoherence(context) – assess alignment between perceived risk and reasoning output.
+
+generateTradingInsights(context) – formulate actionable insights or predictions.
+
+Ensure each method logs structured messages to the Context Bridge and autonomy_audit_log.
+
+Export TradingBob with consistent naming conventions used in other Bob files.
+
+Task 2 – Register TradingBob in Reasoning Orchestrator
+
+Goal: Enable automatic delegation to TradingBob when domain = trading.
+Steps:
+
+Open server/services/reasoning-orchestrator.ts.
+
+In the domainHandlers or equivalent mapping, add:
+
+trading: new TradingBob(),
+
+
+Verify that inferDomainContext() and createPlan() recognize "trading" domain strings (already fixed in 8.8).
+
+Confirm logs show:
+[ReasoningOrchestrator] Delegating reasoning to TradingBob for domain: trading
+
+Task 3 – Integrate with Autonomy Controller
+
+Goal: Allow hourly self-checks to include trading-domain audits.
+Steps:
+
+In server/services/autonomy-controller.ts, inside triggerSelfReasoning(), add conditional logic:
+
+When the last health or cognitive score < threshold (e.g., 0.5), trigger TradingBob.analyzeMarketData() as part of self-reasoning.
+
+Store the resulting insights in autonomy_audit_log with domain = "trading".
+
+Emit a UX Monitor event labeled “Autonomy → Trading Analysis Cycle Completed.”
+
+Task 4 – Validate and Document
+
+Goal: Confirm end-to-end trading-domain reasoning and record the update.
+Steps:
+
+Restart the workflow and observe logs:
+[AutonomyController] Triggered self-reasoning: domain = trading
+[TradingBob] Market analysis complete – Health adjusted +0.12
+
+Run a full cognitive benchmark to verify trading scenarios still PASS.
+
+Update replit.md with a subsection under Phase 8.9 – Autonomy Layer Enhancements:
+
+Title: “TradingBob Integration and Domain Expansion.”
+
+Describe new Bob capabilities, AutonomyController integration, and sample UX Monitor outputs.
+
+Confirm new log entries appear in autonomy_audit_log and are visible via /api/autonomy/status.
+
+Expected Outcome
+
+✅ TradingBob fully operational and registered.
+✅ Autonomy Controller invokes trading-domain reasoning automatically.
+✅ Trading-related self-reasoning cycles recorded and visualized.
+✅ Phase 8.9 now 100% complete — ready for Phase 8.94 Emergent Awareness integration.
