@@ -99,6 +99,23 @@ export async function generateWalterResponse(
       return toneChange.message;
     }
 
+    // Phase 8.8.1: Create reasoning plan before response generation
+    let reasoningPlan = null;
+    try {
+      const { reasoningOrchestrator } = await import('./reasoning-orchestrator');
+      reasoningPlan = await reasoningOrchestrator.createPlan({
+        userId,
+        intentAction: detectIntent(userMessage),
+        userMessage,
+        systemState: stateSnapshot,
+        mode: tradingMode,
+      });
+      console.log(`[WalterResponse] [Phase-8.8.1] Reasoning plan created: ${reasoningPlan.traceId} (${reasoningPlan.steps.length} steps)`);
+    } catch (error: any) {
+      console.error(`[WalterResponse] [Phase-8.8.1] Failed to create reasoning plan:`, error.message);
+      // Continue without reasoning plan if it fails
+    }
+
     // Phase 8.6: Detect commands early and route through Intent Gateway for validation
     // Commands bypass conversational flow and get direct validation/execution
     const intent = detectIntent(userMessage);
@@ -177,8 +194,8 @@ export async function generateWalterResponse(
       processingTimeMs: cieResponse.processingTimeMs,
     });
 
-    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, CIE context, FRESH DUAL-MODE DATA, and STATE SNAPSHOT (Phase 8.7.1)
-    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, dualModeData, stateSnapshot);
+    // 4. Build prompt with behavioral enhancement, feedback acknowledgment, adaptive preferences, CIE context, FRESH DUAL-MODE DATA, STATE SNAPSHOT (Phase 8.7.1), and REASONING CHAIN (Phase 8.8.1)
+    const basePrompt = await buildPrompt(context, userMessage, feedbackDetection, userId, cieResponse, dualModeData, stateSnapshot, reasoningPlan);
     const enhancedPrompt = enhanceBehavioralPrompt(basePrompt, behavioralGuidance);
 
     // Phase 8.6.4 Debug: Log dashboard context to verify goals are fresh
@@ -211,6 +228,21 @@ export async function generateWalterResponse(
 
     // 8. Extract and store memory if needed (expert principles already logged in getRelevantPrinciples)
     await extractAndStoreMemory(userId, chatId, userMessage, response);
+
+    // Phase 8.8.1: Log reasoning result if plan was created
+    if (reasoningPlan) {
+      try {
+        const { reasoningOrchestrator } = await import('./reasoning-orchestrator');
+        await reasoningOrchestrator.logResult(
+          reasoningPlan.traceId,
+          `Response generated: ${response.substring(0, 100)}...`,
+          true
+        );
+        console.log(`[WalterResponse] [Phase-8.8.1] Reasoning result logged: ${reasoningPlan.traceId}`);
+      } catch (error: any) {
+        console.error(`[WalterResponse] [Phase-8.8.1] Failed to log reasoning result:`, error.message);
+      }
+    }
 
     // Phase 8.7.2: Detect and execute intent objects from Walter's response
     const { detectedIntent, cleanedResponse } = detectAndExtractIntent(response);
@@ -522,7 +554,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
 /**
  * Build prompt with context injection including expert principles and CIE context
  */
-async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any, dualModeData?: any, stateSnapshot?: any): Promise<string> {
+async function buildPrompt(context: ResponseContext, userMessage: string, feedbackDetection?: any, userId?: string, cieResponse?: any, dualModeData?: any, stateSnapshot?: any, reasoningPlan?: any): Promise<string> {
   const { purpose, memories, chatHistory, chatSummary, expertPrinciples, referenceContext, dashboardContext, insightContext, uiContext, cortexContext, tradingMode } = context;
 
   // Format memories
@@ -661,6 +693,17 @@ Generated: ${stateSnapshot.timestamp}
    Live Mode: ${stateSnapshot.screeners.live ? JSON.stringify(stateSnapshot.screeners.live, null, 2).replace(/\n/g, '\n   ') : 'Not configured'}
 
 ⚡ IMPORTANT: This is the AUTHORITATIVE system state aggregated from the State Awareness Layer. It provides a complete snapshot of all system configuration and status. Use this as the single source of truth for all system state queries.
+
+---
+
+` : ''}${reasoningPlan ? `🧠 REASONING CHAIN (Phase 8.8.1 - Multi-Step Analysis):
+Trace ID: ${reasoningPlan.traceId}
+Domains: ${reasoningPlan.domainContext.join(', ')}
+
+REASONING STEPS:
+${reasoningPlan.steps.map((step: any, idx: number) => `  ${idx + 1}. ${step.action}${step.target ? ` → ${step.target}` : ''}${step.params ? ` (${JSON.stringify(step.params)})` : ''}`).join('\n')}
+
+IMPORTANT: This reasoning chain outlines my multi-step analysis process for your request. I've already queued tasks for parallel execution to gather contextual data from domain-specific modules (DevOps, FullStack, UX). Base your response on this structured reasoning approach.
 
 ---
 
