@@ -421,5 +421,14 @@ app.use((req, res, next) => {
     } catch (error) {
       console.error('[LearningCycleService] ⚠️ Startup failed:', error);
     }
+
+    // Phase 8.9: Start Autonomy Layer (hourly self-checks, daily optimization)
+    try {
+      const { initAutonomyScheduler } = await import('./services/autonomy-scheduler');
+      await initAutonomyScheduler();
+      console.log('[AutonomyScheduler] ✅ Started successfully');
+    } catch (error) {
+      console.error('[AutonomyScheduler] ⚠️ Startup failed:', error);
+    }
   });
 })();

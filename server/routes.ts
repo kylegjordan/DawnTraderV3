@@ -9301,6 +9301,124 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ========================================
+  // Phase 8.9: Autonomy Layer Routes
+  // ========================================
+
+  // Get autonomy system status
+  app.get('/api/autonomy/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { autonomyController } = await import('./services/autonomy-controller');
+      const { metaReasoningEngine } = await import('./services/meta-reasoning-engine');
+      const { getAutonomySchedulerStatus } = await import('./services/autonomy-scheduler');
+      
+      const controllerStatus = autonomyController.getStatus();
+      const lastSelfCheck = await autonomyController.getLastSelfCheck();
+      const schedulerStatus = getAutonomySchedulerStatus();
+      const recentAnalyses = await metaReasoningEngine.getRecentAnalyses(5);
+      
+      res.json({
+        ok: true,
+        controller: controllerStatus,
+        lastSelfCheck,
+        scheduler: schedulerStatus,
+        recentAnalyses: recentAnalyses.length,
+      });
+    } catch (error: any) {
+      console.error('[Autonomy] Status fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trigger manual self-check
+  app.post('/api/autonomy/self-check', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { autonomyController } = await import('./services/autonomy-controller');
+      
+      const result = await autonomyController.scheduleSelfCheck(userId);
+      
+      res.json({ ok: true, result });
+    } catch (error: any) {
+      console.error('[Autonomy] Self-check failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Analyze reasoning trace integrity
+  app.post('/api/autonomy/analyze-trace', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { traceId } = req.body;
+      const { metaReasoningEngine } = await import('./services/meta-reasoning-engine');
+      
+      const analysis = await metaReasoningEngine.analyzeTraceIntegrity(traceId);
+      
+      res.json({ ok: true, analysis });
+    } catch (error: any) {
+      console.error('[Autonomy] Trace analysis failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get meta-reasoning analyses
+  app.get('/api/autonomy/meta-reasoning', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const { metaReasoningEngine } = await import('./services/meta-reasoning-engine');
+      
+      const analyses = await metaReasoningEngine.getRecentAnalyses(limit);
+      
+      res.json({ ok: true, analyses });
+    } catch (error: any) {
+      console.error('[Autonomy] Meta-reasoning fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Generate exploration prompts
+  app.post('/api/autonomy/exploration', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { curiosityEngine } = await import('./services/curiosity-engine');
+      
+      const prompts = await curiosityEngine.generateExplorationPrompts(userId);
+      
+      res.json({ ok: true, prompts });
+    } catch (error: any) {
+      console.error('[Autonomy] Exploration failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Run optimization cycle
+  app.post('/api/autonomy/optimize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { selfOptimizer } = await import('./services/self-optimizer');
+      
+      const result = await selfOptimizer.runOptimizationCycle();
+      
+      res.json({ ok: true, result });
+    } catch (error: any) {
+      console.error('[Autonomy] Optimization failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get optimization history
+  app.get('/api/autonomy/optimizations', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const { selfOptimizer } = await import('./services/self-optimizer');
+      
+      const optimizations = await selfOptimizer.getRecentOptimizations(limit);
+      
+      res.json({ ok: true, optimizations });
+    } catch (error: any) {
+      console.error('[Autonomy] Optimization history fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
