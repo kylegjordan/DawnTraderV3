@@ -137,7 +137,7 @@ export class AlignmentVerifier {
       await db.insert(alignmentAuditLog).values({
         auditId,
         timestamp: new Date(),
-        verificationResult: 'error',
+        verificationResult: 'flagged',
         proposedChange: {
           actionType,
           actionParams,
@@ -348,7 +348,7 @@ export class AlignmentVerifier {
     verificationResult: string;
     proposedChange: any;
     alignmentScore: number | null;
-    recommendations: string[];
+    recommendations: string[] | null;
   }>> {
     const history = await db
       .select({

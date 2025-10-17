@@ -5,6 +5,9 @@ import { reasoningOrchestrator } from './reasoning-orchestrator';
 import { cognitiveTuner } from './cognitive-tuner';
 import { contextBridge } from './context-bridge';
 import { systemHealthMonitor } from './system-health-monitor';
+import { ExperienceMemoryService } from './experience-memory';
+import { AdaptiveObjectiveEngine } from './adaptive-objective-engine';
+import { AlignmentVerifier } from './alignment-verifier';
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -43,6 +46,17 @@ class AutonomyControllerService {
 
   private lastSelfCheckTime: Date | null = null;
   private isRunning: boolean = false;
+  
+  // Phase 9.0: Adaptive Learning Services
+  private experienceMemory: ExperienceMemoryService;
+  private adaptiveEngine: AdaptiveObjectiveEngine;
+  private alignmentVerifier: AlignmentVerifier;
+
+  constructor() {
+    this.experienceMemory = new ExperienceMemoryService(contextBridge);
+    this.adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
+    this.alignmentVerifier = new AlignmentVerifier(contextBridge);
+  }
 
   /**
    * Schedule periodic self-check
@@ -148,6 +162,17 @@ class AutonomyControllerService {
       this.lastSelfCheckTime = new Date();
 
       console.log(`[AutonomyController] ✅ Self-check complete (Health: ${healthScore.toFixed(2)}, Cognitive: ${cognitiveScore.toFixed(2)})`);
+
+      // Phase 9.0: Adaptive Learning Hooks
+      // 1. Synthesize experiences from recent autonomy logs (async, don't block)
+      this.experienceMemory.synthesizeExperiences().catch((err: any) => 
+        console.error('[AutonomyController] Experience synthesis failed:', err)
+      );
+
+      // 2. Evaluate performance drift and update alignment weights (async, don't block)
+      this.adaptiveEngine.evaluatePerformanceDrift().catch((err: any) => 
+        console.error('[AutonomyController] Drift evaluation failed:', err)
+      );
 
       return {
         runId,
@@ -286,6 +311,7 @@ class AutonomyControllerService {
 
   /**
    * Execute triggered actions based on assessment
+   * Phase 9.0: Now includes alignment verification before execution
    */
   private async executeTriggeredActions(
     actions: string[],
@@ -294,6 +320,27 @@ class AutonomyControllerService {
   ): Promise<void> {
     for (const action of actions) {
       try {
+        // Phase 9.0: Verify action against alignment policies before execution
+        const verification = await this.alignmentVerifier.verifyAction({
+          actionType: action,
+          actionParams: { userId, parentRunId },
+          policyType: 'autonomy',
+          requestedBy: 'AutonomyController'
+        });
+
+        if (!verification.approved) {
+          console.warn(
+            `[AutonomyController] ⛔ Action blocked by alignment verifier: ${action}`,
+            `\n  Rationale: ${verification.rationale}`,
+            `\n  Score: ${verification.alignmentScore.toFixed(2)}`
+          );
+          continue; // Skip this action
+        }
+
+        console.log(
+          `[AutonomyController] ✅ Action verified: ${action} (score: ${verification.alignmentScore.toFixed(2)})`
+        );
+
         switch (action) {
           case 'trigger_health_investigation':
             await this.triggerSelfReasoning(
