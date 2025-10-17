@@ -849,7 +849,7 @@ function AwarenessTab() {
   // Manual reflection mutation
   const reflectMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest('/api/awareness/reflect', 'POST', {});
+      return apiRequest('POST', '/api/awareness/reflect', {});
     },
     onSuccess: () => {
       toast({
