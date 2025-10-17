@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { 
   Activity, 
   Cpu, 
@@ -19,7 +20,8 @@ import {
   XCircle,
   Bot,
   TrendingUp,
-  Check
+  Check,
+  Monitor
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -108,9 +110,20 @@ interface DiagnosticAnalysis {
 export default function EnhancedSystemMonitoring() {
   const [activeTab, setActiveTab] = useState("performance");
   const { toast } = useToast();
+  const logEndRef = useRef<HTMLDivElement>(null);
   
   // Enable auto-refresh every 10 seconds
   const refetchInterval = 10000;
+  
+  // Context Bridge WebSocket connection
+  const { isConnected, messages } = useWebSocket();
+  
+  // Auto-scroll to bottom when new messages arrive in UX Monitor
+  useEffect(() => {
+    if (activeTab === 'ux-monitor' && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, activeTab]);
   
   // Acknowledge alert mutation
   const acknowledgeMutation = useMutation({
@@ -357,7 +370,7 @@ export default function EnhancedSystemMonitoring() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5" data-testid="tabs-system-monitoring">
+        <TabsList className="grid w-full grid-cols-6" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -377,6 +390,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
             Alerts ({errors.filter(e => !e.resolved).length})
+          </TabsTrigger>
+          <TabsTrigger value="ux-monitor" data-testid="tab-ux-monitor">
+            <Monitor className="w-4 h-4 mr-2" />
+            UX Monitor
           </TabsTrigger>
         </TabsList>
 
@@ -713,6 +730,89 @@ export default function EnhancedSystemMonitoring() {
                   <span>No alerts - all systems healthy</span>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 6: UX Monitor - Context Bridge Events */}
+        <TabsContent value="ux-monitor" className="space-y-4">
+          <Card data-testid="card-ux-monitor">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Monitor className="w-5 h-5" />
+                    UX Monitor - Context Bridge Live Events
+                  </CardTitle>
+                  <CardDescription>
+                    Real-time reasoning broadcasts and context updates
+                  </CardDescription>
+                </div>
+                <Badge 
+                  variant={isConnected ? "default" : "destructive"}
+                  data-testid="badge-websocket-status"
+                >
+                  {isConnected ? "Connected" : "Disconnected"}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div 
+                className="bg-black dark:bg-gray-900 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm"
+                data-testid="log-context-bridge"
+              >
+                {messages.length === 0 ? (
+                  <div className="text-green-400 opacity-70">
+                    Waiting for Context Bridge events...
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {messages.map((msg, idx) => {
+                      const timestamp = new Date().toLocaleTimeString();
+                      const isReasoningEvent = msg.type?.includes('reasoning') || msg.data?.eventType?.includes('reasoning');
+                      const isCognitiveEvent = msg.type?.includes('cognitive') || msg.data?.eventType?.includes('cognitive');
+                      
+                      return (
+                        <div 
+                          key={idx} 
+                          className={`${
+                            isReasoningEvent ? 'text-blue-400' : 
+                            isCognitiveEvent ? 'text-purple-400' : 
+                            'text-green-400'
+                          }`}
+                          data-testid={`log-entry-${idx}`}
+                        >
+                          <span className="text-gray-500">[{timestamp}]</span>{' '}
+                          <span className="text-yellow-400">{msg.type}</span>
+                          {msg.data && (
+                            <span className="ml-2">
+                              {JSON.stringify(msg.data, null, 0).substring(0, 120)}
+                              {JSON.stringify(msg.data).length > 120 ? '...' : ''}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div ref={logEndRef} />
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                    <span>Reasoning Events</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                    <span>Cognitive Events</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    <span>Other Events</span>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

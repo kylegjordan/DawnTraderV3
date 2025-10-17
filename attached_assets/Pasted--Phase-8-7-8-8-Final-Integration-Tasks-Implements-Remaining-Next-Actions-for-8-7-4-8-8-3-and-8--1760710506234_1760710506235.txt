@@ -1,0 +1,122 @@
+🧠 Phase 8.7–8.8 Final Integration Tasks
+(Implements Remaining Next Actions for 8.7.4, 8.8.3, and 8.8.4)
+Objective
+
+Complete all remaining development actions in Phases 8.7–8.8 to finalize system readiness for Phase 8.9 (Autonomy).
+This includes UI integration, orchestrator optimization, and cognitive test expansion.
+
+Scope of Work
+
+This implementation includes three major tasks:
+
+Add a UX Monitor tab within the existing System Monitoring Panel.
+
+Optimize Reasoning Orchestrator metrics and retry logic.
+
+Extend Cognitive Tuning with trading-focused test scenarios.
+
+Task 1 – UX Monitor Tab (Phase 8.7.4 Extension)
+
+Goal: Integrate a new “UX Monitor” tab inside the System Monitoring Panel.
+Purpose: Provide real-time visibility into reasoning broadcasts and context updates from the Context Bridge.
+
+Steps:
+
+Locate the System Monitoring Panel component (SystemMonitor.tsx or equivalent).
+
+Add a new tab labeled “UX Monitor.”
+
+Inside the tab’s panel, display a live log area showing reasoning broadcasts and context bridge messages.
+
+Connect this log to the existing Context Bridge event stream (broadcast events).
+
+Style the log output using the project’s existing system log theme (dark background, green text).
+
+Confirm live updates appear when reasoning tasks or broadcasts occur.
+
+This tab will sit alongside the “System Health” and “Performance” tabs in the same panel.
+
+Task 2 – Reasoning Orchestrator Optimization (Phase 8.8.3 Extension)
+
+Goal: Improve task queue observability and retry reliability.
+Purpose: Enable better runtime performance tracking and failure resilience within the reasoning orchestrator.
+
+Steps:
+
+Enhance the orchestrator’s queue processor to record task latency per domain.
+
+Add structured logging for each task’s duration and retry attempts.
+
+Refine retry logic to use exponential backoff with slight randomized jitter (to avoid clustering).
+
+Insert aggregated queue metrics into the existing /api/reasoning/status output:
+
+Average latency (ms) per domain
+
+Total retries attempted
+
+Task completion ratio
+
+Log summarized queue metrics every 10 iterations for runtime visibility.
+
+Validate that the updated metrics appear correctly in both API responses and the console logs.
+
+Task 3 – Cognitive Tuning Expansion (Phase 8.8.4 Extension)
+
+Goal: Introduce trading-domain benchmarks into the Cognitive Tuning and Testing system.
+Purpose: Prepare Walter’s reasoning engine for financial autonomy scenarios.
+
+Steps:
+
+Extend the Cognitive Tuner service with two additional benchmark scenarios:
+
+Scenario 6: Market Sentiment Correlation
+
+Input: Simulated market trend data and sentiment analysis text.
+
+Evaluation: Correlation consistency score (target ≥ 0.8).
+
+Scenario 7: Portfolio Risk Coherence
+
+Input: JSON array of multiple asset risk profiles.
+
+Evaluation: Coherence index (target ≥ 0.9).
+
+Store both scenario results in the existing cognitive_tuning_log table.
+
+Add these results to the /api/cognitive/report endpoint under a new “Trading Domain Tests” section.
+
+Ensure nightly benchmark jobs include both new scenarios.
+
+Verify successful benchmark execution via the console logs and report output.
+
+Task 4 – Documentation Update
+
+Goal: Record the completion of all final 8.7–8.8 integration tasks.
+Steps:
+
+Open replit.md.
+
+Add a new section titled “Phase 8.8 Final Integration Tasks (8.7–8.8 Next Actions)”.
+
+Summarize the following completions:
+
+UX Monitor tab integrated into System Monitoring Panel.
+
+Reasoning Orchestrator performance and retry metrics optimized.
+
+Cognitive Tuning expanded with two trading-domain benchmark scenarios.
+
+Confirm documentation alignment with phase_8_8_overview.md.
+
+Expected Results
+
+After successful implementation:
+
+The System Monitoring Panel now includes a UX Monitor tab showing live Context Bridge messages.
+
+The Reasoning Orchestrator displays enhanced latency and retry metrics for each domain.
+
+The Cognitive Tuning System includes two new trading-domain scenarios, integrated into nightly runs and reports.
+
+The documentation reflects all updates, marking 8.7–8.8 officially complete and ready for 8.9.

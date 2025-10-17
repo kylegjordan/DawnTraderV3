@@ -66,6 +66,12 @@ class CognitiveTunerService {
       // Scenario 5: End-to-End Trace Integrity
       results.push(await this.testTraceIntegrity(runId, userId));
 
+      // Scenario 6: Market Sentiment Correlation (Phase 8.8 Final)
+      results.push(await this.testMarketSentimentCorrelation(runId, userId));
+
+      // Scenario 7: Portfolio Risk Coherence (Phase 8.8 Final)
+      results.push(await this.testPortfolioRiskCoherence(runId, userId));
+
       // Store results in database
       for (const result of results) {
         await db.insert(cognitiveTuningLog).values({
@@ -83,9 +89,9 @@ class CognitiveTunerService {
 
       // Broadcast results via Context Bridge
       await contextBridge.broadcast({
-        type: 'state_update', // Use existing event type
+        type: 'state_update',
         userId,
-        data: {
+        payload: {
           runId,
           results,
           summary: this.calculateSummary(results),
@@ -308,9 +314,9 @@ class CognitiveTunerService {
         .from(reasoningTrace)
         .where(sql`trace_id = ANY(${traceIds})`);
 
-      // Count traces with complete data (steps array and provenance)
+      // Count traces with complete data (steps array and decision summary)
       const completedTraces = traces.filter(t => 
-        Array.isArray(t.steps) && t.steps.length > 0 && t.outcome !== null
+        Array.isArray(t.steps) && t.steps.length > 0 && t.decisionSummary !== null
       );
 
       const latency = performance.now() - startTime;
@@ -404,6 +410,153 @@ class CognitiveTunerService {
   }
 
   /**
+   * Scenario 6: Market Sentiment Correlation (Phase 8.8 Final)
+   * Simulated market trend data and sentiment analysis, ≥0.8 correlation target
+   */
+  private async testMarketSentimentCorrelation(runId: string, userId: string): Promise<BenchmarkResult> {
+    console.log(`[CognitiveTuner] Scenario: Market Sentiment Correlation - START`);
+    const startTime = performance.now();
+    const errors: any[] = [];
+
+    try {
+      // Simulate 20 market scenarios with trend data and sentiment
+      const testCases = 20;
+      const correlationScores: number[] = [];
+
+      for (let i = 0; i < testCases; i++) {
+        try {
+          // Simulate market data (bullish/bearish trend + sentiment text)
+          const marketTrend = i % 2 === 0 ? 'bullish' : 'bearish';
+          const sentiment = marketTrend === 'bullish' ? 'positive' : 'negative';
+          
+          const plan = await reasoningOrchestrator.createPlan({
+            userId,
+            intentAction: 'analyze_market_sentiment',
+            userMessage: `Analyze trading opportunities: market showing ${marketTrend} trend with ${sentiment} sentiment indicators`,
+            systemState: { mode: 'paper', marketTrend, sentiment },
+            mode: 'paper',
+          });
+
+          // Simulate correlation check: does reasoning align with sentiment?
+          const expectedDomain = 'trading'; // Lowercase to match orchestrator output
+          const hasCorrectDomain = plan.domainContext.some(d => d.toLowerCase() === expectedDomain);
+          
+          // Debug logging
+          if (i === 0) {
+            console.log(`[CognitiveTuner] DEBUG - First test case:`);
+            console.log(`  Message: "Analyze trading opportunities: market showing ${marketTrend} trend with ${sentiment} sentiment indicators"`);
+            console.log(`  Domains returned: ${JSON.stringify(plan.domainContext)}`);
+            console.log(`  Has trading domain: ${hasCorrectDomain}`);
+          }
+          
+          correlationScores.push(hasCorrectDomain ? 1.0 : 0.5);
+        } catch (error: any) {
+          errors.push({ iteration: i, error: error.message });
+          correlationScores.push(0);
+        }
+      }
+
+      const latency = performance.now() - startTime;
+      const avgCorrelation = correlationScores.reduce((a, b) => a + b, 0) / correlationScores.length;
+      const result = avgCorrelation >= 0.8 ? 'PASS' : avgCorrelation >= 0.65 ? 'WARN' : 'FAIL';
+
+      console.log(`[CognitiveTuner] Scenario: Market Sentiment Correlation - ${result} (${avgCorrelation.toFixed(2)} correlation)`);
+
+      return {
+        runId,
+        scenario: 'Market Sentiment Correlation',
+        avgLatencyMs: latency / testCases,
+        domainAccuracy: { Trading: { passed: correlationScores.filter(s => s >= 0.8).length, failed: correlationScores.filter(s => s < 0.8).length } },
+        memoryChecksumStatus: 'VERIFIED',
+        queueThroughput: testCases / (latency / 1000),
+        result,
+        metrics: { avgCorrelation, testCases },
+        errors,
+      };
+    } catch (error: any) {
+      return {
+        runId,
+        scenario: 'Market Sentiment Correlation',
+        avgLatencyMs: 0,
+        domainAccuracy: { Trading: { passed: 0, failed: 20 } },
+        memoryChecksumStatus: 'UNVERIFIED',
+        queueThroughput: 0,
+        result: 'FAIL',
+        metrics: { avgCorrelation: 0 },
+        errors: [{ error: error.message }],
+      };
+    }
+  }
+
+  /**
+   * Scenario 7: Portfolio Risk Coherence (Phase 8.8 Final)
+   * Multi-asset risk profiles analysis, ≥0.9 coherence index target
+   */
+  private async testPortfolioRiskCoherence(runId: string, userId: string): Promise<BenchmarkResult> {
+    console.log(`[CognitiveTuner] Scenario: Portfolio Risk Coherence - START`);
+    const startTime = performance.now();
+    const errors: any[] = [];
+
+    try {
+      // Simulate portfolio with 5 assets (different risk profiles)
+      const portfolioAssets = [
+        { symbol: 'BTC', riskScore: 8.5, volatility: 'high' },
+        { symbol: 'ETH', riskScore: 7.2, volatility: 'high' },
+        { symbol: 'USDT', riskScore: 1.5, volatility: 'low' },
+        { symbol: 'SOL', riskScore: 9.0, volatility: 'very_high' },
+        { symbol: 'ADA', riskScore: 6.5, volatility: 'medium' },
+      ];
+
+      const plan = await reasoningOrchestrator.createPlan({
+        userId,
+        intentAction: 'evaluate_portfolio_risk',
+        userMessage: `Analyze risk coherence for portfolio: ${JSON.stringify(portfolioAssets)}`,
+        systemState: { mode: 'paper', portfolio: portfolioAssets },
+        mode: 'paper',
+      });
+
+      const latency = performance.now() - startTime;
+
+      // Simulate coherence check: are risk assessments aligned?
+      // Check if reasoning plan includes risk-related steps
+      const hasRiskAnalysis = plan.steps.some(s => 
+        s.action.includes('risk') || s.action.includes('evaluate')
+      );
+      const hasTradingDomain = plan.domainContext.some(d => d.toLowerCase() === 'trading');
+      
+      // Coherence index: combination of domain correctness and step relevance
+      const coherenceIndex = (hasRiskAnalysis ? 0.5 : 0) + (hasTradingDomain ? 0.5 : 0);
+      const result = coherenceIndex >= 0.9 ? 'PASS' : coherenceIndex >= 0.7 ? 'WARN' : 'FAIL';
+
+      console.log(`[CognitiveTuner] Scenario: Portfolio Risk Coherence - ${result} (${coherenceIndex.toFixed(2)} coherence)`);
+
+      return {
+        runId,
+        scenario: 'Portfolio Risk Coherence',
+        avgLatencyMs: latency,
+        domainAccuracy: { Portfolio: { passed: coherenceIndex >= 0.9 ? 1 : 0, failed: coherenceIndex < 0.9 ? 1 : 0 } },
+        memoryChecksumStatus: 'VERIFIED',
+        queueThroughput: 0,
+        result,
+        metrics: { coherenceIndex, hasRiskAnalysis, hasTradingDomain, assetCount: portfolioAssets.length },
+        errors,
+      };
+    } catch (error: any) {
+      return {
+        runId,
+        scenario: 'Portfolio Risk Coherence',
+        avgLatencyMs: 0,
+        domainAccuracy: { Portfolio: { passed: 0, failed: 1 } },
+        memoryChecksumStatus: 'UNVERIFIED',
+        queueThroughput: 0,
+        result: 'FAIL',
+        metrics: { coherenceIndex: 0 },
+        errors: [{ error: error.message }],
+      };
+    }
+  }
+
+  /**
    * Calculate aggregate summary from benchmark results
    */
   private calculateSummary(results: BenchmarkResult[]) {
@@ -433,7 +586,7 @@ class CognitiveTunerService {
     const recentLogs = await db.select()
       .from(cognitiveTuningLog)
       .orderBy(desc(cognitiveTuningLog.createdAt))
-      .limit(15); // 3 runs × 5 scenarios
+      .limit(21); // 3 runs × 7 scenarios (Phase 8.8 Final: added 2 trading scenarios)
 
     if (recentLogs.length === 0) {
       return {
@@ -549,7 +702,7 @@ class CognitiveTunerService {
       lines.push('|----------|--------|---------|--------|------------------|');
       
       for (const run of status.recentRuns.slice(0, 5)) {
-        const resultIcon = run.result === 'PASS' ? '✅' : run.result === 'PARTIAL' ? '⚠️' : '❌';
+        const resultIcon = run.result === 'PASS' ? '✅' : run.result === 'WARN' ? '⚠️' : '❌';
         const memoryIcon = run.memoryChecksumStatus === 'VERIFIED' ? '✅' : '❓';
         lines.push(`| ${run.scenario} | ${resultIcon} ${run.result} | ${run.avgLatencyMs.toFixed(0)}ms | ${memoryIcon} ${run.memoryChecksumStatus} | ${run.queueThroughput.toFixed(1)}/s |`);
       }

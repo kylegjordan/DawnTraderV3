@@ -7508,9 +7508,13 @@ Summary:`;
     try {
       const userId = req.user!.id;
       const { taskQueue } = await import('./services/task-queue');
+      const { reasoningOrchestrator } = await import('./services/reasoning-orchestrator');
 
-      // Get queue metrics
-      const metrics = await taskQueue.getQueueStats();
+      // Get queue metrics from task queue
+      const queueMetrics = await taskQueue.getQueueStats();
+      
+      // Get orchestrator performance metrics
+      const orchestratorMetrics = reasoningOrchestrator.getMetrics();
 
       // Get recent traces for this user
       const recentTraces = await db
@@ -7529,11 +7533,12 @@ Summary:`;
       res.json({
         ok: true,
         metrics: {
-          totalPending: metrics.pending || 0,
-          totalInProgress: metrics.in_progress || 0,
-          totalCompleted: metrics.completed || 0,
-          totalFailed: metrics.failed || 0,
-          ...metrics
+          totalPending: queueMetrics.pending || 0,
+          totalInProgress: queueMetrics.inProgress || 0,
+          totalCompleted: queueMetrics.completed || 0,
+          totalFailed: queueMetrics.failed || 0,
+          ...queueMetrics,
+          orchestrator: orchestratorMetrics
         },
         recentTraces
       });

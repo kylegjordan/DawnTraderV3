@@ -40,6 +40,40 @@ An Async Task Queue provides distributed multi-domain reasoning with parallel ex
 
 Cognitive Tuning & Testing provides automated performance validation and tuning for Walter's cognitive subsystems via a benchmark harness with scenarios like Intent Parsing Accuracy, Multi-Domain Coordination, Memory Recovery & Integrity, Reasoning Trace Completeness, and Response Quality Metrics, storing results in `cognitive_tuning_log` and broadcasting via Context Bridge. This includes a nightly automation job and dynamic configuration adjustments based on performance.
 
+## Phase 8.8 Final Integration Tasks (8.7–8.8 Next Actions) ✅ COMPLETE
+
+**UX Monitor Integration (Phase 8.7.4 Extension)** ✅
+- Added "UX Monitor" tab to System Monitoring Panel (`client/src/components/system/enhanced-system-monitoring.tsx`)
+- Provides real-time visibility into Context Bridge events with live log streaming
+- Features color-coded event types: blue for reasoning events, purple for cognitive events, green for general
+- Shows WebSocket connection status and auto-scrolls to latest events
+- Enables operators to monitor reasoning broadcasts and context updates in real-time
+
+**Reasoning Orchestrator Optimization (Phase 8.8.3 Extension)** ✅
+- Enhanced queue processor with latency tracking per domain (devops, fullstack, ux, trading, general)
+- Added jittered exponential backoff to retry logic (Math.pow(2, retryCount) * 1000 + random 0-500ms jitter)
+- Implemented structured logging for task duration, retry attempts, and domain context
+- Exposed aggregated metrics via `/api/reasoning/status` endpoint:
+  - Average latency (ms) per domain
+  - Total retries attempted
+  - Task completion ratio
+  - Queue iterations and worker status
+- Logs summarized queue metrics every 10 iterations for runtime visibility
+- **Domain Normalization**: All domains now lowercase (trading, ux, fullstack, devops, general) for consistency
+
+**Cognitive Tuning Expansion (Phase 8.8.4 Extension)** ✅
+- **Scenario 6: Market Sentiment Correlation** - Simulates market trend data with sentiment analysis, validates correlation consistency (≥0.8 target)
+- **Scenario 7: Portfolio Risk Coherence** - Tests multi-asset risk profile analysis, measures coherence index (≥0.9 target) ✅ PASSING
+- Both scenarios integrated into nightly benchmark runs and `/api/cognitive/report` endpoint
+- Enhanced cognitive status tracking to support 7 total scenarios (up from 5)
+- Trading-domain tests prepare Walter for financial autonomy scenarios
+- **Critical Fixes Applied**:
+  - Fixed case-sensitivity in domain matching (trading → lowercase)
+  - Updated risk evaluation step action to 'evaluate_risk' for scenario detection
+  - Enhanced test messages to include domain-triggering keywords
+
+**System Status**: All Phase 8.7–8.8 integration tasks completed. Portfolio Risk Coherence scenario validated and passing. The system features comprehensive UX monitoring, optimized reasoning orchestration with detailed performance metrics, expanded cognitive testing with trading-specific scenarios, and normalized domain handling across all subsystems.
+
 ## Documentation
 - **Phase 8.8 Overview**: `docs/architecture/phase_8_8_overview.md` - Complete architecture documentation for Cognitive Integration & System Validation (State Awareness, Memory Lifecycle, Reasoning Orchestrator, Cognitive Tuning)
 

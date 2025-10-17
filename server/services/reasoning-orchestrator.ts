@@ -37,6 +37,15 @@ class ReasoningOrchestrator {
   private workerInterval: NodeJS.Timeout | null = null;
   private isWorkerRunning = false;
   private domainHandlers: Map<string, DomainHandler> = new Map(); // Phase 8.8.3: Domain registration
+  private queueIterations = 0; // Phase 8.8.3+: Track iterations for logging
+  
+  // Phase 8.8.3+: Queue performance metrics
+  private metrics = {
+    latencyByDomain: new Map<string, number[]>(), // Track latency per domain
+    totalRetries: 0,
+    totalCompleted: 0,
+    totalFailed: 0,
+  };
 
   constructor() {
     this.workerId = `worker_${nanoid(8)}`;
@@ -58,19 +67,25 @@ class ReasoningOrchestrator {
     // DevOpsBob: System health, deployment, CI/CD
     this.registerDomain('devops', async (task) => {
       const { devopsBob } = await import('./bobs/devops-bob');
-      return await devopsBob.analyzeTask(task);
+      const query = task.payload?.params?.query || task.userMessage || 'system status';
+      const analysis = await devopsBob.runAnalysis(query);
+      return await devopsBob.returnFindings(analysis);
     });
 
     // FullStackBob: Code generation, error repair, schema analysis
     this.registerDomain('fullstack', async (task) => {
       const { fullstackBob } = await import('./bobs/fullstack-bob');
-      return await fullstackBob.analyzeTask(task);
+      const query = task.payload?.params?.query || task.userMessage || 'code analysis';
+      const analysis = await fullstackBob.runAnalysis(query);
+      return await fullstackBob.returnFindings(analysis);
     });
 
     // UXBob: UI layout, user flows, interface feedback
     this.registerDomain('ux', async (task) => {
       const { uxBob } = await import('./bobs/ux-bob');
-      return await uxBob.analyzeTask(task);
+      const query = task.payload?.params?.query || task.userMessage || 'ux review';
+      const analysis = await uxBob.runAnalysis(query);
+      return await uxBob.returnFindings(analysis);
     });
 
     console.log('[ReasoningOrchestrator] Default domains registered (DevOps, FullStack, UX)');
@@ -141,15 +156,27 @@ class ReasoningOrchestrator {
   }
 
   /**
-   * Create a reasoning plan based on user intent and system state
+   * Create a reasoning plan based on user intent and system state (v2)
    */
   async createPlan(request: ReasoningRequest): Promise<ReasoningPlan> {
     const traceId = `trace_${nanoid(12)}`;
     
     try {
+      // Debug logging for sentiment correlation test
+      if (request.userMessage.includes('trading opportunities')) {
+        console.log(`[ReasoningOrchestrator] DEBUG createPlan:`);
+        console.log(`  intentAction: "${request.intentAction}"`);
+        console.log(`  userMessage: "${request.userMessage}"`);
+      }
+      
       // Analyze the intent and determine reasoning steps
       const steps = this.buildReasoningSteps(request);
       const domainContext = this.inferDomainContext(request);
+      
+      // Debug logging continued
+      if (request.userMessage.includes('trading opportunities')) {
+        console.log(`  domainContext result: ${JSON.stringify(domainContext)}`);
+      }
 
       // Create reasoning plan
       const plan: ReasoningPlan = {
@@ -243,7 +270,7 @@ class ReasoningOrchestrator {
 
     if (lowerMessage.includes('risk') || lowerMessage.includes('guardrail') || lowerMessage.includes('limit')) {
       steps.push({
-        action: 'compare_guardrails',
+        action: 'evaluate_risk',
         target: 'risk_manager',
         params: { mode: request.mode || 'paper' },
         status: 'pending',
@@ -294,30 +321,39 @@ class ReasoningOrchestrator {
   private inferDomainContext(request: ReasoningRequest): string[] {
     const domains: Set<string> = new Set();
     const lowerMessage = request.userMessage.toLowerCase();
+    
+    // Debug logging for first call
+    if (request.intentAction === 'analyze_market_sentiment') {
+      console.log(`[ReasoningOrchestrator] DEBUG inferDomainContext:`);
+      console.log(`  Original message: "${request.userMessage}"`);
+      console.log(`  Lowercased: "${lowerMessage}"`);
+      console.log(`  Includes 'trade': ${lowerMessage.includes('trade')}`);
+      console.log(`  Includes 'strategy': ${lowerMessage.includes('strategy')}`);
+    }
 
     if (lowerMessage.includes('strategy') || lowerMessage.includes('trade')) {
-      domains.add('Trading');
+      domains.add('trading');
     }
 
     if (lowerMessage.includes('ui') || lowerMessage.includes('interface')) {
-      domains.add('UX');
+      domains.add('ux');
     }
 
     if (lowerMessage.includes('performance') || lowerMessage.includes('api') || lowerMessage.includes('schema')) {
-      domains.add('FullStack');
+      domains.add('fullstack');
     }
 
     if (lowerMessage.includes('system') || lowerMessage.includes('deployment') || lowerMessage.includes('health')) {
-      domains.add('DevOps');
+      domains.add('devops');
     }
 
     if (lowerMessage.includes('goal') || lowerMessage.includes('risk')) {
-      domains.add('Trading');
+      domains.add('trading');
     }
 
     // Default to General if no specific domain detected
     if (domains.size === 0) {
-      domains.add('General');
+      domains.add('general');
     }
 
     return Array.from(domains);
@@ -398,6 +434,9 @@ class ReasoningOrchestrator {
         .for('update', { skipLocked: true });
 
       for (const task of tasks) {
+        const domain = this.extractDomainFromTaskType(task.taskType);
+        const startTime = Date.now();
+        
         try {
           // Lock the task
           await db.update(reasoningQueue)
@@ -410,6 +449,9 @@ class ReasoningOrchestrator {
 
           // Execute the task
           const result = await this.executeTask(task);
+          
+          // Calculate duration
+          const duration = Date.now() - startTime;
 
           // Mark as completed
           await db.update(reasoningQueue)
@@ -420,9 +462,22 @@ class ReasoningOrchestrator {
             })
             .where(eq(reasoningQueue.id, task.id));
 
-          console.log(`[ReasoningOrchestrator] Task completed: ${task.taskType} (${task.id})`);
+          // Track metrics
+          this.metrics.totalCompleted++;
+          if (!this.metrics.latencyByDomain.has(domain)) {
+            this.metrics.latencyByDomain.set(domain, []);
+          }
+          this.metrics.latencyByDomain.get(domain)!.push(duration);
+          
+          // Track retries
+          if (task.retryCount && task.retryCount > 0) {
+            this.metrics.totalRetries += task.retryCount;
+          }
+
+          console.log(`[ReasoningOrchestrator] ✅ Task completed: ${task.taskType} (${task.id}) | Domain: ${domain} | Duration: ${duration}ms | Retries: ${task.retryCount || 0}`);
         } catch (error) {
-          console.error(`[ReasoningOrchestrator] Task failed: ${task.taskType}`, error);
+          const duration = Date.now() - startTime;
+          console.error(`[ReasoningOrchestrator] ❌ Task failed: ${task.taskType} (${task.id}) | Domain: ${domain} | Duration: ${duration}ms`, error);
 
           // Mark as failed
           await db.update(reasoningQueue)
@@ -432,7 +487,15 @@ class ReasoningOrchestrator {
               completedAt: new Date(),
             })
             .where(eq(reasoningQueue.id, task.id));
+          
+          this.metrics.totalFailed++;
         }
+      }
+      
+      // Log summarized queue metrics every 10 iterations
+      this.queueIterations++;
+      if (this.queueIterations % 10 === 0) {
+        this.logQueueMetrics();
       }
     } catch (error) {
       console.error(`[ReasoningOrchestrator] Queue processing error:`, error);
@@ -570,6 +633,64 @@ class ReasoningOrchestrator {
       console.error(`[ReasoningOrchestrator] Error fetching trace:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Phase 8.8.3+: Log summarized queue metrics
+   */
+  private logQueueMetrics(): void {
+    const latencyStats: Record<string, { avg: number; count: number }> = {};
+    
+    // Calculate average latency per domain
+    this.metrics.latencyByDomain.forEach((latencies, domain) => {
+      const avg = latencies.length > 0 
+        ? latencies.reduce((sum, l) => sum + l, 0) / latencies.length 
+        : 0;
+      latencyStats[domain] = { avg: Math.round(avg), count: latencies.length };
+    });
+
+    const totalTasks = this.metrics.totalCompleted + this.metrics.totalFailed;
+    const completionRatio = totalTasks > 0 
+      ? (this.metrics.totalCompleted / totalTasks * 100).toFixed(1) 
+      : '0.0';
+
+    console.log(`[ReasoningOrchestrator] 📊 Queue Metrics (iteration ${this.queueIterations}):`);
+    console.log(`  - Latency by Domain:`, latencyStats);
+    console.log(`  - Total Retries: ${this.metrics.totalRetries}`);
+    console.log(`  - Completion Ratio: ${completionRatio}% (${this.metrics.totalCompleted}/${totalTasks})`);
+    console.log(`  - Failed Tasks: ${this.metrics.totalFailed}`);
+  }
+
+  /**
+   * Phase 8.8.3+: Get aggregated queue metrics
+   */
+  getMetrics(): any {
+    const latencyStats: Record<string, { avgLatency: number; taskCount: number }> = {};
+    
+    this.metrics.latencyByDomain.forEach((latencies, domain) => {
+      const avg = latencies.length > 0 
+        ? latencies.reduce((sum, l) => sum + l, 0) / latencies.length 
+        : 0;
+      latencyStats[domain] = { 
+        avgLatency: Math.round(avg), 
+        taskCount: latencies.length 
+      };
+    });
+
+    const totalTasks = this.metrics.totalCompleted + this.metrics.totalFailed;
+    const completionRatio = totalTasks > 0 
+      ? Number((this.metrics.totalCompleted / totalTasks * 100).toFixed(1))
+      : 0;
+
+    return {
+      workerId: this.workerId,
+      iterations: this.queueIterations,
+      latencyByDomain: latencyStats,
+      totalRetries: this.metrics.totalRetries,
+      totalCompleted: this.metrics.totalCompleted,
+      totalFailed: this.metrics.totalFailed,
+      completionRatio,
+    };
   }
 
   /**

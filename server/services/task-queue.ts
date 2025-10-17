@@ -190,8 +190,10 @@ class TaskQueueService {
     const maxRetries = 3;
 
     if (retryCount < maxRetries) {
-      // Phase 8.8.3 Fix: Calculate retry_at timestamp with exponential backoff
-      const backoffMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+      // Phase 8.8.3+: Calculate retry_at with exponential backoff + jitter
+      const baseBackoffMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+      const jitterMs = Math.random() * 500; // 0-500ms random jitter
+      const backoffMs = baseBackoffMs + jitterMs;
       const retryAt = new Date(Date.now() + backoffMs);
       
       await db.update(reasoningQueue)
@@ -248,8 +250,8 @@ class TaskQueueService {
     try {
       const { contextBridge } = await import('./context-bridge');
       await contextBridge.broadcast({
-        eventType: 'queue_event',
-        payload: event,
+        type: 'state_update',
+        payload: { ...event, eventType: 'queue_event' },
         userId: event.userId || undefined,
       });
     } catch (error) {
