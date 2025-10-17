@@ -84,7 +84,7 @@ class ReflectiveIntelligenceService {
     // Analyze based on depth level
     const analysis = this.performAnalysis(input);
 
-    const [created] = await db.execute(sql`
+    const result = await db.execute(sql`
       INSERT INTO reflection_log (
         id, user_id, trigger_source, reflection_depth, subject_area,
         analysis_text, insights, questions_raised, improvement_suggestions, 
@@ -105,6 +105,8 @@ class ReflectiveIntelligenceService {
       RETURNING *
     `);
 
+    const created = result.rows[0] as ReflectionLog;
+
     // Broadcast via Context Bridge
     await contextBridge.broadcast({
       type: 'state_update',
@@ -119,7 +121,7 @@ class ReflectiveIntelligenceService {
       },
     });
 
-    return created.rows[0] as ReflectionLog;
+    return created;
   }
 
   /**

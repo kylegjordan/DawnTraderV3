@@ -5,6 +5,7 @@ import { strategicPlannerService } from './strategic-planner';
 import { continuousLearningEngine } from './continuous-learning';
 import { simulationEngine } from './simulation-engine';
 import { strategicMemory } from './strategic-memory';
+import { reflectiveIntelligence } from './reflective-intelligence';
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -272,9 +273,63 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 6 hours - Reflective Intelligence & Decision Quality Audit (Phase 9.4)
+schedulerRegistry.registerTask({
+  name: 'reflection_analysis',
+  description: 'Deep reflection and meta-reasoning analysis',
+  frequency: 'custom',
+  intervalMs: 6 * 60 * 60 * 1000, // 6 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🧠 Running reflection and decision quality analysis...');
+    
+    try {
+      const adminUsers = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
+      const userId = adminUsers[0]?.id;
+
+      if (!userId) {
+        console.warn('[AutonomyScheduler] No admin user found for reflection analysis');
+        return;
+      }
+
+      // 1. Trigger deep reflection on recent activities
+      console.log('[AutonomyScheduler] 💭 Triggering deep reflection...');
+      const deepReflection = await reflectiveIntelligence.triggerDeepReflection(userId, 'paper');
+      console.log(`[AutonomyScheduler] Deep reflection completed: ${deepReflection.subjectArea}`);
+
+      // 2. Trigger meta-reflection on reasoning quality
+      console.log('[AutonomyScheduler] 🔍 Triggering meta-reflection...');
+      const metaReflection = await reflectiveIntelligence.triggerMetaReflection(userId, 'paper');
+      console.log(`[AutonomyScheduler] Meta-reflection completed: ${metaReflection.subjectArea}`);
+
+      // 3. Get recent reflections for analysis
+      const recentReflections = await reflectiveIntelligence.getReflections(userId, 5);
+      console.log(`[AutonomyScheduler] Retrieved ${recentReflections.length} recent reflections`);
+
+      // 4. Get recent decision audits
+      const recentAudits = await reflectiveIntelligence.getDecisionAudits(userId, 5);
+      console.log(`[AutonomyScheduler] Retrieved ${recentAudits.length} recent decision audits`);
+
+      console.log('[AutonomyScheduler] ✅ Reflection analysis complete');
+      
+      // Log insights
+      if (recentReflections.length > 0) {
+        console.log('[AutonomyScheduler] 💡 Key insights:', 
+          recentReflections.map(r => `${r.reflectionDepth}-level on ${r.subjectArea}`).join(', ')
+        );
+      }
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Reflection analysis failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, and Phase 9.3 simulation tasks
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, and Phase 9.4 reflection tasks
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -295,12 +350,16 @@ export async function initAutonomyScheduler() {
     // Start simulation evaluation (run after 2 hour delay) - Phase 9.3
     await schedulerRegistry.startTask('simulation_evaluation', false);
     
+    // Start reflection analysis (run after 3 hour delay) - Phase 9.4
+    await schedulerRegistry.startTask('reflection_analysis', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
     console.log('[AutonomyScheduler] - Strategy evaluation: Every 3 hours');
     console.log('[AutonomyScheduler] - Learning updates: Every 6 hours');
     console.log('[AutonomyScheduler] - Simulation evaluation: Every 4 hours');
+    console.log('[AutonomyScheduler] - Reflection analysis: Every 6 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -316,6 +375,7 @@ export function getAutonomySchedulerStatus() {
   const strategyStatus = schedulerRegistry.getTaskStatus('strategy_evaluation');
   const learningStatus = schedulerRegistry.getTaskStatus('learning_updates');
   const simulationStatus = schedulerRegistry.getTaskStatus('simulation_evaluation');
+  const reflectionStatus = schedulerRegistry.getTaskStatus('reflection_analysis');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -347,6 +407,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: simulationStatus.lastRun,
       nextRun: simulationStatus.nextRun,
       frequency: simulationStatus.frequency,
+    } : null,
+    reflectionAnalysis: reflectionStatus ? {
+      status: reflectionStatus.status,
+      lastRun: reflectionStatus.lastRun,
+      nextRun: reflectionStatus.nextRun,
+      frequency: reflectionStatus.frequency,
     } : null,
   };
 }
