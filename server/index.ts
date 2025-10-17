@@ -152,6 +152,13 @@ app.use((req, res, next) => {
     });
   });
 
+  // Phase 8.8.2: Initialize Memory Lifecycle Manager (async, non-blocking)
+  import('./services/memory-lifecycle').then(({ memoryLifecycle }) => {
+    memoryLifecycle.initialize().catch((error) => {
+      console.error('[Server] Failed to initialize Memory Lifecycle:', error);
+    });
+  });
+
   // Start Scheduler Registry with autonomous tasks (async, non-blocking)
   import('./services/scheduler-registry').then(async ({ schedulerRegistry }) => {
     try {
@@ -167,8 +174,10 @@ app.use((req, res, next) => {
       const { diagnosticAnalysisTask } = await import('./services/diagnostic-analysis-task');
       const { optimizationAnalysisTask } = await import('./services/optimization-analysis-task');
       const { weeklyExpertInsightsTask } = await import('./services/weekly-expert-insights-task');
+      const { registerLearningFeedbackJob } = await import('./jobs/learning-feedback');
 
       // Register tasks
+      registerLearningFeedbackJob();
       schedulerRegistry.registerTask({
         name: screenerRecalibrationTask.name,
         description: screenerRecalibrationTask.description,
