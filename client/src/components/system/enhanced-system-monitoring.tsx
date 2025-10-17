@@ -23,7 +23,8 @@ import {
   Check,
   Monitor,
   Brain,
-  Target
+  Target,
+  Sparkles
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -372,7 +373,7 @@ export default function EnhancedSystemMonitoring() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-9" data-testid="tabs-system-monitoring">
+        <TabsList className="grid w-full grid-cols-10" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -400,6 +401,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="strategy" data-testid="tab-strategy">
             <Target className="w-4 h-4 mr-2" />
             Strategy
+          </TabsTrigger>
+          <TabsTrigger value="simulation" data-testid="tab-simulation">
+            <Sparkles className="w-4 h-4 mr-2" />
+            Simulation
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -844,6 +849,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 7: Strategy & Learning */}
         <TabsContent value="strategy" className="space-y-4">
           <StrategyTab />
+        </TabsContent>
+
+        {/* Tab 8: Simulation - Phase 9.3 */}
+        <TabsContent value="simulation" className="space-y-4">
+          <SimulationTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -1551,6 +1561,201 @@ function StrategyTab() {
             <div className="text-center py-8 text-muted-foreground">
               <CheckCircle2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No compliance data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SimulationTab() {
+  const { toast } = useToast();
+  
+  // Fetch simulations list
+  const { data: simulations, isLoading: simulationsLoading, refetch } = useQuery({
+    queryKey: ['/api/simulation/list'],
+    refetchInterval: 60000, // Refresh every minute
+  });
+  
+  // Fetch strategic memory lessons
+  const { data: lessons, isLoading: lessonsLoading } = useQuery({
+    queryKey: ['/api/strategic/memory/lessons'],
+    refetchInterval: 60000,
+  });
+  
+  // Run simulation mutation
+  const runSimulationMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/simulation/run', {
+        type: 'risk_assessment',
+        description: 'Manual risk assessment simulation',
+        inputState: {
+          portfolioBalance: 10000,
+          currentPositions: [],
+        },
+        actions: {
+          riskLevel: 'moderate',
+        },
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Simulation Started',
+        description: 'Risk assessment simulation has been initiated',
+      });
+      refetch();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Simulation Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+  
+  // Extract lessons mutation
+  const extractLessonsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/strategic/memory/extract', {});
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Lessons Extracted',
+        description: 'Strategic lessons have been extracted from simulations',
+      });
+      refetch();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Extraction Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+  
+  const simulationsList = (simulations as any)?.simulations || [];
+  const lessonsList = (lessons as any)?.lessons || [];
+  
+  return (
+    <div className="space-y-4">
+      {/* Simulations Overview */}
+      <Card data-testid="card-simulations-overview">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5" />
+                Strategic Simulations
+              </CardTitle>
+              <CardDescription>
+                Scenario simulations and outcome predictions
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => runSimulationMutation.mutate()}
+              disabled={runSimulationMutation.isPending}
+              data-testid="button-run-simulation"
+            >
+              {runSimulationMutation.isPending ? 'Running...' : 'Run Simulation'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {simulationsLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : simulationsList.length > 0 ? (
+            <div className="space-y-3">
+              {simulationsList.slice(0, 5).map((sim: any, idx: number) => (
+                <div 
+                  key={sim.simulationId} 
+                  className="flex items-center justify-between p-3 rounded-lg border"
+                  data-testid={`simulation-${idx}`}
+                >
+                  <div className="flex-1">
+                    <div className="font-medium">{sim.description || 'Simulation'}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Type: {sim.type} • Status: {sim.evaluationStatus}
+                    </div>
+                  </div>
+                  {sim.successScore !== null && (
+                    <Badge variant={sim.successScore > 0.7 ? 'default' : 'secondary'}>
+                      Score: {(sim.successScore * 100).toFixed(0)}%
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No simulations available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Strategic Memory Lessons */}
+      <Card data-testid="card-strategic-lessons">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="w-5 h-5" />
+                Strategic Lessons
+              </CardTitle>
+              <CardDescription>
+                Lessons extracted from completed simulations
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => extractLessonsMutation.mutate()}
+              disabled={extractLessonsMutation.isPending}
+              data-testid="button-extract-lessons"
+            >
+              {extractLessonsMutation.isPending ? 'Extracting...' : 'Extract Lessons'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {lessonsLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : lessonsList.length > 0 ? (
+            <div className="space-y-3">
+              {lessonsList.slice(0, 5).map((lesson: any, idx: number) => (
+                <div 
+                  key={lesson.id} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`lesson-${idx}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="font-medium">{lesson.lessonTitle}</div>
+                    <Badge variant="outline">{lesson.confidenceLevel}</Badge>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {lesson.lessonContent?.substring(0, 150)}
+                    {lesson.lessonContent?.length > 150 ? '...' : ''}
+                  </div>
+                  {lesson.applicableContexts && (
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      {lesson.applicableContexts.map((context: string, cIdx: number) => (
+                        <Badge key={cIdx} variant="secondary" className="text-xs">
+                          {context}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No strategic lessons available</p>
             </div>
           )}
         </CardContent>
