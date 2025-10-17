@@ -346,19 +346,68 @@ class ReasoningOrchestrator {
   private async executeTask(task: any): Promise<any> {
     const { taskType, payload } = task;
 
-    // TODO: Integrate with Domain Bobs based on taskType
-    // For now, return mock data
-    switch (taskType) {
-      case 'query_bob':
-        return { status: 'ok', data: 'Bob query result' };
-      case 'fetch_strategies':
-        return { status: 'ok', strategies: [] };
-      case 'retrieve_goals':
-        return { status: 'ok', goals: [] };
-      case 'compare_guardrails':
-        return { status: 'ok', guardrails: {} };
-      default:
-        return { status: 'ok', message: 'Task executed' };
+    try {
+      switch (taskType) {
+        case 'query_bob': {
+          // Dynamically import and query the appropriate Bob
+          const target = payload.target;
+          const query = payload.params?.query || '';
+
+          switch (target) {
+            case 'devops_bob': {
+              const { devopsBob } = await import('./bobs/devops-bob');
+              const analysis = await devopsBob.runAnalysis(query);
+              const findings = await devopsBob.returnFindings(analysis);
+              return { status: 'ok', findings, analysis };
+            }
+            case 'fullstack_bob': {
+              const { fullstackBob } = await import('./bobs/fullstack-bob');
+              const analysis = await fullstackBob.runAnalysis(query);
+              const findings = await fullstackBob.returnFindings(analysis);
+              return { status: 'ok', findings, analysis };
+            }
+            case 'ux_bob': {
+              const { uxBob } = await import('./bobs/ux-bob');
+              const analysis = await uxBob.runAnalysis(query);
+              const findings = await uxBob.returnFindings(analysis);
+              return { status: 'ok', findings, analysis };
+            }
+            default:
+              return { status: 'ok', message: `Unknown Bob: ${target}` };
+          }
+        }
+        
+        case 'fetch_strategies': {
+          // Fetch strategy settings from database
+          const { strategySettings } = await import('@shared/schema');
+          const mode = payload.params?.mode || 'paper';
+          const strategies = await db.select().from(strategySettings).where(eq(strategySettings.mode, mode));
+          return { status: 'ok', strategies };
+        }
+        
+        case 'retrieve_goals': {
+          // Fetch user goals from database
+          const { userGoalsLive, userGoalsPaper } = await import('@shared/schema');
+          const mode = payload.params?.mode || 'paper';
+          const goalsTable = mode === 'live' ? userGoalsLive : userGoalsPaper;
+          const goals = await db.select().from(goalsTable);
+          return { status: 'ok', goals };
+        }
+        
+        case 'compare_guardrails': {
+          // Fetch guardrails from database
+          const { guardrails } = await import('@shared/schema');
+          const mode = payload.params?.mode || 'paper';
+          const guardrailData = await db.select().from(guardrails).where(eq(guardrails.mode, mode));
+          return { status: 'ok', guardrails: guardrailData };
+        }
+        
+        default:
+          return { status: 'ok', message: 'Task executed', taskType };
+      }
+    } catch (error) {
+      console.error(`[ReasoningOrchestrator] Error executing task ${taskType}:`, error);
+      throw error;
     }
   }
 
