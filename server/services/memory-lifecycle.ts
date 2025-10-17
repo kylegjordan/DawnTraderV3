@@ -49,7 +49,6 @@ class MemoryLifecycleService {
       // Load core memory components
       const fragments = await db.select()
         .from(learningFragments)
-        .where(userId ? eq(learningFragments.userId, userId) : undefined)
         .limit(100); // Recent learning fragments
       
       const portfolio = await db.select()
@@ -62,19 +61,20 @@ class MemoryLifecycleService {
       this.memoryState = {
         learningFragments: fragments.map(f => ({
           id: f.id,
-          content: f.fragmentContent,
-          timestamp: f.createdAt,
+          content: f.narrative,
+          timestamp: f.timestamp,
           traceId: f.traceId,
         })),
         portfolioState: portfolio.map(p => ({
           mode: p.mode,
           balance: p.balance,
-          allocatedCapital: p.allocatedCapital,
+          userId: p.userId,
         })),
         strategySettings: strategies.map(s => ({
           id: s.id,
-          riskPerTrade: s.riskPerTrade,
-          maxExposure: s.maxExposurePercent,
+          strategy: s.strategy,
+          enabled: s.enabled,
+          params: s.params,
         })),
         timestamp: new Date().toISOString(),
       };
@@ -82,9 +82,10 @@ class MemoryLifecycleService {
       console.log(`[MemoryLifecycle] ✅ Memory rehydrated: ${fragments.length} fragments, ${portfolio.length} portfolio entries, ${strategies.length} strategies`);
       
       return this.memoryState;
-    } catch (error) {
-      console.error("[MemoryLifecycle] ❌ Rehydration failed:", error.message);
-      throw new Error(`E503_REHYDRATION_FAIL: ${error.message}`);
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      console.error("[MemoryLifecycle] ❌ Rehydration failed:", errorMessage);
+      throw new Error(`E503_REHYDRATION_FAIL: ${errorMessage}`);
     }
   }
 
@@ -128,9 +129,10 @@ class MemoryLifecycleService {
       this.currentStatus = status;
       
       console.log(`[MemoryLifecycle] ✅ Checksum logged: ${checksum} (status: ${status})`);
-    } catch (error) {
-      console.error("[MemoryLifecycle] ❌ Failed to log checksum:", error.message);
-      throw new Error(`E422_CHECKSUM_LOG_FAIL: ${error.message}`);
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      console.error("[MemoryLifecycle] ❌ Failed to log checksum:", errorMessage);
+      throw new Error(`E422_CHECKSUM_LOG_FAIL: ${errorMessage}`);
     }
   }
 
@@ -182,10 +184,11 @@ class MemoryLifecycleService {
       
       console.log("[MemoryLifecycle] ✅ Checksum validated - memory integrity confirmed");
       return { repaired: false };
-    } catch (error) {
-      console.error("[MemoryLifecycle] ❌ Repair check failed:", error.message);
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      console.error("[MemoryLifecycle] ❌ Repair check failed:", errorMessage);
       this.currentStatus = "UNVERIFIED";
-      throw new Error(`E422_CHECKSUM_MISMATCH: ${error.message}`);
+      throw new Error(`E422_CHECKSUM_MISMATCH: ${errorMessage}`);
     }
   }
 
@@ -209,8 +212,9 @@ class MemoryLifecycleService {
       await this.logChecksum(checksum, "VERIFIED", memoryState, undefined, userId);
       
       console.log("[MemoryLifecycle] ✅ Initialization complete - memory VERIFIED");
-    } catch (error) {
-      console.error("[MemoryLifecycle] ❌ Initialization failed:", error.message);
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      console.error("[MemoryLifecycle] ❌ Initialization failed:", errorMessage);
       this.currentStatus = "UNVERIFIED";
       throw error;
     }
