@@ -43,6 +43,7 @@ import { insightBob } from "./services/bob-insight";
 import { uiBob } from "./services/bob-ui";
 import { cortexCore } from "./services/cortex/cortex-core";
 import { filePersistence } from "./services/file-persistence";
+import { memoryLifecycle } from "./services/memory-lifecycle";
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -7458,6 +7459,53 @@ Summary:`;
       });
     } catch (error: any) {
       console.error('[Reasoning] Error fetching debug trace:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // ==================== Phase 8.8.2: Memory Lifecycle Manager API ====================
+  
+  // GET /api/memory/status - Get current memory status
+  app.get('/api/memory/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const status = memoryLifecycle.getStatus();
+      res.json({ ok: true, data: status });
+    } catch (error: any) {
+      console.error('[MemoryLifecycle] Error getting status:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // POST /api/memory/rehydrate - Manually trigger memory rehydration (admin only)
+  app.post('/api/memory/rehydrate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Check if user is admin
+      const user = await db.query.users.findFirst({
+        where: (users, { eq }) => eq(users.id, userId)
+      });
+      
+      if (!user?.isAdmin) {
+        return res.status(403).json({ ok: false, error: 'Admin access required' });
+      }
+      
+      const status = await memoryLifecycle.manualRehydrate(userId);
+      res.json({ ok: true, data: status });
+    } catch (error: any) {
+      console.error('[MemoryLifecycle] Error rehydrating memory:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  // GET /api/memory/audit - Get recent audit records
+  app.get('/api/memory/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const records = await memoryLifecycle.getAuditRecords(limit);
+      res.json({ ok: true, data: records });
+    } catch (error: any) {
+      console.error('[MemoryLifecycle] Error fetching audit records:', error);
       res.status(500).json({ ok: false, error: error.message });
     }
   });

@@ -30,10 +30,10 @@ async function aggregateSimulationResults(): Promise<any[]> {
   
   if (recentTrades.length > 0) {
     const profitable = recentTrades.filter(t => 
-      t.status === "closed" && parseFloat(t.pnl || "0") > 0
+      t.status === "closed" && parseFloat(t.realizedPL || "0") > 0
     );
     const losing = recentTrades.filter(t => 
-      t.status === "closed" && parseFloat(t.pnl || "0") < 0
+      t.status === "closed" && parseFloat(t.realizedPL || "0") < 0
     );
     
     insights.push({
@@ -82,7 +82,6 @@ async function runLearningFeedback(): Promise<void> {
         ],
         eventCategory: "daily_synthesis",
         traceId,
-        timestamp: new Date(),
       };
       
       await db.insert(learningFragments).values(fragment);
