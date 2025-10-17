@@ -430,5 +430,14 @@ app.use((req, res, next) => {
     } catch (error) {
       console.error('[AutonomyScheduler] ⚠️ Startup failed:', error);
     }
+
+    // Phase 8.94: Start Awareness Layer (hourly state updates, 6-hour reflections)
+    try {
+      const { initializeAwarenessScheduler } = await import('./services/awareness-scheduler');
+      initializeAwarenessScheduler();
+      console.log('[AwarenessScheduler] ✅ Started successfully');
+    } catch (error) {
+      console.error('[AwarenessScheduler] ⚠️ Startup failed:', error);
+    }
   });
 })();
