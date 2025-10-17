@@ -54,6 +54,7 @@ export const memoryAuditStatusEnum = pgEnum("memory_audit_status", ["VERIFIED", 
 export const cognitiveTestResultEnum = pgEnum("cognitive_test_result", ["PASS", "WARN", "FAIL"]);
 export const autonomyActionTypeEnum = pgEnum("autonomy_action_type", ["self_check", "self_reasoning", "exploration", "optimization"]);
 export const metaAnalysisResultEnum = pgEnum("meta_analysis_result", ["coherent", "inconsistent", "requires_correction"]);
+export const awarenessEmotionalStateEnum = pgEnum("awareness_emotional_state", ["stable", "focused", "alert", "fatigued", "overloaded", "recovering"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -2220,6 +2221,30 @@ export const metaReasoningLog = pgTable("meta_reasoning_log", {
   timestampIdx: index("meta_reasoning_log_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 8.94: Awareness Core - State Log
+export const awarenessStateLog = pgTable("awareness_state_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateId: varchar("state_id", { length: 50 }).notNull().unique(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  userId: varchar("user_id", { length: 50 }),
+  healthScore: doublePrecision("health_score").notNull(),
+  cognitiveScore: doublePrecision("cognitive_score").notNull(),
+  emotionalState: awarenessEmotionalStateEnum("emotional_state").notNull(),
+  dominantDomain: varchar("dominant_domain", { length: 50 }),
+  activeDomains: text("active_domains").array().default(sql`ARRAY[]::text[]`),
+  missionFocus: text("mission_focus"),
+  recentActions: jsonb("recent_actions"), // Summary of recent autonomy actions
+  reflectionSummary: text("reflection_summary"), // Self-reflection narrative
+  confidenceScore: doublePrecision("confidence_score"), // Overall confidence in current state
+  anomalyDetected: boolean("anomaly_detected").default(false),
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  stateIdIdx: index("awareness_state_log_state_id_idx").on(table.stateId),
+  timestampIdx: index("awareness_state_log_timestamp_idx").on(table.timestamp),
+  emotionalStateIdx: index("awareness_state_log_emotional_state_idx").on(table.emotionalState),
+  userIdIdx: index("awareness_state_log_user_id_idx").on(table.userId),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2236,6 +2261,7 @@ export const insertMemoryAuditLogSchema = createInsertSchema(memoryAuditLog).omi
 export const insertCognitiveTuningLogSchema = createInsertSchema(cognitiveTuningLog).omit({ id: true, createdAt: true });
 export const insertAutonomyAuditLogSchema = createInsertSchema(autonomyAuditLog).omit({ id: true, timestamp: true });
 export const insertMetaReasoningLogSchema = createInsertSchema(metaReasoningLog).omit({ id: true, timestamp: true, createdAt: true });
+export const insertAwarenessStateLogSchema = createInsertSchema(awarenessStateLog).omit({ id: true, timestamp: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2282,6 +2308,9 @@ export type AutonomyAuditLog = typeof autonomyAuditLog.$inferSelect;
 
 export type InsertMetaReasoningLog = z.infer<typeof insertMetaReasoningLogSchema>;
 export type MetaReasoningLog = typeof metaReasoningLog.$inferSelect;
+
+export type InsertAwarenessStateLog = z.infer<typeof insertAwarenessStateLogSchema>;
+export type AwarenessStateLog = typeof awarenessStateLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

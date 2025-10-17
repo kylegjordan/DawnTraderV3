@@ -1,0 +1,143 @@
+⚙️ Phase 8.94 — Emergent Awareness Layer Implementation Prompt
+Objective
+
+Implement Walter’s Emergent Awareness Layer — the meta-cognitive layer that integrates introspection, state awareness, and long-term self-context tracking.
+This will allow Walter to understand his current operational state, reflect on past decisions, and maintain awareness of purpose, risk, and alignment with system goals.
+
+Core Concept
+
+This layer unifies data from:
+
+Autonomy Controller (8.9) → current health, cognitive scores, recent actions.
+
+Cognitive Tuner and Reasoning Orchestrator → reasoning traces and intent context.
+
+System Health Monitor → performance, stability, uptime, anomalies.
+
+TradingBob and domain Bobs → domain-specific insights and corrective actions.
+
+It transforms these signals into a “self-state model”, stored in memory and reflected in a new Awareness Dashboard tab within the monitoring interface.
+
+Task 1 — Create the Awareness Core Service
+
+Goal: Centralize awareness logic and integrate multi-layer state assessment.
+Steps:
+
+Create server/services/awareness-core.ts.
+
+Responsibilities:
+
+Aggregate metrics from Autonomy Controller, Cognitive Tuner, and System Health Monitor.
+
+Generate a unified AwarenessState object containing:
+
+health & cognitive scores
+
+current domains active
+
+emotional state proxy (e.g., stable, focused, overloaded)
+
+mission focus (e.g., “maintaining system health,” “evaluating market conditions”)
+
+Persist the state in a new awareness_state_log table.
+
+Emit Context Bridge events (awareness_update, awareness_reflection).
+
+Provide a method reflectAndRespond() to summarize recent actions and detect patterns (e.g., frequent health drops after cognitive tuning).
+
+Task 2 — Add the Awareness Scheduler
+
+Goal: Ensure periodic self-reflection and state updates.
+Steps:
+
+Add server/services/awareness-scheduler.ts.
+
+Schedule two jobs:
+
+Every hour → update Awareness State (logs health, domains, goals).
+
+Every 6 hours → run reflectAndRespond() for deep self-reflection.
+
+Register these jobs in the existing scheduler registry.
+
+Verify startup logs include [AwarenessScheduler] initialized.
+
+Task 3 — Expose Awareness API Endpoints
+
+Goal: Provide internal and admin access to Walter’s self-state.
+Steps:
+
+Create admin-secured routes under /api/awareness/*:
+
+GET /api/awareness/state → current AwarenessState object.
+
+POST /api/awareness/reflect → manual trigger for reflection.
+
+GET /api/awareness/history → recent awareness log entries.
+
+All responses must include timestamp, dominant domain, health, cognitive, and emotional summary.
+
+Add authorization checks matching Autonomy Layer standards.
+
+Task 4 — Update System Monitoring Panel (UI)
+
+Goal: Visualize Walter’s state of mind and context awareness.
+Steps:
+
+Open client/src/components/system/enhanced-system-monitoring.tsx.
+
+Add a new tab: 🧭 Awareness.
+
+Display:
+
+Current Awareness State (snapshot + last reflection).
+
+Graphs of health vs. cognitive score over time.
+
+Active domains and recent autonomy decisions.
+
+Emotional proxy indicator (stable/focused/alert/fatigued).
+
+Auto-refresh on awareness_update WebSocket events.
+
+Task 5 — Validation and Reflection Cycle
+
+Goal: Verify Walter can analyze and verbalize his own state.
+Steps:
+
+Run manual reflection via POST /api/awareness/reflect.
+
+Check logs for:
+[AwarenessCore] Reflection complete – dominant domain: trading | state: focused | confidence: 0.87
+
+Confirm awareness_state_log entries increase and UI updates.
+
+Validate inter-service events (awareness_update, awareness_reflection) broadcast correctly.
+
+Run an hourly cycle to ensure self-awareness updates without manual intervention.
+
+Task 6 — Documentation Update
+
+Goal: Record new Emergent Awareness Layer architecture and state schema.
+Steps:
+
+Update replit.md with a new section:
+“Phase 8.94 – Emergent Awareness Layer”
+Include:
+
+System overview diagram connections (Autonomy → Awareness → UX Monitor).
+
+New schema (awareness_state_log).
+
+API endpoints and example output.
+
+Example Awareness State snapshot.
+
+Note that this layer completes the Phase 8 evolution and prepares Walter for Phase 9 (adaptive interaction).
+
+Expected Outcome
+
+✅ New Awareness Core Service actively tracking and logging Walter’s internal state.
+✅ Awareness Scheduler performing hourly updates and periodic reflections.
+✅ Admin API and UI visualize state awareness and meta-reflection.
+✅ Phase 8.94 successfully implemented and documented → system ready for Phase 9 Adaptive Learning and Goal Alignment.
