@@ -61,6 +61,11 @@ export const alignmentVerificationResultEnum = pgEnum("alignment_verification_re
 export const planStatusEnum = pgEnum("plan_status", ["draft", "active", "paused", "completed"]);
 export const learningPhaseEnum = pgEnum("learning_phase", ["observation", "adjustment", "evaluation"]);
 
+// Phase 9.3 enums
+export const scenarioTypeEnum = pgEnum("scenario_type", ["risk_assessment", "strategy_optimization", "market_condition", "decision_replay", "what_if_analysis"]);
+export const evaluationStatusEnum = pgEnum("evaluation_status", ["pending", "simulating", "completed", "failed"]);
+export const outcomeConfidenceEnum = pgEnum("outcome_confidence", ["very_low", "low", "medium", "high", "very_high"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2369,6 +2374,80 @@ export const learningWeightProfile = pgTable("learning_weight_profile", {
   currentPhaseIdx: index("learning_weight_profile_current_phase_idx").on(table.currentPhase),
 }));
 
+// Phase 9.3: Strategic Simulation Log - Decision Scenario Simulations
+export const strategicSimulationLog = pgTable("strategic_simulation_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  simulationId: varchar("simulation_id", { length: 50 }).notNull().unique(),
+  userId: varchar("user_id", { length: 50 }),
+  scenarioType: scenarioTypeEnum("scenario_type").notNull(),
+  scenarioDescription: text("scenario_description").notNull(),
+  inputState: jsonb("input_state").notNull(), // Initial conditions
+  simulatedActions: jsonb("simulated_actions").notNull(), // Actions taken in simulation
+  predictedOutcome: jsonb("predicted_outcome").notNull(), // Expected results
+  actualOutcome: jsonb("actual_outcome"), // Real results if scenario occurred
+  evaluationStatus: evaluationStatusEnum("evaluation_status").default("pending").notNull(),
+  outcomeConfidence: outcomeConfidenceEnum("outcome_confidence").default("medium").notNull(),
+  successScore: doublePrecision("success_score"), // 0-1 score of simulation success
+  lessonsLearned: text("lessons_learned").array().default(sql`ARRAY[]::text[]`),
+  linkedDecisions: text("linked_decisions").array().default(sql`ARRAY[]::text[]`), // References to decision_trace_log
+  metadata: jsonb("metadata"),
+  simulatedAt: timestamp("simulated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  simulationIdIdx: index("strategic_simulation_log_simulation_id_idx").on(table.simulationId),
+  userIdIdx: index("strategic_simulation_log_user_id_idx").on(table.userId),
+  scenarioTypeIdx: index("strategic_simulation_log_scenario_type_idx").on(table.scenarioType),
+  evaluationStatusIdx: index("strategic_simulation_log_evaluation_status_idx").on(table.evaluationStatus),
+}));
+
+// Phase 9.3: Decision Trace Log - Historical Decision Tracking
+export const decisionTraceLog = pgTable("decision_trace_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  decisionId: varchar("decision_id", { length: 50 }).notNull().unique(),
+  userId: varchar("user_id", { length: 50 }),
+  decisionType: text("decision_type").notNull(), // e.g., "trade_entry", "risk_adjustment", "strategy_enable"
+  contextSnapshot: jsonb("context_snapshot").notNull(), // Full context at decision time
+  reasoning: text("reasoning").notNull(), // Why this decision was made
+  alternatives: jsonb("alternatives").default(sql`'[]'::jsonb`).notNull(), // Other options considered
+  chosenAction: jsonb("chosen_action").notNull(), // What was actually done
+  outcome: jsonb("outcome"), // Result of the decision
+  outcomeQuality: doublePrecision("outcome_quality"), // 0-1 rating of decision quality
+  simulationRef: varchar("simulation_ref", { length: 50 }), // Reference to strategic_simulation_log if simulated first
+  linkedExperiences: text("linked_experiences").array().default(sql`ARRAY[]::text[]`), // Related experience_memory_log entries
+  metadata: jsonb("metadata"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }).defaultNow().notNull(),
+  evaluatedAt: timestamp("evaluated_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  decisionIdIdx: index("decision_trace_log_decision_id_idx").on(table.decisionId),
+  userIdIdx: index("decision_trace_log_user_id_idx").on(table.userId),
+  decisionTypeIdx: index("decision_trace_log_decision_type_idx").on(table.decisionType),
+  simulationRefIdx: index("decision_trace_log_simulation_ref_idx").on(table.simulationRef),
+}));
+
+// Phase 9.3: Strategic Memory Snapshot - Lessons Learned Repository
+export const strategicMemorySnapshot = pgTable("strategic_memory_snapshot", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  snapshotId: varchar("snapshot_id", { length: 50 }).notNull().unique(),
+  userId: varchar("user_id", { length: 50 }),
+  lessonTitle: varchar("lesson_title", { length: 255 }).notNull(),
+  lessonContent: text("lesson_content").notNull(),
+  sourceSimulations: text("source_simulations").array().default(sql`ARRAY[]::text[]`), // References to strategic_simulation_log
+  sourceDecisions: text("source_decisions").array().default(sql`ARRAY[]::text[]`), // References to decision_trace_log
+  applicableContexts: jsonb("applicable_contexts").notNull(), // When this lesson applies
+  confidenceLevel: outcomeConfidenceEnum("confidence_level").default("medium").notNull(),
+  timesApplied: integer("times_applied").default(0), // How often this lesson has been used
+  successRate: doublePrecision("success_rate"), // Success rate when applied
+  lastApplied: timestamp("last_applied", { withTimezone: true }),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  snapshotIdIdx: index("strategic_memory_snapshot_snapshot_id_idx").on(table.snapshotId),
+  userIdIdx: index("strategic_memory_snapshot_user_id_idx").on(table.userId),
+  confidenceLevelIdx: index("strategic_memory_snapshot_confidence_level_idx").on(table.confidenceLevel),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2392,6 +2471,9 @@ export const insertAlignmentAuditLogSchema = createInsertSchema(alignmentAuditLo
 export const insertGoalAlignmentProfileSchema = createInsertSchema(goalAlignmentProfile).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertStrategicPlanLogSchema = createInsertSchema(strategicPlanLog).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertLearningWeightProfileSchema = createInsertSchema(learningWeightProfile).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertStrategicSimulationLogSchema = createInsertSchema(strategicSimulationLog).omit({ id: true, createdAt: true });
+export const insertDecisionTraceLogSchema = createInsertSchema(decisionTraceLog).omit({ id: true, createdAt: true });
+export const insertStrategicMemorySnapshotSchema = createInsertSchema(strategicMemorySnapshot).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2459,6 +2541,15 @@ export type StrategicPlanLog = typeof strategicPlanLog.$inferSelect;
 
 export type InsertLearningWeightProfile = z.infer<typeof insertLearningWeightProfileSchema>;
 export type LearningWeightProfile = typeof learningWeightProfile.$inferSelect;
+
+export type InsertStrategicSimulationLog = z.infer<typeof insertStrategicSimulationLogSchema>;
+export type StrategicSimulationLog = typeof strategicSimulationLog.$inferSelect;
+
+export type InsertDecisionTraceLog = z.infer<typeof insertDecisionTraceLogSchema>;
+export type DecisionTraceLog = typeof decisionTraceLog.$inferSelect;
+
+export type InsertStrategicMemorySnapshot = z.infer<typeof insertStrategicMemorySnapshotSchema>;
+export type StrategicMemorySnapshot = typeof strategicMemorySnapshot.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
