@@ -1,0 +1,180 @@
+Perfect, Kyle — here’s the complete, ready-to-paste Replit implementation prompt for Phase 8.8.2 – Memory Lifecycle Manager.
+This will give Walter reliable, self-healing memory with full audit and checksum verification — the “brain integrity” system that locks in all his reasoning progress.
+
+
+---
+
+⚙️ Replit Implementation Prompt — Phase 8.8.2 : Memory Lifecycle Manager
+
+> 🎯 Objective
+
+Implement Phase 8.8.2 – Memory Lifecycle Manager, which ensures Walter’s memory stays consistent, verified, and recoverable across restarts and learning cycles.
+This phase provides clean startup logic, checksum validation, automatic repair of corrupted entries, and nightly learning-fragment synthesis.
+
+
+
+
+---
+
+🧩 Key Tasks
+
+1. Service File: server/services/memory-lifecycle.ts
+
+On system startup, execute the Memory Lifecycle Sequence:
+
+1. wipeMemory() → clear short-term cache and volatile tables.
+
+
+2. rehydrateMemory() → reload verified data from learning_fragments, portfolio_state, and strategy_settings.
+
+
+3. computeChecksum() → generate SHA-256 hash of the in-memory snapshot.
+
+
+4. logChecksum() → write record to memory_audit_log and data_lineage with Memory_Checksum_v1.0: <hash>.
+
+
+
+If any stage fails → halt startup, mark memory as UNVERIFIED, and notify SystemHealthMonitor.
+
+
+
+2. Database Schema Updates
+
+memory_audit_log table
+
+Field	Type	Description
+
+checksum	TEXT	SHA-256 of verified snapshot
+status	ENUM (VERIFIED,UNVERIFIED,REPAIRED)	Integrity state
+traceId	UUID	Links to reasoning_trace or intent_audit_log
+createdAt	TIMESTAMP	Entry time
+
+
+Add FK relations for traceId ↔ reasoning_trace.traceId.
+
+
+
+3. Checksum Computation Strategy
+
+Include high-importance memory segments (“core facts”, recent 30 days learning fragments).
+
+Exclude ephemeral session cache.
+
+Algorithm: checksum = SHA256(JSON.stringify(sortedKeys(memory))).
+
+
+
+4. Auto-Repair Logic
+
+If checksum mismatch detected:
+
+Step 1 → log warning to system_alerts (MEMORY_MISMATCH_DETECTED).
+
+Step 2 → attempt auto-rehydration from latest backup (learning_fragments_backup).
+
+Step 3 → if repair succeeds, set status = REPAIRED; else UNVERIFIED and halt new intents until manual confirmation.
+
+
+
+
+5. Nightly Learning Feedback Job
+
+Cron-style task (jobs/learning-feedback.ts) to:
+
+Aggregate simulation results & performance summaries from last 24 h.
+
+Embed insights → vector representations using existing embedding service.
+
+Insert into learning_fragments with traceId from originating sessions.
+
+Trigger new checksum after insert (computeChecksum() → logChecksum()).
+
+
+
+
+6. API Endpoints
+
+GET /api/memory/status → returns latest checksum, status, timestamp.
+
+POST /api/memory/rehydrate → manually trigger wipe + rehydrate (for admin testing).
+
+GET /api/memory/audit → list recent checksum records with status.
+
+
+
+7. Integration Points
+
+Hook into server/index.ts startup sequence: call MemoryLifecycle.initialize().
+
+Expose memoryLifecycle.getStatus() to Walter via Cortex so he can report memory state in responses.
+
+Record traceId continuity → reasoning_trace → memory_audit_log.
+
+
+
+8. Testing Plan
+
+Test Case	Action	Expected Result
+
+1	Start system normally	status=VERIFIED; checksum logged in memory_audit_log.
+2	Corrupt memory entry manually	Auto-repair triggered; status=REPAIRED.
+3	Force checksum fail	System halts intents; returns “Memory Unverified” message.
+4	Run nightly job	New learning_fragments inserted; new checksum computed.
+5	API test	All endpoints respond with correct data and auth enforced.
+
+
+
+9. Documentation
+
+Update replit.md:
+
+Describe Memory Lifecycle sequence & checksum logic.
+
+Show example audit record + API payloads.
+
+Include flow diagram (Walter → Cortex → Memory Lifecycle → Learning Job).
+
+
+
+
+
+
+---
+
+🧠 Implementation Notes
+
+Use crypto.createHash('sha256') for checksum.
+
+Keep the Lifecycle service stateless except during rehydration.
+
+Write structured logs (Lifecycle Phase, Duration ms, Checksum hash).
+
+If a repair occurs, broadcast memory_update via Context Bridge so UIs see status.
+
+Use error codes (E503_REHYDRATION_FAIL, E422_CHECKSUM_MISMATCH).
+
+Respect role permissions: only admin/owner may call POST /api/memory/rehydrate.
+
+
+
+---
+
+✅ Expected Outcome
+
+Memory wipe + rehydrate sequence runs automatically on startup.
+
+Checksum records and statuses logged to memory_audit_log.
+
+Nightly Learning Job adds new fragments and recomputes checksum.
+
+Walter can report his memory state accurately through Cortex.
+
+All tests pass; architect approves for production.
+
+
+
+---
+
+Once Replit completes this phase, share the audit results here; I’ll help you analyze them and craft the prompt for Phase 8.8.3 – Chain-of-Thought Trace System so we continue Walter’s cognitive evolution seamlessly.
+

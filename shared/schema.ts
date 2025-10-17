@@ -49,6 +49,7 @@ export const userRoleEnum = pgEnum("user_role", ["owner", "editor", "viewer"]);
 export const eventSignificanceEnum = pgEnum("event_significance", ["minor", "significant", "critical"]);
 export const executionEventTypeEnum = pgEnum("execution_event_type", ["trade", "balance_update", "risk_report", "engine_event", "anomaly", "strategy_signal"]);
 export const reasoningQueueStatusEnum = pgEnum("reasoning_queue_status", ["pending", "in_progress", "completed", "failed"]);
+export const memoryAuditStatusEnum = pgEnum("memory_audit_status", ["VERIFIED", "UNVERIFIED", "REPAIRED"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -2133,6 +2134,24 @@ export const reasoningQueue = pgTable("reasoning_queue", {
   createdAtIdx: index("reasoning_queue_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 8.8.2: Memory Lifecycle Manager - Audit Log
+export const memoryAuditLog = pgTable("memory_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  checksum: varchar("checksum", { length: 64 }).notNull(), // SHA-256 hash
+  status: memoryAuditStatusEnum("status").default("VERIFIED").notNull(),
+  traceId: varchar("trace_id", { length: 50 }).references(() => reasoningTrace.traceId),
+  userId: varchar("user_id").references(() => users.id),
+  memorySnapshot: jsonb("memory_snapshot"), // Core memory state at time of checksum
+  repairDetails: jsonb("repair_details"), // Details if status=REPAIRED
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  checksumIdx: index("memory_audit_log_checksum_idx").on(table.checksum),
+  statusIdx: index("memory_audit_log_status_idx").on(table.status),
+  traceIdIdx: index("memory_audit_log_trace_id_idx").on(table.traceId),
+  userIdIdx: index("memory_audit_log_user_id_idx").on(table.userId),
+  createdAtIdx: index("memory_audit_log_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2145,6 +2164,7 @@ export const insertIntentAuditLogSchema = createInsertSchema(intentAuditLog);
 export const insertContextBridgeLogSchema = createInsertSchema(contextBridgeLog);
 export const insertReasoningTraceSchema = createInsertSchema(reasoningTrace);
 export const insertReasoningQueueSchema = createInsertSchema(reasoningQueue);
+export const insertMemoryAuditLogSchema = createInsertSchema(memoryAuditLog).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2179,6 +2199,9 @@ export type ReasoningTrace = typeof reasoningTrace.$inferSelect;
 
 export type InsertReasoningQueue = z.infer<typeof insertReasoningQueueSchema>;
 export type ReasoningQueue = typeof reasoningQueue.$inferSelect;
+
+export type InsertMemoryAuditLog = z.infer<typeof insertMemoryAuditLogSchema>;
+export type MemoryAuditLog = typeof memoryAuditLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
