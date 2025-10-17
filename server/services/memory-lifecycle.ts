@@ -164,22 +164,58 @@ class MemoryLifecycleService {
         console.log(`  Previous: ${latestAudit.checksum}`);
         console.log(`  Current:  ${freshChecksum}`);
         
-        // Log system alert
-        console.log("[MemoryLifecycle] Attempting auto-repair from backup...");
+        const traceId = nanoid();
+        console.log(`[MemoryLifecycle] Attempting auto-repair from file_persistence backup (trace: ${traceId})...`);
         
-        // In a real scenario, we'd restore from learning_fragments_backup
-        // For now, we just mark as REPAIRED with fresh state
-        const repairDetails = {
-          previousChecksum: latestAudit.checksum,
-          newChecksum: freshChecksum,
-          repairStrategy: "rehydration_from_primary",
-          timestamp: new Date().toISOString(),
-        };
+        // Import file persistence service to restore from backup
+        const { filePersistence } = await import('./file-persistence');
         
-        await this.logChecksum(freshChecksum, "REPAIRED", freshState, undefined, userId, repairDetails);
+        // Attempt to restore from backup
+        const restoredFragments = await filePersistence.restoreBackup('learning_fragments', userId);
         
-        console.log("[MemoryLifecycle] ✅ Auto-repair completed");
-        return { repaired: true, details: repairDetails };
+        if (restoredFragments && restoredFragments.length > 0) {
+          // Delete current corrupted fragments and restore from backup
+          await db.delete(learningFragments);
+          
+          // Insert restored fragments
+          for (const fragment of restoredFragments) {
+            await db.insert(learningFragments).values(fragment);
+          }
+          
+          console.log(`[MemoryLifecycle] ✅ Restored ${restoredFragments.length} fragments from file_persistence backup`);
+          
+          // Rehydrate with restored data
+          const restoredState = await this.rehydrateMemory(userId);
+          const restoredChecksum = this.computeChecksum(restoredState);
+          
+          const repairDetails = {
+            previousChecksum: latestAudit.checksum,
+            newChecksum: restoredChecksum,
+            repairStrategy: "file_persistence_backup_restore",
+            fragmentsRestored: restoredFragments.length,
+            timestamp: new Date().toISOString(),
+          };
+          
+          await this.logChecksum(restoredChecksum, "REPAIRED", restoredState, traceId, userId, repairDetails);
+          
+          console.log("[MemoryLifecycle] ✅ Auto-repair completed via backup restoration");
+          return { repaired: true, details: repairDetails };
+        } else {
+          // Fallback: rehydrate from primary tables if no backup available
+          console.log("[MemoryLifecycle] No backup found, using primary table rehydration");
+          
+          const repairDetails = {
+            previousChecksum: latestAudit.checksum,
+            newChecksum: freshChecksum,
+            repairStrategy: "rehydration_from_primary",
+            timestamp: new Date().toISOString(),
+          };
+          
+          await this.logChecksum(freshChecksum, "REPAIRED", freshState, traceId, userId, repairDetails);
+          
+          console.log("[MemoryLifecycle] ✅ Auto-repair completed (no backup available)");
+          return { repaired: true, details: repairDetails };
+        }
       }
       
       console.log("[MemoryLifecycle] ✅ Checksum validated - memory integrity confirmed");
