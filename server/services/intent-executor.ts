@@ -153,6 +153,22 @@ class IntentExecutionService {
       
       const executionTimeMs = Date.now() - startTime;
       
+      // Phase 8.7.4: Broadcast intent execution result via Context Bridge
+      try {
+        const { contextBridge } = await import('./context-bridge');
+        await contextBridge.broadcast({
+          type: intent.action === 'execute_trade' ? 'trade_update' : 'config_update',
+          payload: {
+            action: intent.action,
+            ...result.data
+          },
+          userId,
+          mode: intent.mode as 'live' | 'paper' | undefined
+        });
+      } catch (bridgeError: any) {
+        console.error('[IntentExecutor] Failed to broadcast intent result:', bridgeError.message);
+      }
+      
       return {
         success: true,
         message: result.message || 'Intent executed successfully',

@@ -1,0 +1,146 @@
+⚙️ Replit Implementation Prompt — Phase 8.7.4 Context Bridge
+🎯 Objective
+
+Implement Phase 8.7.4 – Context Bridge, enabling real-time, bidirectional synchronization between Walter’s panel, chat widget, and backend systems.
+Replace manual polling with WebSocket-based push notifications so every interface shares the same state, session, and conversation context.
+
+🧩 Key Tasks
+
+Service: server/services/context-bridge.ts
+
+Create a unified subscription layer that listens for state changes (trades, configs, memory updates).
+
+Publish updates to all connected clients via WebSocket channel ws://context/updates.
+
+Support both event types:
+
+{"type":"state_update","payload":{"tradingStatus":"running","openPositions":5}}
+{"type":"chat_update","payload":{"newMessage":"Trade executed successfully"}}
+
+
+Frontend Integration
+
+Modify both panel and widget clients to subscribe to the same WebSocket endpoint.
+
+On receiving updates, auto-refresh UI sections (trading status, balances, logs) within < 2 s.
+
+Backend Hooks
+
+Integrate the Context Bridge into the State Awareness Layer.
+
+Trigger contextBridge.broadcast() after:
+
+trade execution
+
+config change
+
+cache invalidation event
+
+Session Unification
+
+Maintain a single shared sessionContext object in memory that both chat interfaces read from.
+
+Ensure consistent intent history and validation context across UI instances.
+
+Error Handling
+
+If a broadcast fails, retry × 3 and log to context_bridge_log.
+
+Include traceId and timestamp for debugging.
+
+Testing
+
+Simulate concurrent updates from trading, config, and chat modules.
+
+Verify both interfaces receive identical data and refresh automatically.
+
+Documentation
+
+Update replit.md with details of WebSocket events, reconnect logic, and example payloads.
+
+🧠 Implementation Notes
+
+Reuse existing WebSocket infrastructure (already present in system).
+
+Ensure backward compatibility with existing REST polling endpoints (mark as deprecated).
+
+Keep messages lightweight — send only deltas, not full payloads.
+
+Validate that Context Bridge broadcasts always originate from the latest cached state (BobCore).
+
+✅ Expected Outcome
+
+Manual refresh eliminated — UI auto-updates in real time.
+
+Both Walter chat interfaces show synchronized data and context.
+
+context-bridge.ts service operational and fully logged.
+
+All tests pass; documentation updated; architect review approved.
+
+🧩 Phase 8.7 Architecture Overview Document Structure
+
+Use this outline when compiling your combined 8.7 documentation bundle (phase-8.7-architecture-overview.md). It will give you a single, organized record of how Walter’s execution foundation evolved.
+
+Phase 8.7 – Execution & Context Cohesion
+Overview
+
+Describe Phase 8.7’s purpose: to make Walter’s commands executable, safe, and synchronized across all interfaces.
+
+8.7.1 – State Awareness Layer
+
+Unified state API architecture
+
+Summary endpoints & polling logic
+
+Integration points with BobCore
+
+Data flow diagram (optional)
+
+8.7.2 – Intent Execution Framework
+
+Intent parsing and routing logic
+
+Role-based permission enforcement
+
+Audit trail structure (traceId → execution)
+
+Error handling and rollback policy
+
+8.7.3 – Pre-Execution Validator + Goal Alignment Gate
+
+Risk checks (Kill Switch, exposure, balance, etc.)
+
+Goal alignment scoring (0–100 scale)
+
+Validation schema example
+
+Integration diagram showing flow: Intent → Validator → Executor → Audit
+
+8.7.4 – Context Bridge
+
+WebSocket event schema
+
+Subscription & broadcast mechanisms
+
+Session context synchronization
+
+Failure recovery & logging
+
+Testing & Validation Summary
+
+Key test cases for each sub-phase
+
+Architect approvals and outcomes
+
+Known limitations or deprecated endpoints
+
+Phase 8.7 Outcomes
+
+Walter can safely execute validated intents.
+
+All interfaces share one real-time state view.
+
+Full auditability and resilience achieved.
+
+Foundation ready for Phase 8.8 cognitive expansion.

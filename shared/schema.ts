@@ -2075,6 +2075,23 @@ export const intentAuditLog = pgTable("intent_audit_log", {
   intentActionIdx: index("intent_audit_log_intent_action_idx").on(table.intentAction),
 }));
 
+// Phase 8.7.4: Context Bridge - WebSocket Broadcast Log
+export const contextBridgeLog = pgTable("context_bridge_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traceId: varchar("trace_id", { length: 50 }).notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // 'state_update', 'chat_update', etc.
+  payload: jsonb("payload").notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  mode: tradingModeEnum("mode"),
+  success: boolean("success").notNull(),
+  errorMessage: text("error_message"),
+}, (table) => ({
+  traceIdIdx: index("context_bridge_log_trace_id_idx").on(table.traceId),
+  timestampIdx: index("context_bridge_log_timestamp_idx").on(table.timestamp),
+  eventTypeIdx: index("context_bridge_log_event_type_idx").on(table.eventType),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2084,6 +2101,7 @@ export const insertExpertResponseLogSchema = createInsertSchema(expertResponseLo
 export const insertDataLineageSchema = createInsertSchema(dataLineage);
 export const insertBobTraceLogSchema = createInsertSchema(bobTraceLog);
 export const insertIntentAuditLogSchema = createInsertSchema(intentAuditLog);
+export const insertContextBridgeLogSchema = createInsertSchema(contextBridgeLog);
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2109,6 +2127,9 @@ export type BobTraceLog = typeof bobTraceLog.$inferSelect;
 
 export type InsertIntentAuditLog = z.infer<typeof insertIntentAuditLogSchema>;
 export type IntentAuditLog = typeof intentAuditLog.$inferSelect;
+
+export type InsertContextBridgeLog = z.infer<typeof insertContextBridgeLogSchema>;
+export type ContextBridgeLog = typeof contextBridgeLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

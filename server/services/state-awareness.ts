@@ -176,6 +176,18 @@ class StateAwarenessService {
       const duration = Date.now() - startTime;
       console.log(`[${this.SERVICE_NAME}] ✅ State snapshot generated in ${duration}ms [trace: ${traceId.substring(0, 12)}...] for user ${userId.substring(0, 8)}`);
 
+      // Phase 8.7.4: Broadcast state update via Context Bridge
+      try {
+        const { contextBridge } = await import('./context-bridge');
+        await contextBridge.broadcast({
+          type: 'state_update',
+          payload: snapshot,
+          userId
+        });
+      } catch (bridgeError: any) {
+        console.error(`[${this.SERVICE_NAME}] Failed to broadcast state update:`, bridgeError.message);
+      }
+
       // Return with provenance if requested (for debug endpoint)
       if (options.includeProvenance) {
         return {

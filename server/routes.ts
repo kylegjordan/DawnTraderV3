@@ -190,11 +190,19 @@ function validateMode(req: AuthenticatedRequest, res: Response, next: NextFuncti
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
+  // Phase 8.7.4: Import Context Bridge
+  const { contextBridge } = await import('./services/context-bridge');
+  
   // WebSocket server for real-time data
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   
   wss.on('connection', (ws: WebSocket, request) => {
     console.log('WebSocket client connected');
+    
+    // Phase 8.7.4: Register client with Context Bridge
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    const userId = url.searchParams.get('userId') || undefined;
+    contextBridge.registerClient(ws, userId);
     
     ws.on('message', (message) => {
       try {
@@ -2206,6 +2214,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         error: 'Failed to fetch audit history', 
         message: error.message 
+      });
+    }
+  });
+
+  // Phase 8.7.4: Context Bridge Stats and Status
+  app.get('/api/context/bridge/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const stats = contextBridge.getStats();
+      
+      res.json({
+        success: true,
+        ...stats
+      });
+    } catch (error: any) {
+      console.error('[ContextBridge] Error fetching stats:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch context bridge stats',
+        message: error.message
       });
     }
   });
