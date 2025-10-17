@@ -24,7 +24,8 @@ import {
   Monitor,
   Brain,
   Target,
-  Sparkles
+  Sparkles,
+  Eye
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -373,7 +374,7 @@ export default function EnhancedSystemMonitoring() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-10" data-testid="tabs-system-monitoring">
+        <TabsList className="grid w-full grid-cols-11" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -405,6 +406,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="simulation" data-testid="tab-simulation">
             <Sparkles className="w-4 h-4 mr-2" />
             Simulation
+          </TabsTrigger>
+          <TabsTrigger value="reflection" data-testid="tab-reflection">
+            <Eye className="w-4 h-4 mr-2" />
+            Reflection
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -854,6 +859,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 8: Simulation - Phase 9.3 */}
         <TabsContent value="simulation" className="space-y-4">
           <SimulationTab />
+        </TabsContent>
+
+        {/* Tab 9: Reflection - Phase 9.4 */}
+        <TabsContent value="reflection" className="space-y-4">
+          <ReflectionTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -1756,6 +1766,163 @@ function SimulationTab() {
             <div className="text-center py-8 text-muted-foreground">
               <Brain className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No strategic lessons available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ReflectionTab() {
+  const { toast } = useToast();
+
+  const { data: reflectionData, isLoading: reflectionsLoading } = useQuery({
+    queryKey: ['/api/reflection/list'],
+    refetchInterval: 60000,
+  });
+
+  const { data: auditData, isLoading: auditsLoading } = useQuery({
+    queryKey: ['/api/reflection/audits'],
+    refetchInterval: 60000,
+  });
+
+  const reflectMutation = useMutation({
+    mutationFn: async (input: any) => {
+      return apiRequest('POST', '/api/reflection/reflect', input);
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Reflection Complete',
+        description: 'New reflection analysis generated',
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/reflection/list'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Reflection Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const reflections = reflectionData?.reflections || [];
+  const audits = auditData?.audits || [];
+
+  return (
+    <div className="space-y-4">
+      <Card data-testid="card-reflections">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              Reflective Intelligence
+            </CardTitle>
+            <Button
+              size="sm"
+              onClick={() => reflectMutation.mutate({
+                triggerSource: 'manual_ui_trigger',
+                depth: 'analytical',
+                subjectArea: 'system_state',
+                contextData: {}
+              })}
+              disabled={reflectMutation.isPending}
+              data-testid="button-trigger-reflection"
+            >
+              {reflectMutation.isPending ? 'Reflecting...' : 'Trigger Reflection'}
+            </Button>
+          </div>
+          <CardDescription>Self-reflective analysis and meta-reasoning</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {reflectionsLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : reflections.length > 0 ? (
+            <div className="space-y-3">
+              {reflections.slice(0, 5).map((ref: any, idx: number) => (
+                <div 
+                  key={ref.id} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`reflection-${idx}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="font-medium">{ref.subjectArea}</div>
+                    <Badge variant={ref.reflectionDepth === 'meta' ? 'default' : 'secondary'}>
+                      {ref.reflectionDepth}
+                    </Badge>
+                  </div>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    {ref.analysisText?.substring(0, 150)}
+                    {ref.analysisText?.length > 150 ? '...' : ''}
+                  </div>
+                  {ref.questionsRaised && ref.questionsRaised.length > 0 && (
+                    <div className="text-xs text-blue-600 dark:text-blue-400">
+                      Questions: {ref.questionsRaised.join('; ')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Eye className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No reflections available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-decision-audits">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="w-5 h-5" />
+            Decision Quality Audits
+          </CardTitle>
+          <CardDescription>Post-execution decision analysis</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {auditsLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : audits.length > 0 ? (
+            <div className="space-y-3">
+              {audits.slice(0, 5).map((audit: any, idx: number) => (
+                <div 
+                  key={audit.id} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`audit-${idx}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="font-medium">{audit.decisionType}</div>
+                    <Badge variant={
+                      audit.qualityRating === 'excellent' ? 'default' :
+                      audit.qualityRating === 'good' ? 'secondary' :
+                      audit.qualityRating === 'fair' ? 'outline' : 'destructive'
+                    }>
+                      {audit.qualityRating}
+                    </Badge>
+                  </div>
+                  {audit.lessonsLearned && (
+                    <div className="text-sm text-muted-foreground">
+                      {audit.lessonsLearned}
+                    </div>
+                  )}
+                  {audit.biasDetected && audit.biasDetected.length > 0 && (
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      {audit.biasDetected.map((bias: string, bIdx: number) => (
+                        <Badge key={bIdx} variant="destructive" className="text-xs">
+                          {bias}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No decision audits available</p>
             </div>
           )}
         </CardContent>
