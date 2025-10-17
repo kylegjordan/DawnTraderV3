@@ -1,0 +1,126 @@
+🧩 Phase 8.8 Final Wrap-Up Actions Implementation Prompt
+(Stabilization and Validation Before Advancing to Phase 8.9)
+Objective
+
+Ensure that the reasoning, cognitive, and monitoring layers from Phases 8.7–8.8 are fully validated, consistent across domains, and benchmark-ready for the 8.9 Autonomy Layer.
+This phase finalizes the integration by correcting remaining inference issues, validating metrics, and establishing a clean system checkpoint.
+
+Scope of Work
+
+This task includes four focused actions:
+
+Improve domain-inference coverage for market-related cognitive scenarios.
+
+Re-run full cognitive benchmarks and verify pass criteria.
+
+Confirm orchestrator metrics and latency reporting integrity.
+
+Create and record a stable system snapshot.
+
+Task 1 – Domain Inference Keyword Expansion
+
+Goal: Ensure Market Sentiment Correlation scenario is correctly detected as “trading” domain.
+Purpose: Fix misalignment between keyword triggers and domain inference logic.
+
+Steps:
+
+Open server/services/reasoning-orchestrator.ts.
+
+Locate the domain-inference method (inferDomainContext).
+
+Add additional keyword triggers for: “market,” “sentiment,” “bullish,” “bearish.”
+
+Confirm existing keywords for “trade,” “trading,” and “portfolio” remain intact.
+
+Verify the method converts all matches to lowercase for uniformity.
+
+Save and restart the workflow to apply inference updates.
+
+Task 2 – Full Cognitive Benchmark Validation
+
+Goal: Confirm all seven scenarios (including new trading scenarios) pass.
+Purpose: Establish clean, verified benchmark results before proceeding to autonomy modules.
+
+Steps:
+
+Execute the /api/cognitive/run endpoint using stored test credentials.
+
+Confirm the following scenarios report PASS:
+
+Trace Integrity
+
+Reasoning Coherence
+
+Multi-Step Depth
+
+Domain Diversity
+
+Adaptive Memory Recall
+
+Market Sentiment Correlation (≥ 0.8 target)
+
+Portfolio Risk Coherence (≥ 0.9 target)
+
+If Market Sentiment Correlation still fails, adjust phrase detection sensitivity or include a second synonym list for “market trend,” “price action,” and “sentiment shift.”
+
+Re-run until all seven scenarios pass validation.
+
+Task 3 – Orchestrator Metrics Verification
+
+Goal: Validate orchestrator metrics reporting after full benchmark run.
+Purpose: Confirm consistency of latency, retry counts, and throughput data.
+
+Steps:
+
+Query /api/reasoning/status.
+
+Confirm fields under .metrics.orchestrator display:
+
+averageLatency (ms)
+
+retryAttempts
+
+completionRatio
+
+Ensure values update dynamically after each benchmark run.
+
+Cross-check console output for matching domain metrics summaries.
+
+Verify no stale metrics remain from earlier runs.
+
+Task 4 – System Snapshot and Documentation Update
+
+Goal: Record the completion of 8.8 Final Wrap-Up Actions and create a clean restore point.
+Purpose: Lock a stable build before launching the autonomy modules.
+
+Steps:
+
+Open replit.md.
+
+Append a section titled “Phase 8.8 Final Wrap-Up Actions (Validation and Snapshot)”.
+
+Summarize successful actions:
+
+Expanded domain inference for Market Sentiment Correlation.
+
+Validated all seven cognitive scenarios.
+
+Verified orchestrator metrics and latency tracking.
+
+Confirmed stable system health via System Monitor → UX Monitor tab.
+
+Create a system checkpoint or commit labeled phase-8.8-final-integration-complete.
+
+Confirm logs show all benchmark scenarios as passing.
+
+Expected Results
+
+After completing these steps:
+
+All seven cognitive scenarios pass validation.
+
+The Reasoning Orchestrator reports accurate latency and throughput metrics.
+
+The System Monitor’s UX Tab displays real-time reasoning updates with no dropped events.
+
+The system achieves “Phase 8.8 Final Integration Complete” status, ready to proceed into 8.9 Autonomy development.

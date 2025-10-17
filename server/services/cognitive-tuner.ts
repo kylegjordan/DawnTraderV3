@@ -440,15 +440,6 @@ class CognitiveTunerService {
           // Simulate correlation check: does reasoning align with sentiment?
           const expectedDomain = 'trading'; // Lowercase to match orchestrator output
           const hasCorrectDomain = plan.domainContext.some(d => d.toLowerCase() === expectedDomain);
-          
-          // Debug logging
-          if (i === 0) {
-            console.log(`[CognitiveTuner] DEBUG - First test case:`);
-            console.log(`  Message: "Analyze trading opportunities: market showing ${marketTrend} trend with ${sentiment} sentiment indicators"`);
-            console.log(`  Domains returned: ${JSON.stringify(plan.domainContext)}`);
-            console.log(`  Has trading domain: ${hasCorrectDomain}`);
-          }
-          
           correlationScores.push(hasCorrectDomain ? 1.0 : 0.5);
         } catch (error: any) {
           errors.push({ iteration: i, error: error.message });

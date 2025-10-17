@@ -156,27 +156,15 @@ class ReasoningOrchestrator {
   }
 
   /**
-   * Create a reasoning plan based on user intent and system state (v2)
+   * Create a reasoning plan based on user intent and system state
    */
   async createPlan(request: ReasoningRequest): Promise<ReasoningPlan> {
     const traceId = `trace_${nanoid(12)}`;
     
     try {
-      // Debug logging for sentiment correlation test
-      if (request.userMessage.includes('trading opportunities')) {
-        console.log(`[ReasoningOrchestrator] DEBUG createPlan:`);
-        console.log(`  intentAction: "${request.intentAction}"`);
-        console.log(`  userMessage: "${request.userMessage}"`);
-      }
-      
       // Analyze the intent and determine reasoning steps
       const steps = this.buildReasoningSteps(request);
       const domainContext = this.inferDomainContext(request);
-      
-      // Debug logging continued
-      if (request.userMessage.includes('trading opportunities')) {
-        console.log(`  domainContext result: ${JSON.stringify(domainContext)}`);
-      }
 
       // Create reasoning plan
       const plan: ReasoningPlan = {
@@ -321,17 +309,17 @@ class ReasoningOrchestrator {
   private inferDomainContext(request: ReasoningRequest): string[] {
     const domains: Set<string> = new Set();
     const lowerMessage = request.userMessage.toLowerCase();
-    
-    // Debug logging for first call
-    if (request.intentAction === 'analyze_market_sentiment') {
-      console.log(`[ReasoningOrchestrator] DEBUG inferDomainContext:`);
-      console.log(`  Original message: "${request.userMessage}"`);
-      console.log(`  Lowercased: "${lowerMessage}"`);
-      console.log(`  Includes 'trade': ${lowerMessage.includes('trade')}`);
-      console.log(`  Includes 'strategy': ${lowerMessage.includes('strategy')}`);
-    }
 
-    if (lowerMessage.includes('strategy') || lowerMessage.includes('trade')) {
+    // Trading domain keywords - expanded coverage for market-related scenarios
+    if (lowerMessage.includes('strategy') || 
+        lowerMessage.includes('trade') || 
+        lowerMessage.includes('trading') ||
+        lowerMessage.includes('market') || 
+        lowerMessage.includes('sentiment') || 
+        lowerMessage.includes('bullish') || 
+        lowerMessage.includes('bearish') ||
+        lowerMessage.includes('portfolio') ||
+        lowerMessage.includes('risk')) {
       domains.add('trading');
     }
 
