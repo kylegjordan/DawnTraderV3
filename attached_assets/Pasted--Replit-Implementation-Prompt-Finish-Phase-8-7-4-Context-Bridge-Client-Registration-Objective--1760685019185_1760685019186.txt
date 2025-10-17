@@ -1,0 +1,254 @@
+⚙️ Replit Implementation Prompt — Finish Phase 8.7.4: Context Bridge Client Registration
+
+Objective
+Complete Phase 8.7.4 by wiring the frontend WebSocket clients to the Context Bridge so broadcasts reach both the Walter Panel and the Widget. Ensure scoped delivery (per-user), robust reconnection, and auditable delivery logs.
+
+Tasks
+
+Confirm WS Server Route & Auth
+
+Verify the backend WS endpoint (e.g., ws://<host>/ws or wss://.../ws) is exposed.
+
+Require JWT in the WS URL query or protocol header so the server can attach userId.
+Example (client-side, conceptually): new WebSocket(${WS_BASE}/ws?token=${jwt})
+
+On connection, the server should:
+
+Validate token → resolve userId
+
+Register client in Context Bridge registry: { userId, clientId, ts }
+
+Log CONNECTED event to context_bridge_log
+
+Frontend Client Hook (Panel + Widget)
+
+Create/Update a shared hook/util (e.g., useContextBridgeWS) used by both chat UIs.
+
+Behavior requirements:
+
+Connect to /ws?token=<JWT> on mount
+
+Send registration message on open (if your server expects one)
+
+Listen for messages:
+
+state_update → update state cache / UI
+
+chat_update → append to chat or trigger local refresh
+
+Implement client-side exponential backoff reconnect (1s, 2s, 4s, max 30s)
+
+Heartbeat: ping every 25s, close on 3 missed pongs (server should respond to ping/pong)
+
+Persist currentMode changes: ensure UI still calls PUT /api/settings so the server broadcasts.
+
+Ensure User-Scoped Delivery
+
+On server, deliveries must be filtered by userId:
+
+contextBridge.broadcast({ userId, type, payload })
+
+Success criteria for each broadcast:
+
+totalTargets > 0
+
+failureCount === 0
+
+Only after all sends succeed → log DELIVERED with target count
+
+Partial failures → log PARTIAL_FAILURE with per-target errors.
+
+Add Server-Side Heartbeat & Cleanup
+
+WS server should:
+
+Reply to ping with pong
+
+Mark client stale after ~60s no heartbeat
+
+Hourly cleanup (already added) should remove stale clients and log CLEANUP_REMOVED
+
+Broadcast Hooks Audit
+
+Confirm broadcasts fire on:
+
+PUT /api/settings (mode changes) ✅
+
+config-change-handler (guardrails, goals, screeners) ✅
+
+IntentExecutor after successful execution (start/stop engines, strategy update) ✅
+
+StateAwarenessService.generateStateSnapshot() (optional: dedupe with a cooldown to avoid spam)
+
+Security & Hardening
+
+Reject WS connections without valid JWT; log AUTH_REJECT
+
+Rate-limit reconnect attempts (cap at 30s backoff)
+
+Prevent oversized messages (drop > 64KB payloads)
+
+Sanitize outbound payloads (no secrets)
+
+Tests
+
+A. Connection & Registration
+
+Open Panel + Widget in two browser tabs (same user).
+
+Expect: context_bridge_log shows two CONNECTED entries with same userId and distinct clientIds.
+
+B. Mode Switch Broadcast
+
+Click PAPER ↔ LIVE.
+
+Expect:
+
+Server logs: SETTINGS_UPDATED, then BROADCAST SENT with totalTargets >= 2
+
+Both UIs reflect mode in < 2s (no manual refresh)
+
+context_bridge_log: DELIVERED, successCount >= 2
+
+C. Intent Execution Broadcast
+
+Start paper sim → stop paper sim.
+
+Expect: status lights update on both UIs within < 2s; DELIVERED logs with successCount >= 2.
+
+D. Config Change Broadcast
+
+Update guardrail or goal.
+
+Expect both UIs reflect counts/values live; DELIVERED log.
+
+E. Disconnect & Reconnect
+
+Close one tab; wait for cleanup (or shorten interval temporarily).
+
+Expect: DISCONNECTED → later CLEANUP_REMOVED
+
+Reopen tab: CONNECTED again; next broadcast shows totalTargets incremented.
+
+F. Auth Failure
+
+Attempt WS without token / with bad token.
+
+Expect: server rejects; AUTH_REJECT log; client sees close event.
+
+Deliverables
+
+Updated WS client integration (panel + widget)
+
+Verified context_bridge_log entries showing CONNECTED, DELIVERED, PARTIAL_FAILURE (if any), DISCONNECTED, CLEANUP_REMOVED, AUTH_REJECT
+
+Short demo video or replay confirming A–E
+
+replit.md updates:
+
+WS URL, auth, reconnection strategy
+
+Event types (state_update, chat_update, config_update) with sample payloads
+
+Known limits (message size, debounce/cooldown)
+
+Acceptance Criteria
+
+Both UIs receive all broadcasts for the logged-in user within < 2 seconds
+
+totalTargets >= 1 anytime a user has at least one WS client open
+
+No “success” logs with failureCount > 0
+
+Architect approval
+
+🧩 Phase 8.7 Architecture Overview — Markdown Template
+
+Create docs/phase-8.7-architecture-overview.md with the outline below. Fill in concrete details (endpoints, tables, screenshots/log snippets) once 8.7.4 is verified.
+
+Phase 8.7 — Execution & Context Cohesion
+1) Overview
+
+Purpose of 8.7 (safe execution, verified state, real-time sync)
+
+High-level diagram: User → Walter → Intent → Validator → Executor → State Layer → Context Bridge → UIs
+
+2) 8.7.1 State Awareness Layer (✅)
+
+Endpoints:
+
+GET /api/state/summary
+
+GET /api/state/debug
+
+Cache TTL & invalidation hooks (config changes, engine start/stop)
+
+Provenance logging (data_lineage fields)
+
+Example payload (redacted)
+
+3) 8.7.2 Intent Execution Framework (✅)
+
+Endpoint(s):
+
+POST /api/intent/execute
+
+GET /api/intent/audit
+
+RBAC (owner/editor/viewer)
+
+Error schema (E403_PERMISSION, E422_VALIDATION, E503_TIMEOUT)
+
+Audit structure: traceId, preStateHash, postStateHash
+
+Integration in walter-response.ts (post-processing)
+
+4) 8.7.3 Pre-Execution Validator + Goal Alignment Gate (✅)
+
+Endpoint: POST /api/trading/validate
+
+Risk checks (Kill Switch, balance, exposure, max trades, etc.)
+
+Alignment score (0–100); missing goals = 100 fallback
+
+Output schema with sample
+
+Execution chain: Intent → Validate → Execute → Recheck state
+
+5) 8.7.4 Context Bridge (🚧 now finishing)
+
+Service: server/services/context-bridge.ts
+
+WS endpoint & auth (/ws?token=…)
+
+Event types: state_update, config_update, chat_update
+
+Broadcast sources: executor, settings, config-change-handler, state snapshot
+
+Delivery logging rules (DELIVERED, PARTIAL_FAILURE, AUTH_REJECT, etc.)
+
+Cleanup & heartbeat (ping/pong)
+
+6) Testing & Validation Summary
+
+Key test cases and pass/fail notes for each sub-phase
+
+E2E sequence (mode switch → validate/execute → state refresh → broadcast receipt)
+
+Architect approvals (dates, sign-offs)
+
+7) Known Limitations & Next Steps
+
+Deprecation of REST polling; fallback path
+
+Message size limits & debouncing
+
+Next phases: 8.8.x Reasoning + Memory (queue decision, checksum plan)
+
+8) Appendix
+
+Table schemas (intent_audit_log, context_bridge_log, data_lineage)
+
+Sample logs (redacted)
+
+Glossary (BoBs, Cortex, State Layer, Context Bridge)
