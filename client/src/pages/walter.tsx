@@ -25,6 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useWebSocket } from '@/hooks/use-websocket';
 
 interface WalterChatLog {
   id: string;
@@ -87,6 +88,44 @@ export default function WalterPage() {
   const { toast} = useToast();
   const { isRecording, startRecording, stopRecording, audioBlob, error: recorderError } = useAudioRecorder();
   const { preferences, updatePreferences } = useWalterPreferences();
+  
+  // Phase 8.7.4: Connect to Context Bridge for real-time updates
+  const { isConnected, messages: wsMessages } = useWebSocket();
+  
+  // Handle Context Bridge messages
+  useEffect(() => {
+    if (wsMessages.length === 0) return;
+    
+    const latestMessage = wsMessages[wsMessages.length - 1];
+    console.log('[WalterPage] Context Bridge message received:', latestMessage);
+    
+    // Handle different message types from Context Bridge
+    switch (latestMessage.type) {
+      case 'state_update':
+        // Invalidate relevant queries to refresh UI
+        queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+        break;
+        
+      case 'config_update':
+        // Refresh settings and configuration-related queries
+        queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] });
+        break;
+        
+      case 'trade_update':
+        // Refresh trade-related queries
+        queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/trades/active'] });
+        break;
+        
+      case 'chat_update':
+        // Refresh Walter chat data
+        queryClient.invalidateQueries({ queryKey: ['/api/walter/chats'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/walter/pending-approvals'] });
+        break;
+    }
+  }, [wsMessages]);
 
   // Phase 8.4: Dynamic textarea resizing (ChatGPT-style)
   useEffect(() => {

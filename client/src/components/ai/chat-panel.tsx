@@ -11,6 +11,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
+import { useWebSocket } from '@/hooks/use-websocket';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -42,6 +43,43 @@ export function ChatPanel() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder();
+  
+  // Phase 8.7.4: Connect to Context Bridge for real-time updates
+  const { isConnected, messages: wsMessages } = useWebSocket();
+  
+  // Handle Context Bridge messages
+  useEffect(() => {
+    if (wsMessages.length === 0) return;
+    
+    const latestMessage = wsMessages[wsMessages.length - 1];
+    console.log('[ChatPanel] Context Bridge message received:', latestMessage);
+    
+    // Handle different message types from Context Bridge
+    switch (latestMessage.type) {
+      case 'state_update':
+        // Invalidate relevant queries to refresh UI
+        queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+        break;
+        
+      case 'config_update':
+        // Refresh settings and configuration-related queries
+        queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] });
+        break;
+        
+      case 'trade_update':
+        // Refresh trade-related queries
+        queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/trades/active'] });
+        break;
+        
+      case 'chat_update':
+        // Refresh chat conversation
+        queryClient.invalidateQueries({ queryKey: ['/api/ai/conversation'] });
+        break;
+    }
+  }, [wsMessages, queryClient]);
 
   // Load conversation history
   const { data: conversation, isLoading: isLoadingHistory } = useQuery({
