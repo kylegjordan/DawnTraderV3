@@ -1,0 +1,144 @@
+⚙️ Replit Implementation Prompt — Phase 8.8.1 : Reasoning Orchestrator Service
+
+> 🎯 Objective
+
+Implement Phase 8.8.1 – Reasoning Orchestrator Service, giving Walter multi-step reasoning, cross-domain cognition, and transparent trace logging.
+This module lets Walter break down complex user intents into sub-tasks, query multiple Bobs in parallel, and feed structured reasoning chains back to the LLM before response generation.
+
+🧩 Key Tasks
+
+1. Service File: server/services/reasoning-orchestrator.ts
+
+Accept reasoning requests from walter-response.ts.
+
+Build a structured reasoning plan object:
+
+{
+  "traceId": "trace_ABC123",
+  "steps": [
+    "check_trading_status",
+    "retrieve_goals",
+    "compare_guardrails",
+    "compose_response"
+  ],
+  "domainContext": ["Trading", "DevOps"],
+  "status": "in_progress"
+}
+
+Store reasoning trace in reasoning_trace table with timestamps and data-source metadata.
+
+
+
+2. Asynchronous Task Queue
+
+Implement a lightweight queue using PostgreSQL first (reasoning_queue table).
+
+Fields: id, traceId, taskType, payload, status, createdAt, completedAt.
+
+Worker loop: fetch → lock row (FOR UPDATE SKIP LOCKED) → execute → mark complete.
+
+Ensure safe concurrency (optimistic locking on Cortex writes).
+
+Leave comments for future Redis migration.
+
+
+
+3. Domain Bobs Integration
+
+Add three new micro-services:
+
+devops-bob.ts → monitors system health & deployment metrics
+
+fullstack-bob.ts → handles schema, API, and performance analysis
+
+ux-bob.ts → tracks UI layout and usability feedback (uses UI_STATUS JSON feed)
+
+
+Each Bob exports: getContext(), runAnalysis(), returnFindings().
+
+Register all Domain Bobs in cortex-registry.ts for dynamic loading.
+
+
+
+4. Reasoning Execution Flow
+
+Modify walter-response.ts:
+
+Before generating a reply, call ReasoningOrchestrator.createPlan(intent, state) to build reasoning steps.
+
+Pass the resulting plan JSON into the system prompt as REASONING CHAIN.
+
+After response, call ReasoningOrchestrator.logResult(traceId, outcomeSummary).
+
+
+Ensure traceId continuity from intent → reasoning → execution → audit trail.
+
+
+
+5. Trace Logging & Transparency
+
+New reasoning_trace table:
+
+Field	Type	Description
+
+traceId	UUID	Links to intent audit log
+steps	JSONB	Ordered list of reasoning actions
+domainContext	TEXT[]	Domains used in reasoning
+decisionSummary	TEXT	Final verbalized summary
+createdAt / updatedAt	TIMESTAMP	Trace timing
+
+
+Link traceId to existing intent_audit_log.traceId for full provenance.
+
+
+
+6. Testing
+
+Test Case	Action	Expected Result
+
+1	Ask Walter “Enable VWAP strategy and check guardrails.”	Reasoning chain includes both “strategy” and “guardrails”; trace saved.
+2	Ask Walter “Optimize UI for dark mode.”	UXBob invoked; trace records domainContext [“UX”].
+3	Simultaneous two queries	No race conditions (Cortex locks resolve).
+4	Check trace API (/api/reasoning/debug/:traceId)	Returns full JSON plan + timestamps.
+5	Restart system mid-reasoning	Incomplete trace resumes gracefully or logs as “interrupted.”
+
+
+
+7. Documentation
+
+Update replit.md:
+
+Describe Reasoning Orchestrator architecture and Domain Bob interfaces.
+
+Include sample reasoning_trace record.
+
+Note async queue implementation and migration path to Redis.
+
+
+
+
+
+🧠 Implementation Notes
+
+Keep queue worker interval ≤ 2 s for low latency.
+
+Use TypeScript interfaces for ReasoningStep and ReasoningPlan.
+
+Log every traceId creation to data_lineage for provenance.
+
+Use try/catch with structured error codes (E503_QUEUE_TIMEOUT, E422_PLAN_BUILD_FAIL).
+
+All Domain Bobs should fail softly and report partial data rather than throwing fatal errors.
+
+
+✅ Expected Outcome
+
+Reasoning Orchestrator builds and logs multi-step plans.
+
+Domain Bobs contribute contextual findings to Cortex.
+
+reasoning_trace and reasoning_queue tables populate successfully.
+
+API endpoint /api/reasoning/debug/:traceId returns structured plan and summary.
+
+All tests pass with architect approval and documentation 

@@ -48,6 +48,7 @@ export const walterViewModeEnum = pgEnum("walter_view_mode", ["compact", "expand
 export const userRoleEnum = pgEnum("user_role", ["owner", "editor", "viewer"]);
 export const eventSignificanceEnum = pgEnum("event_significance", ["minor", "significant", "critical"]);
 export const executionEventTypeEnum = pgEnum("execution_event_type", ["trade", "balance_update", "risk_report", "engine_event", "anomaly", "strategy_signal"]);
+export const reasoningQueueStatusEnum = pgEnum("reasoning_queue_status", ["pending", "in_progress", "completed", "failed"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -2092,6 +2093,46 @@ export const contextBridgeLog = pgTable("context_bridge_log", {
   eventTypeIdx: index("context_bridge_log_event_type_idx").on(table.eventType),
 }));
 
+// Phase 8.8.1: Reasoning Orchestrator - Trace Log
+export const reasoningTrace = pgTable("reasoning_trace", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traceId: varchar("trace_id", { length: 50 }).notNull().unique(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  intentAction: varchar("intent_action", { length: 100 }),
+  steps: jsonb("steps").notNull(), // Ordered list of reasoning actions
+  domainContext: text("domain_context").array().default(sql`ARRAY[]::text[]`), // Domains used in reasoning
+  decisionSummary: text("decision_summary"),
+  status: varchar("status", { length: 20 }).default("in_progress").notNull(), // 'in_progress', 'completed', 'failed', 'interrupted'
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  traceIdIdx: index("reasoning_trace_trace_id_idx").on(table.traceId),
+  userIdIdx: index("reasoning_trace_user_id_idx").on(table.userId),
+  timestampIdx: index("reasoning_trace_created_at_idx").on(table.createdAt),
+  statusIdx: index("reasoning_trace_status_idx").on(table.status),
+}));
+
+// Phase 8.8.1: Reasoning Orchestrator - Async Task Queue
+export const reasoningQueue = pgTable("reasoning_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traceId: varchar("trace_id", { length: 50 }).notNull(),
+  taskType: varchar("task_type", { length: 100 }).notNull(), // e.g., 'query_bob', 'validate_guardrails', 'fetch_goals'
+  payload: jsonb("payload").notNull(),
+  status: reasoningQueueStatusEnum("status").default("pending").notNull(),
+  result: jsonb("result"),
+  errorMessage: text("error_message"),
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
+  lockedBy: varchar("locked_by", { length: 100 }), // Worker ID
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (table) => ({
+  traceIdIdx: index("reasoning_queue_trace_id_idx").on(table.traceId),
+  statusIdx: index("reasoning_queue_status_idx").on(table.status),
+  taskTypeIdx: index("reasoning_queue_task_type_idx").on(table.taskType),
+  createdAtIdx: index("reasoning_queue_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2102,6 +2143,8 @@ export const insertDataLineageSchema = createInsertSchema(dataLineage);
 export const insertBobTraceLogSchema = createInsertSchema(bobTraceLog);
 export const insertIntentAuditLogSchema = createInsertSchema(intentAuditLog);
 export const insertContextBridgeLogSchema = createInsertSchema(contextBridgeLog);
+export const insertReasoningTraceSchema = createInsertSchema(reasoningTrace);
+export const insertReasoningQueueSchema = createInsertSchema(reasoningQueue);
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2130,6 +2173,12 @@ export type IntentAuditLog = typeof intentAuditLog.$inferSelect;
 
 export type InsertContextBridgeLog = z.infer<typeof insertContextBridgeLogSchema>;
 export type ContextBridgeLog = typeof contextBridgeLog.$inferSelect;
+
+export type InsertReasoningTrace = z.infer<typeof insertReasoningTraceSchema>;
+export type ReasoningTrace = typeof reasoningTrace.$inferSelect;
+
+export type InsertReasoningQueue = z.infer<typeof insertReasoningQueueSchema>;
+export type ReasoningQueue = typeof reasoningQueue.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
