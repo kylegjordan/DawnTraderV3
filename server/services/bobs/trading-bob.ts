@@ -9,8 +9,9 @@ import { db } from '../../db';
 import { marketDataService } from '../market-data';
 import { portfolioAggregator } from '../portfolio-aggregator';
 import { storage } from '../../storage';
-import { autonomyAuditLog } from '@shared/schema';
+import { autonomyAuditLog, strategySettings } from '@shared/schema';
 import { nanoid } from 'nanoid';
+import { and, eq } from 'drizzle-orm';
 
 export interface TradingContext {
   marketSentiment: 'bullish' | 'bearish' | 'neutral' | 'unknown';
@@ -53,12 +54,22 @@ class TradingBob {
   async getContext(userId: string, mode: 'live' | 'paper'): Promise<TradingContext> {
     try {
       // Get market context
-      const marketContext = await storage.getLatestMarketContext();
+      const marketContext = await storage.getLatestAiMarketAnalysis(mode);
       const marketSentiment = (marketContext?.regime || 'unknown') as 'bullish' | 'bearish' | 'neutral' | 'unknown';
 
-      // Get strategy settings to count active strategies
-      const strategySettings = await storage.getStrategySettings(userId, mode);
-      const activeStrategies = strategySettings.filter(s => s.enabled).length;
+      // Get strategy settings to count active strategies  
+      const globalContextId = 'default';
+      const strategyCount = await db
+        .select()
+        .from(strategySettings)
+        .where(
+          and(
+            eq(strategySettings.globalContextId, globalContextId),
+            eq(strategySettings.mode, mode),
+            eq(strategySettings.enabled, true)
+          )
+        );
+      const activeStrategies = strategyCount.length;
 
       // Get portfolio metrics
       const settings = await storage.getTradingSettings(userId);
@@ -95,9 +106,10 @@ class TradingBob {
       }
 
       // Get risk metrics
+      const activeTrades = await storage.getActiveTrades(userId);
       const openTrades = mode === 'live'
-        ? await storage.getActiveTrades(userId)
-        : await storage.getActivePaperTrades(userId);
+        ? activeTrades
+        : activeTrades.filter((t: any) => t.mode === 'paper');
       
       const maxExposure = parseFloat(settings?.maxExposurePercent || '25');
       const currentExposure = openTrades.length > 0 
@@ -112,21 +124,29 @@ class TradingBob {
 
       // Find top performing strategy
       let topPerformingStrategy: string | undefined;
-      if (closedTrades.length > 0) {
-        const strategyPL = new Map<string, number>();
-        closedTrades.forEach((t: any) => {
-          const strategy = t.strategy || 'unknown';
-          const pl = parseFloat(t.realizedPL || '0');
-          strategyPL.set(strategy, (strategyPL.get(strategy) || 0) + pl);
-        });
-        
-        let maxPL = -Infinity;
-        strategyPL.forEach((pl, strategy) => {
-          if (pl > maxPL) {
-            maxPL = pl;
-            topPerformingStrategy = strategy;
-          }
-        });
+      try {
+        const allTradesForStrategy = mode === 'live' 
+          ? await storage.getTrades(userId, { limit: 1000 })
+          : await storage.getAllPaperTrades(userId);
+        const closedTrades = allTradesForStrategy.filter((t: any) => t.status === 'closed');
+        if (closedTrades.length > 0) {
+          const strategyPL = new Map<string, number>();
+          closedTrades.forEach((t: any) => {
+            const strategy = t.strategy || 'unknown';
+            const pl = parseFloat(t.realizedPL || '0');
+            strategyPL.set(strategy, (strategyPL.get(strategy) || 0) + pl);
+          });
+          
+          let maxPL = -Infinity;
+          strategyPL.forEach((pl, strategy) => {
+            if (pl > maxPL) {
+              maxPL = pl;
+              topPerformingStrategy = strategy;
+            }
+          });
+        }
+      } catch (error) {
+        console.error('[TradingBob] Error finding top strategy:', error);
       }
 
       return {
@@ -231,7 +251,7 @@ class TradingBob {
     if (context.riskMetrics.openTrades > 5) {
       findings.push(`High concurrent trades: ${context.riskMetrics.openTrades} open positions`);
       recommendations.push('Monitor open trades closely, consider reducing new entries');
-      if (riskLevel === 'low') riskLevel = 'medium';
+      // Risk level is already at least medium at this point
     }
 
     // Query-specific analysis
@@ -400,15 +420,21 @@ class TradingBob {
     try {
       await db.insert(autonomyAuditLog).values({
         runId: `tradingbob_${nanoid(10)}`,
-        action: 'market_analysis',
-        triggeredBy: 'domain_reasoning',
-        domain: 'trading',
-        findings: JSON.stringify({
+        actionType: 'exploration', // Using exploration type for domain analysis
+        triggerSource: 'domain_reasoning',
+        assessmentResult: {
           sentiment: analysis.sentiment,
           riskLevel: analysis.riskLevel,
           findings: analysis.findings,
           recommendations: analysis.recommendations,
-        }),
+          confidence: analysis.confidence,
+        },
+        success: true,
+        metadata: {
+          domain: 'trading',
+          userId,
+          mode,
+        },
       });
     } catch (error) {
       console.error('[TradingBob] Error logging to audit:', error);

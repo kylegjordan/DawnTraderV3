@@ -88,7 +88,17 @@ class ReasoningOrchestrator {
       return await uxBob.returnFindings(analysis);
     });
 
-    console.log('[ReasoningOrchestrator] Default domains registered (DevOps, FullStack, UX)');
+    // TradingBob: Market analysis, portfolio health, risk coherence (Phase 8.9.1)
+    this.registerDomain('trading', async (task) => {
+      const { tradingBob } = await import('./bobs/trading-bob');
+      const userId = task.payload?.userId || task.userId || 'default';
+      const mode = task.payload?.mode || 'paper';
+      const query = task.payload?.params?.query || task.userMessage || 'market analysis';
+      const analysis = await tradingBob.runAnalysis(userId, mode, query);
+      return await tradingBob.returnFindings(analysis);
+    });
+
+    console.log('[ReasoningOrchestrator] Default domains registered (DevOps, FullStack, UX, Trading)');
   }
 
   /**
