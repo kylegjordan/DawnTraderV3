@@ -280,6 +280,65 @@ class AutonomyControllerService {
         ).catch((err: any) => console.error('[AutonomyController] Decision audit failed:', err));
       }
 
+      // Phase 9.5: Ethical Reasoning Pre-Execution Check (BLOCKING)
+      const { ethicalReasoningEngine } = await import('./ethical-reasoning-engine').then((m) => ({
+        ethicalReasoningEngine: m.ethicalReasoningEngine,
+      })).catch(() => ({ ethicalReasoningEngine: null }));
+
+      let ethicalViolations: string[] = [];
+
+      if (ethicalReasoningEngine) {
+        try {
+          const ethicalAudit = await ethicalReasoningEngine.evaluateAction(
+            userId,
+            {
+              actionType: 'autonomy_self_check',
+              actionId: runId,
+              actionData: {
+                riskPercent: healthScore < this.config.healthThresholds.critical ? 3.0 : 1.5,
+                positionPercent: 5.0,
+                reasoning: `Self-check: Health ${healthScore.toFixed(2)}, Cognitive ${cognitiveScore.toFixed(2)}`,
+                dailyLossPercent: healthScore < this.config.healthThresholds.critical ? 3.0 : 0,
+              },
+            },
+            'paper'
+          );
+
+          // ENFORCEMENT: Block on violations
+          if (ethicalAudit.complianceStatus === 'violation') {
+            const violations = ethicalAudit.violationsDetected as Record<string, any> || {};
+            ethicalViolations = Object.keys(violations).map(rule => `${rule}: ${violations[rule]}`);
+            
+            console.error(`[AutonomyController] ⛔ ETHICAL VIOLATION DETECTED - blocking actions`);
+            console.error(`[AutonomyController] Violations: ${ethicalViolations.join('; ')}`);
+            
+            issuesDetected.push(...ethicalViolations.map(v => `ETHICAL VIOLATION: ${v}`));
+            actionsTriggered.push('block_due_to_ethical_violation');
+
+            // Broadcast violation via Context Bridge
+            await contextBridge.broadcast({
+              type: 'state_update',
+              userId,
+              payload: {
+                source: 'ethical_enforcement',
+                action: 'violation_blocked',
+                runId,
+                violations: ethicalViolations,
+                complianceStatus: ethicalAudit.complianceStatus,
+              },
+            });
+          } else if (ethicalAudit.complianceStatus === 'warning') {
+            console.warn(`[AutonomyController] ⚠️ Ethical warnings detected`);
+            actionsTriggered.push('ethical_warning_logged');
+          } else {
+            console.log(`[AutonomyController] ✅ Ethical evaluation: ${ethicalAudit.complianceStatus}`);
+          }
+        } catch (err: any) {
+          console.error('[AutonomyController] Ethical evaluation failed:', err);
+          issuesDetected.push('Ethical evaluation system error');
+        }
+      }
+
       return {
         runId,
         timestamp: new Date(),

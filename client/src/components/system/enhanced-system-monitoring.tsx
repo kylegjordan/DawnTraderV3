@@ -374,7 +374,7 @@ export default function EnhancedSystemMonitoring() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-11" data-testid="tabs-system-monitoring">
+        <TabsList className="grid w-full grid-cols-12" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -410,6 +410,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="reflection" data-testid="tab-reflection">
             <Eye className="w-4 h-4 mr-2" />
             Reflection
+          </TabsTrigger>
+          <TabsTrigger value="ethics" data-testid="tab-ethics">
+            <CheckCircle2 className="w-4 h-4 mr-2" />
+            Ethics
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -864,6 +868,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 9: Reflection - Phase 9.4 */}
         <TabsContent value="reflection" className="space-y-4">
           <ReflectionTab />
+        </TabsContent>
+
+        {/* Tab 10: Ethics - Phase 9.5 */}
+        <TabsContent value="ethics" className="space-y-4">
+          <EthicsTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -1927,6 +1936,187 @@ function ReflectionTab() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function EthicsTab() {
+  const { toast } = useToast();
+
+  const { data: auditsData, isLoading: auditsLoading } = useQuery({
+    queryKey: ['/api/ethics/audits'],
+    refetchInterval: 60000,
+  });
+
+  const { data: rulesData, isLoading: rulesLoading } = useQuery({
+    queryKey: ['/api/ethics/rules'],
+    refetchInterval: 60000,
+  });
+
+  const { data: alignmentData, isLoading: alignmentLoading } = useQuery({
+    queryKey: ['/api/alignment/overall'],
+    refetchInterval: 60000,
+  });
+
+  const initRulesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/ethics/init', {});
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Rules Initialized',
+        description: 'Default ethical rules have been set up',
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/ethics/rules'] });
+    },
+  });
+
+  const initAlignmentMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/alignment/init', {});
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Alignment Initialized',
+        description: 'Default value alignment matrix has been set up',
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/alignment/overall'] });
+    },
+  });
+
+  const audits = auditsData?.audits || [];
+  const rules = rulesData?.rules || [];
+  const alignment = alignmentData?.alignment;
+
+  return (
+    <div className="space-y-4">
+      <Card data-testid="card-ethical-audits">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5" />
+              Ethical Compliance Audits
+            </CardTitle>
+            <Button
+              size="sm"
+              onClick={() => initRulesMutation.mutate()}
+              disabled={initRulesMutation.isPending}
+              data-testid="button-init-rules"
+            >
+              {initRulesMutation.isPending ? 'Initializing...' : 'Init Rules'}
+            </Button>
+          </div>
+          <CardDescription>Action compliance and ethical evaluations</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {auditsLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : audits.length > 0 ? (
+            <div className="space-y-3">
+              {audits.slice(0, 5).map((audit: any, idx: number) => (
+                <div 
+                  key={audit.id} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`audit-${idx}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="font-medium">{audit.actionType}</div>
+                    <Badge variant={
+                      audit.complianceStatus === 'compliant' ? 'default' :
+                      audit.complianceStatus === 'warning' ? 'outline' :
+                      audit.complianceStatus === 'violation' ? 'destructive' : 'secondary'
+                    }>
+                      {audit.complianceStatus}
+                    </Badge>
+                  </div>
+                  {audit.violationsDetected && Object.keys(audit.violationsDetected).length > 0 && (
+                    <div className="text-sm text-red-600 dark:text-red-400 mt-2">
+                      Violations: {Object.keys(audit.violationsDetected).join(', ')}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <CheckCircle2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No ethical audits available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card data-testid="card-ethical-rules">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5" />
+              Ethical Rules ({rules.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {rulesLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : rules.length > 0 ? (
+              <div className="space-y-2">
+                {rules.slice(0, 5).map((rule: any, idx: number) => (
+                  <div key={rule.id} className="p-2 rounded border text-sm">
+                    <div className="font-medium">{rule.ruleName}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {rule.category} - {rule.priority}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground">No rules defined</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-value-alignment">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="w-5 h-5" />
+                Value Alignment
+              </CardTitle>
+              <Button
+                size="sm"
+                onClick={() => initAlignmentMutation.mutate()}
+                disabled={initAlignmentMutation.isPending}
+                data-testid="button-init-alignment"
+              >
+                {initAlignmentMutation.isPending ? 'Initializing...' : 'Init Matrix'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {alignmentLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : alignment ? (
+              <div className="space-y-3">
+                <div className="text-center">
+                  <div className="text-3xl font-bold">
+                    {(alignment.averageScore * 100).toFixed(0)}%
+                  </div>
+                  <div className="text-sm text-muted-foreground">Overall Alignment</div>
+                </div>
+                <div className="space-y-1">
+                  {Object.entries(alignment.byCategory).map(([cat, score]: [string, any]) => (
+                    <div key={cat} className="flex justify-between text-sm">
+                      <span className="capitalize">{cat.replace('_', ' ')}</span>
+                      <span className="font-medium">{(score * 100).toFixed(0)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground">No alignment data</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

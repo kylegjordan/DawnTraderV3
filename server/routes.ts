@@ -10040,6 +10040,104 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 9.5: Ethical Reasoning & Value Alignment API Endpoints
+  app.post('/api/ethics/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
+      const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
+      
+      const audit = await ethicalReasoningEngine.evaluateAction(
+        req.user!.id,
+        req.body,
+        mode
+      );
+      
+      res.json({ ok: true, audit });
+    } catch (error: any) {
+      console.error('[Ethics] Evaluate failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/ethics/audits', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const audits = await ethicalReasoningEngine.getAudits(req.user!.id, limit);
+      
+      res.json({ ok: true, audits });
+    } catch (error: any) {
+      console.error('[Ethics] Get audits failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/ethics/rules', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
+      
+      const rules = await ethicalReasoningEngine.getRules(req.user!.id);
+      
+      res.json({ ok: true, rules });
+    } catch (error: any) {
+      console.error('[Ethics] Get rules failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ethics/init', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
+      
+      await ethicalReasoningEngine.initializeDefaultRules(req.user!.id);
+      
+      res.json({ ok: true, message: 'Default ethical rules initialized' });
+    } catch (error: any) {
+      console.error('[Ethics] Init rules failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/alignment/matrix', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { valueAlignmentService } = await import('./services/value-alignment');
+      
+      const matrix = await valueAlignmentService.getMatrix(req.user!.id);
+      
+      res.json({ ok: true, matrix });
+    } catch (error: any) {
+      console.error('[Alignment] Get matrix failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/alignment/overall', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { valueAlignmentService } = await import('./services/value-alignment');
+      
+      const alignment = await valueAlignmentService.getOverallAlignment(req.user!.id);
+      
+      res.json({ ok: true, alignment });
+    } catch (error: any) {
+      console.error('[Alignment] Get overall failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/alignment/init', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { valueAlignmentService } = await import('./services/value-alignment');
+      
+      await valueAlignmentService.initializeDefaultMatrix(req.user!.id);
+      
+      res.json({ ok: true, message: 'Default value alignment matrix initialized' });
+    } catch (error: any) {
+      console.error('[Alignment] Init matrix failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
