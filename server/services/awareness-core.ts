@@ -145,7 +145,7 @@ class AwarenessCoreService {
       const { contextBridge } = await import('./context-bridge');
       await contextBridge.broadcast({
         type: 'state_update',
-        userId: userId || 'system',
+        userId: userId || null,
         payload: {
           stateId,
           eventSubtype: 'awareness_update',

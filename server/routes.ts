@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql, eq, and } from "drizzle-orm";
+import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
@@ -12,7 +12,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -9419,6 +9419,61 @@ Important: Extract the exact field names and numeric values from the user's requ
       res.json({ ok: true, optimizations });
     } catch (error: any) {
       console.error('[Autonomy] Optimization history fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========================================
+  // Phase 8.94: Awareness Layer Endpoints
+  // ========================================
+
+  // Get current awareness state
+  app.get('/api/awareness/state', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      // Get the most recent awareness state
+      const states = await db
+        .select()
+        .from(awarenessStateLog)
+        .orderBy(desc(awarenessStateLog.timestamp))
+        .limit(1);
+      
+      const currentState = states[0] || null;
+      
+      res.json({ ok: true, state: currentState });
+    } catch (error: any) {
+      console.error('[Awareness] State fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trigger manual reflection
+  app.post('/api/awareness/reflect', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { awarenessCore } = await import('./services/awareness-core');
+      
+      const reflection = await awarenessCore.reflectAndRespond();
+      
+      res.json({ ok: true, reflection });
+    } catch (error: any) {
+      console.error('[Awareness] Reflection failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get awareness state history
+  app.get('/api/awareness/history', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const states = await db
+        .select()
+        .from(awarenessStateLog)
+        .orderBy(desc(awarenessStateLog.timestamp))
+        .limit(limit);
+      
+      res.json({ ok: true, states });
+    } catch (error: any) {
+      console.error('[Awareness] History fetch failed:', error);
       res.status(500).json({ error: error.message });
     }
   });
