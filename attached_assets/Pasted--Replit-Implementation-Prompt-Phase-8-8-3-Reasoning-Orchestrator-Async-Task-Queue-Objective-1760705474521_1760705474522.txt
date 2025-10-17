@@ -1,0 +1,169 @@
+⚙️ Replit Implementation Prompt — Phase 8.8.3 Reasoning Orchestrator & Async Task Queue
+🎯 Objective
+
+Implement Phase 8.8.3 – Reasoning Orchestrator, introducing a distributed reasoning layer that coordinates domain-specific agents (DevOpsBob, FullStackBob, UXBob) through an async task queue.
+This enables Walter to perform concurrent reasoning, multi-domain synthesis, and error-resilient task routing.
+
+🧩 Core Tasks
+1️⃣ Infrastructure — Async Task Queue
+
+Create server/services/task-queue.ts
+
+Implement a PostgreSQL-backed queue (reasoning_queue table already exists).
+
+Use status enum PENDING, RUNNING, COMPLETED, FAILED.
+
+Add methods:
+
+enqueueTask(task: ReasoningTask): Promise<string>
+fetchNextTask(domain: string): Promise<ReasoningTask | null>
+markTaskComplete(id: string, result: any)
+markTaskFailed(id: string, error: string)
+
+
+Implement optimistic locking (FOR UPDATE SKIP LOCKED) to avoid race conditions.
+
+Emit queue_event broadcasts to Context Bridge for visibility.
+
+Add config option in .env:
+
+TASK_QUEUE_DRIVER=postgres
+TASK_QUEUE_CONCURRENCY=5
+
+2️⃣ Reasoning Orchestrator Service
+
+Create server/services/reasoning-orchestrator.ts.
+
+Responsibilities:
+
+Assign tasks to the appropriate Bob domain.
+
+Manage queue workers (concurrency = 5).
+
+Handle cross-Bob aggregation and summarization.
+
+Implement methods:
+
+registerDomain(domain: string, handler: (task) => Promise<any>)
+startWorkers()
+processTask(task: ReasoningTask)
+broadcastResult(traceId: string, result: any)
+
+
+Use Redis pub/sub if available (later migration path); default to Postgres.
+
+Log each task to reasoning_trace and link traceId ↔ taskId.
+
+Register Bob handlers:
+
+DevOpsBob: diagnoses server, deployment, CI/CD issues.
+
+FullStackBob: code generation and error repair tasks.
+
+UXBob: reasoning about user flows, interface layout, and feedback.
+
+Each handler writes reasoning_fragments with domain, confidence, and summary.
+
+Implement multi-domain orchestration:
+
+When a task requires multiple domains, the orchestrator runs them in parallel and awaits all results.
+
+Merge results via aggregateFindings() → single JSON object with provenance.
+
+Store aggregated summary to reasoning_trace.
+
+3️⃣ Integration Points
+
+Walter Response Flow
+
+In walter-response.ts, after Intent Validation (Phase 8.7.3), enqueue reasoning tasks when requests require analysis (e.g., “optimize strategies”, “evaluate performance”).
+
+Await orchestrator results as part of response assembly.
+
+Memory Lifecycle Link
+
+After each reasoning session, store result summaries into learning_fragments.
+
+Compute and record checksum via MemoryLifecycleService.
+
+Context Bridge Broadcasts
+
+Broadcast reasoning_update messages with progress and completion status.
+
+Example payload:
+
+{
+  "type": "reasoning_update",
+  "payload": {
+    "taskId": "abc123",
+    "domain": "DevOpsBob",
+    "status": "COMPLETED",
+    "confidence": 0.91
+  }
+}
+
+4️⃣ Error Handling & Retries
+
+Retries: max 3, exponential backoff (1 s → 2 s → 4 s).
+
+Capture stack trace and serialized error in reasoning_trace.
+
+If failure count > 3 → move task to FAILED and broadcast alert.
+
+Use memory_audit_log entry to record persistent failures for forensic review.
+
+5️⃣ Testing
+
+✅ Core Tests
+
+Enqueue and process single domain task → COMPLETED within 1 s.
+
+Multi-domain task → aggregate 3 Bob outputs correctly.
+
+Forced failure → retry 3× then FAILED with alert.
+
+Queue concurrency test (> 10 tasks) → no deadlocks.
+
+✅ Integration Tests
+
+walter-response.ts creates task → receives broadcast update.
+
+Memory fragments added post-reasoning.
+
+Context Bridge receives real-time status events.
+
+✅ Audit Verification
+
+reasoning_trace links traceId ↔ taskId ↔ domains.
+
+context_bridge_log shows reasoning_update events.
+
+memory_audit_log entries for failures.
+
+6️⃣ Documentation
+
+Update replit.md with:
+
+New services (task-queue.ts, reasoning-orchestrator.ts)
+
+Schema fields for reasoning_queue and reasoning_trace
+
+Example multi-domain payloads and aggregated results
+
+Async queue configuration (TASK_QUEUE_DRIVER, TASK_QUEUE_CONCURRENCY)
+
+Known limitations and future Redis migration note
+
+✅ Expected Outcome
+
+Walter can now:
+
+Run parallel reasoning across DevOpsBob, FullStackBob, and UXBob
+
+Manage concurrent tasks through a safe, logged async queue
+
+Integrate reasoning results into learning memory and Context Bridge
+
+Produce auditable, self-referenced trace chains linking Intent → Reasoning → Memory
+
+Support continuous cognitive evolution toward autonomous goal-seeking
