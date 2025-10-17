@@ -2172,6 +2172,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/cognitive/report - Get benchmark report in Markdown format
+  app.get('/api/cognitive/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { cognitiveTuner } = await import('./services/cognitive-tuner');
+      const report = await cognitiveTuner.generateReport();
+      
+      res.type('text/markdown').send(report);
+    } catch (error: any) {
+      console.error('[CognitiveTuner] Error generating report:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to generate benchmark report',
+        message: error.message,
+      });
+    }
+  });
+
   // ==================== Phase 8.7.1: State Awareness Layer ====================
 
   // GET /api/state/summary - Get authoritative system state snapshot

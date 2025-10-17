@@ -498,6 +498,75 @@ class CognitiveTunerService {
 
     return recommendations;
   }
+
+  /**
+   * Generate Markdown benchmark report
+   */
+  async generateReport(): Promise<string> {
+    const status = await this.getStatus();
+
+    const lines: string[] = [];
+    lines.push('# Cognitive Tuning Benchmark Report');
+    lines.push('');
+    lines.push(`**Generated:** ${new Date().toISOString()}`);
+    lines.push('');
+
+    // Executive Summary
+    lines.push('## Executive Summary');
+    lines.push('');
+    lines.push(`- **Last Run:** ${status.lastRun || 'Never'}`);
+    lines.push(`- **Accuracy Score:** ${status.accuracyScore.toFixed(1)}% ${status.accuracyScore >= 90 ? '✅' : '⚠️'}`);
+    lines.push(`- **Average Latency:** ${status.averageLatencyMs.toFixed(0)}ms ${status.averageLatencyMs <= 300 ? '✅' : '⚠️'}`);
+    lines.push(`- **Memory Reliability:** ${status.memoryReliability.toFixed(1)}% ${status.memoryReliability >= 95 ? '✅' : '⚠️'}`);
+    lines.push('');
+
+    // Pass/Fail Criteria
+    lines.push('## Pass/Fail Criteria');
+    lines.push('');
+    lines.push('| Metric | Target | Current | Status |');
+    lines.push('|--------|--------|---------|--------|');
+    lines.push(`| Accuracy | ≥90% | ${status.accuracyScore.toFixed(1)}% | ${status.accuracyScore >= 90 ? '✅ PASS' : '❌ FAIL'} |`);
+    lines.push(`| Latency | ≤300ms | ${status.averageLatencyMs.toFixed(0)}ms | ${status.averageLatencyMs <= 300 ? '✅ PASS' : '❌ FAIL'} |`);
+    lines.push(`| Memory | ≥95% | ${status.memoryReliability.toFixed(1)}% | ${status.memoryReliability >= 95 ? '✅ PASS' : '❌ FAIL'} |`);
+    lines.push('');
+
+    // Recent Runs
+    if (status.recentRuns.length > 0) {
+      lines.push('## Recent Test Results');
+      lines.push('');
+      lines.push('| Scenario | Result | Latency | Memory | Queue Throughput |');
+      lines.push('|----------|--------|---------|--------|------------------|');
+      
+      for (const run of status.recentRuns.slice(0, 5)) {
+        const resultIcon = run.result === 'PASS' ? '✅' : run.result === 'PARTIAL' ? '⚠️' : '❌';
+        const memoryIcon = run.memoryChecksumStatus === 'VERIFIED' ? '✅' : '❓';
+        lines.push(`| ${run.scenario} | ${resultIcon} ${run.result} | ${run.avgLatencyMs.toFixed(0)}ms | ${memoryIcon} ${run.memoryChecksumStatus} | ${run.queueThroughput.toFixed(1)}/s |`);
+      }
+      lines.push('');
+    }
+
+    // Recommendations
+    const recommendations = await this.tuneConfiguration('general');
+    if (Object.keys(recommendations).length > 0) {
+      lines.push('## Tuning Recommendations');
+      lines.push('');
+      for (const [key, value] of Object.entries(recommendations)) {
+        lines.push(`- **${key}:** ${value}`);
+      }
+      lines.push('');
+    }
+
+    // Configuration
+    lines.push('## Current Configuration');
+    lines.push('');
+    lines.push(`- **REASONING_MAX_DEPTH:** ${process.env.REASONING_MAX_DEPTH || '10'}`);
+    lines.push(`- **TASK_QUEUE_CONCURRENCY:** ${process.env.TASK_QUEUE_CONCURRENCY || '5'}`);
+    lines.push(`- **MEMORY_VERIFICATION_INTERVAL:** ${process.env.MEMORY_VERIFICATION_INTERVAL || '3600000'}ms`);
+    lines.push(`- **COGNITIVE_BENCHMARK_SCHEDULE:** ${process.env.COGNITIVE_BENCHMARK_SCHEDULE || '0 3 * * *'}`);
+    lines.push('');
+
+    return lines.join('\n');
+  }
 }
 
 // Export singleton instance
