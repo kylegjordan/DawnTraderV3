@@ -169,7 +169,7 @@ class AwarenessCoreService {
       // 10. Emit Context Bridge event (note: contextBridge already imported above in Phase 9.0)
       await contextBridge.broadcast({
         type: 'state_update',
-        userId: userId || null,
+        userId: userId,
         payload: {
           stateId,
           eventSubtype: 'awareness_update',

@@ -9478,6 +9478,141 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ===== PHASE 9.0: ADAPTIVE LEARNING & ALIGNMENT ROUTES =====
+
+  // Verify action alignment
+  app.post('/api/alignment/verify', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { AlignmentVerifier } = await import('./services/alignment-verifier');
+      const { contextBridge } = await import('./services/context-bridge');
+      
+      const verifier = new AlignmentVerifier(contextBridge);
+      
+      const { actionType, actionParams, policyType, requestedBy } = req.body;
+      
+      if (!actionType || !policyType) {
+        return res.status(400).json({ error: 'actionType and policyType are required' });
+      }
+      
+      const result = await verifier.verifyAction({
+        actionType,
+        actionParams: actionParams || {},
+        policyType,
+        requestedBy: requestedBy || req.user?.username || 'unknown'
+      });
+      
+      res.json({ ok: true, verification: result });
+    } catch (error: any) {
+      console.error('[Alignment] Verification failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get verification history
+  app.get('/api/alignment/history', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { AlignmentVerifier } = await import('./services/alignment-verifier');
+      const { contextBridge } = await import('./services/context-bridge');
+      
+      const verifier = new AlignmentVerifier(contextBridge);
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const history = await verifier.getVerificationHistory(limit);
+      
+      res.json({ ok: true, history });
+    } catch (error: any) {
+      console.error('[Alignment] History fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trigger experience synthesis
+  app.post('/api/alignment/synthesize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ExperienceMemoryService } = await import('./services/experience-memory');
+      const { contextBridge } = await import('./services/context-bridge');
+      
+      const experienceMemory = new ExperienceMemoryService(contextBridge);
+      
+      const result = await experienceMemory.synthesizeExperiences();
+      
+      res.json({ ok: true, synthesis: result });
+    } catch (error: any) {
+      console.error('[Alignment] Synthesis failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get recent experience insights
+  app.get('/api/alignment/experiences', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ExperienceMemoryService } = await import('./services/experience-memory');
+      const { contextBridge } = await import('./services/context-bridge');
+      
+      const experienceMemory = new ExperienceMemoryService(contextBridge);
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const experiences = await experienceMemory.getRecentExperiences(limit);
+      
+      res.json({ ok: true, experiences });
+    } catch (error: any) {
+      console.error('[Alignment] Experience fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Evaluate performance drift
+  app.post('/api/alignment/evaluate-drift', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
+      const { contextBridge } = await import('./services/context-bridge');
+      
+      const adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
+      
+      const drift = await adaptiveEngine.evaluatePerformanceDrift();
+      
+      res.json({ ok: true, drift });
+    } catch (error: any) {
+      console.error('[Alignment] Drift evaluation failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get current alignment profile
+  app.get('/api/alignment/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
+      const { contextBridge } = await import('./services/context-bridge');
+      
+      const adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
+      
+      const profile = await adaptiveEngine.getCurrentProfile();
+      
+      res.json({ ok: true, profile });
+    } catch (error: any) {
+      console.error('[Alignment] Profile fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get alignment adjustment history
+  app.get('/api/alignment/adjustments', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
+      const { contextBridge } = await import('./services/context-bridge');
+      
+      const adaptiveEngine = new AdaptiveObjectiveEngine(contextBridge);
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      const adjustments = await adaptiveEngine.getAdjustmentHistory(limit);
+      
+      res.json({ ok: true, adjustments });
+    } catch (error: any) {
+      console.error('[Alignment] Adjustment history fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
