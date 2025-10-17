@@ -21,7 +21,8 @@ import {
   Bot,
   TrendingUp,
   Check,
-  Monitor
+  Monitor,
+  Brain
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -370,7 +371,7 @@ export default function EnhancedSystemMonitoring() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6" data-testid="tabs-system-monitoring">
+        <TabsList className="grid w-full grid-cols-7" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -386,6 +387,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="database" data-testid="tab-database">
             <Database className="w-4 h-4 mr-2" />
             Database
+          </TabsTrigger>
+          <TabsTrigger value="awareness" data-testid="tab-awareness">
+            <Brain className="w-4 h-4 mr-2" />
+            Awareness
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -816,7 +821,210 @@ export default function EnhancedSystemMonitoring() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Tab 7: Awareness - System Self-Awareness State */}
+        <TabsContent value="awareness" className="space-y-4">
+          <AwarenessTab />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function AwarenessTab() {
+  const { toast } = useToast();
+  
+  // Fetch current awareness state
+  const { data: awarenessState, isLoading: stateLoading, refetch: refetchState } = useQuery({
+    queryKey: ['/api/awareness/state'],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+  
+  // Fetch awareness state history
+  const { data: awarenessHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ['/api/awareness/history'],
+    refetchInterval: 60000, // Refresh every minute
+  });
+  
+  // Manual reflection mutation
+  const reflectMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('/api/awareness/reflect', 'POST', {});
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Reflection Complete',
+        description: 'System has completed self-reflection analysis',
+      });
+      refetchState();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Reflection Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+  
+  const currentState = (awarenessState as any)?.state;
+  const states = (awarenessHistory as any)?.states || [];
+  
+  const getEmotionalColor = (emotion: string) => {
+    const colors: Record<string, string> = {
+      stable: 'bg-green-500',
+      elevated: 'bg-yellow-500',
+      critical: 'bg-red-500',
+      recovering: 'bg-blue-500',
+    };
+    return colors[emotion] || 'bg-gray-500';
+  };
+  
+  return (
+    <div className="space-y-4">
+      {/* Current Awareness State */}
+      <Card data-testid="card-awareness-current">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="w-5 h-5" />
+                Current Awareness State
+              </CardTitle>
+              <CardDescription>
+                System's current self-awareness and cognitive status
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => reflectMutation.mutate()}
+              disabled={reflectMutation.isPending}
+              data-testid="button-trigger-reflection"
+            >
+              {reflectMutation.isPending ? 'Reflecting...' : 'Trigger Reflection'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {stateLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : currentState ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div data-testid="metric-health-score">
+                  <div className="text-sm text-muted-foreground">Health Score</div>
+                  <div className="text-2xl font-bold">
+                    {(currentState.healthScore * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div data-testid="metric-cognitive-score">
+                  <div className="text-sm text-muted-foreground">Cognitive Score</div>
+                  <div className="text-2xl font-bold">
+                    {currentState.cognitiveScore.toFixed(1)}%
+                  </div>
+                </div>
+                <div data-testid="metric-confidence">
+                  <div className="text-sm text-muted-foreground">Confidence</div>
+                  <div className="text-2xl font-bold">
+                    {currentState.confidenceScore.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Emotional State:</span>
+                  <Badge className={getEmotionalColor(currentState.emotionalState)} data-testid="badge-emotional-state">
+                    {currentState.emotionalState}
+                  </Badge>
+                </div>
+                {currentState.dominantDomain && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Dominant Domain:</span>
+                    <Badge variant="outline" data-testid="badge-dominant-domain">
+                      {currentState.dominantDomain}
+                    </Badge>
+                  </div>
+                )}
+                {currentState.anomalyDetected && (
+                  <Badge variant="destructive" data-testid="badge-anomaly">
+                    Anomaly Detected
+                  </Badge>
+                )}
+              </div>
+              
+              {currentState.missionFocus && (
+                <div data-testid="text-mission-focus">
+                  <div className="text-sm text-muted-foreground">Current Focus:</div>
+                  <div className="text-sm font-medium">{currentState.missionFocus}</div>
+                </div>
+              )}
+              
+              {currentState.recentActions && currentState.recentActions.length > 0 && (
+                <div>
+                  <div className="text-sm text-muted-foreground mb-2">Recent Actions:</div>
+                  <div className="space-y-1">
+                    {currentState.recentActions.slice(0, 5).map((action: any, idx: number) => (
+                      <div key={idx} className="text-xs flex items-center gap-2" data-testid={`action-${idx}`}>
+                        <Badge variant="secondary" className="text-xs">
+                          {action.actionType}
+                        </Badge>
+                        <span className={action.outcome === 'success' ? 'text-green-600' : 'text-red-600'}>
+                          {action.outcome}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {new Date(action.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-muted-foreground">No awareness state available</div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Awareness State History */}
+      <Card data-testid="card-awareness-history">
+        <CardHeader>
+          <CardTitle>Awareness History</CardTitle>
+          <CardDescription>Recent awareness states and trends</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {historyLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : states.length > 0 ? (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {states.map((state: any, idx: number) => (
+                <div 
+                  key={state.id} 
+                  className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
+                  data-testid={`history-entry-${idx}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${getEmotionalColor(state.emotionalState)}`}></div>
+                    <div>
+                      <div className="text-sm font-medium">{state.missionFocus || 'No focus'}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(state.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span>H: {(state.healthScore * 100).toFixed(0)}%</span>
+                    <span>C: {state.cognitiveScore.toFixed(0)}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-muted-foreground">No awareness history available</div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
