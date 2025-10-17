@@ -13,7 +13,8 @@ import {
   uniqueIndex,
   index,
   vector,
-  serial
+  serial,
+  doublePrecision
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -50,6 +51,7 @@ export const eventSignificanceEnum = pgEnum("event_significance", ["minor", "sig
 export const executionEventTypeEnum = pgEnum("execution_event_type", ["trade", "balance_update", "risk_report", "engine_event", "anomaly", "strategy_signal"]);
 export const reasoningQueueStatusEnum = pgEnum("reasoning_queue_status", ["pending", "in_progress", "completed", "failed"]);
 export const memoryAuditStatusEnum = pgEnum("memory_audit_status", ["VERIFIED", "UNVERIFIED", "REPAIRED"]);
+export const cognitiveTestResultEnum = pgEnum("cognitive_test_result", ["PASS", "WARN", "FAIL"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -2154,6 +2156,26 @@ export const memoryAuditLog = pgTable("memory_audit_log", {
   createdAtIdx: index("memory_audit_log_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 8.8.4: Cognitive Tuning & Testing - Performance Benchmark Log
+export const cognitiveTuningLog = pgTable("cognitive_tuning_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  runId: varchar("run_id", { length: 50 }).notNull(), // Test session ID
+  scenario: text("scenario").notNull(), // Test description
+  avgLatencyMs: doublePrecision("avg_latency_ms"), // Mean reasoning latency
+  domainAccuracy: jsonb("domain_accuracy"), // Per-domain pass/fail stats
+  memoryChecksumStatus: varchar("memory_checksum_status", { length: 20 }), // VERIFIED/UNVERIFIED/REPAIRED
+  queueThroughput: doublePrecision("queue_throughput"), // Tasks per second
+  result: cognitiveTestResultEnum("result").notNull(), // PASS/WARN/FAIL
+  metrics: jsonb("metrics"), // Additional performance data
+  errors: jsonb("errors"), // Error details if any
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  runIdIdx: index("cognitive_tuning_log_run_id_idx").on(table.runId),
+  scenarioIdx: index("cognitive_tuning_log_scenario_idx").on(table.scenario),
+  resultIdx: index("cognitive_tuning_log_result_idx").on(table.result),
+  createdAtIdx: index("cognitive_tuning_log_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2167,6 +2189,7 @@ export const insertContextBridgeLogSchema = createInsertSchema(contextBridgeLog)
 export const insertReasoningTraceSchema = createInsertSchema(reasoningTrace);
 export const insertReasoningQueueSchema = createInsertSchema(reasoningQueue);
 export const insertMemoryAuditLogSchema = createInsertSchema(memoryAuditLog).omit({ id: true, createdAt: true });
+export const insertCognitiveTuningLogSchema = createInsertSchema(cognitiveTuningLog).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2204,6 +2227,9 @@ export type ReasoningQueue = typeof reasoningQueue.$inferSelect;
 
 export type InsertMemoryAuditLog = z.infer<typeof insertMemoryAuditLogSchema>;
 export type MemoryAuditLog = typeof memoryAuditLog.$inferSelect;
+
+export type InsertCognitiveTuningLog = z.infer<typeof insertCognitiveTuningLogSchema>;
+export type CognitiveTuningLog = typeof cognitiveTuningLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

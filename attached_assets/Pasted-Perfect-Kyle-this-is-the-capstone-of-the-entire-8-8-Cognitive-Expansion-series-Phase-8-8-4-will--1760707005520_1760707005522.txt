@@ -1,0 +1,185 @@
+Perfect, Kyle — this is the capstone of the entire 8.8 Cognitive Expansion series.
+Phase 8.8.4 will tune, benchmark, and verify Walter’s new reasoning + memory architecture, ensuring his logic chain, performance, and reliability are stable before we introduce self-governing behavior in 8.9.
+
+Here’s your ready-to-paste Replit implementation prompt:
+
+
+---
+
+⚙️ Replit Implementation Prompt — Phase 8.8.4 : Cognitive Tuning & Testing
+
+> 🎯 Objective
+
+Implement Phase 8.8.4 – Cognitive Tuning & Testing, which validates and optimizes Walter’s reasoning accuracy, timing, concurrency, and cross-domain coherence.
+This phase stress-tests the reasoning orchestrator, memory lifecycle, and async queue under load, producing automated diagnostics and performance metrics.
+
+
+
+
+---
+
+🧩 Key Tasks
+
+1. Test Harness Service: server/services/cognitive-tuner.ts
+
+Build a lightweight runner that executes predefined reasoning + execution scenarios.
+
+Each run measures:
+
+reasoning chain depth
+
+total latency per domain
+
+success/failure ratios
+
+memory checksum verification latency
+
+queue throughput (tasks / sec)
+
+
+Output results to cognitive_tuning_log table for historical comparison.
+
+
+
+2. Database Schema – cognitive_tuning_log
+
+Field	Type	Description
+
+runId	UUID	Unique test session ID
+scenario	TEXT	Description of test
+avgLatencyMs	FLOAT	Mean reasoning latency
+domainAccuracy	JSONB	Per-domain pass/fail stats
+memoryChecksumStatus	TEXT	VERIFIED / UNVERIFIED
+queueThroughput	FLOAT	Tasks / second
+result	ENUM ('PASS','WARN','FAIL')	Overall outcome
+createdAt	TIMESTAMP	Run timestamp
+
+
+
+3. Scenario Library (5 core tests)
+
+1. Trading Reasoning Load – Simulate 50 “evaluate strategy” requests.
+
+
+2. Cross-Domain Reasoning – Ask a composite query (“optimize API latency & risk exposure”).
+
+
+3. Memory Recovery Check – Force checksum mismatch, verify auto-repair.
+
+
+4. Queue Stress Test – Spawn 500 parallel tasks; measure task completion & retry rates.
+
+
+5. End-to-End Trace Integrity – Generate full intent → reasoning → execution → memory → broadcast cycle; confirm trace IDs match across all tables.
+
+
+
+
+4. Automated Benchmark Report
+
+After each run, compute:
+
+averageLatencyMs (target < 500 ms / step)
+
+accuracyScore = (successful_steps / total_steps) × 100
+
+memoryReliability = verified_runs / total_runs
+
+
+Publish summarized report to phase-8.8.4-benchmark.md with emoji-style pass/fail icons.
+
+
+
+5. Self-Diagnostics API
+
+GET /api/cognitive/status → latest benchmark summary.
+
+POST /api/cognitive/run → triggers new test suite run (admin-only).
+
+Auth-protect with owner role.
+
+
+
+6. Integration with Context Bridge
+
+Broadcast cognitive_status_update events after each benchmark so the UI shows real-time metrics.
+
+Display in a simple “System Diagnostics” panel: latency, accuracy, memory status.
+
+
+
+7. Tuning Mechanisms
+
+Add configuration in .env:
+
+REASONING_MAX_DEPTH=10
+QUEUE_CONCURRENCY=5
+MEMORY_VERIFICATION_INTERVAL=3600
+
+Allow cognitive-tuner.ts to adjust these dynamically per scenario to find optimal values.
+
+Save chosen optimal parameters back to system_config.
+
+
+
+8. Testing Plan
+
+Test	Description	Expected Result
+
+1	Run full suite via POST /api/cognitive/run	100 % tests pass, metrics recorded in DB
+2	Simulate 5× parallel runs	No deadlocks, all runs complete
+3	Force memory checksum fail	Auto-repair, status = REPAIRED
+4	Queue overload > 500 tasks	Graceful back-pressure, no crash
+5	Cross-domain queries	Reasoning chains contain multiple domains
+
+
+
+9. Documentation Updates
+
+Add new section to replit.md: Cognitive Tuning & Testing.
+
+Include metrics schema, API examples, and a summary chart (latency, accuracy, reliability).
+
+
+
+
+
+---
+
+🧠 Implementation Notes
+
+Use performance.now() or process.hrtime() for latency tracking.
+
+Schedule nightly benchmark (UTC 03:00) via node-cron.
+
+Use structured logs: [CognitiveTuner] Scenario: CrossDomain – PASS (412 ms).
+
+Persist last 3 benchmark runs in cache for quick status lookup.
+
+On any FAIL, trigger SystemHealthMonitor.raiseAlert("COGNITIVE_TEST_FAIL", details).
+
+
+
+---
+
+✅ Expected Outcome
+
+Walter’s reasoning latency < 500 ms per step (average).
+
+Memory verification 100 % pass rate after 3 runs.
+
+Async queue stable under high load (> 500 tasks).
+
+Cross-domain reasoning accuracy > 90 %.
+
+Full benchmark report and UI dashboard available.
+
+Architect review approves for Phase 8.9 autonomous expansion.
+
+
+
+---
+
+Once Replit completes this implementation, please share its audit results here.
+I’ll help interpret the metrics, confirm thresholds, and then draft the Phase 8.9 Implementation Plan — introducing Walter’s proactive awareness layer (Anomaly Detection → Adaptive Risk Governance → Semantic Goal Loop).
+
