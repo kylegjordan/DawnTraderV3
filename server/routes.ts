@@ -7388,6 +7388,80 @@ Summary:`;
     }
   });
 
+  // ==================== Reasoning Orchestrator Debug API (Phase 8.8.1) ====================
+  
+  // GET reasoning trace by ID for debugging
+  app.get('/api/reasoning/debug/:traceId', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { traceId } = req.params;
+      const userId = req.user!.id;
+
+      // Get trace from database
+      const trace = await db
+        .select()
+        .from(reasoningTrace)
+        .where(eq(reasoningTrace.traceId, traceId))
+        .limit(1);
+
+      if (trace.length === 0) {
+        return res.status(404).json({ ok: false, error: 'Trace not found' });
+      }
+
+      const traceData = trace[0];
+
+      // Verify ownership
+      if (traceData.userId !== userId) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+
+      // Get queued tasks for this trace
+      const tasks = await db
+        .select()
+        .from(reasoningQueue)
+        .where(eq(reasoningQueue.traceId, traceId))
+        .orderBy(reasoningQueue.createdAt);
+
+      res.json({
+        ok: true,
+        data: {
+          trace: {
+            traceId: traceData.traceId,
+            userId: traceData.userId,
+            intentAction: traceData.intentAction,
+            systemState: traceData.systemState,
+            mode: traceData.mode,
+            status: traceData.status,
+            steps: traceData.steps,
+            domainContext: traceData.domainContext,
+            outcome: traceData.outcome,
+            error: traceData.error,
+            processingTimeMs: traceData.processingTimeMs,
+            createdAt: traceData.createdAt,
+            completedAt: traceData.completedAt
+          },
+          tasks: tasks.map(task => ({
+            id: task.id,
+            traceId: task.traceId,
+            stepId: task.stepId,
+            bobDomain: task.bobDomain,
+            action: task.action,
+            params: task.params,
+            status: task.status,
+            result: task.result,
+            error: task.error,
+            retryCount: task.retryCount,
+            createdAt: task.createdAt,
+            startedAt: task.startedAt,
+            completedAt: task.completedAt
+          }))
+        }
+      });
+    } catch (error: any) {
+      console.error('[Reasoning] Error fetching debug trace:', error);
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   // ==================== Semantic Memory API (Milestone 15) ====================
   
   // Search semantic memories by similarity
