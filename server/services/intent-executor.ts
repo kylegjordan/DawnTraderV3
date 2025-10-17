@@ -14,6 +14,7 @@ interface IntentPayload {
   action: string;
   mode?: 'live' | 'paper';
   strategy?: string;
+  strategyId?: string; // Support both strategy and strategyId
   enabled?: boolean;
   params?: Record<string, any>;
   goals?: Array<any>;
@@ -175,36 +176,122 @@ class IntentExecutionService {
     const mode = intent.mode || 'paper';
     const { storage } = await import('../storage');
     
-    // Update user status to active
-    await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
-    
-    return {
-      message: `${mode === 'live' ? 'Live' : 'Paper'} trading started successfully`,
-      data: { mode, status: 'active' }
-    };
+    if (mode === 'paper') {
+      // Start paper trading via PaperPortfolioManager
+      const globalPaperPortfolioManager = (global as any).globalPaperPortfolioManager;
+      
+      if (globalPaperPortfolioManager) {
+        throw new Error('Paper trading simulation already running (system-wide)');
+      }
+      
+      const { PaperPortfolioManager } = await import('../services/paper-portfolio-manager');
+      const manager = new PaperPortfolioManager(userId);
+      
+      // Set global manager and register session
+      (global as any).globalPaperPortfolioManager = manager;
+      (global as any).registerSimulationSession({
+        sessionId: `intent_${Date.now()}`,
+        startedBy: userId,
+        startTime: new Date(),
+        isRunning: true,
+        type: 'manual'
+      });
+      
+      await manager.start();
+      
+      // Update user status
+      await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
+      
+      // Invalidate BobCore cache for paper sim status
+      const { bobCore } = await import('../services/bob-core');
+      bobCore.invalidate('metrics:paperSimStatus');
+      console.log('[IntentExecutor] Invalidated BobCore cache: metrics:paperSimStatus');
+      
+      return {
+        message: 'Paper trading started successfully',
+        data: { mode, status: 'active' }
+      };
+    } else {
+      // Start live trading via TradingEngine
+      const tradingEngines = (global as any).tradingEngines as Map<string, any>;
+      let engine = tradingEngines.get(userId);
+      
+      if (!engine) {
+        const { TradingEngine } = await import('../services/trading-engine');
+        engine = new TradingEngine(userId);
+        tradingEngines.set(userId, engine);
+      }
+      
+      await engine.start();
+      await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
+      
+      return {
+        message: 'Live trading started successfully',
+        data: { mode, status: 'active' }
+      };
+    }
   }
 
   private async executeStopTrading(userId: string, intent: IntentPayload): Promise<any> {
     const mode = intent.mode || 'paper';
     const { storage } = await import('../storage');
     
-    // Update user status to stopped
-    await storage.updateUser(userId, { tradingStatus: 'stopped' });
-    
-    return {
-      message: `${mode === 'live' ? 'Live' : 'Paper'} trading stopped successfully`,
-      data: { mode, status: 'stopped' }
-    };
+    if (mode === 'paper') {
+      // Stop paper trading via PaperPortfolioManager
+      const globalPaperPortfolioManager = (global as any).globalPaperPortfolioManager;
+      
+      if (!globalPaperPortfolioManager) {
+        throw new Error('No paper trading simulation is running');
+      }
+      
+      await globalPaperPortfolioManager.stop();
+      
+      // Deregister session and clear global manager
+      (global as any).deregisterSimulationSession();
+      (global as any).globalPaperPortfolioManager = null;
+      
+      // Update user status
+      await storage.updateUser(userId, { tradingStatus: 'stopped' });
+      
+      // Invalidate BobCore cache for paper sim status
+      const { bobCore } = await import('../services/bob-core');
+      bobCore.invalidate('metrics:paperSimStatus');
+      bobCore.invalidateMode('paper'); // Also invalidate all paper mode caches
+      console.log('[IntentExecutor] Invalidated BobCore cache: metrics:paperSimStatus and paper mode');
+      
+      return {
+        message: 'Paper trading stopped successfully',
+        data: { mode, status: 'stopped' }
+      };
+    } else {
+      // Stop live trading via TradingEngine
+      const tradingEngines = (global as any).tradingEngines as Map<string, any>;
+      const engine = tradingEngines.get(userId);
+      
+      if (!engine) {
+        throw new Error('No live trading engine is running');
+      }
+      
+      await engine.stop();
+      await storage.updateUser(userId, { tradingStatus: 'stopped' });
+      
+      return {
+        message: 'Live trading stopped successfully',
+        data: { mode, status: 'stopped' }
+      };
+    }
   }
 
   private async executeStrategyUpdate(userId: string, intent: IntentPayload): Promise<any> {
     const { storage } = await import('../storage');
     const globalContextId = 'default';
     const mode = (intent.mode || 'paper') as 'live' | 'paper';
-    const strategy = intent.strategy as 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap';
+    
+    // Support both 'strategy' and 'strategyId' field names for backward compatibility
+    const strategy = (intent.strategy || intent.strategyId) as 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap';
     
     if (!strategy) {
-      throw new Error('Strategy name is required for strategy update');
+      throw new Error('Strategy name is required for strategy update (provide strategy or strategyId)');
     }
     
     // Determine enabled status

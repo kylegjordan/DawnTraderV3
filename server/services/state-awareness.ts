@@ -290,11 +290,30 @@ class StateAwarenessService {
    * Note: This is a placeholder - actual implementation would query the trading engine
    */
   private async getTradingStatus(userId: string, traceId: string): Promise<{ paper: 'active' | 'stopped' | 'unknown'; live: 'active' | 'stopped' | 'unknown' }> {
-    // TODO: Integrate with actual trading engine status when available
-    // For now, return 'stopped' as default
+    // Phase 8.7.2: Get actual trading engine status
+    let paperStatus: 'active' | 'stopped' | 'unknown' = 'stopped';
+    let liveStatus: 'active' | 'stopped' | 'unknown' = 'stopped';
+    
+    // Check paper trading engine status
+    const globalPaperPortfolioManager = (global as any).globalPaperPortfolioManager;
+    if (globalPaperPortfolioManager) {
+      // Check if it's actually running (has monitoring interval)
+      const isRunning = globalPaperPortfolioManager.isRunning || 
+                       (globalPaperPortfolioManager.executionEngine && 
+                        globalPaperPortfolioManager.executionEngine.isRunning);
+      paperStatus = isRunning ? 'active' : 'stopped';
+    }
+    
+    // Check live trading engine status
+    const tradingEngines = (global as any).tradingEngines as Map<string, any>;
+    const liveEngine = tradingEngines?.get(userId);
+    if (liveEngine) {
+      liveStatus = liveEngine.isRunning ? 'active' : 'stopped';
+    }
+    
     return {
-      paper: 'stopped',
-      live: 'stopped',
+      paper: paperStatus,
+      live: liveStatus,
     };
   }
 
