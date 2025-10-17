@@ -9334,9 +9334,13 @@ Important: Extract the exact field names and numeric values from the user's requ
   app.post('/api/autonomy/self-check', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const { simulate, simulateHealth } = req.body;
       const { autonomyController } = await import('./services/autonomy-controller');
       
-      const result = await autonomyController.scheduleSelfCheck(userId);
+      const result = await autonomyController.scheduleSelfCheck(userId, {
+        simulate,
+        simulateHealth,
+      });
       
       res.json({ ok: true, result });
     } catch (error: any) {

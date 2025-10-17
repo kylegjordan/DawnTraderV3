@@ -48,7 +48,13 @@ class AutonomyControllerService {
    * Schedule periodic self-check
    * Evaluates system health, cognitive performance, and triggers reasoning if needed
    */
-  async scheduleSelfCheck(userId: string): Promise<SelfCheckResult> {
+  async scheduleSelfCheck(
+    userId: string,
+    options?: {
+      simulate?: boolean;
+      simulateHealth?: { healthScore?: number; cognitiveScore?: number };
+    }
+  ): Promise<SelfCheckResult> {
     if (this.isRunning) {
       console.log('[AutonomyController] Self-check already in progress, skipping');
       throw new Error('Self-check already in progress');
@@ -58,16 +64,28 @@ class AutonomyControllerService {
     const runId = `autonomy_${nanoid(12)}`;
     const startTime = performance.now();
 
-    console.log(`[AutonomyController] 🤖 Initiating self-check (runId: ${runId})`);
+    console.log(`[AutonomyController] 🤖 Initiating self-check (runId: ${runId})${options?.simulate ? ' [SIMULATED]' : ''}`);
 
     try {
       // 1. Assess system health
       const healthMetrics = systemHealthMonitor.getMetrics();
-      const healthScore = this.calculateHealthScore(healthMetrics);
+      let healthScore = this.calculateHealthScore(healthMetrics);
 
       // 2. Evaluate cognitive performance
       const cognitiveStatus = await cognitiveTuner.getStatus();
-      const cognitiveScore = cognitiveStatus.accuracyScore;
+      let cognitiveScore = cognitiveStatus.accuracyScore;
+
+      // Apply simulation if requested
+      if (options?.simulate && options?.simulateHealth) {
+        if (options.simulateHealth.healthScore !== undefined) {
+          healthScore = options.simulateHealth.healthScore;
+          console.log(`[AutonomyController] 🧪 Simulating healthScore: ${healthScore}`);
+        }
+        if (options.simulateHealth.cognitiveScore !== undefined) {
+          cognitiveScore = options.simulateHealth.cognitiveScore;
+          console.log(`[AutonomyController] 🧪 Simulating cognitiveScore: ${cognitiveScore}`);
+        }
+      }
 
       // 3. Detect issues
       const issuesDetected: string[] = [];
