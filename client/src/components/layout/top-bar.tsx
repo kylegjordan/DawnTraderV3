@@ -191,12 +191,26 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   };
 
-  const handleModeChange = (newMode: 'live' | 'paper') => {
-    setMode(newMode);
-    toast({
-      title: "Mode Changed",
-      description: `Switched to ${newMode === 'live' ? 'Live' : 'Paper'} trading mode`,
-    });
+  const handleModeChange = async (newMode: 'live' | 'paper') => {
+    try {
+      // Update local state
+      setMode(newMode);
+      
+      // Persist to database via API
+      await apiRequest('PUT', '/api/settings', { currentMode: newMode });
+      
+      toast({
+        title: "Mode Changed",
+        description: `Switched to ${newMode === 'live' ? 'Live' : 'Paper'} trading mode`,
+      });
+    } catch (error: any) {
+      console.error('Failed to update mode:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update trading mode",
+        variant: "destructive",
+      });
+    }
   };
 
   // Determine if trading is active based on current mode

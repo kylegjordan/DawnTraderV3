@@ -623,6 +623,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertTradingSettingsSchema.omit({ userId: true }).parse(req.body);
       const settings = await storage.updateTradingSettings(userId, validatedData);
       
+      // Broadcast config update via Context Bridge
+      await contextBridge.broadcast({
+        type: 'config_update',
+        payload: { settings },
+        userId,
+        mode: settings.currentMode as 'live' | 'paper'
+      });
+      
       res.json(settings);
     } catch (error) {
       console.error('Error updating settings:', error);

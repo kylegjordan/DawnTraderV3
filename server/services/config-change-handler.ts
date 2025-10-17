@@ -72,6 +72,20 @@ class ConfigChangeHandler {
         console.log(`[${this.MODULE_NAME}] ✅ EngineSettingsBus notified for strategy change`);
       }
 
+      // Step 6: Broadcast config update via Context Bridge
+      try {
+        const { contextBridge } = await import('./context-bridge');
+        await contextBridge.broadcast({
+          type: 'config_update',
+          payload: { configType, mode },
+          userId,
+          mode
+        });
+        console.log(`[${this.MODULE_NAME}] ✅ Config update broadcasted via Context Bridge`);
+      } catch (bridgeError: any) {
+        console.error(`[${this.MODULE_NAME}] Failed to broadcast config update:`, bridgeError.message);
+      }
+
       console.log(`[${this.MODULE_NAME}] ✨ Config change handled successfully for ${configType}`);
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] ❌ Error handling config change:`, error);
