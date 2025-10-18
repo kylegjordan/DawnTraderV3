@@ -18,6 +18,7 @@ import metaOversightService from './meta-oversight';
 import longtermMemoryService from './longterm-memory';
 import { unifiedCore } from './unified-core';
 import { safetyGuardrails } from './safety-guardrails';
+import { ethicalReasoner } from './ethical-reasoner'; // Phase 13.0
 import { performanceMonitor } from './performance-monitor'; // Phase 12.1
 import { desc, sql } from 'drizzle-orm';
 
@@ -330,63 +331,53 @@ class AutonomyControllerService {
         issuesDetected.push('Safety guardrails system error');
       }
 
-      // Phase 9.5: Ethical Reasoning Pre-Execution Check (BLOCKING)
-      const { ethicalReasoningEngine } = await import('./ethical-reasoning-engine').then((m) => ({
-        ethicalReasoningEngine: m.ethicalReasoningEngine,
-      })).catch(() => ({ ethicalReasoningEngine: null }));
+      // Phase 13.0: Ethical Reasoning Pre-Execution Check (BLOCKING - after Safety)
+      try {
+        const ethicalEval = await ethicalReasoner.evaluateAction({
+          actor: 'autonomy_controller',
+          action: 'autonomy_self_check',
+          context: {
+            healthScore,
+            cognitiveScore,
+            issuesDetected: issuesDetected.length,
+            runId,
+            riskLevel: (healthScore < this.config.healthThresholds.critical ? '3.0' : '1.5'),
+            tradingMode: 'paper',
+            userApproved: true, // Autonomy is user-approved by default
+            reasoningLogId: runId, // For transparency principle
+          },
+        });
 
-      let ethicalViolations: string[] = [];
-
-      if (ethicalReasoningEngine) {
-        try {
-          const ethicalAudit = await ethicalReasoningEngine.evaluateAction(
-            userId,
-            {
-              actionType: 'autonomy_self_check',
-              actionId: runId,
-              actionData: {
-                riskPercent: healthScore < this.config.healthThresholds.critical ? 3.0 : 1.5,
-                positionPercent: 5.0,
-                reasoning: `Self-check: Health ${healthScore.toFixed(2)}, Cognitive ${cognitiveScore.toFixed(2)}`,
-                dailyLossPercent: healthScore < this.config.healthThresholds.critical ? 3.0 : 0,
-              },
-            },
-            'paper'
-          );
-
-          // ENFORCEMENT: Block on violations
-          if (ethicalAudit.complianceStatus === 'violation') {
-            const violations = ethicalAudit.violationsDetected as Record<string, any> || {};
-            ethicalViolations = Object.keys(violations).map(rule => `${rule}: ${violations[rule]}`);
-            
-            console.error(`[AutonomyController] ⛔ ETHICAL VIOLATION DETECTED - blocking actions`);
-            console.error(`[AutonomyController] Violations: ${ethicalViolations.join('; ')}`);
-            
-            issuesDetected.push(...ethicalViolations.map(v => `ETHICAL VIOLATION: ${v}`));
-            actionsTriggered.push('block_due_to_ethical_violation');
-
-            // Broadcast violation via Context Bridge
-            await contextBridge.broadcast({
-              type: 'state_update',
-              userId,
-              payload: {
-                source: 'ethical_enforcement',
-                action: 'violation_blocked',
-                runId,
-                violations: ethicalViolations,
-                complianceStatus: ethicalAudit.complianceStatus,
-              },
-            });
-          } else if (ethicalAudit.complianceStatus === 'warning') {
-            console.warn(`[AutonomyController] ⚠️ Ethical warnings detected`);
-            actionsTriggered.push('ethical_warning_logged');
-          } else {
-            console.log(`[AutonomyController] ✅ Ethical evaluation: ${ethicalAudit.complianceStatus}`);
+        if (ethicalEval.verdict === 'rejected') {
+          console.error(`[AutonomyController] ⚖️ ETHICAL VIOLATION - action rejected`);
+          console.error(`[AutonomyController] Violations: ${ethicalEval.principlesViolated.join(', ')}`);
+          console.error(`[AutonomyController] Reasons: ${ethicalEval.reasons.join('; ')}`);
+          
+          issuesDetected.push(...ethicalEval.reasons.map(r => `ETHICAL VIOLATION: ${r}`));
+          actionsTriggered.push('blocked_by_ethical_violation');
+          
+          // Return early if critical violation
+          if (ethicalEval.severity === 'critical') {
+            return {
+              runId,
+              timestamp: new Date(),
+              healthScore,
+              cognitiveScore,
+              systemMetrics: assessmentResult.systemMetrics,
+              issuesDetected,
+              actionsTriggered,
+            };
           }
-        } catch (err: any) {
-          console.error('[AutonomyController] Ethical evaluation failed:', err);
-          issuesDetected.push('Ethical evaluation system error');
+        } else if (ethicalEval.verdict === 'requires_review') {
+          console.warn(`[AutonomyController] ⚠️ Ethical review required - logging for human oversight`);
+          actionsTriggered.push('ethical_review_required');
+          issuesDetected.push(`Ethical review needed: ${ethicalEval.reasons.join('; ')}`);
+        } else {
+          console.log(`[AutonomyController] ✅ Ethical reasoning: approved`);
         }
+      } catch (err: any) {
+        console.error('[AutonomyController] Ethical reasoning check failed:', err);
+        issuesDetected.push('Ethical reasoning system error');
       }
 
       // Phase 9.6: Collaborative Cognition & Cross-Domain Reasoning Hooks
