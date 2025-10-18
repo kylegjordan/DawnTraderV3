@@ -1,9 +1,10 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Server, Activity, CheckCircle, AlertCircle, Clock } from "lucide-react";
+import { Server, Activity, CheckCircle, AlertCircle, Clock, Shield, Eye } from "lucide-react";
 
 interface ClusterNode {
   id: string;
@@ -35,6 +36,26 @@ interface ClusterStatus {
   failedTasks: number;
 }
 
+interface CircuitBreakerStatus {
+  nodeId: string;
+  nodeName: string;
+  state: "closed" | "open" | "half_open";
+  failureCount: number;
+  successCount: number;
+  nextRetryAt: string | null;
+}
+
+interface AuditLog {
+  id: string;
+  taskId: string;
+  nodeId: string;
+  gateType: "safety" | "federated_ethics" | "ethical_reasoning" | "knowledge_acquisition";
+  gatePassed: boolean;
+  gateResult: string;
+  executionTimeMs: number;
+  createdAt: string;
+}
+
 export default function ClusterTab() {
   const { toast } = useToast();
 
@@ -51,6 +72,16 @@ export default function ClusterTab() {
   const { data: queueData, isLoading: queueLoading } = useQuery<{ ok: boolean; tasks: ClusterTask[] }>({
     queryKey: ['/api/cluster/queue?limit=10'],
     refetchInterval: 15000, // Refresh every 15 seconds
+  });
+
+  const { data: circuitBreakerData, isLoading: circuitBreakerLoading } = useQuery<{ ok: boolean; circuitBreakers: CircuitBreakerStatus[] }>({
+    queryKey: ['/api/cluster/circuit-breaker'],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const { data: auditLogsData, isLoading: auditLogsLoading } = useQuery<{ ok: boolean; auditLogs: AuditLog[] }>({
+    queryKey: ['/api/cluster/audit-logs?limit=20'],
+    refetchInterval: 30000,
   });
 
   const rebalanceMutation = useMutation({
@@ -271,6 +302,106 @@ export default function ClusterTab() {
           <p className="text-muted-foreground text-sm" data-testid="cluster-queue-empty">
             No tasks in queue
           </p>
+        )}
+      </div>
+
+      {/* Phase 17.5: Circuit Breaker Status */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <Shield className="h-4 w-4" />
+          Circuit Breaker Status (Phase 17.5)
+        </h3>
+        {circuitBreakerLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : circuitBreakerData && circuitBreakerData.circuitBreakers.length > 0 ? (
+          <div className="border rounded-lg p-4 space-y-3" data-testid="circuit-breaker-section">
+            {circuitBreakerData.circuitBreakers.map((cb) => (
+              <div key={cb.nodeId} className="flex items-center justify-between p-3 bg-muted/30 rounded">
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{cb.nodeName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Failures: {cb.failureCount} | Successes: {cb.successCount}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={
+                      cb.state === "closed"
+                        ? "default"
+                        : cb.state === "open"
+                        ? "destructive"
+                        : "secondary"
+                    }
+                    data-testid={`circuit-breaker-${cb.nodeId}-state`}
+                  >
+                    {cb.state.toUpperCase()}
+                  </Badge>
+                  {cb.state === "open" && cb.nextRetryAt && (
+                    <span className="text-xs text-muted-foreground">
+                      Retry: {new Date(cb.nextRetryAt).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">No circuit breaker data available</p>
+        )}
+      </div>
+
+      {/* Phase 17.6: Audit Log Summary */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <Eye className="h-4 w-4" />
+          Ethical Gate Audit Log (Phase 17.6) - Last 20
+        </h3>
+        {auditLogsLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : auditLogsData && auditLogsData.auditLogs.length > 0 ? (
+          <div className="border rounded-lg overflow-hidden" data-testid="audit-logs-section">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="text-left p-2">Gate Type</th>
+                    <th className="text-left p-2">Result</th>
+                    <th className="text-right p-2">Exec Time</th>
+                    <th className="text-left p-2">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogsData.auditLogs.map((log) => (
+                    <tr
+                      key={log.id}
+                      className="border-t hover:bg-muted/50"
+                      data-testid={`audit-log-${log.id}`}
+                    >
+                      <td className="p-2 font-mono text-xs">{log.gateType}</td>
+                      <td className="p-2">
+                        {log.gatePassed ? (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4 text-red-500" />
+                        )}
+                      </td>
+                      <td className="p-2 text-right text-xs">{log.executionTimeMs}ms</td>
+                      <td className="p-2 text-xs text-muted-foreground">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">No audit logs available</p>
         )}
       </div>
     </div>
