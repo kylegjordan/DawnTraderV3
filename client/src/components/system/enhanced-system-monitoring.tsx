@@ -34,6 +34,7 @@ import {
   Globe,
   ScanLine
 } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SystemMetrics {
   cpu: {
@@ -257,7 +258,7 @@ export default function EnhancedSystemMonitoring() {
   // Run mitigation mutation
   const runMitigationMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/introspection/mitigate', 'POST', {});
+      return await apiRequest('POST', '/api/introspection/mitigate', {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/introspection/status'] });
@@ -3905,8 +3906,6 @@ function IntrospectionTab({
   driftLoading: boolean;
   runMitigationMutation: any;
 }) {
-  const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, Legend, ResponsiveContainer } = require('recharts');
-  
   // Group biases by type for breakdown
   const biasCounts = biases.reduce((acc, bias) => {
     acc[bias.biasType] = (acc[bias.biasType] || 0) + 1;
@@ -3977,13 +3976,13 @@ function IntrospectionTab({
             ) : introspection ? (
               <div>
                 <div className="text-3xl font-bold" data-testid="text-reasoning-quality">
-                  {(introspection.reasoningQuality * 100).toFixed(0)}%
+                  {((introspection.reasoningQuality ?? 1) * 100).toFixed(0)}%
                 </div>
                 <Badge 
-                  variant={introspection.reasoningQuality > 0.85 ? 'secondary' : introspection.reasoningQuality > 0.7 ? 'default' : 'destructive'}
+                  variant={(introspection.reasoningQuality ?? 1) > 0.85 ? 'secondary' : (introspection.reasoningQuality ?? 1) > 0.7 ? 'default' : 'destructive'}
                   className="mt-2"
                 >
-                  {introspection.reasoningQuality > 0.85 ? 'Excellent' : introspection.reasoningQuality > 0.7 ? 'Good' : 'Poor'}
+                  {(introspection.reasoningQuality ?? 1) > 0.85 ? 'Excellent' : (introspection.reasoningQuality ?? 1) > 0.7 ? 'Good' : 'Poor'}
                 </Badge>
               </div>
             ) : (

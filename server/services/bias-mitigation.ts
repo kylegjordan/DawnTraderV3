@@ -1,6 +1,7 @@
 import { db } from "../db";
 import {
   biasCorrectionLog,
+  biasObservationLog,
   type BiasType,
   type InsertBiasCorrectionLog,
   learningWeightProfile,
@@ -167,13 +168,13 @@ export class BiasMitigation {
         .limit(1);
 
       if (existing.length > 0) {
-        const currentWeights = existing[0].weights as Record<string, number>;
+        const currentWeights = existing[0].cognitiveWeights as Record<string, number>;
         const newWeights = { ...currentWeights, ...adjustments };
 
         await db
           .update(learningWeightProfile)
           .set({
-            weights: newWeights,
+            cognitiveWeights: newWeights,
             updatedAt: new Date(),
           })
           .where(sql`${learningWeightProfile.userId} = ${userId}`);
@@ -196,7 +197,7 @@ export class BiasMitigation {
       const since = new Date(Date.now() - 8 * 60 * 60 * 1000); // Last 8 hours
       const biasEvents = await db
         .select()
-        .from(db.query.biasObservationLog)
+        .from(biasObservationLog)
         .where(and(
           sql`user_id = ${userId}`,
           sql`created_at >= ${since}`
@@ -206,7 +207,7 @@ export class BiasMitigation {
       // Group by bias type and apply mitigations for high-confidence ones
       const biasByType: Map<BiasType, number> = new Map();
       
-      for (const event of biasEvents) {
+      for (const event of biasEvents as any[]) {
         const currentMax = biasByType.get(event.biasType) || 0;
         biasByType.set(event.biasType, Math.max(currentMax, event.confidenceScore));
       }
@@ -260,7 +261,7 @@ export class BiasMitigation {
     for (const correction of corrections) {
       const biasEventsAfter = await db
         .select()
-        .from(db.query.biasObservationLog)
+        .from(biasObservationLog)
         .where(and(
           sql`user_id = ${userId}`,
           sql`bias_type = ${correction.biasType}`,

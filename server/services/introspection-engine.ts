@@ -11,7 +11,7 @@ import {
   autonomyAuditLog,
   metaReasoningLog,
 } from "@shared/schema";
-import { sql, desc, and, gte } from "drizzle-orm";
+import { sql, desc, and, gte, eq } from "drizzle-orm";
 import { eventBus } from "../lib/event-bus";
 
 /**
@@ -41,13 +41,28 @@ export class IntrospectionEngine {
       .orderBy(desc(reasoningTrace.createdAt))
       .limit(100);
 
-    // Fetch recent meta-reasoning logs
+    // Fetch recent meta-reasoning logs with user scoping via reasoningTrace join
     const metaLogs = await db
-      .select()
+      .select({
+        id: metaReasoningLog.id,
+        analysisId: metaReasoningLog.analysisId,
+        timestamp: metaReasoningLog.timestamp,
+        targetTraceId: metaReasoningLog.targetTraceId,
+        analysisResult: metaReasoningLog.analysisResult,
+        integrityScore: metaReasoningLog.integrityScore,
+        detectedIssues: metaReasoningLog.detectedIssues,
+        correctionPlan: metaReasoningLog.correctionPlan,
+        correctionApplied: metaReasoningLog.correctionApplied,
+        correctionResult: metaReasoningLog.correctionResult,
+        executionTimeMs: metaReasoningLog.executionTimeMs,
+        metadata: metaReasoningLog.metadata,
+        createdAt: metaReasoningLog.createdAt,
+      })
       .from(metaReasoningLog)
+      .innerJoin(reasoningTrace, eq(metaReasoningLog.targetTraceId, reasoningTrace.traceId))
       .where(and(
         sql`${metaReasoningLog.createdAt} >= ${since}`,
-        sql`${metaReasoningLog.userId} = ${userId}`
+        eq(reasoningTrace.userId, userId)
       ))
       .orderBy(desc(metaReasoningLog.createdAt))
       .limit(50);
@@ -94,14 +109,29 @@ export class IntrospectionEngine {
     const windowHours = this.parseSessionWindow(sessionWindow);
     const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
 
-    // Fetch decisions with confidence scores
+    // Fetch decisions with confidence scores (using integrityScore as proxy) scoped to user
     const decisions = await db
-      .select()
+      .select({
+        id: metaReasoningLog.id,
+        analysisId: metaReasoningLog.analysisId,
+        timestamp: metaReasoningLog.timestamp,
+        targetTraceId: metaReasoningLog.targetTraceId,
+        analysisResult: metaReasoningLog.analysisResult,
+        integrityScore: metaReasoningLog.integrityScore,
+        detectedIssues: metaReasoningLog.detectedIssues,
+        correctionPlan: metaReasoningLog.correctionPlan,
+        correctionApplied: metaReasoningLog.correctionApplied,
+        correctionResult: metaReasoningLog.correctionResult,
+        executionTimeMs: metaReasoningLog.executionTimeMs,
+        metadata: metaReasoningLog.metadata,
+        createdAt: metaReasoningLog.createdAt,
+      })
       .from(metaReasoningLog)
+      .innerJoin(reasoningTrace, eq(metaReasoningLog.targetTraceId, reasoningTrace.traceId))
       .where(and(
         sql`${metaReasoningLog.createdAt} >= ${since}`,
-        sql`${metaReasoningLog.userId} = ${userId}`,
-        sql`${metaReasoningLog.reflectionScore} IS NOT NULL`
+        sql`${metaReasoningLog.integrityScore} IS NOT NULL`,
+        eq(reasoningTrace.userId, userId)
       ))
       .orderBy(desc(metaReasoningLog.createdAt));
 
@@ -109,8 +139,8 @@ export class IntrospectionEngine {
       return;
     }
 
-    // Extract confidence scores (using reflectionScore as proxy)
-    const confidenceScores = decisions.map(d => d.reflectionScore || 0.5);
+    // Extract confidence scores (using integrityScore as proxy)
+    const confidenceScores = decisions.map(d => d.integrityScore || 0.5);
     
     // Calculate statistics
     const average = confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length;
@@ -209,7 +239,7 @@ export class IntrospectionEngine {
     // Create report
     await db.insert(introspectionReport).values({
       userId,
-      reportDate: startOfDay,
+      reportDate: startOfDay.toISOString().split('T')[0], // Convert to YYYY-MM-DD format
       biasIndex,
       confidenceStability,
       totalBiasEvents: biasEvents.length,
@@ -350,7 +380,7 @@ export class IntrospectionEngine {
 
   private detectOverconfidenceBias(metaLogs: any[]): BiasAnalysisResult {
     const highConfidenceLogs = metaLogs.filter(log => 
-      (log.reflectionScore || 0) > 0.85
+      (log.integrityScore || 0) > 0.85
     ).length;
 
     const confidence = Math.min(1.0, highConfidenceLogs / Math.max(metaLogs.length, 1));
