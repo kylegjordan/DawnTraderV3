@@ -633,8 +633,8 @@ export default function WalterPage() {
 
   return (
     <div className="px-2 sm:px-3 lg:px-4 pt-0 pb-2 max-w-full overflow-hidden h-screen flex flex-col">
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2 pt-2">
+      <div className="flex items-start justify-between mb-1 pt-2">
+        <div className="flex items-center gap-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Walter</h1>
           <ModeIndicator />
           <DropdownMenu>
@@ -678,11 +678,25 @@ export default function WalterPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        {pendingApprovalsCount > 0 && (
-          <Badge variant="destructive" className="text-lg px-4 py-2" data-testid="badge-pending-approvals">
-            {pendingApprovalsCount} Pending Approval{pendingApprovalsCount !== 1 ? 's' : ''}
-          </Badge>
-        )}
+        
+        <div className="flex items-center gap-2">
+          {selectedChatId && chatData?.chat && (
+            <div>
+              <h2 className="text-sm font-medium">{chatData.chat.title}</h2>
+              {chatData.chat.isApprovalThread && currentApproval && (
+                <p className="text-xs text-muted-foreground">
+                  Approval {currentApproval.status === 'pending' ? 'Pending' : 
+                           currentApproval.status === 'approved' ? 'Approved' : 'Rejected'}
+                </p>
+              )}
+            </div>
+          )}
+          {pendingApprovalsCount > 0 && (
+            <Badge variant="destructive" className="text-lg px-4 py-2" data-testid="badge-pending-approvals">
+              {pendingApprovalsCount} Pending Approval{pendingApprovalsCount !== 1 ? 's' : ''}
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 flex gap-4 min-h-0">
@@ -940,64 +954,6 @@ export default function WalterPage() {
 
         {/* Central Chat Area */}
         <Card className="flex-1 flex flex-col min-h-0 border-0 shadow-none p-0">
-          {/* Chat Header */}
-          {selectedChatId && chatData?.chat && (
-            <div className="px-1 pb-1 flex items-start justify-between">
-              <div>
-                <h2 className="text-sm font-medium">{chatData.chat.title}</h2>
-                {chatData.chat.isApprovalThread && currentApproval && (
-                  <p className="text-xs text-muted-foreground">
-                    {currentApproval.strategyName} • {currentApproval.mode} mode • {currentApproval.projectedRisk}% risk
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                {chatData.chat.status === 'active' && !chatData.chat.isApprovalThread && (
-                  <>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          title="Export chat"
-                          data-testid="button-export-chat"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem 
-                          onClick={() => exportChatMutation.mutate({ chatId: selectedChatId, format: 'markdown' })}
-                          data-testid="export-markdown"
-                        >
-                          Export as Markdown
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => exportChatMutation.mutate({ chatId: selectedChatId, format: 'pdf' })}
-                          data-testid="export-pdf"
-                        >
-                          Export as PDF
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => archiveChatMutation.mutate(selectedChatId)}
-                      disabled={archiveChatMutation.isPending}
-                      title="Archive chat"
-                      data-testid="button-archive-chat"
-                    >
-                      <Archive className="w-3.5 h-3.5" />
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Messages Area */}
           <ScrollArea ref={scrollAreaRef} className="flex-1 p-2 sm:p-3">
             <div className="space-y-6 max-w-4xl mx-auto">
