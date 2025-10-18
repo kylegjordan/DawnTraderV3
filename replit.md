@@ -31,7 +31,49 @@ Ethical Alignment Framework establishes comprehensive ethical reasoning across a
 
 Collaborative Alignment & Federated Ethics enables multi-agent ethical consensus across domain agents with database tables (`federated_ethics_state`, `cross_agent_ethics_session`, `ethics_conflict_register`, `ethics_propagation_journal`) supporting distributed ethical decision-making. The `FederatedEthicsHub` provides authoritative ethical state snapshots, and the `EthicsConsensusOrchestrator` performs multi-agent consensus checks using weighted majority voting and conflict detection. The `PolicyPropagationService` handles push/pull delta updates. The Autonomy Controller execution path is enhanced with federated ethics: Safety → Federated Ethics Consensus → Ethical Reasoning → Execution. A Federation UI tab provides comprehensive monitoring and control.
 
-Cognitive Introspection & Bias Mitigation (Phase 15.0) adds continuous self-analysis to detect and counter cognitive biases across Walter's autonomous reasoning. The `IntrospectionEngine` analyzes reasoning traces to detect six bias types: confirmation bias (pattern reinforcement), recency bias (over-weighting recent data), anchoring bias (initial value fixation), overconfidence bias (excessive certainty via integrityScore > 0.85), availability bias (reliance on readily available information), and optimism bias (systematic over-estimation). The engine tracks confidence drift metrics (average confidence, variance, direction) to identify reasoning degradation. All analysis is strictly per-user via INNER JOIN between `metaReasoningLog` and `reasoningTrace` filtering by userId, preventing cross-user data pollution. The `BiasMitigation` service applies event-driven corrections when biases are detected, adjusting `cognitiveWeights` to counter specific patterns and persisting corrections to the database. Integration into the Autonomy Controller adds an async introspection checkpoint before execution. Database tables include `bias_observation_log`, `confidence_drift_log`, and `introspection_report` with a BiasType enum covering all six types. Scheduler tasks run introspection_cycle (4h) and bias_mitigation_cycle (8h) for continuous monitoring. Four authenticated API endpoints provide `/api/introspection/status`, `/biases`, `/drift`, and `/mitigate` for real-time access. The System Monitoring UI includes an Introspection tab with summary cards, bias breakdown charts (Recharts), confidence drift visualization, and mitigation controls, all properly scoped to the authenticated user. Critical implementation: overconfidence detection uses `integrityScore` (not reflectionScore which doesn't exist in schema), and all metaReasoningLog queries join with reasoningTrace to ensure user isolation.
+**Cognitive Introspection & Bias Mitigation (Phase 15.0)** adds continuous self-analysis to detect and counter cognitive biases across Walter's autonomous reasoning, providing meta-cognitive awareness and automated bias correction.
+
+**Database Schema:**
+- `bias_observation_log`: Records detected cognitive biases with type, context, confidence score, decision ID, impact assessment, and metadata
+- `confidence_drift_log`: Tracks confidence drift metrics including average confidence, variance, drift direction, and decisions analyzed
+- `introspection_report`: Stores daily introspection summaries with overall health score, critical issues, and improvement recommendations
+- `BiasType` enum: confirmation, recency, anchoring, overconfidence, availability, optimism
+
+**Core Services:**
+- `IntrospectionEngine`: Analyzes reasoning traces to detect six bias types and calculate confidence drift metrics. All analysis is strictly per-user via INNER JOIN between `metaReasoningLog` and `reasoningTrace` filtering by userId, preventing cross-user data pollution. Bias detection methods:
+  - Confirmation bias: Pattern reinforcement detection
+  - Recency bias: Over-weighting recent data
+  - Anchoring bias: Initial value fixation
+  - Overconfidence bias: Excessive certainty via integrityScore > 0.85
+  - Availability bias: Reliance on readily available information
+  - Optimism bias: Systematic over-estimation
+- `BiasMitigation`: Applies event-driven corrections when biases are detected, adjusting `cognitiveWeights` to counter specific patterns and persisting corrections to the database. Subscribes to introspection events and triggers mitigation workflows.
+
+**Autonomy Controller Integration:**
+- Async introspection checkpoint added to execution pipeline before final execution
+- Pipeline flow: Reasoning → Introspection (async, user-scoped) → Safety → Federated Ethics → Ethical Reasoning → Execution
+
+**Scheduler Tasks:**
+- `introspection_cycle`: Runs every 4 hours to analyze recent reasoning traces for biases and confidence drift
+- `bias_mitigation_cycle`: Runs every 8 hours to apply corrections for detected biases and optimize cognitive weights
+
+**API Endpoints (All require JWT authentication):**
+- `GET /api/introspection/status`: Returns introspection summary with overall score, recent biases, drift status, and active mitigations
+- `GET /api/introspection/biases`: Returns recent bias observations with type, confidence, context, and timestamps
+- `GET /api/introspection/drift`: Returns confidence drift logs with session windows, averages, variance, and drift direction
+- `POST /api/introspection/mitigate`: Triggers immediate bias mitigation and cognitive weight adjustment
+
+**System Monitoring UI - Introspection Tab:**
+- Summary cards: Reasoning Quality (%), Biases Detected (count), Active Mitigations (count), Drift Status (text)
+- Bias Breakdown Chart: BarChart (Recharts) showing distribution of detected bias types
+- Confidence Drift Chart: LineChart (Recharts) visualizing confidence trends over time
+- Mitigation Controls: Trigger Mitigation button with auto-refresh after execution
+- All data properly scoped to authenticated user, preventing cross-user information leakage
+
+**Critical Implementation Notes:**
+- Overconfidence detection uses `integrityScore` (validated field in schema), not reflectionScore
+- All metaReasoningLog queries join with reasoningTrace to ensure user isolation
+- Query pattern: `.from(metaReasoningLog).innerJoin(reasoningTrace, eq(metaReasoningLog.targetTraceId, reasoningTrace.traceId)).where(eq(reasoningTrace.userId, userId))`
 
 ## UI Maintenance Notes
 
