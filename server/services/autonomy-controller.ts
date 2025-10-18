@@ -10,6 +10,9 @@ import { AdaptiveObjectiveEngine } from './adaptive-objective-engine';
 import { AlignmentVerifier } from './alignment-verifier';
 import { strategicPlannerService } from './strategic-planner';
 import { continuousLearningEngine } from './continuous-learning';
+import { collaborationManager } from './collaboration-manager';
+import { reasoningBus } from './reasoning-bus';
+import { consensusEngine } from './consensus-engine';
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -339,6 +342,24 @@ class AutonomyControllerService {
         }
       }
 
+      // Phase 9.6: Collaborative Cognition & Cross-Domain Reasoning Hooks
+      // 1. Trigger collaborative reasoning if multiple complex issues detected (async, don't block)
+      if (issuesDetected.length >= 2 && !issuesDetected.some(i => i.includes('ETHICAL VIOLATION'))) {
+        console.log('[AutonomyController] 🤝 Multiple issues detected, initiating collaborative reasoning');
+        
+        this.initiateCollaborativeReasoning(
+          userId,
+          {
+            topic: `Multi-domain issue resolution: ${issuesDetected.length} issues detected`,
+            issues: issuesDetected,
+            healthScore,
+            cognitiveScore,
+            runId,
+          },
+          'paper'
+        ).catch((err: any) => console.error('[AutonomyController] Collaborative reasoning failed:', err));
+      }
+
       return {
         runId,
         timestamp: new Date(),
@@ -621,6 +642,101 @@ class AutonomyControllerService {
       });
 
       console.error(`[AutonomyController] ❌ Trading analysis failed:`, error);
+    }
+  }
+
+  /**
+   * Phase 9.6: Initiate collaborative reasoning session
+   * Invites domain agents to collaborate on complex multi-domain problems
+   */
+  private async initiateCollaborativeReasoning(
+    userId: string,
+    context: {
+      topic: string;
+      issues: string[];
+      healthScore: number;
+      cognitiveScore: number;
+      runId: string;
+    },
+    mode: 'live' | 'paper'
+  ): Promise<void> {
+    const startTime = performance.now();
+
+    try {
+      console.log(`[AutonomyController] 🤝 Initiating collaborative reasoning: "${context.topic}"`);
+
+      // 1. Determine which domain agents should participate
+      const participants: string[] = [];
+      
+      // Always include Walter as coordinator
+      participants.push('Walter');
+
+      // Add domain-specific agents based on issue types
+      if (context.healthScore < this.config.healthThresholds.warning) {
+        participants.push('DevOpsBob'); // System health expertise
+      }
+      if (context.cognitiveScore < this.config.healthThresholds.warning) {
+        participants.push('FullStackBob'); // Cognitive system expertise
+      }
+      if (context.issues.some(i => i.toLowerCase().includes('risk') || i.toLowerCase().includes('portfolio'))) {
+        participants.push('TradingBob'); // Risk and portfolio expertise
+      }
+
+      // Always include at least one analyst
+      if (participants.length === 1) {
+        participants.push('FullStackBob');
+      }
+
+      // 2. Create collaboration session
+      const session = await collaborationManager.startSession({
+        topic: context.topic,
+        participants,
+        userId,
+        contextSnapshot: {
+          issues: context.issues,
+          healthScore: context.healthScore,
+          cognitiveScore: context.cognitiveScore,
+          parentRunId: context.runId,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      console.log(`[AutonomyController] ✅ Session created: ${session.sessionId} with ${participants.length} agents`);
+
+      // 3. Broadcast session start to agents via Reasoning Bus
+      await reasoningBus.notifySessionUpdate(
+        session.sessionId,
+        'started',
+        {
+          topic: context.topic,
+          participants,
+          context: context,
+        },
+        userId,
+        mode
+      );
+
+      // 4. Record in autonomy audit log
+      const executionTimeMs = Math.round(performance.now() - startTime);
+      await this.recordAssessment({
+        runId: `collab_${nanoid(10)}`,
+        actionType: 'exploration',
+        triggerSource: 'autonomous',
+        assessmentResult: {
+          collaborationSessionId: session.sessionId,
+          participants,
+          topic: context.topic,
+          issuesCount: context.issues.length,
+        },
+        actionsTriggered: ['collaborative_reasoning_initiated'],
+        success: true,
+        executionTimeMs,
+        metadata: { userId, mode, parentRunId: context.runId },
+      });
+
+      console.log(`[AutonomyController] ✅ Collaborative reasoning initiated successfully`);
+    } catch (error) {
+      console.error(`[AutonomyController] ❌ Collaborative reasoning initiation failed:`, error);
     }
   }
 
