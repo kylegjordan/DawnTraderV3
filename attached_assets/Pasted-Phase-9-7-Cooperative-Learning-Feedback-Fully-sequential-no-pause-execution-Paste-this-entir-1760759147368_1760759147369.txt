@@ -1,0 +1,187 @@
+Phase 9.7 → Cooperative Learning Feedback
+
+(Fully sequential / no-pause execution)
+
+Paste this entire block directly into Replit.
+It continues immediately from your completed 9.6 state, runs autonomously, and uses your standard test credentials:
+
+username = testuser123
+password = SecurePass123!
+
+
+It must never attempt email-based login or stop for human confirmation.
+
+🎯 Objective
+
+Build the Cooperative Learning Feedback Layer so Walter’s agents (TradingBob, UXBob, DevOpsBob, etc.) learn from one another’s outcomes and improve reasoning precision through internal feedback loops.
+
+🧱 Autonomous Task List
+1️⃣ Database Schema Expansion (shared/schema.ts)
+
+Add new schemas and types after Phase 9.6 definitions:
+
+Table agent_learning_feedback
+
+id (UUID, PK)
+
+agent_name (TEXT)
+
+domain (TEXT)
+
+session_id (TEXT → collaboration session link)
+
+accuracy_score (FLOAT)
+
+consensus_alignment (FLOAT)
+
+improvement_notes (TEXT)
+
+created_at (TIMESTAMP DEFAULT NOW())
+
+Enum feedback_source = { "self", "peer", "system" }
+
+Export types AgentLearningFeedback and FeedbackSource.
+
+Then deploy schema to DB with:
+npm run db:push -- --force
+and verify table creation via SQL query for agent_learning_feedback.
+
+2️⃣ Create Learning Service (server/services/learning-bridge.ts)
+
+Implement a service to manage feedback cycles:
+
+recordFeedback(agent, domain, sessionId, accuracy, alignment, notes)
+
+analyzePerformanceTrends(agent) → returns moving average accuracy + trend
+
+generateLearningSummary() → aggregated agent metrics
+
+Auto-link session IDs from collaboration_sessions.
+
+Integrate safe guards to avoid Infinity or NaN scores (similar to the 9.6 fix).
+
+3️⃣ Integrate into Consensus Engine (server/services/consensus-engine.ts)
+
+After each consensus snapshot:
+
+Call LearningBridge.recordFeedback() with agent accuracy and alignment.
+
+Emit Context Bridge event learning_feedback_created.
+
+Append to audit log under domain “learning”.
+
+4️⃣ Extend Autonomy Controller (server/services/autonomy-controller.ts)
+
+Add updateLearningProfiles() method that:
+
+Runs after each collaborative session ends.
+
+Queries recent feedback records.
+
+Adjusts agent weights (+/- 5%) based on accuracy trends.
+
+Logs “learning update completed” with summary to console and audit log.
+
+5️⃣ Add Scheduler Task (server/services/autonomy-scheduler.ts)
+
+Add learning_feedback_sync task running every 6 hours:
+
+Aggregates recent feedback.
+
+Calls LearningBridge.generateLearningSummary().
+
+Archives results in consensus_snapshots.
+
+Update init() and status() methods to include learning scheduler status.
+
+6️⃣ API Endpoints (server/routes.ts)
+
+Add routes for frontend access:
+
+GET /api/learning/stats → summary of agent scores.
+
+GET /api/learning/trends → performance trendlines.
+
+POST /api/learning/record → manual feedback entry (for future testing).
+
+Ensure authentication required but token optional for testuser123.
+
+7️⃣ UI Integration (client/src/components/system/enhanced-system-monitoring.tsx)
+
+Add a new Learning tab after Collaboration:
+
+Display per-agent accuracy, alignment, and trend (3-bar chart or line graph).
+
+Show “Recent Learning Events” feed below graphs.
+
+Auto-refresh every 60 s via /api/learning/stats.
+
+Reuse charting component from Performance or Ethics tabs.
+
+8️⃣ Testing & Validation
+
+Run end-to-end tests autonomously with the following login credentials:
+
+username = testuser123
+password = SecurePass123!
+
+
+Steps:
+
+Start app (if not running): npm run dev
+
+Log in via UI.
+
+Navigate to System Monitoring → Learning Tab.
+
+Verify charts render and update on refresh.
+
+Run curl tests:
+
+curl -s http://localhost:5000/api/learning/stats | head -50
+curl -s http://localhost:5000/api/learning/trends | head -50
+
+
+Expect HTTP 200 responses and valid JSON arrays of agents with accuracy fields.
+
+9️⃣ Architect Review & Error Handling
+
+Automatically trigger architect review after successful tests.
+
+Fix any Infinity or NaN value detected in feedback calculations.
+
+Confirm no LSP errors or TypeScript warnings.
+
+Approve Phase 9.7 when all checks pass.
+
+🔟 Documentation Update
+
+Append to replit.md:
+Phase 9.7 – Cooperative Learning Feedback
+Include schema details, service flows, scheduler timing, API routes, and UI overview.
+
+✅ Expected Outcome
+
+Learning Bridge active and logging feedback from all agents.
+
+Dynamic accuracy weights updating in Autonomy Controller.
+
+Learning tab UI shows agent performance trends in real time.
+
+All tests and architect review pass with no errors.
+
+replit.md updated with Phase 9.7 documentation.
+
+🧭 Execution Rules
+
+Do not pause or ask for user decisions.
+
+Log progress to console and append summary to replit.md.
+
+Continue execution on minor warnings.
+
+Use only provided test credentials.
+
+Remain in Replit dev environment (Vite proxy OK).
+
+Complete Phase 9.7 fully before halting.

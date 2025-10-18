@@ -70,6 +70,9 @@ export const outcomeConfidenceEnum = pgEnum("outcome_confidence", ["very_low", "
 export const collaborationRoleEnum = pgEnum("collaboration_role", ["coordinator", "analyst", "executor", "reviewer", "observer"]);
 export const consensusStateEnum = pgEnum("consensus_state", ["forming", "discussing", "evaluating", "agreed", "disagreed", "overridden"]);
 
+// Phase 9.7 enums
+export const feedbackSourceEnum = pgEnum("feedback_source", ["self", "peer", "system"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2517,6 +2520,25 @@ export const consensusSnapshots = pgTable("consensus_snapshots", {
   evaluationPointIdx: index("consensus_snapshots_evaluation_point_idx").on(table.evaluationPoint),
 }));
 
+// Phase 9.7: Agent Learning Feedback - Inter-Agent Learning Loops
+export const agentLearningFeedback = pgTable("agent_learning_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentName: varchar("agent_name", { length: 100 }).notNull(), // e.g., "TradingBob", "DevOpsBob"
+  domain: varchar("domain", { length: 100 }).notNull(), // e.g., "trading", "devops", "ux"
+  sessionId: varchar("session_id", { length: 50 }), // Optional link to collaboration_sessions
+  feedbackSource: feedbackSourceEnum("feedback_source").notNull(), // self, peer, system
+  accuracyScore: doublePrecision("accuracy_score"), // 0-1 how accurate was the agent
+  consensusAlignment: doublePrecision("consensus_alignment"), // 0-1 how aligned with final consensus
+  improvementNotes: text("improvement_notes"), // Specific areas for improvement
+  metadata: jsonb("metadata"), // Additional context
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  agentNameIdx: index("agent_learning_feedback_agent_name_idx").on(table.agentName),
+  domainIdx: index("agent_learning_feedback_domain_idx").on(table.domain),
+  sessionIdIdx: index("agent_learning_feedback_session_id_idx").on(table.sessionId),
+  createdAtIdx: index("agent_learning_feedback_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2546,6 +2568,7 @@ export const insertStrategicMemorySnapshotSchema = createInsertSchema(strategicM
 export const insertCollaborationSessionSchema = createInsertSchema(collaborationSessions).omit({ id: true, createdAt: true });
 export const insertCollaborationMessageSchema = createInsertSchema(collaborationMessages).omit({ id: true, createdAt: true });
 export const insertConsensusSnapshotSchema = createInsertSchema(consensusSnapshots).omit({ id: true, createdAt: true });
+export const insertAgentLearningFeedbackSchema = createInsertSchema(agentLearningFeedback).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2631,6 +2654,10 @@ export type CollaborationMessage = typeof collaborationMessages.$inferSelect;
 
 export type InsertConsensusSnapshot = z.infer<typeof insertConsensusSnapshotSchema>;
 export type ConsensusSnapshot = typeof consensusSnapshots.$inferSelect;
+
+export type InsertAgentLearningFeedback = z.infer<typeof insertAgentLearningFeedbackSchema>;
+export type AgentLearningFeedback = typeof agentLearningFeedback.$inferSelect;
+export type FeedbackSource = typeof feedbackSourceEnum.enumValues[number];
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
