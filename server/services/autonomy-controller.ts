@@ -798,32 +798,12 @@ class AutonomyControllerService {
           continue;
         }
 
-        // 3. Determine if cognitive weight adjustment is needed
+        // 3. Record performance insights
         if (accuracy < 0.6) {
-          concerns.push(`${agentName} showing low accuracy (${(accuracy * 100).toFixed(1)}%)`);
-          
-          // Request cognitive weight reduction for low-performing agents
-          await continuousLearningEngine.adjustCognitiveWeight(
-            domain,
-            'decrease',
-            `Low learning accuracy detected: ${(accuracy * 100).toFixed(1)}%`,
-            userId,
-            mode
-          );
-          
+          concerns.push(`${agentName} showing low accuracy (${(accuracy * 100).toFixed(1)}%) - needs improvement`);
           updateCount++;
         } else if (accuracy > 0.85) {
           improvements.push(`${agentName} performing excellently (${(accuracy * 100).toFixed(1)}%)`);
-          
-          // Request cognitive weight increase for high-performing agents
-          await continuousLearningEngine.adjustCognitiveWeight(
-            domain,
-            'increase',
-            `High learning accuracy detected: ${(accuracy * 100).toFixed(1)}%`,
-            userId,
-            mode
-          );
-          
           updateCount++;
         }
 

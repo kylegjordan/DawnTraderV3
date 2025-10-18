@@ -386,9 +386,56 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 6 hours - Learning Feedback Synchronization (Phase 9.7)
+schedulerRegistry.registerTask({
+  name: 'learning_feedback_sync',
+  description: 'Synchronize agent learning feedback and update performance profiles',
+  frequency: 'custom',
+  intervalMs: 6 * 60 * 60 * 1000, // 6 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🎓 Running learning feedback synchronization...');
+    
+    try {
+      const adminUsers = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
+      const userId = adminUsers[0]?.id;
+
+      if (!userId) {
+        console.warn('[AutonomyScheduler] No admin user found for learning feedback sync');
+        return;
+      }
+
+      // Update learning profiles based on agent feedback
+      const result = await autonomyController.updateLearningProfiles(userId, 'paper');
+      
+      console.log(`[AutonomyScheduler] ✅ Learning feedback sync complete`);
+      console.log(`[AutonomyScheduler] - Updated profiles: ${result.updated}`);
+      console.log(`[AutonomyScheduler] - Improvements: ${result.improvements.length}`);
+      console.log(`[AutonomyScheduler] - Concerns: ${result.concerns.length}`);
+      
+      if (result.improvements.length > 0) {
+        console.log('[AutonomyScheduler] 📈 Agent improvements:', 
+          result.improvements.join('; ')
+        );
+      }
+      
+      if (result.concerns.length > 0) {
+        console.log('[AutonomyScheduler] ⚠️ Agent concerns:', 
+          result.concerns.join('; ')
+        );
+      }
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Learning feedback sync failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, and Phase 9.6 collaboration tasks
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, and Phase 9.7 learning feedback sync
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -415,6 +462,9 @@ export async function initAutonomyScheduler() {
     // Start collaboration maintenance (run after 4 hour delay) - Phase 9.6
     await schedulerRegistry.startTask('collaboration_maintenance', false);
     
+    // Start learning feedback sync (run after 5 hour delay) - Phase 9.7
+    await schedulerRegistry.startTask('learning_feedback_sync', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -423,6 +473,7 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Simulation evaluation: Every 4 hours');
     console.log('[AutonomyScheduler] - Reflection analysis: Every 6 hours');
     console.log('[AutonomyScheduler] - Collaboration maintenance: Every 12 hours');
+    console.log('[AutonomyScheduler] - Learning feedback sync: Every 6 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -440,6 +491,7 @@ export function getAutonomySchedulerStatus() {
   const simulationStatus = schedulerRegistry.getTaskStatus('simulation_evaluation');
   const reflectionStatus = schedulerRegistry.getTaskStatus('reflection_analysis');
   const collaborationStatus = schedulerRegistry.getTaskStatus('collaboration_maintenance');
+  const learningFeedbackStatus = schedulerRegistry.getTaskStatus('learning_feedback_sync');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -483,6 +535,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: collaborationStatus.lastRun,
       nextRun: collaborationStatus.nextRun,
       frequency: collaborationStatus.frequency,
+    } : null,
+    learningFeedbackSync: learningFeedbackStatus ? {
+      status: learningFeedbackStatus.status,
+      lastRun: learningFeedbackStatus.lastRun,
+      nextRun: learningFeedbackStatus.nextRun,
+      frequency: learningFeedbackStatus.frequency,
     } : null,
   };
 }
