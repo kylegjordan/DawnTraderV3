@@ -2024,9 +2024,9 @@ function EthicsTab() {
     refetchInterval: 60000,
   });
 
-  const status = (statusData as any) || null;
-  const principles = (principlesData as any)?.principles || [];
-  const violations = (violationsData as any)?.violations || [];
+  const status = (statusData as any) || {};
+  const principles = Array.isArray((principlesData as any)?.principles) ? (principlesData as any).principles : [];
+  const violations = Array.isArray((violationsData as any)?.violations) ? (violationsData as any).violations : [];
 
   return (
     <div className="space-y-4">
@@ -2043,13 +2043,13 @@ function EthicsTab() {
         <CardContent>
           {statusLoading ? (
             <Skeleton className="h-32 w-full" />
-          ) : status ? (
+          ) : status && status.ok !== false ? (
             <div className="space-y-4">
               <div className={`p-6 rounded-lg border-2 ${status.status === 'compliant' ? 'border-green-500 bg-green-50 dark:bg-green-950' : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950'}`}>
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <div className="text-lg font-semibold mb-1">
-                      Alignment Score: {status.alignmentScore?.toFixed(0) || 0}%
+                      Alignment Score: {typeof status.alignmentScore === 'number' ? status.alignmentScore.toFixed(0) : '0'}%
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Status: {status.status === 'compliant' ? 'Compliant' : 'At Risk'}
@@ -2067,19 +2067,19 @@ function EthicsTab() {
                 <div className="grid grid-cols-3 gap-4 pt-4 border-t">
                   <div>
                     <div className="text-2xl font-bold" data-testid="text-violations-today">
-                      {status.violationsToday || 0}
+                      {typeof status.violationsToday === 'number' ? status.violationsToday : 0}
                     </div>
                     <div className="text-xs text-muted-foreground">Violations Today</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold" data-testid="text-principle-count">
-                      {status.principleCount || 0}
+                      {typeof status.principleCount === 'number' ? status.principleCount : 0}
                     </div>
                     <div className="text-xs text-muted-foreground">Active Principles</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold" data-testid="text-principle-health">
-                      {status.principleHealth?.toFixed(0) || 0}%
+                      {typeof status.principleHealth === 'number' ? status.principleHealth.toFixed(0) : '0'}%
                     </div>
                     <div className="text-xs text-muted-foreground">Principle Health</div>
                   </div>
