@@ -179,7 +179,8 @@ export class TaskRouter {
   }
 
   /**
-   * Mark task as failed (with retry logic)
+   * Mark task as failed (with exponential backoff + jitter retry logic)
+   * Phase 17.5: Enhanced with exponential backoff calculation
    */
   async markFailed(taskId: string, errorMessage: string): Promise<void> {
     const tasks = await db
@@ -194,6 +195,17 @@ export class TaskRouter {
     const retryCount = task.retryCount + 1;
 
     if (retryCount < task.maxRetries) {
+      // Calculate exponential backoff with jitter (Phase 17.5)
+      const baseDelayMs = 1000; // 1 second
+      const maxDelayMs = 60000; // 60 seconds
+      const exponentialDelay = Math.min(baseDelayMs * Math.pow(2, retryCount), maxDelayMs);
+      
+      // Add jitter (±25%)
+      const jitter = exponentialDelay * 0.25 * (Math.random() - 0.5) * 2;
+      const retryDelayMs = Math.floor(exponentialDelay + jitter);
+      
+      const retryAfter = new Date(Date.now() + retryDelayMs);
+
       // Retry with exponential backoff
       await db
         .update(clusterTaskQueue)
@@ -203,10 +215,18 @@ export class TaskRouter {
           errorMessage,
           assignedNodeId: null,
           startedAt: null,
+          metadata: {
+            ...((task.metadata as any) || {}),
+            lastError: errorMessage,
+            retryDelayMs,
+            retryAfter: retryAfter.toISOString(),
+          },
         })
         .where(eq(clusterTaskQueue.id, taskId));
+
+      console.log(`[TaskRouter] Task ${taskId} will retry in ${retryDelayMs}ms (attempt ${retryCount}/${task.maxRetries})`);
     } else {
-      // Max retries exceeded
+      // Max retries exceeded - move to dead letter queue (failed status)
       await db
         .update(clusterTaskQueue)
         .set({
@@ -214,8 +234,15 @@ export class TaskRouter {
           retryCount,
           errorMessage,
           finishedAt: new Date(),
+          metadata: {
+            ...((task.metadata as any) || {}),
+            lastError: errorMessage,
+            maxRetriesExceeded: true,
+          },
         })
         .where(eq(clusterTaskQueue.id, taskId));
+
+      console.log(`[TaskRouter] Task ${taskId} permanently failed after ${retryCount} retries`);
     }
   }
 

@@ -9598,6 +9598,77 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 17.5: Get circuit breaker status for all nodes
+  app.get('/api/cluster/circuit-breaker', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { circuitBreaker } = await import('./services/circuit-breaker');
+      
+      const statuses = await circuitBreaker.getAllStatuses();
+      
+      res.json({ 
+        ok: true, 
+        circuitBreakers: statuses 
+      });
+    } catch (error: any) {
+      console.error('[Cluster] Circuit breaker status fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Phase 17.5: Reset circuit breaker for a specific node
+  app.post('/api/cluster/circuit-breaker/reset/:nodeId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { nodeId } = req.params;
+      const { circuitBreaker } = await import('./services/circuit-breaker');
+      
+      await circuitBreaker.reset(nodeId);
+      
+      res.json({ 
+        ok: true, 
+        message: `Circuit breaker reset for node ${nodeId}`,
+        nodeId 
+      });
+    } catch (error: any) {
+      console.error('[Cluster] Circuit breaker reset failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Phase 17.6: Get audit logs for ethical gate executions
+  app.get('/api/cluster/audit-logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const taskId = req.query.taskId as string | undefined;
+      const gateType = req.query.gateType as string | undefined;
+      
+      const { clusterAuditLog } = await import('@shared/schema');
+      const { eq, and, desc } = await import('drizzle-orm');
+      
+      let query = db.select().from(clusterAuditLog);
+      
+      const conditions = [];
+      if (taskId) {
+        conditions.push(eq(clusterAuditLog.taskId, taskId));
+      }
+      if (gateType) {
+        conditions.push(eq(clusterAuditLog.gateType, gateType as any));
+      }
+      
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+      
+      const logs = await query
+        .orderBy(desc(clusterAuditLog.createdAt))
+        .limit(limit);
+      
+      res.json({ ok: true, auditLogs: logs });
+    } catch (error: any) {
+      console.error('[Cluster] Audit logs fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ===== PHASE 9.0: ADAPTIVE LEARNING & ALIGNMENT ROUTES =====
 
   // Verify action alignment

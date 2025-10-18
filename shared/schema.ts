@@ -3207,6 +3207,10 @@ export const clusterTaskTypeEnum = pgEnum("cluster_task_type", ["trading_signal"
 export const outcomeStatusEnum = pgEnum("outcome_status", ["success", "partial", "failed", "timeout"]);
 export const busEventTopicEnum = pgEnum("bus_event_topic", ["task_assigned", "task_completed", "node_status_change", "rebalance_triggered", "circuit_breaker", "health_alert"]);
 
+// Phase 17.5 & 17.6 enums - Reliability & Security
+export const circuitBreakerStateEnum = pgEnum("circuit_breaker_state", ["closed", "open", "half_open"]);
+export const gateTypeEnum = pgEnum("gate_type", ["safety", "federated_ethics", "ethical_reasoning", "knowledge_acquisition"]);
+
 // Phase 17.0: Distributed Autonomy & Scaling
 
 export const clusterNode = pgTable("cluster_node", {
@@ -3285,6 +3289,45 @@ export const clusterBusEvent = pgTable("cluster_bus_event", {
   sourceNodeIdx: index("cluster_bus_event_source_node_idx").on(table.sourceNode),
 }));
 
+// Phase 17.5: Circuit Breaker for fault tolerance
+export const clusterCircuitBreaker = pgTable("cluster_circuit_breaker", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nodeId: varchar("node_id").references(() => clusterNode.id).notNull(),
+  state: circuitBreakerStateEnum("state").default("closed").notNull(),
+  failureCount: integer("failure_count").default(0).notNull(),
+  successCount: integer("success_count").default(0).notNull(),
+  lastFailureAt: timestamp("last_failure_at", { withTimezone: true }),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  stateChangedAt: timestamp("state_changed_at", { withTimezone: true }).defaultNow().notNull(),
+  nextRetryAt: timestamp("next_retry_at", { withTimezone: true }), // For exponential backoff
+  metadata: jsonb("metadata"), // Failure details, error messages
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  nodeIdIdx: index("cluster_circuit_breaker_node_id_idx").on(table.nodeId),
+  stateIdx: index("cluster_circuit_breaker_state_idx").on(table.state),
+}));
+
+// Phase 17.6: Audit log for ethical gate execution tracking
+export const clusterAuditLog = pgTable("cluster_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").references(() => clusterTaskQueue.id).notNull(),
+  nodeId: varchar("node_id").references(() => clusterNode.id).notNull(),
+  userId: varchar("user_id").references(() => users.id), // For user-scoped audits
+  gateType: gateTypeEnum("gate_type").notNull(),
+  gatePassed: boolean("gate_passed").notNull(),
+  gateResult: text("gate_result"), // Details about what happened
+  executionTimeMs: integer("execution_time_ms"), // How long the gate took
+  metadata: jsonb("metadata"), // Additional context (risk scores, ethical verdicts, etc.)
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  taskIdIdx: index("cluster_audit_log_task_id_idx").on(table.taskId),
+  nodeIdIdx: index("cluster_audit_log_node_id_idx").on(table.nodeId),
+  gateTypeIdx: index("cluster_audit_log_gate_type_idx").on(table.gateType),
+  userIdIdx: index("cluster_audit_log_user_id_idx").on(table.userId),
+  createdAtIdx: index("cluster_audit_log_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas for Phase 17
 export const insertClusterNodeSchema = createInsertSchema(clusterNode).omit({ 
   id: true, 
@@ -3307,6 +3350,17 @@ export const insertClusterBusEventSchema = createInsertSchema(clusterBusEvent).o
   createdAt: true 
 });
 
+export const insertClusterCircuitBreakerSchema = createInsertSchema(clusterCircuitBreaker).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+export const insertClusterAuditLogSchema = createInsertSchema(clusterAuditLog).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
 // Types for Phase 17
 export type InsertClusterNode = z.infer<typeof insertClusterNodeSchema>;
 export type ClusterNode = typeof clusterNode.$inferSelect;
@@ -3321,6 +3375,14 @@ export type ClusterTaskType = typeof clusterTaskTypeEnum.enumValues[number];
 export type InsertClusterResultLog = z.infer<typeof insertClusterResultLogSchema>;
 export type ClusterResultLog = typeof clusterResultLog.$inferSelect;
 export type OutcomeStatus = typeof outcomeStatusEnum.enumValues[number];
+
+export type InsertClusterCircuitBreaker = z.infer<typeof insertClusterCircuitBreakerSchema>;
+export type ClusterCircuitBreaker = typeof clusterCircuitBreaker.$inferSelect;
+export type CircuitBreakerState = typeof circuitBreakerStateEnum.enumValues[number];
+
+export type InsertClusterAuditLog = z.infer<typeof insertClusterAuditLogSchema>;
+export type ClusterAuditLog = typeof clusterAuditLog.$inferSelect;
+export type GateType = typeof gateTypeEnum.enumValues[number];
 
 export type InsertClusterBusEvent = z.infer<typeof insertClusterBusEventSchema>;
 export type ClusterBusEvent = typeof clusterBusEvent.$inferSelect;
