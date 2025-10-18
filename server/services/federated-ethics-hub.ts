@@ -10,7 +10,7 @@ import type {
   InsertFederatedEthicsState,
   FederatedScope
 } from '@shared/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, gte } from 'drizzle-orm';
 import { createHash } from 'crypto';
 
 /**
@@ -91,7 +91,7 @@ class FederatedEthicsHubService {
     const recentViolations = await db
       .select()
       .from(ethicalViolationLog)
-      .where(eq(ethicalViolationLog.createdAt, twentyFourHoursAgo));
+      .where(gte(ethicalViolationLog.createdAt, twentyFourHoursAgo));
 
     // Step 4: Generate snapshot hash
     const snapshotData = {
