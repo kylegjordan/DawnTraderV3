@@ -1,0 +1,115 @@
+🧭 Phase 14.9 – Federation UI Tab Implementation
+
+(Final task of Phase 14 – Collaborative Alignment & Federated Ethics)
+
+Rules to follow throughout
+
+No pauses or operator prompts. Execute sequentially.
+
+Login credentials for any authentication or e2e test:
+
+username: testuser123
+
+password: SecurePass123!
+
+Never attempt email login.
+
+Do not remove or rename any existing tabs or routes.
+
+UI auto-refresh every 60 seconds; use safe defaults if no data.
+
+1️⃣ Locate System Monitoring Panel
+
+Open client/src/components/system/enhanced-system-monitoring.tsx.
+Identify the <TabsList> and the existing tab triggers (Safety → Task Performance → Ethics, etc.).
+
+2️⃣ Add Federation Tab Trigger
+
+Insert a new tab trigger after Ethics with label “Federation” (or “Ethics Federation” if the name is taken).
+Use the 🌐 globe icon (Globe from lucide-react).
+Set the value="federation" attribute so it maps to its content section.
+Increase the grid column count by 1 in the TabsList grid-cols setting.
+
+3️⃣ Add TabsContent Block
+
+After the <TabsContent value="ethics">…</TabsContent> section,
+add a new block <TabsContent value="federation"> <FederationTab /> </TabsContent>.
+
+4️⃣ Create FederationTab Component
+
+At the end of the file (where other tab components reside):
+Define FederationTab modeled on SafetyTab / EthicsTab patterns.
+Inside, use apiRequest hooks to call these existing endpoints:
+
+GET /api/ethics/collab/status → federated status snapshot
+
+GET /api/ethics/collab/sessions?limit=20 → recent sessions
+
+GET /api/ethics/collab/conflicts?open=true → open conflicts
+If isAdmin → display buttons:
+
+“Force Propagation” → POST /api/federation/propagate
+
+“Run Mediation Pass” → POST /api/ethics/collab/mediate
+Both buttons should show non-blocking toast on success/failure.
+
+5️⃣ UI Layout & Cards
+
+Inside FederationTab display three sections in cards style:
+
+Section	Contents
+Federated Status	Snapshot timestamp, domains covered, open conflicts count, last propagation result, last consensus verdict & confidence.
+Sessions & Conflicts	Table/list of recent sessions (id, domains, verdict, confidence, time). Below it, collapsible list of open conflicts with short reason.
+Admin Tools	Two buttons (Force Propagation / Run Mediation Pass) + inline result toast.
+
+Apply the same card and grid styling used in Task Performance and Safety tabs for consistency.
+
+6️⃣ Auto-Refresh & Placeholders
+
+Data refresh interval: 60 seconds ( refetchInterval=60000 ).
+
+Show friendly empty state text (e.g., “No federated sessions yet” / “No open conflicts”).
+
+Handle null / undefined values by displaying "N/A".
+
+7️⃣ Testing & Validation (End-to-End)
+
+After hot-reload completes, run non-interactive tests using the standard credentials.
+Confirm the following:
+
+1️⃣ Login → System Monitoring → Federation tab appears in Tabs list.
+2️⃣ Federation tab opens without errors.
+3️⃣ Federated Status card loads (placeholder values OK if no data).
+4️⃣ Recent Sessions list shows table headers even if empty.
+5️⃣ Admin buttons fire API calls and return success toast (even if summary = empty).
+6️⃣ Auto-refresh does not trigger React warnings or reload loops.
+
+8️⃣ Architect Review & Documentation Update
+
+After successful tests:
+
+Call architect review tool for UI verification.
+
+Update replit.md → append “Phase 14.9 – Federation UI Tab” section covering:
+
+UI structure and cards
+
+API endpoints used
+
+Refresh interval behavior
+
+Admin actions summary
+
+Visual integration into System Monitoring
+
+9️⃣ Done Criteria
+
+Federation tab visible in System Monitoring UI.
+
+All API calls return without error.
+
+Admin actions show confirmation toasts.
+
+Auto-refresh functions every 60 s.
+
+replit.md updated and Phase 14 officially marked complete (11 / 11 tasks)
