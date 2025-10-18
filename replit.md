@@ -42,35 +42,35 @@ Collaborative Alignment & Federated Ethics enables multi-agent ethical consensus
 **Solution:** Implemented sticky positioning with significantly increased spacing to accommodate all wrapped tab rows.
 
 **Implementation:**
-- Wrapped TabsList in sticky container: `<div className="sticky top-0 z-20 bg-background pb-12">`
-- TabsList styling: `flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-4`
+- Wrapped TabsList in sticky container: `<div className="sticky top-0 z-20 bg-background pb-16">`
+- TabsList styling: `flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-6`
   - `gap-y-3` (12px) provides vertical spacing between wrapped tab rows
-  - `pb-4` (16px) adds internal bottom padding to TabsList
-- All TabsContent sections: `relative z-0 overflow-visible mt-8 space-y-4`
-  - `mt-8` (32px) creates clear separation from tabs
+  - `pb-6` (24px) adds internal bottom padding to TabsList
+- All TabsContent sections: `relative z-0 overflow-visible mt-12 space-y-4`
+  - `mt-12` (48px) creates clear separation from tabs
 - Sticky positioning keeps tab menu anchored at viewport top while content scrolls
 - Z-index z-20 ensures tabs stay above all content (z-0)
 - Background color prevents content showing through when scrolling
 
 **Spacing Breakdown:**
-- Sticky container bottom: 48px (pb-12)
-- TabsList bottom: 16px (pb-4)
+- Sticky container bottom: 64px (pb-16)
+- TabsList bottom: 24px (pb-6)
 - Gap between tab rows: 12px (gap-y-3)
-- Content top margin: 32px (mt-8)
-- **Total measured spacing: 64-80px** between last tab row and first content card
+- Content top margin: 48px (mt-12)
+- **Total measured spacing: ~112px** between last tab row and first content card
 
 **Structure:**
 ```tsx
 <Tabs className="relative">
-  <div className="sticky top-0 z-20 bg-background pb-12">
-    <TabsList className="flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-4">
+  <div className="sticky top-0 z-20 bg-background pb-16">
+    <TabsList className="flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-6">
       {/* 20 tabs wrapping across 3 rows */}
     </TabsList>
   </div>
-  <TabsContent className="relative z-0 overflow-visible mt-8 space-y-4">
+  <TabsContent className="relative z-0 overflow-visible mt-12 space-y-4">
 ```
 
-**Result:** All 20 tabs fully visible across 3 rows with no overlap. Third row tabs (Task Performance, Alerts, UX Monitor) completely visible and clickable. Measured 64-80px spacing between tabs and content cards. Fix validated with automated e2e testing at 1366×768 resolution.
+**Result:** All 20 tabs fully visible across 3 rows with substantial clearance. Third row tabs (Task Performance, Alerts, UX Monitor) completely visible and clickable with no visual obstruction. Measured ~112px spacing between tabs and content cards, providing generous separation. Fix validated with automated e2e testing at 1366×768 resolution.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
