@@ -761,9 +761,9 @@ schedulerRegistry.registerTask({
 
       for (const conflict of staleConflicts) {
         console.log(`[AutonomyScheduler] 🔄 Auto-resolving stale low-severity conflict: ${conflict.conflictId}`);
-        await ethicsConsensusOrchestrator.resolveConflict(
+        await ethicsConsensusOrchestrator.resolveConflictById(
           conflict.conflictId,
-          'auto_resolved',
+          'resolved',
           'Automatically resolved after 24 hours (low severity)'
         );
       }

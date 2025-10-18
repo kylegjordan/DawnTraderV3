@@ -273,6 +273,47 @@ class EthicsConsensusOrchestratorService {
 
     return conflicts.length;
   }
+
+  /**
+   * Get conflicts from database (public method for API/scheduler)
+   */
+  async getConflicts(status: 'all' | 'resolved' | 'unresolved' | 'rejected' | 'escalated' | 'open' = 'all') {
+    if (status === 'all') {
+      return await db.select().from(ethicsConflictRegister).orderBy(desc(ethicsConflictRegister.detectedAt));
+    }
+    
+    return await db
+      .select()
+      .from(ethicsConflictRegister)
+      .where(eq(ethicsConflictRegister.resolutionStatus, status as any))
+      .orderBy(desc(ethicsConflictRegister.detectedAt));
+  }
+
+  /**
+   * Resolve a conflict by ID (public method for API/scheduler)
+   */
+  async resolveConflictById(
+    conflictId: string,
+    resolution: 'resolved' | 'rejected' | 'escalated',
+    notes?: string
+  ) {
+    const updated = await db
+      .update(ethicsConflictRegister)
+      .set({
+        resolutionStatus: resolution,
+        resolutionRationale: notes || `Manually resolved as ${resolution}`,
+        resolvedAt: new Date(),
+      })
+      .where(eq(ethicsConflictRegister.conflictId, conflictId))
+      .returning();
+
+    if (updated.length === 0) {
+      throw new Error(`Conflict ${conflictId} not found`);
+    }
+
+    console.log(`[EthicsConsensus] ✅ Conflict ${conflictId} resolved as ${resolution}`);
+    return updated[0];
+  }
 }
 
 export const ethicsConsensusOrchestrator = new EthicsConsensusOrchestratorService();
