@@ -19,6 +19,7 @@ import longtermMemoryService from './longterm-memory';
 import { unifiedCore } from './unified-core';
 import { safetyGuardrails } from './safety-guardrails';
 import { ethicalReasoner } from './ethical-reasoner'; // Phase 13.0
+import { ethicsConsensusOrchestrator } from './ethics-consensus-orchestrator'; // Phase 14.0
 import { performanceMonitor } from './performance-monitor'; // Phase 12.1
 import { desc, sql } from 'drizzle-orm';
 
@@ -329,6 +330,72 @@ class AutonomyControllerService {
       } catch (err: any) {
         console.error('[AutonomyController] Safety guardrails check failed:', err);
         issuesDetected.push('Safety guardrails system error');
+      }
+
+      // Phase 14.0: Federated Ethics Consensus Check (BLOCKING - after Safety, before Execution)
+      try {
+        console.log('[AutonomyController] 🤝 Running federated ethics consensus check');
+        
+        // Simulate multi-agent recommendations for the self-check action
+        const agentRecommendations = [
+          {
+            agentName: 'DevOpsBob',
+            verdict: 'approved' as const,
+            confidence: healthScore > 0.7 ? 0.9 : 0.6,
+            reasoning: `System health is ${healthScore > 0.7 ? 'good' : 'degraded'}, self-check is safe`,
+          },
+          {
+            agentName: 'TradingBob',
+            verdict: (cognitiveScore > 0.5 ? 'approved' : 'requires_review') as const,
+            confidence: cognitiveScore,
+            reasoning: `Cognitive score: ${(cognitiveScore * 100).toFixed(1)}%`,
+          },
+        ];
+
+        const consensusResult = await ethicsConsensusOrchestrator.checkConsensus(
+          {
+            actor: 'autonomy_controller',
+            action: 'self_check',
+            domain: 'global',
+            risk: healthScore < 0.5 ? 'high' : (healthScore < 0.7 ? 'medium' : 'low'),
+            mode: 'paper',
+            metadata: {
+              healthScore,
+              cognitiveScore,
+              issuesDetected: issuesDetected.length,
+              runId,
+            },
+          },
+          agentRecommendations
+        );
+
+        if (consensusResult.verdict === 'rejected') {
+          console.error(`[AutonomyController] ⚖️ FEDERATED ETHICS VIOLATION - consensus rejected`);
+          console.error(`[AutonomyController] Rationale: ${consensusResult.rationale}`);
+          
+          issuesDetected.push(`FEDERATED ETHICS VIOLATION: ${consensusResult.rationale}`);
+          actionsTriggered.push('blocked_by_federated_ethics');
+          
+          // Return early if rejected
+          return {
+            runId,
+            timestamp: new Date(),
+            healthScore,
+            cognitiveScore,
+            systemMetrics: assessmentResult.systemMetrics,
+            issuesDetected,
+            actionsTriggered,
+          };
+        } else if (consensusResult.verdict === 'requires_review') {
+          console.warn(`[AutonomyController] ⚠️ Federated ethics review required`);
+          actionsTriggered.push('federated_ethics_review_required');
+          issuesDetected.push(`Federated ethics review needed: ${consensusResult.rationale}`);
+        } else {
+          console.log(`[AutonomyController] ✅ Federated ethics consensus: approved (confidence: ${(consensusResult.confidence * 100).toFixed(1)}%)`);
+        }
+      } catch (err: any) {
+        console.error('[AutonomyController] Federated ethics consensus check failed:', err);
+        issuesDetected.push('Federated ethics system error');
       }
 
       // Phase 13.0: Ethical Reasoning Pre-Execution Check (BLOCKING - after Safety)
