@@ -334,6 +334,35 @@ export class KnowledgeRetrievalService {
   }
 
   /**
+   * Get retrieval logs for a user
+   */
+  async getRetrievalLogs(userId: string, hours: number = 24) {
+    const sinceDate = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    return await db
+      .select()
+      .from(knowledgeRetrievalLog)
+      .where(
+        and(
+          eq(knowledgeRetrievalLog.userId, userId),
+          sql`${knowledgeRetrievalLog.retrievedAt} >= ${sinceDate}`
+        )
+      )
+      .orderBy(desc(knowledgeRetrievalLog.retrievedAt));
+  }
+
+  /**
+   * Get trusted sources for a user
+   */
+  async getTrustedSources(userId: string) {
+    return await db
+      .select()
+      .from(knowledgeTrustRecord)
+      .where(sql`${knowledgeTrustRecord.trustLevel} IN ('verified', 'moderate')`)
+      .orderBy(desc(knowledgeTrustRecord.trustLevel), desc(knowledgeTrustRecord.successfulRetrievals));
+  }
+
+  /**
    * Refresh cache by removing expired entries
    */
   async refreshCache(): Promise<number> {

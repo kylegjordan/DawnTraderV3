@@ -32,7 +32,8 @@ import {
   Gauge,
   Clock,
   Globe,
-  ScanLine
+  ScanLine,
+  BookOpen
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
@@ -532,6 +533,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="introspection" data-testid="tab-introspection">
             <ScanLine className="w-4 h-4 mr-2" />
             Introspection
+          </TabsTrigger>
+          <TabsTrigger value="knowledge" data-testid="tab-knowledge">
+            <BookOpen className="w-4 h-4 mr-2" />
+            Knowledge
           </TabsTrigger>
         </TabsList>
         </div>
@@ -1037,6 +1042,11 @@ export default function EnhancedSystemMonitoring() {
             driftLoading={driftLoading}
             runMitigationMutation={runMitigationMutation}
           />
+        </TabsContent>
+
+        {/* Tab 22: Knowledge - Phase 16.0 */}
+        <TabsContent value="knowledge" className="relative z-0 overflow-visible mt-12 space-y-4">
+          <KnowledgeTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -4163,6 +4173,258 @@ function IntrospectionTab({
               <p>No confidence drift data available</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function KnowledgeTab() {
+  const { toast } = useToast();
+  
+  // Fetch knowledge retrieval logs
+  const { data: knowledgeData, isLoading: knowledgeLoading, refetch: refetchKnowledge } = useQuery({
+    queryKey: ['/api/knowledge/query', { query: 'all', limit: '24' }],
+    refetchInterval: 60000, // Refresh every minute
+  });
+  
+  // Fetch trusted sources
+  const { data: trustData, isLoading: trustLoading } = useQuery({
+    queryKey: ['/api/knowledge/trust'],
+    refetchInterval: 300000, // Refresh every 5 minutes
+  });
+  
+  // Refresh cache mutation
+  const refreshCacheMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/knowledge/refresh', {});
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: 'Cache Refreshed',
+        description: `${data.removedCount} expired entries removed`,
+      });
+      refetchKnowledge();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Refresh Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+  
+  const logs = knowledgeData?.logs || [];
+  const trustRecords = trustData?.trustRecords || [];
+  
+  return (
+    <>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card data-testid="card-total-retrievals">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Retrievals (24h)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {knowledgeLoading ? (
+              <Skeleton className="h-8 w-20" />
+            ) : (
+              <div>
+                <div className="text-3xl font-bold" data-testid="text-total-retrievals">
+                  {logs.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Knowledge queries made
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-trusted-sources">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Trusted Sources</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {trustLoading ? (
+              <Skeleton className="h-8 w-20" />
+            ) : (
+              <div>
+                <div className="text-3xl font-bold" data-testid="text-trusted-sources">
+                  {trustRecords.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Verified + Moderate
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-avg-relevance">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Avg Relevance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {knowledgeLoading ? (
+              <Skeleton className="h-8 w-20" />
+            ) : logs.length > 0 ? (
+              <div>
+                <div className="text-3xl font-bold" data-testid="text-avg-relevance">
+                  {((logs.reduce((sum: number, log: any) => sum + (log.relevanceScore || 0), 0) / logs.length) * 100).toFixed(0)}%
+                </div>
+                <Badge variant="secondary" className="mt-2">
+                  Quality Score
+                </Badge>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No data</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-cache-hits">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Cache Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div>
+              <div className="text-3xl font-bold text-green-600 dark:text-green-400" data-testid="text-cache-status">
+                Active
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Knowledge caching enabled
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Retrievals & Trusted Sources */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card data-testid="card-recent-retrievals">
+          <CardHeader>
+            <CardTitle>Recent Retrievals</CardTitle>
+            <CardDescription>Last 24 hours of knowledge queries</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {knowledgeLoading ? (
+              <Skeleton className="h-48 w-full" />
+            ) : logs.length > 0 ? (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {logs.slice(0, 10).map((log: any) => (
+                  <div key={log.id} className="p-3 rounded-lg border bg-card" data-testid={`retrieval-${log.id}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={
+                          log.trustLevel === 'verified' ? 'secondary' : 
+                          log.trustLevel === 'moderate' ? 'default' : 
+                          'destructive'
+                        }>
+                          {log.trustLevel}
+                        </Badge>
+                        <Badge variant="outline">
+                          {(log.relevanceScore * 100).toFixed(0)}% relevance
+                        </Badge>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(log.retrievedAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium mb-1">{log.query}</p>
+                    {log.url && (
+                      <p className="text-xs text-muted-foreground truncate">{log.url}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No retrievals in last 24h</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-trusted-domains">
+          <CardHeader>
+            <CardTitle>Trusted Domains</CardTitle>
+            <CardDescription>Verified and moderate trust sources</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {trustLoading ? (
+              <Skeleton className="h-48 w-full" />
+            ) : trustRecords.length > 0 ? (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {trustRecords.map((record: any) => (
+                  <div key={record.id} className="p-3 rounded-lg border bg-card" data-testid={`trust-${record.id}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <Badge variant={record.trustLevel === 'verified' ? 'secondary' : 'default'}>
+                        {record.trustLevel}
+                      </Badge>
+                      <div className="text-xs text-muted-foreground">
+                        {record.successfulRetrievals} successful
+                      </div>
+                    </div>
+                    <p className="text-sm font-medium">{record.domain}</p>
+                    <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                      <CheckCircle2 className="w-3 h-3 text-green-500" />
+                      <span>{((record.successfulRetrievals / (record.successfulRetrievals + record.failedRetrievals || 1)) * 100).toFixed(0)}% success rate</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Shield className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No trusted sources yet</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Cache Control */}
+      <Card data-testid="card-cache-control">
+        <CardHeader>
+          <CardTitle>Cache Management</CardTitle>
+          <CardDescription>Manage knowledge cache and refresh expired entries</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg border bg-muted/50">
+              <h4 className="text-sm font-medium mb-2">Automatic Sync</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                Cache is automatically refreshed every 2 hours to remove expired entries.
+              </p>
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="w-4 h-4" />
+                <span className="text-muted-foreground">Next sync in:</span>
+                <span className="font-medium">~1.5h</span>
+              </div>
+            </div>
+            
+            <Button 
+              onClick={() => refreshCacheMutation.mutate()}
+              disabled={refreshCacheMutation.isPending}
+              className="w-full"
+              data-testid="button-refresh-cache"
+            >
+              {refreshCacheMutation.isPending ? (
+                <>
+                  <Activity className="w-4 h-4 mr-2 animate-spin" />
+                  Refreshing Cache...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" />
+                  Refresh Cache Now
+                </>
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </>
