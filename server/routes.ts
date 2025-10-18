@@ -10602,6 +10602,80 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 12.0: Performance & Autoscaling Routes ====================
+
+  app.get('/api/system/performance', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { performanceMonitor } = await import('./services/performance-monitor');
+      
+      const performance = performanceMonitor.getSystemPerformance();
+      
+      res.json({ ok: true, performance });
+    } catch (error: any) {
+      console.error('[Performance] Get performance failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/system/autoscale/hints', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { performanceMonitor } = await import('./services/performance-monitor');
+      
+      const performance = performanceMonitor.getSystemPerformance();
+      const { taskQueue, reasoning, autonomyCycles, overallHealthScore } = performance;
+      
+      // Autoscaling recommendation logic
+      let scaleAction = 'maintain';
+      const reasons: string[] = [];
+      let targetConcurrency = 5;
+      
+      // Scale up conditions
+      if (taskQueue.currentDepth > 100) {
+        scaleAction = 'scale_up';
+        reasons.push(`Queue depth ${taskQueue.currentDepth} exceeds threshold of 100`);
+        targetConcurrency = Math.min(20, Math.ceil(taskQueue.currentDepth / 20));
+      } else if (taskQueue.currentDepth > 50) {
+        scaleAction = 'scale_up';
+        reasons.push(`Queue depth ${taskQueue.currentDepth} approaching limit`);
+        targetConcurrency = 10;
+      }
+      
+      if (reasoning && reasoning.p95 > 10000) {
+        scaleAction = 'scale_up';
+        reasons.push(`Reasoning p95 latency ${reasoning.p95}ms exceeds 10s threshold`);
+        targetConcurrency = Math.max(targetConcurrency, 10);
+      }
+      
+      // Scale down conditions
+      if (scaleAction === 'maintain' && taskQueue.currentDepth < 5 && taskQueue.avgProcessingTime < 1000) {
+        scaleAction = 'scale_down';
+        reasons.push('Low queue depth and fast processing times');
+        targetConcurrency = 3;
+      }
+      
+      // Health-based scaling
+      if (overallHealthScore < 50) {
+        scaleAction = 'investigate';
+        reasons.push(`System health score ${overallHealthScore} is critical`);
+      }
+      
+      res.json({ 
+        ok: true, 
+        scaleAction,
+        reasons,
+        targetConcurrency,
+        currentMetrics: {
+          queueDepth: taskQueue.currentDepth,
+          healthScore: overallHealthScore,
+          reasoningP95: reasoning?.p95 || 0,
+        }
+      });
+    } catch (error: any) {
+      console.error('[Performance] Get autoscale hints failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 

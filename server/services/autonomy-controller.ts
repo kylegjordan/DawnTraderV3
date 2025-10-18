@@ -18,6 +18,7 @@ import metaOversightService from './meta-oversight';
 import longtermMemoryService from './longterm-memory';
 import { unifiedCore } from './unified-core';
 import { safetyGuardrails } from './safety-guardrails';
+import { performanceMonitor } from './performance-monitor'; // Phase 12.1
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -1119,6 +1120,7 @@ class AutonomyControllerService {
     try {
       console.log('[AutonomyController] 🧠 Running unified cognitive core optimization cycle...');
       const startTime = performance.now();
+      const timingId = performanceMonitor.startTiming('autonomy_cycle', nanoid()); // Phase 12.1
 
       const result = await unifiedCore.runOptimizationCycle();
 
@@ -1155,6 +1157,7 @@ class AutonomyControllerService {
         },
       }, 'all');
 
+      performanceMonitor.endTiming(timingId, true, { score: result.score }); // Phase 12.1
       console.log(`[AutonomyController] ✅ Unified core optimization complete: ${result.cycleId} (score: ${result.score.toFixed(2)})`);
 
       return {

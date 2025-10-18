@@ -567,9 +567,47 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 10 minutes - Performance Snapshot (Phase 12.0)
+schedulerRegistry.registerTask({
+  name: 'perf_snapshot',
+  description: 'Capture performance metrics and broadcast via Context Bridge',
+  frequency: 'custom',
+  intervalMs: 10 * 60 * 1000, // 10 minutes
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 📊 Running performance snapshot...');
+    
+    try {
+      const { performanceMonitor } = await import('./performance-monitor').then((m) => ({
+        performanceMonitor: m.performanceMonitor,
+      }));
+      const { contextBridge } = await import('./context-bridge').then((m) => ({
+        contextBridge: m.contextBridge,
+      }));
+
+      const performance = performanceMonitor.getSystemPerformance();
+      
+      console.log(`[AutonomyScheduler] 📈 Performance: Health=${performance.overallHealthScore}, Queue=${performance.taskQueue.currentDepth}`);
+
+      // Broadcast via Context Bridge
+      await contextBridge.broadcast({
+        event: 'performance_snapshot',
+        data: performance,
+      }, 'all');
+
+      console.log(`[AutonomyScheduler] ✅ Performance snapshot complete`);
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Performance snapshot failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, Phase 10.0 cognitive core optimization, and Phase 11.0 safety sweeper
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, Phase 10.0 cognitive core optimization, Phase 11.0 safety sweeper, and Phase 12.0 perf snapshot
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -611,6 +649,9 @@ export async function initAutonomyScheduler() {
     // Start safety sweeper (run after 9 hour delay) - Phase 11.0
     await schedulerRegistry.startTask('safety_sweeper', false);
     
+    // Start perf snapshot (run immediately) - Phase 12.0
+    await schedulerRegistry.startTask('perf_snapshot', true);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -624,6 +665,7 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Strategic memory sync: Every 12 hours');
     console.log('[AutonomyScheduler] - Cognitive core optimization: Every 6 hours');
     console.log('[AutonomyScheduler] - Safety sweeper: Every 2 hours');
+    console.log('[AutonomyScheduler] - Performance snapshot: Every 10 minutes');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -646,6 +688,7 @@ export function getAutonomySchedulerStatus() {
   const strategicMemoryStatus = schedulerRegistry.getTaskStatus('strategic_memory_sync');
   const cognitiveCoreStatus = schedulerRegistry.getTaskStatus('cognitive_core_cycle');
   const safetySweeperStatus = schedulerRegistry.getTaskStatus('safety_sweeper');
+  const perfSnapshotStatus = schedulerRegistry.getTaskStatus('perf_snapshot');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -719,6 +762,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: safetySweeperStatus.lastRun,
       nextRun: safetySweeperStatus.nextRun,
       frequency: safetySweeperStatus.frequency,
+    } : null,
+    perfSnapshot: perfSnapshotStatus ? {
+      status: perfSnapshotStatus.status,
+      lastRun: perfSnapshotStatus.lastRun,
+      nextRun: perfSnapshotStatus.nextRun,
+      frequency: perfSnapshotStatus.frequency,
     } : null,
   };
 }

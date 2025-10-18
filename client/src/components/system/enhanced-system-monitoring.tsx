@@ -442,6 +442,10 @@ export default function EnhancedSystemMonitoring() {
             <Shield className="w-4 h-4 mr-2" />
             Safety
           </TabsTrigger>
+          <TabsTrigger value="perf-metrics" data-testid="tab-perf-metrics">
+            <Gauge className="w-4 h-4 mr-2" />
+            Performance
+          </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
             Alerts ({errors.filter(e => !e.resolved).length})

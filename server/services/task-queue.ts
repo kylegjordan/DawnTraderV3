@@ -2,6 +2,7 @@ import { db } from "../db";
 import { reasoningQueue, InsertReasoningQueue } from "@shared/schema";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { performanceMonitor } from "./performance-monitor";
 
 /**
  * Phase 8.8.3: Async Task Queue Service
@@ -47,6 +48,7 @@ class TaskQueueService {
    */
   async enqueueTask(input: EnqueueTaskInput): Promise<string> {
     const taskId = nanoid();
+    performanceMonitor.recordQueueEnqueue(); // Phase 12.1
     
     const task: InsertReasoningQueue = {
       id: taskId,
@@ -154,6 +156,8 @@ class TaskQueueService {
    * Mark task as completed
    */
   async markTaskComplete(id: string, result: any): Promise<void> {
+    performanceMonitor.recordQueueDequeue(true); // Phase 12.1
+    
     await db.update(reasoningQueue)
       .set({
         status: "completed",
@@ -188,6 +192,10 @@ class TaskQueueService {
    */
   async markTaskFailed(id: string, error: string, retryCount: number = 0): Promise<void> {
     const maxRetries = 3;
+    
+    if (retryCount >= maxRetries) {
+      performanceMonitor.recordQueueDequeue(false); // Phase 12.1 - permanent failure
+    }
 
     if (retryCount < maxRetries) {
       // Phase 8.8.3+: Calculate retry_at with exponential backoff + jitter

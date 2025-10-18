@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-18T12:44:25.457Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all time intervals, indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero confidence, and no opportunities generated, suggesting it may not be functioning properly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero active or closed trades with a win rate and ROI of zero, indicating potential issues with trading strategies or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by reviewing running processes and load distribution across cores."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate and potentially restart or update the AI system to ensure it is functioning and generating opportunities as expected."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and adjust active trading strategies to ensure they are aligned with current market conditions."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Immediately investigate the high CPU load to prevent potential system performance degradation or failure.",
+      "rationale": "High CPU load can lead to system instability, affecting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Assess the AI system's functionality and perform necessary updates or restarts.",
+      "rationale": "The AI system is not generating opportunities or learning, which could impact trading effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a review of the current trading strategies to ensure they are effective in the current market environment.",
+      "rationale": "Zero active and closed trades with no profit or loss suggests strategies may not be performing as expected."
+    }
+  ],
+  "urgencyLevel": "high"
+}
