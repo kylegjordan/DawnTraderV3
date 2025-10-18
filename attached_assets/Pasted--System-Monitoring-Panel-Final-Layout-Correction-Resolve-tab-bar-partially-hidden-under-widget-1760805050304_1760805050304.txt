@@ -1,0 +1,104 @@
+🧩 System Monitoring Panel — Final Layout Correction
+
+(Resolve tab bar partially hidden under widgets)
+
+Execution Rules
+
+Run autonomously; no user interaction required.
+
+Make no functional logic or data changes.
+
+Fix applies only to layout / spacing / stacking order.
+
+Test after implementation in 1366×768 and 1920×1080 resolutions.
+
+1️⃣ Target File
+
+client/src/components/system/enhanced-system-monitoring.tsx
+
+Locate the outer layout structure containing:
+
+“AI Diagnostic Insights” / system status alerts
+
+The <TabsList> section for tab buttons
+
+The <TabsContent> containers below
+
+2️⃣ Establish Clear Vertical Hierarchy
+
+Ensure the render order follows exactly:
+
+Alert / Diagnostic section  
+↓  
+TabsList (tab menu row)  
+↓  
+TabsContent blocks (page widgets)
+
+
+Nothing else should sit between the <TabsList> and its <TabsContent> wrappers.
+
+3️⃣ Adjust Z-Index and Spacing
+
+Apply the following adjustments to their containing elements:
+
+Element	Visual Layer	Spacing Directive
+Alert container	z-30, bottom margin mb-6	Keeps alert clearly above everything.
+TabsList wrapper	z-20, top padding pt-2, bottom margin mb-4	Ensures tab row always visible.
+TabsContent container	z-0, top margin mt-2, relative, overflow-visible	Prevents cards from covering the tab bar.
+
+If a parent wrapper uses overflow-hidden, replace with overflow-visible or wrap the grid in its own scroll container.
+
+4️⃣ Normalize Card Grid Behavior
+
+Within each <TabsContent> section (Performance, Walter Activity, etc.):
+
+The card grid wrapper should include mt-4 or pt-2 so its top edge clears the tab header.
+
+No negative margins allowed.
+
+Maintain consistent vertical gaps (gap-4) between rows.
+
+If widgets have fixed heights, remove absolute positioning—use flex or grid layout instead.
+
+5️⃣ Verify Scroll and Click Regions
+
+Ensure parent container (SystemMonitoringPanel or similar) uses overflow-y-auto and not overflow-hidden.
+
+Confirm the <TabsList> stays in the normal document flow (not absolutely positioned).
+
+Validate that tab buttons are fully clickable and not overlapped by invisible cards.
+
+6️⃣ Test Procedure
+
+1️⃣ Run the app → Login with testuser123 / SecurePass123!.
+2️⃣ Navigate to System Monitoring.
+3️⃣ Confirm:
+
+The yellow AI Diagnostic Insights box sits clearly above the tabs.
+
+The tab row (“Performance,” “Trading Engine,” etc.) is completely visible and clickable.
+
+The metric widgets start below the tab bar.
+4️⃣ Resize the window to smaller heights → confirm tab row remains visible and not hidden by scrolling.
+
+7️⃣ Document the Fix
+
+After validation, update replit.md under:
+UI Maintenance Notes → System Monitoring Panel Final Layout Correction
+Include:
+
+“Adjusted stacking order (z-index 30/20/0) and spacing between alert, tab header, and widget grids.”
+
+“Removed overflow clipping and ensured tab bar visibility at all breakpoints.”
+
+“Validated fix at 1366×768 and 1920×1080 resolutions.”
+
+✅ Completion Criteria
+
+Tab bar fully visible and clickable.
+
+Widgets render entirely below it.
+
+No overlap or clipping in any resolution.
+
+Documented fix logged in replit.md.
