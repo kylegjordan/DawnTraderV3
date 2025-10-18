@@ -10429,6 +10429,70 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 9.9: Strategic Memory & Model Calibration Routes ====================
+
+  app.get('/api/memory/archives', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const longtermMemoryService = (await import('./services/longterm-memory')).default;
+      const { limit = 50, scope, agentName } = req.query;
+      
+      const archives = await longtermMemoryService.getArchivedInsights(
+        scope as any,
+        agentName as string | undefined,
+        limit ? parseInt(limit as string) : 50
+      );
+      
+      res.json({ ok: true, archives });
+    } catch (error: any) {
+      console.error('[Memory] Get archives failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/memory/calibration', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const longtermMemoryService = (await import('./services/longterm-memory')).default;
+      const { limit = 50, agentName, parameter } = req.query;
+      
+      const calibrations = await longtermMemoryService.getCalibrationHistory(
+        agentName as string | undefined,
+        parameter as string | undefined,
+        limit ? parseInt(limit as string) : 50
+      );
+      
+      res.json({ ok: true, calibrations });
+    } catch (error: any) {
+      console.error('[Memory] Get calibration history failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/memory/archive', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const longtermMemoryService = (await import('./services/longterm-memory')).default;
+      const { agentName, memoryScope, summary, insights, performanceDelta } = req.body;
+      
+      if (!agentName || !memoryScope || !summary || !insights) {
+        return res.status(400).json({ 
+          error: 'agentName, memoryScope, summary, and insights are required' 
+        });
+      }
+      
+      const archived = await longtermMemoryService.archiveInsights(
+        agentName,
+        memoryScope,
+        summary,
+        insights,
+        performanceDelta
+      );
+      
+      res.json({ ok: true, archived });
+    } catch (error: any) {
+      console.error('[Memory] Archive insight failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
