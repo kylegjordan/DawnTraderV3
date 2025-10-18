@@ -35,7 +35,9 @@ The Ethical Reasoning & Value Alignment Module enforces ethical constraints and 
 
 The Collaborative Cognition & Cross-Domain Reasoning Module enables multi-agent collaborative problem-solving through coordinated domain expert reasoning. `CollaborationManager` orchestrates collaborative sessions. `ReasoningBus` provides a message broker for cross-domain agent communication. `ConsensusEngine` evaluates agreement across agent inputs.
 
-The Autonomous Task Scheduler coordinates all higher-order cognitive processes, including self-checks, optimization, strategy evaluation, learning updates, simulation evaluation, reflection analysis, and collaboration maintenance.
+The Cooperative Learning Feedback Module (Phase 9.7) enables agents to learn from each other's outcomes through internal feedback loops. `LearningBridge` manages feedback recording, performance trend analysis, and learning summaries based on agent collaboration outcomes, self-checks, simulations, and reflections. Feedback is captured in the `agent_learning_feedback` table with metadata including agent name, domain, session ID, source type (collaboration/self_check/simulation/reflection), accuracy scores, and alignment scores. The `ConsensusEngine` integration automatically records feedback after consensus snapshots, enabling agents to improve based on collaborative outcomes. `AutonomyController` provides `updateLearningProfiles` for adaptive profile adjustments based on accumulated feedback. A dedicated Learning tab in the Enhanced System Monitoring UI displays agent performance metrics, learning statistics, top performers, and agents needing improvement. Safe scoring patterns prevent NaN/Infinity propagation in feedback data.
+
+The Autonomous Task Scheduler coordinates all higher-order cognitive processes, including self-checks, optimization, strategy evaluation, learning updates, simulation evaluation, reflection analysis, collaboration maintenance, and learning feedback sync (every 6 hours).
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
