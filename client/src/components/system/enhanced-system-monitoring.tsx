@@ -3308,7 +3308,7 @@ function FederationTab() {
   // Force Propagation mutation
   const forcePropagationMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('POST', '/api/federation/propagate', {});
+      return await apiRequest('POST', '/api/federation/propagate', { updates: [] });
     },
     onSuccess: (data: any) => {
       toast({

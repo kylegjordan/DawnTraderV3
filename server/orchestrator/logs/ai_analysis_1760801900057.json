@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-18T15:38:20.057Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential CPU bottleneck or overload."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has not generated any learning cycles, opportunities, or adjustments, suggesting it may not be functioning properly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system shows zero active trades and zero total profit/loss, which may indicate inactivity or issues with trade execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI processes to ensure they are functioning and generating insights."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate trading strategies and system configuration to ensure trades are being executed as expected."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Immediately investigate the high CPU load to identify and resolve the cause of the overload.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart or troubleshoot the AI system to ensure it is operational and generating insights.",
+      "rationale": "The AI system is not performing any learning or generating opportunities, which is crucial for adaptive trading strategies."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review the trading system and strategies to ensure they are correctly configured and active.",
+      "rationale": "Zero active trades and zero profit/loss suggest potential issues with trade execution or strategy effectiveness."
+    }
+  ],
+  "urgencyLevel": "critical"
+}

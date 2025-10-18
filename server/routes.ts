@@ -10840,6 +10840,55 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  app.post('/api/ethics/collab/mediate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ethicsConsensusOrchestrator } = await import('./services/ethics-consensus-orchestrator');
+      const { contextBridge } = await import('./services/context-bridge');
+      
+      // Get all open conflicts
+      const openConflicts = await ethicsConsensusOrchestrator.getConflicts('open');
+      
+      // Auto-resolve stale low-severity conflicts (older than 24 hours)
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
+      const staleConflicts = openConflicts.filter((c: any) => 
+        c.detectedAt && new Date(c.detectedAt) < twentyFourHoursAgo
+      );
+      
+      let resolvedCount = 0;
+      for (const conflict of staleConflicts) {
+        await ethicsConsensusOrchestrator.resolveConflictById(
+          conflict.conflictId,
+          'resolved',
+          'Automatically resolved after 24 hours (manual mediation pass)'
+        );
+        resolvedCount++;
+      }
+      
+      // Broadcast event
+      await contextBridge.broadcast({
+        event: 'ethics_conflict_updated',
+        userId: 'all',
+        payload: {
+          resolvedCount,
+          totalConflicts: openConflicts.length,
+          timestamp: new Date().toISOString(),
+        },
+      });
+      
+      res.json({ 
+        ok: true, 
+        message: `Mediation pass complete. Resolved ${resolvedCount} stale conflicts.`,
+        resolvedCount,
+        totalConflicts: openConflicts.length,
+      });
+    } catch (error: any) {
+      console.error('[Ethics Mediation] Mediation pass failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==================== Phase 12.0: Performance & Autoscaling Routes ====================
 
   app.get('/api/system/performance', authenticateToken, async (req: AuthenticatedRequest, res) => {

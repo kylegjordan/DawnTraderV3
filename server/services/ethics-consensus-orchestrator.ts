@@ -4,7 +4,7 @@ import {
   ethicsConflictRegister,
   ethicalViolationLog
 } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import type { 
   InsertCrossAgentEthicsSession,
   InsertEthicsConflictRegister,
