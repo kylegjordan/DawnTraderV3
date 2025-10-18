@@ -33,6 +33,28 @@ The Unified Cognitive Core & Autonomous Meta-Optimization provides centralized c
 
 **Phase 14.9: Federation UI Tab** provides comprehensive monitoring and control for Phase 14.0's federated ethics system through a dedicated Federation tab in the System Monitoring page. The UI displays three main sections: (1) Federated Status card showing snapshot timestamp, domains covered, open conflicts count, and last propagation time with alignment score visualization; (2) Sessions & Conflicts card presenting recent consensus sessions with verdict badges (approved/rejected/requires_review), confidence scores, participating domains, and open conflicts with severity indicators (low/medium/high/critical) and resolution status; (3) Admin Tools card with two admin-only action buttons: Force Propagation (manually triggers policy propagation across all federated domains via POST `/api/federation/propagate` with empty updates array) and Run Mediation Pass (manually executes conflict mediation logic via POST `/api/ethics/collab/mediate`, auto-resolving stale low-severity conflicts older than 24h). The tab implements auto-refresh every 60 seconds using React Query with proper cache invalidation after mutations, loading states with skeleton components, empty state handling with user-friendly messages, and toast notifications for admin actions. All interactive elements include data-testid attributes for e2e testing. The UI enables real-time visibility into multi-agent ethical consensus state and provides manual override controls for federated operations.
 
+## UI Maintenance Notes
+
+### System Monitoring Panel Layout Fix (October 18, 2025)
+
+**Description:** Adjusted z-index layering and container structure in `client/src/components/system/enhanced-system-monitoring.tsx` to prevent overlapping between alerts, tabs, and metric widgets.
+
+**Changes Applied:**
+- Main container: Added `min-h-screen overflow-y-auto` to enable proper scrolling and viewport handling
+- Header section: Applied `relative z-20` for top-level stacking (highest priority)
+- AI Diagnostic Insights card: Added `relative z-20 mb-4` for proper separation from tab headers
+- Tabs container: Applied `relative z-10 mt-2` with `bg-background` to TabsList for mid-level stacking
+- All TabsContent sections: Added `relative z-0 overflow-visible pt-2` for proper content flow and widget display
+
+**Stacking Hierarchy:**
+1. Header & Alerts: z-20 (top layer) with mb-4 bottom margin
+2. Tabs: z-10 (middle layer) with mt-2 top margin
+3. Tab Content: z-0 (base layer) with pt-2 top padding and overflow-visible
+
+**Validation:** Verified in multiple resolutions. All tab triggers remain clickable, alerts and widgets are properly aligned without overlap, and page scrolls smoothly with no frozen zones. Responsive behavior confirmed across sm, md, and lg breakpoints.
+
+**Result:** Tabs clickable, alerts and widgets aligned, no content overflow or stacking issues.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

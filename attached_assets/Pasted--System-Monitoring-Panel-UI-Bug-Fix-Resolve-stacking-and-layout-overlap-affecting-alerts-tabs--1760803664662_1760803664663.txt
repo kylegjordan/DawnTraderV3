@@ -1,0 +1,89 @@
+🧩 System Monitoring Panel UI Bug Fix
+
+(Resolve stacking and layout overlap affecting alerts, tabs, and widgets)
+
+Rules
+
+Perform all steps autonomously with no pauses.
+
+Do not alter data or functionality — only layout and stacking order.
+
+Test in both light and dark mode after fixes.
+
+1️⃣ Identify the Problem Components
+
+Open client/src/components/system/enhanced-system-monitoring.tsx.
+Inspect the upper layout region where these elements coexist:
+
+“AI Diagnostic Insights” or “System Status” alert card
+
+Tabs row (TabsList, TabsTrigger)
+
+Metrics widget cards (CPU, Memory, Database, etc.)
+
+2️⃣ Correct Layout Hierarchy
+
+Ensure the alert region (diagnostic insights, system status) resides above the tab header in DOM order,
+and all tab content areas (Performance, Trading Engine, Walter Activity, etc.) are contained within a scrollable <div> that sits below.
+
+All sections should have explicit z-index and padding separation:
+
+Alert section: higher z-index (e.g., z-20) and bottom margin (~mb-4)
+
+Tabs header: z-10 with top margin (~mt-2)
+
+Tab content wrapper: z-0 with adequate padding (~pt-2)
+
+This prevents stacking overlaps and ensures alerts don’t obscure tabs.
+
+3️⃣ Adjust Container Heights and Overflow
+
+Confirm the main container for System Monitoring uses overflow-y-auto rather than fixed height if it’s clipping.
+
+Add min-h-screen to the parent wrapper if components overlap when viewport is smaller.
+
+Ensure tab panels use overflow-visible for metric widgets so charts and cards display fully.
+
+4️⃣ Verify Responsive Behavior
+
+In responsive breakpoints (sm, md, lg):
+
+Alerts and tabs must wrap cleanly.
+
+No widgets should render outside their grid or overlap with headers.
+
+All cards must maintain consistent vertical spacing (gap-4 between rows).
+
+5️⃣ Test & Validate
+
+Run the app → Login (testuser123 / SecurePass123!) → navigate to System Monitoring.
+Check visually that:
+1️⃣ Alerts sit neatly above the tabs.
+2️⃣ Tabs are clickable and not obscured.
+3️⃣ Each metrics widget sits in its own card without overlapping.
+4️⃣ Page scrolls smoothly with no frozen zones.
+
+Perform this test in both light and dark modes and confirm readability.
+
+6️⃣ Document the Fix
+
+After validation:
+
+Update replit.md under “UI Maintenance Notes” → System Monitoring Panel Layout Fix.
+Include:
+
+Description: Adjusted z-index and container structure to prevent overlapping alerts/tabs/widgets.
+
+Validation: Verified in 1366×768 and 1920×1080 resolutions.
+
+Result: Tabs clickable, alerts and widgets aligned, no overflow.
+
+✅ Done Criteria
+
+All alert and tab overlaps resolved.
+
+Tabs remain fully interactive.
+
+No content hidden behind floating elements.
+
+replit.md updated.

@@ -264,9 +264,9 @@ export default function EnhancedSystemMonitoring() {
   const statusColor = getSystemStatusColor();
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen overflow-y-auto space-y-6">
       {/* Header with Status Badge and Export Button */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between relative z-20">
         <div className="flex items-center gap-4">
           <Badge 
             variant={statusColor === 'green' ? 'default' : statusColor === 'yellow' ? 'secondary' : 'destructive'}
@@ -306,7 +306,7 @@ export default function EnhancedSystemMonitoring() {
       {/* AI Diagnostic Insights Banner */}
       {!analysisLoading && latestAnalysis && (
         <Card 
-          className={`border-l-4 ${
+          className={`relative z-20 mb-4 border-l-4 ${
             latestAnalysis.urgencyLevel === 'high' ? 'border-l-red-500 bg-red-50 dark:bg-red-950' :
             latestAnalysis.urgencyLevel === 'medium' ? 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
             'border-l-blue-500 bg-blue-50 dark:bg-blue-950'
@@ -379,8 +379,8 @@ export default function EnhancedSystemMonitoring() {
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex w-full flex-wrap" data-testid="tabs-system-monitoring">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="relative z-10 mt-2">
+        <TabsList className="flex w-full flex-wrap bg-background" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -464,7 +464,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsList>
 
         {/* Tab 1: Real-Time Performance */}
-        <TabsContent value="performance" className="space-y-4">
+        <TabsContent value="performance" className="relative z-0 overflow-visible pt-2 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* CPU Card */}
             <Card data-testid="card-cpu">
@@ -586,7 +586,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 2: Trading Engine Status */}
-        <TabsContent value="trading-engine" className="space-y-4">
+        <TabsContent value="trading-engine" className="relative z-0 overflow-visible pt-2 space-y-4">
           <Card data-testid="card-trading-engine">
             <CardHeader>
               <CardTitle>Trading Engine Status</CardTitle>
@@ -636,7 +636,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 3: Walter Activity */}
-        <TabsContent value="walter" className="space-y-4">
+        <TabsContent value="walter" className="relative z-0 overflow-visible pt-2 space-y-4">
           <Card data-testid="card-walter-activity">
             <CardHeader>
               <CardTitle>Walter Activity Metrics</CardTitle>
@@ -680,7 +680,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 4: Database Health */}
-        <TabsContent value="database" className="space-y-4">
+        <TabsContent value="database" className="relative z-0 overflow-visible pt-2 space-y-4">
           <Card data-testid="card-database-health">
             <CardHeader>
               <CardTitle>Database Health Metrics</CardTitle>
@@ -741,7 +741,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 5: Alert Log */}
-        <TabsContent value="alerts" className="space-y-4">
+        <TabsContent value="alerts" className="relative z-0 overflow-visible pt-2 space-y-4">
           <Card data-testid="card-alerts">
             <CardHeader>
               <CardTitle>Alert Log</CardTitle>
@@ -801,7 +801,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 6: UX Monitor - Context Bridge Events */}
-        <TabsContent value="ux-monitor" className="space-y-4">
+        <TabsContent value="ux-monitor" className="relative z-0 overflow-visible pt-2 space-y-4">
           <Card data-testid="card-ux-monitor">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -884,72 +884,72 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 7: Awareness - System Self-Awareness State */}
-        <TabsContent value="awareness" className="space-y-4">
+        <TabsContent value="awareness" className="relative z-0 overflow-visible pt-2 space-y-4">
           <AwarenessTab />
         </TabsContent>
 
         {/* Tab 8: Goal Alignment - Adaptive Learning & Policy Alignment */}
-        <TabsContent value="alignment" className="space-y-4">
+        <TabsContent value="alignment" className="relative z-0 overflow-visible pt-2 space-y-4">
           <AlignmentTab />
         </TabsContent>
 
         {/* Tab 7: Strategy & Learning */}
-        <TabsContent value="strategy" className="space-y-4">
+        <TabsContent value="strategy" className="relative z-0 overflow-visible pt-2 space-y-4">
           <StrategyTab />
         </TabsContent>
 
         {/* Tab 8: Simulation - Phase 9.3 */}
-        <TabsContent value="simulation" className="space-y-4">
+        <TabsContent value="simulation" className="relative z-0 overflow-visible pt-2 space-y-4">
           <SimulationTab />
         </TabsContent>
 
         {/* Tab 9: Reflection - Phase 9.4 */}
-        <TabsContent value="reflection" className="space-y-4">
+        <TabsContent value="reflection" className="relative z-0 overflow-visible pt-2 space-y-4">
           <ReflectionTab />
         </TabsContent>
 
         {/* Tab 10: Ethics - Phase 13.0 */}
-        <TabsContent value="ethics" className="space-y-4">
+        <TabsContent value="ethics" className="relative z-0 overflow-visible pt-2 space-y-4">
           <EthicsTab />
         </TabsContent>
 
         {/* Tab 10.5: Federation - Phase 14.0 */}
-        <TabsContent value="federation" className="space-y-4">
+        <TabsContent value="federation" className="relative z-0 overflow-visible pt-2 space-y-4">
           <FederationTab />
         </TabsContent>
 
         {/* Tab 11: Collaboration - Phase 9.6 */}
-        <TabsContent value="collaboration" className="space-y-4">
+        <TabsContent value="collaboration" className="relative z-0 overflow-visible pt-2 space-y-4">
           <CollaborationTab />
         </TabsContent>
 
         {/* Tab 12: Learning - Phase 9.7 */}
-        <TabsContent value="learning" className="space-y-4">
+        <TabsContent value="learning" className="relative z-0 overflow-visible pt-2 space-y-4">
           <LearningTab />
         </TabsContent>
 
         {/* Tab 13: Oversight - Phase 9.8 */}
-        <TabsContent value="oversight" className="space-y-4">
+        <TabsContent value="oversight" className="relative z-0 overflow-visible pt-2 space-y-4">
           <OversightTab />
         </TabsContent>
 
         {/* Tab 14: Memory - Phase 9.9 */}
-        <TabsContent value="memory" className="space-y-4">
+        <TabsContent value="memory" className="relative z-0 overflow-visible pt-2 space-y-4">
           <MemoryTab />
         </TabsContent>
 
         {/* Tab 15: Core - Phase 10.0 */}
-        <TabsContent value="core" className="space-y-4">
+        <TabsContent value="core" className="relative z-0 overflow-visible pt-2 space-y-4">
           <CoreTab />
         </TabsContent>
 
         {/* Tab 16: Safety - Phase 11.0 */}
-        <TabsContent value="safety" className="space-y-4">
+        <TabsContent value="safety" className="relative z-0 overflow-visible pt-2 space-y-4">
           <SafetyTab />
         </TabsContent>
 
         {/* Tab 17: Task Performance Metrics - Phase 12.0 */}
-        <TabsContent value="perf-metrics" className="space-y-4">
+        <TabsContent value="perf-metrics" className="relative z-0 overflow-visible pt-2 space-y-4">
           <PerformanceTab />
         </TabsContent>
       </Tabs>

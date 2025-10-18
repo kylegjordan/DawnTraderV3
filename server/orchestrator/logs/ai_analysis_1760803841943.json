@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-18T16:10:41.943Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals, indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system is not generating any opportunities or making adjustments, which may indicate a malfunction or misconfiguration."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system has zero active trades and a win rate of 0, suggesting potential issues with strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system responsiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI models or configurations to ensure they are functioning correctly and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments or alternative strategies to improve performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve the root cause.",
+      "rationale": "Sustained high CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Perform a diagnostic check on the AI system to ensure it is properly configured and operational.",
+      "rationale": "The AI system's inactivity in generating opportunities could hinder trading performance and strategic decision-making."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Assess the current trading strategies for effectiveness and make necessary adjustments or switch to more suitable strategies.",
+      "rationale": "Zero active trades and a win rate of 0 indicate that current strategies may not be aligned with market conditions."
+    }
+  ],
+  "urgencyLevel": "high"
+}

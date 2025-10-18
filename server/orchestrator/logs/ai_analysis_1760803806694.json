@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-18T16:10:06.694Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero active trades and zero total profit/loss, which could indicate inactivity or issues with trading strategies."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent performance degradation or system failures."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI processes to ensure they are functioning and generating insights."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments or alternative strategies to improve trading activity."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Immediately investigate the cause of high CPU load and address any underlying issues.",
+      "rationale": "Sustained high CPU load can lead to system instability and affect the platform's ability to process trades efficiently."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart the AI system and monitor its performance to ensure it resumes normal operation.",
+      "rationale": "The AI system is not generating insights or learning, which could hinder the platform's ability to adapt to market changes."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a review of the current trading strategies and their parameters.",
+      "rationale": "Zero active trades and profit/loss suggest that the strategies may not be engaging effectively with the market."
+    }
+  ],
+  "urgencyLevel": "high"
+}
