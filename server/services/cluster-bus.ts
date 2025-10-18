@@ -21,6 +21,8 @@ export class ClusterBus extends EventEmitter {
     "rebalance_triggered",
     "circuit_breaker",
     "health_alert",
+    "learning_delta", // Phase 18: Multi-domain learning
+    "model_sync", // Phase 18: Model synchronization
   ]);
 
   constructor() {
