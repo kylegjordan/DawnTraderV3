@@ -92,6 +92,11 @@ export const principleTypeEnum = pgEnum("principle_type", ["foundational", "oper
 export const violationSeverityEnum = pgEnum("violation_severity", ["low", "medium", "high", "critical"]);
 export const ethicalVerdictEnum = pgEnum("ethical_verdict", ["approved", "rejected", "requires_review"]);
 
+// Phase 14.0 enums
+export const federatedScopeEnum = pgEnum("federated_scope", ["global", "trading", "devops", "ux", "fullstack"]);
+export const propagationStatusEnum = pgEnum("propagation_status", ["pending", "success", "failed", "retrying"]);
+export const conflictResolutionEnum = pgEnum("conflict_resolution", ["open", "resolved", "escalated"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2710,6 +2715,80 @@ export const ethicalViolationLog = pgTable("ethical_violation_log", {
   createdAtIdx: index("ethical_violation_log_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 14.0: Federated Ethics State - Shared Snapshots by Domain
+export const federatedEthicsState = pgTable("federated_ethics_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  domain: federatedScopeEnum("domain").notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  snapshotHash: varchar("snapshot_hash", { length: 64 }).notNull(), // SHA-256 of principles + policies state
+  principlesActive: jsonb("principles_active").notNull(), // Array of active principle names
+  policiesActive: jsonb("policies_active").notNull(), // Array of active policy names
+  metadata: jsonb("metadata"), // Additional context (agent versions, etc.)
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  domainModeIdx: index("federated_ethics_state_domain_mode_idx").on(table.domain, table.mode),
+  updatedAtIdx: index("federated_ethics_state_updated_at_idx").on(table.updatedAt),
+}));
+
+// Phase 14.0: Cross-Agent Ethics Session - Multi-Agent Consensus Logs
+export const crossAgentEthicsSession = pgTable("cross_agent_ethics_session", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id", { length: 100 }).notNull(), // Unique session identifier
+  actor: varchar("actor", { length: 100 }).notNull(),
+  action: varchar("action", { length: 200 }).notNull(),
+  domains: text("domains").array().notNull(), // Participating domains (trading, devops, etc.)
+  mode: tradingModeEnum("mode").notNull(),
+  agentInputs: jsonb("agent_inputs").notNull(), // Each agent's recommendation
+  verdict: ethicalVerdictEnum("verdict").notNull(),
+  confidence: doublePrecision("confidence").notNull(), // 0.0 to 1.0
+  rationale: text("rationale").notNull(),
+  hasConflict: boolean("has_conflict").notNull().default(false),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("cross_agent_ethics_session_session_id_idx").on(table.sessionId),
+  verdictIdx: index("cross_agent_ethics_session_verdict_idx").on(table.verdict),
+  createdAtIdx: index("cross_agent_ethics_session_created_at_idx").on(table.createdAt),
+}));
+
+// Phase 14.0: Ethics Conflict Register - Agent Disagreement Records
+export const ethicsConflictRegister = pgTable("ethics_conflict_register", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  conflictingSources: text("conflicting_sources").array().notNull(), // Agent names in disagreement
+  conflictingVerdicts: jsonb("conflicting_verdicts").notNull(), // Map of agent → verdict
+  resolutionStatus: conflictResolutionEnum("resolution_status").notNull().default("open"),
+  resolutionMethod: varchar("resolution_method", { length: 100 }), // e.g., "majority_vote", "priority_principle"
+  resolutionRationale: text("resolution_rationale"),
+  finalVerdict: ethicalVerdictEnum("final_verdict"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+}, (table) => ({
+  sessionIdIdx: index("ethics_conflict_register_session_id_idx").on(table.sessionId),
+  statusIdx: index("ethics_conflict_register_status_idx").on(table.resolutionStatus),
+  createdAtIdx: index("ethics_conflict_register_created_at_idx").on(table.createdAt),
+}));
+
+// Phase 14.0: Ethics Propagation Journal - Agent Cache Sync Tracking
+export const ethicsPropagationJournal = pgTable("ethics_propagation_journal", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propagationId: varchar("propagation_id", { length: 100 }).notNull(),
+  targetDomain: federatedScopeEnum("target_domain").notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  deltaType: varchar("delta_type", { length: 50 }).notNull(), // "principle_update", "policy_update", "violation_sync"
+  deltaPayload: jsonb("delta_payload").notNull(),
+  status: propagationStatusEnum("status").notNull().default("pending"),
+  retryCount: integer("retry_count").notNull().default(0),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (table) => ({
+  propagationIdIdx: index("ethics_propagation_journal_propagation_id_idx").on(table.propagationId),
+  statusIdx: index("ethics_propagation_journal_status_idx").on(table.status),
+  targetDomainIdx: index("ethics_propagation_journal_target_domain_idx").on(table.targetDomain),
+  createdAtIdx: index("ethics_propagation_journal_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2750,6 +2829,10 @@ export const insertSafetyEventLogSchema = createInsertSchema(safetyEventLog).omi
 export const insertKillSwitchSchema = createInsertSchema(killSwitch).omit({ updatedAt: true });
 export const insertEthicalPrincipleSchema = createInsertSchema(ethicalPrinciple).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertEthicalViolationLogSchema = createInsertSchema(ethicalViolationLog).omit({ id: true, createdAt: true });
+export const insertFederatedEthicsStateSchema = createInsertSchema(federatedEthicsState).omit({ id: true, updatedAt: true });
+export const insertCrossAgentEthicsSessionSchema = createInsertSchema(crossAgentEthicsSession).omit({ id: true, createdAt: true });
+export const insertEthicsConflictRegisterSchema = createInsertSchema(ethicsConflictRegister).omit({ id: true, createdAt: true });
+export const insertEthicsPropagationJournalSchema = createInsertSchema(ethicsPropagationJournal).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2878,6 +2961,21 @@ export type EthicalVerdict = typeof ethicalVerdictEnum.enumValues[number];
 
 export type InsertEthicalViolationLog = z.infer<typeof insertEthicalViolationLogSchema>;
 export type EthicalViolationLog = typeof ethicalViolationLog.$inferSelect;
+
+export type InsertFederatedEthicsState = z.infer<typeof insertFederatedEthicsStateSchema>;
+export type FederatedEthicsState = typeof federatedEthicsState.$inferSelect;
+export type FederatedScope = typeof federatedScopeEnum.enumValues[number];
+
+export type InsertCrossAgentEthicsSession = z.infer<typeof insertCrossAgentEthicsSessionSchema>;
+export type CrossAgentEthicsSession = typeof crossAgentEthicsSession.$inferSelect;
+
+export type InsertEthicsConflictRegister = z.infer<typeof insertEthicsConflictRegisterSchema>;
+export type EthicsConflictRegister = typeof ethicsConflictRegister.$inferSelect;
+export type ConflictResolution = typeof conflictResolutionEnum.enumValues[number];
+
+export type InsertEthicsPropagationJournal = z.infer<typeof insertEthicsPropagationJournalSchema>;
+export type EthicsPropagationJournal = typeof ethicsPropagationJournal.$inferSelect;
+export type PropagationStatus = typeof propagationStatusEnum.enumValues[number];
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

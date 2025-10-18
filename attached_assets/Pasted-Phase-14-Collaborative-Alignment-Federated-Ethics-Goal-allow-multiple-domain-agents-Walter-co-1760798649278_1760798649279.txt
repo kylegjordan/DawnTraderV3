@@ -1,0 +1,248 @@
+Phase 14 – Collaborative Alignment & Federated Ethics
+
+Goal: allow multiple domain agents (Walter core, TradingBob, DevOpsBob, UXBob, etc.) to share, reconcile, and co-enforce ethical state and alignment decisions across domains. Establish cross-agent consensus for ethical checks, federated policy propagation, and dispute resolution.
+
+0) Preflight & Guardrails
+
+Confirm the app is running in the Replit dev environment.
+
+Ensure previous phases’ scheduler tasks are active; do not alter existing tasks unless explicitly instructed below.
+
+Keep Context Bridge broadcasts enabled; extend only as specified.
+
+Enforce no user prompts during this phase.
+
+1) Data Layer (Federated Ethics State)
+
+Add the following (without removing existing tables):
+
+Federated state: shared snapshots of active principles/policies by domain and global scope.
+
+Cross-agent ethics session log: records each multi-agent ethics session, involved agents, inputs, verdicts, and rationale.
+
+Conflict register: records disagreements (e.g., “TradingBob = approve” vs “Ethics = review”).
+
+Propagation journal: tracks outbound/inbound updates to agent-local caches and whether applied/failed.
+
+Requirements:
+
+Index by (domain, updated_at) and (session_id) for fast lookups.
+
+Include fields for mode (e.g., live, paper) to remain consistent with existing broadcasts.
+
+All timestamps in UTC.
+
+Use the same ID/enum and naming conventions established in Phases 9–13.
+
+Validation after creation:
+
+Ensure read/write succeeds (insert a small test row via existing DB tooling if needed).
+
+No foreign-key breaks; no enum name collisions.
+
+2) Services (Collaborative Alignment)
+
+Create/extend services (follow existing service patterns):
+
+FederatedEthicsHub
+
+Maintains the authoritative in-memory snapshot of global ethical state.
+
+Pulls from ethical_principle + Phase 13 violations + Phase 11 safety policies.
+
+Exposes: getSnapshot(domain?), reconcileUpdates(updates), recordPropagation(outcome).
+
+EthicsConsensusOrchestrator
+
+Runs a multi-agent consensus check for a proposed action.
+
+Inputs: action metadata (domain, risk, mode), current federated snapshot, agent-local recommendations.
+
+Outputs: verdict = approved | rejected | requires_review, with confidence score and rationale.
+
+Writes a row to the cross-agent ethics session log and (if disagreement) to the conflict register.
+
+PolicyPropagationService
+
+Push/pull delta updates between the FederatedEthicsHub and agent-local caches (TradingBob, etc.).
+
+Retries with backoff; records into the propagation journal (success/failure & reason).
+
+Service design constraints:
+
+No blocking of safety layer: safety still executes first.
+
+Ethics consensus must run after safety, but before execution.
+
+Handle empty/partial agent responses gracefully; never return NaN/Infinity; clamp confidence to [0,1].
+
+3) Controller Integration (Three-Gate + Federated)
+
+In the Autonomy Controller pipeline (pre-execution path):
+
+Keep order: SafetyGuardrails → EthicsConsensusOrchestrator (federated) → Execution.
+
+If requires_review or rejected, block execution, log details, and broadcast an ethical_event including:
+
+userId (if present), mode, domains, verdict, confidence, reasons, and conflict summary (if any).
+
+Status exposure:
+
+Add a read-only status getter to return: last session verdict, last confidence, open conflicts count, last propagation outcome.
+
+4) Scheduler Tasks (Federated Maintenance)
+
+Add two new recurring tasks (names must match exactly):
+
+federated_ethics_sync
+
+Every 2 hours.
+
+Pull latest principles, safety deltas, violations; reconcile into the hub; propagate to agents; log to propagation journal.
+
+ethics_conflict_mediation
+
+Every 6 hours.
+
+Scan conflict register; attempt automated resolution (e.g., majority vote, higher-priority principle wins).
+
+Update conflicts to resolved or leave open with remediation guidance.
+
+Broadcast a summary via Context Bridge.
+
+Do not disable or change existing scheduler tasks.
+
+5) API Endpoints (Admin + Read)
+
+Create endpoints grouped under /api/federation and /api/ethics/collab:
+
+Admin-only (require admin auth):
+
+POST /api/federation/propagate – force a propagation cycle now; returns counts & errors (if any).
+
+POST /api/ethics/collab/mediate – force conflict mediation pass; returns resolved/open counts.
+
+Read (authenticated):
+
+GET /api/ethics/collab/status – latest federated snapshot summary, open conflicts, last verdict/confidence.
+
+GET /api/ethics/collab/sessions?limit=50 – most recent cross-agent ethics sessions (id, domains, verdict, confidence).
+
+GET /api/ethics/collab/conflicts?open=true – list unresolved conflicts with brief rationale.
+
+Response invariants:
+
+Never return undefined/NaN values; for missing metrics use null or safe defaults.
+
+Include mode in responses where relevant.
+
+6) Context Bridge (Events)
+
+Add/broadcast non-breaking events (extend existing union safely):
+
+ethics_federation_sync_complete – includes snapshot hash, updated domains, propagation stats.
+
+ethics_conflict_updated – includes counts of open/resolved and top unresolved items.
+
+ethical_event – already in use; now enriched with federatedConsensus (verdict, confidence, participants).
+
+Ensure events handle userId absent (system-level) by using existing safe patterns.
+
+7) UI – System Monitoring Panel (New “Federation” tab)
+
+Do not remove existing tabs. Add a new tab labeled “Federation” (or “Ethics Federation” if “Federation” is taken).
+Inside the tab:
+
+Federated Status Card:
+
+Snapshot time, domains covered, open conflicts count, last propagation result, last consensus verdict & confidence.
+
+Sessions & Conflicts:
+
+Paginated table/list of the most recent ethics sessions (verdict, confidence, domains, time).
+
+Collapsible “Open Conflicts” with a one-line reason and suggested remediation.
+
+Admin Tools (visible when user is admin):
+
+Buttons: “Force Propagation” (calls /api/federation/propagate), “Run Mediation Pass” (calls /api/ethics/collab/mediate).
+
+Display success/error toasts non-blockingly.
+
+UX rules:
+
+Auto-refresh every 60s.
+
+Defensive rendering: if empty, show friendly placeholders.
+
+No modal pauses; all actions fire-and-toast.
+
+8) Testing (End-to-End, No Pauses)
+
+Use username/password provided below for all tests (never email):
+
+Credentials:
+
+testuser123 / SecurePass123!
+
+Run these validations:
+
+Login & Navigate: Load System Monitoring → verify new Federation tab appears.
+
+Status Read: Confirm the Federation tab loads status (placeholders OK if no data yet).
+
+Trigger Admin Actions:
+
+Force Propagation (admin-check: return summary).
+
+Run Mediation Pass (admin-check: return counts).
+
+Conflict Simulation (non-interactive): Ensure the system can display zero conflicts without error.
+
+No Pauses: At no step should the UI/services prompt the operator.
+
+Record results in logs; show toasts in UI.
+
+9) Observability & Health
+
+Extend existing metrics to track:
+
+federatedEthics.lastSyncAt, lastSyncResult, openConflicts, lastConsensusConfidence.
+
+Ensure /api/system/performance includes a small federated-ethics section (counts only).
+
+Log warnings (not errors) on transient propagation failures; auto-retry per backoff policy.
+
+10) Rollback & Safety
+
+If consensus service fails hard (exceptions), fail safe: treat as requires_review and block execution.
+
+Do not alter Phase 11 kill switch behavior. Kill switch remains authoritative.
+
+All new writes must be idempotent-safe; duplicate syncs should not duplicate journal records.
+
+11) Documentation
+
+Update replit.md with:
+
+New tables & scheduler tasks (name, cadence).
+
+Service responsibilities and call order.
+
+API endpoint list with example responses.
+
+Federation tab UX description and admin actions.
+
+Failure modes and safe defaults.
+
+12) Done Criteria
+
+Federation tab visible and loads without errors.
+
+federated_ethics_sync and ethics_conflict_mediation scheduled and reported in scheduler status.
+
+Admin endpoints execute and return summaries.
+
+Autonomy Controller path enforces Safety → Federated Ethics → Execution.
+
+No prompts to the user at any point.
