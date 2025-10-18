@@ -6,6 +6,7 @@ import { continuousLearningEngine } from './continuous-learning';
 import { simulationEngine } from './simulation-engine';
 import { strategicMemory } from './strategic-memory';
 import { reflectiveIntelligence } from './reflective-intelligence';
+import { collaborationManager } from './collaboration-manager';
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -327,9 +328,67 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 12 hours - Collaboration Maintenance & Analytics (Phase 9.6)
+schedulerRegistry.registerTask({
+  name: 'collaboration_maintenance',
+  description: 'Maintain collaboration sessions and analyze collaboration trends',
+  frequency: 'custom',
+  intervalMs: 12 * 60 * 60 * 1000, // 12 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🤝 Running collaboration maintenance...');
+    
+    try {
+      const adminUsers = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
+      const userId = adminUsers[0]?.id;
+
+      if (!userId) {
+        console.warn('[AutonomyScheduler] No admin user found for collaboration maintenance');
+        return;
+      }
+
+      // 1. Get collaboration statistics
+      const stats = await collaborationManager.getCollaborationStats();
+      console.log(`[AutonomyScheduler] 📊 Collaboration stats:`);
+      console.log(`  - Active sessions: ${stats.activeSessions}`);
+      console.log(`  - Total sessions: ${stats.totalSessions}`);
+      console.log(`  - Completed: ${stats.completedSessions}`);
+      console.log(`  - Avg consensus: ${(stats.averageConsensusScore * 100).toFixed(1)}%`);
+
+      // 2. Archive old sessions (older than 7 days)
+      const archivedCount = await collaborationManager.archiveOldSessions(7);
+      console.log(`[AutonomyScheduler] 🗄️ Found ${archivedCount} sessions for archival`);
+
+      // 3. Get active sessions and check for stale sessions
+      const activeSessions = await collaborationManager.getActiveSessions();
+      const now = new Date();
+      const staleThresholdMs = 24 * 60 * 60 * 1000; // 24 hours
+      
+      for (const session of activeSessions) {
+        const sessionAge = now.getTime() - new Date(session.startedAt).getTime();
+        if (sessionAge > staleThresholdMs) {
+          console.log(`[AutonomyScheduler] ⚠️ Stale session detected: ${session.sessionId} (${Math.round(sessionAge / 3600000)}h old)`);
+          // End stale session
+          await collaborationManager.endSession(
+            session.sessionId,
+            'Automatically ended due to inactivity (>24h)'
+          );
+        }
+      }
+
+      console.log('[AutonomyScheduler] ✅ Collaboration maintenance complete');
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Collaboration maintenance failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, and Phase 9.4 reflection tasks
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, and Phase 9.6 collaboration tasks
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -353,6 +412,9 @@ export async function initAutonomyScheduler() {
     // Start reflection analysis (run after 3 hour delay) - Phase 9.4
     await schedulerRegistry.startTask('reflection_analysis', false);
     
+    // Start collaboration maintenance (run after 4 hour delay) - Phase 9.6
+    await schedulerRegistry.startTask('collaboration_maintenance', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -360,6 +422,7 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Learning updates: Every 6 hours');
     console.log('[AutonomyScheduler] - Simulation evaluation: Every 4 hours');
     console.log('[AutonomyScheduler] - Reflection analysis: Every 6 hours');
+    console.log('[AutonomyScheduler] - Collaboration maintenance: Every 12 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -376,6 +439,7 @@ export function getAutonomySchedulerStatus() {
   const learningStatus = schedulerRegistry.getTaskStatus('learning_updates');
   const simulationStatus = schedulerRegistry.getTaskStatus('simulation_evaluation');
   const reflectionStatus = schedulerRegistry.getTaskStatus('reflection_analysis');
+  const collaborationStatus = schedulerRegistry.getTaskStatus('collaboration_maintenance');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -413,6 +477,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: reflectionStatus.lastRun,
       nextRun: reflectionStatus.nextRun,
       frequency: reflectionStatus.frequency,
+    } : null,
+    collaborationMaintenance: collaborationStatus ? {
+      status: collaborationStatus.status,
+      lastRun: collaborationStatus.lastRun,
+      nextRun: collaborationStatus.nextRun,
+      frequency: collaborationStatus.frequency,
     } : null,
   };
 }
