@@ -1,0 +1,158 @@
+🧠 Phase 16 — Controlled Web Intelligence & Knowledge Retrieval
+Purpose
+
+Enable Walter to perform safe, policy-bound online lookups and integrate verified information into his reasoning.
+All web activity remains sandboxed, logged, and constrained by the existing Safety → Ethics → Execution chain.
+
+⚙️ Global Execution Settings
+
+Autonomous execution: Run all tasks 16.1 → 16.10 sequentially with no decision prompts.
+
+Credentials for testing: username = testuser123, password = SecurePass123! (for any authenticated operations).
+
+Auth mode: Username / password only — never attempt email-based login.
+
+Safety rules: All retrievals routed through the Retrieval Gateway and policy filters; never open arbitrary URLs or modify remote content.
+
+🧩 Task Sequence Overview
+16.1 — Database Schema Expansion
+
+Add new enums and tables:
+
+knowledge_source (enum: ‘web’, ‘api’, ‘research’, ‘market’, ‘internal’)
+
+retrieval_trust_level (enum: ‘low’, ‘medium’, ‘high’, ‘verified’)
+
+Tables: knowledge_retrieval_log, knowledge_cache, knowledge_trust_record.
+
+Push schema or create via SQL DO blocks if drizzle push fails.
+
+Verify all tables and indices exist.
+
+16.2 — Knowledge Retrieval Service
+
+Create server/services/knowledge-retrieval.ts.
+
+Implement methods for:
+
+queryWeb() → delegates to sandboxed fetch.
+
+parseAndStore() → extracts relevant text and metadata.
+
+scoreTrust() → assigns trust level based on domain reputation.
+
+recordRetrieval() → writes log + cache entries.
+
+16.3 — Semantic Correlation Engine
+
+Create server/services/semantic-correlation.ts.
+
+Functions:
+
+embedText() (uses local embeddings model).
+
+relateToKnowledgeGraph() (links new data with prior facts).
+
+computeRelevanceScore() (0–1 similarity metric).
+
+16.4 — Autonomy Controller Integration
+
+Import the Knowledge Retrieval Service and Semantic Correlation Engine.
+
+Add a Knowledge Acquisition Checkpoint:
+
+Runs after ethics check and before execution.
+
+Triggered only when knowledge gap > threshold.
+
+Pass retrieved, scored data into working memory for context-safe reasoning.
+
+16.5 — Scheduler Tasks
+
+Register:
+
+knowledge_sync (every 2 h) → refreshes cache.
+
+trust_audit (every 12 h) → re-evaluates source reliability.
+
+Add both to init and getAutonomySchedulerStatus.
+
+16.6 — API Endpoints
+
+Add endpoints in server/routes.ts:
+
+GET /api/knowledge/query?q= → perform retrieval.
+
+GET /api/knowledge/trust → list trusted domains.
+
+POST /api/knowledge/refresh → manual cache refresh.
+All require authentication and pass through safety middleware.
+
+16.7 — UI Enhancement: Knowledge Tab
+
+In client/src/components/system/enhanced-system-monitoring.tsx:
+
+Import Globe or Book icon.
+
+Add TabsTrigger value="knowledge" label="Knowledge".
+
+Create KnowledgeTab component with:
+
+Recent Retrievals Card (show last 10 lookups).
+
+Trusted Sources Card (domains + trust levels).
+
+Knowledge Mode Controls: toggle “Retrieval Mode ON/OFF” and trust threshold slider.
+
+Enable auto-refresh every 60 s.
+
+16.8 — Testing & Validation
+
+Run full end-to-end tests:
+
+Login as testuser123.
+
+Perform search “latest UAE economic report 2025”.
+
+Confirm retrieval log created, trust score assigned, and results display in UI.
+
+Validate scheduler tasks listed and operational.
+
+Check sandbox logging: no external POST/PUT requests permitted.
+
+16.9 — Architect Review
+
+Verify:
+
+Safety → Federated Ethics → Knowledge flow enforced.
+
+Trust scores affect reasoning weighting.
+
+Unauthorized domains blocked.
+
+Approve only if all API calls authenticated and rate-limited.
+
+16.10 — Documentation Update
+
+Append Phase 16 entry to replit.md with:
+
+Schema tables & enums.
+
+Service structures and trust algorithm outline.
+
+Controller integration diagram.
+
+Scheduler task schedule.
+
+API routes and UI controls reference.
+
+Confirm Phase 16 marked Complete.
+
+🧭 Execution Command
+
+Copy this line directly into Replit prompt:
+
+“Begin Phase 16 – Controlled Web Intelligence & Knowledge Retrieval.
+Execute tasks 16.1 through 16.10 autonomously without pausing.
+Use testuser123 / SecurePass123! for all login tests.
+Verify safe sandboxed retrieval, trust scoring, and Knowledge tab functionality.”

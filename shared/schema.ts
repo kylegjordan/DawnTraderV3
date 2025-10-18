@@ -100,6 +100,10 @@ export const conflictResolutionEnum = pgEnum("conflict_resolution", ["open", "re
 // Phase 15.0 enums
 export const biasTypeEnum = pgEnum("bias_type", ["confirmation", "recency", "anchoring", "overconfidence", "availability", "optimism"]);
 
+// Phase 16.0 enums
+export const knowledgeSourceEnum = pgEnum("knowledge_source", ["web", "api", "research", "market", "internal"]);
+export const retrievalTrustLevelEnum = pgEnum("retrieval_trust_level", ["low", "medium", "high", "verified"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2857,6 +2861,63 @@ export const biasCorrectionLog = pgTable("bias_correction_log", {
   userIdIdx: index("bias_correction_log_user_id_idx").on(table.userId),
 }));
 
+// Phase 16.0: Controlled Web Intelligence & Knowledge Retrieval
+export const knowledgeRetrievalLog = pgTable("knowledge_retrieval_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  query: text("query").notNull(),
+  source: knowledgeSourceEnum("source").notNull(),
+  url: text("url"),
+  trustLevel: retrievalTrustLevelEnum("trust_level").notNull(),
+  relevanceScore: doublePrecision("relevance_score"), // 0.0 to 1.0
+  retrievedData: text("retrieved_data"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("knowledge_retrieval_log_user_id_idx").on(table.userId),
+  sourceIdx: index("knowledge_retrieval_log_source_idx").on(table.source),
+  trustLevelIdx: index("knowledge_retrieval_log_trust_level_idx").on(table.trustLevel),
+  createdAtIdx: index("knowledge_retrieval_log_created_at_idx").on(table.createdAt),
+}));
+
+export const knowledgeCache = pgTable("knowledge_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  queryHash: varchar("query_hash", { length: 64 }).notNull().unique(),
+  query: text("query").notNull(),
+  source: knowledgeSourceEnum("source").notNull(),
+  cachedData: text("cached_data").notNull(),
+  trustLevel: retrievalTrustLevelEnum("trust_level").notNull(),
+  relevanceScore: doublePrecision("relevance_score"),
+  hitCount: integer("hit_count").default(0).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  queryHashIdx: index("knowledge_cache_query_hash_idx").on(table.queryHash),
+  sourceIdx: index("knowledge_cache_source_idx").on(table.source),
+  expiresAtIdx: index("knowledge_cache_expires_at_idx").on(table.expiresAt),
+}));
+
+export const knowledgeTrustRecord = pgTable("knowledge_trust_record", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  domain: varchar("domain", { length: 255 }).notNull().unique(),
+  trustLevel: retrievalTrustLevelEnum("trust_level").notNull(),
+  verificationMethod: varchar("verification_method", { length: 100 }),
+  successfulRetrievals: integer("successful_retrievals").default(0).notNull(),
+  failedRetrievals: integer("failed_retrievals").default(0).notNull(),
+  averageRelevance: doublePrecision("average_relevance"),
+  lastAuditDate: timestamp("last_audit_date", { withTimezone: true }),
+  notes: text("notes"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  domainIdx: index("knowledge_trust_record_domain_idx").on(table.domain),
+  trustLevelIdx: index("knowledge_trust_record_trust_level_idx").on(table.trustLevel),
+  lastAuditDateIdx: index("knowledge_trust_record_last_audit_date_idx").on(table.lastAuditDate),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2905,6 +2966,9 @@ export const insertBiasObservationLogSchema = createInsertSchema(biasObservation
 export const insertConfidenceDriftLogSchema = createInsertSchema(confidenceDriftLog).omit({ id: true, createdAt: true });
 export const insertIntrospectionReportSchema = createInsertSchema(introspectionReport).omit({ id: true, createdAt: true });
 export const insertBiasCorrectionLogSchema = createInsertSchema(biasCorrectionLog).omit({ id: true, createdAt: true });
+export const insertKnowledgeRetrievalLogSchema = createInsertSchema(knowledgeRetrievalLog).omit({ id: true, createdAt: true });
+export const insertKnowledgeCacheSchema = createInsertSchema(knowledgeCache).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertKnowledgeTrustRecordSchema = createInsertSchema(knowledgeTrustRecord).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -3048,6 +3112,17 @@ export type ConflictResolution = typeof conflictResolutionEnum.enumValues[number
 export type InsertEthicsPropagationJournal = z.infer<typeof insertEthicsPropagationJournalSchema>;
 export type EthicsPropagationJournal = typeof ethicsPropagationJournal.$inferSelect;
 export type PropagationStatus = typeof propagationStatusEnum.enumValues[number];
+
+export type InsertKnowledgeRetrievalLog = z.infer<typeof insertKnowledgeRetrievalLogSchema>;
+export type KnowledgeRetrievalLog = typeof knowledgeRetrievalLog.$inferSelect;
+export type KnowledgeSource = typeof knowledgeSourceEnum.enumValues[number];
+export type RetrievalTrustLevel = typeof retrievalTrustLevelEnum.enumValues[number];
+
+export type InsertKnowledgeCache = z.infer<typeof insertKnowledgeCacheSchema>;
+export type KnowledgeCache = typeof knowledgeCache.$inferSelect;
+
+export type InsertKnowledgeTrustRecord = z.infer<typeof insertKnowledgeTrustRecordSchema>;
+export type KnowledgeTrustRecord = typeof knowledgeTrustRecord.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
