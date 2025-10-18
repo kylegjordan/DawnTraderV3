@@ -27,7 +27,8 @@ import {
   Sparkles,
   Eye,
   GraduationCap,
-  Shield
+  Shield,
+  Archive
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -428,6 +429,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="oversight" data-testid="tab-oversight">
             <Shield className="w-4 h-4 mr-2" />
             Oversight
+          </TabsTrigger>
+          <TabsTrigger value="memory" data-testid="tab-memory">
+            <Archive className="w-4 h-4 mr-2" />
+            Memory
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -902,6 +907,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 13: Oversight - Phase 9.8 */}
         <TabsContent value="oversight" className="space-y-4">
           <OversightTab />
+        </TabsContent>
+
+        {/* Tab 14: Memory - Phase 9.9 */}
+        <TabsContent value="memory" className="space-y-4">
+          <MemoryTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -2609,6 +2619,183 @@ function OversightTab() {
             <div className="text-center py-8 text-muted-foreground">
               <Eye className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No oversight flags detected</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function MemoryTab() {
+  const { toast } = useToast();
+
+  const { data: archivesData, isLoading: archivesLoading } = useQuery({
+    queryKey: ['/api/memory/archives'],
+    refetchInterval: 30000,
+  });
+
+  const { data: calibrationsData, isLoading: calibrationsLoading } = useQuery({
+    queryKey: ['/api/memory/calibration'],
+    refetchInterval: 30000,
+  });
+
+  const archives = (archivesData as any)?.archives || [];
+  const calibrations = (calibrationsData as any)?.calibrations || [];
+
+  const getScopeColor = (scope: string) => {
+    const colors: Record<string, string> = {
+      tactical: 'bg-blue-500',
+      strategic: 'bg-purple-500',
+      meta: 'bg-orange-500',
+      short_term: 'bg-green-500',
+      medium_term: 'bg-yellow-500',
+      long_term: 'bg-red-500',
+    };
+    return colors[scope] || 'bg-gray-500';
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card data-testid="card-memory-overview">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Archive className="w-5 h-5" />
+            Strategic Memory Overview
+          </CardTitle>
+          <CardDescription>
+            Long-term knowledge archival and cognitive parameter tuning
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {archivesLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <div className="text-sm text-muted-foreground mb-1">Total Archives</div>
+                <div className="text-2xl font-bold" data-testid="text-total-archives">
+                  {archives.length}
+                </div>
+              </div>
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <div className="text-sm text-muted-foreground mb-1">Calibrations</div>
+                <div className="text-2xl font-bold" data-testid="text-total-calibrations">
+                  {calibrations.length}
+                </div>
+              </div>
+              <div className="p-4 rounded-lg bg-secondary/30">
+                <div className="text-sm text-muted-foreground mb-1">Recent Changes</div>
+                <div className="text-2xl font-bold" data-testid="text-recent-changes">
+                  {calibrations.filter((c: any) => {
+                    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                    return new Date(c.createdAt) > twentyFourHoursAgo;
+                  }).length}
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-memory-archives">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="w-5 h-5" />
+            Strategic Memory Archives
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {archivesLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : archives.length > 0 ? (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {archives.slice(0, 10).map((archive: any, idx: number) => (
+                <div 
+                  key={archive.id} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`memory-archive-${idx}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge className={getScopeColor(archive.memoryScope)} data-testid={`badge-scope-${idx}`}>
+                          {archive.memoryScope}
+                        </Badge>
+                        <Badge variant="outline" data-testid={`badge-agent-${idx}`}>
+                          {archive.agentName}
+                        </Badge>
+                        {archive.performanceDelta && archive.performanceDelta > 0 && (
+                          <Badge variant="secondary" className="bg-green-500/20 text-green-700 dark:text-green-300">
+                            +{(archive.performanceDelta * 100).toFixed(1)}%
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-sm font-medium mb-1">{archive.summary}</div>
+                      <div className="text-xs text-muted-foreground mt-2">
+                        Archived: {new Date(archive.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Archive className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No strategic memories archived yet</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-calibration-history">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="w-5 h-5" />
+            Model Calibration History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {calibrationsLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : calibrations.length > 0 ? (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {calibrations.slice(0, 10).map((cal: any, idx: number) => (
+                <div 
+                  key={cal.id} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`calibration-${idx}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" data-testid={`badge-cal-agent-${idx}`}>
+                          {cal.agentName}
+                        </Badge>
+                        <Badge variant="secondary" data-testid={`badge-parameter-${idx}`}>
+                          {cal.parameter}
+                        </Badge>
+                        <Badge 
+                          className={cal.newValue > cal.oldValue ? 'bg-green-500' : cal.newValue < cal.oldValue ? 'bg-red-500' : 'bg-gray-500'}
+                          data-testid={`badge-change-${idx}`}
+                        >
+                          {cal.oldValue.toFixed(3)} → {cal.newValue.toFixed(3)}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground">{cal.reason}</div>
+                      <div className="text-xs text-muted-foreground mt-2">
+                        {new Date(cal.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No model calibrations performed yet</p>
             </div>
           )}
         </CardContent>
