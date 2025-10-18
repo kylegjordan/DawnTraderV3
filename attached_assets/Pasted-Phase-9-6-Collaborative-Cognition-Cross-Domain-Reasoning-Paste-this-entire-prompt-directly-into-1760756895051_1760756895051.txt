@@ -1,0 +1,129 @@
+Phase 9.6 → Collaborative Cognition & Cross-Domain Reasoning
+
+Paste this entire prompt directly into Replit’s input.
+It will execute the full implementation chain without pausing or asking you for next-step confirmations.
+It will use the credentials you specified (username = testuser123, password = SecurePass123!) for all runtime tests and UI validation.
+It will not attempt email login.
+It assumes you are running in Replit’s dev environment (Vite + Express proxy).
+
+🧠 Replit Autonomous Instruction – Phase 9.6
+
+Objective:
+Implement the Collaborative Cognition & Cross-Domain Reasoning Layer enabling Walter and all domain agents (TradingBob, UXBob, DevOpsBob, etc.) to reason together, share situational context, and reach consensus before actions execute.
+
+Autonomous Task List
+
+Database Schema Additions (shared/schema.ts)
+
+Add new enums: collaboration_role, consensus_state
+
+Add tables:
+
+collaboration_sessions – tracks session metadata (agent IDs, topics, start/end times, consensus status)
+
+collaboration_messages – threaded chat-like records of inter-agent communications
+
+consensus_snapshots – records agreement levels, confidence scores, and resolution outcomes
+
+Deploy Schema to Database
+
+Run npm run db:push -- --force
+
+Verify tables exist via SELECT table_name FROM information_schema.tables WHERE table_schema='public';
+
+Create Core Services (in server/services/)
+
+collaboration-manager.ts → session creation, agent invitation, message logging, consensus evaluation
+
+reasoning-bus.ts → context bridge extension for cross-agent broadcasts & role-based routing
+
+consensus-engine.ts → evaluates agent inputs, computes agreement scores, records snapshots
+
+Integrate into Autonomy Controller (server/services/autonomy-controller.ts)
+
+Import the new services
+
+Initialize collaboration hooks after ethical verification phase
+
+Add startCollaborationSession, endCollaborationSession, and enforceConsensus calls inside the execution pipeline
+
+Broadcast collaboration updates via Context Bridge with metadata {userId, mode, sessionId}
+
+Add Scheduler Tasks (server/services/autonomy-scheduler.ts)
+
+collaboration_maintenance → runs every 2 hours to archive old sessions and update consensus metrics
+
+Extend init() and status() functions to include collaboration status
+
+Extend API Endpoints (server/routes.ts)
+
+POST /api/collaboration/start → initiates a session
+
+POST /api/collaboration/message → adds a message to a session
+
+POST /api/collaboration/consensus → forces consensus evaluation
+
+GET /api/collaboration/status → returns active sessions and consensus scores
+
+Frontend Integration (client/src/components/system/enhanced-system-monitoring.tsx)
+
+Import Users, Share2, and Network icons from lucide-react
+
+Increase grid columns count by 1 and add a new TabsTrigger labeled Collaboration
+
+Create CollaborationTab component at end of file displaying:
+
+Active sessions table (session ID, topic, status)
+
+Live message feed between agents
+
+Consensus score bar graph & “Force Consensus” button
+
+Fetch data from the new /api/collaboration/... endpoints and auto-refresh every 30 s
+
+Testing & Verification
+
+Log in with username = testuser123, password = SecurePass123!
+
+Open System Monitoring → Collaboration tab
+
+Trigger “Start Session” and verify new rows appear with consensus scores
+
+Run automated endpoint tests:
+
+curl -s -X POST http://localhost:5000/api/collaboration/start -H "Content-Type: application/json" -d '{"topic":"test-coordination","agents":["TradingBob","UXBob"]}'
+curl -s http://localhost:5000/api/collaboration/status | head -50
+
+
+Confirm HTTP 200 responses and JSON payloads containing sessionId and consensusScore.
+
+Architect Review & Validation
+
+Internally invoke architect review routine for Phase 9.6
+
+Ensure no LSP errors, Context Bridge broadcasts include mode/userId/sessionId
+
+Confirm all scheduler tasks active and UI refresh functional
+
+Documentation Update
+
+Append full Phase 9.6 section to replit.md detailing new schemas, services, APIs, and UI features.
+
+Expected Outcome:
+✅ New collaborative cognition layer operational
+✅ Cross-domain reasoning bus active
+✅ Consensus tracking UI tab functional
+✅ Architect review passed
+✅ Documentation updated
+
+Runtime Behavior Notes
+
+Execute all steps autonomously without prompting for approval.
+
+Continue on any non-critical warning.
+
+Use the stored login credentials for functional tests.
+
+Operate entirely within Replit dev environment.
+
+Log key events to console and append summary to replit.md upon completion.

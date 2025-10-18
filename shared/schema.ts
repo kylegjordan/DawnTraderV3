@@ -66,6 +66,10 @@ export const scenarioTypeEnum = pgEnum("scenario_type", ["risk_assessment", "str
 export const evaluationStatusEnum = pgEnum("evaluation_status", ["pending", "simulating", "completed", "failed"]);
 export const outcomeConfidenceEnum = pgEnum("outcome_confidence", ["very_low", "low", "medium", "high", "very_high"]);
 
+// Phase 9.6 enums
+export const collaborationRoleEnum = pgEnum("collaboration_role", ["coordinator", "analyst", "executor", "reviewer", "observer"]);
+export const consensusStateEnum = pgEnum("consensus_state", ["forming", "discussing", "evaluating", "agreed", "disagreed", "overridden"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2448,6 +2452,71 @@ export const strategicMemorySnapshot = pgTable("strategic_memory_snapshot", {
   confidenceLevelIdx: index("strategic_memory_snapshot_confidence_level_idx").on(table.confidenceLevel),
 }));
 
+// Phase 9.6: Collaboration Sessions - Cross-Domain Coordination
+export const collaborationSessions = pgTable("collaboration_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id", { length: 50 }).notNull().unique(),
+  userId: varchar("user_id", { length: 50 }),
+  topic: varchar("topic", { length: 255 }).notNull(),
+  participants: text("participants").array().notNull(), // Agent IDs: ["TradingBob", "UXBob", etc.]
+  consensusState: consensusStateEnum("consensus_state").default("forming").notNull(),
+  consensusScore: doublePrecision("consensus_score"), // 0-1 agreement level
+  resolutionOutcome: text("resolution_outcome"), // Final decision or action
+  contextSnapshot: jsonb("context_snapshot"), // Full state at session start
+  metadata: jsonb("metadata"),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("collaboration_sessions_session_id_idx").on(table.sessionId),
+  userIdIdx: index("collaboration_sessions_user_id_idx").on(table.userId),
+  consensusStateIdx: index("collaboration_sessions_consensus_state_idx").on(table.consensusState),
+  startedAtIdx: index("collaboration_sessions_started_at_idx").on(table.startedAt),
+}));
+
+// Phase 9.6: Collaboration Messages - Inter-Agent Communication
+export const collaborationMessages = pgTable("collaboration_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id", { length: 50 }).notNull().unique(),
+  sessionId: varchar("session_id", { length: 50 }).notNull(), // References collaboration_sessions
+  agentId: varchar("agent_id", { length: 100 }).notNull(), // e.g., "TradingBob", "DevOpsBob"
+  role: collaborationRoleEnum("role").notNull(),
+  content: text("content").notNull(),
+  contributionType: varchar("contribution_type", { length: 50 }), // e.g., "analysis", "recommendation", "objection"
+  confidenceLevel: doublePrecision("confidence_level"), // 0-1 agent's confidence
+  supportingData: jsonb("supporting_data"), // Evidence or context
+  replyTo: varchar("reply_to", { length: 50 }), // messageId if replying to another message
+  metadata: jsonb("metadata"),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  messageIdIdx: index("collaboration_messages_message_id_idx").on(table.messageId),
+  sessionIdIdx: index("collaboration_messages_session_id_idx").on(table.sessionId),
+  agentIdIdx: index("collaboration_messages_agent_id_idx").on(table.agentId),
+  timestampIdx: index("collaboration_messages_timestamp_idx").on(table.timestamp),
+}));
+
+// Phase 9.6: Consensus Snapshots - Agreement Tracking
+export const consensusSnapshots = pgTable("consensus_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  snapshotId: varchar("snapshot_id", { length: 50 }).notNull().unique(),
+  sessionId: varchar("session_id", { length: 50 }).notNull(), // References collaboration_sessions
+  evaluationPoint: timestamp("evaluation_point", { withTimezone: true }).notNull(),
+  participantInputs: jsonb("participant_inputs").notNull(), // Each agent's position
+  agreementScores: jsonb("agreement_scores").notNull(), // Per-agent agreement levels
+  overallConsensus: doublePrecision("overall_consensus").notNull(), // 0-1 total agreement
+  dissenterAgents: text("dissenter_agents").array().default(sql`ARRAY[]::text[]`), // Agents who disagreed
+  consensusRationale: text("consensus_rationale"), // Why consensus was/wasn't reached
+  decidingFactors: jsonb("deciding_factors"), // Key data points that influenced consensus
+  resolutionPath: text("resolution_path"), // How disagreements were resolved
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  snapshotIdIdx: index("consensus_snapshots_snapshot_id_idx").on(table.snapshotId),
+  sessionIdIdx: index("consensus_snapshots_session_id_idx").on(table.sessionId),
+  evaluationPointIdx: index("consensus_snapshots_evaluation_point_idx").on(table.evaluationPoint),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2474,6 +2543,9 @@ export const insertLearningWeightProfileSchema = createInsertSchema(learningWeig
 export const insertStrategicSimulationLogSchema = createInsertSchema(strategicSimulationLog).omit({ id: true, createdAt: true });
 export const insertDecisionTraceLogSchema = createInsertSchema(decisionTraceLog).omit({ id: true, createdAt: true });
 export const insertStrategicMemorySnapshotSchema = createInsertSchema(strategicMemorySnapshot).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCollaborationSessionSchema = createInsertSchema(collaborationSessions).omit({ id: true, createdAt: true });
+export const insertCollaborationMessageSchema = createInsertSchema(collaborationMessages).omit({ id: true, createdAt: true });
+export const insertConsensusSnapshotSchema = createInsertSchema(consensusSnapshots).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2550,6 +2622,15 @@ export type DecisionTraceLog = typeof decisionTraceLog.$inferSelect;
 
 export type InsertStrategicMemorySnapshot = z.infer<typeof insertStrategicMemorySnapshotSchema>;
 export type StrategicMemorySnapshot = typeof strategicMemorySnapshot.$inferSelect;
+
+export type InsertCollaborationSession = z.infer<typeof insertCollaborationSessionSchema>;
+export type CollaborationSession = typeof collaborationSessions.$inferSelect;
+
+export type InsertCollaborationMessage = z.infer<typeof insertCollaborationMessageSchema>;
+export type CollaborationMessage = typeof collaborationMessages.$inferSelect;
+
+export type InsertConsensusSnapshot = z.infer<typeof insertConsensusSnapshotSchema>;
+export type ConsensusSnapshot = typeof consensusSnapshots.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

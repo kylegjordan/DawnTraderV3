@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-18T02:52:31.399Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals, indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI subsystem shows no recent learning cycles, confidence, or generated opportunities, suggesting it may not be functioning as intended."
+    },
+    {
+      "severity": "low",
+      "message": "Trading system has zero active trades and a win rate of 0, which might indicate inactivity or issues with strategy execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation or system instability."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI learning processes to ensure the AI subsystem is actively contributing to trading decisions."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Evaluate trading strategies to ensure they are functioning correctly and adjust as necessary to improve trading activity and performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Immediately investigate the cause of high CPU load and address any underlying issues such as inefficient processes or resource bottlenecks.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting the platform's reliability and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart or troubleshoot the AI subsystem to ensure it is operational and capable of generating trading opportunities.",
+      "rationale": "The AI subsystem is crucial for identifying trading opportunities and optimizing strategies, and its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a review of the active trading strategies to ensure they are properly configured and aligned with current market conditions.",
+      "rationale": "Ensuring that trading strategies are effective and responsive to market conditions is essential for improving trading performance and profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}
