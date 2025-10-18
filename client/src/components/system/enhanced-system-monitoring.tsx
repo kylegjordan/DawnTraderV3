@@ -374,7 +374,7 @@ export default function EnhancedSystemMonitoring() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-12" data-testid="tabs-system-monitoring">
+        <TabsList className="flex w-full flex-wrap" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -414,6 +414,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="ethics" data-testid="tab-ethics">
             <CheckCircle2 className="w-4 h-4 mr-2" />
             Ethics
+          </TabsTrigger>
+          <TabsTrigger value="collaboration" data-testid="tab-collaboration">
+            <Bot className="w-4 h-4 mr-2" />
+            Collaboration
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -873,6 +877,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 10: Ethics - Phase 9.5 */}
         <TabsContent value="ethics" className="space-y-4">
           <EthicsTab />
+        </TabsContent>
+
+        {/* Tab 11: Collaboration - Phase 9.6 */}
+        <TabsContent value="collaboration" className="space-y-4">
+          <CollaborationTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -2114,6 +2123,155 @@ function EthicsTab() {
             ) : (
               <p className="text-center text-muted-foreground">No alignment data</p>
             )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function CollaborationTab() {
+  const { toast } = useToast();
+
+  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
+    queryKey: ['/api/collaboration/sessions'],
+    refetchInterval: 30000,
+  });
+
+  const { data: statsData, isLoading: statsLoading } = useQuery({
+    queryKey: ['/api/collaboration/stats'],
+    refetchInterval: 30000,
+  });
+
+  const { data: agentsData } = useQuery({
+    queryKey: ['/api/collaboration/agents'],
+    refetchInterval: 60000,
+  });
+
+  const sessions = sessionsData?.sessions || [];
+  const stats = statsData?.stats;
+  const agents = agentsData?.agents || [];
+
+  return (
+    <div className="space-y-4">
+      <Card data-testid="card-collaboration-stats">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="w-5 h-5" />
+            Collaboration Statistics
+          </CardTitle>
+          <CardDescription>Cross-domain agent collaboration metrics</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {statsLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : stats ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-3xl font-bold" data-testid="text-active-sessions">
+                  {stats.activeSessions}
+                </div>
+                <div className="text-sm text-muted-foreground">Active Sessions</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold">
+                  {stats.totalSessions}
+                </div>
+                <div className="text-sm text-muted-foreground">Total Sessions</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold">
+                  {stats.completedSessions}
+                </div>
+                <div className="text-sm text-muted-foreground">Completed</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold">
+                  {(stats.averageConsensusScore * 100).toFixed(0)}%
+                </div>
+                <div className="text-sm text-muted-foreground">Avg Consensus</div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Bot className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No collaboration stats available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card data-testid="card-active-sessions">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Active Sessions ({sessions.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {sessionsLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : sessions.length > 0 ? (
+              <div className="space-y-3">
+                {sessions.slice(0, 5).map((session: any, idx: number) => (
+                  <div 
+                    key={session.id} 
+                    className="p-3 rounded-lg border"
+                    data-testid={`session-${idx}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="font-medium text-sm">{session.topic}</div>
+                      <Badge variant={
+                        session.consensusState === 'agreed' ? 'default' :
+                        session.consensusState === 'disagreed' ? 'destructive' :
+                        session.consensusState === 'evaluating' ? 'outline' :
+                        'secondary'
+                      }>
+                        {session.consensusState}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {session.participants?.length || 0} participants
+                    </div>
+                    {session.consensusScore !== null && (
+                      <div className="text-xs mt-1">
+                        Consensus: {(session.consensusScore * 100).toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No active collaboration sessions</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-domain-agents">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="w-5 h-5" />
+              Domain Agents ({agents.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {agents.map((agent: any, idx: number) => (
+                <div key={idx} className="p-2 rounded border text-sm">
+                  <div className="font-medium">{agent.agentId}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {agent.capabilities?.join(', ') || 'No capabilities listed'}
+                  </div>
+                  <div className="text-xs mt-1">
+                    Priority: {agent.priority}
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
