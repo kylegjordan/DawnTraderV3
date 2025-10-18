@@ -605,9 +605,51 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 6 hours - Ethics Audit (Phase 13.0)
+schedulerRegistry.registerTask({
+  name: 'ethics_audit',
+  description: 'Review ethical violations and principle adherence',
+  frequency: 'custom',
+  intervalMs: 6 * 60 * 60 * 1000, // 6 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] ⚖️ Running ethics audit...');
+    
+    try {
+      const { ethicalReasoner } = await import('./ethical-reasoner').then((m) => ({
+        ethicalReasoner: m.ethicalReasoner,
+      }));
+
+      // Get ethical alignment status
+      const status = await ethicalReasoner.getAlignmentStatus();
+      console.log(`[AutonomyScheduler] 📊 Alignment Score: ${status.alignmentScore}/100`);
+      console.log(`[AutonomyScheduler] 🔍 Violations Today: ${status.violationsToday}`);
+      console.log(`[AutonomyScheduler] 📜 Active Principles: ${status.principleCount}`);
+
+      // Flag drift if alignment score is low
+      if (status.alignmentScore < 70) {
+        console.warn('[AutonomyScheduler] ⚠️ LOW ALIGNMENT SCORE - ethical drift detected');
+        console.warn('[AutonomyScheduler] 📋 Principle Health:', status.principleHealth);
+      } else {
+        console.log('[AutonomyScheduler] ✅ Ethical alignment: healthy');
+      }
+
+      // Clear principles cache to ensure fresh data on next evaluation
+      ethicalReasoner.clearCache();
+
+      console.log(`[AutonomyScheduler] ✅ Ethics audit complete`);
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Ethics audit failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, Phase 10.0 cognitive core optimization, Phase 11.0 safety sweeper, and Phase 12.0 perf snapshot
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, Phase 10.0 cognitive core optimization, Phase 11.0 safety sweeper, Phase 12.0 perf snapshot, and Phase 13.0 ethics audit
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -652,6 +694,9 @@ export async function initAutonomyScheduler() {
     // Start perf snapshot (run immediately) - Phase 12.0
     await schedulerRegistry.startTask('perf_snapshot', true);
     
+    // Start ethics audit (run after 10 hour delay) - Phase 13.0
+    await schedulerRegistry.startTask('ethics_audit', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -666,6 +711,7 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Cognitive core optimization: Every 6 hours');
     console.log('[AutonomyScheduler] - Safety sweeper: Every 2 hours');
     console.log('[AutonomyScheduler] - Performance snapshot: Every 10 minutes');
+    console.log('[AutonomyScheduler] - Ethics audit: Every 6 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -689,6 +735,7 @@ export function getAutonomySchedulerStatus() {
   const cognitiveCoreStatus = schedulerRegistry.getTaskStatus('cognitive_core_cycle');
   const safetySweeperStatus = schedulerRegistry.getTaskStatus('safety_sweeper');
   const perfSnapshotStatus = schedulerRegistry.getTaskStatus('perf_snapshot');
+  const ethicsAuditStatus = schedulerRegistry.getTaskStatus('ethics_audit');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -768,6 +815,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: perfSnapshotStatus.lastRun,
       nextRun: perfSnapshotStatus.nextRun,
       frequency: perfSnapshotStatus.frequency,
+    } : null,
+    ethicsAudit: ethicsAuditStatus ? {
+      status: ethicsAuditStatus.status,
+      lastRun: ethicsAuditStatus.lastRun,
+      nextRun: ethicsAuditStatus.nextRun,
+      frequency: ethicsAuditStatus.frequency,
     } : null,
   };
 }
