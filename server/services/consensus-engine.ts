@@ -46,6 +46,25 @@ class ConsensusEngine {
     try {
       console.log(`[ConsensusEngine] 🧮 Evaluating consensus for session ${sessionId} with ${inputs.length} inputs`);
 
+      // Guard against empty inputs to avoid Infinity in decidingFactors
+      if (inputs.length === 0) {
+        console.log(`[ConsensusEngine] ⚠️ No inputs provided, returning safe defaults`);
+        return {
+          overallConsensus: 0,
+          agreementScores: {},
+          dissenterAgents: [],
+          consensusRationale: 'No agent inputs available for consensus evaluation.',
+          decidingFactors: {
+            highestConfidence: 0,
+            lowestConfidence: 0,
+            unanimousAgreement: false,
+            abstentions: 0,
+          },
+          resolutionPath: 'awaiting_input',
+          canProceed: false,
+        };
+      }
+
       // Calculate individual agreement scores
       const agreementScores: Record<string, number> = {};
       const dissenterAgents: string[] = [];
