@@ -132,13 +132,13 @@ export class KnowledgeRetrievalService {
       const domainLower = domain.toLowerCase();
       
       if (trustedDomains.some(td => domainLower.includes(td))) {
-        await this.createTrustRecord(domain, "high");
-        return "high";
+        await this.createTrustRecord(domain, "verified");
+        return "verified";
       }
       
       if (mediumTrustDomains.some(md => domainLower.includes(md))) {
-        await this.createTrustRecord(domain, "medium");
-        return "medium";
+        await this.createTrustRecord(domain, "moderate");
+        return "moderate";
       }
       
       // Default to low trust for unknown domains
@@ -392,9 +392,9 @@ export class KnowledgeRetrievalService {
         if (successRate < 0.5 && record.trustLevel !== "low") {
           newTrustLevel = "low";
         } else if (successRate >= 0.8 && record.trustLevel === "low") {
-          newTrustLevel = "medium";
-        } else if (successRate >= 0.95 && record.trustLevel === "medium") {
-          newTrustLevel = "high";
+          newTrustLevel = "moderate";
+        } else if (successRate >= 0.95 && record.trustLevel === "moderate") {
+          newTrustLevel = "verified";
         }
         
         if (newTrustLevel !== record.trustLevel) {
