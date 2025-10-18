@@ -1,8 +1,9 @@
 /**
- * Phase 9.6: Consensus Engine
+ * Phase 9.6: Consensus Engine (Extended in Phase 9.7)
  * 
  * Evaluates agent contributions and computes consensus scores.
  * Records consensus snapshots for decision tracking.
+ * Phase 9.7: Integrates with LearningBridge for cooperative learning feedback.
  */
 
 import { db } from '../db';
@@ -14,6 +15,7 @@ import {
 } from '@shared/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { learningBridge } from './learning-bridge';
 
 export interface AgentInput {
   agentId: string;
@@ -180,6 +182,9 @@ class ConsensusEngine {
 
       console.log(`[ConsensusEngine] ✅ Snapshot ${snapshotId} recorded`);
 
+      // Phase 9.7: Record learning feedback for each participating agent
+      await this.recordAgentFeedback(sessionId, participantInputs, evaluation);
+
       return snapshot;
     } catch (error: any) {
       console.error('[ConsensusEngine] Failed to record snapshot:', error);
@@ -238,6 +243,62 @@ class ConsensusEngine {
    */
   getConsensusThreshold(): number {
     return this.consensusThreshold;
+  }
+
+  /**
+   * Phase 9.7: Record learning feedback for participating agents
+   */
+  private async recordAgentFeedback(
+    sessionId: string,
+    participantInputs: AgentInput[],
+    evaluation: ConsensusEvaluation
+  ): Promise<void> {
+    try {
+      console.log(`[ConsensusEngine] 📝 Recording learning feedback for ${participantInputs.length} agents`);
+
+      // Record feedback for each agent based on their contribution
+      const feedbackPromises = participantInputs.map(async (input) => {
+        // Calculate accuracy score (how well agent aligned with consensus)
+        const agentScore = evaluation.agreementScores[input.agentId] || 0;
+        const accuracyScore = input.position === 'abstain' 
+          ? 0.5  // Neutral score for abstentions
+          : agentScore;
+
+        // Consensus alignment is the overall consensus score
+        const consensusAlignment = evaluation.overallConsensus;
+
+        // Generate improvement notes based on performance
+        let improvementNotes = '';
+        if (input.position === 'agree' && evaluation.canProceed) {
+          improvementNotes = `Agent aligned with consensus (${(accuracyScore * 100).toFixed(1)}% contribution). Strong performance.`;
+        } else if (input.position === 'disagree') {
+          improvementNotes = `Agent dissented from consensus. Consider reviewing reasoning: "${input.reasoning.substring(0, 100)}..."`;
+        } else if (input.position === 'conditional') {
+          improvementNotes = `Agent provided conditional support (${(input.confidence * 100).toFixed(1)}% confidence). Conditions should be reviewed.`;
+        } else if (input.position === 'abstain') {
+          improvementNotes = `Agent abstained from decision. May need more context or expertise in this domain.`;
+        }
+
+        // Extract domain from agent ID (e.g., "TradingBob" -> "trading")
+        const domain = input.agentId.toLowerCase().replace('bob', '').replace('agent', '') || 'general';
+
+        return learningBridge.recordFeedback(
+          input.agentId,
+          domain,
+          sessionId,
+          accuracyScore,
+          consensusAlignment,
+          improvementNotes,
+          'peer' // Feedback from peer consensus
+        );
+      });
+
+      await Promise.all(feedbackPromises);
+      console.log(`[ConsensusEngine] ✅ Learning feedback recorded for all agents`);
+    } catch (error: any) {
+      console.error('[ConsensusEngine] Failed to record agent feedback:', error);
+      // Don't throw - feedback recording is non-critical
+    }
   }
 
   /**
