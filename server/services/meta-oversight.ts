@@ -430,6 +430,40 @@ class MetaOversightService {
       return [];
     }
   }
+
+  /**
+   * Get oversight summary statistics
+   */
+  async getOversightSummary() {
+    try {
+      const allFlags = await db.select().from(metaCognitionLog);
+      
+      const totalFlags = allFlags.length;
+      const unresolvedFlags = allFlags.filter(flag => !flag.resolved).length;
+      const highSeverity = allFlags.filter(flag => flag.severity >= 0.7).length;
+      
+      // Count recent trends (flags created in last 24 hours)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentTrends = allFlags.filter(flag => 
+        new Date(flag.createdAt) > oneDayAgo
+      ).length;
+
+      return {
+        totalFlags,
+        unresolvedFlags,
+        highSeverity,
+        recentTrends,
+      };
+    } catch (error: any) {
+      console.error('[MetaOversight] Failed to get oversight summary:', error);
+      return {
+        totalFlags: 0,
+        unresolvedFlags: 0,
+        highSeverity: 0,
+        recentTrends: 0,
+      };
+    }
+  }
 }
 
 export default new MetaOversightService();
