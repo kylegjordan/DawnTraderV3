@@ -73,6 +73,12 @@ export const consensusStateEnum = pgEnum("consensus_state", ["forming", "discuss
 // Phase 9.7 enums
 export const feedbackSourceEnum = pgEnum("feedback_source", ["self", "peer", "system"]);
 
+// Phase 9.8 enums
+export const oversightFlagTypeEnum = pgEnum("oversight_flag_type", ["instability", "bias", "low_confidence", "conflict", "performance_drop"]);
+
+// Phase 9.9 enums
+export const memoryScopeEnum = pgEnum("memory_scope", ["short_term", "medium_term", "long_term"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2539,6 +2545,56 @@ export const agentLearningFeedback = pgTable("agent_learning_feedback", {
   createdAtIdx: index("agent_learning_feedback_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 9.8: Meta-Cognitive Oversight - Supervises Learning Activity & Bias Detection
+export const metaCognitionLog = pgTable("meta_cognition_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceAgent: varchar("source_agent", { length: 100 }), // Agent that triggered the flag
+  flagType: oversightFlagTypeEnum("flag_type").notNull(),
+  severity: doublePrecision("severity").notNull(), // 0-1 scale
+  message: text("message").notNull(),
+  context: jsonb("context"), // Additional diagnostic data
+  recommendations: text("recommendations").array().default(sql`ARRAY[]::text[]`),
+  resolved: boolean("resolved").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sourceAgentIdx: index("meta_cognition_log_source_agent_idx").on(table.sourceAgent),
+  flagTypeIdx: index("meta_cognition_log_flag_type_idx").on(table.flagType),
+  severityIdx: index("meta_cognition_log_severity_idx").on(table.severity),
+  resolvedIdx: index("meta_cognition_log_resolved_idx").on(table.resolved),
+  createdAtIdx: index("meta_cognition_log_created_at_idx").on(table.createdAt),
+}));
+
+// Phase 9.9: Strategic Memory Archive - Long-Term Knowledge Persistence
+export const strategicMemoryArchive = pgTable("strategic_memory_archive", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentName: varchar("agent_name", { length: 100 }).notNull(),
+  memoryScope: memoryScopeEnum("memory_scope").notNull(),
+  summary: text("summary").notNull(), // High-level insight summary
+  insights: jsonb("insights").notNull(), // Detailed lessons learned
+  performanceDelta: doublePrecision("performance_delta"), // Change in performance metric
+  adjustments: jsonb("adjustments"), // What was tuned/learned
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  agentNameIdx: index("strategic_memory_archive_agent_name_idx").on(table.agentName),
+  memoryScopeIdx: index("strategic_memory_archive_memory_scope_idx").on(table.memoryScope),
+  createdAtIdx: index("strategic_memory_archive_created_at_idx").on(table.createdAt),
+}));
+
+// Phase 9.9: Model Calibration Log - Parameter Tuning History
+export const modelCalibrationLog = pgTable("model_calibration_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentName: varchar("agent_name", { length: 100 }).notNull(),
+  parameter: varchar("parameter", { length: 200 }).notNull(), // e.g., "confidence_threshold", "bias_weight"
+  oldValue: doublePrecision("old_value").notNull(),
+  newValue: doublePrecision("new_value").notNull(),
+  reason: text("reason").notNull(), // Why the calibration was made
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  agentNameIdx: index("model_calibration_log_agent_name_idx").on(table.agentName),
+  parameterIdx: index("model_calibration_log_parameter_idx").on(table.parameter),
+  createdAtIdx: index("model_calibration_log_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2569,6 +2625,9 @@ export const insertCollaborationSessionSchema = createInsertSchema(collaboration
 export const insertCollaborationMessageSchema = createInsertSchema(collaborationMessages).omit({ id: true, createdAt: true });
 export const insertConsensusSnapshotSchema = createInsertSchema(consensusSnapshots).omit({ id: true, createdAt: true });
 export const insertAgentLearningFeedbackSchema = createInsertSchema(agentLearningFeedback).omit({ id: true, createdAt: true });
+export const insertMetaCognitionLogSchema = createInsertSchema(metaCognitionLog).omit({ id: true, createdAt: true });
+export const insertStrategicMemoryArchiveSchema = createInsertSchema(strategicMemoryArchive).omit({ id: true, createdAt: true });
+export const insertModelCalibrationLogSchema = createInsertSchema(modelCalibrationLog).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2658,6 +2717,17 @@ export type ConsensusSnapshot = typeof consensusSnapshots.$inferSelect;
 export type InsertAgentLearningFeedback = z.infer<typeof insertAgentLearningFeedbackSchema>;
 export type AgentLearningFeedback = typeof agentLearningFeedback.$inferSelect;
 export type FeedbackSource = typeof feedbackSourceEnum.enumValues[number];
+
+export type InsertMetaCognitionLog = z.infer<typeof insertMetaCognitionLogSchema>;
+export type MetaCognitionLog = typeof metaCognitionLog.$inferSelect;
+export type OversightFlagType = typeof oversightFlagTypeEnum.enumValues[number];
+
+export type InsertStrategicMemoryArchive = z.infer<typeof insertStrategicMemoryArchiveSchema>;
+export type StrategicMemoryArchive = typeof strategicMemoryArchive.$inferSelect;
+export type MemoryScope = typeof memoryScopeEnum.enumValues[number];
+
+export type InsertModelCalibrationLog = z.infer<typeof insertModelCalibrationLogSchema>;
+export type ModelCalibrationLog = typeof modelCalibrationLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

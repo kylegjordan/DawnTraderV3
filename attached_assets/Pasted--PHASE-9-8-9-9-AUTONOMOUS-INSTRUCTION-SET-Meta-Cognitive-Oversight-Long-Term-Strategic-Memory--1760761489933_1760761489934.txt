@@ -1,0 +1,231 @@
+🧭 PHASE 9.8 → 9.9 AUTONOMOUS INSTRUCTION SET
+Meta-Cognitive Oversight + Long-Term Strategic Memory
+⚙️ Overview
+
+Walter will gain:
+
+A Meta-Cognitive Oversight Engine (9.8) — supervises learning activity, bias trends, and instability.
+
+A Long-Term Strategic Memory & Calibration Module (9.9) — persists insights and gradually tunes models across sessions.
+
+Both phases build on the Cooperative Learning Feedback system (9.7) and complete the “adaptive cognition” stack.
+
+🧱 PHASE 9.8 — Meta-Cognitive Oversight Engine
+1️⃣ Schema Additions (shared/schema.ts)
+
+Add these after the 9.7 section:
+
+Enum oversight_flag_type
+
+instability, bias, low_confidence, conflict, performance_drop
+
+Table meta_cognition_log
+
+Column	Type	Notes
+id	UUID PK	
+source_agent	VARCHAR	
+flag_type	oversight_flag_type	
+severity	FLOAT	0 – 1
+message	TEXT	
+context	JSONB	
+recommendations	TEXT[]	
+resolved	BOOLEAN	Default false
+created_at	TIMESTAMP DEFAULT NOW()	
+
+Add MetaCognitionLog type export.
+Deploy with npm run db:push -- --force or fallback SQL block if needed.
+
+2️⃣ Service Creation (server/services/meta-oversight.ts)
+
+Create class MetaOversightService with methods:
+
+analyzeLearningTrends() → detect drift/bias across agents
+
+flagIssues(agent, type, severity, msg, ctx) → writes to meta_cognition_log
+
+recommendAdjustments() → returns JSON summary of active flags + remedies
+
+Ensure safe numerical handling (no Infinity/NaN).
+
+3️⃣ Integrate into Autonomy Controller
+
+In server/services/autonomy-controller.ts:
+
+Add runMetaCognitiveCheck() after updateLearningProfiles().
+
+If flags exist with severity > 0.7, log warning and adjust agent weights (-5 %).
+
+Broadcast flag events via Context Bridge.
+
+4️⃣ Scheduler Task
+
+In server/services/autonomy-scheduler.ts:
+Add meta_cognition_scan task (every 8 hours):
+runs MetaOversightService.analyzeLearningTrends() and recommendAdjustments();
+updates status list.
+
+5️⃣ API Endpoints (server/routes.ts)
+
+Add:
+
+GET /api/oversight/logs
+GET /api/oversight/summary
+POST /api/oversight/resolve
+
+
+All require authentication (testuser123 credentials).
+
+6️⃣ UI Integration (client/src/components/system/enhanced-system-monitoring.tsx)
+
+Add Oversight tab after Learning:
+
+Icon: AlertTriangle from lucide-react.
+
+Cards:
+
+Active Flags Count
+
+Highest Severity
+
+Recommendations List
+
+Refresh every 90 seconds (/api/oversight/summary).
+
+7️⃣ Testing & Validation
+
+Run:
+
+npm run dev
+curl -s http://localhost:5000/api/oversight/summary
+
+
+Verify HTTP 200 + JSON structure.
+Login as testuser123 in browser, check Oversight tab renders.
+
+8️⃣ Architect Review & Documentation
+
+Trigger architect review → fix minor LSP or Infinity errors.
+Append “Phase 9.8 Meta-Cognitive Oversight” to replit.md.
+
+🧩 PHASE 9.9 — Long-Term Strategic Memory & Model Calibration
+1️⃣ Schema Additions
+
+Add after meta_cognition_log:
+
+Enum memory_scope
+
+short_term, medium_term, long_term
+
+Table strategic_memory_archive
+
+Column	Type	Notes
+id	UUID PK	
+agent_name	VARCHAR	
+memory_scope	memory_scope	
+summary	TEXT	
+insights	JSONB	
+performance_delta	FLOAT	
+adjustments	JSONB	
+created_at	TIMESTAMP DEFAULT NOW()	
+
+Table model_calibration_log
+
+Column	Type
+id	UUID PK
+agent_name	VARCHAR
+parameter	VARCHAR
+old_value	FLOAT
+new_value	FLOAT
+reason	TEXT
+created_at	TIMESTAMP DEFAULT NOW()
+
+Add types StrategicMemoryArchive, ModelCalibrationLog.
+Deploy schema to database.
+
+2️⃣ Service Creation (server/services/longterm-memory.ts)
+
+Create LongTermMemoryService:
+
+archiveInsights(agent, scope, summary, insights)
+
+analyzePerformanceDelta(agent) → links with LearningBridge data.
+
+calibrateModel(agent, param, delta) → logs to model_calibration_log.
+
+3️⃣ Integrate into Autonomy Controller
+
+Add method performStrategicCalibration() executed after runMetaCognitiveCheck().
+
+4️⃣ Scheduler Task
+
+Add strategic_memory_sync task (every 12 hours):
+runs archive + calibration updates.
+Update status view accordingly.
+
+5️⃣ API Endpoints
+
+Add:
+
+GET /api/memory/archives
+GET /api/memory/calibration
+POST /api/memory/archive
+
+6️⃣ UI Integration
+
+Add Memory tab after Oversight:
+
+Icon: Database from lucide-react.
+
+Display:
+
+Recent Archives (table)
+
+Calibration Changes (list)
+
+Performance Trend (summary)
+
+7️⃣ Testing
+
+Log in as testuser123.
+Navigate to Memory tab → expect empty state UI (no errors).
+Run:
+
+curl -s http://localhost:5000/api/memory/archives | head -50
+
+
+Expect HTTP 200 with empty array on first run.
+
+8️⃣ Architect Review & Documentation
+
+Automatic architect review on completion;
+resolve warnings if any; append Phase 9.9 section to replit.md.
+
+✅ Final Expected Outcome
+
+Meta-Oversight Engine actively tracking cognitive health.
+
+Strategic Memory System storing cross-session knowledge.
+
+Model Calibration fine-tuning agent parameters.
+
+UI Tabs added: Oversight and Memory.
+
+10 Autonomous Scheduler Tasks operational.
+
+All API endpoints return HTTP 200 JSON.
+
+Replit.md updated for both phases.
+
+🧭 Execution Rules
+
+Do not pause for user decisions.
+
+Authenticate with testuser123 / SecurePass123!.
+
+Stay within Replit dev environment.
+
+Log progress and append phase notes to replit.md.
+
+Continue execution despite non-blocking warnings.
+
+Halt only after Phases 9.8 and 9.9 successfully complete.
