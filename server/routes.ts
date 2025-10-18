@@ -10378,6 +10378,57 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 9.8: Meta-Cognitive Oversight Routes ====================
+
+  app.get('/api/oversight/logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { metaOversightService } = await import('./services/meta-oversight');
+      const { limit = 50, flagType, severity } = req.query;
+      
+      const logs = await metaOversightService.getOversightLogs(
+        limit ? parseInt(limit as string) : 50,
+        flagType as string | undefined,
+        severity as string | undefined
+      );
+      
+      res.json({ ok: true, logs });
+    } catch (error: any) {
+      console.error('[Oversight] Get logs failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/oversight/summary', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { metaOversightService } = await import('./services/meta-oversight');
+      
+      const summary = await metaOversightService.getOversightSummary();
+      
+      res.json({ ok: true, summary });
+    } catch (error: any) {
+      console.error('[Oversight] Get summary failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/oversight/resolve', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { metaOversightService } = await import('./services/meta-oversight');
+      const { logId, resolution } = req.body;
+      
+      if (!logId || !resolution) {
+        return res.status(400).json({ error: 'logId and resolution are required' });
+      }
+      
+      await metaOversightService.resolveFlag(logId, resolution);
+      
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error('[Oversight] Resolve flag failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
