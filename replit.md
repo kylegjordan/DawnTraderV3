@@ -9,11 +9,11 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 The application features a React, TypeScript, Vite frontend with a mobile-first, responsive design. The backend uses Node.js and Express, providing a RESTful API and WebSocket support. Data persistence is managed by PostgreSQL via Neon serverless driver and Drizzle ORM.
 
-Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`, supporting automated trading strategies and multi-layered risk management. Authentication uses username/password, bcrypt, JWT, and WebAuthn.
+Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `MarketScanner`, `RiskManager`, `AIAnalyst`, and `AIOpportunitiesService`. Authentication uses username/password, bcrypt, JWT, and WebAuthn.
 
 An AI Orchestrator & Command Center, powered by GPT-4o, features an AI SysAdmin Co-Pilot named Walter. Walter's architecture includes a Unified Command & Conversation Layer, Semantic Memory Layer (pgvector and OpenAI embeddings), and an Intelligence Refinement Layer with a Self-optimizing Cognitive Weight Adjuster. A Paper Trading Simulation Engine provides real-time execution. The system incorporates a multi-module intelligent caching system (Bob Core) and a Hybrid Cortex Intelligent Memory Layer.
 
-The system includes a `SystemHealthMonitor`, `SelfRepairService`, a Natural Language Action Interpreter (NLAI), and a Contextual Intent Engine (CIE). The Real-Time Execution Layer manages market data, execution timing, slippage modeling, and rate control. A Unified Portfolio & Strategy State ensures a single source of truth. Walter's architecture is Hybrid Cognitive-Operational, with a Cognitive Layer for intent reflection and an Intent Gateway for validating operational commands with RBAC, risk assessment, and audit logging. Data Provenance & Source Governance is ensured, and Schema Binding Validation & Learning Alignment provides comprehensive data source validation. A `SecureCoreService` restricts Walter's domains when enabled. The Continuous Learning Pipeline extends the Event Broker to capture trade events and transfer knowledge. A `StateAwarenessService` provides a single authoritative system state snapshot for Walter and UI components. An Intent Execution Framework provides safe, audited execution of validated intents. A `Pre-Execution Validator` ensures comprehensive validation of trade intents. The Context Bridge enables real-time, bidirectional synchronization between Walter's panel, chat widget, and backend systems via WebSocket broadcasting.
+The system includes a `SystemHealthMonitor`, `SelfRepairService`, a Natural Language Action Interpreter (NLAI), and a Contextual Intent Engine (CIE). The Real-Time Execution Layer manages market data, execution timing, slippage modeling, and rate control. A Unified Portfolio & Strategy State ensures a single source of truth. Walter's architecture is Hybrid Cognitive-Operational, with a Cognitive Layer for intent reflection and an Intent Gateway for validating operational commands with RBAC, risk assessment, and audit logging. A `SecureCoreService` restricts Walter's domains when enabled. The Continuous Learning Pipeline extends the Event Broker to capture trade events and transfer knowledge. A `StateAwarenessService` provides a single authoritative system state snapshot for Walter and UI components. An Intent Execution Framework provides safe, audited execution of validated intents. A `Pre-Execution Validator` ensures comprehensive validation of trade intents. The Context Bridge enables real-time, bidirectional synchronization between Walter's panel, chat widget, and backend systems via WebSocket broadcasting.
 
 The Reasoning Orchestrator enables Walter's multi-step transparent reasoning via Domain Bobs (DevOps, FullStack, UX, TradingBob) for contextual analysis and execution plan building. The Memory Lifecycle Manager ensures semantic memory integrity and nightly learning feedback aggregation. An Async Task Queue provides distributed multi-domain reasoning with parallel execution. Cognitive Tuning & Testing provides automated performance validation and tuning for Walter's cognitive subsystems.
 
@@ -31,91 +31,93 @@ Ethical Alignment Framework establishes comprehensive ethical reasoning across a
 
 Collaborative Alignment & Federated Ethics enables multi-agent ethical consensus across domain agents with database tables (`federated_ethics_state`, `cross_agent_ethics_session`, `ethics_conflict_register`, `ethics_propagation_journal`) supporting distributed ethical decision-making. The `FederatedEthicsHub` provides authoritative ethical state snapshots, and the `EthicsConsensusOrchestrator` performs multi-agent consensus checks using weighted majority voting and conflict detection. The `PolicyPropagationService` handles push/pull delta updates. The Autonomy Controller execution path is enhanced with federated ethics: Safety → Federated Ethics Consensus → Ethical Reasoning → Execution. A Federation UI tab provides comprehensive monitoring and control.
 
-**Cognitive Introspection & Bias Mitigation (Phase 15.0)** adds continuous self-analysis to detect and counter cognitive biases across Walter's autonomous reasoning, providing meta-cognitive awareness and automated bias correction.
+
+**Cognitive Introspection & Bias Mitigation (Phase 15.0)**
 
 **Database Schema:**
-- `bias_observation_log`: Records detected cognitive biases with type, context, confidence score, decision ID, impact assessment, and metadata
-- `confidence_drift_log`: Tracks confidence drift metrics including average confidence, variance, drift direction, and decisions analyzed
-- `introspection_report`: Stores daily introspection summaries with overall health score, critical issues, and improvement recommendations
+- `bias_observation_log`: Records detected cognitive biases
+- `confidence_drift_log`: Tracks confidence drift metrics
+- `introspection_report`: Stores daily summaries
 - `BiasType` enum: confirmation, recency, anchoring, overconfidence, availability, optimism
 
 **Core Services:**
-- `IntrospectionEngine`: Analyzes reasoning traces to detect six bias types and calculate confidence drift metrics. All analysis is strictly per-user via INNER JOIN between `metaReasoningLog` and `reasoningTrace` filtering by userId, preventing cross-user data pollution. Bias detection methods:
-  - Confirmation bias: Pattern reinforcement detection
-  - Recency bias: Over-weighting recent data
-  - Anchoring bias: Initial value fixation
-  - Overconfidence bias: Excessive certainty via integrityScore > 0.85
-  - Availability bias: Reliance on readily available information
-  - Optimism bias: Systematic over-estimation
-- `BiasMitigation`: Applies event-driven corrections when biases are detected, adjusting `cognitiveWeights` to counter specific patterns and persisting corrections to the database. Subscribes to introspection events and triggers mitigation workflows.
+- `IntrospectionEngine`: Detects six bias types, strictly per-user via INNER JOIN
+- `BiasMitigation`: Applies corrections when biases detected
 
 **Autonomy Controller Integration:**
-- Async introspection checkpoint added to execution pipeline before final execution
-- Pipeline flow: Reasoning → Introspection (async, user-scoped) → Safety → Federated Ethics → Ethical Reasoning → Execution
+- Pipeline: Reasoning → Introspection (async) → Safety → Federated Ethics → Ethical Reasoning → Execution
 
 **Scheduler Tasks:**
-- `introspection_cycle`: Runs every 4 hours to analyze recent reasoning traces for biases and confidence drift
-- `bias_mitigation_cycle`: Runs every 8 hours to apply corrections for detected biases and optimize cognitive weights
+- `introspection_cycle`: Every 4 hours
+- `bias_mitigation_cycle`: Every 8 hours
 
-**API Endpoints (All require JWT authentication):**
-- `GET /api/introspection/status`: Returns introspection summary with overall score, recent biases, drift status, and active mitigations
-- `GET /api/introspection/biases`: Returns recent bias observations with type, confidence, context, and timestamps
-- `GET /api/introspection/drift`: Returns confidence drift logs with session windows, averages, variance, and drift direction
-- `POST /api/introspection/mitigate`: Triggers immediate bias mitigation and cognitive weight adjustment
+**API Endpoints (JWT auth required):**
+- `GET /api/introspection/status`, `/biases`, `/drift`
+- `POST /api/introspection/mitigate`
 
 **System Monitoring UI - Introspection Tab:**
-- Summary cards: Reasoning Quality (%), Biases Detected (count), Active Mitigations (count), Drift Status (text)
-- Bias Breakdown Chart: BarChart (Recharts) showing distribution of detected bias types
-- Confidence Drift Chart: LineChart (Recharts) visualizing confidence trends over time
-- Mitigation Controls: Trigger Mitigation button with auto-refresh after execution
-- All data properly scoped to authenticated user, preventing cross-user information leakage
+Summary cards, Bias Breakdown Chart, Confidence Drift Chart, Mitigation Controls
 
-**Critical Implementation Notes:**
-- Overconfidence detection uses `integrityScore` (validated field in schema), not reflectionScore
-- All metaReasoningLog queries join with reasoningTrace to ensure user isolation
-- Query pattern: `.from(metaReasoningLog).innerJoin(reasoningTrace, eq(metaReasoningLog.targetTraceId, reasoningTrace.traceId)).where(eq(reasoningTrace.userId, userId))`
+**Critical Notes:**
+- Uses `integrityScore` (not reflectionScore) for overconfidence detection
+- All queries join reasoningTrace for user isolation
 
-## UI Maintenance Notes
+**Controlled Web Intelligence & Knowledge Retrieval (Phase 16.0)**
 
-### System Monitoring Panel Sticky Tab Fix (October 18, 2025)
+**Database Schema:**
+- `knowledge_source` enum: web_search, web_fetch, api, internal_docs
+- `retrieval_trust_level` enum: verified, moderate, low, untrusted
+- `knowledge_retrieval_log`: Records all knowledge queries (userId, query, source, url, trustLevel, relevanceScore, retrievedData, retrievedAt)
+- `knowledge_cache`: Caches data with 24h TTL (queryHash, cachedData, expiresAt)
+- `knowledge_trust_record`: Tracks domain trust (domain, trustLevel, success/failure counts, avgRelevanceScore)
 
-**Issue:** Tab menu was being covered by metric cards (CPU Usage, Memory Usage, etc.), particularly the third row of wrapped tabs (Task Performance, Alerts, UX Monitor).
+**Core Services:**
+- `KnowledgeRetrievalService`: Safe web acquisition with policy-bound domain whitelisting
+  - `queryWeb()`: Retrieves via web_search/web_fetch with trust scoring and caching
+  - `scoreTrust()`: Domain whitelist - verified: wikipedia.org, reuters.com, bbc.com, bloomberg.com, coindesk.com, cointelegraph.com, github.com, stackexchange.com, stackoverflow.com, arxiv.org, nature.com, science.org; moderate: medium.com, dev.to, reddit.com, twitter.com, x.com; low: unknown
+  - `recordRetrieval()`: Logs all retrievals with trust/relevance scores
+  - `refreshCache()`: Removes expired entries
+  - `auditTrust()`: Re-evaluates trust (downgrade <50% success, promote ≥80% moderate, ≥95% verified)
+- `SemanticCorrelationEngine`: OpenAI embeddings for relevance and gap detection
+  - `embedText()`: 1536-dim embeddings via text-embedding-3-small
+  - `computeRelevanceScore()`: Cosine similarity
+  - `relateToKnowledgeGraph()`: Gap detection (threshold 0.4)
 
-**Root Cause:** With 20 tabs wrapping across 3 rows, metric cards were visually overlapping the tab menu due to insufficient spacing between the wrapped tab rows and content below.
+**Autonomy Controller Integration:**
+- Pipeline: Reasoning → Introspection → Safety → Federated Ethics → Ethical Reasoning → Knowledge Acquisition (if gap >0.4) → Execution
+- Async, non-blocking (doesn't halt on failure)
+- Gap threshold: 0.4 (40% semantic relevance)
 
-**Solution:** Implemented sticky positioning with significantly increased spacing to accommodate all wrapped tab rows.
+**Scheduler Tasks:**
+- `knowledge_sync`: Every 2 hours (cache refresh, sync sources)
+- `trust_audit`: Every 12 hours (re-evaluate domain trust)
 
-**Implementation:**
-- Wrapped TabsList in sticky container: `<div className="sticky top-0 z-20 bg-background pb-16">`
-- TabsList styling: `flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-6`
-  - `gap-y-3` (12px) provides vertical spacing between wrapped tab rows
-  - `pb-6` (24px) adds internal bottom padding to TabsList
-- All TabsContent sections: `relative z-0 overflow-visible mt-12 space-y-4`
-  - `mt-12` (48px) creates clear separation from tabs
-- Sticky positioning keeps tab menu anchored at viewport top while content scrolls
-- Z-index z-20 ensures tabs stay above all content (z-0)
-- Background color prevents content showing through when scrolling
+**API Endpoints (JWT auth required):**
+- `GET /api/knowledge/query?query=all&limit=24`: Retrieval logs (default 24h)
+- `GET /api/knowledge/trust`: Trusted sources (verified+moderate)
+- `POST /api/knowledge/refresh`: Manual cache refresh
 
-**Spacing Breakdown:**
-- Sticky container bottom: 64px (pb-16)
-- TabsList bottom: 24px (pb-6)
-- Gap between tab rows: 12px (gap-y-3)
-- Content top margin: 48px (mt-12)
-- **Total measured spacing: ~112px** between last tab row and first content card
+**System Monitoring UI - Knowledge Tab:**
+- Summary: Retrievals (24h), Trusted Sources, Avg Relevance, Cache Status
+- Recent Retrievals: Last 10 with trust badges (verified=green, moderate=yellow, low=gray), relevance, timestamps
+- Trusted Domains: verified/moderate sources with success rates
+- Cache Management: Manual refresh button, auto-sync schedule
 
-**Structure:**
-```tsx
-<Tabs className="relative">
-  <div className="sticky top-0 z-20 bg-background pb-16">
-    <TabsList className="flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-6">
-      {/* 20 tabs wrapping across 3 rows */}
-    </TabsList>
-  </div>
-  <TabsContent className="relative z-0 overflow-visible mt-12 space-y-4">
-```
+**Critical Notes:**
+- ONLY valid enum values: "verified", "moderate", "low", "untrusted"
+- Domain whitelist enforces policy-bound retrieval (no arbitrary URLs)
+- All operations user-scoped (userId enforced)
+- Cache TTL: 24 hours
+- Trust audit thresholds: <50% → low, ≥80% → moderate, ≥95% → verified
+- Optional enhancement (doesn't block execution)
+- getTrustedSources uses enum casting: \`sql\`\${knowledgeTrustRecord.trustLevel} = ANY(ARRAY['verified'::retrieval_trust_level, 'moderate'::retrieval_trust_level])\`\`
 
-**Result:** All 20 tabs fully visible across 3 rows with substantial clearance. Third row tabs (Task Performance, Alerts, UX Monitor) completely visible and clickable with no visual obstruction. Measured ~112px spacing between tabs and content cards, providing generous separation. Fix validated with automated e2e testing at 1366×768 resolution.
-
+**Security Constraints:**
+- All endpoints require JWT auth (authenticateToken)
+- No direct URL access - only via approved query flow
+- Web search/fetch sandboxed via KnowledgeRetrievalService
+- Unknown domains default to "low" trust
+- Admin can override via knowledge_trust_record manual entries
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
