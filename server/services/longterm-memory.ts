@@ -131,7 +131,18 @@ class LongTermMemoryService {
       const historicalAccuracy = historicalFeedback.reduce((sum, f) => 
         sum + this.sanitizeScore(f.accuracyScore), 0) / historicalFeedback.length;
 
-      const deltaPercent = ((currentAccuracy - historicalAccuracy) / historicalAccuracy) * 100;
+      // Guard against division by zero - if historical accuracy is zero or near-zero, treat as baseline
+      let deltaPercent: number;
+      if (historicalAccuracy < 0.001) {
+        // Historical accuracy is essentially zero - use absolute current accuracy as metric
+        deltaPercent = currentAccuracy > 0.05 ? 100 : 0;
+      } else {
+        deltaPercent = ((currentAccuracy - historicalAccuracy) / historicalAccuracy) * 100;
+        // Ensure deltaPercent is finite
+        if (!isFinite(deltaPercent)) {
+          deltaPercent = 0;
+        }
+      }
 
       // Determine trend
       let trend: 'improving' | 'stable' | 'degrading';
@@ -148,7 +159,7 @@ class LongTermMemoryService {
         recommendation = `${agentName} performance is stable. Continue current approach.`;
       }
 
-      console.log(`[LongTermMemory] Delta: ${deltaPercent.toFixed(2)}% - Trend: ${trend}`);
+      console.log(`[LongTermMemory] Delta: ${isFinite(deltaPercent) ? deltaPercent.toFixed(2) : '0.00'}% - Trend: ${trend}`);
 
       return {
         agentName,
