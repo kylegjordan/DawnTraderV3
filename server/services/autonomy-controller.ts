@@ -13,6 +13,7 @@ import { continuousLearningEngine } from './continuous-learning';
 import { collaborationManager } from './collaboration-manager';
 import { reasoningBus } from './reasoning-bus';
 import { consensusEngine } from './consensus-engine';
+import { learningBridge } from './learning-bridge';
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -765,6 +766,109 @@ class AutonomyControllerService {
     }
 
     return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0.8;
+  }
+
+  /**
+   * Phase 9.7: Update learning profiles based on agent feedback
+   * Called periodically to synchronize agent performance data with cognitive weights
+   */
+  async updateLearningProfiles(userId: string, mode: 'live' | 'paper' = 'paper'): Promise<{
+    updated: number;
+    improvements: string[];
+    concerns: string[];
+  }> {
+    try {
+      console.log(`[AutonomyController] 🎓 Updating learning profiles`);
+      const startTime = performance.now();
+
+      // 1. Get learning summary from LearningBridge
+      const summary = await learningBridge.generateLearningSummary();
+      
+      const improvements: string[] = [];
+      const concerns: string[] = [];
+      let updateCount = 0;
+
+      // 2. Process each agent's performance
+      for (const metric of summary.agentMetrics) {
+        const { agentName, domain, accuracy, alignment, feedbackCount } = metric;
+
+        // Skip agents with insufficient feedback
+        if (feedbackCount < 3) {
+          console.log(`[AutonomyController] Skipping ${agentName}: insufficient feedback (${feedbackCount})`);
+          continue;
+        }
+
+        // 3. Determine if cognitive weight adjustment is needed
+        if (accuracy < 0.6) {
+          concerns.push(`${agentName} showing low accuracy (${(accuracy * 100).toFixed(1)}%)`);
+          
+          // Request cognitive weight reduction for low-performing agents
+          await continuousLearningEngine.adjustCognitiveWeight(
+            domain,
+            'decrease',
+            `Low learning accuracy detected: ${(accuracy * 100).toFixed(1)}%`,
+            userId,
+            mode
+          );
+          
+          updateCount++;
+        } else if (accuracy > 0.85) {
+          improvements.push(`${agentName} performing excellently (${(accuracy * 100).toFixed(1)}%)`);
+          
+          // Request cognitive weight increase for high-performing agents
+          await continuousLearningEngine.adjustCognitiveWeight(
+            domain,
+            'increase',
+            `High learning accuracy detected: ${(accuracy * 100).toFixed(1)}%`,
+            userId,
+            mode
+          );
+          
+          updateCount++;
+        }
+
+        // 4. Check consensus alignment
+        if (alignment < 0.5 && feedbackCount >= 5) {
+          concerns.push(`${agentName} frequently out of alignment with consensus (${(alignment * 100).toFixed(1)}%)`);
+        }
+      }
+
+      // 5. Log the update to audit trail
+      const executionTimeMs = Math.round(performance.now() - startTime);
+      await this.recordAssessment({
+        runId: `learning_sync_${nanoid(10)}`,
+        actionType: 'optimization',
+        triggerSource: 'autonomous',
+        assessmentResult: {
+          totalAgents: summary.agentMetrics.length,
+          updatedProfiles: updateCount,
+          improvements: improvements.length,
+          concerns: concerns.length,
+          topPerformers: summary.topPerformers,
+          needsImprovement: summary.needsImprovement,
+        },
+        actionsTriggered: ['learning_profiles_synchronized'],
+        success: true,
+        executionTimeMs,
+        metadata: { userId, mode, feedbackRecords: summary.totalFeedbackRecords },
+      });
+
+      console.log(`[AutonomyController] ✅ Learning profiles updated: ${updateCount} adjustments made`);
+      console.log(`[AutonomyController] 📈 Improvements: ${improvements.length}, ⚠️ Concerns: ${concerns.length}`);
+
+      return {
+        updated: updateCount,
+        improvements,
+        concerns,
+      };
+    } catch (error: any) {
+      console.error('[AutonomyController] Failed to update learning profiles:', error);
+      return {
+        updated: 0,
+        improvements: [],
+        concerns: ['Learning profile update failed: ' + error.message],
+      };
+    }
   }
 
   /**
