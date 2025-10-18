@@ -1,0 +1,36 @@
+{
+  "timestamp": "2025-10-18T09:23:23.302Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is consistently above the number of cores (8), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, confidence, or opportunities generated, indicating potential inactivity or misconfiguration."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI module configuration and ensure it is correctly set up to perform learning cycles and generate opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Analyze and address the high CPU load to prevent system performance issues.",
+      "rationale": "Consistently high CPU load can lead to slower processing times and affect the platform's ability to handle trades efficiently."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Check the AI module's settings and logs to ensure it is functioning as expected and not missing any critical updates or configurations.",
+      "rationale": "The AI module's inactivity could lead to missed trading opportunities and reduced platform competitiveness."
+    }
+  ],
+  "urgencyLevel": "high"
+}

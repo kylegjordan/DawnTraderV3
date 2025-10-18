@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-10-18T09:58:25.600Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential CPU bottleneck or overutilization."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has not generated any opportunities or made adjustments recently, which could indicate a malfunction or misconfiguration."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system responsiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI system configuration and ensure it is properly tuned to generate trading opportunities and make adjustments."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of running processes to identify and address the cause of high CPU load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review and update AI system parameters and algorithms to ensure they are functioning as expected.",
+      "rationale": "AI inactivity could result in missed trading opportunities and reduced platform effectiveness."
+    },
+    {
+      "urgencyLevel": "low",
+      "action": "Monitor memory usage trends to ensure it remains within acceptable limits.",
+      "rationale": "Current memory usage is within normal range, but ongoing monitoring can preempt potential issues."
+    }
+  ],
+  "urgencyLevel": "high"
+}

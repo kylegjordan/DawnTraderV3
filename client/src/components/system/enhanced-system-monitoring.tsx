@@ -438,6 +438,10 @@ export default function EnhancedSystemMonitoring() {
             <Cpu className="w-4 h-4 mr-2" />
             Core
           </TabsTrigger>
+          <TabsTrigger value="safety" data-testid="tab-safety">
+            <Shield className="w-4 h-4 mr-2" />
+            Safety
+          </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
             Alerts ({errors.filter(e => !e.resolved).length})
@@ -921,6 +925,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 15: Core - Phase 10.0 */}
         <TabsContent value="core" className="space-y-4">
           <CoreTab />
+        </TabsContent>
+
+        {/* Tab 16: Safety - Phase 11.0 */}
+        <TabsContent value="safety" className="space-y-4">
+          <SafetyTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -3000,6 +3009,244 @@ function CoreTab() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function SafetyTab() {
+  const { toast } = useToast();
+  const [killSwitchEnabled, setKillSwitchEnabled] = useState(false);
+
+  const { data: safetyStatusData, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
+    queryKey: ['/api/safety/status'],
+    refetchInterval: 60000, // 1 minute
+  });
+
+  const toggleKillSwitchMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      return await apiRequest('POST', '/api/safety/kill-switch', { 
+        enabled, 
+        reason: enabled ? 'Manual activation from UI' : 'Manual deactivation from UI' 
+      });
+    },
+    onSuccess: (data: any) => {
+      const newStatus = data.killSwitch?.is_enabled;
+      setKillSwitchEnabled(newStatus);
+      toast({
+        title: newStatus ? "Kill Switch Activated" : "Kill Switch Deactivated",
+        description: newStatus 
+          ? "All trading and execution operations are now blocked" 
+          : "Trading and execution operations are now allowed",
+        variant: newStatus ? "destructive" : "default",
+      });
+      refetchStatus();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Toggle Failed",
+        description: error.message || "Failed to toggle kill switch",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const status = (safetyStatusData as any) || null;
+  const recentEvents = status?.recentEvents || [];
+  const activePolicies = status?.activePolicies || [];
+  const killSwitch = status?.killSwitch;
+
+  // Sync kill switch state
+  useEffect(() => {
+    if (killSwitch) {
+      setKillSwitchEnabled(killSwitch.is_enabled);
+    }
+  }, [killSwitch]);
+
+  return (
+    <div className="space-y-4">
+      <Card data-testid="card-kill-switch">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Kill Switch Control
+          </CardTitle>
+          <CardDescription>
+            Emergency stop for all trading and execution operations
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {statusLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : (
+            <div className="space-y-4">
+              <div className={`p-6 rounded-lg border-2 ${killSwitchEnabled ? 'border-red-500 bg-red-50 dark:bg-red-950' : 'border-green-500 bg-green-50 dark:bg-green-950'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <div className="text-lg font-semibold mb-1">
+                      Status: {killSwitchEnabled ? 'ACTIVE' : 'INACTIVE'}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {killSwitchEnabled 
+                        ? 'All trading operations are blocked' 
+                        : 'Trading operations are allowed'}
+                    </div>
+                  </div>
+                  <Badge 
+                    variant={killSwitchEnabled ? 'destructive' : 'default'}
+                    className="text-lg px-4 py-2"
+                    data-testid="badge-kill-switch-status"
+                  >
+                    {killSwitchEnabled ? 'ACTIVE' : 'INACTIVE'}
+                  </Badge>
+                </div>
+                
+                <Button 
+                  onClick={() => toggleKillSwitchMutation.mutate(!killSwitchEnabled)}
+                  disabled={toggleKillSwitchMutation.isPending}
+                  variant={killSwitchEnabled ? 'default' : 'destructive'}
+                  className="w-full"
+                  data-testid="button-toggle-kill-switch"
+                >
+                  {toggleKillSwitchMutation.isPending 
+                    ? 'Toggling...' 
+                    : killSwitchEnabled 
+                      ? 'Deactivate Kill Switch' 
+                      : 'Activate Kill Switch'}
+                </Button>
+
+                {killSwitch?.activated_at && (
+                  <div className="mt-4 pt-4 border-t text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Last Toggled:</span>
+                      <span className="font-medium">
+                        {new Date(killSwitch.activated_at).toLocaleString()}
+                      </span>
+                    </div>
+                    {killSwitch.reason && (
+                      <div className="mt-2">
+                        <span className="text-muted-foreground">Reason: </span>
+                        <span className="font-medium">{killSwitch.reason}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card data-testid="card-safety-policies">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5" />
+              Active Policies
+            </CardTitle>
+            <CardDescription>
+              Safety policies currently enforced
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {statusLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : activePolicies.length > 0 ? (
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {activePolicies.map((policy: any, idx: number) => (
+                  <div 
+                    key={policy.id} 
+                    className="p-3 rounded-lg border"
+                    data-testid={`policy-${idx}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="font-semibold">{policy.policy_name}</div>
+                      <Badge 
+                        variant={policy.enabled ? 'default' : 'secondary'}
+                        data-testid={`badge-policy-status-${idx}`}
+                      >
+                        {policy.enabled ? 'Enabled' : 'Disabled'}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Scope: {policy.scope}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-2">
+                      Updated: {new Date(policy.updated_at).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No active policies configured</p>
+              </div>
+            )}
+            <div className="mt-4 pt-4 border-t">
+              <div className="text-sm font-medium">
+                Total Active Policies: {status?.totalActivePolicies || 0}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-safety-events">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              Recent Safety Events
+            </CardTitle>
+            <CardDescription>
+              Latest safety-related events and violations
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {statusLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : recentEvents.length > 0 ? (
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {recentEvents.map((event: any, idx: number) => (
+                  <div 
+                    key={event.id} 
+                    className={`p-3 rounded-lg border-l-4 ${
+                      event.severity === 'critical' ? 'border-l-red-500 bg-red-50 dark:bg-red-950' :
+                      event.severity === 'high' ? 'border-l-orange-500 bg-orange-50 dark:bg-orange-950' :
+                      event.severity === 'medium' ? 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
+                      'border-l-blue-500 bg-blue-50 dark:bg-blue-950'
+                    }`}
+                    data-testid={`event-${idx}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="font-semibold">{event.event_type}</div>
+                      <Badge 
+                        variant={
+                          event.severity === 'critical' || event.severity === 'high' ? 'destructive' :
+                          event.severity === 'medium' ? 'secondary' :
+                          'outline'
+                        }
+                        data-testid={`badge-event-severity-${idx}`}
+                      >
+                        {event.severity}
+                      </Badge>
+                    </div>
+                    {event.message && (
+                      <div className="text-sm mb-2">{event.message}</div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(event.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No recent safety events</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
