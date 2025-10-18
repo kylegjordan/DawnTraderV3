@@ -10382,7 +10382,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   app.get('/api/oversight/logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const { metaOversightService } = await import('./services/meta-oversight');
+      const metaOversightService = (await import('./services/meta-oversight')).default;
       const { limit = 50, flagType, severity } = req.query;
       
       const logs = await metaOversightService.getOversightLogs(
@@ -10400,7 +10400,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   app.get('/api/oversight/summary', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const { metaOversightService } = await import('./services/meta-oversight');
+      const metaOversightService = (await import('./services/meta-oversight')).default;
       
       const summary = await metaOversightService.getOversightSummary();
       
@@ -10413,7 +10413,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   app.post('/api/oversight/resolve', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
-      const { metaOversightService } = await import('./services/meta-oversight');
+      const metaOversightService = (await import('./services/meta-oversight')).default;
       const { logId, resolution } = req.body;
       
       if (!logId || !resolution) {

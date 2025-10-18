@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-10-18T04:35:40.695Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or inefficiencies in processing."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics indicate no active trades and a win rate of 0%, which could imply issues with strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI algorithms to ensure they are generating opportunities and learning effectively."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and address any processes causing excessive load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Evaluate the AI module's configuration and logs to diagnose why it is not generating opportunities or learning.",
+      "rationale": "Ensuring the AI is functioning correctly is crucial for maintaining competitive trading strategies."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Assess the effectiveness of active trading strategies and market conditions to understand the lack of active trades and zero win rate.",
+      "rationale": "Understanding strategy performance is essential for optimizing trading outcomes and profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}

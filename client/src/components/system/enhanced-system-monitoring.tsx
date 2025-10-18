@@ -26,7 +26,8 @@ import {
   Target,
   Sparkles,
   Eye,
-  GraduationCap
+  GraduationCap,
+  Shield
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -423,6 +424,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="learning" data-testid="tab-learning">
             <GraduationCap className="w-4 h-4 mr-2" />
             Learning
+          </TabsTrigger>
+          <TabsTrigger value="oversight" data-testid="tab-oversight">
+            <Shield className="w-4 h-4 mr-2" />
+            Oversight
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -892,6 +897,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 12: Learning - Phase 9.7 */}
         <TabsContent value="learning" className="space-y-4">
           <LearningTab />
+        </TabsContent>
+
+        {/* Tab 13: Oversight - Phase 9.8 */}
+        <TabsContent value="oversight" className="space-y-4">
+          <OversightTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -2428,6 +2438,177 @@ function LearningTab() {
             <div className="text-center py-8 text-muted-foreground">
               <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No agent performance data</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function OversightTab() {
+  const { toast } = useToast();
+
+  const { data: summaryData, isLoading: summaryLoading } = useQuery({
+    queryKey: ['/api/oversight/summary'],
+    refetchInterval: 60000,
+  });
+
+  const { data: logsData, isLoading: logsLoading } = useQuery({
+    queryKey: ['/api/oversight/logs'],
+    refetchInterval: 60000,
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: async ({ logId, resolution }: { logId: string; resolution: string }) => {
+      return apiRequest('POST', '/api/oversight/resolve', { logId, resolution });
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Flag Resolved',
+        description: 'Meta-cognitive flag has been marked as resolved',
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/oversight/logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/oversight/summary'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Resolution Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const summary = (summaryData as any)?.summary;
+  const logs = (logsData as any)?.logs || [];
+
+  const getSeverityColor = (severity: string) => {
+    const colors: Record<string, string> = {
+      low: 'bg-green-500',
+      medium: 'bg-yellow-500',
+      high: 'bg-red-500',
+      critical: 'bg-red-700',
+    };
+    return colors[severity] || 'bg-gray-500';
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card data-testid="card-oversight-summary">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Meta-Cognitive Oversight Summary
+          </CardTitle>
+          <CardDescription>System-level trend analysis and issue detection</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {summaryLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : summary ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className="text-3xl font-bold" data-testid="text-total-flags">
+                    {summary.totalFlags}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Total Flags</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-red-600">
+                    {summary.unresolvedFlags}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Unresolved</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold">
+                    {summary.highSeverity}
+                  </div>
+                  <div className="text-sm text-muted-foreground">High Severity</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-yellow-600">
+                    {summary.recentTrends}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Recent Trends</div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Shield className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No oversight summary available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-oversight-logs">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="w-5 h-5" />
+            Oversight Flags & Trends
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {logsLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : logs.length > 0 ? (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {logs.map((log: any, idx: number) => (
+                <div 
+                  key={log.id} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`oversight-log-${idx}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className={getSeverityColor(log.severity)} data-testid={`badge-severity-${idx}`}>
+                          {log.severity}
+                        </Badge>
+                        <Badge variant="outline" data-testid={`badge-flag-type-${idx}`}>
+                          {log.flagType}
+                        </Badge>
+                        {log.resolved && (
+                          <Badge variant="secondary" data-testid={`badge-resolved-${idx}`}>
+                            Resolved
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-sm font-medium mb-1">{log.description}</div>
+                      {log.recommendation && (
+                        <div className="text-xs text-muted-foreground">
+                          💡 {log.recommendation}
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-2">
+                        {new Date(log.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                    {!log.resolved && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => resolveMutation.mutate({ 
+                          logId: log.id, 
+                          resolution: 'Resolved via UI' 
+                        })}
+                        disabled={resolveMutation.isPending}
+                        data-testid={`button-resolve-${idx}`}
+                      >
+                        Resolve
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Eye className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No oversight flags detected</p>
             </div>
           )}
         </CardContent>
