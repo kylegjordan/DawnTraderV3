@@ -647,9 +647,153 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 2 hours - Federated Ethics Synchronization (Phase 14.0)
+schedulerRegistry.registerTask({
+  name: 'federated_ethics_sync',
+  description: 'Synchronize federated ethics state across all agents and domains',
+  frequency: 'custom',
+  intervalMs: 2 * 60 * 60 * 1000, // 2 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🤝 Running federated ethics synchronization...');
+    
+    try {
+      const { federatedEthicsHub } = await import('./federated-ethics-hub').then((m) => ({
+        federatedEthicsHub: m.federatedEthicsHub,
+      }));
+      const { policyPropagationService } = await import('./policy-propagation').then((m) => ({
+        policyPropagationService: m.policyPropagationService,
+      }));
+      const { contextBridge } = await import('./context-bridge').then((m) => ({
+        contextBridge: m.contextBridge,
+      }));
+
+      // 1. Reconcile all pending updates
+      const pendingUpdates = await federatedEthicsHub.getDeltaUpdates('global', 'paper');
+      console.log(`[AutonomyScheduler] 📊 Found ${pendingUpdates.length} pending delta updates`);
+
+      if (pendingUpdates.length > 0) {
+        const outcomes = await policyPropagationService.propagateUpdates(pendingUpdates);
+        const successCount = outcomes.filter(o => o.success).length;
+        console.log(`[AutonomyScheduler] ✅ Propagated ${successCount}/${outcomes.length} updates successfully`);
+      }
+
+      // 2. Get snapshot for each domain
+      const domains: Array<'global' | 'trading' | 'autonomy' | 'analysis' | 'safety'> = 
+        ['global', 'trading', 'autonomy', 'analysis', 'safety'];
+      
+      for (const domain of domains) {
+        const snapshot = await federatedEthicsHub.getSnapshot(domain, 'paper');
+        console.log(`[AutonomyScheduler] 📸 ${domain}: ${snapshot.consensusHistory.length} sessions, alignment ${snapshot.alignmentScore}/100`);
+      }
+
+      // 3. Get propagation stats
+      const stats = await policyPropagationService.getStats();
+      console.log(`[AutonomyScheduler] 📈 Propagation stats: ${stats.successCount}/${stats.totalPropagations} successful`);
+
+      // 4. Broadcast sync complete event
+      await contextBridge.broadcast({
+        event: 'ethics_federation_sync_complete',
+        data: {
+          pendingUpdates: pendingUpdates.length,
+          successCount: stats.successCount,
+          failedCount: stats.failedCount,
+          timestamp: new Date(),
+        },
+      }, 'all');
+
+      console.log(`[AutonomyScheduler] ✅ Federated ethics sync complete`);
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Federated ethics sync failed:', error);
+      throw error;
+    }
+  },
+});
+
+// Every 6 hours - Ethics Conflict Mediation (Phase 14.0)
+schedulerRegistry.registerTask({
+  name: 'ethics_conflict_mediation',
+  description: 'Review and mediate cross-agent ethical conflicts',
+  frequency: 'custom',
+  intervalMs: 6 * 60 * 60 * 1000, // 6 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] ⚖️ Running ethics conflict mediation...');
+    
+    try {
+      const { ethicsConsensusOrchestrator } = await import('./ethics-consensus-orchestrator').then((m) => ({
+        ethicsConsensusOrchestrator: m.ethicsConsensusOrchestrator,
+      }));
+      const { contextBridge } = await import('./context-bridge').then((m) => ({
+        contextBridge: m.contextBridge,
+      }));
+
+      // 1. Get all conflicts
+      const conflicts = await ethicsConsensusOrchestrator.getConflicts('all');
+      console.log(`[AutonomyScheduler] 📊 Found ${conflicts.length} ethical conflicts`);
+
+      const unresolvedConflicts = conflicts.filter(c => c.status === 'unresolved');
+      console.log(`[AutonomyScheduler] ⚠️ Unresolved conflicts: ${unresolvedConflicts.length}`);
+
+      // 2. Flag high-severity conflicts for immediate attention
+      const highSeverityConflicts = conflicts.filter(c => 
+        c.status === 'unresolved' && 
+        (c.severity === 'high' || c.severity === 'critical')
+      );
+
+      if (highSeverityConflicts.length > 0) {
+        console.warn(`[AutonomyScheduler] 🚨 HIGH-SEVERITY CONFLICTS DETECTED: ${highSeverityConflicts.length}`);
+        highSeverityConflicts.forEach(conflict => {
+          console.warn(`  - ${conflict.conflictId}: ${conflict.conflictType} (${conflict.severity})`);
+        });
+      }
+
+      // 3. Auto-resolve low-severity conflicts older than 24 hours
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const staleConflicts = unresolvedConflicts.filter(c => 
+        c.severity === 'low' && 
+        new Date(c.detectedAt) < oneDayAgo
+      );
+
+      for (const conflict of staleConflicts) {
+        console.log(`[AutonomyScheduler] 🔄 Auto-resolving stale low-severity conflict: ${conflict.conflictId}`);
+        await ethicsConsensusOrchestrator.resolveConflict(
+          conflict.conflictId,
+          'auto_resolved',
+          'Automatically resolved after 24 hours (low severity)'
+        );
+      }
+
+      // 4. Broadcast conflict update
+      await contextBridge.broadcast({
+        event: 'ethics_conflict_updated',
+        data: {
+          totalConflicts: conflicts.length,
+          unresolvedCount: unresolvedConflicts.length - staleConflicts.length,
+          highSeverityCount: highSeverityConflicts.length,
+          autoResolvedCount: staleConflicts.length,
+          timestamp: new Date(),
+        },
+      }, 'all');
+
+      console.log(`[AutonomyScheduler] ✅ Ethics conflict mediation complete`);
+      console.log(`[AutonomyScheduler] - Total conflicts: ${conflicts.length}`);
+      console.log(`[AutonomyScheduler] - Unresolved: ${unresolvedConflicts.length - staleConflicts.length}`);
+      console.log(`[AutonomyScheduler] - Auto-resolved: ${staleConflicts.length}`);
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Ethics conflict mediation failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, Phase 10.0 cognitive core optimization, Phase 11.0 safety sweeper, Phase 12.0 perf snapshot, and Phase 13.0 ethics audit
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, Phase 10.0 cognitive core optimization, Phase 11.0 safety sweeper, Phase 12.0 perf snapshot, Phase 13.0 ethics audit, and Phase 14.0 federated ethics tasks
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -697,6 +841,12 @@ export async function initAutonomyScheduler() {
     // Start ethics audit (run after 10 hour delay) - Phase 13.0
     await schedulerRegistry.startTask('ethics_audit', false);
     
+    // Start federated ethics sync (run after 11 hour delay) - Phase 14.0
+    await schedulerRegistry.startTask('federated_ethics_sync', false);
+    
+    // Start ethics conflict mediation (run after 12 hour delay) - Phase 14.0
+    await schedulerRegistry.startTask('ethics_conflict_mediation', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -712,6 +862,8 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Safety sweeper: Every 2 hours');
     console.log('[AutonomyScheduler] - Performance snapshot: Every 10 minutes');
     console.log('[AutonomyScheduler] - Ethics audit: Every 6 hours');
+    console.log('[AutonomyScheduler] - Federated ethics sync: Every 2 hours');
+    console.log('[AutonomyScheduler] - Ethics conflict mediation: Every 6 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
