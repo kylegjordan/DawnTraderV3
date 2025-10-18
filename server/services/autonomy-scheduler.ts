@@ -466,9 +466,43 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 12 hours - Strategic Memory & Model Calibration (Phase 9.9)
+schedulerRegistry.registerTask({
+  name: 'strategic_memory_sync',
+  description: 'Strategic memory archival and cognitive model calibration',
+  frequency: 'custom',
+  intervalMs: 12 * 60 * 60 * 1000, // 12 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🎯 Running strategic calibration and memory sync...');
+    
+    try {
+      // Perform strategic calibration
+      const result = await autonomyController.performStrategicCalibration();
+      
+      console.log(`[AutonomyScheduler] ✅ Strategic calibration complete`);
+      console.log(`[AutonomyScheduler] - Insights archived: ${result.insightsArchived}`);
+      console.log(`[AutonomyScheduler] - Agents calibrated: ${result.agentsCalibrated}`);
+      console.log(`[AutonomyScheduler] - Performance deltas: ${result.performanceDeltas.length}`);
+      
+      if (result.performanceDeltas.length > 0) {
+        console.log('[AutonomyScheduler] 📊 Performance trends:');
+        result.performanceDeltas.forEach(delta => {
+          console.log(`  - ${delta.agent}: ${delta.trend} (${delta.delta > 0 ? '+' : ''}${delta.delta.toFixed(1)}%)`);
+        });
+      }
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Strategic calibration failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, and Phase 9.8 meta-cognitive oversight
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, and Phase 9.9 strategic memory sync
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -501,6 +535,9 @@ export async function initAutonomyScheduler() {
     // Start meta-cognitive oversight (run after 6 hour delay) - Phase 9.8
     await schedulerRegistry.startTask('meta_cognition_scan', false);
     
+    // Start strategic memory sync (run after 7 hour delay) - Phase 9.9
+    await schedulerRegistry.startTask('strategic_memory_sync', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -511,6 +548,7 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Collaboration maintenance: Every 12 hours');
     console.log('[AutonomyScheduler] - Learning feedback sync: Every 6 hours');
     console.log('[AutonomyScheduler] - Meta-cognitive oversight: Every 8 hours');
+    console.log('[AutonomyScheduler] - Strategic memory sync: Every 12 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -530,6 +568,7 @@ export function getAutonomySchedulerStatus() {
   const collaborationStatus = schedulerRegistry.getTaskStatus('collaboration_maintenance');
   const learningFeedbackStatus = schedulerRegistry.getTaskStatus('learning_feedback_sync');
   const metaCognitionStatus = schedulerRegistry.getTaskStatus('meta_cognition_scan');
+  const strategicMemoryStatus = schedulerRegistry.getTaskStatus('strategic_memory_sync');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -585,6 +624,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: metaCognitionStatus.lastRun,
       nextRun: metaCognitionStatus.nextRun,
       frequency: metaCognitionStatus.frequency,
+    } : null,
+    strategicMemorySync: strategicMemoryStatus ? {
+      status: strategicMemoryStatus.status,
+      lastRun: strategicMemoryStatus.lastRun,
+      nextRun: strategicMemoryStatus.nextRun,
+      frequency: strategicMemoryStatus.frequency,
     } : null,
   };
 }

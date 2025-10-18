@@ -15,6 +15,7 @@ import { reasoningBus } from './reasoning-bus';
 import { consensusEngine } from './consensus-engine';
 import { learningBridge } from './learning-bridge';
 import metaOversightService from './meta-oversight';
+import longtermMemoryService from './longterm-memory';
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -938,6 +939,126 @@ class AutonomyControllerService {
         flagsCreated: 0,
         adjustmentsMade: 0,
         highSeverityIssues: ['Meta-cognitive check failed: ' + error.message],
+      };
+    }
+  }
+
+  /**
+   * Phase 9.9: Perform strategic calibration and long-term memory sync
+   * Archives insights, analyzes performance deltas, and calibrates cognitive parameters
+   */
+  async performStrategicCalibration(): Promise<{
+    insightsArchived: number;
+    agentsCalibrated: number;
+    performanceDeltas: { agent: string; trend: string; delta: number }[];
+  }> {
+    try {
+      console.log('[AutonomyController] 🎯 Performing strategic calibration and memory sync');
+      const startTime = performance.now();
+
+      // 1. Get learning summary for all agents
+      const learningSummary = await learningBridge.getLearningStats();
+      const agentsToCalibrate = ['DevOps', 'FullStack', 'UX', 'TradingBob'];
+      
+      let insightsArchived = 0;
+      let agentsCalibrated = 0;
+      const performanceDeltas: { agent: string; trend: string; delta: number }[] = [];
+
+      // 2. For each major agent, analyze performance and calibrate
+      for (const agentName of agentsToCalibrate) {
+        const agentStats = learningSummary.byAgent.find(a => a.agentName === agentName);
+        
+        if (!agentStats || agentStats.total === 0) {
+          console.log(`[AutonomyController] Skipping ${agentName} - no learning data`);
+          continue;
+        }
+
+        // 3. Analyze performance delta
+        const delta = await longtermMemoryService.analyzePerformanceDelta(agentName);
+        
+        if (delta) {
+          performanceDeltas.push({
+            agent: delta.agentName,
+            trend: delta.trend,
+            delta: delta.deltaPercent,
+          });
+
+          // 4. Archive strategic insights if improving significantly
+          if (delta.trend === 'improving' && delta.deltaPercent > 10) {
+            await longtermMemoryService.archiveInsights(
+              agentName,
+              'strategic',
+              `${agentName} showing significant improvement: ${delta.deltaPercent.toFixed(1)}% increase`,
+              {
+                currentAccuracy: delta.currentAccuracy,
+                historicalAccuracy: delta.historicalAccuracy,
+                recommendation: delta.recommendation,
+              },
+              delta.deltaPercent / 100
+            );
+            insightsArchived++;
+          }
+
+          // 5. Calibrate cognitive parameters based on trend
+          const calibration = await longtermMemoryService.calibrateModel(
+            agentName,
+            'confidence_threshold',
+            delta.trend
+          );
+
+          if (calibration) {
+            console.log(`[AutonomyController] ⚙️ Calibrated ${agentName}: ${calibration.parameter} ${calibration.oldValue.toFixed(3)} → ${calibration.newValue.toFixed(3)}`);
+            agentsCalibrated++;
+
+            // Broadcast calibration via Context Bridge
+            await contextBridge.broadcast({
+              event: 'strategic_calibration',
+              data: {
+                agent: agentName,
+                parameter: calibration.parameter,
+                oldValue: calibration.oldValue,
+                newValue: calibration.newValue,
+                reason: calibration.reason,
+                trend: delta.trend,
+              },
+            }, 'all');
+          }
+        }
+      }
+
+      // 6. Log the strategic calibration to audit trail
+      const executionTimeMs = Math.round(performance.now() - startTime);
+      await this.recordAssessment({
+        runId: `strategic_calibration_${nanoid(10)}`,
+        actionType: 'optimization',
+        triggerSource: 'autonomous',
+        assessmentResult: {
+          insightsArchived,
+          agentsCalibrated,
+          performanceDeltas,
+          totalAgentsAnalyzed: agentsToCalibrate.length,
+        },
+        actionsTriggered: ['strategic_memory_synchronized'],
+        success: true,
+        executionTimeMs,
+        metadata: { 
+          deltas: performanceDeltas,
+        },
+      });
+
+      console.log(`[AutonomyController] ✅ Strategic calibration complete: ${insightsArchived} insights archived, ${agentsCalibrated} agents calibrated`);
+
+      return {
+        insightsArchived,
+        agentsCalibrated,
+        performanceDeltas,
+      };
+    } catch (error: any) {
+      console.error('[AutonomyController] Failed to perform strategic calibration:', error);
+      return {
+        insightsArchived: 0,
+        agentsCalibrated: 0,
+        performanceDeltas: [],
       };
     }
   }
