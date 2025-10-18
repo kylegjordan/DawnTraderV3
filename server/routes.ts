@@ -10712,6 +10712,88 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 15.0: Cognitive Introspection & Bias Mitigation Routes ====================
+
+  app.get('/api/introspection/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { introspectionEngine } = await import('./services/introspection-engine');
+      const summary = await introspectionEngine.getLatestSummary(req.user!.id);
+      
+      res.json({
+        success: true,
+        summary,
+      });
+    } catch (error: any) {
+      console.error('[IntrospectionAPI] Status fetch failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  app.get('/api/introspection/biases', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { introspectionEngine } = await import('./services/introspection-engine');
+      const hours = parseInt(req.query.hours as string) || 24;
+      const biases = await introspectionEngine.getRecentBiases(req.user!.id, hours);
+      
+      res.json({
+        success: true,
+        biases,
+        count: biases.length,
+        timeWindow: `${hours}h`,
+      });
+    } catch (error: any) {
+      console.error('[IntrospectionAPI] Biases fetch failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  app.get('/api/introspection/drift', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { introspectionEngine } = await import('./services/introspection-engine');
+      const hours = parseInt(req.query.hours as string) || 48;
+      const driftData = await introspectionEngine.getConfidenceDriftData(req.user!.id, hours);
+      
+      res.json({
+        success: true,
+        driftData,
+        count: driftData.length,
+        timeWindow: `${hours}h`,
+      });
+    } catch (error: any) {
+      console.error('[IntrospectionAPI] Drift fetch failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  app.post('/api/introspection/mitigate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { biasMitigation } = await import('./services/bias-mitigation');
+      const result = await biasMitigation.runMitigationCycle(req.user!.id);
+      
+      res.json({
+        success: result.success,
+        mitigationsApplied: result.mitigationsApplied,
+        duration: result.duration,
+        errors: result.errors,
+      });
+    } catch (error: any) {
+      console.error('[IntrospectionAPI] Mitigation failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
   // ==================== Phase 14.0: Federated Ethics & Multi-Agent Consensus Routes ====================
 
   app.get('/api/federation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {

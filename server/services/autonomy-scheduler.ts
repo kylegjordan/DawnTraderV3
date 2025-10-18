@@ -7,6 +7,8 @@ import { simulationEngine } from './simulation-engine';
 import { strategicMemory } from './strategic-memory';
 import { reflectiveIntelligence } from './reflective-intelligence';
 import { collaborationManager } from './collaboration-manager';
+import { introspectionEngine } from './introspection-engine'; // Phase 15.0
+import { biasMitigation } from './bias-mitigation'; // Phase 15.0
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -847,6 +849,12 @@ export async function initAutonomyScheduler() {
     // Start ethics conflict mediation (run after 12 hour delay) - Phase 14.0
     await schedulerRegistry.startTask('ethics_conflict_mediation', false);
     
+    // Start introspection cycle (run after 4 hour delay) - Phase 15.0
+    await schedulerRegistry.startTask('introspection_cycle', false);
+    
+    // Start bias mitigation cycle (run after 8 hour delay) - Phase 15.0
+    await schedulerRegistry.startTask('bias_mitigation_cycle', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -864,11 +872,99 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Ethics audit: Every 6 hours');
     console.log('[AutonomyScheduler] - Federated ethics sync: Every 2 hours');
     console.log('[AutonomyScheduler] - Ethics conflict mediation: Every 6 hours');
+    console.log('[AutonomyScheduler] - Introspection cycle: Every 4 hours');
+    console.log('[AutonomyScheduler] - Bias mitigation cycle: Every 8 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
   }
 }
+
+// Phase 15.0: Every 4 hours - Introspection Cycle
+schedulerRegistry.registerTask({
+  name: 'introspection_cycle',
+  description: 'Analyze cognitive biases and confidence drift patterns',
+  frequency: 'custom',
+  intervalMs: 4 * 60 * 60 * 1000, // 4 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🧠 Running introspection cycle...');
+    
+    try {
+      const adminUsers = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
+      const userId = adminUsers[0]?.id;
+
+      if (!userId) {
+        console.warn('[AutonomyScheduler] No admin user found for introspection cycle');
+        return;
+      }
+
+      // Run bias detection
+      await introspectionEngine.detectBiases(userId, 4);
+      console.log('[AutonomyScheduler] ✓ Bias detection complete');
+
+      // Calculate confidence drift
+      await introspectionEngine.calculateConfidenceDrift(userId, 'last_4h');
+      console.log('[AutonomyScheduler] ✓ Confidence drift calculated');
+
+      // Get summary
+      const summary = await introspectionEngine.getLatestSummary(userId);
+      console.log(`[AutonomyScheduler] ✅ Introspection cycle complete - Bias Index: ${summary.biasIndex}, Confidence Stability: ${(summary.confidenceStability * 100).toFixed(1)}%`);
+      
+      if (summary.biasIndex > 70) {
+        console.warn(`[AutonomyScheduler] ⚠️ High bias index detected: ${summary.biasIndex}/100`);
+      }
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Introspection cycle failed:', error);
+      throw error;
+    }
+  },
+});
+
+// Phase 15.0: Every 8 hours - Bias Mitigation Cycle
+schedulerRegistry.registerTask({
+  name: 'bias_mitigation_cycle',
+  description: 'Apply cumulative bias corrections and evaluate effectiveness',
+  frequency: 'custom',
+  intervalMs: 8 * 60 * 60 * 1000, // 8 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🔧 Running bias mitigation cycle...');
+    
+    try {
+      const adminUsers = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
+      const userId = adminUsers[0]?.id;
+
+      if (!userId) {
+        console.warn('[AutonomyScheduler] No admin user found for bias mitigation cycle');
+        return;
+      }
+
+      // Run mitigation cycle
+      const result = await biasMitigation.runMitigationCycle(userId);
+      
+      console.log(`[AutonomyScheduler] ✅ Bias mitigation cycle complete - ${result.mitigationsApplied} mitigations applied in ${result.duration}ms`);
+      
+      if (!result.success && result.errors.length > 0) {
+        console.error('[AutonomyScheduler] ⚠️ Mitigation errors:', result.errors);
+      }
+
+      // Generate daily report if it's the right time (once per day)
+      const now = new Date();
+      if (now.getHours() === 23) { // Generate report at 11 PM
+        await introspectionEngine.generateDailyReport(userId);
+        console.log('[AutonomyScheduler] 📊 Daily introspection report generated');
+      }
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Bias mitigation cycle failed:', error);
+      throw error;
+    }
+  },
+});
 
 /**
  * Get autonomy scheduler status
@@ -888,6 +984,8 @@ export function getAutonomySchedulerStatus() {
   const safetySweeperStatus = schedulerRegistry.getTaskStatus('safety_sweeper');
   const perfSnapshotStatus = schedulerRegistry.getTaskStatus('perf_snapshot');
   const ethicsAuditStatus = schedulerRegistry.getTaskStatus('ethics_audit');
+  const introspectionStatus = schedulerRegistry.getTaskStatus('introspection_cycle');
+  const biasMitigationStatus = schedulerRegistry.getTaskStatus('bias_mitigation_cycle');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -973,6 +1071,18 @@ export function getAutonomySchedulerStatus() {
       lastRun: ethicsAuditStatus.lastRun,
       nextRun: ethicsAuditStatus.nextRun,
       frequency: ethicsAuditStatus.frequency,
+    } : null,
+    introspectionCycle: introspectionStatus ? {
+      status: introspectionStatus.status,
+      lastRun: introspectionStatus.lastRun,
+      nextRun: introspectionStatus.nextRun,
+      frequency: introspectionStatus.frequency,
+    } : null,
+    biasMitigationCycle: biasMitigationStatus ? {
+      status: biasMitigationStatus.status,
+      lastRun: biasMitigationStatus.lastRun,
+      nextRun: biasMitigationStatus.nextRun,
+      frequency: biasMitigationStatus.frequency,
     } : null,
   };
 }

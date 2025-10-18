@@ -31,7 +31,8 @@ import {
   Archive,
   Gauge,
   Clock,
-  Globe
+  Globe,
+  ScanLine
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -115,6 +116,28 @@ interface DiagnosticAnalysis {
     };
     recommendations?: string[];
   };
+}
+
+interface IntrospectionSummary {
+  biasIndex: number;
+  confidenceStability: number;
+  reasoningQuality: number;
+  lastAnalysis: string;
+  totalBiasesDetected: number;
+}
+
+interface BiasObservation {
+  id: string;
+  biasType: string;
+  detectedAt: string;
+  confidenceScore: number;
+  reasoningSnapshot: string;
+}
+
+interface ConfidenceDrift {
+  timestamp: string;
+  confidenceLevel: number;
+  varianceScore: number;
 }
 
 export default function EnhancedSystemMonitoring() {
@@ -213,12 +236,55 @@ export default function EnhancedSystemMonitoring() {
     refetchInterval,
   });
 
+  // Fetch introspection summary
+  const { data: introspectionData, isLoading: introspectionLoading } = useQuery<{ success: boolean; summary: IntrospectionSummary }>({
+    queryKey: ['/api/introspection/status'],
+    refetchInterval,
+  });
+
+  // Fetch recent biases (24h)
+  const { data: biasesData, isLoading: biasesLoading } = useQuery<{ success: boolean; biases: BiasObservation[]; count: number }>({
+    queryKey: ['/api/introspection/biases'],
+    refetchInterval,
+  });
+
+  // Fetch confidence drift data (48h)
+  const { data: driftData, isLoading: driftLoading } = useQuery<{ success: boolean; driftData: ConfidenceDrift[]; count: number }>({
+    queryKey: ['/api/introspection/drift'],
+    refetchInterval,
+  });
+
+  // Run mitigation mutation
+  const runMitigationMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/introspection/mitigate', 'POST', {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/introspection/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/introspection/biases'] });
+      toast({
+        title: "Mitigation Complete",
+        description: "Bias mitigation cycle completed successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to run bias mitigation",
+        variant: "destructive",
+      });
+    }
+  });
+
   const metrics = metricsData?.metrics;
   const engineStatus = engineData?.status;
   const walterActivity = walterData?.activity;
   const dbHealth = dbHealthData?.health;
   const errors = errorData?.errors || [];
   const analyses = analysisData?.analyses || [];
+  const introspection = introspectionData?.summary;
+  const biases = biasesData?.biases || [];
+  const driftPoints = driftData?.driftData || [];
   
   // Latest AI insight
   const latestAnalysis = analyses.length > 0 ? analyses[0] : null;
@@ -461,6 +527,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="ux-monitor" data-testid="tab-ux-monitor">
             <Monitor className="w-4 h-4 mr-2" />
             UX Monitor
+          </TabsTrigger>
+          <TabsTrigger value="introspection" data-testid="tab-introspection">
+            <ScanLine className="w-4 h-4 mr-2" />
+            Introspection
           </TabsTrigger>
         </TabsList>
         </div>
@@ -953,6 +1023,19 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 17: Task Performance Metrics - Phase 12.0 */}
         <TabsContent value="perf-metrics" className="relative z-0 overflow-visible mt-12 space-y-4">
           <PerformanceTab />
+        </TabsContent>
+
+        {/* Tab 21: Introspection - Phase 15.0 */}
+        <TabsContent value="introspection" className="relative z-0 overflow-visible mt-12 space-y-4">
+          <IntrospectionTab 
+            introspection={introspection}
+            introspectionLoading={introspectionLoading}
+            biases={biases}
+            biasesLoading={biasesLoading}
+            driftPoints={driftPoints}
+            driftLoading={driftLoading}
+            runMitigationMutation={runMitigationMutation}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -3802,5 +3885,287 @@ function PerformanceTab() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function IntrospectionTab({ 
+  introspection, 
+  introspectionLoading, 
+  biases, 
+  biasesLoading, 
+  driftPoints, 
+  driftLoading,
+  runMitigationMutation 
+}: {
+  introspection?: IntrospectionSummary;
+  introspectionLoading: boolean;
+  biases: BiasObservation[];
+  biasesLoading: boolean;
+  driftPoints: ConfidenceDrift[];
+  driftLoading: boolean;
+  runMitigationMutation: any;
+}) {
+  const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, Legend, ResponsiveContainer } = require('recharts');
+  
+  // Group biases by type for breakdown
+  const biasCounts = biases.reduce((acc, bias) => {
+    acc[bias.biasType] = (acc[bias.biasType] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  
+  return (
+    <>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card data-testid="card-bias-index">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Bias Index</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {introspectionLoading ? (
+              <Skeleton className="h-8 w-20" />
+            ) : introspection ? (
+              <div>
+                <div className="text-3xl font-bold" data-testid="text-bias-index">
+                  {introspection.biasIndex}
+                </div>
+                <Badge 
+                  variant={introspection.biasIndex > 70 ? 'destructive' : introspection.biasIndex > 40 ? 'default' : 'secondary'}
+                  className="mt-2"
+                >
+                  {introspection.biasIndex > 70 ? 'High' : introspection.biasIndex > 40 ? 'Moderate' : 'Low'}
+                </Badge>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No data</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-confidence-stability">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Confidence Stability</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {introspectionLoading ? (
+              <Skeleton className="h-8 w-20" />
+            ) : introspection ? (
+              <div>
+                <div className="text-3xl font-bold" data-testid="text-confidence-stability">
+                  {(introspection.confidenceStability * 100).toFixed(1)}%
+                </div>
+                <Badge 
+                  variant={introspection.confidenceStability > 0.8 ? 'secondary' : introspection.confidenceStability > 0.6 ? 'default' : 'destructive'}
+                  className="mt-2"
+                >
+                  {introspection.confidenceStability > 0.8 ? 'Stable' : introspection.confidenceStability > 0.6 ? 'Moderate' : 'Unstable'}
+                </Badge>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No data</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-reasoning-quality">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Reasoning Quality</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {introspectionLoading ? (
+              <Skeleton className="h-8 w-20" />
+            ) : introspection ? (
+              <div>
+                <div className="text-3xl font-bold" data-testid="text-reasoning-quality">
+                  {(introspection.reasoningQuality * 100).toFixed(0)}%
+                </div>
+                <Badge 
+                  variant={introspection.reasoningQuality > 0.85 ? 'secondary' : introspection.reasoningQuality > 0.7 ? 'default' : 'destructive'}
+                  className="mt-2"
+                >
+                  {introspection.reasoningQuality > 0.85 ? 'Excellent' : introspection.reasoningQuality > 0.7 ? 'Good' : 'Poor'}
+                </Badge>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No data</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-total-biases">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium">Total Biases (24h)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {introspectionLoading ? (
+              <Skeleton className="h-8 w-20" />
+            ) : introspection ? (
+              <div>
+                <div className="text-3xl font-bold" data-testid="text-total-biases">
+                  {introspection.totalBiasesDetected}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Last: {new Date(introspection.lastAnalysis).toLocaleString()}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No data</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bias Breakdown & Mitigation */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card data-testid="card-bias-breakdown">
+          <CardHeader>
+            <CardTitle>Bias Type Breakdown</CardTitle>
+            <CardDescription>Distribution of detected cognitive biases</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {biasesLoading ? (
+              <Skeleton className="h-48 w-full" />
+            ) : Object.keys(biasCounts).length > 0 ? (
+              <div className="space-y-3">
+                {Object.entries(biasCounts).map(([type, count]) => (
+                  <div key={type} className="flex items-center justify-between" data-testid={`bias-type-${type}`}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${
+                        type === 'confirmation' ? 'bg-red-500' :
+                        type === 'recency' ? 'bg-orange-500' :
+                        type === 'anchoring' ? 'bg-yellow-500' :
+                        type === 'overconfidence' ? 'bg-blue-500' :
+                        type === 'availability' ? 'bg-purple-500' :
+                        'bg-pink-500'
+                      }`}></div>
+                      <span className="capitalize text-sm">{type.replace('_', ' ')}</span>
+                    </div>
+                    <Badge variant="outline" data-testid={`count-${type}`}>{count}</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <ScanLine className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No biases detected in last 24h</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-mitigation-control">
+          <CardHeader>
+            <CardTitle>Bias Mitigation</CardTitle>
+            <CardDescription>Apply corrections to detected cognitive biases</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg border bg-muted/50">
+                <h4 className="text-sm font-medium mb-2">Mitigation Status</h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Automated mitigation runs every 8 hours. You can trigger a manual cycle below.
+                </p>
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span className="text-muted-foreground">Next auto-run in:</span>
+                  <span className="font-medium">~6h</span>
+                </div>
+              </div>
+              
+              <Button 
+                onClick={() => runMitigationMutation.mutate()}
+                disabled={runMitigationMutation.isPending}
+                className="w-full"
+                data-testid="button-run-mitigation"
+              >
+                {runMitigationMutation.isPending ? (
+                  <>
+                    <Activity className="w-4 h-4 mr-2 animate-spin" />
+                    Running Mitigation...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 mr-2" />
+                    Run Mitigation Now
+                  </>
+                )}
+              </Button>
+              
+              {introspection && introspection.biasIndex > 70 && (
+                <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-medium text-yellow-700 dark:text-yellow-400">High Bias Index</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Consider running mitigation to improve reasoning quality
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Confidence Drift Chart */}
+      <Card data-testid="card-confidence-drift">
+        <CardHeader>
+          <CardTitle>Confidence Drift Analysis</CardTitle>
+          <CardDescription>Confidence level variations over last 48 hours</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {driftLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : driftPoints.length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={driftPoints}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="timestamp" 
+                    tickFormatter={(value: any) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    className="text-xs"
+                  />
+                  <YAxis 
+                    domain={[0, 1]}
+                    tickFormatter={(value: any) => `${(value * 100).toFixed(0)}%`}
+                    className="text-xs"
+                  />
+                  <RechartsTooltip 
+                    labelFormatter={(value: any) => new Date(value).toLocaleString()}
+                    formatter={(value: number) => [`${(value * 100).toFixed(1)}%`, 'Confidence']}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="confidenceLevel" 
+                    stroke="hsl(var(--primary))" 
+                    name="Confidence Level"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="varianceScore" 
+                    stroke="hsl(var(--destructive))" 
+                    name="Variance"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={{ r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No confidence drift data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }

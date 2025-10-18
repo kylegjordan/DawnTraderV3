@@ -1,0 +1,156 @@
+🧠 Phase 15 → Cognitive Introspection & Bias Mitigation
+Objective
+
+Introduce a continuous self-analysis layer enabling Walter to detect and quantify cognitive biases, confidence drift, and reasoning degradation across all autonomous operations.
+This phase integrates with the meta-cognitive (9.8) and ethical (13) systems to close the learning feedback loop.
+
+⚙️ Execution Rules
+
+Run autonomously with no pauses or human prompts.
+
+Always log in using
+username = testuser123
+password = SecurePass123!
+
+Implement sequentially (Tasks 1 → 10).
+
+Do not modify prior-phase logic—extend via new services and tables only.
+
+All tests and documentation updates must run automatically at completion.
+
+🔩 Task List
+Task 1 — Database Schema
+
+Create new tables and enums to capture introspection analytics:
+
+bias_type enum (confirmation, recency, anchoring, overconfidence, availability, optimism)
+
+bias_observation_log – records detected bias events with confidence scores.
+
+confidence_drift_log – tracks variance in model confidence over time.
+
+introspection_report – aggregated daily analysis summaries.
+
+Ensure indices for created_at and bias_type and relationships to users.
+
+Task 2 — IntrospectionEngine Service
+
+Create server/services/introspection-engine.ts that:
+
+Consumes data from reasoning traces + decision logs.
+
+Calculates bias likelihoods (0–1) per decision cycle.
+
+Produces “confidence drift” metrics comparing last N sessions.
+
+Emits structured events (introspection_event) via Context Bridge.
+
+Task 3 — BiasMitigation Service
+
+Create server/services/bias-mitigation.ts that:
+
+Receives introspection events.
+
+Adjusts agent learning weights or strategy parameters to counter bias.
+
+Stores interventions in bias_correction_log.
+
+Provides an API method to retrieve active corrections.
+
+Task 4 — Integration into Autonomy Controller
+
+Update autonomy-controller.ts to insert introspection checkpoints:
+
+Reasoning → Introspection → Bias Mitigation → Ethics → Execution
+
+
+All evaluations must run asynchronously so they don’t block reasoning latency.
+
+Task 5 — Scheduler Tasks
+
+Add two autonomous tasks:
+
+introspection_cycle (every 4 hours) → runs full introspection analysis.
+
+bias_mitigation_cycle (every 8 hours) → applies cumulative bias adjustments.
+Add both to scheduler init and status functions.
+
+Task 6 — API Endpoints
+
+Add under /api/introspection/*:
+
+GET /status – returns latest introspection summary.
+
+GET /biases – lists recent bias events (24 h).
+
+GET /drift – returns confidence drift chart data.
+
+POST /mitigate – forces bias mitigation run.
+All endpoints require authentication.
+
+Task 7 — UI Enhancement → “Introspection” Tab
+
+Add a new tab to System Monitoring between Learning and Oversight:
+
+Introspection Summary Card → shows Bias Index (0–100) and Confidence Stability score.
+
+Bias Breakdown Card → bar chart of bias types with counts.
+
+Confidence Drift Card → line chart of confidence variance vs time.
+
+Auto-refresh every 60 s.
+
+Toast notifications when bias index > 70 (warning).
+
+Task 8 — Data Visualization Hooks
+
+Implement chart rendering with the existing Recharts package using:
+
+Soft color palette (greens → yellows → reds for bias severity).
+
+Tooltip showing bias type, count, average confidence.
+
+Responsive container for all resolutions.
+
+Task 9 — Testing & Verification
+
+Perform end-to-end validation:
+1️⃣ Build and start the application.
+2️⃣ Login → System Monitoring → Introspection Tab.
+3️⃣ Confirm:
+• Tab loads without overlap.
+• Bias Index and Confidence Drift display values or N/A.
+• Scheduler tasks visible in system status.
+• No 401/500 errors in logs.
+
+Task 10 — Documentation
+
+Update replit.md → Phase 15: Cognitive Introspection & Bias Mitigation
+Include:
+
+Table definitions & indices.
+
+Service descriptions (IntrospectionEngine & BiasMitigation).
+
+Scheduler task timings.
+
+API route list.
+
+UI tab layout description.
+Mark phase as “Validated and Architect-Approved.”
+
+✅ Completion Criteria
+
+4 new tables created and indexed.
+
+2 new services implemented.
+
+Introspection → Bias Mitigation → Ethics pipeline operational.
+
+2 new scheduler tasks visible in status.
+
+/api/introspection/* endpoints return data 200 OK.
+
+Introspection Tab visible and refreshing correctly.
+
+replit.md updated with Phase 15 summary.

@@ -97,6 +97,9 @@ export const federatedScopeEnum = pgEnum("federated_scope", ["global", "trading"
 export const propagationStatusEnum = pgEnum("propagation_status", ["pending", "success", "failed", "retrying"]);
 export const conflictResolutionEnum = pgEnum("conflict_resolution", ["open", "resolved", "escalated"]);
 
+// Phase 15.0 enums
+export const biasTypeEnum = pgEnum("bias_type", ["confirmation", "recency", "anchoring", "overconfidence", "availability", "optimism"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2789,6 +2792,71 @@ export const ethicsPropagationJournal = pgTable("ethics_propagation_journal", {
   createdAtIdx: index("ethics_propagation_journal_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 15.0: Cognitive Introspection & Bias Mitigation
+export const biasObservationLog = pgTable("bias_observation_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  biasType: biasTypeEnum("bias_type").notNull(),
+  detectedContext: text("detected_context").notNull(), // Description of when/where bias was detected
+  confidenceScore: doublePrecision("confidence_score").notNull(), // 0.0 to 1.0
+  decisionId: varchar("decision_id", { length: 100 }), // Link to autonomy or reasoning decision
+  impactAssessment: text("impact_assessment"), // How the bias may have affected the decision
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  biasTypeIdx: index("bias_observation_log_bias_type_idx").on(table.biasType),
+  createdAtIdx: index("bias_observation_log_created_at_idx").on(table.createdAt),
+  userIdIdx: index("bias_observation_log_user_id_idx").on(table.userId),
+}));
+
+export const confidenceDriftLog = pgTable("confidence_drift_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  sessionWindow: varchar("session_window", { length: 100 }).notNull(), // e.g., "last_4h", "last_24h"
+  averageConfidence: doublePrecision("average_confidence").notNull(),
+  varianceScore: doublePrecision("variance_score").notNull(), // Measure of confidence stability
+  driftDirection: varchar("drift_direction", { length: 50 }), // "increasing", "decreasing", "stable"
+  decisionsAnalyzed: integer("decisions_analyzed").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  createdAtIdx: index("confidence_drift_log_created_at_idx").on(table.createdAt),
+  userIdIdx: index("confidence_drift_log_user_id_idx").on(table.userId),
+}));
+
+export const introspectionReport = pgTable("introspection_report", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  reportDate: date("report_date").notNull(), // Daily aggregation
+  biasIndex: integer("bias_index").notNull(), // 0-100 composite score
+  confidenceStability: doublePrecision("confidence_stability").notNull(), // 0.0-1.0
+  totalBiasEvents: integer("total_bias_events").notNull(),
+  topBiasTypes: jsonb("top_bias_types").notNull(), // Array of {type, count}
+  mitigationsApplied: integer("mitigations_applied").notNull(),
+  summary: text("summary"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  reportDateIdx: index("introspection_report_report_date_idx").on(table.reportDate),
+  userIdIdx: index("introspection_report_user_id_idx").on(table.userId),
+  createdAtIdx: index("introspection_report_created_at_idx").on(table.createdAt),
+}));
+
+export const biasCorrectionLog = pgTable("bias_correction_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  biasType: biasTypeEnum("bias_type").notNull(),
+  correctionStrategy: varchar("correction_strategy", { length: 100 }).notNull(),
+  parameterAdjustments: jsonb("parameter_adjustments").notNull(), // What weights/params were changed
+  effectivenessScore: doublePrecision("effectiveness_score"), // Post-correction assessment
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  biasTypeIdx: index("bias_correction_log_bias_type_idx").on(table.biasType),
+  createdAtIdx: index("bias_correction_log_created_at_idx").on(table.createdAt),
+  userIdIdx: index("bias_correction_log_user_id_idx").on(table.userId),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2833,6 +2901,10 @@ export const insertFederatedEthicsStateSchema = createInsertSchema(federatedEthi
 export const insertCrossAgentEthicsSessionSchema = createInsertSchema(crossAgentEthicsSession).omit({ id: true, createdAt: true });
 export const insertEthicsConflictRegisterSchema = createInsertSchema(ethicsConflictRegister).omit({ id: true, createdAt: true });
 export const insertEthicsPropagationJournalSchema = createInsertSchema(ethicsPropagationJournal).omit({ id: true, createdAt: true });
+export const insertBiasObservationLogSchema = createInsertSchema(biasObservationLog).omit({ id: true, createdAt: true });
+export const insertConfidenceDriftLogSchema = createInsertSchema(confidenceDriftLog).omit({ id: true, createdAt: true });
+export const insertIntrospectionReportSchema = createInsertSchema(introspectionReport).omit({ id: true, createdAt: true });
+export const insertBiasCorrectionLogSchema = createInsertSchema(biasCorrectionLog).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -3038,3 +3110,16 @@ export type PortfolioState = typeof portfolioState.$inferSelect;
 
 export type InsertPatchProposal = z.infer<typeof insertPatchProposalSchema>;
 export type PatchProposal = typeof patchProposals.$inferSelect;
+
+export type InsertBiasObservationLog = z.infer<typeof insertBiasObservationLogSchema>;
+export type BiasObservationLog = typeof biasObservationLog.$inferSelect;
+export type BiasType = typeof biasTypeEnum.enumValues[number];
+
+export type InsertConfidenceDriftLog = z.infer<typeof insertConfidenceDriftLogSchema>;
+export type ConfidenceDriftLog = typeof confidenceDriftLog.$inferSelect;
+
+export type InsertIntrospectionReport = z.infer<typeof insertIntrospectionReportSchema>;
+export type IntrospectionReport = typeof introspectionReport.$inferSelect;
+
+export type InsertBiasCorrectionLog = z.infer<typeof insertBiasCorrectionLogSchema>;
+export type BiasCorrectionLog = typeof biasCorrectionLog.$inferSelect;

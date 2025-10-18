@@ -21,6 +21,8 @@ import { safetyGuardrails } from './safety-guardrails';
 import { ethicalReasoner } from './ethical-reasoner'; // Phase 13.0
 import { ethicsConsensusOrchestrator } from './ethics-consensus-orchestrator'; // Phase 14.0
 import { performanceMonitor } from './performance-monitor'; // Phase 12.1
+import { introspectionEngine } from './introspection-engine'; // Phase 15.0
+import { biasMitigation } from './bias-mitigation'; // Phase 15.0
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -290,6 +292,16 @@ class AutonomyControllerService {
           'paper'
         ).catch((err: any) => console.error('[AutonomyController] Decision audit failed:', err));
       }
+
+      // Phase 15.0: Introspection & Bias Mitigation (ASYNC - before safety)
+      // Run introspection asynchronously to avoid blocking reasoning latency
+      introspectionEngine.detectBiases(userId, 4).catch((err: any) => 
+        console.error('[AutonomyController] Introspection failed (non-blocking):', err)
+      );
+      
+      introspectionEngine.calculateConfidenceDrift(userId, 'last_4h').catch((err: any) =>
+        console.error('[AutonomyController] Confidence drift calculation failed (non-blocking):', err)
+      );
 
       // Phase 11.0: Safety Guardrails Pre-Execution Check (BLOCKING - before ethical)
       try {
