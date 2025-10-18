@@ -12,7 +12,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -10598,6 +10598,116 @@ Important: Extract the exact field names and numeric values from the user's requ
       res.json({ ok: true, killSwitch: status });
     } catch (error: any) {
       console.error('[Safety] Toggle kill switch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== Phase 13.0: Ethical Alignment Framework Routes ====================
+
+  app.get('/api/ethics/principles', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const principles = await db.select().from(ethicalPrinciple).orderBy(ethicalPrinciple.priority);
+      
+      res.json({ ok: true, principles });
+    } catch (error: any) {
+      console.error('[Ethics] Get principles failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ethics/principles', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { name, type, description, priority, enabled, constraints } = req.body;
+      
+      if (!name || !type || !description) {
+        return res.status(400).json({ error: 'Missing required fields: name, type, description' });
+      }
+      
+      // Check if principle already exists
+      const existing = await db.select().from(ethicalPrinciple).where(eq(ethicalPrinciple.name, name));
+      
+      let principle;
+      if (existing.length > 0) {
+        // Update existing principle
+        const [updated] = await db
+          .update(ethicalPrinciple)
+          .set({
+            type,
+            description,
+            priority: priority !== undefined ? priority : existing[0].priority,
+            enabled: enabled !== undefined ? enabled : existing[0].enabled,
+            constraints: constraints || existing[0].constraints,
+            updatedAt: new Date(),
+          })
+          .where(eq(ethicalPrinciple.name, name))
+          .returning();
+        principle = updated;
+        
+        // Clear ethical reasoner cache after update
+        const { ethicalReasoner } = await import('./services/ethical-reasoner');
+        ethicalReasoner.clearCache();
+      } else {
+        // Insert new principle
+        const [inserted] = await db
+          .insert(ethicalPrinciple)
+          .values({
+            name,
+            type,
+            description,
+            priority: priority !== undefined ? priority : 99,
+            enabled: enabled !== undefined ? enabled : true,
+            constraints: constraints || null,
+          })
+          .returning();
+        principle = inserted;
+        
+        // Clear ethical reasoner cache after insert
+        const { ethicalReasoner } = await import('./services/ethical-reasoner');
+        ethicalReasoner.clearCache();
+      }
+      
+      res.json({ ok: true, principle });
+    } catch (error: any) {
+      console.error('[Ethics] Update principle failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/ethics/violations', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { limit = '50', severity } = req.query;
+      
+      let query = db.select().from(ethicalViolationLog).orderBy(desc(ethicalViolationLog.createdAt));
+      
+      if (severity) {
+        query = query.where(eq(ethicalViolationLog.severity, severity as any));
+      }
+      
+      const violations = await query.limit(parseInt(limit as string));
+      
+      res.json({ ok: true, violations });
+    } catch (error: any) {
+      console.error('[Ethics] Get violations failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/ethics/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ethicalReasoner } = await import('./services/ethical-reasoner');
+      
+      const status = await ethicalReasoner.getAlignmentStatus();
+      
+      res.json({ 
+        ok: true, 
+        alignmentScore: status.alignmentScore,
+        violationsToday: status.violationsToday,
+        principleCount: status.principleCount,
+        principleHealth: status.principleHealth,
+        status: status.alignmentScore >= 70 ? 'compliant' : 'at_risk',
+      });
+    } catch (error: any) {
+      console.error('[Ethics] Get status failed:', error);
       res.status(500).json({ error: error.message });
     }
   });
