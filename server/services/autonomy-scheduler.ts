@@ -433,9 +433,42 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 8 hours - Meta-Cognitive Oversight (Phase 9.8)
+schedulerRegistry.registerTask({
+  name: 'meta_cognition_scan',
+  description: 'Meta-cognitive oversight: analyze learning trends and flag issues',
+  frequency: 'custom',
+  intervalMs: 8 * 60 * 60 * 1000, // 8 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🧠 Running meta-cognitive oversight scan...');
+    
+    try {
+      // Run meta-cognitive oversight check
+      const result = await autonomyController.runMetaCognitiveCheck();
+      
+      console.log(`[AutonomyScheduler] ✅ Meta-cognitive scan complete`);
+      console.log(`[AutonomyScheduler] - Trends analyzed: ${result.trendsAnalyzed}`);
+      console.log(`[AutonomyScheduler] - Flags created: ${result.flagsCreated}`);
+      console.log(`[AutonomyScheduler] - Adjustments made: ${result.adjustmentsMade}`);
+      
+      if (result.highSeverityIssues.length > 0) {
+        console.log('[AutonomyScheduler] ⚠️ High-severity issues detected:', 
+          result.highSeverityIssues.join('; ')
+        );
+      }
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Meta-cognitive scan failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, and Phase 9.7 learning feedback sync
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, and Phase 9.8 meta-cognitive oversight
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -465,6 +498,9 @@ export async function initAutonomyScheduler() {
     // Start learning feedback sync (run after 5 hour delay) - Phase 9.7
     await schedulerRegistry.startTask('learning_feedback_sync', false);
     
+    // Start meta-cognitive oversight (run after 6 hour delay) - Phase 9.8
+    await schedulerRegistry.startTask('meta_cognition_scan', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -474,6 +510,7 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Reflection analysis: Every 6 hours');
     console.log('[AutonomyScheduler] - Collaboration maintenance: Every 12 hours');
     console.log('[AutonomyScheduler] - Learning feedback sync: Every 6 hours');
+    console.log('[AutonomyScheduler] - Meta-cognitive oversight: Every 8 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -492,6 +529,7 @@ export function getAutonomySchedulerStatus() {
   const reflectionStatus = schedulerRegistry.getTaskStatus('reflection_analysis');
   const collaborationStatus = schedulerRegistry.getTaskStatus('collaboration_maintenance');
   const learningFeedbackStatus = schedulerRegistry.getTaskStatus('learning_feedback_sync');
+  const metaCognitionStatus = schedulerRegistry.getTaskStatus('meta_cognition_scan');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -541,6 +579,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: learningFeedbackStatus.lastRun,
       nextRun: learningFeedbackStatus.nextRun,
       frequency: learningFeedbackStatus.frequency,
+    } : null,
+    metaCognitionScan: metaCognitionStatus ? {
+      status: metaCognitionStatus.status,
+      lastRun: metaCognitionStatus.lastRun,
+      nextRun: metaCognitionStatus.nextRun,
+      frequency: metaCognitionStatus.frequency,
     } : null,
   };
 }

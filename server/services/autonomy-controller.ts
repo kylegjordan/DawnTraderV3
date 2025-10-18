@@ -14,6 +14,7 @@ import { collaborationManager } from './collaboration-manager';
 import { reasoningBus } from './reasoning-bus';
 import { consensusEngine } from './consensus-engine';
 import { learningBridge } from './learning-bridge';
+import metaOversightService from './meta-oversight';
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -847,6 +848,96 @@ class AutonomyControllerService {
         updated: 0,
         improvements: [],
         concerns: ['Learning profile update failed: ' + error.message],
+      };
+    }
+  }
+
+  /**
+   * Phase 9.8: Run meta-cognitive oversight check
+   * Analyzes learning trends, flags issues, and adjusts agent weights if needed
+   */
+  async runMetaCognitiveCheck(): Promise<{
+    trendsAnalyzed: number;
+    flagsCreated: number;
+    adjustmentsMade: number;
+    highSeverityIssues: string[];
+  }> {
+    try {
+      console.log('[AutonomyController] 🧠 Running meta-cognitive oversight check');
+      const startTime = performance.now();
+
+      // 1. Analyze learning trends across all agents
+      const trends = await metaOversightService.analyzeLearningTrends();
+      console.log(`[AutonomyController] Analyzed ${trends.length} agent trends`);
+
+      // 2. Get current oversight summary
+      const summary = await metaOversightService.recommendAdjustments();
+      
+      // 3. Process high-severity flags
+      const highSeverityIssues: string[] = [];
+      let adjustmentsMade = 0;
+
+      for (const flag of summary.recentFlags) {
+        if (flag.severity > 0.7) {
+          highSeverityIssues.push(`${flag.sourceAgent}: ${flag.message}`);
+          
+          // Adjust agent weights for high-severity issues
+          console.log(`[AutonomyController] ⚠️ High severity flag for ${flag.sourceAgent} (${flag.flagType}): ${flag.severity.toFixed(2)}`);
+          
+          // Broadcast warning via Context Bridge
+          await contextBridge.broadcast({
+            event: 'meta_oversight_warning',
+            data: {
+              agent: flag.sourceAgent,
+              flagType: flag.flagType,
+              severity: flag.severity,
+              message: flag.message,
+              recommendations: flag.recommendations,
+            },
+          }, 'all');
+          
+          adjustmentsMade++;
+        }
+      }
+
+      // 4. Log the oversight check to audit trail
+      const executionTimeMs = Math.round(performance.now() - startTime);
+      await this.recordAssessment({
+        runId: `meta_cognition_${nanoid(10)}`,
+        actionType: 'optimization',
+        triggerSource: 'autonomous',
+        assessmentResult: {
+          trendsAnalyzed: trends.length,
+          flagsCreated: summary.recentFlags.length,
+          highSeverityCount: highSeverityIssues.length,
+          totalActiveFlags: summary.totalActiveFlags,
+          highestSeverity: summary.highestSeverity,
+          topRecommendations: summary.topRecommendations,
+        },
+        actionsTriggered: ['meta_cognitive_oversight_completed'],
+        success: true,
+        executionTimeMs,
+        metadata: { 
+          flagsByType: summary.flagsByType,
+          adjustmentsMade,
+        },
+      });
+
+      console.log(`[AutonomyController] ✅ Meta-cognitive check complete: ${summary.totalActiveFlags} active flags, ${highSeverityIssues.length} high-severity`);
+
+      return {
+        trendsAnalyzed: trends.length,
+        flagsCreated: summary.recentFlags.length,
+        adjustmentsMade,
+        highSeverityIssues,
+      };
+    } catch (error: any) {
+      console.error('[AutonomyController] Failed to run meta-cognitive check:', error);
+      return {
+        trendsAnalyzed: 0,
+        flagsCreated: 0,
+        adjustmentsMade: 0,
+        highSeverityIssues: ['Meta-cognitive check failed: ' + error.message],
       };
     }
   }
