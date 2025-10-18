@@ -379,8 +379,9 @@ export default function EnhancedSystemMonitoring() {
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="relative z-20">
-        <TabsList className="flex w-full flex-wrap bg-background pt-2 mb-4" data-testid="tabs-system-monitoring">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="relative">
+        <div className="sticky top-0 z-20 bg-background pb-4">
+          <TabsList className="flex w-full flex-wrap bg-background pt-2" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" data-testid="tab-performance">
             <Cpu className="w-4 h-4 mr-2" />
             Performance
@@ -462,6 +463,7 @@ export default function EnhancedSystemMonitoring() {
             UX Monitor
           </TabsTrigger>
         </TabsList>
+        </div>
 
         {/* Tab 1: Real-Time Performance */}
         <TabsContent value="performance" className="relative z-0 overflow-visible mt-2 space-y-4">

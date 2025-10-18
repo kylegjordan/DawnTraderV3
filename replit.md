@@ -31,6 +31,34 @@ Ethical Alignment Framework establishes comprehensive ethical reasoning across a
 
 Collaborative Alignment & Federated Ethics enables multi-agent ethical consensus across domain agents with database tables (`federated_ethics_state`, `cross_agent_ethics_session`, `ethics_conflict_register`, `ethics_propagation_journal`) supporting distributed ethical decision-making. The `FederatedEthicsHub` provides authoritative ethical state snapshots, and the `EthicsConsensusOrchestrator` performs multi-agent consensus checks using weighted majority voting and conflict detection. The `PolicyPropagationService` handles push/pull delta updates. The Autonomy Controller execution path is enhanced with federated ethics: Safety → Federated Ethics Consensus → Ethical Reasoning → Execution. A Federation UI tab provides comprehensive monitoring and control.
 
+## UI Maintenance Notes
+
+### System Monitoring Panel Sticky Tab Fix (October 18, 2025)
+
+**Issue:** Tab menu was being covered by metric cards (CPU Usage, Memory Usage, etc.) despite z-index corrections.
+
+**Root Cause:** Metric cards were visually overlapping the tab menu because tabs and content were in a flow layout without positional anchoring.
+
+**Solution:** Implemented sticky positioning for the tab bar with proper z-index stacking.
+
+**Implementation:**
+- Wrapped TabsList in sticky container: `<div className="sticky top-0 z-20 bg-background pb-4">`
+- Sticky positioning keeps tab menu anchored at viewport top while content scrolls
+- Z-index z-20 ensures tabs stay above all content (z-0)
+- Background color prevents content showing through when scrolling
+- Bottom padding pb-4 (16px) provides clear separation from content
+
+**Structure:**
+```tsx
+<Tabs className="relative">
+  <div className="sticky top-0 z-20 bg-background pb-4">
+    <TabsList className="flex w-full flex-wrap bg-background pt-2">
+  </div>
+  <TabsContent className="relative z-0 overflow-visible mt-2">
+```
+
+**Result:** Tab menu always visible and never covered by content cards. Measured spacing: 24px between tabs and content. Fix validated with automated e2e testing across multiple resolutions (1366×768, 1920×1080, 1024×768).
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
