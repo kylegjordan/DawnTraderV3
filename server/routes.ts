@@ -10794,6 +10794,76 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 16.0: Knowledge Retrieval & Web Intelligence Routes ====================
+
+  app.get('/api/knowledge/query', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { knowledgeRetrievalService } = await import('./services/knowledge-retrieval');
+      const { query, limit } = req.query;
+      
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'query parameter required' 
+        });
+      }
+      
+      const hours = limit ? parseInt(limit as string) : 24;
+      const logs = await knowledgeRetrievalService.getRetrievalLogs(req.user!.id, hours);
+      
+      res.json({
+        success: true,
+        logs,
+        count: logs.length,
+        timeWindow: `${hours}h`,
+      });
+    } catch (error: any) {
+      console.error('[KnowledgeAPI] Query fetch failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  app.get('/api/knowledge/trust', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { knowledgeRetrievalService } = await import('./services/knowledge-retrieval');
+      const trustRecords = await knowledgeRetrievalService.getTrustedSources(req.user!.id);
+      
+      res.json({
+        success: true,
+        trustRecords,
+        count: trustRecords.length,
+      });
+    } catch (error: any) {
+      console.error('[KnowledgeAPI] Trust fetch failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  app.post('/api/knowledge/refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { knowledgeRetrievalService } = await import('./services/knowledge-retrieval');
+      const removedCount = await knowledgeRetrievalService.refreshCache();
+      
+      res.json({
+        success: true,
+        removedCount,
+        message: `${removedCount} expired cache entries removed`,
+      });
+    } catch (error: any) {
+      console.error('[KnowledgeAPI] Cache refresh failed:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
   // ==================== Phase 14.0: Federated Ethics & Multi-Agent Consensus Routes ====================
 
   app.get('/api/federation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
