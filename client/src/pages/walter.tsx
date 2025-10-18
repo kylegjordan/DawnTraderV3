@@ -942,7 +942,7 @@ export default function WalterPage() {
         <Card className="flex-1 flex flex-col min-h-0 border-0 shadow-none">
           {/* Chat Header */}
           {selectedChatId && chatData?.chat && (
-            <div className="px-1 pt-2 pb-1 flex items-start justify-between">
+            <div className="px-1 pb-1 flex items-start justify-between">
               <div>
                 <h2 className="text-sm font-medium">{chatData.chat.title}</h2>
                 {chatData.chat.isApprovalThread && currentApproval && (
