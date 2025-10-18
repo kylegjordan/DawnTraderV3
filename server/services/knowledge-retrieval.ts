@@ -358,7 +358,9 @@ export class KnowledgeRetrievalService {
     return await db
       .select()
       .from(knowledgeTrustRecord)
-      .where(sql`${knowledgeTrustRecord.trustLevel} IN ('verified', 'moderate')`)
+      .where(
+        sql`${knowledgeTrustRecord.trustLevel} = ANY(ARRAY['verified'::retrieval_trust_level, 'moderate'::retrieval_trust_level])`
+      )
       .orderBy(desc(knowledgeTrustRecord.trustLevel), desc(knowledgeTrustRecord.successfulRetrievals));
   }
 
