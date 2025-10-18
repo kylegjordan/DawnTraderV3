@@ -33,8 +33,10 @@ import {
   Clock,
   Globe,
   ScanLine,
-  BookOpen
+  BookOpen,
+  Server
 } from "lucide-react";
+import ClusterTab from "./cluster-tab";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SystemMetrics {
@@ -537,6 +539,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="knowledge" data-testid="tab-knowledge">
             <BookOpen className="w-4 h-4 mr-2" />
             Knowledge
+          </TabsTrigger>
+          <TabsTrigger value="cluster" data-testid="tab-cluster">
+            <Server className="w-4 h-4 mr-2" />
+            Cluster
           </TabsTrigger>
         </TabsList>
         </div>
@@ -1047,6 +1053,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 22: Knowledge - Phase 16.0 */}
         <TabsContent value="knowledge" className="relative z-0 overflow-visible mt-12 space-y-4">
           <KnowledgeTab />
+        </TabsContent>
+
+        {/* Cluster Tab */}
+        <TabsContent value="cluster" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-cluster">
+          <ClusterTab />
         </TabsContent>
       </Tabs>
     </div>

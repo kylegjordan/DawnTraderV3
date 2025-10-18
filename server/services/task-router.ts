@@ -5,6 +5,7 @@ import {
   type InsertClusterTaskQueue,
   type ClusterTaskQueue,
   type ClusterTaskType,
+  type ClusterTaskStatus,
   type NodeRole,
 } from "@shared/schema";
 import { eq, and, sql, or, desc } from "drizzle-orm";
@@ -292,6 +293,107 @@ export class TaskRouter {
     }
 
     return rebalanced;
+  }
+
+  /**
+   * Get queue statistics
+   */
+  async getQueueStats(): Promise<{
+    queued: number;
+    running: number;
+    completed: number;
+    failed: number;
+  }> {
+    const stats = await db
+      .select({
+        status: clusterTaskQueue.status,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(clusterTaskQueue)
+      .groupBy(clusterTaskQueue.status);
+
+    const result = {
+      queued: 0,
+      running: 0,
+      completed: 0,
+      failed: 0,
+    };
+
+    for (const stat of stats) {
+      const count = Number(stat.count);
+      if (stat.status === "queued") result.queued = count;
+      else if (stat.status === "running") result.running = count;
+      else if (stat.status === "completed") result.completed = count;
+      else if (stat.status === "failed") result.failed = count;
+    }
+
+    return result;
+  }
+
+  /**
+   * Get queued tasks with optional status filter
+   */
+  async getQueuedTasks(
+    limit: number = 50,
+    status?: ClusterTaskStatus
+  ): Promise<ClusterTaskQueue[]> {
+    const query = db.select().from(clusterTaskQueue);
+
+    if (status) {
+      return await query
+        .where(eq(clusterTaskQueue.status, status))
+        .orderBy(clusterTaskQueue.priority, desc(clusterTaskQueue.createdAt))
+        .limit(limit);
+    }
+
+    return await query
+      .orderBy(clusterTaskQueue.priority, desc(clusterTaskQueue.createdAt))
+      .limit(limit);
+  }
+
+  /**
+   * Drain all tasks from a specific node
+   */
+  async drainNode(nodeId: string): Promise<number> {
+    // Find all tasks assigned to this node
+    const nodeTasks = await db
+      .select()
+      .from(clusterTaskQueue)
+      .where(
+        and(
+          eq(clusterTaskQueue.assignedNodeId, nodeId),
+          or(
+            eq(clusterTaskQueue.status, "assigned"),
+            eq(clusterTaskQueue.status, "running")
+          )
+        )
+      );
+
+    let reassigned = 0;
+
+    for (const task of nodeTasks) {
+      // Reset to queued for reassignment
+      await db
+        .update(clusterTaskQueue)
+        .set({
+          status: "queued",
+          assignedNodeId: null,
+          startedAt: null,
+        })
+        .where(eq(clusterTaskQueue.id, task.id));
+
+      reassigned++;
+    }
+
+    if (reassigned > 0) {
+      await clusterBus.publish("rebalance_triggered", {
+        nodeId,
+        reassignedCount: reassigned,
+        reason: "node_drain",
+      });
+    }
+
+    return reassigned;
   }
 }
 

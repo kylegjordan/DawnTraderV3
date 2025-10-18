@@ -166,6 +166,45 @@ export class ClusterRegistry {
   }
 
   /**
+   * Get all nodes (including unhealthy)
+   */
+  async getAllNodes(): Promise<ClusterNode[]> {
+    return await db
+      .select()
+      .from(clusterNode)
+      .orderBy(desc(clusterNode.lastHeartbeat));
+  }
+
+  /**
+   * Get healthy nodes (active and responsive)
+   */
+  async getHealthyNodes(): Promise<ClusterNode[]> {
+    return await db
+      .select()
+      .from(clusterNode)
+      .where(
+        and(
+          sql`${clusterNode.status} IN ('healthy', 'degraded')`,
+          sql`${clusterNode.lastHeartbeat} > NOW() - INTERVAL '5 minutes'`
+        )
+      )
+      .orderBy(desc(clusterNode.lastHeartbeat));
+  }
+
+  /**
+   * Mark a node as draining (for graceful shutdown)
+   */
+  async markNodeDraining(nodeId: string): Promise<void> {
+    await db
+      .update(clusterNode)
+      .set({
+        status: "draining",
+        updatedAt: new Date(),
+      })
+      .where(eq(clusterNode.id, nodeId));
+  }
+
+  /**
    * Get local node ID
    */
   getLocalNodeId(): string | null {

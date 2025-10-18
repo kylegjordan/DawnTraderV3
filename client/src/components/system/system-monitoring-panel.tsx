@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import ClusterTab from "./cluster-tab";
 
 interface SystemStatus {
   tradingEngine: string;
@@ -78,8 +79,9 @@ export default function SystemMonitoringPanel() {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="health" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 mb-4">
+          <TabsList className="grid w-full grid-cols-7 mb-4">
             <TabsTrigger value="health" data-testid="tab-system-health">System Health</TabsTrigger>
+            <TabsTrigger value="cluster" data-testid="tab-cluster">Cluster</TabsTrigger>
             <TabsTrigger value="audit" data-testid="tab-audit-viewer">Audit Viewer</TabsTrigger>
             <TabsTrigger value="logs" data-testid="tab-system-logs">System Logs</TabsTrigger>
             <TabsTrigger value="validation" data-testid="tab-validation-reports">Validation Reports</TabsTrigger>
@@ -121,6 +123,11 @@ export default function SystemMonitoringPanel() {
             ) : (
               <p className="text-muted-foreground">No health data available.</p>
             )}
+          </TabsContent>
+
+          {/* Cluster Tab */}
+          <TabsContent value="cluster" data-testid="content-cluster">
+            <ClusterTab />
           </TabsContent>
 
           {/* Audit Viewer */}

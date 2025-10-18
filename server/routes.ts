@@ -12,7 +12,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -9474,6 +9474,126 @@ Important: Extract the exact field names and numeric values from the user's requ
       res.json({ ok: true, states });
     } catch (error: any) {
       console.error('[Awareness] History fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========================================
+  // Phase 17.0: Distributed Cluster Routes
+  // ========================================
+
+  // Get overall cluster status
+  app.get('/api/cluster/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { clusterRegistry } = await import('./services/cluster-registry');
+      const { taskRouter } = await import('./services/task-router');
+      
+      const nodes = await clusterRegistry.getHealthyNodes();
+      const queueStats = await taskRouter.getQueueStats();
+      
+      res.json({
+        ok: true,
+        totalNodes: nodes.length,
+        healthyNodes: nodes.filter(n => n.healthScore >= 0.7).length,
+        queuedTasks: queueStats.queued,
+        runningTasks: queueStats.running,
+        completedTasks: queueStats.completed,
+        failedTasks: queueStats.failed,
+      });
+    } catch (error: any) {
+      console.error('[Cluster] Status fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get all cluster nodes with health metrics
+  app.get('/api/cluster/nodes', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { clusterRegistry } = await import('./services/cluster-registry');
+      
+      const nodes = await clusterRegistry.getAllNodes();
+      
+      res.json({ ok: true, nodes });
+    } catch (error: any) {
+      console.error('[Cluster] Nodes fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get cluster task queue
+  app.get('/api/cluster/queue', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const status = req.query.status as string | undefined;
+      
+      const { taskRouter } = await import('./services/task-router');
+      
+      const tasks = await taskRouter.getQueuedTasks(limit, status as any);
+      
+      res.json({ ok: true, tasks });
+    } catch (error: any) {
+      console.error('[Cluster] Queue fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get cluster task results
+  app.get('/api/cluster/results', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const results = await db
+        .select()
+        .from(clusterResultLog)
+        .orderBy(desc(clusterResultLog.completedAt))
+        .limit(limit);
+      
+      res.json({ ok: true, results });
+    } catch (error: any) {
+      console.error('[Cluster] Results fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trigger manual cluster rebalance
+  app.post('/api/cluster/rebalance', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { taskRouter } = await import('./services/task-router');
+      
+      const rebalancedCount = await taskRouter.rebalanceStuckTasks();
+      
+      res.json({ 
+        ok: true, 
+        message: `Rebalanced ${rebalancedCount} stuck tasks`,
+        rebalancedCount 
+      });
+    } catch (error: any) {
+      console.error('[Cluster] Rebalance failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Drain a specific node (mark unhealthy and reassign tasks)
+  app.post('/api/cluster/drain/:nodeId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { nodeId } = req.params;
+      const { clusterRegistry } = await import('./services/cluster-registry');
+      const { taskRouter } = await import('./services/task-router');
+      
+      // Mark node as draining
+      await clusterRegistry.markNodeDraining(nodeId);
+      
+      // Reassign all tasks from this node
+      const reassignedCount = await taskRouter.drainNode(nodeId);
+      
+      res.json({ 
+        ok: true, 
+        message: `Drained node ${nodeId} - ${reassignedCount} tasks reassigned`,
+        nodeId,
+        reassignedCount 
+      });
+    } catch (error: any) {
+      console.error('[Cluster] Drain failed:', error);
       res.status(500).json({ error: error.message });
     }
   });
