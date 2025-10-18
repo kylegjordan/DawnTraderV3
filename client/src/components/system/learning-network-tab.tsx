@@ -91,7 +91,7 @@ export default function LearningNetworkTab() {
   // Trigger manual learning sync
   const syncMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/learning/sync', 'POST', {});
+      return await apiRequest('POST', '/api/learning/sync', {});
     },
     onSuccess: (data: any) => {
       toast({
