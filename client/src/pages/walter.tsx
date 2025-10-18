@@ -699,11 +699,11 @@ export default function WalterPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex gap-4 min-h-0">
+      <div className="flex-1 flex gap-2 min-h-0">
         {/* Left Sidebar - Chat Sessions */}
         {!preferences.sidebarCollapsed && (
-          <div className="hidden lg:flex lg:w-80 flex-col gap-2">
-            <Card className="flex-1 p-4 min-h-0 flex flex-col relative">
+          <div className="hidden lg:flex lg:w-80 flex-col gap-1">
+            <Card className="flex-1 p-3 min-h-0 flex flex-col relative">
             {/* Search and Filters */}
             <div className="space-y-2 mb-3">
               <div className="relative">
