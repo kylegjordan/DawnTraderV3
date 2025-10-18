@@ -37,6 +37,7 @@ import {
   Server
 } from "lucide-react";
 import ClusterTab from "./cluster-tab";
+import LearningNetworkTab from "./learning-network-tab";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SystemMetrics {
@@ -543,6 +544,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="cluster" data-testid="tab-cluster">
             <Server className="w-4 h-4 mr-2" />
             Cluster
+          </TabsTrigger>
+          <TabsTrigger value="learning" data-testid="tab-learning">
+            <Brain className="w-4 h-4 mr-2" />
+            Learning Network
           </TabsTrigger>
         </TabsList>
         </div>
@@ -1058,6 +1063,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Cluster Tab */}
         <TabsContent value="cluster" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-cluster">
           <ClusterTab />
+        </TabsContent>
+
+        {/* Learning Network Tab - Phase 18.0 */}
+        <TabsContent value="learning" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-learning">
+          <LearningNetworkTab />
         </TabsContent>
       </Tabs>
     </div>

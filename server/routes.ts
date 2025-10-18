@@ -9669,6 +9669,108 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ========================================
+  // Phase 18.0: Multi-Domain Learning Network
+  // ========================================
+
+  // Get learning delta statistics
+  app.get('/api/learning/delta-stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { learningCoordinator } = await import('./services/learning-coordinator');
+      const stats = await learningCoordinator.getStatistics();
+      res.json({ ok: true, stats });
+    } catch (error: any) {
+      console.error('[Learning] Delta stats fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get recent learning deltas
+  app.get('/api/learning/deltas', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const { learningCoordinator } = await import('./services/learning-coordinator');
+      const deltas = await learningCoordinator.getRecentDeltas(limit);
+      res.json({ ok: true, deltas });
+    } catch (error: any) {
+      console.error('[Learning] Deltas fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get model alignment statistics
+  app.get('/api/learning/alignment-stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { modelConsistencyManager } = await import('./services/model-consistency-manager');
+      const stats = await modelConsistencyManager.getStatistics();
+      res.json({ ok: true, stats });
+    } catch (error: any) {
+      console.error('[Learning] Alignment stats fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get recent model alignments
+  app.get('/api/learning/alignments', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const { modelConsistencyManager } = await import('./services/model-consistency-manager');
+      const alignments = await modelConsistencyManager.getAlignmentHistory(limit);
+      res.json({ ok: true, alignments });
+    } catch (error: any) {
+      console.error('[Learning] Alignments fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get cross-domain proposals
+  app.get('/api/learning/proposals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const targetDomain = req.query.targetDomain as string | undefined;
+      const { crossDomainReasoning } = await import('./services/cross-domain-reasoning');
+      const proposals = crossDomainReasoning.getPendingProposals(targetDomain);
+      const stats = crossDomainReasoning.getStatistics();
+      res.json({ ok: true, proposals, stats });
+    } catch (error: any) {
+      console.error('[Learning] Proposals fetch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trigger manual learning sync
+  app.post('/api/learning/sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { nanoid } = await import('nanoid');
+      const { clusterBus } = await import('./services/cluster-bus');
+      
+      const traceId = nanoid();
+      
+      // Publish a test learning delta event
+      await clusterBus.publish(
+        "learning_delta",
+        {
+          deltaType: "discovery",
+          data: {
+            source: "manual_sync",
+            timestamp: new Date().toISOString(),
+            discovery: "Manual learning sync triggered via API",
+          },
+          traceId,
+        },
+        "api_trigger"
+      );
+
+      res.json({ 
+        ok: true, 
+        message: "Learning sync triggered successfully",
+        traceId,
+      });
+    } catch (error: any) {
+      console.error('[Learning] Sync trigger failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ===== PHASE 9.0: ADAPTIVE LEARNING & ALIGNMENT ROUTES =====
 
   // Verify action alignment
