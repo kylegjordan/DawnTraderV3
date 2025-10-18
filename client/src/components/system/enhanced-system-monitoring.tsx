@@ -446,7 +446,7 @@ export default function EnhancedSystemMonitoring() {
           </TabsTrigger>
           <TabsTrigger value="perf-metrics" data-testid="tab-perf-metrics">
             <Gauge className="w-4 h-4 mr-2" />
-            Performance
+            Task Performance
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -938,7 +938,7 @@ export default function EnhancedSystemMonitoring() {
           <SafetyTab />
         </TabsContent>
 
-        {/* Tab 17: Performance Metrics - Phase 12.0 */}
+        {/* Tab 17: Task Performance Metrics - Phase 12.0 */}
         <TabsContent value="perf-metrics" className="space-y-4">
           <PerformanceTab />
         </TabsContent>
@@ -3273,8 +3273,20 @@ function PerformanceTab() {
     refetchInterval: 60000, // 60 seconds
   });
 
-  const performance = (perfData as any) || null;
+  const perfResponse = (perfData as any) || null;
+  const performance = perfResponse?.performance || null;
   const autoscale = (autoscaleData as any) || null;
+
+  // Calculate success rate from task queue metrics
+  const calculateSuccessRate = () => {
+    if (!performance?.taskQueue) return null;
+    const { totalProcessed, totalFailed } = performance.taskQueue;
+    const totalCompleted = totalProcessed + totalFailed;
+    if (totalCompleted === 0) return null; // No tasks completed yet
+    return (totalProcessed / totalCompleted) * 100;
+  };
+
+  const successRate = calculateSuccessRate();
 
   return (
     <div className="space-y-4">
@@ -3297,7 +3309,7 @@ function PerformanceTab() {
               <div className="p-4 rounded-lg border bg-card">
                 <div className="text-sm text-muted-foreground mb-1">Health Score</div>
                 <div className="text-3xl font-bold" data-testid="text-health-score">
-                  {performance.healthScore?.toFixed(1) || 'N/A'}
+                  {performance.overallHealthScore?.toFixed(1) || 'N/A'}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   out of 100
@@ -3307,7 +3319,7 @@ function PerformanceTab() {
               <div className="p-4 rounded-lg border bg-card">
                 <div className="text-sm text-muted-foreground mb-1">Queue Depth</div>
                 <div className="text-3xl font-bold" data-testid="text-queue-depth">
-                  {performance.queueDepth ?? 'N/A'}
+                  {performance.taskQueue?.currentDepth ?? 'N/A'}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   tasks pending
@@ -3317,7 +3329,7 @@ function PerformanceTab() {
               <div className="p-4 rounded-lg border bg-card">
                 <div className="text-sm text-muted-foreground mb-1">Success Rate</div>
                 <div className="text-3xl font-bold" data-testid="text-success-rate">
-                  {performance.successRate?.toFixed(1) || 'N/A'}%
+                  {successRate !== null ? successRate.toFixed(1) : 'N/A'}%
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   task completion
@@ -3347,63 +3359,61 @@ function PerformanceTab() {
         <CardContent>
           {perfLoading ? (
             <Skeleton className="h-32 w-full" />
-          ) : performance?.timing ? (
+          ) : performance?.taskQueue || performance?.reasoning ? (
             <div className="space-y-4">
               {/* Task Queue Latency */}
-              <div>
-                <div className="text-sm font-medium mb-3 flex items-center gap-2">
-                  <Zap className="w-4 h-4" />
-                  Task Queue Processing
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 rounded-lg border bg-card">
-                    <div className="text-xs text-muted-foreground mb-1">p50</div>
-                    <div className="text-xl font-bold" data-testid="text-queue-p50">
-                      {performance.timing.queue?.p50?.toFixed(1) || 'N/A'} ms
-                    </div>
+              {performance.taskQueue && (
+                <div>
+                  <div className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Zap className="w-4 h-4" />
+                    Task Queue Processing
                   </div>
-                  <div className="p-3 rounded-lg border bg-card">
-                    <div className="text-xs text-muted-foreground mb-1">p95</div>
-                    <div className="text-xl font-bold" data-testid="text-queue-p95">
-                      {performance.timing.queue?.p95?.toFixed(1) || 'N/A'} ms
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg border bg-card">
+                      <div className="text-xs text-muted-foreground mb-1">Average</div>
+                      <div className="text-xl font-bold" data-testid="text-queue-p50">
+                        {performance.taskQueue.avgProcessingTime?.toFixed(1) || 'N/A'} ms
+                      </div>
                     </div>
-                  </div>
-                  <div className="p-3 rounded-lg border bg-card">
-                    <div className="text-xs text-muted-foreground mb-1">p99</div>
-                    <div className="text-xl font-bold" data-testid="text-queue-p99">
-                      {performance.timing.queue?.p99?.toFixed(1) || 'N/A'} ms
+                    <div className="p-3 rounded-lg border bg-card">
+                      <div className="text-xs text-muted-foreground mb-1">p95</div>
+                      <div className="text-xl font-bold" data-testid="text-queue-p95">
+                        {performance.taskQueue.p95ProcessingTime?.toFixed(1) || 'N/A'} ms
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Reasoning Latency */}
-              <div>
-                <div className="text-sm font-medium mb-3 flex items-center gap-2">
-                  <Brain className="w-4 h-4" />
-                  Autonomy Reasoning
+              {performance.reasoning && (
+                <div>
+                  <div className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Brain className="w-4 h-4" />
+                    Autonomy Reasoning
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3 rounded-lg border bg-card">
+                      <div className="text-xs text-muted-foreground mb-1">p50</div>
+                      <div className="text-xl font-bold" data-testid="text-reasoning-p50">
+                        {performance.reasoning.p50?.toFixed(1) || 'N/A'} ms
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-card">
+                      <div className="text-xs text-muted-foreground mb-1">p95</div>
+                      <div className="text-xl font-bold" data-testid="text-reasoning-p95">
+                        {performance.reasoning.p95?.toFixed(1) || 'N/A'} ms
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-card">
+                      <div className="text-xs text-muted-foreground mb-1">p99</div>
+                      <div className="text-xl font-bold" data-testid="text-reasoning-p99">
+                        {performance.reasoning.p99?.toFixed(1) || 'N/A'} ms
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 rounded-lg border bg-card">
-                    <div className="text-xs text-muted-foreground mb-1">p50</div>
-                    <div className="text-xl font-bold" data-testid="text-reasoning-p50">
-                      {performance.timing.reasoning?.p50?.toFixed(1) || 'N/A'} ms
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-lg border bg-card">
-                    <div className="text-xs text-muted-foreground mb-1">p95</div>
-                    <div className="text-xl font-bold" data-testid="text-reasoning-p95">
-                      {performance.timing.reasoning?.p95?.toFixed(1) || 'N/A'} ms
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-lg border bg-card">
-                    <div className="text-xs text-muted-foreground mb-1">p99</div>
-                    <div className="text-xl font-bold" data-testid="text-reasoning-p99">
-                      {performance.timing.reasoning?.p99?.toFixed(1) || 'N/A'} ms
-                    </div>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
