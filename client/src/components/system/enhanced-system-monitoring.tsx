@@ -25,7 +25,8 @@ import {
   Brain,
   Target,
   Sparkles,
-  Eye
+  Eye,
+  GraduationCap
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -418,6 +419,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="collaboration" data-testid="tab-collaboration">
             <Bot className="w-4 h-4 mr-2" />
             Collaboration
+          </TabsTrigger>
+          <TabsTrigger value="learning" data-testid="tab-learning">
+            <GraduationCap className="w-4 h-4 mr-2" />
+            Learning
           </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -882,6 +887,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 11: Collaboration - Phase 9.6 */}
         <TabsContent value="collaboration" className="space-y-4">
           <CollaborationTab />
+        </TabsContent>
+
+        {/* Tab 12: Learning - Phase 9.7 */}
+        <TabsContent value="learning" className="space-y-4">
+          <LearningTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -2275,6 +2285,153 @@ function CollaborationTab() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function LearningTab() {
+  const { toast } = useToast();
+
+  const { data: statsData, isLoading: statsLoading, refetch: refetchStats } = useQuery({
+    queryKey: ['/api/learning/stats'],
+    refetchInterval: 30000,
+  });
+
+  const stats = statsData?.summary;
+
+  return (
+    <div className="space-y-4">
+      <Card data-testid="card-learning-stats">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <GraduationCap className="w-5 h-5" />
+            Learning Feedback Statistics
+          </CardTitle>
+          <CardDescription>Agent performance tracking and cooperative learning metrics</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {statsLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : stats ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center">
+                  <div className="text-3xl font-bold" data-testid="text-total-feedback">
+                    {stats.totalFeedbackRecords}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Total Feedback Records</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold">
+                    {stats.agentMetrics?.length || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Active Agents</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-3xl font-bold">
+                    {stats.topPerformers?.length || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Top Performers</div>
+                </div>
+              </div>
+
+              {stats.topPerformers && stats.topPerformers.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-sm font-medium mb-2">Top Performing Agents</div>
+                  <div className="flex flex-wrap gap-2">
+                    {stats.topPerformers.map((agent: string) => (
+                      <Badge key={agent} variant="default" data-testid={`badge-top-${agent}`}>
+                        {agent}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {stats.needsImprovement && stats.needsImprovement.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-sm font-medium mb-2">Needs Improvement</div>
+                  <div className="flex flex-wrap gap-2">
+                    {stats.needsImprovement.map((agent: string) => (
+                      <Badge key={agent} variant="destructive" data-testid={`badge-needs-${agent}`}>
+                        {agent}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <GraduationCap className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No learning stats available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-agent-performance">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Agent Performance Metrics
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {statsLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : stats?.agentMetrics && stats.agentMetrics.length > 0 ? (
+            <div className="space-y-3">
+              {stats.agentMetrics.map((metric: any, idx: number) => (
+                <div 
+                  key={`${metric.agentName}-${metric.domain}`} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`agent-metric-${idx}`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="font-medium">{metric.agentName}</div>
+                      <div className="text-xs text-muted-foreground capitalize">
+                        Domain: {metric.domain}
+                      </div>
+                    </div>
+                    <Badge variant={
+                      metric.accuracy >= 0.85 ? 'default' :
+                      metric.accuracy >= 0.7 ? 'outline' :
+                      'destructive'
+                    }>
+                      {(metric.accuracy * 100).toFixed(0)}% accuracy
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs mt-2">
+                    <div>
+                      <span className="text-muted-foreground">Alignment:</span>
+                      <span className="ml-1 font-medium">{(metric.alignment * 100).toFixed(0)}%</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Feedback:</span>
+                      <span className="ml-1 font-medium">{metric.feedbackCount}</span>
+                    </div>
+                    <div className="text-right">
+                      {metric.accuracy >= 0.85 && (
+                        <span className="text-green-600">✓ Excellent</span>
+                      )}
+                      {metric.accuracy < 0.6 && (
+                        <span className="text-red-600">⚠ Low</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No agent performance data</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
