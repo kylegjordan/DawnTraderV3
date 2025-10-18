@@ -955,7 +955,7 @@ export default function WalterPage() {
         {/* Central Chat Area */}
         <Card className="flex-1 flex flex-col min-h-0 border-0 shadow-none p-0">
           {/* Messages Area */}
-          <ScrollArea ref={scrollAreaRef} className="flex-1 p-2 sm:p-3 max-h-[calc(100vh-280px)]">
+          <ScrollArea ref={scrollAreaRef} className="flex-1 p-2 sm:p-3 max-h-[calc(100vh-240px)]">
             <div className="space-y-6 max-w-4xl mx-auto">
               {!selectedChatId ? (
                 <div className="text-center py-12">
