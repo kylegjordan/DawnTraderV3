@@ -35,29 +35,42 @@ Collaborative Alignment & Federated Ethics enables multi-agent ethical consensus
 
 ### System Monitoring Panel Sticky Tab Fix (October 18, 2025)
 
-**Issue:** Tab menu was being covered by metric cards (CPU Usage, Memory Usage, etc.) despite z-index corrections.
+**Issue:** Tab menu was being covered by metric cards (CPU Usage, Memory Usage, etc.), particularly the third row of wrapped tabs (Task Performance, Alerts, UX Monitor).
 
-**Root Cause:** Metric cards were visually overlapping the tab menu because tabs and content were in a flow layout without positional anchoring.
+**Root Cause:** With 20 tabs wrapping across 3 rows, metric cards were visually overlapping the tab menu due to insufficient spacing between the wrapped tab rows and content below.
 
-**Solution:** Implemented sticky positioning for the tab bar with proper z-index stacking.
+**Solution:** Implemented sticky positioning with significantly increased spacing to accommodate all wrapped tab rows.
 
 **Implementation:**
-- Wrapped TabsList in sticky container: `<div className="sticky top-0 z-20 bg-background pb-4">`
+- Wrapped TabsList in sticky container: `<div className="sticky top-0 z-20 bg-background pb-8">`
+- TabsList styling: `flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-3`
+  - `gap-y-3` (12px) provides vertical spacing between wrapped tab rows
+  - `pb-3` (12px) adds internal bottom padding to TabsList
+- All TabsContent sections: `relative z-0 overflow-visible mt-6 space-y-4`
+  - `mt-6` (24px) creates clear separation from tabs
 - Sticky positioning keeps tab menu anchored at viewport top while content scrolls
 - Z-index z-20 ensures tabs stay above all content (z-0)
 - Background color prevents content showing through when scrolling
-- Bottom padding pb-4 (16px) provides clear separation from content
+
+**Spacing Breakdown:**
+- Sticky container bottom: 32px (pb-8)
+- TabsList bottom: 12px (pb-3)
+- Gap between tab rows: 12px (gap-y-3)
+- Content top margin: 24px (mt-6)
+- **Total measured spacing: 48px** between last tab row and first content card
 
 **Structure:**
 ```tsx
 <Tabs className="relative">
-  <div className="sticky top-0 z-20 bg-background pb-4">
-    <TabsList className="flex w-full flex-wrap bg-background pt-2">
+  <div className="sticky top-0 z-20 bg-background pb-8">
+    <TabsList className="flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-3">
+      {/* 20 tabs wrapping across 3 rows */}
+    </TabsList>
   </div>
-  <TabsContent className="relative z-0 overflow-visible mt-2">
+  <TabsContent className="relative z-0 overflow-visible mt-6 space-y-4">
 ```
 
-**Result:** Tab menu always visible and never covered by content cards. Measured spacing: 24px between tabs and content. Fix validated with automated e2e testing across multiple resolutions (1366×768, 1920×1080, 1024×768).
+**Result:** All 20 tabs fully visible across 3 rows with no overlap. Third row tabs (Task Performance, Alerts, UX Monitor) completely visible and clickable. Measured 48px spacing between tabs and content cards. Fix validated with automated e2e testing at 1366×768 resolution.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
