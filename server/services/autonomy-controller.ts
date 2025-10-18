@@ -482,6 +482,56 @@ class AutonomyControllerService {
         // Non-blocking - don't add to issues
       }
 
+      // Phase 17.0: Cluster Delegation Checkpoint (OPTIONAL - after Knowledge, before Execution)
+      try {
+        console.log('[AutonomyController] 🔄 Evaluating cluster delegation opportunity');
+        
+        const { taskRouter } = await import('./task-router');
+        const { clusterRegistry } = await import('./cluster-registry');
+        
+        // Check if cluster is available
+        const activeNodes = await clusterRegistry.getActiveNodes();
+        
+        if (activeNodes.length > 0) {
+          // Determine if this task benefits from cluster delegation
+          const shouldDelegate = this.shouldDelegateToCluster({
+            healthScore,
+            cognitiveScore,
+            issuesDetected: issuesDetected.length,
+            complexity: 'medium',
+          });
+          
+          if (shouldDelegate) {
+            console.log(`[AutonomyController] 📤 Delegating health assessment to cluster (${activeNodes.length} nodes available)`);
+            
+            // Enqueue task for cluster execution (non-blocking)
+            taskRouter.enqueueTask(
+              'general',
+              {
+                type: 'health_assessment',
+                healthScore,
+                cognitiveScore,
+                issuesDetected,
+                runId,
+              },
+              userId,
+              7 // Higher priority for health checks
+            ).catch((err: any) => 
+              console.error('[AutonomyController] Cluster delegation failed (non-blocking):', err)
+            );
+            
+            actionsTriggered.push('delegated_to_cluster');
+          } else {
+            console.log(`[AutonomyController] ✅ Cluster delegation: not needed (executing locally)`);
+          }
+        } else {
+          console.log(`[AutonomyController] ℹ️ Cluster delegation: no active nodes (executing locally)`);
+        }
+      } catch (err: any) {
+        console.error('[AutonomyController] Cluster delegation check failed:', err);
+        // Non-blocking - don't add to issues
+      }
+
       // Phase 9.6: Collaborative Cognition & Cross-Domain Reasoning Hooks
       // 1. Trigger collaborative reasoning if multiple complex issues detected (async, don't block)
       if (issuesDetected.length >= 2 && !issuesDetected.some(i => i.includes('ETHICAL VIOLATION'))) {
@@ -905,6 +955,45 @@ class AutonomyControllerService {
     }
 
     return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0.8;
+  }
+
+  /**
+   * Phase 17.0: Determine if task should be delegated to cluster
+   * 
+   * Delegation benefits:
+   * - Complex analysis tasks
+   * - Research and optimization
+   * - Resource-intensive operations
+   * - Tasks that can be parallelized
+   */
+  private shouldDelegateToCluster(context: {
+    healthScore: number;
+    cognitiveScore: number;
+    issuesDetected: number;
+    complexity: 'low' | 'medium' | 'high';
+  }): boolean {
+    // Don't delegate if system is unhealthy - keep control local
+    if (context.healthScore < 0.5 || context.cognitiveScore < 0.5) {
+      return false;
+    }
+
+    // Delegate complex tasks that benefit from distributed execution
+    if (context.complexity === 'high') {
+      return true;
+    }
+
+    // Delegate if multiple issues detected (likely needs deep analysis)
+    if (context.issuesDetected >= 3) {
+      return true;
+    }
+
+    // Medium complexity with good health - delegate for load balancing
+    if (context.complexity === 'medium' && context.healthScore > 0.7) {
+      return true;
+    }
+
+    // Default: execute locally for low complexity
+    return false;
   }
 
   /**
