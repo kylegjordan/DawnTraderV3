@@ -3337,7 +3337,7 @@ export const clusterAuditLog = pgTable("cluster_audit_log", {
 
 export const agentLearningDelta = pgTable("agent_learning_delta", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  originNodeId: varchar("origin_node_id").references(() => clusterNode.id).notNull(),
+  originNodeId: varchar("origin_node_id").notNull(),
   deltaType: learningDeltaTypeEnum("delta_type").notNull(),
   payload: jsonb("payload").notNull(),
   payloadHash: varchar("payload_hash", { length: 64 }).notNull(),

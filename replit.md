@@ -29,95 +29,14 @@ Latency & Throughput Optimization with Autoscaling Hooks introduces performance 
 
 Ethical Alignment Framework establishes comprehensive ethical reasoning across all autonomous decisions with database tables (`ethical_principle`, `ethical_violation_log`), an `EthicalReasoner` service integrated into the Autonomy Controller execution chain (Safety→Ethics→Execution), and foundational principles. The `EthicalReasoner` evaluates all actions against enabled principles and returns verdicts with violation logging. Admin API endpoints provide principle management and alignment monitoring.
 
-Collaborative Alignment & Federated Ethics enables multi-agent ethical consensus across domain agents with database tables (`federated_ethics_state`, `cross_agent_ethics_session`, `ethics_conflict_register`, `ethics_propagation_journal`) supporting distributed ethical decision-making. The `FederatedEthicsHub` provides authoritative ethical state snapshots, and the `EthicsConsensusOrchestrator` performs multi-agent consensus checks using weighted majority voting and conflict detection. The `PolicyPropagationService` handles push/pull delta updates. The Autonomy Controller execution path is enhanced with federated ethics: Safety → Federated Ethics Consensus → Ethical Reasoning → Execution. A Federation UI tab provides comprehensive monitoring and control.
+Collaborative Alignment & Federated Ethics enables multi-agent ethical consensus across domain agents with database tables (`federated_ethics_state`, `cross_agent_ethics_session`, `ethics_conflict_register`, `ethics_propagation_journal`) supporting distributed ethical decision-making. The `FederatedEthicsHub` provides authoritative ethical state snapshots, and the `EthicsConsensusOrchestrator` performs multi-agent consensus checks using weighted majority voting and conflict detection. The `PolicyPropagationService` handles push/pull delta updates. The Autonomy Controller execution path is enhanced with federated ethics: Safety → Federated Ethics Consensus → Ethical Reasoning → Execution.
 
+Cognitive Introspection & Bias Mitigation involves an `IntrospectionEngine` to detect cognitive biases and a `BiasMitigation` service to apply corrections. This integrates into the Autonomy Controller pipeline: Reasoning → Introspection (async) → Safety → Federated Ethics → Ethical Reasoning → Execution.
 
-**Cognitive Introspection & Bias Mitigation (Phase 15.0)**
+Controlled Web Intelligence & Knowledge Retrieval uses a `KnowledgeRetrievalService` for policy-bound web acquisition with trust scoring and caching, and a `SemanticCorrelationEngine` for relevance and gap detection using OpenAI embeddings. This also integrates into the Autonomy Controller pipeline: Reasoning → Introspection → Safety → Federated Ethics → Ethical Reasoning → Knowledge Acquisition (if gap >0.4) → Execution.
 
-**Database Schema:**
-- `bias_observation_log`: Records detected cognitive biases
-- `confidence_drift_log`: Tracks confidence drift metrics
-- `introspection_report`: Stores daily summaries
-- `BiasType` enum: confirmation, recency, anchoring, overconfidence, availability, optimism
+Multi-Domain Orchestration & Cross-Node Learning utilizes a `LearningCoordinator` to validate, score, and route learning deltas across cluster nodes, a `ModelConsistencyManager` to detect and reconcile model drift, and `CrossDomainReasoning` to transform learning between defined domain channels (Research to Trading, Compliance to Trading, Analytics to Research, Trading to Analytics). A `LearningGateValidator` applies the ethical gate chain to all learning operations.
 
-**Core Services:**
-- `IntrospectionEngine`: Detects six bias types, strictly per-user via INNER JOIN
-- `BiasMitigation`: Applies corrections when biases detected
-
-**Autonomy Controller Integration:**
-- Pipeline: Reasoning → Introspection (async) → Safety → Federated Ethics → Ethical Reasoning → Execution
-
-**Scheduler Tasks:**
-- `introspection_cycle`: Every 4 hours
-- `bias_mitigation_cycle`: Every 8 hours
-
-**API Endpoints (JWT auth required):**
-- `GET /api/introspection/status`, `/biases`, `/drift`
-- `POST /api/introspection/mitigate`
-
-**System Monitoring UI - Introspection Tab:**
-Summary cards, Bias Breakdown Chart, Confidence Drift Chart, Mitigation Controls
-
-**Critical Notes:**
-- Uses `integrityScore` (not reflectionScore) for overconfidence detection
-- All queries join reasoningTrace for user isolation
-
-**Controlled Web Intelligence & Knowledge Retrieval (Phase 16.0)**
-
-**Database Schema:**
-- `knowledge_source` enum: web_search, web_fetch, api, internal_docs
-- `retrieval_trust_level` enum: verified, moderate, low, untrusted
-- `knowledge_retrieval_log`: Records all knowledge queries (userId, query, source, url, trustLevel, relevanceScore, retrievedData, retrievedAt)
-- `knowledge_cache`: Caches data with 24h TTL (queryHash, cachedData, expiresAt)
-- `knowledge_trust_record`: Tracks domain trust (domain, trustLevel, success/failure counts, avgRelevanceScore)
-
-**Core Services:**
-- `KnowledgeRetrievalService`: Safe web acquisition with policy-bound domain whitelisting
-  - `queryWeb()`: Retrieves via web_search/web_fetch with trust scoring and caching
-  - `scoreTrust()`: Domain whitelist - verified: wikipedia.org, reuters.com, bbc.com, bloomberg.com, coindesk.com, cointelegraph.com, github.com, stackexchange.com, stackoverflow.com, arxiv.org, nature.com, science.org; moderate: medium.com, dev.to, reddit.com, twitter.com, x.com; low: unknown
-  - `recordRetrieval()`: Logs all retrievals with trust/relevance scores
-  - `refreshCache()`: Removes expired entries
-  - `auditTrust()`: Re-evaluates trust (downgrade <50% success, promote ≥80% moderate, ≥95% verified)
-- `SemanticCorrelationEngine`: OpenAI embeddings for relevance and gap detection
-  - `embedText()`: 1536-dim embeddings via text-embedding-3-small
-  - `computeRelevanceScore()`: Cosine similarity
-  - `relateToKnowledgeGraph()`: Gap detection (threshold 0.4)
-
-**Autonomy Controller Integration:**
-- Pipeline: Reasoning → Introspection → Safety → Federated Ethics → Ethical Reasoning → Knowledge Acquisition (if gap >0.4) → Execution
-- Async, non-blocking (doesn't halt on failure)
-- Gap threshold: 0.4 (40% semantic relevance)
-
-**Scheduler Tasks:**
-- `knowledge_sync`: Every 2 hours (cache refresh, sync sources)
-- `trust_audit`: Every 12 hours (re-evaluate domain trust)
-
-**API Endpoints (JWT auth required):**
-- `GET /api/knowledge/query?query=all&limit=24`: Retrieval logs (default 24h)
-- `GET /api/knowledge/trust`: Trusted sources (verified+moderate)
-- `POST /api/knowledge/refresh`: Manual cache refresh
-
-**System Monitoring UI - Knowledge Tab:**
-- Summary: Retrievals (24h), Trusted Sources, Avg Relevance, Cache Status
-- Recent Retrievals: Last 10 with trust badges (verified=green, moderate=yellow, low=gray), relevance, timestamps
-- Trusted Domains: verified/moderate sources with success rates
-- Cache Management: Manual refresh button, auto-sync schedule
-
-**Critical Notes:**
-- ONLY valid enum values: "verified", "moderate", "low", "untrusted"
-- Domain whitelist enforces policy-bound retrieval (no arbitrary URLs)
-- All operations user-scoped (userId enforced)
-- Cache TTL: 24 hours
-- Trust audit thresholds: <50% → low, ≥80% → moderate, ≥95% → verified
-- Optional enhancement (doesn't block execution)
-- getTrustedSources uses enum casting: \`sql\`\${knowledgeTrustRecord.trustLevel} = ANY(ARRAY['verified'::retrieval_trust_level, 'moderate'::retrieval_trust_level])\`\`
-
-**Security Constraints:**
-- All endpoints require JWT auth (authenticateToken)
-- No direct URL access - only via approved query flow
-- Web search/fetch sandboxed via KnowledgeRetrievalService
-- Unknown domains default to "low" trust
-- Admin can override via knowledge_trust_record manual entries
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
