@@ -76,6 +76,10 @@ app.use((req, res, next) => {
   const { seedTestUser } = await import('./startup/test-user-seeder');
   await seedTestUser();
 
+  // Phase 13.0: Seed default ethical principles
+  const { seedEthicalPrinciples } = await import('./startup/ethical-principles-seeder');
+  await seedEthicalPrinciples();
+
   // Phase 8.5 Addendum F: Sync all strategies for all users on startup
   const { strategySyncService } = await import('./services/strategy-sync');
   await strategySyncService.syncAllUsers();

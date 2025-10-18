@@ -105,6 +105,15 @@ class EthicalReasonerService {
   }
 
   /**
+   * Clear the principles cache (called when principles are updated)
+   */
+  clearCache(): void {
+    this.principlesCache = [];
+    this.lastCacheUpdate = 0;
+    console.log('[EthicalReasoner] Cache cleared');
+  }
+
+  /**
    * Get active ethical principles (with caching)
    */
   private async getActivePrinciples(): Promise<EthicalPrinciple[]> {
@@ -138,8 +147,26 @@ class EthicalReasonerService {
     const constraints = principle.constraints as any;
 
     switch (principle.name) {
-      case 'Safety First':
-        // Check if action violates safety constraints
+      case 'transparency':
+        // Check if action has proper audit trail and reasoning
+        if (constraints?.require_reasoning_log && !action.context.reasoningLogId) {
+          return {
+            principle: principle.name,
+            reason: 'Action lacks required reasoning log for transparency',
+            severity: 'medium',
+          };
+        }
+        if (constraints?.require_audit_trail && !action.context.auditTrailId) {
+          return {
+            principle: principle.name,
+            reason: 'Action lacks required audit trail for accountability',
+            severity: 'medium',
+          };
+        }
+        break;
+
+      case 'harm_prevention':
+        // Check if action violates risk/harm prevention constraints
         if (action.context.tradeAmount && constraints?.max_risk_per_trade_pct) {
           const riskPct = action.context.riskLevel ? parseFloat(action.context.riskLevel) : 0;
           if (riskPct > constraints.max_risk_per_trade_pct) {
@@ -150,31 +177,36 @@ class EthicalReasonerService {
             };
           }
         }
-        break;
-
-      case 'Transparency':
-        // Check if action has proper audit trail
-        if (constraints?.require_reasoning_log && !action.context.reasoningLogId) {
-          return {
-            principle: principle.name,
-            reason: 'Action lacks required reasoning log for transparency',
-            severity: 'medium',
-          };
+        if (action.context.dailyLoss && constraints?.max_daily_loss_pct) {
+          const dailyLossPct = parseFloat(action.context.dailyLoss);
+          if (dailyLossPct > constraints.max_daily_loss_pct) {
+            return {
+              principle: principle.name,
+              reason: `Daily loss (${dailyLossPct}%) exceeds maximum allowed (${constraints.max_daily_loss_pct}%)`,
+              severity: 'critical',
+            };
+          }
         }
         break;
 
-      case 'Fairness':
-        // Check for prohibited market manipulation
-        if (constraints?.prohibit_manipulation && action.action.includes('manipulate')) {
-          return {
-            principle: principle.name,
-            reason: 'Action appears to involve market manipulation',
-            severity: 'critical',
-          };
+      case 'fairness':
+        // Check for prohibited market manipulation or unfair practices
+        if (constraints?.prohibit_manipulation) {
+          const manipulationKeywords = ['manipulate', 'front-run', 'spoof', 'wash-trade'];
+          const actionLower = action.action.toLowerCase();
+          for (const keyword of manipulationKeywords) {
+            if (actionLower.includes(keyword)) {
+              return {
+                principle: principle.name,
+                reason: `Action appears to involve market manipulation (${keyword})`,
+                severity: 'critical',
+              };
+            }
+          }
         }
         break;
 
-      case 'User Autonomy':
+      case 'autonomy_bounds':
         // Check if user approval is required and present
         if (constraints?.require_approval_for_live_trades && 
             action.context.tradingMode === 'live' && 
@@ -185,22 +217,30 @@ class EthicalReasonerService {
             severity: 'high',
           };
         }
+        if (constraints?.respect_user_preferences && action.context.overrideUserPreference) {
+          return {
+            principle: principle.name,
+            reason: 'Action overrides user preferences without authorization',
+            severity: 'high',
+          };
+        }
         break;
 
-      case 'Data Privacy':
-        // Check for exposed secrets
-        if (constraints?.prohibit_logging_secrets) {
-          const sensitiveKeys = ['password', 'apiKey', 'secret', 'token', 'privateKey'];
-          const contextStr = JSON.stringify(action.context).toLowerCase();
-          for (const key of sensitiveKeys) {
-            if (contextStr.includes(key)) {
-              return {
-                principle: principle.name,
-                reason: `Action context may contain sensitive data (${key})`,
-                severity: 'critical',
-              };
-            }
-          }
+      case 'accountability':
+        // Check for proper logging and audit capabilities
+        if (constraints?.log_all_decisions && !action.context.decisionLogId) {
+          return {
+            principle: principle.name,
+            reason: 'Autonomous decision not logged for accountability',
+            severity: 'medium',
+          };
+        }
+        if (constraints?.enable_human_review && action.context.bypassHumanReview) {
+          return {
+            principle: principle.name,
+            reason: 'Action attempts to bypass required human review',
+            severity: 'high',
+          };
         }
         break;
     }
