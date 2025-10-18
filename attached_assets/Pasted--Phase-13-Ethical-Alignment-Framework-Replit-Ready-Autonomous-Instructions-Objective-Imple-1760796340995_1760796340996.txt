@@ -1,0 +1,173 @@
+🧩 Phase 13 — Ethical Alignment Framework (Replit-Ready Autonomous Instructions)
+🔹 Objective
+
+Implement an Ethical Alignment Framework that guides all autonomous reasoning and trading decisions through clearly defined values, moral heuristics, and transparency principles.
+This phase completes the cognition stack by embedding an ethical reasoning layer across all agents.
+
+🧭 Execution Steps
+Task 1 — Schema Expansion
+
+Edit shared/schema.ts.
+
+Add new database tables:
+
+ethical_principle – stores system-wide values (e.g., safety, transparency, fairness, autonomy).
+
+ethical_violation_log – records any detected ethical conflicts or overrides.
+
+Add enums:
+
+principle_type (foundational, operational, contextual)
+
+violation_severity (low, medium, high, critical)
+
+Include insert schemas and type exports for these tables.
+
+Push schema to database (npm run db:push -- --force).
+
+If parsing errors occur, use SQL DO blocks as in earlier phases.
+
+Task 2 — Ethical Reasoner Service
+
+Create server/services/ethical-reasoner.ts.
+
+This service evaluates every proposed action (trade, decision, analysis) against:
+
+Stored ethical principles
+
+Current context and risk level
+
+Safety and bias signals from Phases 11–12
+
+Output: verdict (approved, rejected, requires_review) and reason list.
+
+Task 3 — Integration with Autonomy Controller
+
+Open server/services/autonomy-controller.ts.
+
+Insert ethical reasoning step:
+
+Run after SafetyGuardrails, before final execution.
+
+If verdict = rejected, abort execution and log violation.
+
+If verdict = requires_review, queue for human review mode.
+
+Broadcast ethical events to Context Bridge so UI updates live.
+
+Task 4 — Ethics Scheduler Task
+
+Edit server/services/autonomy-scheduler.ts.
+
+Add ethics_audit scheduled task (once every 6 hours).
+
+Reviews recent violation logs and principle changes.
+
+Flags drift in decision patterns vs. ethical standards.
+
+Register task in initAutonomyScheduler() and include in getAutonomySchedulerStatus().
+
+Task 5 — API Endpoints
+
+Edit server/routes.ts.
+
+Add Phase 13 API routes:
+
+GET /api/ethics/principles – list current principles.
+
+POST /api/ethics/principles – update or add principles (admin-only).
+
+GET /api/ethics/violations – fetch violation logs.
+
+GET /api/ethics/status – summary of ethical alignment health.
+
+Ensure admin authentication required for updates.
+
+Task 6 — Ethics UI Tab
+
+Open client/src/components/system/enhanced-system-monitoring.tsx.
+
+Add new tab trigger: Ethics (value="ethics"), after Task Performance tab.
+
+Add TabsContent value="ethics" block to render the Ethics tab.
+
+Create EthicsTab component within the same file:
+
+Show cards for:
+
+Ethical Principles (list from /api/ethics/principles)
+
+Recent Violations (from /api/ethics/violations)
+
+Alignment Status (from /api/ethics/status)
+
+Include filters for severity and principle type.
+
+Auto-refresh every 5 minutes (300 000 ms).
+
+Task 7 — Functional Validation
+
+Login as testuser123 / SecurePass123!
+
+Navigate to System Monitoring → Ethics tab.
+
+Confirm:
+
+Principles table loads with values (e.g., Safety, Transparency).
+
+Violation log shows none on first run (empty = normal).
+
+Alignment Status card shows ✅ Compliant.
+
+Check console for successful API calls and no authorization errors.
+
+Task 8 — Scheduler and API Verification
+
+Verify scheduler status shows new ethics_audit task.
+
+Run:
+
+curl -s http://localhost:5000/api/ethics/status -H "Authorization: Bearer $TOKEN"
+
+
+Expect JSON response with alignment_score, violations_today, and principle_drift.
+
+Confirm no errors in Replit console.
+
+Task 9 — Architect Review and Documentation
+
+Call architect review agent to validate data flow and decision order (Safety → Ethics → Execution).
+
+Update replit.md with Phase 13 section describing:
+
+Ethical Reasoner architecture
+
+Principle storage schema
+
+Audit scheduler behavior
+
+UI overview and expected JSON fields
+
+✅ Completion Criteria
+Check	Expected Result
+Database Tables	ethical_principle and ethical_violation_log exist
+Service	ethical-reasoner.ts active and linked to Autonomy Controller
+Scheduler	ethics_audit runs every 6 hours
+UI	Ethics tab shows principles and status
+API	All routes respond 200 OK
+Safety Chain	Execution blocked when ethical rule violated
+📘 Post-Implementation Summary
+
+Once Phase 13 is executed successfully:
+
+All autonomous actions are now evaluated through three gates:
+
+Safety Guardrails (Phase 11)
+
+Ethical Reasoner (Phase 13)
+
+Meta-Cognition Oversight (Phase 9.8)
+
+The system can self-audit ethical drift and alert operators.
+
+Administrators can modify core values without code changes.

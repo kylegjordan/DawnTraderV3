@@ -87,6 +87,11 @@ export const agentStateEnum = pgEnum("agent_state", ["active", "idle", "suspende
 export const safetySeverityEnum = pgEnum("safety_severity", ["low", "medium", "high", "critical"]);
 export const safetyScopeEnum = pgEnum("safety_scope", ["global", "trading", "autonomy", "analysis"]);
 
+// Phase 13.0 enums
+export const principleTypeEnum = pgEnum("principle_type", ["foundational", "operational", "contextual"]);
+export const violationSeverityEnum = pgEnum("violation_severity", ["low", "medium", "high", "critical"]);
+export const ethicalVerdictEnum = pgEnum("ethical_verdict", ["approved", "rejected", "requires_review"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2670,6 +2675,41 @@ export const killSwitch = pgTable("kill_switch", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Phase 13.0: Ethical Principle - System-wide Values and Moral Heuristics
+export const ethicalPrinciple = pgTable("ethical_principle", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  type: principleTypeEnum("type").notNull(),
+  description: text("description").notNull(),
+  priority: integer("priority").notNull().default(1), // 1=highest priority
+  enabled: boolean("enabled").notNull().default(true),
+  constraints: jsonb("constraints"), // JSON object with specific constraints for this principle
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  nameIdx: index("ethical_principle_name_idx").on(table.name),
+  typeIdx: index("ethical_principle_type_idx").on(table.type),
+  enabledIdx: index("ethical_principle_enabled_idx").on(table.enabled),
+}));
+
+// Phase 13.0: Ethical Violation Log - Detected Ethical Conflicts
+export const ethicalViolationLog = pgTable("ethical_violation_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actor: varchar("actor", { length: 100 }).notNull(),
+  action: varchar("action", { length: 200 }).notNull(),
+  principleViolated: varchar("principle_violated", { length: 100 }).notNull(),
+  verdict: ethicalVerdictEnum("verdict").notNull(),
+  severity: violationSeverityEnum("severity").notNull(),
+  reason: text("reason"), // Explanation of why this violated the principle
+  metadata: jsonb("metadata"), // Context about the action (e.g., trade params, risk level)
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  actorIdx: index("ethical_violation_log_actor_idx").on(table.actor),
+  verdictIdx: index("ethical_violation_log_verdict_idx").on(table.verdict),
+  severityIdx: index("ethical_violation_log_severity_idx").on(table.severity),
+  createdAtIdx: index("ethical_violation_log_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2708,6 +2748,8 @@ export const insertAgentRegistrySchema = createInsertSchema(agentRegistry).omit(
 export const insertSafetyPolicySchema = createInsertSchema(safetyPolicy).omit({ id: true, createdAt: true });
 export const insertSafetyEventLogSchema = createInsertSchema(safetyEventLog).omit({ id: true, createdAt: true });
 export const insertKillSwitchSchema = createInsertSchema(killSwitch).omit({ updatedAt: true });
+export const insertEthicalPrincipleSchema = createInsertSchema(ethicalPrinciple).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertEthicalViolationLogSchema = createInsertSchema(ethicalViolationLog).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2827,6 +2869,15 @@ export type SafetyEventLog = typeof safetyEventLog.$inferSelect;
 
 export type InsertKillSwitch = z.infer<typeof insertKillSwitchSchema>;
 export type KillSwitch = typeof killSwitch.$inferSelect;
+
+export type InsertEthicalPrinciple = z.infer<typeof insertEthicalPrincipleSchema>;
+export type EthicalPrinciple = typeof ethicalPrinciple.$inferSelect;
+export type PrincipleType = typeof principleTypeEnum.enumValues[number];
+export type ViolationSeverity = typeof violationSeverityEnum.enumValues[number];
+export type EthicalVerdict = typeof ethicalVerdictEnum.enumValues[number];
+
+export type InsertEthicalViolationLog = z.infer<typeof insertEthicalViolationLogSchema>;
+export type EthicalViolationLog = typeof ethicalViolationLog.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({
