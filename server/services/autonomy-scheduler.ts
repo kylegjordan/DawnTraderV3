@@ -1023,6 +1023,65 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Phase 17.0: Every 60 seconds - Cluster Heartbeat
+schedulerRegistry.registerTask({
+  name: 'cluster_heartbeat',
+  description: 'Update cluster node heartbeat and metrics',
+  frequency: 'custom',
+  intervalMs: 60 * 1000, // 60 seconds
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    try {
+      const { clusterRegistry } = await import('./cluster-registry');
+      const nodeId = clusterRegistry.getLocalNodeId();
+      
+      if (!nodeId) {
+        // Node not registered yet, skip heartbeat
+        return;
+      }
+      
+      await clusterRegistry.heartbeat();
+      
+      // Silent success - heartbeat is routine
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Cluster heartbeat failed:', error);
+      throw error;
+    }
+  },
+});
+
+// Phase 17.0: Every 10 minutes - Cluster Rebalance
+schedulerRegistry.registerTask({
+  name: 'cluster_rebalance',
+  description: 'Rebalance stuck tasks and optimize cluster load distribution',
+  frequency: 'custom',
+  intervalMs: 10 * 60 * 1000, // 10 minutes
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🔄 Running cluster rebalance...');
+    
+    try {
+      const { taskRouter } = await import('./task-router');
+      
+      // Rebalance stuck tasks
+      const rebalancedCount = await taskRouter.rebalanceStuckTasks();
+      
+      if (rebalancedCount > 0) {
+        console.log(`[AutonomyScheduler] ✅ Cluster rebalance complete - ${rebalancedCount} tasks reassigned`);
+      } else {
+        console.log('[AutonomyScheduler] ✅ Cluster rebalance complete - no stuck tasks found');
+      }
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Cluster rebalance failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Get autonomy scheduler status
  */
@@ -1045,6 +1104,8 @@ export function getAutonomySchedulerStatus() {
   const biasMitigationStatus = schedulerRegistry.getTaskStatus('bias_mitigation_cycle');
   const knowledgeSyncStatus = schedulerRegistry.getTaskStatus('knowledge_sync');
   const trustAuditStatus = schedulerRegistry.getTaskStatus('trust_audit');
+  const clusterHeartbeatStatus = schedulerRegistry.getTaskStatus('cluster_heartbeat');
+  const clusterRebalanceStatus = schedulerRegistry.getTaskStatus('cluster_rebalance');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -1154,6 +1215,18 @@ export function getAutonomySchedulerStatus() {
       lastRun: trustAuditStatus.lastRun,
       nextRun: trustAuditStatus.nextRun,
       frequency: trustAuditStatus.frequency,
+    } : null,
+    clusterHeartbeat: clusterHeartbeatStatus ? {
+      status: clusterHeartbeatStatus.status,
+      lastRun: clusterHeartbeatStatus.lastRun,
+      nextRun: clusterHeartbeatStatus.nextRun,
+      frequency: clusterHeartbeatStatus.frequency,
+    } : null,
+    clusterRebalance: clusterRebalanceStatus ? {
+      status: clusterRebalanceStatus.status,
+      lastRun: clusterRebalanceStatus.lastRun,
+      nextRun: clusterRebalanceStatus.nextRun,
+      frequency: clusterRebalanceStatus.frequency,
     } : null,
   };
 }
