@@ -28,7 +28,9 @@ import {
   Eye,
   GraduationCap,
   Shield,
-  Archive
+  Archive,
+  Gauge,
+  Clock
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -934,6 +936,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 16: Safety - Phase 11.0 */}
         <TabsContent value="safety" className="space-y-4">
           <SafetyTab />
+        </TabsContent>
+
+        {/* Tab 17: Performance Metrics - Phase 12.0 */}
+        <TabsContent value="perf-metrics" className="space-y-4">
+          <PerformanceTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -3251,6 +3258,219 @@ function SafetyTab() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function PerformanceTab() {
+  const { data: perfData, isLoading: perfLoading } = useQuery({
+    queryKey: ['/api/system/performance'],
+    refetchInterval: 60000, // 60 seconds
+  });
+
+  const { data: autoscaleData, isLoading: autoscaleLoading } = useQuery({
+    queryKey: ['/api/system/autoscale/hints'],
+    refetchInterval: 60000, // 60 seconds
+  });
+
+  const performance = (perfData as any) || null;
+  const autoscale = (autoscaleData as any) || null;
+
+  return (
+    <div className="space-y-4">
+      {/* System Health Card */}
+      <Card data-testid="card-system-health">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5" />
+            System Health
+          </CardTitle>
+          <CardDescription>
+            Overall system performance and queue metrics
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {perfLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : performance ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 rounded-lg border bg-card">
+                <div className="text-sm text-muted-foreground mb-1">Health Score</div>
+                <div className="text-3xl font-bold" data-testid="text-health-score">
+                  {performance.healthScore?.toFixed(1) || 'N/A'}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  out of 100
+                </div>
+              </div>
+              
+              <div className="p-4 rounded-lg border bg-card">
+                <div className="text-sm text-muted-foreground mb-1">Queue Depth</div>
+                <div className="text-3xl font-bold" data-testid="text-queue-depth">
+                  {performance.queueDepth ?? 'N/A'}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  tasks pending
+                </div>
+              </div>
+              
+              <div className="p-4 rounded-lg border bg-card">
+                <div className="text-sm text-muted-foreground mb-1">Success Rate</div>
+                <div className="text-3xl font-bold" data-testid="text-success-rate">
+                  {performance.successRate?.toFixed(1) || 'N/A'}%
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  task completion
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No performance data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Latency Metrics Card */}
+      <Card data-testid="card-latency-metrics">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            Latency Metrics
+          </CardTitle>
+          <CardDescription>
+            Task queue and reasoning performance timing
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {perfLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : performance?.timing ? (
+            <div className="space-y-4">
+              {/* Task Queue Latency */}
+              <div>
+                <div className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Zap className="w-4 h-4" />
+                  Task Queue Processing
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg border bg-card">
+                    <div className="text-xs text-muted-foreground mb-1">p50</div>
+                    <div className="text-xl font-bold" data-testid="text-queue-p50">
+                      {performance.timing.queue?.p50?.toFixed(1) || 'N/A'} ms
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg border bg-card">
+                    <div className="text-xs text-muted-foreground mb-1">p95</div>
+                    <div className="text-xl font-bold" data-testid="text-queue-p95">
+                      {performance.timing.queue?.p95?.toFixed(1) || 'N/A'} ms
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg border bg-card">
+                    <div className="text-xs text-muted-foreground mb-1">p99</div>
+                    <div className="text-xl font-bold" data-testid="text-queue-p99">
+                      {performance.timing.queue?.p99?.toFixed(1) || 'N/A'} ms
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reasoning Latency */}
+              <div>
+                <div className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Brain className="w-4 h-4" />
+                  Autonomy Reasoning
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg border bg-card">
+                    <div className="text-xs text-muted-foreground mb-1">p50</div>
+                    <div className="text-xl font-bold" data-testid="text-reasoning-p50">
+                      {performance.timing.reasoning?.p50?.toFixed(1) || 'N/A'} ms
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg border bg-card">
+                    <div className="text-xs text-muted-foreground mb-1">p95</div>
+                    <div className="text-xl font-bold" data-testid="text-reasoning-p95">
+                      {performance.timing.reasoning?.p95?.toFixed(1) || 'N/A'} ms
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg border bg-card">
+                    <div className="text-xs text-muted-foreground mb-1">p99</div>
+                    <div className="text-xl font-bold" data-testid="text-reasoning-p99">
+                      {performance.timing.reasoning?.p99?.toFixed(1) || 'N/A'} ms
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No latency data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Autoscale Recommendations Card */}
+      <Card data-testid="card-autoscale">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Autoscale Recommendations
+          </CardTitle>
+          <CardDescription>
+            Intelligent worker scaling based on queue depth and latency
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {autoscaleLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : autoscale ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg border bg-card">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-sm font-medium">Recommended Workers</div>
+                  <div className="text-3xl font-bold" data-testid="text-recommended-workers">
+                    {autoscale.recommendedWorkers ?? 'N/A'}
+                  </div>
+                </div>
+                
+                {autoscale.reason && (
+                  <div className="text-sm text-muted-foreground border-t pt-3">
+                    <div className="font-medium mb-1">Reason:</div>
+                    <div data-testid="text-autoscale-reason">{autoscale.reason}</div>
+                  </div>
+                )}
+              </div>
+
+              {autoscale.metrics && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg border bg-card">
+                    <div className="text-xs text-muted-foreground mb-1">Current Queue</div>
+                    <div className="text-lg font-bold">
+                      {autoscale.metrics.queueDepth ?? 'N/A'}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg border bg-card">
+                    <div className="text-xs text-muted-foreground mb-1">Reasoning p95</div>
+                    <div className="text-lg font-bold">
+                      {autoscale.metrics.reasoningP95?.toFixed(1) || 'N/A'} ms
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No autoscale data available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

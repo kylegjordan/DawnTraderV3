@@ -1,0 +1,107 @@
+🧩 Phase 12.1 — Performance UI Integration (Replit-Ready Autonomous Instructions)
+🔹 Objective
+
+Implement the Performance Tab within the System Monitoring interface.
+This tab displays real-time backend metrics from /api/system/performance and /api/system/autoscale/hints, refreshing automatically every 60 seconds.
+
+🧭 Execution Steps
+
+Task 1 — Locate File
+
+Target file: client/src/components/system/enhanced-system-monitoring.tsx
+
+Confirm existing Safety Tab and TabsList section.
+
+Task 2 — Create PerformanceTab Component
+
+Append a new PerformanceTab React component at the end of the file (below SafetyTab).
+
+Include sections for:
+
+System Health (Health Score, Queue Depth, Success Rate)
+
+Latency (p50/p95/p99 ms)
+
+Autoscale Recommendations (Recommended Workers + Reason)
+
+Configure data fetch from both endpoints and auto-refresh every 60 seconds.
+
+Display loading indicator and fallback text when data is unavailable.
+
+Task 3 — Add TabsContent Block
+
+Add a new <TabsContent value="performance"> block that renders <PerformanceTab />.
+
+Position it immediately after the Safety Tab content.
+
+Task 4 — Add Tab Trigger
+
+In the <TabsList> section near the top of the System Monitoring layout, add:
+
+A Performance tab trigger (<TabsTrigger value="performance">Performance</TabsTrigger>) immediately after the Safety trigger.
+
+Ensure consistent indentation and formatting with the other triggers.
+
+Task 5 — Save → Build → Run
+
+Save all changes.
+
+Run:
+
+npm run build
+npm start
+
+
+The dev server should start automatically on port 5000 (or whichever Replit assigns).
+
+Task 6 — Functional Validation
+
+Log in using:
+
+Username: testuser123
+
+Password: SecurePass123!
+
+Navigate to System Monitoring → Performance Tab.
+
+Confirm:
+
+Health Score, Queue Depth, Success Rate values appear.
+
+Latency (p50/p95/p99) metrics display.
+
+Autoscale Recommendations section shows numeric values.
+
+Values refresh automatically every 60 seconds.
+
+Task 7 — Console and API Verification
+
+Open Replit Console → check for successful JSON fetch logs.
+
+Verify both backend APIs return 200 OK:
+
+curl -s http://localhost:5000/api/system/performance
+curl -s http://localhost:5000/api/system/autoscale/hints
+
+
+Confirm both responses return JSON data.
+
+Task 8 — UI Consistency Check
+
+Ensure tab trigger highlights correctly when selected.
+
+Confirm that navigating between Safety and Performance tabs updates content without page reload.
+
+Verify no UI errors or console warnings during refresh.
+
+🧩 Completion Criteria
+
+✅ Performance Tab visible in System Monitoring.
+✅ Metrics load successfully from backend APIs.
+✅ Auto-refresh confirmed at 60 s intervals.
+✅ No LSP or runtime errors.
+✅ Kill Switch and Safety tabs remain unaffected.
+
+📘 Phase 12 .1 Post-Implementation Summary
+
+After executing these steps, the Performance Monitoring UI will be fully integrated and aligned with backend instrumentation, completing all pending work from Phase 12.
