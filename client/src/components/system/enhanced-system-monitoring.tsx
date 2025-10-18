@@ -2009,178 +2009,190 @@ function ReflectionTab() {
 }
 
 function EthicsTab() {
-  const { toast } = useToast();
-
-  const { data: auditsData, isLoading: auditsLoading } = useQuery({
-    queryKey: ['/api/ethics/audits'],
+  const { data: statusData, isLoading: statusLoading } = useQuery({
+    queryKey: ['/api/ethics/status'],
     refetchInterval: 60000,
   });
 
-  const { data: rulesData, isLoading: rulesLoading } = useQuery({
-    queryKey: ['/api/ethics/rules'],
+  const { data: principlesData, isLoading: principlesLoading } = useQuery({
+    queryKey: ['/api/ethics/principles'],
     refetchInterval: 60000,
   });
 
-  const { data: alignmentData, isLoading: alignmentLoading } = useQuery({
-    queryKey: ['/api/alignment/overall'],
+  const { data: violationsData, isLoading: violationsLoading } = useQuery({
+    queryKey: ['/api/ethics/violations'],
     refetchInterval: 60000,
   });
 
-  const initRulesMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest('POST', '/api/ethics/init', {});
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Rules Initialized',
-        description: 'Default ethical rules have been set up',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/ethics/rules'] });
-    },
-  });
-
-  const initAlignmentMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest('POST', '/api/alignment/init', {});
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Alignment Initialized',
-        description: 'Default value alignment matrix has been set up',
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/alignment/overall'] });
-    },
-  });
-
-  const audits = auditsData?.audits || [];
-  const rules = rulesData?.rules || [];
-  const alignment = alignmentData?.alignment;
+  const status = (statusData as any) || null;
+  const principles = (principlesData as any)?.principles || [];
+  const violations = (violationsData as any)?.violations || [];
 
   return (
     <div className="space-y-4">
-      <Card data-testid="card-ethical-audits">
+      <Card data-testid="card-ethics-status">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5" />
-              Ethical Compliance Audits
-            </CardTitle>
-            <Button
-              size="sm"
-              onClick={() => initRulesMutation.mutate()}
-              disabled={initRulesMutation.isPending}
-              data-testid="button-init-rules"
-            >
-              {initRulesMutation.isPending ? 'Initializing...' : 'Init Rules'}
-            </Button>
-          </div>
-          <CardDescription>Action compliance and ethical evaluations</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5" />
+            Ethical Alignment Status
+          </CardTitle>
+          <CardDescription>
+            Overall ethical compliance and principle adherence
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {auditsLoading ? (
+          {statusLoading ? (
             <Skeleton className="h-32 w-full" />
-          ) : audits.length > 0 ? (
-            <div className="space-y-3">
-              {audits.slice(0, 5).map((audit: any, idx: number) => (
-                <div 
-                  key={audit.id} 
-                  className="p-3 rounded-lg border"
-                  data-testid={`audit-${idx}`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="font-medium">{audit.actionType}</div>
-                    <Badge variant={
-                      audit.complianceStatus === 'compliant' ? 'default' :
-                      audit.complianceStatus === 'warning' ? 'outline' :
-                      audit.complianceStatus === 'violation' ? 'destructive' : 'secondary'
-                    }>
-                      {audit.complianceStatus}
-                    </Badge>
-                  </div>
-                  {audit.violationsDetected && Object.keys(audit.violationsDetected).length > 0 && (
-                    <div className="text-sm text-red-600 dark:text-red-400 mt-2">
-                      Violations: {Object.keys(audit.violationsDetected).join(', ')}
+          ) : status ? (
+            <div className="space-y-4">
+              <div className={`p-6 rounded-lg border-2 ${status.status === 'compliant' ? 'border-green-500 bg-green-50 dark:bg-green-950' : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <div className="text-lg font-semibold mb-1">
+                      Alignment Score: {status.alignmentScore?.toFixed(0) || 0}%
                     </div>
-                  )}
+                    <div className="text-sm text-muted-foreground">
+                      Status: {status.status === 'compliant' ? 'Compliant' : 'At Risk'}
+                    </div>
+                  </div>
+                  <Badge 
+                    variant={status.status === 'compliant' ? 'default' : 'secondary'}
+                    className="text-lg px-4 py-2"
+                    data-testid="badge-ethics-status"
+                  >
+                    {status.status === 'compliant' ? 'COMPLIANT' : 'AT RISK'}
+                  </Badge>
                 </div>
-              ))}
+                
+                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                  <div>
+                    <div className="text-2xl font-bold" data-testid="text-violations-today">
+                      {status.violationsToday || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Violations Today</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold" data-testid="text-principle-count">
+                      {status.principleCount || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Active Principles</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold" data-testid="text-principle-health">
+                      {status.principleHealth?.toFixed(0) || 0}%
+                    </div>
+                    <div className="text-xs text-muted-foreground">Principle Health</div>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <CheckCircle2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No ethical audits available</p>
-            </div>
+            <p className="text-muted-foreground">No status data available</p>
           )}
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card data-testid="card-ethical-rules">
+        <Card data-testid="card-ethical-principles">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="w-5 h-5" />
-              Ethical Rules ({rules.length})
+              Ethical Principles ({principles.length})
             </CardTitle>
+            <CardDescription>
+              Active ethical guidelines governing system behavior
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {rulesLoading ? (
+            {principlesLoading ? (
               <Skeleton className="h-32 w-full" />
-            ) : rules.length > 0 ? (
-              <div className="space-y-2">
-                {rules.slice(0, 5).map((rule: any, idx: number) => (
-                  <div key={rule.id} className="p-2 rounded border text-sm">
-                    <div className="font-medium">{rule.ruleName}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {rule.category} - {rule.priority}
+            ) : principles.length > 0 ? (
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {principles.map((principle: any, idx: number) => (
+                  <div 
+                    key={principle.id} 
+                    className="p-3 rounded-lg border"
+                    data-testid={`principle-${idx}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="font-semibold">{principle.name}</div>
+                      <Badge 
+                        variant={principle.enabled ? 'default' : 'secondary'}
+                        data-testid={`badge-principle-status-${idx}`}
+                      >
+                        {principle.enabled ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground mb-2">
+                      {principle.description}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Type: {principle.type}</span>
+                      <span>Priority: {principle.priority}</span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-center text-muted-foreground">No rules defined</p>
+              <div className="text-center py-8 text-muted-foreground">
+                <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No principles configured</p>
+              </div>
             )}
           </CardContent>
         </Card>
 
-        <Card data-testid="card-value-alignment">
+        <Card data-testid="card-ethics-violations">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="w-5 h-5" />
-                Value Alignment
-              </CardTitle>
-              <Button
-                size="sm"
-                onClick={() => initAlignmentMutation.mutate()}
-                disabled={initAlignmentMutation.isPending}
-                data-testid="button-init-alignment"
-              >
-                {initAlignmentMutation.isPending ? 'Initializing...' : 'Init Matrix'}
-              </Button>
-            </div>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              Recent Violations
+            </CardTitle>
+            <CardDescription>
+              Latest ethical principle violations detected
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {alignmentLoading ? (
+            {violationsLoading ? (
               <Skeleton className="h-32 w-full" />
-            ) : alignment ? (
-              <div className="space-y-3">
-                <div className="text-center">
-                  <div className="text-3xl font-bold">
-                    {(alignment.averageScore * 100).toFixed(0)}%
-                  </div>
-                  <div className="text-sm text-muted-foreground">Overall Alignment</div>
-                </div>
-                <div className="space-y-1">
-                  {Object.entries(alignment.byCategory).map(([cat, score]: [string, any]) => (
-                    <div key={cat} className="flex justify-between text-sm">
-                      <span className="capitalize">{cat.replace('_', ' ')}</span>
-                      <span className="font-medium">{(score * 100).toFixed(0)}%</span>
+            ) : violations.length > 0 ? (
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {violations.slice(0, 10).map((violation: any, idx: number) => (
+                  <div 
+                    key={violation.id} 
+                    className={`p-3 rounded-lg border-l-4 ${
+                      violation.severity === 'critical' ? 'border-l-red-500 bg-red-50 dark:bg-red-950' :
+                      violation.severity === 'high' ? 'border-l-orange-500 bg-orange-50 dark:bg-orange-950' :
+                      violation.severity === 'medium' ? 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
+                      'border-l-blue-500 bg-blue-50 dark:bg-blue-950'
+                    }`}
+                    data-testid={`violation-${idx}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="font-semibold">{violation.action_type}</div>
+                      <Badge 
+                        variant={
+                          violation.severity === 'critical' || violation.severity === 'high' ? 'destructive' :
+                          violation.severity === 'medium' ? 'secondary' :
+                          'outline'
+                        }
+                        data-testid={`badge-violation-severity-${idx}`}
+                      >
+                        {violation.severity}
+                      </Badge>
                     </div>
-                  ))}
-                </div>
+                    <div className="text-sm mb-2">{violation.reason}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(violation.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
-              <p className="text-center text-muted-foreground">No alignment data</p>
+              <div className="text-center py-8 text-muted-foreground">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No violations detected</p>
+              </div>
             )}
           </CardContent>
         </Card>
