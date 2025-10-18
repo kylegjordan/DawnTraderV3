@@ -10138,6 +10138,173 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 9.6: Collaborative Cognition & Cross-Domain Reasoning API Endpoints
+  app.post('/api/collaboration/sessions', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { collaborationManager } = await import('./services/collaboration-manager');
+      const { topic, participants, contextSnapshot } = req.body;
+      
+      const session = await collaborationManager.startSession({
+        topic,
+        participants,
+        userId: req.user!.id,
+        contextSnapshot,
+      });
+      
+      res.json({ ok: true, session });
+    } catch (error: any) {
+      console.error('[Collaboration] Create session failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/collaboration/sessions', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { collaborationManager } = await import('./services/collaboration-manager');
+      
+      const sessions = await collaborationManager.getActiveSessions(req.user!.id);
+      
+      res.json({ ok: true, sessions });
+    } catch (error: any) {
+      console.error('[Collaboration] Get sessions failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/collaboration/sessions/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { collaborationManager } = await import('./services/collaboration-manager');
+      const { sessionId } = req.params;
+      
+      const session = await collaborationManager.getSession(sessionId);
+      
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      res.json({ ok: true, session });
+    } catch (error: any) {
+      console.error('[Collaboration] Get session failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/collaboration/sessions/:sessionId/end', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { collaborationManager } = await import('./services/collaboration-manager');
+      const { sessionId } = req.params;
+      const { resolutionOutcome } = req.body;
+      
+      await collaborationManager.endSession(sessionId, resolutionOutcome);
+      
+      res.json({ ok: true, message: 'Session ended successfully' });
+    } catch (error: any) {
+      console.error('[Collaboration] End session failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/collaboration/sessions/:sessionId/messages', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { collaborationManager } = await import('./services/collaboration-manager');
+      const { sessionId } = req.params;
+      
+      const messages = await collaborationManager.getSessionMessages(sessionId);
+      
+      res.json({ ok: true, messages });
+    } catch (error: any) {
+      console.error('[Collaboration] Get messages failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/collaboration/sessions/:sessionId/messages', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { collaborationManager } = await import('./services/collaboration-manager');
+      const { sessionId } = req.params;
+      const { agentId, role, content, contributionType, confidenceLevel, supportingData, replyTo } = req.body;
+      
+      const message = await collaborationManager.addMessage({
+        sessionId,
+        agentId,
+        role,
+        content,
+        contributionType,
+        confidenceLevel,
+        supportingData,
+        replyTo,
+      });
+      
+      res.json({ ok: true, message });
+    } catch (error: any) {
+      console.error('[Collaboration] Add message failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/collaboration/stats', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { collaborationManager } = await import('./services/collaboration-manager');
+      
+      const stats = await collaborationManager.getCollaborationStats();
+      
+      res.json({ ok: true, stats });
+    } catch (error: any) {
+      console.error('[Collaboration] Get stats failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/collaboration/consensus/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { consensusEngine } = await import('./services/consensus-engine');
+      const { sessionId } = req.params;
+      
+      const snapshots = await consensusEngine.getSessionSnapshots(sessionId);
+      
+      res.json({ ok: true, snapshots });
+    } catch (error: any) {
+      console.error('[Collaboration] Get consensus failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/collaboration/consensus/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { consensusEngine } = await import('./services/consensus-engine');
+      const { collaborationManager } = await import('./services/collaboration-manager');
+      const { sessionId, inputs } = req.body;
+      
+      const evaluation = await consensusEngine.evaluateConsensus(sessionId, inputs);
+      const snapshot = await consensusEngine.recordSnapshot(sessionId, evaluation, inputs);
+      
+      // Update session consensus state
+      await collaborationManager.updateSessionState(
+        sessionId,
+        evaluation.canProceed ? 'agreed' : 'disagreed',
+        evaluation.overallConsensus
+      );
+      
+      res.json({ ok: true, evaluation, snapshot });
+    } catch (error: any) {
+      console.error('[Collaboration] Evaluate consensus failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/collaboration/agents', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reasoningBus } = await import('./services/reasoning-bus');
+      
+      const agents = reasoningBus.getAllAgents();
+      
+      res.json({ ok: true, agents });
+    } catch (error: any) {
+      console.error('[Collaboration] Get agents failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
