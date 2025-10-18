@@ -7,6 +7,7 @@ import {
 } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { clusterBus } from "./cluster-bus";
+import { learningGateValidator } from "./learning-gate-validator";
 import { createHash } from "crypto";
 import { nanoid } from "nanoid";
 
@@ -80,6 +81,23 @@ export class LearningCoordinator {
 
       // Score the learning delta
       const scores = await this.scoreDelta(sourceNode || "unknown", payload.deltaType);
+
+      // Phase 18.7: Validate through ethical gate chain
+      const gateValidation = await learningGateValidator.validate({
+        actionType: "accept_delta",
+        deltaType: payload.deltaType as LearningDeltaType,
+        sourceNode: sourceNode || "unknown",
+        payload: { ...payload, overallScore: scores.overall },
+        traceId,
+      });
+
+      if (!gateValidation.allowed) {
+        console.log(
+          `[LearningCoordinator] 🚫 Delta blocked by gates: ${gateValidation.overallReason}`
+        );
+        // Still persist but mark as rejected
+        scores.overall = 0; // Force rejection
+      }
 
       // Persist the delta
       const [delta] = await db
