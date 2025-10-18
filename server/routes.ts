@@ -10305,6 +10305,79 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 9.7: Learning Feedback Routes ====================
+
+  app.get('/api/learning/stats', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { learningBridge } = await import('./services/learning-bridge');
+      
+      const summary = await learningBridge.generateLearningSummary();
+      
+      res.json({ ok: true, summary });
+    } catch (error: any) {
+      console.error('[Learning] Get stats failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/learning/trends/:agentName', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { learningBridge } = await import('./services/learning-bridge');
+      const { agentName } = req.params;
+      
+      const trends = await learningBridge.analyzePerformanceTrends(agentName);
+      
+      if (!trends) {
+        return res.status(404).json({ error: `No feedback found for agent: ${agentName}` });
+      }
+      
+      res.json({ ok: true, trends });
+    } catch (error: any) {
+      console.error('[Learning] Get trends failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/learning/record', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { learningBridge } = await import('./services/learning-bridge');
+      const { agentName, domain, sessionId, accuracyScore, consensusAlignment, improvementNotes, feedbackSource } = req.body;
+      
+      if (!agentName || !domain) {
+        return res.status(400).json({ error: 'agentName and domain are required' });
+      }
+      
+      const feedback = await learningBridge.recordFeedback(
+        agentName,
+        domain,
+        sessionId || null,
+        accuracyScore || null,
+        consensusAlignment || null,
+        improvementNotes || '',
+        feedbackSource || 'system'
+      );
+      
+      res.json({ ok: true, feedback });
+    } catch (error: any) {
+      console.error('[Learning] Record feedback failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/learning/session/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { learningBridge } = await import('./services/learning-bridge');
+      const { sessionId } = req.params;
+      
+      const feedback = await learningBridge.getSessionFeedback(sessionId);
+      
+      res.json({ ok: true, feedback });
+    } catch (error: any) {
+      console.error('[Learning] Get session feedback failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
