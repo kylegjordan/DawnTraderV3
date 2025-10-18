@@ -3205,11 +3205,16 @@ export const nodeStatusEnum = pgEnum("node_status", ["healthy", "degraded", "dra
 export const clusterTaskStatusEnum = pgEnum("cluster_task_status", ["queued", "assigned", "running", "completed", "failed", "cancelled"]);
 export const clusterTaskTypeEnum = pgEnum("cluster_task_type", ["trading_signal", "market_analysis", "risk_assessment", "compliance_check", "research", "optimization", "general"]);
 export const outcomeStatusEnum = pgEnum("outcome_status", ["success", "partial", "failed", "timeout"]);
-export const busEventTopicEnum = pgEnum("bus_event_topic", ["task_assigned", "task_completed", "node_status_change", "rebalance_triggered", "circuit_breaker", "health_alert"]);
+export const busEventTopicEnum = pgEnum("bus_event_topic", ["task_assigned", "task_completed", "node_status_change", "rebalance_triggered", "circuit_breaker", "health_alert", "learning_delta", "model_sync"]);
 
 // Phase 17.5 & 17.6 enums - Reliability & Security
 export const circuitBreakerStateEnum = pgEnum("circuit_breaker_state", ["closed", "open", "half_open"]);
 export const gateTypeEnum = pgEnum("gate_type", ["safety", "federated_ethics", "ethical_reasoning", "knowledge_acquisition"]);
+
+// Phase 18 enums - Multi-Domain Learning
+export const learningDeltaTypeEnum = pgEnum("learning_delta_type", ["model_update", "discovery", "insight", "strategy_adjustment", "risk_parameter"]);
+export const alignmentStrategyEnum = pgEnum("alignment_strategy", ["accept", "reject", "blend"]);
+export const domainChannelEnum = pgEnum("domain_channel", ["research_to_trading", "compliance_to_trading", "analytics_to_research", "trading_to_analytics"]);
 
 // Phase 17.0: Distributed Autonomy & Scaling
 
@@ -3328,6 +3333,70 @@ export const clusterAuditLog = pgTable("cluster_audit_log", {
   createdAtIdx: index("cluster_audit_log_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 18: Multi-Domain Orchestration & Cross-Node Learning
+
+export const agentLearningDelta = pgTable("agent_learning_delta", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  originNodeId: varchar("origin_node_id").references(() => clusterNode.id).notNull(),
+  deltaType: learningDeltaTypeEnum("delta_type").notNull(),
+  payload: jsonb("payload").notNull(),
+  payloadHash: varchar("payload_hash", { length: 64 }).notNull(),
+  traceId: varchar("trace_id").notNull(),
+  trustScore: doublePrecision("trust_score").notNull().default(0.5),
+  recencyScore: doublePrecision("recency_score").notNull().default(1.0),
+  successRate: doublePrecision("success_rate").notNull().default(0.0),
+  overallScore: doublePrecision("overall_score").notNull().default(0.0),
+  isAccepted: boolean("is_accepted").default(false).notNull(),
+  acceptedBy: varchar("accepted_by"),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  originNodeIdIdx: index("agent_learning_delta_origin_node_id_idx").on(table.originNodeId),
+  deltaTypeIdx: index("agent_learning_delta_delta_type_idx").on(table.deltaType),
+  traceIdIdx: index("agent_learning_delta_trace_id_idx").on(table.traceId),
+  isAcceptedIdx: index("agent_learning_delta_is_accepted_idx").on(table.isAccepted),
+  createdAtIdx: index("agent_learning_delta_created_at_idx").on(table.createdAt),
+}));
+
+export const modelConsistencySnapshot = pgTable("model_consistency_snapshot", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nodeId: varchar("node_id").references(() => clusterNode.id).notNull(),
+  modelHash: varchar("model_hash", { length: 64 }).notNull(),
+  domainChannel: domainChannelEnum("domain_channel").notNull(),
+  version: varchar("version").notNull(),
+  parameterCount: integer("parameter_count").notNull().default(0),
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  nodeIdIdx: index("model_consistency_snapshot_node_id_idx").on(table.nodeId),
+  domainChannelIdx: index("model_consistency_snapshot_domain_channel_idx").on(table.domainChannel),
+  modelHashIdx: index("model_consistency_snapshot_model_hash_idx").on(table.modelHash),
+  createdAtIdx: index("model_consistency_snapshot_created_at_idx").on(table.createdAt),
+}));
+
+export const crossNodeAlignmentLog = pgTable("cross_node_alignment_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceNodeId: varchar("source_node_id").references(() => clusterNode.id).notNull(),
+  targetNodeId: varchar("target_node_id").references(() => clusterNode.id).notNull(),
+  preAlignmentHash: varchar("pre_alignment_hash", { length: 64 }).notNull(),
+  postAlignmentHash: varchar("post_alignment_hash", { length: 64 }),
+  alignmentStrategy: alignmentStrategyEnum("alignment_strategy").notNull(),
+  alignmentScore: doublePrecision("alignment_score").notNull().default(0.0),
+  driftDetected: boolean("drift_detected").notNull().default(false),
+  reconciliationSuccess: boolean("reconciliation_success").default(false).notNull(),
+  traceId: varchar("trace_id").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sourceNodeIdIdx: index("cross_node_alignment_log_source_node_id_idx").on(table.sourceNodeId),
+  targetNodeIdIdx: index("cross_node_alignment_log_target_node_id_idx").on(table.targetNodeId),
+  traceIdIdx: index("cross_node_alignment_log_trace_id_idx").on(table.traceId),
+  driftDetectedIdx: index("cross_node_alignment_log_drift_detected_idx").on(table.driftDetected),
+  createdAtIdx: index("cross_node_alignment_log_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas for Phase 17
 export const insertClusterNodeSchema = createInsertSchema(clusterNode).omit({ 
   id: true, 
@@ -3387,3 +3456,32 @@ export type GateType = typeof gateTypeEnum.enumValues[number];
 export type InsertClusterBusEvent = z.infer<typeof insertClusterBusEventSchema>;
 export type ClusterBusEvent = typeof clusterBusEvent.$inferSelect;
 export type BusEventTopic = typeof busEventTopicEnum.enumValues[number];
+
+// Insert schemas for Phase 18
+export const insertAgentLearningDeltaSchema = createInsertSchema(agentLearningDelta).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertModelConsistencySnapshotSchema = createInsertSchema(modelConsistencySnapshot).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertCrossNodeAlignmentLogSchema = createInsertSchema(crossNodeAlignmentLog).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+// Types for Phase 18
+export type InsertAgentLearningDelta = z.infer<typeof insertAgentLearningDeltaSchema>;
+export type AgentLearningDelta = typeof agentLearningDelta.$inferSelect;
+export type LearningDeltaType = typeof learningDeltaTypeEnum.enumValues[number];
+
+export type InsertModelConsistencySnapshot = z.infer<typeof insertModelConsistencySnapshotSchema>;
+export type ModelConsistencySnapshot = typeof modelConsistencySnapshot.$inferSelect;
+export type DomainChannel = typeof domainChannelEnum.enumValues[number];
+
+export type InsertCrossNodeAlignmentLog = z.infer<typeof insertCrossNodeAlignmentLogSchema>;
+export type CrossNodeAlignmentLog = typeof crossNodeAlignmentLog.$inferSelect;
+export type AlignmentStrategy = typeof alignmentStrategyEnum.enumValues[number];

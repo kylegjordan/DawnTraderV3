@@ -1,0 +1,82 @@
+⚙️ Phase 18 — Multi-Domain Orchestration & Cross-Node Learning
+🎯 Objective
+
+Enable the cluster’s nodes (Trading / Research / Analytics / Compliance) to exchange model updates, summarize discoveries, and reconcile divergent knowledge safely — creating an intelligent, cooperative network.
+
+🧩 Action Steps
+
+Confirm Cluster Health Baseline
+• Verify all nodes show CLOSED in Circuit Breaker UI.
+• Check /api/cluster/audit-logs for recent gate passes (< 5 min).
+• Confirm “Cluster Heartbeat” job logging normally every 30 s.
+✅ Goal – Stable baseline before enabling learning flow.
+
+Extend Cluster Bus for Learning Events
+• Add a new learning_delta event topic to the existing bus.
+• Ensure every message includes traceId, hash, and originNodeId.
+• Persist all learning messages in cluster_bus_event for audit.
+✅ Check – Emit a sample learning_delta and verify bus and DB entries.
+
+Deploy Learning Coordinator Service
+• New service learning-coordinator.ts.
+• Subscribe to learning_delta; validate payloads and auth.
+• Score deltas by trust + recency + success rate.
+• Fan-out accepted deltas as model_sync events.
+✅ Goal – Logs show “Accepted Learning Delta (score > 0.8)” and fan-out event.
+
+Add Cross-Domain Reasoning Pipelines
+• Create domain channels (e.g., RESEARCH→TRADING, COMPLIANCE→TRADING).
+• Each channel transforms incoming summary data into structured proposals for Walter approval.
+✅ Check – Sending a Research summary creates a Trading proposal within 3 s.
+
+Implement Model Consistency Manager
+• New service model-consistency-manager.ts.
+• Detect hash drift between nodes; log alignment attempts.
+• Three strategies: accept, reject, blend.
+✅ Goal – cross_node_alignment_log shows pre/post hash and alignment score.
+
+Integrate Safety & Ethics Gates for Learning
+• Reuse existing Safety→Ethics→Reasoner→Knowledge chain.
+• All learning applications log each gate pass/fail to audit table.
+✅ Check – Simulate a malformed payload → system returns E422_VALIDATION.
+
+Monitoring UI Upgrade – “Learning Network” Tab
+• Add tab under System Monitoring.
+• Show graph of nodes and knowledge edges, top learning deltas, and model hash map.
+• Auto-refresh every 60 s.
+✅ Check – Graph renders with live data from last 15 min.
+
+Run End-to-End Learning Test
+• Emit three learning_deltas → confirm Trading node receives and proposes changes.
+• Approve one proposal → verify model hash updated.
+• Force hash drift → Consistency Manager reconciles automatically.
+✅ Pass – All steps have traceIds and appear in UI graph.
+
+Documentation & Report
+• Append Phase 18 section to replit.md with diagram and key APIs.
+• Record cluster learning test results and architect approval.
+✅ Deliverable – Updated replit.md + final Phase 18 verification summary.
+
+🧾 Testing & Verification Checklist
+
+✅ Bus handles learning_delta and model_sync events
+✅ Coordinator scores and routes deltas
+✅ Cross-domain proposals arrive within 3 s
+✅ Model drift detected and reconciled
+✅ All learning actions pass ethical gates
+✅ Learning Network tab displays live edges and hash map
+✅ End-to-end traceIds match across bus + DB + UI
+
+🏁 Deliverables for Phase 18 Completion
+
+• agent_learning_delta, model_consistency_snapshot, cross_node_alignment_log tables populated
+• Learning Coordinator + Consistency Manager active
+• Cross-domain reasoning proposals visible in DB and UI
+• Learning Network tab rendering live graph
+• Phase 18 documentation added to replit.md
+• Architect review PASS
+
+🚀 Command to Paste into Replit (Execution Directive)
+
+“Execute Phase 18 — Multi-Domain Orchestration & Cross-Node Learning.
+Implement Tasks 18.1–18.9 in sequence, verify cluster learning flow, and append Phase 18 documentation to replit.md upon completion.”
