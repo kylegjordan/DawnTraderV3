@@ -1,7 +1,11 @@
-import { openai } from "../lib/openai";
+import OpenAI from "openai";
 import { db } from "../db";
 import { knowledgeRetrievalLog, walterMemory } from "@shared/schema";
 import { eq, sql, desc, and } from "drizzle-orm";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 /**
  * Phase 16.0: SemanticCorrelationEngine
@@ -52,7 +56,7 @@ export class SemanticCorrelationEngine {
       .select()
       .from(walterMemory)
       .where(eq(walterMemory.userId, userId))
-      .orderBy(desc(walterMemory.createdAt))
+      .orderBy(desc(walterMemory.timestamp))
       .limit(20);
     
     const relatedMemories: any[] = [];
@@ -207,7 +211,7 @@ export class SemanticCorrelationEngine {
       .select()
       .from(walterMemory)
       .where(eq(walterMemory.userId, userId))
-      .orderBy(desc(walterMemory.createdAt))
+      .orderBy(desc(walterMemory.timestamp))
       .limit(50);
     
     // Check recent retrievals

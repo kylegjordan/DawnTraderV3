@@ -9,6 +9,7 @@ import { reflectiveIntelligence } from './reflective-intelligence';
 import { collaborationManager } from './collaboration-manager';
 import { introspectionEngine } from './introspection-engine'; // Phase 15.0
 import { biasMitigation } from './bias-mitigation'; // Phase 15.0
+import { knowledgeRetrievalService } from './knowledge-retrieval'; // Phase 16.0
 import { db } from '../db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -855,6 +856,12 @@ export async function initAutonomyScheduler() {
     // Start bias mitigation cycle (run after 8 hour delay) - Phase 15.0
     await schedulerRegistry.startTask('bias_mitigation_cycle', false);
     
+    // Start knowledge sync (run after 2 hour delay) - Phase 16.0
+    await schedulerRegistry.startTask('knowledge_sync', false);
+    
+    // Start trust audit (run after 12 hour delay) - Phase 16.0
+    await schedulerRegistry.startTask('trust_audit', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -874,6 +881,8 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Ethics conflict mediation: Every 6 hours');
     console.log('[AutonomyScheduler] - Introspection cycle: Every 4 hours');
     console.log('[AutonomyScheduler] - Bias mitigation cycle: Every 8 hours');
+    console.log('[AutonomyScheduler] - Knowledge sync: Every 2 hours');
+    console.log('[AutonomyScheduler] - Trust audit: Every 12 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -966,6 +975,54 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Phase 16.0: Every 2 hours - Knowledge Sync
+schedulerRegistry.registerTask({
+  name: 'knowledge_sync',
+  description: 'Refresh knowledge cache by removing expired entries',
+  frequency: 'custom',
+  intervalMs: 2 * 60 * 60 * 1000, // 2 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 📚 Running knowledge cache sync...');
+    
+    try {
+      // Refresh cache - remove expired entries
+      const removedCount = await knowledgeRetrievalService.refreshCache();
+      
+      console.log(`[AutonomyScheduler] ✅ Knowledge cache sync complete - ${removedCount} expired entries removed`);
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Knowledge sync failed:', error);
+      throw error;
+    }
+  },
+});
+
+// Phase 16.0: Every 12 hours - Trust Audit
+schedulerRegistry.registerTask({
+  name: 'trust_audit',
+  description: 'Re-evaluate domain trustworthiness based on retrieval success rates',
+  frequency: 'custom',
+  intervalMs: 12 * 60 * 60 * 1000, // 12 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🔍 Running knowledge trust audit...');
+    
+    try {
+      // Audit trust levels
+      await knowledgeRetrievalService.auditTrust();
+      
+      console.log('[AutonomyScheduler] ✅ Trust audit complete - domain trust levels re-evaluated');
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Trust audit failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Get autonomy scheduler status
  */
@@ -986,6 +1043,8 @@ export function getAutonomySchedulerStatus() {
   const ethicsAuditStatus = schedulerRegistry.getTaskStatus('ethics_audit');
   const introspectionStatus = schedulerRegistry.getTaskStatus('introspection_cycle');
   const biasMitigationStatus = schedulerRegistry.getTaskStatus('bias_mitigation_cycle');
+  const knowledgeSyncStatus = schedulerRegistry.getTaskStatus('knowledge_sync');
+  const trustAuditStatus = schedulerRegistry.getTaskStatus('trust_audit');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -1083,6 +1142,18 @@ export function getAutonomySchedulerStatus() {
       lastRun: biasMitigationStatus.lastRun,
       nextRun: biasMitigationStatus.nextRun,
       frequency: biasMitigationStatus.frequency,
+    } : null,
+    knowledgeSync: knowledgeSyncStatus ? {
+      status: knowledgeSyncStatus.status,
+      lastRun: knowledgeSyncStatus.lastRun,
+      nextRun: knowledgeSyncStatus.nextRun,
+      frequency: knowledgeSyncStatus.frequency,
+    } : null,
+    trustAudit: trustAuditStatus ? {
+      status: trustAuditStatus.status,
+      lastRun: trustAuditStatus.lastRun,
+      nextRun: trustAuditStatus.nextRun,
+      frequency: trustAuditStatus.frequency,
     } : null,
   };
 }

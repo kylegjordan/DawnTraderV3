@@ -45,7 +45,7 @@ export class KnowledgeRetrievalService {
         data: cached.cachedData,
         trustLevel: cached.trustLevel,
         relevanceScore: cached.relevanceScore || 0.8,
-        url: cached.metadata?.url as string | undefined,
+        url: (cached.metadata as any)?.url as string | undefined,
       };
     }
     

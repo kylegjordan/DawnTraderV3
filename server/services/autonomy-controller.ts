@@ -459,6 +459,29 @@ class AutonomyControllerService {
         issuesDetected.push('Ethical reasoning system error');
       }
 
+      // Phase 16.0: Knowledge Acquisition Checkpoint (ASYNC - after Ethics, before final execution)
+      try {
+        console.log('[AutonomyController] 📚 Checking for knowledge gaps');
+        
+        const { semanticCorrelationEngine } = await import('./semantic-correlation');
+        const knowledgeGap = await semanticCorrelationEngine.assessKnowledgeGap(
+          `System health assessment: ${issuesDetected.join(', ')}`,
+          userId,
+          0.4 // threshold for triggering retrieval
+        );
+        
+        if (knowledgeGap.hasGap) {
+          console.log(`[AutonomyController] 📖 Knowledge gap detected (confidence: ${(knowledgeGap.confidence * 100).toFixed(1)}%): ${knowledgeGap.reason}`);
+          actionsTriggered.push('knowledge_retrieval_recommended');
+          // Note: Actual retrieval would be triggered asynchronously by Walter or on-demand
+        } else {
+          console.log(`[AutonomyController] ✅ Knowledge assessment: sufficient (${(knowledgeGap.confidence * 100).toFixed(1)}%)`);
+        }
+      } catch (err: any) {
+        console.error('[AutonomyController] Knowledge acquisition check failed:', err);
+        // Non-blocking - don't add to issues
+      }
+
       // Phase 9.6: Collaborative Cognition & Cross-Domain Reasoning Hooks
       // 1. Trigger collaborative reasoning if multiple complex issues detected (async, don't block)
       if (issuesDetected.length >= 2 && !issuesDetected.some(i => i.includes('ETHICAL VIOLATION'))) {
