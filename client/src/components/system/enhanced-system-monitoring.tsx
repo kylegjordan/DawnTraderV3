@@ -30,7 +30,8 @@ import {
   Shield,
   Archive,
   Gauge,
-  Clock
+  Clock,
+  Globe
 } from "lucide-react";
 
 interface SystemMetrics {
@@ -419,6 +420,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="ethics" data-testid="tab-ethics">
             <CheckCircle2 className="w-4 h-4 mr-2" />
             Ethics
+          </TabsTrigger>
+          <TabsTrigger value="federation" data-testid="tab-federation">
+            <Globe className="w-4 h-4 mr-2" />
+            Federation
           </TabsTrigger>
           <TabsTrigger value="collaboration" data-testid="tab-collaboration">
             <Bot className="w-4 h-4 mr-2" />
@@ -903,9 +908,14 @@ export default function EnhancedSystemMonitoring() {
           <ReflectionTab />
         </TabsContent>
 
-        {/* Tab 10: Ethics - Phase 9.5 */}
+        {/* Tab 10: Ethics - Phase 13.0 */}
         <TabsContent value="ethics" className="space-y-4">
           <EthicsTab />
+        </TabsContent>
+
+        {/* Tab 10.5: Federation - Phase 14.0 */}
+        <TabsContent value="federation" className="space-y-4">
+          <FederationTab />
         </TabsContent>
 
         {/* Tab 11: Collaboration - Phase 9.6 */}
@@ -3270,6 +3280,302 @@ function SafetyTab() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function FederationTab() {
+  const { toast } = useToast();
+
+  // Fetch federation status
+  const { data: statusData, isLoading: statusLoading } = useQuery({
+    queryKey: ['/api/federation/status'],
+    refetchInterval: 60000, // 60 seconds
+  });
+
+  // Fetch recent sessions
+  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
+    queryKey: ['/api/ethics/collab/sessions'],
+    refetchInterval: 60000, // 60 seconds
+  });
+
+  // Fetch open conflicts
+  const { data: conflictsData, isLoading: conflictsLoading } = useQuery({
+    queryKey: ['/api/ethics/collab/conflicts'],
+    refetchInterval: 60000, // 60 seconds
+  });
+
+  // Force Propagation mutation
+  const forcePropagationMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/federation/propagate', {});
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Propagation Initiated",
+        description: data.message || "Federated ethics propagation completed successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/federation/status'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Propagation Failed",
+        description: error.message || "Failed to initiate propagation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Run Mediation Pass mutation
+  const runMediationMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/ethics/collab/mediate', {});
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Mediation Pass Complete",
+        description: data.message || "Ethics conflict mediation completed successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/ethics/collab/conflicts'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Mediation Failed",
+        description: error.message || "Failed to run mediation pass",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const status = (statusData as any) || null;
+  const sessions = (sessionsData as any)?.sessions || [];
+  const conflicts = (conflictsData as any)?.conflicts || [];
+
+  return (
+    <div className="space-y-4">
+      {/* Federated Status Card */}
+      <Card data-testid="card-federation-status">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="w-5 h-5" />
+            Federated Status
+          </CardTitle>
+          <CardDescription>
+            Multi-agent ethical consensus state across all domains
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {statusLoading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : status ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="text-sm text-muted-foreground mb-1">Snapshot Timestamp</div>
+                  <div className="text-lg font-semibold" data-testid="text-snapshot-timestamp">
+                    {status.snapshot?.timestamp 
+                      ? new Date(status.snapshot.timestamp).toLocaleString() 
+                      : 'N/A'}
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="text-sm text-muted-foreground mb-1">Domains Covered</div>
+                  <div className="text-lg font-semibold" data-testid="text-domains-count">
+                    {status.domainsActive?.length || 0} domains
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="text-sm text-muted-foreground mb-1">Open Conflicts</div>
+                  <div className="text-lg font-semibold" data-testid="text-open-conflicts">
+                    {status.openConflicts || 0}
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="text-sm text-muted-foreground mb-1">Last Propagation</div>
+                  <div className="text-lg font-semibold" data-testid="text-last-propagation">
+                    {status.lastPropagation 
+                      ? new Date(status.lastPropagation).toLocaleString() 
+                      : 'N/A'}
+                  </div>
+                </div>
+              </div>
+
+              {status.lastConsensus && (
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="text-sm font-medium mb-2">Last Consensus</div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Badge 
+                        variant={
+                          status.lastConsensus.verdict === 'approved' ? 'default' : 
+                          status.lastConsensus.verdict === 'rejected' ? 'destructive' : 
+                          'secondary'
+                        }
+                        data-testid="badge-consensus-verdict"
+                      >
+                        {status.lastConsensus.verdict || 'N/A'}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Confidence: <span className="font-semibold" data-testid="text-consensus-confidence">
+                        {status.lastConsensus.confidence 
+                          ? `${(status.lastConsensus.confidence * 100).toFixed(1)}%` 
+                          : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Globe className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No federation status available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Sessions & Conflicts Card */}
+      <Card data-testid="card-sessions-conflicts">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5" />
+            Sessions & Conflicts
+          </CardTitle>
+          <CardDescription>
+            Recent consensus sessions and open conflicts
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {/* Recent Sessions */}
+            <div>
+              <div className="text-sm font-medium mb-3">Recent Sessions</div>
+              {sessionsLoading ? (
+                <Skeleton className="h-32 w-full" />
+              ) : sessions.length > 0 ? (
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {sessions.slice(0, 20).map((session: any, idx: number) => (
+                    <div 
+                      key={session.sessionId || idx} 
+                      className="p-3 rounded-lg border"
+                      data-testid={`session-${idx}`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="text-sm font-semibold truncate max-w-[60%]">
+                          {session.sessionId || 'Unknown Session'}
+                        </div>
+                        <Badge 
+                          variant={
+                            session.verdict === 'approved' ? 'default' : 
+                            session.verdict === 'rejected' ? 'destructive' : 
+                            'secondary'
+                          }
+                          data-testid={`badge-session-verdict-${idx}`}
+                        >
+                          {session.verdict || 'N/A'}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Domains: {session.domains?.join(', ') || 'N/A'}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Confidence: {session.confidence ? `${(session.confidence * 100).toFixed(1)}%` : 'N/A'} | 
+                        {session.createdAt && ` ${new Date(session.createdAt).toLocaleString()}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  No federated sessions yet
+                </div>
+              )}
+            </div>
+
+            {/* Open Conflicts */}
+            <div>
+              <div className="text-sm font-medium mb-3">Open Conflicts</div>
+              {conflictsLoading ? (
+                <Skeleton className="h-32 w-full" />
+              ) : conflicts.length > 0 ? (
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {conflicts.map((conflict: any, idx: number) => (
+                    <div 
+                      key={conflict.conflictId || idx} 
+                      className="p-3 rounded-lg border border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950"
+                      data-testid={`conflict-${idx}`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="text-sm font-semibold truncate max-w-[60%]">
+                          {conflict.conflictId || 'Unknown Conflict'}
+                        </div>
+                        <Badge 
+                          variant="secondary"
+                          data-testid={`badge-conflict-status-${idx}`}
+                        >
+                          {conflict.resolutionStatus || 'open'}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Sources: {conflict.conflictingSources?.join(', ') || 'N/A'}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {conflict.detectedAt && `Detected: ${new Date(conflict.detectedAt).toLocaleString()}`}
+                      </div>
+                      {conflict.resolutionRationale && (
+                        <div className="text-xs mt-2 text-muted-foreground">
+                          Reason: {conflict.resolutionRationale}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  No open conflicts
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Admin Tools Card */}
+      <Card data-testid="card-admin-tools">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Admin Tools
+          </CardTitle>
+          <CardDescription>
+            Manual controls for federated ethics operations
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Button 
+              onClick={() => forcePropagationMutation.mutate()}
+              disabled={forcePropagationMutation.isPending}
+              variant="outline"
+              className="w-full"
+              data-testid="button-force-propagation"
+            >
+              {forcePropagationMutation.isPending ? 'Propagating...' : 'Force Propagation'}
+            </Button>
+            <Button 
+              onClick={() => runMediationMutation.mutate()}
+              disabled={runMediationMutation.isPending}
+              variant="outline"
+              className="w-full"
+              data-testid="button-run-mediation"
+            >
+              {runMediationMutation.isPending ? 'Mediating...' : 'Run Mediation Pass'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
