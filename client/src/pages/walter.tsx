@@ -939,7 +939,7 @@ export default function WalterPage() {
         )}
 
         {/* Central Chat Area */}
-        <Card className="flex-1 flex flex-col min-h-0 border-0 shadow-none">
+        <Card className="flex-1 flex flex-col min-h-0 border-0 shadow-none p-0">
           {/* Chat Header */}
           {selectedChatId && chatData?.chat && (
             <div className="px-1 pt-2 pb-1 flex items-start justify-between">
