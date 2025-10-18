@@ -16,6 +16,7 @@ import { consensusEngine } from './consensus-engine';
 import { learningBridge } from './learning-bridge';
 import metaOversightService from './meta-oversight';
 import longtermMemoryService from './longterm-memory';
+import { unifiedCore } from './unified-core';
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -1059,6 +1060,74 @@ class AutonomyControllerService {
         insightsArchived: 0,
         agentsCalibrated: 0,
         performanceDeltas: [],
+      };
+    }
+  }
+
+  /**
+   * Phase 10.0: Run unified cognitive core optimization cycle
+   * Synchronizes all subsystems, evaluates health, optimizes parameters, and logs cycle
+   */
+  async runOptimizationCycle(): Promise<{
+    cycleId: string;
+    optimizationType: string;
+    score: number;
+    activeAgents: number;
+  }> {
+    try {
+      console.log('[AutonomyController] 🧠 Running unified cognitive core optimization cycle...');
+      const startTime = performance.now();
+
+      const result = await unifiedCore.runOptimizationCycle();
+
+      // Record the optimization cycle to audit trail
+      const executionTimeMs = Math.round(performance.now() - startTime);
+      await this.recordAssessment({
+        runId: result.cycleId,
+        actionType: 'optimization',
+        triggerSource: 'autonomous',
+        assessmentResult: {
+          cycleId: result.cycleId,
+          optimizationType: result.optimizationType,
+          score: result.score,
+          activeAgents: result.activeAgents,
+          notes: result.notes,
+        },
+        actionsTriggered: ['unified_core_optimization'],
+        success: true,
+        executionTimeMs,
+        metadata: {
+          optimizationType: result.optimizationType,
+          score: result.score,
+        },
+      });
+
+      // Broadcast optimization result via Context Bridge
+      await contextBridge.broadcast({
+        event: 'cognitive_core_optimization',
+        data: {
+          cycleId: result.cycleId,
+          optimizationType: result.optimizationType,
+          score: result.score,
+          activeAgents: result.activeAgents,
+        },
+      }, 'all');
+
+      console.log(`[AutonomyController] ✅ Unified core optimization complete: ${result.cycleId} (score: ${result.score.toFixed(2)})`);
+
+      return {
+        cycleId: result.cycleId,
+        optimizationType: result.optimizationType,
+        score: result.score,
+        activeAgents: result.activeAgents,
+      };
+    } catch (error: any) {
+      console.error('[AutonomyController] Failed to run optimization cycle:', error);
+      return {
+        cycleId: `error_${nanoid(10)}`,
+        optimizationType: 'parameter_tuning',
+        score: 0.5,
+        activeAgents: 0,
       };
     }
   }

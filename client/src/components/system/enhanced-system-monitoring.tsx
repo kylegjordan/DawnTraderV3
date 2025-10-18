@@ -434,6 +434,10 @@ export default function EnhancedSystemMonitoring() {
             <Archive className="w-4 h-4 mr-2" />
             Memory
           </TabsTrigger>
+          <TabsTrigger value="core" data-testid="tab-core">
+            <Cpu className="w-4 h-4 mr-2" />
+            Core
+          </TabsTrigger>
           <TabsTrigger value="alerts" data-testid="tab-alerts">
             <AlertTriangle className="w-4 h-4 mr-2" />
             Alerts ({errors.filter(e => !e.resolved).length})
@@ -912,6 +916,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Tab 14: Memory - Phase 9.9 */}
         <TabsContent value="memory" className="space-y-4">
           <MemoryTab />
+        </TabsContent>
+
+        {/* Tab 15: Core - Phase 10.0 */}
+        <TabsContent value="core" className="space-y-4">
+          <CoreTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -2796,6 +2805,197 @@ function MemoryTab() {
             <div className="text-center py-8 text-muted-foreground">
               <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No model calibrations performed yet</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function CoreTab() {
+  const { toast } = useToast();
+
+  const { data: coreStatusData, isLoading: statusLoading, refetch: refetchStatus } = useQuery({
+    queryKey: ['/api/core/status'],
+    refetchInterval: 120000, // 2 minutes
+  });
+
+  const { data: agentsData, isLoading: agentsLoading } = useQuery({
+    queryKey: ['/api/core/agents'],
+    refetchInterval: 120000,
+  });
+
+  const optimizeMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/core/optimize', {});
+    },
+    onSuccess: () => {
+      toast({
+        title: "Optimization Complete",
+        description: "Unified cognitive core optimization cycle completed successfully",
+      });
+      refetchStatus();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Optimization Failed",
+        description: error.message || "Failed to run optimization cycle",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const status = (coreStatusData as any)?.status || null;
+  const agents = (agentsData as any)?.agents || [];
+
+  const latestCycle = status?.latestCycle;
+  const activeAgents = status?.activeAgents || 0;
+  const metrics = status?.metrics;
+
+  return (
+    <div className="space-y-4">
+      <Card data-testid="card-core-overview">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Cpu className="w-5 h-5" />
+            Cognitive Core Status
+          </CardTitle>
+          <CardDescription>
+            Unified cognitive core optimization and subsystem synchronization
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {statusLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="p-4 rounded-lg bg-secondary/30">
+                  <div className="text-sm text-muted-foreground mb-1">Cycle ID</div>
+                  <div className="text-lg font-mono truncate" data-testid="text-cycle-id">
+                    {latestCycle?.cycleId || 'N/A'}
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg bg-secondary/30">
+                  <div className="text-sm text-muted-foreground mb-1">Optimization Type</div>
+                  <div className="text-lg font-semibold capitalize" data-testid="text-optimization-type">
+                    {latestCycle?.optimizationType?.replace('_', ' ') || 'N/A'}
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg bg-secondary/30">
+                  <div className="text-sm text-muted-foreground mb-1">Global Score</div>
+                  <div className="text-2xl font-bold" data-testid="text-global-score">
+                    {latestCycle?.score ? (latestCycle.score * 100).toFixed(1) + '%' : 'N/A'}
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg bg-secondary/30">
+                  <div className="text-sm text-muted-foreground mb-1">Active Agents</div>
+                  <div className="text-2xl font-bold" data-testid="text-active-agents">
+                    {activeAgents}
+                  </div>
+                </div>
+              </div>
+
+              {metrics && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t">
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Stability</div>
+                    <div className="text-lg font-semibold">
+                      {(metrics.stabilityScore * 100).toFixed(0)}%
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Bias</div>
+                    <div className="text-lg font-semibold">
+                      {(metrics.biasScore * 100).toFixed(0)}%
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Learning</div>
+                    <div className="text-lg font-semibold">
+                      {(metrics.learningScore * 100).toFixed(0)}%
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Memory</div>
+                    <div className="text-lg font-semibold">
+                      {(metrics.memoryScore * 100).toFixed(0)}%
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4 flex justify-center">
+                <Button 
+                  onClick={() => optimizeMutation.mutate()}
+                  disabled={optimizeMutation.isPending}
+                  data-testid="button-force-optimization"
+                >
+                  {optimizeMutation.isPending ? 'Optimizing...' : 'Force Optimization Cycle'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-active-agents">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="w-5 h-5" />
+            Agent Registry
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {agentsLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : agents.length > 0 ? (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {agents.slice(0, 20).map((agent: any, idx: number) => (
+                <div 
+                  key={agent.id} 
+                  className="p-3 rounded-lg border"
+                  data-testid={`agent-${idx}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" data-testid={`badge-agent-name-${idx}`}>
+                          {agent.agentName}
+                        </Badge>
+                        <Badge variant="secondary" data-testid={`badge-domain-${idx}`}>
+                          {agent.domain}
+                        </Badge>
+                        <Badge 
+                          className={
+                            agent.state === 'active' ? 'bg-green-500' : 
+                            agent.state === 'idle' ? 'bg-yellow-500' : 
+                            agent.state === 'suspended' ? 'bg-orange-500' : 
+                            'bg-gray-500'
+                          }
+                          data-testid={`badge-state-${idx}`}
+                        >
+                          {agent.state}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm">
+                        <div className="text-muted-foreground">
+                          Performance: <span className="font-semibold">{(agent.performance * 100).toFixed(0)}%</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Created: {new Date(agent.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Bot className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No agents registered yet</p>
             </div>
           )}
         </CardContent>

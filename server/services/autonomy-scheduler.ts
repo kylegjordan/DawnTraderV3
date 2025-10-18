@@ -500,9 +500,37 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 6 hours - Unified Cognitive Core Optimization (Phase 10.0)
+schedulerRegistry.registerTask({
+  name: 'cognitive_core_cycle',
+  description: 'Unified cognitive core optimization and subsystem synchronization',
+  frequency: 'custom',
+  intervalMs: 6 * 60 * 60 * 1000, // 6 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🧠 Running unified cognitive core optimization...');
+    
+    try {
+      // Run unified core optimization cycle
+      const result = await autonomyController.runOptimizationCycle();
+      
+      console.log(`[AutonomyScheduler] ✅ Cognitive core optimization complete`);
+      console.log(`[AutonomyScheduler] - Cycle ID: ${result.cycleId}`);
+      console.log(`[AutonomyScheduler] - Optimization type: ${result.optimizationType}`);
+      console.log(`[AutonomyScheduler] - Global score: ${result.score.toFixed(2)}`);
+      console.log(`[AutonomyScheduler] - Active agents: ${result.activeAgents}`);
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Cognitive core optimization failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, and Phase 9.9 strategic memory sync
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, and Phase 10.0 cognitive core optimization
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -538,6 +566,9 @@ export async function initAutonomyScheduler() {
     // Start strategic memory sync (run after 7 hour delay) - Phase 9.9
     await schedulerRegistry.startTask('strategic_memory_sync', false);
     
+    // Start cognitive core cycle (run after 8 hour delay) - Phase 10.0
+    await schedulerRegistry.startTask('cognitive_core_cycle', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -549,6 +580,7 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Learning feedback sync: Every 6 hours');
     console.log('[AutonomyScheduler] - Meta-cognitive oversight: Every 8 hours');
     console.log('[AutonomyScheduler] - Strategic memory sync: Every 12 hours');
+    console.log('[AutonomyScheduler] - Cognitive core optimization: Every 6 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -569,6 +601,7 @@ export function getAutonomySchedulerStatus() {
   const learningFeedbackStatus = schedulerRegistry.getTaskStatus('learning_feedback_sync');
   const metaCognitionStatus = schedulerRegistry.getTaskStatus('meta_cognition_scan');
   const strategicMemoryStatus = schedulerRegistry.getTaskStatus('strategic_memory_sync');
+  const cognitiveCoreStatus = schedulerRegistry.getTaskStatus('cognitive_core_cycle');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -630,6 +663,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: strategicMemoryStatus.lastRun,
       nextRun: strategicMemoryStatus.nextRun,
       frequency: strategicMemoryStatus.frequency,
+    } : null,
+    cognitiveCoreOptimization: cognitiveCoreStatus ? {
+      status: cognitiveCoreStatus.status,
+      lastRun: cognitiveCoreStatus.lastRun,
+      nextRun: cognitiveCoreStatus.nextRun,
+      frequency: cognitiveCoreStatus.frequency,
     } : null,
   };
 }

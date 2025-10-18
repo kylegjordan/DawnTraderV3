@@ -1,0 +1,130 @@
+🧩 PHASE 10.0 — UNIFIED COGNITIVE CORE & AUTONOMOUS META-OPTIMIZATION
+
+Goal: merge every prior subsystem (Awareness → Memory) into a single coordinated Cognitive Core that can self-tune, spawn new domain agents, and continuously evolve reasoning quality.
+
+1️⃣ Schema & Types (shared/schema.ts)
+
+Add after the Phase 9.9 section.
+
+New Enums
+
+optimization_type: 'parameter_tuning' | 'architecture_adjustment' | 'policy_refinement'
+
+agent_state: 'active' | 'idle' | 'suspended' | 'terminated'
+
+New Tables
+
+Table	Purpose	Key Fields
+cognitive_core_state	Tracks unified core cycles	id UUID PK, cycle_id VARCHAR, active_agents INT, optimization_type optimization_type, score FLOAT, notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+agent_registry	Persists agent life-cycle info	id UUID PK, agent_name VARCHAR(100), domain VARCHAR(100), state agent_state, performance FLOAT, metadata JSONB, created_at TIMESTAMPTZ DEFAULT NOW()
+
+Export types CognitiveCoreState and AgentRegistry.
+
+Deploy schema (npm run db:push -- --force or SQL fallback block).
+
+2️⃣ Service Creation (server/services/unified-core.ts)
+
+Create UnifiedCoreService with methods:
+
+synchronizeSubsystems() → aggregates data from Awareness → Memory tables.
+
+evaluateSystemHealth() → computes global stability/bias scores.
+
+optimizeParameters() → chooses and applies optimization_type.
+
+spawnAdaptiveAgent(domain) → registers new agent in agent_registry.
+
+logCycle() → inserts summary record into cognitive_core_state.
+
+Add NaN/Infinity guards and detailed console logging.
+
+3️⃣ Integrate into Autonomy Controller (server/services/autonomy-controller.ts)
+
+After performStrategicCalibration():
+
+await unifiedCore.runOptimizationCycle();
+
+
+Add runOptimizationCycle() that calls UnifiedCoreService.synchronizeSubsystems(), evaluateSystemHealth(), optimizeParameters(), and logCycle() sequentially.
+
+4️⃣ Scheduler Task (server/services/autonomy-scheduler.ts)
+
+Add 11ᵗʰ autonomous task cognitive_core_cycle:
+
+Runs every 6 hours.
+
+Calls UnifiedCoreService.runOptimizationCycle().
+
+Appends cycle result to status object.
+
+Update initAutonomyScheduler() and getSchedulerStatus() accordingly.
+
+5️⃣ API Endpoints (server/routes.ts)
+
+Add before the final return:
+
+GET  /api/core/status
+GET  /api/core/agents
+POST /api/core/optimize
+
+
+Each endpoint calls corresponding methods from UnifiedCoreService.
+Return 200 JSON responses with summaries.
+
+6️⃣ UI Integration (client/src/components/system/enhanced-system-monitoring.tsx)
+
+Add “Core” tab after Memory:
+
+Icon: Cpu (from lucide-react).
+
+Cards: Current Cycle ID · Optimization Type · Global Score · Active Agents Count.
+
+Auto-refresh every 120 s.
+
+Button → “Force Optimization Cycle” → POST /api/core/optimize.
+
+Create CoreTab component below MemoryTab using existing pattern.
+
+7️⃣ Testing & Verification
+
+Start app → npm run dev
+
+curl -s http://localhost:5000/api/core/status → expect HTTP 200 with JSON.
+
+Login as testuser123 → open System Monitoring → Core tab renders.
+
+Click “Force Optimization Cycle” → check log entry in cognitive_core_state.
+
+8️⃣ Architect Review & Docs
+
+Run automated architect review.
+
+Resolve minor warnings (typings, null guards).
+
+Append “Phase 10.0 Unified Cognitive Core” section to replit.md, including:
+
+schema diagrams
+
+API list
+
+scheduler table
+
+✅ Expected Outcome
+Capability	Description	Status
+Unified Cognitive Core	Centralized reasoning hub integrating all layers	🧠 Enabled
+Autonomous Meta-Optimization	Self-tuning of parameters & policies every 6 h	⚙️ Active
+Agent Registry	Persistent multi-domain agent tracking	📘 Operational
+Cycle Logging & Scoring	Full record of optimization sessions	📊 Stored
+UI Core Tab	Live metrics + manual cycle trigger	💻 Visible
+Documentation	replit.md updated	📝 Complete
+Execution Rules
+
+No pauses or questions — proceed through all steps.
+
+Authenticate only with testuser123 / SecurePass123!.
+
+Ignore non-blocking LSP warnings.
+
+Stay in Replit dev environment.
+
+End execution only after successful cycle log and UI verification.

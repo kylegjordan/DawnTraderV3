@@ -79,6 +79,10 @@ export const oversightFlagTypeEnum = pgEnum("oversight_flag_type", ["instability
 // Phase 9.9 enums
 export const memoryScopeEnum = pgEnum("memory_scope", ["short_term", "medium_term", "long_term"]);
 
+// Phase 10.0 enums
+export const optimizationTypeEnum = pgEnum("optimization_type", ["parameter_tuning", "architecture_adjustment", "policy_refinement"]);
+export const agentStateEnum = pgEnum("agent_state", ["active", "idle", "suspended", "terminated"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2595,6 +2599,36 @@ export const modelCalibrationLog = pgTable("model_calibration_log", {
   createdAtIdx: index("model_calibration_log_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 10.0: Cognitive Core State - Unified Core Optimization Cycles
+export const cognitiveCoreState = pgTable("cognitive_core_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cycleId: varchar("cycle_id", { length: 100 }).notNull(),
+  activeAgents: integer("active_agents").notNull().default(0),
+  optimizationType: optimizationTypeEnum("optimization_type").notNull(),
+  score: doublePrecision("score").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  cycleIdIdx: index("cognitive_core_state_cycle_id_idx").on(table.cycleId),
+  createdAtIdx: index("cognitive_core_state_created_at_idx").on(table.createdAt),
+}));
+
+// Phase 10.0: Agent Registry - Multi-Domain Agent Lifecycle Management
+export const agentRegistry = pgTable("agent_registry", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentName: varchar("agent_name", { length: 100 }).notNull(),
+  domain: varchar("domain", { length: 100 }).notNull(),
+  state: agentStateEnum("state").notNull().default("active"),
+  performance: doublePrecision("performance").notNull().default(0.5),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  agentNameIdx: index("agent_registry_agent_name_idx").on(table.agentName),
+  domainIdx: index("agent_registry_domain_idx").on(table.domain),
+  stateIdx: index("agent_registry_state_idx").on(table.state),
+  createdAtIdx: index("agent_registry_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2628,6 +2662,8 @@ export const insertAgentLearningFeedbackSchema = createInsertSchema(agentLearnin
 export const insertMetaCognitionLogSchema = createInsertSchema(metaCognitionLog).omit({ id: true, createdAt: true });
 export const insertStrategicMemoryArchiveSchema = createInsertSchema(strategicMemoryArchive).omit({ id: true, createdAt: true });
 export const insertModelCalibrationLogSchema = createInsertSchema(modelCalibrationLog).omit({ id: true, createdAt: true });
+export const insertCognitiveCoreStateSchema = createInsertSchema(cognitiveCoreState).omit({ id: true, createdAt: true });
+export const insertAgentRegistrySchema = createInsertSchema(agentRegistry).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2728,6 +2764,14 @@ export type MemoryScope = typeof memoryScopeEnum.enumValues[number];
 
 export type InsertModelCalibrationLog = z.infer<typeof insertModelCalibrationLogSchema>;
 export type ModelCalibrationLog = typeof modelCalibrationLog.$inferSelect;
+
+export type InsertCognitiveCoreState = z.infer<typeof insertCognitiveCoreStateSchema>;
+export type CognitiveCoreState = typeof cognitiveCoreState.$inferSelect;
+export type OptimizationType = typeof optimizationTypeEnum.enumValues[number];
+
+export type InsertAgentRegistry = z.infer<typeof insertAgentRegistrySchema>;
+export type AgentRegistry = typeof agentRegistry.$inferSelect;
+export type AgentState = typeof agentStateEnum.enumValues[number];
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

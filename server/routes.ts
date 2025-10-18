@@ -10493,6 +10493,47 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 10.0: Unified Cognitive Core Routes ====================
+
+  app.get('/api/core/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { unifiedCore } = await import('./services/unified-core');
+      const status = await unifiedCore.getCoreStatus();
+      
+      res.json({ ok: true, status });
+    } catch (error: any) {
+      console.error('[CognitiveCore] Get status failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/core/agents', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { unifiedCore } = await import('./services/unified-core');
+      const { state } = req.query;
+      
+      const agents = await unifiedCore.getAgents(state as any);
+      
+      res.json({ ok: true, agents });
+    } catch (error: any) {
+      console.error('[CognitiveCore] Get agents failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/core/optimize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { unifiedCore } = await import('./services/unified-core');
+      
+      const result = await unifiedCore.runOptimizationCycle();
+      
+      res.json({ ok: true, result });
+    } catch (error: any) {
+      console.error('[CognitiveCore] Manual optimization failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
