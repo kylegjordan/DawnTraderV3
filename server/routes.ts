@@ -10534,6 +10534,74 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 11.0: Safety Guardrails Routes ====================
+
+  app.get('/api/safety/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { safetyGuardrails } = await import('./services/safety-guardrails');
+      
+      const killSwitchStatus = await safetyGuardrails.getKillSwitchStatus();
+      const recentEvents = await safetyGuardrails.getRecentEvents(10);
+      const activePolicies = await safetyGuardrails.getActivePolicies();
+      
+      res.json({ 
+        ok: true, 
+        killSwitch: killSwitchStatus,
+        recentEvents,
+        activePolicies,
+        totalActivePolicies: activePolicies.length,
+      });
+    } catch (error: any) {
+      console.error('[Safety] Get status failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/safety/policies/apply', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { safetyGuardrails } = await import('./services/safety-guardrails');
+      
+      const { policyName, scope, enabled, constraints } = req.body;
+      
+      if (!policyName || !scope || !constraints) {
+        return res.status(400).json({ error: 'Missing required fields: policyName, scope, constraints' });
+      }
+      
+      const policy = await safetyGuardrails.applyPolicy({
+        policyName,
+        scope,
+        enabled: enabled !== undefined ? enabled : true,
+        constraints,
+      });
+      
+      res.json({ ok: true, policy });
+    } catch (error: any) {
+      console.error('[Safety] Apply policy failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/safety/kill-switch', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { safetyGuardrails } = await import('./services/safety-guardrails');
+      
+      const { enabled, reason } = req.body;
+      
+      if (enabled === undefined) {
+        return res.status(400).json({ error: 'Missing required field: enabled' });
+      }
+      
+      await safetyGuardrails.toggleKillSwitch(enabled, reason || null);
+      
+      const status = await safetyGuardrails.getKillSwitchStatus();
+      
+      res.json({ ok: true, killSwitch: status });
+    } catch (error: any) {
+      console.error('[Safety] Toggle kill switch failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 

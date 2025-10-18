@@ -528,9 +528,48 @@ schedulerRegistry.registerTask({
   },
 });
 
+// Every 2 hours - Safety Event Sweeper (Phase 11.0)
+schedulerRegistry.registerTask({
+  name: 'safety_sweeper',
+  description: 'Archive old low-severity safety events and surface high-severity ones',
+  frequency: 'custom',
+  intervalMs: 2 * 60 * 60 * 1000, // 2 hours
+  lastRun: null,
+  nextRun: null,
+  status: 'idle',
+  run: async () => {
+    console.log('[AutonomyScheduler] 🛡️ Running safety event sweeper...');
+    
+    try {
+      const { safetyGuardrails } = await import('./safety-guardrails').then((m) => ({
+        safetyGuardrails: m.safetyGuardrails,
+      }));
+
+      // Archive low-severity events older than 7 days
+      const archivedCount = await safetyGuardrails.archiveOldEvents(7);
+      console.log(`[AutonomyScheduler] 🗑️ Archived ${archivedCount} old low-severity events`);
+
+      // Get high-severity events for oversight
+      const highSeverityEvents = await safetyGuardrails.getHighSeverityEvents(50);
+      console.log(`[AutonomyScheduler] ⚠️ Found ${highSeverityEvents.length} high-severity events`);
+
+      // Surface to meta-cognitive oversight if there are high-severity events
+      if (highSeverityEvents.length > 0) {
+        console.log('[AutonomyScheduler] 📊 Surfacing high-severity events to oversight system');
+        // Note: Oversight system will pick these up via its own query
+      }
+
+      console.log(`[AutonomyScheduler] ✅ Safety sweeper complete`);
+    } catch (error) {
+      console.error('[AutonomyScheduler] ❌ Safety sweeper failed:', error);
+      throw error;
+    }
+  },
+});
+
 /**
  * Initialize autonomy scheduler
- * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, and Phase 10.0 cognitive core optimization
+ * Starts hourly self-checks, daily optimization, Phase 9.2 strategic tasks, Phase 9.3 simulation tasks, Phase 9.4 reflection tasks, Phase 9.6 collaboration tasks, Phase 9.7 learning feedback sync, Phase 9.8 meta-cognitive oversight, Phase 9.9 strategic memory sync, Phase 10.0 cognitive core optimization, and Phase 11.0 safety sweeper
  */
 export async function initAutonomyScheduler() {
   console.log('[AutonomyScheduler] 🚀 Initializing autonomy scheduler...');
@@ -569,6 +608,9 @@ export async function initAutonomyScheduler() {
     // Start cognitive core cycle (run after 8 hour delay) - Phase 10.0
     await schedulerRegistry.startTask('cognitive_core_cycle', false);
     
+    // Start safety sweeper (run after 9 hour delay) - Phase 11.0
+    await schedulerRegistry.startTask('safety_sweeper', false);
+    
     console.log('[AutonomyScheduler] ✅ Autonomy scheduler initialized');
     console.log('[AutonomyScheduler] - Self-checks: Every hour');
     console.log('[AutonomyScheduler] - Optimization: Every 24 hours');
@@ -581,6 +623,7 @@ export async function initAutonomyScheduler() {
     console.log('[AutonomyScheduler] - Meta-cognitive oversight: Every 8 hours');
     console.log('[AutonomyScheduler] - Strategic memory sync: Every 12 hours');
     console.log('[AutonomyScheduler] - Cognitive core optimization: Every 6 hours');
+    console.log('[AutonomyScheduler] - Safety sweeper: Every 2 hours');
   } catch (error) {
     console.error('[AutonomyScheduler] ❌ Failed to initialize:', error);
     throw error;
@@ -602,6 +645,7 @@ export function getAutonomySchedulerStatus() {
   const metaCognitionStatus = schedulerRegistry.getTaskStatus('meta_cognition_scan');
   const strategicMemoryStatus = schedulerRegistry.getTaskStatus('strategic_memory_sync');
   const cognitiveCoreStatus = schedulerRegistry.getTaskStatus('cognitive_core_cycle');
+  const safetySweeperStatus = schedulerRegistry.getTaskStatus('safety_sweeper');
   
   return {
     selfCheck: selfCheckStatus ? {
@@ -669,6 +713,12 @@ export function getAutonomySchedulerStatus() {
       lastRun: cognitiveCoreStatus.lastRun,
       nextRun: cognitiveCoreStatus.nextRun,
       frequency: cognitiveCoreStatus.frequency,
+    } : null,
+    safetySweeper: safetySweeperStatus ? {
+      status: safetySweeperStatus.status,
+      lastRun: safetySweeperStatus.lastRun,
+      nextRun: safetySweeperStatus.nextRun,
+      frequency: safetySweeperStatus.frequency,
     } : null,
   };
 }

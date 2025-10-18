@@ -83,6 +83,10 @@ export const memoryScopeEnum = pgEnum("memory_scope", ["short_term", "medium_ter
 export const optimizationTypeEnum = pgEnum("optimization_type", ["parameter_tuning", "architecture_adjustment", "policy_refinement"]);
 export const agentStateEnum = pgEnum("agent_state", ["active", "idle", "suspended", "terminated"]);
 
+// Phase 11.0 enums
+export const safetySeverityEnum = pgEnum("safety_severity", ["low", "medium", "high", "critical"]);
+export const safetyScopeEnum = pgEnum("safety_scope", ["global", "trading", "autonomy", "analysis"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2629,6 +2633,43 @@ export const agentRegistry = pgTable("agent_registry", {
   createdAtIdx: index("agent_registry_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 11.0: Safety Policy - Guardrails Configuration
+export const safetyPolicy = pgTable("safety_policy", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  policyName: varchar("policy_name", { length: 100 }).notNull().unique(),
+  scope: safetyScopeEnum("scope").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  constraints: jsonb("constraints").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  policyNameIdx: index("safety_policy_policy_name_idx").on(table.policyName),
+  scopeIdx: index("safety_policy_scope_idx").on(table.scope),
+  enabledIdx: index("safety_policy_enabled_idx").on(table.enabled),
+}));
+
+// Phase 11.0: Safety Event Log - Safety Violations and Actions
+export const safetyEventLog = pgTable("safety_event_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actor: varchar("actor", { length: 100 }).notNull(),
+  action: varchar("action", { length: 200 }).notNull(),
+  policyHits: text("policy_hits").array().notNull().default(sql`ARRAY[]::text[]`),
+  severity: safetySeverityEnum("severity").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  actorIdx: index("safety_event_log_actor_idx").on(table.actor),
+  severityIdx: index("safety_event_log_severity_idx").on(table.severity),
+  createdAtIdx: index("safety_event_log_created_at_idx").on(table.createdAt),
+}));
+
+// Phase 11.0: Kill Switch - Emergency System Shutdown Control
+export const killSwitch = pgTable("kill_switch", {
+  id: varchar("id").primaryKey().default("global_kill_switch"),
+  isEnabled: boolean("is_enabled").notNull().default(false),
+  reason: text("reason"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertExpertPrincipleSchema = createInsertSchema(expertPrinciples);
 export const insertExpertSourceSchema = createInsertSchema(expertSources);
@@ -2664,6 +2705,9 @@ export const insertStrategicMemoryArchiveSchema = createInsertSchema(strategicMe
 export const insertModelCalibrationLogSchema = createInsertSchema(modelCalibrationLog).omit({ id: true, createdAt: true });
 export const insertCognitiveCoreStateSchema = createInsertSchema(cognitiveCoreState).omit({ id: true, createdAt: true });
 export const insertAgentRegistrySchema = createInsertSchema(agentRegistry).omit({ id: true, createdAt: true });
+export const insertSafetyPolicySchema = createInsertSchema(safetyPolicy).omit({ id: true, createdAt: true });
+export const insertSafetyEventLogSchema = createInsertSchema(safetyEventLog).omit({ id: true, createdAt: true });
+export const insertKillSwitchSchema = createInsertSchema(killSwitch).omit({ updatedAt: true });
 
 // Type exports
 export type InsertExpertPrinciple = z.infer<typeof insertExpertPrincipleSchema>;
@@ -2772,6 +2816,17 @@ export type OptimizationType = typeof optimizationTypeEnum.enumValues[number];
 export type InsertAgentRegistry = z.infer<typeof insertAgentRegistrySchema>;
 export type AgentRegistry = typeof agentRegistry.$inferSelect;
 export type AgentState = typeof agentStateEnum.enumValues[number];
+
+export type InsertSafetyPolicy = z.infer<typeof insertSafetyPolicySchema>;
+export type SafetyPolicy = typeof safetyPolicy.$inferSelect;
+export type SafetySeverity = typeof safetySeverityEnum.enumValues[number];
+export type SafetyScope = typeof safetyScopeEnum.enumValues[number];
+
+export type InsertSafetyEventLog = z.infer<typeof insertSafetyEventLogSchema>;
+export type SafetyEventLog = typeof safetyEventLog.$inferSelect;
+
+export type InsertKillSwitch = z.infer<typeof insertKillSwitchSchema>;
+export type KillSwitch = typeof killSwitch.$inferSelect;
 
 // Orchestrator configuration update schemas
 export const orchestratorUpdateGoalSchema = z.object({

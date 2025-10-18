@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-18T08:06:39.669Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (10.44, 10.6, 11.33) for an 8-core system, indicating potential over-utilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, confidence, opportunities generated, or adjustments made, indicating it may not be functioning as expected."
+    },
+    {
+      "severity": "low",
+      "message": "Trading metrics show zero activity (totalPL, activeTrades, winRate, roi), which might be unusual depending on expected trading volume."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation or system instability."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review AI module functionality to ensure it is correctly configured and operational, as it currently shows no activity."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Evaluate trading strategies and market conditions to ensure trading activity aligns with expectations."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve any underlying issues.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, potentially affecting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Perform a diagnostic check on the AI module to determine why it is not generating opportunities or making adjustments.",
+      "rationale": "The AI module is crucial for identifying trading opportunities and optimizing strategies; its inactivity could impact trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze trading strategy performance and market conditions to ensure alignment with trading goals.",
+      "rationale": "Zero trading activity might indicate misalignment with current market conditions or strategy inefficacy."
+    }
+  ],
+  "urgencyLevel": "high"
+}

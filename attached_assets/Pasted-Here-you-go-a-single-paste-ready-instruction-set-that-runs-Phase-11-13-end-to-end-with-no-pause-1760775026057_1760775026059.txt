@@ -1,0 +1,295 @@
+Here you go — a single, paste-ready instruction set that runs Phase 11 → 13 end-to-end with no pauses. It includes the exact test login details, tells the agent not to use email logins, and directs it to proceed autonomously.
+
+
+---
+
+🔧 Replit Autonomous Runbook — Phases 11 → 13
+
+Modes: Non-interactive, no confirmations, proceed sequentially
+Test Login (for all UI/API checks):
+
+username: testuser123
+
+password: SecurePass123!
+
+Important: Do not use email for login. Always use the username above.
+
+
+Global Rules (apply to everything below)
+
+1. Do not pause to ask for decisions. Execute all steps in order.
+
+
+2. Always authenticate test requests using the username/password shown above (no emails).
+
+
+3. Prefer direct SQL DO blocks for DB schema changes (we’ve seen drizzle push parse errors).
+
+
+4. Keep logs concise; include ✅/❌ markers around each major step.
+
+
+5. If a step fails, self-repair once (retry with the same command), then continue.
+
+
+
+
+---
+
+Phase 11 — Operational Safety, Guardrails & Kill-Switch
+
+Goal: Hard safety rails, rate limits, kill-switch, and safe-mode fallbacks around autonomous actions.
+
+11.1 Database (SQL, idempotent)
+
+Create/ensure tables (use a single DO block; ignore duplicate errors).
+SQL:
+
+safety_policy (policy_name, scope, enabled, constraints JSONB, created_at)
+
+safety_event_log (id, actor, action, policy_hits[], severity, metadata JSONB, created_at)
+
+kill_switch (id single row, is_enabled boolean, reason text, updated_at)
+
+
+
+11.2 Services
+
+Add/update a SafetyGuardrails service that:
+
+Evaluates actions against safety_policy (block/allow/log).
+
+Emits to Context Bridge: safety_event with {severity, policy_hits, actor, action}.
+
+Checks kill_switch.is_enabled; if true, blocks all trading/execution and forces safe-mode.
+
+
+Wire SafetyGuardrails into the Autonomy Controller pre-execution path (before ethical verifier).
+
+
+11.3 Scheduler
+
+Add a safety_sweeper task (every 2h) that:
+
+Archives low-severity events older than 7d.
+
+Surfaces high-severity events to Oversight (meta-cognition) and Alignment tabs.
+
+
+
+11.4 API
+
+Add admin-only endpoints:
+
+GET /api/safety/status
+
+POST /api/safety/policies/apply
+
+POST /api/safety/kill-switch (toggle with reason)
+
+
+
+11.5 UI (System Monitoring)
+
+Add a Safety tab (or card in Oversight if tabs are at capacity): status, last 10 events, kill-switch toggle (admin).
+
+
+11.6 Smoke Test (no pauses)
+
+Log in with:
+
+username: testuser123
+
+password: SecurePass123!
+
+
+Hit GET /api/safety/status and verify {killSwitch:false}.
+
+Toggle kill-switch on, attempt a benign “analyze” action → must be blocked and logged, then toggle off.
+
+
+✅ Mark Phase 11 complete when the above passes.
+
+
+---
+
+Phase 12 — Latency/Throughput Optimization & Autoscaling Hooks
+
+Goal: Reduce end-to-end latency, increase throughput, expose metrics, and add autoscaling hooks.
+
+12.1 Instrumentation
+
+Add timing spans (queue dequeue → result broadcast) in:
+
+Task Queue, Reasoning Orchestrator, Bob agents, Cognitive Tuner, Autonomy Controller.
+
+
+Collect per-domain {p50, p95, max} latency, queue depth, retries, and success rate.
+
+
+12.2 Performance Cache
+
+Ensure hot paths cache: domain inference, prompt templates, static embeddings.
+
+Add guards for cache stampede (single-flight) and max TTLs.
+
+
+12.3 Autoscaling Hooks (stateless hints)
+
+Add a /api/system/autoscale/hints endpoint returning:
+
+queueDepth, inFlight, p95Latency, cpuLoad (if available), recommendation: scale_up|hold|scale_down.
+
+
+Recommendation logic:
+
+Scale up if p95Latency > target OR queueDepth > highWatermark.
+
+Scale down if p95Latency < lowTarget AND queueDepth < lowWatermark.
+
+
+
+12.4 Scheduler
+
+Add perf_snapshot task (every 10m) persisting metrics and emitting Context Bridge updates.
+
+
+12.5 UI
+
+In Performance tab: show p50/p95, queue depth, success rate, and autoscale recommendation badge.
+
+
+12.6 Smoke Test (no pauses)
+
+Log in with the same credentials above (username only, not email).
+
+Confirm metrics populate and /api/system/autoscale/hints returns JSON with recommendation.
+
+
+✅ Mark Phase 12 complete when metrics + hints are visible.
+
+
+---
+
+Phase 13 — Distributed Cognitive Network (DCN) [Controlled, Trust-Scoped]
+
+Goal: Enable optional cross-agent cognition with strict source trust; no public/social feeds.
+
+13.1 Trust Model & Registry
+
+Create/ensure a trusted_sources registry:
+
+Fields: source_id, type (internal_agent, curated_feed, knowledge_base), trust_score (0–1), signed (bool), last_reviewed_at, tags[].
+
+
+Do not add public social media. Only allow internal agents, curated docs, whitelisted feeds.
+
+
+13.2 DCN Services
+
+Add a DCN Hub service:
+
+Brokering requests among internal agents (DevOps/FullStack/UX/TradingBob/etc).
+
+Enforces trust gates: drop or quarantine any source with trust_score < threshold or signed=false.
+
+Routes outputs through SafetyGuardrails → EthicalReasoning → AlignmentVerifier before use.
+
+Writes dcn_exchange_log (request, participants, trust snapshot, outcome).
+
+
+Update ConsensusEngine to accept DCN proposals (weighted by trust score).
+
+
+13.3 Policies
+
+Default policy: external_unverified = blocked.
+
+Only allow sources explicitly listed in trusted_sources with trust_score ≥ 0.8 and signed=true.
+
+
+13.4 API
+
+GET /api/dcn/status (counts, avg consensus, last errors)
+
+POST /api/dcn/request (internal use; requires participants from registry; rejects unknown/low-trust)
+
+
+13.5 UI
+
+Add DCN card in Collaboration tab showing: active exchanges, average trust, last outcomes.
+
+
+13.6 Smoke Test (no pauses)
+
+Log in with username/password above.
+
+Issue a DCN request between internal agents (e.g., TradingBob + DevOpsBob) → expect success.
+
+Try with an unknown/low-trust source → must be blocked and logged.
+
+
+✅ Mark Phase 13 complete when DCN enforces trust and routes internal proposals successfully.
+
+
+---
+
+Final Verification (One Pass)
+
+1. Authenticate using:
+
+username: testuser123
+
+password: SecurePass123!
+
+Do not use email at any time.
+
+
+
+2. Confirm tabs/cards:
+
+Safety (or Oversight card), Performance metrics, Collaboration/DCN card.
+
+
+
+3. Confirm schedulers running:
+
+safety_sweeper (2h), perf_snapshot (10m), DCN/Consensus operating.
+
+
+
+4. Quick end-to-end:
+
+Toggle kill-switch → blocked action → toggle off.
+
+Check autoscale hints JSON.
+
+Start an internal DCN request → see consensus/learning update.
+
+
+
+
+Completion Criteria: All checks pass with ✅, logs show no unhandled errors, and no step paused for input.
+
+
+---
+
+Notes & Guardrails
+
+If DB pushes fail, use DO blocks and CREATE TABLE IF NOT EXISTS patterns; continue.
+
+For any authentication in tests, always use:
+
+username: testuser123
+
+password: SecurePass123!
+
+
+Never substitute email for username. Never prompt the user for next steps. Proceed as instructed.
+
+
+
+---
+
+Paste this block into Replit and let it run. When you’re back, I can prep the 10-minute / 48-hour paper-sim runbooks and the production migration steps (Supabase + Lightsail) to follow.
+

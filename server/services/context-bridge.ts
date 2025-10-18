@@ -5,7 +5,7 @@ import { db } from '../db';
 import { sql } from 'drizzle-orm';
 
 export interface ContextUpdate {
-  type: 'state_update' | 'chat_update' | 'config_update' | 'trade_update';
+  type: 'state_update' | 'chat_update' | 'config_update' | 'trade_update' | 'safety_event' | 'kill_switch_changed';
   payload: any;
   timestamp: string;
   traceId: string;

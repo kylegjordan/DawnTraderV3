@@ -17,6 +17,7 @@ import { learningBridge } from './learning-bridge';
 import metaOversightService from './meta-oversight';
 import longtermMemoryService from './longterm-memory';
 import { unifiedCore } from './unified-core';
+import { safetyGuardrails } from './safety-guardrails';
 import { desc, sql } from 'drizzle-orm';
 
 /**
@@ -285,6 +286,47 @@ class AutonomyControllerService {
           },
           'paper'
         ).catch((err: any) => console.error('[AutonomyController] Decision audit failed:', err));
+      }
+
+      // Phase 11.0: Safety Guardrails Pre-Execution Check (BLOCKING - before ethical)
+      try {
+        const safetyEval = await safetyGuardrails.evaluateAction({
+          actor: 'autonomy_controller',
+          action: 'self_check',
+          scope: 'autonomy',
+          metadata: {
+            healthScore,
+            cognitiveScore,
+            issuesDetected: issuesDetected.length,
+            runId,
+          },
+        });
+
+        if (!safetyEval.allowed) {
+          console.error(`[AutonomyController] ⛔ SAFETY GUARDRAILS VIOLATION - blocking self-check`);
+          console.error(`[AutonomyController] Policy hits: ${safetyEval.policyHits.join(', ')}`);
+          
+          issuesDetected.push(`SAFETY VIOLATION: ${safetyEval.reason}`);
+          actionsTriggered.push('blocked_by_safety_guardrails');
+
+          // If kill switch is active, return early
+          if (safetyEval.policyHits.includes('KILL_SWITCH')) {
+            return {
+              runId,
+              timestamp: new Date(),
+              healthScore,
+              cognitiveScore,
+              systemMetrics: assessmentResult.systemMetrics,
+              issuesDetected,
+              actionsTriggered,
+            };
+          }
+        } else {
+          console.log(`[AutonomyController] ✅ Safety guardrails: passed`);
+        }
+      } catch (err: any) {
+        console.error('[AutonomyController] Safety guardrails check failed:', err);
+        issuesDetected.push('Safety guardrails system error');
       }
 
       // Phase 9.5: Ethical Reasoning Pre-Execution Check (BLOCKING)
