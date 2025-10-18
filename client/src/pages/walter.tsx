@@ -1182,7 +1182,7 @@ export default function WalterPage() {
                       onPaste={handlePaste}
                       placeholder="Ask Walter anything, drag and drop files, or paste images"
                       className="resize-none pl-10 pr-12 overflow-y-auto"
-                      style={{ minHeight: '120px', maxHeight: '200px' }}
+                      style={{ minHeight: '60px', maxHeight: '100px' }}
                       disabled={sendMessageMutation.isPending || isTranscribing || isUploadingFile}
                       data-testid="input-message"
                     />
