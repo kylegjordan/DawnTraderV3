@@ -1,0 +1,233 @@
+Phase 17 — Distributed Autonomy & Scaling
+
+Goal: Turn Walter into a horizontally scalable, multi-agent cluster that can delegate, coordinate, and aggregate results across specialized workers — while preserving all Safety → Ethics → Knowledge gates.
+
+Global rules for this run
+
+Execute all tasks sequentially without pausing for decisions. Do not ask the user for confirmation at any step.
+
+Auth for all app logins/tests:
+
+username: testuser123
+
+password: SecurePass123!
+
+Use username only (not email) for login wherever applicable.
+
+Do not alter existing safety/ethics behavior. All new execution paths must pass through the existing Safety → Federated Ethics → Ethical Reasoner → Knowledge Acquisition gates.
+
+Treat any non-critical warnings as informational; continue execution.
+
+17.1 Cluster Data Plane (Schema)
+
+Objective: Add minimal tables to track distributed agents, heartbeats, task routing, and results.
+
+Inspect shared/schema.ts to follow existing ID and enum patterns.
+
+Add schema objects (no code here) for:
+
+cluster_node (id, name, role, status, version, last_heartbeat, capacity, load, metadata).
+
+cluster_task_queue (id, task_type, payload, priority, status, assigned_node_id, created_at, started_at, finished_at, error_message).
+
+cluster_result_log (id, task_id, node_id, outcome_status, result_summary, metrics, created_at).
+
+cluster_bus_event (id, topic, source_node, payload, created_at).
+
+Create required enums (e.g., node_role, node_status, task_status) aligned with existing style.
+
+Push changes. If ORM push fails, use safe SQL blocks as in prior phases.
+
+Verify via a quick DB introspection (same technique you used in Phases 14–16).
+
+Acceptance check: All four tables exist and are indexed on common query keys (status, created_at, node_id, task_type).
+
+17.2 Orchestration Layer Services
+
+Objective: Introduce the runtime services that make the cluster work.
+
+Create services (filenames only; follow existing patterns and imports):
+
+server/services/cluster-registry.ts
+
+Registers local node, updates/reads capacity & load, heartbeats, fetches peer list.
+
+server/services/cluster-bus.ts
+
+Lightweight pub/sub using existing event mechanism; persists key events to cluster_bus_event.
+
+server/services/task-router.ts
+
+Places tasks into cluster_task_queue, chooses a target node by role/capacity/health, supports priorities & retries.
+
+server/services/task-worker.ts
+
+Pulls tasks for the local node, executes through Safety → Federated Ethics → Ethical Reasoner → Knowledge gates, posts results to cluster_result_log.
+
+Acceptance check: Services compile without LSP errors and can start/stop cleanly with app.
+
+17.3 Autonomy Controller: Delegation Hooks
+
+Objective: Enable targeted delegation to specialized nodes (Trading, Research, Analysis, Compliance).
+
+Add a Cluster Delegation Checkpoint that runs after Knowledge Acquisition and before final execution:
+
+If task is labeled delegable, route to task-router instead of executing locally.
+
+If non-delegable, continue local path.
+
+Ensure delegated tasks still pass Safety/Ethics/Knowledge gates on the worker node.
+
+Acceptance check: Local vs delegated path chosen correctly based on task metadata (role/priority).
+
+17.4 Scheduler Additions (Cluster Ops)
+
+Objective: Keep the cluster healthy with recurring jobs.
+
+Add two recurring tasks to the scheduler (naming consistent with previous phases):
+
+cluster_heartbeat — every 60s.
+
+Updates cluster_node.last_heartbeat, measures CPU/mem, queue depth, sets status healthy/degraded.
+
+cluster_rebalance — every 10 min.
+
+Moves stuck tasks, reassigns from unhealthy nodes, retries failed with backoff, trims old bus events.
+
+Acceptance check: Both tasks appear in scheduler status and write logs on run.
+
+17.5 Cluster Admin API (Secure)
+
+Objective: Provide minimal admin endpoints for observability/ops (JWT required; admin-guard if already present).
+
+Add routes under /api/cluster/*:
+
+GET /status — aggregate health: node count, healthy/degraded, queue depth, throughput, error rate.
+
+GET /nodes — list nodes (id, name, role, status, capacity, load, last_heartbeat, version).
+
+GET /queue — recent tasks with status & assigned node.
+
+GET /results — recent results (filter by role/status/time).
+
+POST /rebalance — manual rebalance request.
+
+POST /drain/:nodeId — mark node as draining (no new tasks), allow in-flight to finish.
+
+Acceptance check: All endpoints return JSON successfully when authenticated as testuser123.
+
+17.6 Cluster UI — “Cluster” Tab in System Monitoring
+
+Objective: Visualize the distributed system.
+
+Add a new Cluster tab (consistent with other tabs):
+
+Cluster Overview card: total nodes, healthy/degraded, total queue depth, 5-min throughput.
+
+Nodes table: name, role, status, load%, capacity, last heartbeat, version; highlight degraded.
+
+Queue panel: top N tasks (type, priority, age, assigned node, status).
+
+Recent Results panel: task id, node, outcome, short summary.
+
+Admin controls (if user is admin or the app’s standard control rules): “Rebalance Now”, “Drain Node” action.
+
+Behavior:
+
+Auto-refresh every 60s.
+
+Proper loading/empty states.
+
+Do not block other tabs; keep layout clean (reuse the z-index/pointer-events fixes from your System Monitoring repairs).
+
+Acceptance check: Tab renders with live data and controls perform actions (with success toasts).
+
+17.7 Reliability & Backpressure
+
+Objective: Prevent overload and ensure graceful degradation.
+
+Implement:
+
+Admission control in task-router: if global queue depth or node load exceeds thresholds, queue with backoff.
+
+Retry policy in task-worker: bounded retries with exponential backoff; write failure reasons to cluster_result_log.
+
+Circuit-breaker flag: if failure rate for a task_type exceeds a threshold, pause routing for that type and surface a Cluster alert.
+
+Acceptance check: Over-threshold scenarios cause queuing and clear operator-visible signals, not crashes.
+
+17.8 Security & Compliance
+
+Objective: Preserve the enforcement chain and scoping.
+
+All new execution paths must always call Safety → Federated Ethics → Ethical Reasoner → Knowledge gates on the worker node.
+
+Maintain user scoping on logs and results (match Phase 15 fix pattern).
+
+Ensure JWT auth is required for new admin endpoints.
+
+Persist cluster-bus events for audit; redact sensitive fields consistently with prior phases.
+
+Acceptance check: Manual validation of a delegated task shows full audit trail with gated passes.
+
+17.9 E2E Test Pass (Autonomous)
+
+Objective: Validate end-to-end behavior without human prompts.
+
+Run an autonomous test flow that:
+
+Logs in as testuser123 / SecurePass123!.
+
+Opens System Monitoring → Cluster tab and confirms live stats render.
+
+Submits at least two delegated tasks (e.g., Research and Analysis types).
+
+Verifies they are routed to a node, executed, and results appear.
+
+Triggers Rebalance Now and confirms queue/task ownership changes when appropriate.
+
+Marks one node draining, confirms no new tasks land there, and others pick up slack.
+
+Acceptance check: All assertions pass; no React or server errors.
+
+17.10 Documentation
+
+Objective: Keep replit.md authoritative.
+
+Append a Phase 17 section with:
+
+Tables & enums list, with purpose.
+
+Service diagram (Registry ↔ Bus ↔ Router ↔ Worker).
+
+Execution pipeline diagram showing delegation point and gates.
+
+Scheduler tasks and API reference.
+
+Cluster UI screenshots/labels (if your process allows, otherwise textual descriptions).
+
+Operational runbook (rebalance, drain, troubleshooting).
+
+Acceptance check: replit.md includes Phase 17 details and links to prior phases.
+
+17.11 Success Criteria (Autocheck)
+
+All four cluster tables present and populated during runtime.
+
+Scheduler shows cluster_heartbeat and cluster_rebalance running on cadence.
+
+Cluster tab displays: nodes, queue, results, and admin controls.
+
+Delegated tasks execute with full Safety/Ethics/Knowledge gating, and results are logged.
+
+Rebalance and Drain controls function and reflect in UI within 60 seconds.
+
+No unhandled errors in server logs during test.
+
+17.12 Rollback Plan (If Needed)
+
+If a new service fatally errors, disable delegation (set a feature flag or bypass checkpoint) and continue with local execution.
+
+If queue growth is unchecked, enable admission control hard cap and pause delegated routes.
+
+If the Cluster tab fails to render, hide the tab via feature flag while keeping backend running.

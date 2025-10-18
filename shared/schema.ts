@@ -3198,3 +3198,130 @@ export type IntrospectionReport = typeof introspectionReport.$inferSelect;
 
 export type InsertBiasCorrectionLog = z.infer<typeof insertBiasCorrectionLogSchema>;
 export type BiasCorrectionLog = typeof biasCorrectionLog.$inferSelect;
+
+// Phase 17.0 enums - Distributed Autonomy & Scaling
+export const nodeRoleEnum = pgEnum("node_role", ["coordinator", "trading", "research", "analysis", "compliance", "general"]);
+export const nodeStatusEnum = pgEnum("node_status", ["healthy", "degraded", "draining", "offline"]);
+export const clusterTaskStatusEnum = pgEnum("cluster_task_status", ["queued", "assigned", "running", "completed", "failed", "cancelled"]);
+export const clusterTaskTypeEnum = pgEnum("cluster_task_type", ["trading_signal", "market_analysis", "risk_assessment", "compliance_check", "research", "optimization", "general"]);
+export const outcomeStatusEnum = pgEnum("outcome_status", ["success", "partial", "failed", "timeout"]);
+export const busEventTopicEnum = pgEnum("bus_event_topic", ["task_assigned", "task_completed", "node_status_change", "rebalance_triggered", "circuit_breaker", "health_alert"]);
+
+// Phase 17.0: Distributed Autonomy & Scaling
+
+export const clusterNode = pgTable("cluster_node", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  role: nodeRoleEnum("role").notNull(),
+  status: nodeStatusEnum("status").default("healthy").notNull(),
+  version: varchar("version", { length: 50 }),
+  lastHeartbeat: timestamp("last_heartbeat", { withTimezone: true }).defaultNow().notNull(),
+  capacity: integer("capacity").default(100).notNull(), // Max concurrent tasks
+  currentLoad: integer("current_load").default(0).notNull(), // Current active tasks
+  cpuUsage: doublePrecision("cpu_usage"),
+  memoryUsage: doublePrecision("memory_usage"),
+  queueDepth: integer("queue_depth").default(0).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  roleIdx: index("cluster_node_role_idx").on(table.role),
+  statusIdx: index("cluster_node_status_idx").on(table.status),
+  lastHeartbeatIdx: index("cluster_node_last_heartbeat_idx").on(table.lastHeartbeat),
+}));
+
+export const clusterTaskQueue = pgTable("cluster_task_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskType: clusterTaskTypeEnum("task_type").notNull(),
+  payload: jsonb("payload").notNull(),
+  priority: integer("priority").default(5).notNull(), // 1-10, lower = higher priority
+  status: clusterTaskStatusEnum("status").default("queued").notNull(),
+  assignedNodeId: varchar("assigned_node_id").references(() => clusterNode.id),
+  userId: varchar("user_id").references(() => users.id), // For user-scoped tasks
+  retryCount: integer("retry_count").default(0).notNull(),
+  maxRetries: integer("max_retries").default(3).notNull(),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+}, (table) => ({
+  statusIdx: index("cluster_task_queue_status_idx").on(table.status),
+  taskTypeIdx: index("cluster_task_queue_task_type_idx").on(table.taskType),
+  createdAtIdx: index("cluster_task_queue_created_at_idx").on(table.createdAt),
+  assignedNodeIdIdx: index("cluster_task_queue_assigned_node_id_idx").on(table.assignedNodeId),
+  priorityIdx: index("cluster_task_queue_priority_idx").on(table.priority),
+  userIdIdx: index("cluster_task_queue_user_id_idx").on(table.userId),
+}));
+
+export const clusterResultLog = pgTable("cluster_result_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").references(() => clusterTaskQueue.id).notNull(),
+  nodeId: varchar("node_id").references(() => clusterNode.id).notNull(),
+  userId: varchar("user_id").references(() => users.id), // For user-scoped results
+  outcomeStatus: outcomeStatusEnum("outcome_status").notNull(),
+  resultSummary: text("result_summary"),
+  metrics: jsonb("metrics"), // Execution time, resource usage, etc.
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  taskIdIdx: index("cluster_result_log_task_id_idx").on(table.taskId),
+  nodeIdIdx: index("cluster_result_log_node_id_idx").on(table.nodeId),
+  outcomeStatusIdx: index("cluster_result_log_outcome_status_idx").on(table.outcomeStatus),
+  createdAtIdx: index("cluster_result_log_created_at_idx").on(table.createdAt),
+  userIdIdx: index("cluster_result_log_user_id_idx").on(table.userId),
+}));
+
+export const clusterBusEvent = pgTable("cluster_bus_event", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  topic: busEventTopicEnum("topic").notNull(),
+  sourceNode: varchar("source_node", { length: 100 }),
+  payload: jsonb("payload").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  topicIdx: index("cluster_bus_event_topic_idx").on(table.topic),
+  createdAtIdx: index("cluster_bus_event_created_at_idx").on(table.createdAt),
+  sourceNodeIdx: index("cluster_bus_event_source_node_idx").on(table.sourceNode),
+}));
+
+// Insert schemas for Phase 17
+export const insertClusterNodeSchema = createInsertSchema(clusterNode).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+export const insertClusterTaskQueueSchema = createInsertSchema(clusterTaskQueue).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertClusterResultLogSchema = createInsertSchema(clusterResultLog).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertClusterBusEventSchema = createInsertSchema(clusterBusEvent).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+// Types for Phase 17
+export type InsertClusterNode = z.infer<typeof insertClusterNodeSchema>;
+export type ClusterNode = typeof clusterNode.$inferSelect;
+export type NodeRole = typeof nodeRoleEnum.enumValues[number];
+export type NodeStatus = typeof nodeStatusEnum.enumValues[number];
+
+export type InsertClusterTaskQueue = z.infer<typeof insertClusterTaskQueueSchema>;
+export type ClusterTaskQueue = typeof clusterTaskQueue.$inferSelect;
+export type ClusterTaskStatus = typeof clusterTaskStatusEnum.enumValues[number];
+export type ClusterTaskType = typeof clusterTaskTypeEnum.enumValues[number];
+
+export type InsertClusterResultLog = z.infer<typeof insertClusterResultLogSchema>;
+export type ClusterResultLog = typeof clusterResultLog.$inferSelect;
+export type OutcomeStatus = typeof outcomeStatusEnum.enumValues[number];
+
+export type InsertClusterBusEvent = z.infer<typeof insertClusterBusEventSchema>;
+export type ClusterBusEvent = typeof clusterBusEvent.$inferSelect;
+export type BusEventTopic = typeof busEventTopicEnum.enumValues[number];
