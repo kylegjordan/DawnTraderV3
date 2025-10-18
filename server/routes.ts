@@ -10712,6 +10712,134 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 14.0: Federated Ethics & Multi-Agent Consensus Routes ====================
+
+  app.get('/api/federation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { federatedEthicsHub } = await import('./services/federated-ethics-hub');
+      const { policyPropagationService } = await import('./services/policy-propagation');
+      
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      const domain = (req.query.domain as any) || 'global';
+      
+      const snapshot = await federatedEthicsHub.getSnapshot(domain, mode);
+      const stats = await policyPropagationService.getStats();
+      
+      res.json({ 
+        ok: true, 
+        snapshot,
+        propagationStats: stats,
+      });
+    } catch (error: any) {
+      console.error('[Federation] Get status failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/federation/propagate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { policyPropagationService } = await import('./services/policy-propagation');
+      const { updates } = req.body;
+      
+      if (!updates || !Array.isArray(updates)) {
+        return res.status(400).json({ error: 'updates array required' });
+      }
+      
+      const outcomes = await policyPropagationService.propagateUpdates(updates);
+      const successCount = outcomes.filter(o => o.success).length;
+      
+      res.json({ 
+        ok: true, 
+        outcomes,
+        successCount,
+        totalCount: outcomes.length,
+      });
+    } catch (error: any) {
+      console.error('[Federation] Propagate failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ethics/collab/consensus', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ethicsConsensusOrchestrator } = await import('./services/ethics-consensus-orchestrator');
+      const { action, agentRecommendations } = req.body;
+      
+      if (!action || !agentRecommendations) {
+        return res.status(400).json({ error: 'action and agentRecommendations required' });
+      }
+      
+      const result = await ethicsConsensusOrchestrator.checkConsensus(action, agentRecommendations);
+      
+      res.json({ 
+        ok: true, 
+        result,
+      });
+    } catch (error: any) {
+      console.error('[Ethics Consensus] Check failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/ethics/collab/conflicts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ethicsConsensusOrchestrator } = await import('./services/ethics-consensus-orchestrator');
+      const status = (req.query.status as any) || 'all';
+      
+      const conflicts = await ethicsConsensusOrchestrator.getConflicts(status);
+      
+      res.json({ 
+        ok: true, 
+        conflicts,
+      });
+    } catch (error: any) {
+      console.error('[Ethics Conflicts] Get failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ethics/collab/conflicts/:id/resolve', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ethicsConsensusOrchestrator } = await import('./services/ethics-consensus-orchestrator');
+      const { id } = req.params;
+      const { resolution, notes } = req.body;
+      
+      if (!resolution) {
+        return res.status(400).json({ error: 'resolution required' });
+      }
+      
+      const conflict = await ethicsConsensusOrchestrator.resolveConflict(id, resolution, notes);
+      
+      res.json({ 
+        ok: true, 
+        conflict,
+      });
+    } catch (error: any) {
+      console.error('[Ethics Conflicts] Resolve failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/ethics/collab/sessions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { limit = '20' } = req.query;
+      
+      const sessions = await db
+        .select()
+        .from(crossAgentEthicsSession)
+        .orderBy(desc(crossAgentEthicsSession.createdAt))
+        .limit(parseInt(limit as string));
+      
+      res.json({ 
+        ok: true, 
+        sessions,
+      });
+    } catch (error: any) {
+      console.error('[Ethics Sessions] Get failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==================== Phase 12.0: Performance & Autoscaling Routes ====================
 
   app.get('/api/system/performance', authenticateToken, async (req: AuthenticatedRequest, res) => {
