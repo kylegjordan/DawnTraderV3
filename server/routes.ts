@@ -6986,9 +6986,12 @@ Please:
       
       // Find approval by traceId OR id (for backward compatibility)
       const approvals = await storage.getPendingApprovals(userId, 'pending');
+      console.log(`[Phase 27.2] Searching for traceId=${traceId} among ${approvals.length} approvals`);
+      console.log('[Phase 27.2] Approval IDs:', approvals.map(a => ({ id: a.id, traceId: a.traceId })));
       const approval = approvals.find(a => a.traceId === traceId || a.id === traceId);
       
       if (!approval) {
+        console.log(`[Phase 27.2] No approval found for traceId=${traceId}`);
         return res.status(404).json({ success: false, error: 'Approval not found or already processed' });
       }
       
@@ -7069,9 +7072,12 @@ Please:
       
       // Find approval by traceId OR id (for backward compatibility)
       const approvals = await storage.getPendingApprovals(userId, 'pending');
+      console.log(`[Phase 27.2] Searching for traceId=${traceId} among ${approvals.length} approvals`);
+      console.log('[Phase 27.2] Approval IDs:', approvals.map(a => ({ id: a.id, traceId: a.traceId })));
       const approval = approvals.find(a => a.traceId === traceId || a.id === traceId);
       
       if (!approval) {
+        console.log(`[Phase 27.2] No approval found for traceId=${traceId}`);
         return res.status(404).json({ success: false, error: 'Approval not found or already processed' });
       }
       
