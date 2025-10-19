@@ -123,6 +123,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       
+      // Phase 27.F.1: Invalidate goals queries for both modes to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ['/api/goals', 'live'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals', 'paper'] });
+      
       // Update local mode if changed (WebSocketMessage uses 'data' property)
       if (latestUpdate.data?.mode) {
         setMode(latestUpdate.data.mode);
