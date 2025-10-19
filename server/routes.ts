@@ -6984,9 +6984,9 @@ Please:
         return res.status(400).json({ success: false, error: 'traceId is required' });
       }
       
-      // Find approval by traceId
+      // Find approval by traceId OR id (for backward compatibility)
       const approvals = await storage.getPendingApprovals(userId, 'pending');
-      const approval = approvals.find(a => a.traceId === traceId);
+      const approval = approvals.find(a => a.traceId === traceId || a.id === traceId);
       
       if (!approval) {
         return res.status(404).json({ success: false, error: 'Approval not found or already processed' });
@@ -7067,9 +7067,9 @@ Please:
         return res.status(400).json({ success: false, error: 'traceId is required' });
       }
       
-      // Find approval by traceId
+      // Find approval by traceId OR id (for backward compatibility)
       const approvals = await storage.getPendingApprovals(userId, 'pending');
-      const approval = approvals.find(a => a.traceId === traceId);
+      const approval = approvals.find(a => a.traceId === traceId || a.id === traceId);
       
       if (!approval) {
         return res.status(404).json({ success: false, error: 'Approval not found or already processed' });
@@ -7117,9 +7117,9 @@ Please:
         return res.status(400).json({ success: false, error: 'traceId is required' });
       }
       
-      // Find approval by traceId
+      // Find approval by traceId OR id (for backward compatibility)
       const approvals = await storage.getPendingApprovals(userId, 'pending');
-      const approval = approvals.find(a => a.traceId === traceId);
+      const approval = approvals.find(a => a.traceId === traceId || a.id === traceId);
       
       if (!approval) {
         return res.status(404).json({ success: false, error: 'Approval not found' });
@@ -7163,7 +7163,7 @@ Please:
       for (const traceId of traceIds) {
         try {
           const approvals = await storage.getPendingApprovals(userId);
-          const approval = approvals.find(a => a.traceId === traceId && a.userId === userId);
+          const approval = approvals.find(a => (a.traceId === traceId || a.id === traceId) && a.userId === userId);
           
           if (approval && (approval.status === 'approved' || approval.status === 'rejected')) {
             await storage.updateApprovalStatus(approval.id, approval.status, {
