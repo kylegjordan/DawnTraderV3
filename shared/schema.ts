@@ -11,6 +11,7 @@ import {
   pgEnum,
   date,
   uniqueIndex,
+  unique,
   index,
   vector,
   serial,
@@ -971,25 +972,31 @@ export const featureSnapshots = pgTable("feature_snapshots", {
 export const userGoalsLive = pgTable("user_goals_live", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
-  metricName: varchar("metric_name", { length: 100 }).notNull(),
+  metricName: varchar("metric_name", { length: 100 }).notNull(), // Display name
+  metricKey: varchar("metric_key", { length: 100 }).notNull(), // Canonical normalized key
   goalValue: decimal("goal_value", { precision: 15, scale: 2 }),
   actualValue: decimal("actual_value", { precision: 15, scale: 2 }),
   percentAchieved: decimal("percent_achieved", { precision: 5, scale: 2 }),
   aiValidationNotes: text("ai_validation_notes"),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  uniqueUserMetric: unique().on(table.userId, table.metricKey),
+}));
 
 // Goals Engine - Paper Mode
 export const userGoalsPaper = pgTable("user_goals_paper", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
-  metricName: varchar("metric_name", { length: 100 }).notNull(),
+  metricName: varchar("metric_name", { length: 100 }).notNull(), // Display name
+  metricKey: varchar("metric_key", { length: 100 }).notNull(), // Canonical normalized key
   goalValue: decimal("goal_value", { precision: 15, scale: 2 }),
   actualValue: decimal("actual_value", { precision: 15, scale: 2 }),
   percentAchieved: decimal("percent_achieved", { precision: 5, scale: 2 }),
   aiValidationNotes: text("ai_validation_notes"),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  uniqueUserMetric: unique().on(table.userId, table.metricKey),
+}));
 
 // Goal Analysis History - Live Mode
 export const goalAnalysisHistoryLive = pgTable("goal_analysis_history_live", {

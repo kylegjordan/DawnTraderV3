@@ -1,0 +1,189 @@
+🧩 PHASE 27.F — Unified Stabilization: Goals + Trading + Mode Switch Repair
+🎯 Objectives
+
+Fix Goals Engine persistence — eliminate duplicate metric rows and make saves immediately reflect in the UI.
+
+Fix Trading Engine toggle — ensure start/stop actions work and show correct active state.
+
+Fix Paper ↔ Live mode switching — restore full switching functionality with correct permission and UI updates.
+
+A. Goals Engine — Canonicalization & Persistence Repair
+1️⃣ Canonical Metric Normalization
+
+Introduce a canonical key generator on the backend:
+metric_key = toLowerCase(remove spaces + non-alphanumerics(metricName)).
+Example:
+
+"Earnings per Day" → "earningsperday"
+
+"EarningsPerDay" → "earningsperday"
+
+2️⃣ Database Alignment
+
+Add column metric_key TEXT NOT NULL to goals table if missing.
+
+Backfill existing rows using the canonicalization rule.
+
+Add a unique index on (user_id, mode, metric_key) to prevent duplicates.
+
+3️⃣ API Fixes
+
+In every goals endpoint (update, apply, get):
+
+Compute metric_key on input.
+
+UPSERT by (user_id, mode, metric_key) rather than free-text name.
+
+Store display_name separately for UI labeling.
+
+When returning data, include both fields:
+{ metricKey, displayName, goalValue, lastUpdated }.
+
+4️⃣ Data Cleanup Migration
+
+For each duplicate (user_id, mode, metric_key) group:
+
+Keep the newest record (MAX(lastUpdated)), delete the rest.
+
+Move old audit entries to reference the kept row.
+
+Produce summary report reports/GOALS_DEDUP_SUMMARY.md (counts per metric).
+
+5️⃣ Frontend Consistency
+
+Use canonical metric constants in the UI:
+EARNINGS_PER_DAY = "earningsperday", etc.
+
+Save calls send { metricKey, goalValue }.
+
+Hydrate goals tab from /api/goals on entry and after each save.
+
+Invalidate local cache on mode or user change.
+
+✅ Verification
+
+Edit Earnings per Day → value sticks immediately.
+
+Refresh or switch mode → same value persists.
+
+DB has only one row per metricKey per mode.
+
+Audit log shows UPDATE, not INSERT.
+
+B. Trading Engine — Toggle and State Reconciliation Repair
+1️⃣ Atomic Start/Stop Transaction
+
+Wrap start/stop in a single DB transaction on system_context.
+
+SELECT FOR UPDATE the user row.
+
+Set is_engine_active and session_id atomically.
+
+Emit trading_state_changed only after commit.
+
+Return { mode, active, sessionId } in response.
+
+2️⃣ Deterministic Status Endpoint
+
+/api/trading/status must always read directly from system_context.
+
+Return exact fields: { mode, active, sessionId, lastModeChange }.
+
+No in-memory caching.
+
+3️⃣ Reconciliation Guard (Background)
+
+Every 15 s: verify system_context ↔ session ↔ engine state.
+
+Heal mismatches by resetting to active=false + broadcast STOP.
+
+Log [ReconGuard] Healed state for user=<id> if triggered.
+
+4️⃣ WebSocket Broadcast
+
+Send trading_state_changed only to the requesting user.
+
+Payload: { mode, active, sessionId, timestamp }.
+
+✅ Verification
+
+Click Trading Toggle → toast “Engine started” and header flips to ACTIVE.
+
+Click again → toast “Trading halted” and header flips to STOPPED.
+
+Restart app → state restored from system_context.
+
+C. Mode Switching — Paper ↔ Live Enablement and UI Sync
+1️⃣ Backend Permission Checks
+
+Allow both Paper and Live modes for owner|admin.
+
+Return { availableModes:['paper','live'], currentMode, active } from /api/trading/modes.
+
+2️⃣ Frontend Selector Enablement
+
+Replace any hardcoded disabled={currentMode==='paper'} logic with:
+
+disabled={isPending || (!can('trade_live') && mode==='live')}
+
+
+Buttons should only disable during pending API calls or when permissions truly missing.
+
+3️⃣ Mode Change Flow
+
+On click → call /api/trading/set-mode { mode:'live' } or 'paper'.
+
+Optimistically update local tradingStore.mode.
+
+Await confirmation event or fallback poll.
+
+Once confirmed, reset isPending=false.
+
+4️⃣ WebSocket Listener & Fallback
+
+Ensure client subscribes to trading_state_changed.
+
+On event:
+
+Update tradingStore.mode = payload.mode.
+
+Update tradingStore.active = payload.active.
+
+If no event within 3 s, poll /api/trading/status and reconcile.
+
+✅ Verification
+Action	Expected Result
+Click “Live”	Header shows LIVE ACTIVE within 1 s
+Click “Paper” again	Switches back to PAPER ACTIVE
+Stop Trading	Header shows STOPPED
+Refresh	Mode and status restore correctly
+D. Deliverables
+
+✅ Goals canonicalization + dedup migration complete
+✅ Atomic Trading Engine transactions and deterministic status
+✅ Paper/Live switch UI working and synced
+✅ New reports:
+• GOALS_DEDUP_SUMMARY.md
+• PHASE_27_F_VERIFICATION.md
+✅ replit.md updated with sections:
+27.5.3 Goals Fix, 27.4.4 Trading Fix, 27.4.5 Mode Switch Restore
+✅ Architect review PASS
+
+📋 REPLIT EXECUTION DIRECTIVE (Paste This)
+Proceed with Phase 27.F — Unified Stabilization: Goals, Trading, and Mode Switch Repair.
+
+Implement:
+1. Goals canonicalization and deduplication (metric_key normalization, unique index, upsert-by-key, data cleanup, canonical constants in frontend).
+2. Trading engine atomic start/stop transactions with deterministic /api/trading/status and reconciliation guard.
+3. Enable Paper ↔ Live switching: re-enable selector buttons, optimistic UI update, WebSocket listener for trading_state_changed, fallback poll, and correct permission gating.
+4. Produce verification reports and update replit.md.
+5. Request architect review and mark phase complete when all verification tests pass.
+
+
+When Replit completes this unified phase:
+
+Goals will save once, display correctly, and persist after reload.
+
+Trading toggle will start/stop cleanly without “already running” errors.
+
+Paper ↔ Live mode will switch instantly and stay in sync with the backend.
