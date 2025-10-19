@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { ModeIndicator } from "./mode-indicator";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
 import { Filter, Save, RotateCcw } from "lucide-react";
@@ -12,42 +13,33 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
 const DEFAULTS = {
-  // Volume Filters
-  minVolume24h: 1000000,
-  avgVolumeRatio: 1.5,
-  
-  // Price Filters
+  minVolume: 1000000,
   minPrice: 0.01,
   maxPrice: 100000,
-  minLiquidity: 500000,
-  
-  // Volatility Filters
-  atrThreshold: 2,
-  maxSpread: 0.5,
-  
-  // Technical Filters
+  minMarketCap: 100000000,
+  maxBidAskSpread: 1.00,
   rsiMin: 30,
   rsiMax: 70,
-  
-  // Risk Filters
-  maxRMultiple: 3,
-  stopLossMin: 1,
-  stopLossMax: 5,
+  volatilityMin: 0.50,
+  volatilityMax: 5.00,
+  minLiquidity: 500000,
+  excludeStablecoins: true,
+  allowRegulatedOnly: false,
 };
 
 interface ScreenerFilters {
-  minVolume24h: number;
-  avgVolumeRatio: number;
+  minVolume: number;
   minPrice: number;
   maxPrice: number;
-  minLiquidity: number;
-  atrThreshold: number;
-  maxSpread: number;
+  minMarketCap: number;
+  maxBidAskSpread: number;
   rsiMin: number;
   rsiMax: number;
-  maxRMultiple: number;
-  stopLossMin: number;
-  stopLossMax: number;
+  volatilityMin: number;
+  volatilityMax: number;
+  minLiquidity: number;
+  excludeStablecoins: boolean;
+  allowRegulatedOnly: boolean;
 }
 
 interface CalibrationData {
@@ -83,18 +75,18 @@ export default function ScreenerFiltersTab() {
       initialized.current = true;
       lastMode.current = mode;
       setFilters({
-        minVolume24h: currentFilters.minVolume24h ?? DEFAULTS.minVolume24h,
-        avgVolumeRatio: currentFilters.avgVolumeRatio ?? DEFAULTS.avgVolumeRatio,
+        minVolume: currentFilters.minVolume ?? DEFAULTS.minVolume,
         minPrice: currentFilters.minPrice ?? DEFAULTS.minPrice,
         maxPrice: currentFilters.maxPrice ?? DEFAULTS.maxPrice,
-        minLiquidity: currentFilters.minLiquidity ?? DEFAULTS.minLiquidity,
-        atrThreshold: currentFilters.atrThreshold ?? DEFAULTS.atrThreshold,
-        maxSpread: currentFilters.maxSpread ?? DEFAULTS.maxSpread,
+        minMarketCap: currentFilters.minMarketCap ?? DEFAULTS.minMarketCap,
+        maxBidAskSpread: currentFilters.maxBidAskSpread ?? DEFAULTS.maxBidAskSpread,
         rsiMin: currentFilters.rsiMin ?? DEFAULTS.rsiMin,
         rsiMax: currentFilters.rsiMax ?? DEFAULTS.rsiMax,
-        maxRMultiple: currentFilters.maxRMultiple ?? DEFAULTS.maxRMultiple,
-        stopLossMin: currentFilters.stopLossMin ?? DEFAULTS.stopLossMin,
-        stopLossMax: currentFilters.stopLossMax ?? DEFAULTS.stopLossMax,
+        volatilityMin: currentFilters.volatilityMin ?? DEFAULTS.volatilityMin,
+        volatilityMax: currentFilters.volatilityMax ?? DEFAULTS.volatilityMax,
+        minLiquidity: currentFilters.minLiquidity ?? DEFAULTS.minLiquidity,
+        excludeStablecoins: currentFilters.excludeStablecoins ?? DEFAULTS.excludeStablecoins,
+        allowRegulatedOnly: currentFilters.allowRegulatedOnly ?? DEFAULTS.allowRegulatedOnly,
       });
       setHasChanges(false);
     }
@@ -122,7 +114,7 @@ export default function ScreenerFiltersTab() {
     },
   });
 
-  const handleChange = (field: string, value: number) => {
+  const handleChange = (field: string, value: number | boolean) => {
     setFilters(prev => ({ ...prev, [field]: value }));
     setHasChanges(true);
   };
@@ -223,32 +215,32 @@ export default function ScreenerFiltersTab() {
       <CardContent>
         <div className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Volume Filters */}
+            {/* Volume & Liquidity Filters */}
             <div className="space-y-4 p-4 border rounded-lg">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-blue-500" />
-                Volume Filters
+                Volume & Liquidity
               </h4>
               <div className="space-y-2">
-                <Label htmlFor="minVolume24h" className="text-xs">Minimum 24h Volume ($M)</Label>
+                <Label htmlFor="minVolume" className="text-xs">Min Volume ($)</Label>
                 <Input
-                  id="minVolume24h"
+                  id="minVolume"
                   type="number"
                   step="100000"
-                  value={filters.minVolume24h}
-                  onChange={(e) => handleChange('minVolume24h', parseFloat(e.target.value))}
+                  value={filters.minVolume}
+                  onChange={(e) => handleChange('minVolume', parseFloat(e.target.value))}
                   data-testid="input-min-volume"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="avgVolumeRatio" className="text-xs">Average Volume Ratio (x)</Label>
+                <Label htmlFor="minLiquidity" className="text-xs">Min Liquidity ($)</Label>
                 <Input
-                  id="avgVolumeRatio"
+                  id="minLiquidity"
                   type="number"
-                  step="0.1"
-                  value={filters.avgVolumeRatio}
-                  onChange={(e) => handleChange('avgVolumeRatio', parseFloat(e.target.value))}
-                  data-testid="input-avg-volume-ratio"
+                  step="10000"
+                  value={filters.minLiquidity}
+                  onChange={(e) => handleChange('minLiquidity', parseFloat(e.target.value))}
+                  data-testid="input-min-liquidity"
                 />
               </div>
             </div>
@@ -257,7 +249,7 @@ export default function ScreenerFiltersTab() {
             <div className="space-y-4 p-4 border rounded-lg">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-500" />
-                Price Filters
+                Price Range
               </h4>
               <div className="space-y-2">
                 <Label htmlFor="minPrice" className="text-xs">Min Price ($)</Label>
@@ -281,54 +273,43 @@ export default function ScreenerFiltersTab() {
                   data-testid="input-max-price"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="minLiquidity" className="text-xs">Min Liquidity ($K)</Label>
-                <Input
-                  id="minLiquidity"
-                  type="number"
-                  step="10000"
-                  value={filters.minLiquidity}
-                  onChange={(e) => handleChange('minLiquidity', parseFloat(e.target.value))}
-                  data-testid="input-min-liquidity"
-                />
-              </div>
             </div>
 
-            {/* Volatility Filters */}
-            <div className="space-y-4 p-4 border rounded-lg">
-              <h4 className="font-semibold text-sm flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                Volatility Filters
-              </h4>
-              <div className="space-y-2">
-                <Label htmlFor="atrThreshold" className="text-xs">ATR Threshold (%)</Label>
-                <Input
-                  id="atrThreshold"
-                  type="number"
-                  step="0.1"
-                  value={filters.atrThreshold}
-                  onChange={(e) => handleChange('atrThreshold', parseFloat(e.target.value))}
-                  data-testid="input-atr-threshold"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="maxSpread" className="text-xs">Max Spread (%)</Label>
-                <Input
-                  id="maxSpread"
-                  type="number"
-                  step="0.1"
-                  value={filters.maxSpread}
-                  onChange={(e) => handleChange('maxSpread', parseFloat(e.target.value))}
-                  data-testid="input-max-spread"
-                />
-              </div>
-            </div>
-
-            {/* Technical Filters */}
+            {/* Market Cap & Spread */}
             <div className="space-y-4 p-4 border rounded-lg">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-purple-500" />
-                Technical Filters
+                Market Quality
+              </h4>
+              <div className="space-y-2">
+                <Label htmlFor="minMarketCap" className="text-xs">Min Market Cap ($)</Label>
+                <Input
+                  id="minMarketCap"
+                  type="number"
+                  step="10000000"
+                  value={filters.minMarketCap}
+                  onChange={(e) => handleChange('minMarketCap', parseFloat(e.target.value))}
+                  data-testid="input-min-market-cap"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxBidAskSpread" className="text-xs">Max Bid-Ask Spread (%)</Label>
+                <Input
+                  id="maxBidAskSpread"
+                  type="number"
+                  step="0.1"
+                  value={filters.maxBidAskSpread}
+                  onChange={(e) => handleChange('maxBidAskSpread', parseFloat(e.target.value))}
+                  data-testid="input-max-bid-ask-spread"
+                />
+              </div>
+            </div>
+
+            {/* RSI Filters */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <h4 className="font-semibold text-sm flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-orange-500" />
+                RSI Range
               </h4>
               <div className="space-y-2">
                 <Label htmlFor="rsiMin" className="text-xs">RSI Min</Label>
@@ -356,57 +337,63 @@ export default function ScreenerFiltersTab() {
               </div>
             </div>
 
-            {/* Risk Filters */}
+            {/* Volatility Filters */}
             <div className="space-y-4 p-4 border rounded-lg">
               <h4 className="font-semibold text-sm flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500" />
-                Risk Filters
+                <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                Volatility Range
               </h4>
               <div className="space-y-2">
-                <Label htmlFor="maxRMultiple" className="text-xs">Max R-Multiple</Label>
+                <Label htmlFor="volatilityMin" className="text-xs">Min Volatility (%)</Label>
                 <Input
-                  id="maxRMultiple"
+                  id="volatilityMin"
                   type="number"
-                  step="0.5"
-                  value={filters.maxRMultiple}
-                  onChange={(e) => handleChange('maxRMultiple', parseFloat(e.target.value))}
-                  data-testid="input-max-r-multiple"
+                  step="0.1"
+                  value={filters.volatilityMin}
+                  onChange={(e) => handleChange('volatilityMin', parseFloat(e.target.value))}
+                  data-testid="input-volatility-min"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="stopLossMin" className="text-xs">Stop Loss Min (%)</Label>
+                <Label htmlFor="volatilityMax" className="text-xs">Max Volatility (%)</Label>
                 <Input
-                  id="stopLossMin"
+                  id="volatilityMax"
                   type="number"
                   step="0.1"
-                  value={filters.stopLossMin}
-                  onChange={(e) => handleChange('stopLossMin', parseFloat(e.target.value))}
-                  data-testid="input-stop-loss-min"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="stopLossMax" className="text-xs">Stop Loss Max (%)</Label>
-                <Input
-                  id="stopLossMax"
-                  type="number"
-                  step="0.1"
-                  value={filters.stopLossMax}
-                  onChange={(e) => handleChange('stopLossMax', parseFloat(e.target.value))}
-                  data-testid="input-stop-loss-max"
+                  value={filters.volatilityMax}
+                  onChange={(e) => handleChange('volatilityMax', parseFloat(e.target.value))}
+                  data-testid="input-volatility-max"
                 />
               </div>
             </div>
 
-            {/* Market Filters */}
+            {/* Asset Type Filters */}
             <div className="space-y-4 p-4 border rounded-lg">
               <h4 className="font-semibold text-sm flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-orange-500" />
-                Market Filters
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                Asset Type Filters
               </h4>
-              <div className="p-3 bg-muted/50 rounded-md text-xs text-muted-foreground space-y-1">
-                <div>• Trading hours: 24/7</div>
-                <div>• Excluded pairs: Stable/Stable</div>
-                <div>• Only spot markets</div>
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="excludeStablecoins"
+                  checked={filters.excludeStablecoins}
+                  onCheckedChange={(checked) => handleChange('excludeStablecoins', checked as boolean)}
+                  data-testid="checkbox-exclude-stablecoins"
+                />
+                <Label htmlFor="excludeStablecoins" className="text-xs cursor-pointer">
+                  Exclude Stablecoins
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="allowRegulatedOnly"
+                  checked={filters.allowRegulatedOnly}
+                  onCheckedChange={(checked) => handleChange('allowRegulatedOnly', checked as boolean)}
+                  data-testid="checkbox-allow-regulated-only"
+                />
+                <Label htmlFor="allowRegulatedOnly" className="text-xs cursor-pointer">
+                  Regulated Assets Only
+                </Label>
               </div>
             </div>
           </div>
@@ -414,7 +401,7 @@ export default function ScreenerFiltersTab() {
           <div className="p-4 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground">
               <Filter className="w-4 h-4 inline mr-2" />
-              The AI can adjust screener parameters to align with goal strategy (e.g., higher return focus vs. safer consistency)
+              These filters are mode-specific. Changes in {mode} mode will not affect {mode === 'live' ? 'paper' : 'live'} mode settings.
             </p>
           </div>
         </div>
