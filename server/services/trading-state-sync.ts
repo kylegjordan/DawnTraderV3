@@ -7,6 +7,7 @@
 
 import { storage } from '../storage.js';
 import { clusterBus } from './cluster-bus.js';
+import { contextBridge } from './context-bridge.js';
 import type { SystemContext } from '@shared/schema';
 
 export type TradingMode = 'live' | 'paper';
@@ -107,6 +108,17 @@ export class TradingStateSync {
     
     clusterBus.emit('trading_mode_changed', changeEvent);
     
+    // Phase 27.4.2: Broadcast to frontend via WebSocket
+    await contextBridge.broadcast({
+      type: 'trading_state_changed',
+      payload: {
+        mode: newMode,
+        active: false, // Will be updated by setEngineActive
+        user: userId,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
     console.log(`[TradingStateSync] Trading mode changed for user ${userId}: ${previousMode} → ${newMode} (by: ${changedBy})`);
     
     return context;
@@ -125,6 +137,18 @@ export class TradingStateSync {
       userId,
       isActive,
       timestamp: new Date()
+    });
+    
+    // Phase 27.4.2: Broadcast engine state change to frontend
+    const context = await storage.getSystemContext(userId);
+    await contextBridge.broadcast({
+      type: 'trading_state_changed',
+      payload: {
+        mode: context?.tradingMode || 'paper',
+        active: isActive,
+        user: userId,
+        timestamp: new Date().toISOString()
+      }
     });
     
     console.log(`[TradingStateSync] Engine state for user ${userId}: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
@@ -170,6 +194,19 @@ export class TradingStateSync {
       previousMode,
       reason,
       timestamp: new Date()
+    });
+    
+    // Phase 27.4.2: Broadcast emergency stop to frontend
+    await contextBridge.broadcast({
+      type: 'trading_state_changed',
+      payload: {
+        mode: 'paper',
+        active: false,
+        user: userId,
+        emergency: true,
+        reason,
+        timestamp: new Date().toISOString()
+      }
     });
   }
 
