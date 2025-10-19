@@ -23,8 +23,6 @@ class ContextLoader {
     'context_uploads'
   ];
   
-  private readonly CODE_BLOCK_REGEX = /```[\s\S]*?```/g;
-  private readonly FENCED_JSON_REGEX = /\{[\s\S]*?\}/g;
   private readonly MAX_SUMMARY_LENGTH = 500;
 
   /**
@@ -149,21 +147,71 @@ class ContextLoader {
   }
 
   /**
-   * Remove code blocks, JSON, and executable content
+   * Comprehensively remove all code blocks, inline code, HTML, JSON, and executable content
+   * Following security best practices to prevent code injection
+   * Addresses: fenced blocks (backtick AND tilde), indented blocks, inline code, HTML, entities, protocols
    */
   private sanitizeContent(content: string): string {
     let sanitized = content;
     
-    // Remove code blocks (triple backticks)
-    sanitized = sanitized.replace(this.CODE_BLOCK_REGEX, '[CODE_REMOVED]');
+    // 1. Decode HTML entities first to catch encoded exploits
+    sanitized = this.decodeHTMLEntities(sanitized);
     
-    // Remove standalone JSON objects (basic pattern)
-    sanitized = sanitized.replace(/```json[\s\S]*?```/g, '[JSON_REMOVED]');
+    // 2. Remove fenced code blocks - BOTH backtick (```) AND tilde (~~~) with optional language
+    sanitized = sanitized.replace(/```[\s\S]*?```/g, '[CODE_REMOVED]');
+    sanitized = sanitized.replace(/~~~[\s\S]*?~~~/g, '[CODE_REMOVED]');
     
-    // Remove HTML script tags if present
-    sanitized = sanitized.replace(/<script[\s\S]*?<\/script>/gi, '[SCRIPT_REMOVED]');
+    // 3. Remove indented code blocks (4 spaces or 1 tab at line start)
+    sanitized = sanitized.replace(/^(?:    |\t).+$/gm, '[CODE_REMOVED]');
+    
+    // 4. Remove inline code (single backticks)
+    sanitized = sanitized.replace(/`[^`\n]+`/g, '[CODE_REMOVED]');
+    
+    // 5. Remove HTML/XML tags entirely (including script, style, etc.)
+    sanitized = sanitized.replace(/<[^>]*>/g, '[HTML_REMOVED]');
+    
+    // 6. Remove dangerous URL protocols
+    sanitized = sanitized.replace(/(?:javascript|data|vbscript|file):[^\s]*/gi, '[PROTOCOL_REMOVED]');
+    
+    // 7. Remove event handlers (onclick, onload, etc.)
+    sanitized = sanitized.replace(/on\w+\s*=\s*["'][^"']*["']/gi, '[EVENT_HANDLER_REMOVED]');
+    
+    // 8. Remove multiline JSON-like structures (must span multiple lines and start/end at line boundaries)
+    // This is conservative - only removes clear multiline JSON blocks
+    sanitized = sanitized.replace(/^\s*\{[^\}]*?\n[\s\S]*?^\s*\}$/gm, '[JSON_REMOVED]');
+    
+    // 9. Clean up multiple consecutive removals to single marker
+    sanitized = sanitized.replace(/(\[(?:CODE|JSON|HTML|PROTOCOL|EVENT_HANDLER|CONTENT)_REMOVED\]\s*){2,}/g, '[CONTENT_REMOVED]');
     
     return sanitized;
+  }
+
+  /**
+   * Decode common HTML entities to catch encoded exploits
+   */
+  private decodeHTMLEntities(text: string): string {
+    const entities: Record<string, string> = {
+      '&lt;': '<',
+      '&gt;': '>',
+      '&amp;': '&',
+      '&quot;': '"',
+      '&#39;': "'",
+      '&#x27;': "'",
+      '&apos;': "'",
+      '&#x60;': '`',
+      '&#96;': '`'
+    };
+    
+    let decoded = text;
+    for (const [entity, char] of Object.entries(entities)) {
+      decoded = decoded.replace(new RegExp(entity, 'gi'), char);
+    }
+    
+    // Also decode numeric entities
+    decoded = decoded.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num)));
+    decoded = decoded.replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    
+    return decoded;
   }
 
   /**
