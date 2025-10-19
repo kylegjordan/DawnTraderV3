@@ -1,0 +1,203 @@
+🧩 Unified Implementation Prompt
+Phase 22.3 — Live Trading Voice/Chat Activation
+Phase 23 — Simulation Heartbeat & Recovery
+Phase 24 — Automatic Test Harness
+🔐 Test Login Credentials (for all testing)
+username = testuser123
+password = SecurePass123!
+
+
+Please use and store these credentials for all login, testing, and diagnostics. Do not attempt to log in with user email — only use these credentials.
+
+🎯 Overall Objective
+
+Enhance Walter’s autonomy and reliability by implementing:
+1️⃣ Live Trading Activation via Chat or Voice — including manual approval prompt integration.
+2️⃣ Simulation Heartbeat & Recovery — ensures long-running paper simulations survive restarts or interruptions.
+3️⃣ Automatic Test Harness — replays key user conversation scenarios and verifies state, logs, and approvals end-to-end.
+
+Each enhancement must integrate cleanly with the existing ExecutionPolicyController, paper_sim_sessions, walter_execution_log, and cluster_bus_event systems from Phase 22.
+
+🔹 Phase 22.3 – Live Trading Voice/Chat Activation with Manual Approval
+A. Add Intents to the NLAI Registry
+
+Register new action intents:
+
+startLiveTrading
+
+stopLiveTrading
+
+checkLiveTradingStatus
+
+Use the same naming and structure as startPaperSim, stopPaperSim, getPaperSimStatus.
+
+B. Extend ExecutionPolicyController
+
+Add new policy definitions for live trading:
+
+approval_required: true
+
+risk_threshold: critical
+
+mode: 'live'
+
+When a live-trading start command is received:
+
+Create an entry in walter_execution_log with approval_status='manual_required'.
+
+Return a chat confirmation message identical to the UI modal text:
+
+“Are you sure you want to start live trading? This will enable real orders. Please confirm.”
+
+Require explicit approval from the authenticated user via “Yes, I approve” or clicking the approval button in the chat.
+
+C. Unified Approval Flow
+
+Reuse the same approval modal used for the UI toggle switch.
+
+Whether the user confirms through chat or by clicking the modal, both actions update the same approval record.
+
+D. Start/Stop Flow
+
+startLiveTrading:
+
+On approval → activate live mode; emit cluster_bus_event(topic='mode_changed', data:{mode:'live'}).
+
+Update /api/state/summary and dashboard chip → LIVE ACTIVE.
+
+stopLiveTrading:
+
+Deactivate live mode; emit the same event with {mode:'stopped'}.
+
+Update status in summary and dashboard chip.
+
+E. Acceptance Tests
+
+Command “start live trading” → expect confirmation prompt → approve → state changes to LIVE ACTIVE.
+
+Command “stop live trading” → expect state changes to STOPPED.
+
+Verify walter_execution_log entries and cluster_bus_event emissions for both actions.
+
+Confirm both UI toggle and chat command share the same approval source.
+
+🔹 Phase 23 – Simulation Heartbeat & Recovery
+A. Heartbeat Scheduler
+
+Implement a lightweight scheduler (paper_sim_heartbeat.ts) that:
+
+Runs every 30 seconds.
+
+Queries paper_sim_sessions for status='running'.
+
+Checks each session’s ends_at or run_for_ms.
+
+Emits heartbeat events to cluster_bus_event(topic='simulation_heartbeat').
+
+B. Recovery Logic
+
+On application startup:
+
+Check for paper_sim_sessions where status='running' and stopped_at IS NULL.
+
+If the session ends_at > now → resume monitoring.
+
+If expired → set status='stopped' and stopped_at=now(), emit simulation_state_changed.
+
+C. Automatic Restart Option
+
+If configured (autoResumeSimulations=true in system config), automatically resume any interrupted sessions.
+
+D. State Consistency
+
+Ensure /api/state/summary reflects recovered or resumed sessions.
+
+Walter should notify the user on login if a prior session was resumed or force-stopped.
+
+E. Acceptance Tests
+
+Start a simulation → restart the server → verify it auto-resumes or cleanly stops based on time remaining.
+
+Confirm a simulation_heartbeat event fires every 30 s.
+
+Verify Walter reports accurate session status after recovery.
+
+🔹 Phase 24 – Automatic Test Harness
+A. Purpose
+
+Automate validation of all conversational and operational flows after deployment.
+
+B. Test Harness Components
+
+Conversation Replayer
+
+Reads predefined chat scripts from /scripts/test_scenarios/.
+
+Each script includes: user message, expected intents, expected resulting state.
+
+Execution Verifier
+
+After replay, queries the database:
+
+paper_sim_sessions → correct state.
+
+walter_execution_log → all intents executed.
+
+cluster_bus_event → all expected events persisted.
+
+Result Reporter
+
+Outputs Markdown (reports/auto_test_results.md) and JSON (reports/auto_test_results.json).
+
+C. Test Scenarios to Include
+
+Start + Stop Simulation
+
+Start Simulation → Restart → Recover
+
+Multi-Intent Command (“update guardrails and start simulation”)
+
+File + Text Input Command
+
+Start Live Trading → Approval → Stop Live Trading
+
+D. Execution Command
+npm run auto:test
+
+
+Runs all scenarios using the test credentials.
+
+Must exit with code 0 when all assertions pass.
+
+E. Dashboard Integration
+
+Append results to /api/system/health for visibility in the admin dashboard.
+
+📄 Deliverables
+
+server/services/live-trading-service.ts
+
+server/services/paper_sim_heartbeat.ts
+
+server/services/auto_test_harness.ts
+
+reports/auto_test_results.md
+
+replit.md — updated with Phases 22.3, 23, 24 descriptions and acceptance criteria.
+
+🧭 Validation Checklist
+Test	Expected Result
+Start live trading (chat)	Prompts confirmation; on approval → LIVE ACTIVE
+Stop live trading	State → STOPPED
+Start simulation → Restart app	Session resumes or closes cleanly
+Heartbeat logging	Event every 30 s in logs
+Auto test harness	All 5 scenarios pass
+
+Final Objective:
+By the end of this unified implementation, Walter will:
+
+Reliably execute both paper and live trades through voice or chat commands.
+
+Maintain continuous simulation stability with automatic recovery.
+
+Self-validate system health and conversational accuracy through an integrated automatic test harness.

@@ -1,5 +1,6 @@
 import type { AuthenticatedRequest } from '../routes';
 import { startPaperSimulation, stopPaperSimulation, getPaperSimulationStatus } from './paper-sim-service';
+import { startLiveTrading, stopLiveTrading, checkLiveTradingStatus } from './live-trading-service';
 import { 
   updateGuardrails, 
   updateGoals, 
@@ -67,6 +68,51 @@ export class NLAIActionRegistry {
         return await stopPaperSimulation(userId);
       },
       description: 'Stop paper trading simulation',
+      requiredAuth: true,
+    });
+
+    // Live Trading Actions
+    this.register({
+      id: 'start_live_trading',
+      patterns: [
+        /(?:please\s+)?(?:start|begin|run|initiate|launch|activate|enable)(?:\s+the)?(?:\s+live[\s-]?(?:trad(?:e|ing)|mode))/i,
+        /(?:please\s+)?(?:go\s+)?live(?:\s+with)?(?:\s+trading)?/i,
+        /(?:please\s+)?(?:switch|change)(?:\s+to)?(?:\s+live[\s-]?mode)/i,
+      ],
+      category: 'simulation',
+      handler: async (userId: string, intent: ActionIntent) => {
+        return await startLiveTrading(userId);
+      },
+      description: 'Start live trading mode (requires approval)',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'stop_live_trading',
+      patterns: [
+        /(?:please\s+)?(?:stop|end|halt|terminate|kill|deactivate|disable)(?:\s+the)?(?:\s+live[\s-]?(?:trad(?:e|ing)|mode))/i,
+        /(?:please\s+)?(?:exit|leave)(?:\s+live)?(?:\s+mode|trading)?/i,
+      ],
+      category: 'simulation',
+      handler: async (userId: string, intent: ActionIntent) => {
+        return await stopLiveTrading(userId);
+      },
+      description: 'Stop live trading mode',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'check_live_trading_status',
+      patterns: [
+        /(?:please\s+)?(?:check|show|display|get|what's)(?:\s+the)?(?:\s+live)?(?:\s+(?:trading|mode))?(?:\s+status)/i,
+        /(?:is|are)(?:\s+we)?(?:\s+in)?(?:\s+live[\s-]?(?:mode|trading))/i,
+        /(?:am\s+i\s+)?(?:trading\s+)?live/i,
+      ],
+      category: 'simulation',
+      handler: async (userId: string, intent: ActionIntent) => {
+        return await checkLiveTradingStatus(userId);
+      },
+      description: 'Check live trading status',
       requiredAuth: true,
     });
 
