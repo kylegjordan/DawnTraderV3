@@ -3517,6 +3517,25 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Phase 27: Context ingestion endpoint (manual trigger)
+  app.post('/api/context/ingest', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { files, overwrite } = req.body;
+      
+      const { contextLoader } = await import('./services/context-loader');
+      const result = await contextLoader.ingest({ files, overwrite: overwrite || false });
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error('[ContextLoader] API ingestion error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to ingest context files',
+        message: error.message 
+      });
+    }
+  });
+
   // Chat cost tracking
   app.get('/api/chat-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

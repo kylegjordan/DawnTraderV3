@@ -96,6 +96,10 @@ app.use((req, res, next) => {
   const { corpusDomainService } = await import('./services/corpus-domain-service');
   await corpusDomainService.initialize();
 
+  // Phase 27: Initialize Context Persistence Framework - Load replit.md and context files
+  const { contextLoader } = await import('./services/context-loader');
+  await contextLoader.initialize();
+
   // Phase 8.6.5: Register API routes for enhancements
   const { registerPhase865Routes } = await import('./routes-phase-8.6.5');
   registerPhase865Routes(app);

@@ -1,0 +1,141 @@
+PHASE 27 — Context Persistence Framework (Safe Context-Only Ingestion)
+Objective
+
+Enable Walter to automatically understand his mission, architecture, and development history on every startup by reading replit.md and uploaded .md files—while guaranteeing that all ingested data is contextual only and never executable.
+
+A. Context Loader Architecture
+
+Create new service: server/services/context-loader.ts
+
+Scan these directories:
+
+/replit.md – always included.
+
+/context_uploads – for your chat or design .md files.
+
+Parse only .md and .txt files.
+
+Extract key sections (e.g., Purpose, System Status, Architecture, Goals, Phases).
+
+Ignore code blocks, JSON, fenced scripts, or anything resembling instructions.
+
+Summarize each file into structured records:
+
+{
+  type: 'contextual_reference',
+  title,
+  summary,
+  source: fileName,
+  actionable: false,
+  policy: 'no-execution'
+}
+
+
+Store summaries in:
+
+walter_memory (type = 'purpose' | 'system_state' | 'development_history' | 'contextual_reference')
+
+system_context (key/value pairs for global parameters)
+
+Initialization sequence
+
+In server/index.ts, call
+await contextLoader.initialize() before starting Walter’s interpreter.
+
+Log line example:
+
+[ContextLoader] Loaded 12 context records (7 from replit.md, 5 from uploads)
+
+
+Ingestion frequency
+
+Default = once per startup (guarantees deterministic context).
+
+Optional future enhancement: add a daily refresh cron if needed.
+
+Manual API trigger (optional)
+
+POST /api/context/ingest
+Body: { files?: [fileNames], overwrite?: boolean }
+
+
+Re-ingests specific files mid-session without restart.
+
+B. Data Persistence Tables
+
+Confirm or add tables:
+
+walter_memory
+
+id, type, title, content, source, actionable, policy, created_at
+
+
+system_context
+
+id, key, value, source, last_updated
+
+
+All entries written by context-loader must include policy='no-execution' and actionable=false.
+
+C. Safety Guards
+Risk	Protection
+Old prompts or code blocks accidentally executed	Stripped during parsing; anything inside or JSON is ignored
+Actionable flags set true	Hard-coded false in context-loader
+Policy bypass	ExecutionPolicyController blocks any record where policy='no-execution'
+File injection at runtime	Context-loader reads only whitelisted directories; no external fetches
+Over-frequent reloads	Startup-only by default; manual trigger endpoint optional
+D. Verification Steps
+
+Drop past chat .md files into /context_uploads/.
+
+Restart application → click “Restart Start application” in Replit.
+
+Console should show:
+
+[ContextLoader] Parsed 8 .md files — 42 entries added (actionable:false)
+
+
+In Walter chat:
+
+"Walter, summarize your purpose and recent development phases."
+
+
+→ Response uses persistent memory entries, not session uploads.
+
+Confirm no unintended actions: no new tasks, API calls, or parameter changes should appear in logs.
+
+E. Deliverables
+
+✅ context-loader.ts service
+✅ Startup integration in server/index.ts
+✅ /api/context/ingest endpoint (optional)
+✅ Updated replit.md → add section Phase 27: Context Persistence Framework (Safe Context-Only Ingestion)
+✅ Report /reports/context_ingest_audit.md listing: files processed, records created, timestamps
+✅ Logs confirming actionable:false, policy:no-execution
+
+F. Test Credentials
+
+Use:
+
+username: testuser123
+password: SecurePass123!
+
+
+Run verification while authenticated as this user to confirm entries tie to correct user ID.
+
+G. Expected Behavior Summary
+Event	Result
+Replit restart	Walter loads context from replit.md and /context_uploads
+New file added	Ingested on next restart or via /api/context/ingest
+Context query to Walter	Answers from walter_memory summaries
+Code found in file	Ignored; flagged actionable:false
+Old prompt found in file	Stored as historical reference, never executed
+H. Outcome
+
+After Phase 27 is implemented and you restart Replit:
+
+Walter automatically internalizes his mission, purpose, and development history.
+
+You never need to re-upload files for context.
+
+All ingested data remains contextual, read-only, and safe from accidental execution.
