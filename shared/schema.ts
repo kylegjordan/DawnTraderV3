@@ -1021,6 +1021,26 @@ export const goalAnalysisHistoryPaper = pgTable("goal_analysis_history_paper", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+// Phase 27.5: Goal Audit Log (tracks all goal changes across modes)
+export const goalAuditLog = pgTable("goal_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  action: varchar("action", { length: 50 }).notNull(), // 'created', 'updated', 'deleted', 'analyzed', 'applied'
+  metricName: varchar("metric_name", { length: 100 }),
+  previousValue: jsonb("previous_value"), // Stores previous state for updates
+  newValue: jsonb("new_value"), // Stores new state
+  analysisId: varchar("analysis_id"), // Links to goal analysis history
+  source: varchar("source", { length: 50 }).default('user'), // 'user', 'ai', 'system'
+  metadata: jsonb("metadata"), // Additional context
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userIdIdx: index("goal_audit_log_user_id_idx").on(table.userId),
+  modeIdx: index("goal_audit_log_mode_idx").on(table.mode),
+  actionIdx: index("goal_audit_log_action_idx").on(table.action),
+  timestampIdx: index("goal_audit_log_timestamp_idx").on(table.timestamp),
+}));
+
 // Screener Results (operational data - mode isolated)
 export const screenerResults = pgTable("screener_results", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1756,6 +1776,11 @@ export const insertGoalAnalysisHistoryPaperSchema = createInsertSchema(goalAnaly
   createdAt: true,
 });
 
+export const insertGoalAuditLogSchema = createInsertSchema(goalAuditLog).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Screener and Learning insert schemas
 export const insertScreenerResultSchema = createInsertSchema(screenerResults).omit({
   id: true,
@@ -2010,6 +2035,9 @@ export type GoalAnalysisHistoryLive = typeof goalAnalysisHistoryLive.$inferSelec
 
 export type InsertGoalAnalysisHistoryPaper = z.infer<typeof insertGoalAnalysisHistoryPaperSchema>;
 export type GoalAnalysisHistoryPaper = typeof goalAnalysisHistoryPaper.$inferSelect;
+
+export type InsertGoalAuditLog = z.infer<typeof insertGoalAuditLogSchema>;
+export type GoalAuditLog = typeof goalAuditLog.$inferSelect;
 
 export type InsertScreenerResult = z.infer<typeof insertScreenerResultSchema>;
 export type ScreenerResult = typeof screenerResults.$inferSelect;
