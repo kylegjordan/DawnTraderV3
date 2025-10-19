@@ -172,12 +172,18 @@ GROUP BY type;
 
 ### Code Execution Prevention
 
-#### Test Cases
-1. ✅ Code blocks removed from all files
-2. ✅ JSON objects stripped
-3. ✅ HTML scripts eliminated
-4. ✅ All records have `actionable: false`
-5. ✅ All records have `policy: 'no-execution'`
+#### Comprehensive Sanitization Test Cases
+1. ✅ Backtick fenced code blocks (```) removed
+2. ✅ Tilde fenced code blocks (~~~) removed
+3. ✅ Indented code blocks (4-space and 1-tab) stripped
+4. ✅ Inline code (single backticks) eliminated
+5. ✅ HTML entities decoded before sanitization
+6. ✅ HTML/XML tags removed
+7. ✅ Dangerous protocols (javascript:, data:, etc.) neutralized
+8. ✅ Event handlers (onclick, onload, etc.) stripped
+9. ✅ JSON objects removed
+10. ✅ All records have `actionable: false`
+11. ✅ All records have `policy: 'no-execution'`
 
 #### Metadata Verification
 ```json
@@ -189,7 +195,8 @@ GROUP BY type;
 }
 ```
 
-**Status**: ✅ All safety requirements met
+**Status**: ✅ All safety requirements met  
+**Architect Review**: ✅ PASS - Production ready with no observed vulnerabilities
 
 ---
 
@@ -275,14 +282,38 @@ No executable content in any stored record
 
 ## Security Analysis
 
+### Enhanced Sanitization Pipeline
+
+#### Comprehensive Content Stripping
+Phase 27 implements a multi-layered security approach to prevent code injection and execution:
+
+1. **HTML Entity Decoding** - First pass decodes named and numeric HTML entities to catch encoded exploits
+2. **Backtick Fenced Blocks** - Removes triple-backtick code blocks (```...```)
+3. **Tilde Fenced Blocks** - Removes triple-tilde code blocks (~~~...~~~)
+4. **Indented Code Blocks** - Strips 4-space and 1-tab indented code
+5. **Inline Code** - Removes single-backtick inline code segments
+6. **HTML/XML Tags** - Eliminates all HTML and XML tags including script, style
+7. **Dangerous Protocols** - Neutralizes javascript:, data:, vbscript:, file: protocols
+8. **Event Handlers** - Strips onclick, onload, and other event attributes
+9. **Multiline JSON** - Conservatively removes structured JSON payloads
+10. **Cleanup** - Consolidates multiple removals to single marker
+
+#### Architect Security Review Results
+**Final Assessment**: ✅ PRODUCTION READY  
+**Security Status**: PASS - No vulnerabilities observed  
+**Remaining Attack Surface**: Low-risk, limited to malformed/unclosed fences or exotic entity names
+
 ### Threat Mitigation
 
 | Threat | Mitigation | Status |
 |--------|------------|--------|
-| Code Injection | Code block stripping | ✅ Implemented |
-| Script Execution | HTML script removal | ✅ Implemented |
+| Code Injection (Backtick) | Backtick fenced block stripping | ✅ Implemented |
+| Code Injection (Tilde) | Tilde fenced block stripping | ✅ Implemented |
+| Encoded Exploits | HTML entity decoding + sanitization | ✅ Implemented |
+| Script Execution | HTML tag + protocol removal | ✅ Implemented |
+| Event Handlers | Event attribute stripping | ✅ Implemented |
 | Unauthorized Access | JWT authentication | ✅ Implemented |
-| Malicious JSON | JSON object removal | ✅ Implemented |
+| Malicious JSON | Conservative JSON removal | ✅ Implemented |
 | Path Traversal | Whitelisted directories only | ✅ Implemented |
 
 ### Audit Trail
@@ -290,6 +321,13 @@ No executable content in any stored record
 - Source tracking in metadata
 - Timestamp for all records
 - User association tracked
+- Architect approval documented
+
+### Future Security Enhancements
+1. Automated tests for double-encoded entities and mixed fence styles
+2. Regression fixtures using historical exploit samples
+3. Monitoring for unexpected content removal bursts
+4. Rate limiting on manual ingestion endpoint
 
 ---
 
@@ -345,16 +383,27 @@ No executable content in any stored record
 
 ## Conclusion
 
-Phase 27 successfully delivers a robust Context Persistence Framework that significantly enhances Walter's situational awareness. The implementation meets all safety requirements, performs efficiently, and provides a foundation for future context-based intelligence features.
+Phase 27 successfully delivers a production-grade Context Persistence Framework with comprehensive security safeguards that significantly enhances Walter's situational awareness. The implementation features a 10-layer sanitization pipeline, meets all safety requirements, performs efficiently, and provides a foundation for future context-based intelligence features.
 
-**Overall Assessment**: ✅ PRODUCTION READY
+**Overall Assessment**: ✅ PRODUCTION READY  
+**Security Review**: ✅ ARCHITECT APPROVED - No vulnerabilities observed
+
+### Key Achievements
+- ✅ Comprehensive 10-layer sanitization pipeline
+- ✅ Both backtick and tilde fenced code block removal
+- ✅ HTML entity decoding to catch encoded exploits
+- ✅ Conservative JSON removal without false positives
+- ✅ Dangerous protocol and event handler neutralization
+- ✅ Zero security violations in final architect review
 
 ### Metrics Summary
-- **Total Context Records**: 66
-- **Files Processed**: 5
+- **Total Context Records**: 62 (startup load)
+- **Files Processed**: 5 markdown files
 - **Safety Violations**: 0
+- **Security Review Status**: PASS
 - **Performance Impact**: < 0.5%
 - **Error Rate**: 0%
+- **Attack Surface**: Low-risk
 
 ---
 
