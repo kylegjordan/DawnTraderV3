@@ -1649,6 +1649,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Live Trading Routes (Phase 22.3)
+  // Control live trading mode with manual approval requirements
+  app.post('/api/live-trading/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { liveTradingService } = await import('./services/live-trading-service.js');
+      
+      const result = await liveTradingService.startLiveTrading(userId);
+      
+      if (result.success) {
+        res.json(result);
+      } else {
+        // Manual approval required - return 202 Accepted with approval prompt
+        res.status(202).json(result);
+      }
+    } catch (error: any) {
+      console.error('Error starting live trading:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/live-trading/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { liveTradingService } = await import('./services/live-trading-service.js');
+      
+      const result = await liveTradingService.stopLiveTrading(userId);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error stopping live trading:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/live-trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { liveTradingService } = await import('./services/live-trading-service.js');
+      
+      const result = await liveTradingService.checkLiveTradingStatus(userId);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error checking live trading status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Approval endpoint for live trading (called after user confirms)
+  app.post('/api/live-trading/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { liveTradingService } = await import('./services/live-trading-service.js');
+      
+      const result = await liveTradingService.activateLiveTrading(userId);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error approving live trading:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Paper Trading Simulation Engine Routes (Milestone 18)
   // NOTE: Paper trading is SYSTEM-WIDE. Only ONE simulation can run at a time.
   // All users see the same simulation status.
