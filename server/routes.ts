@@ -198,6 +198,22 @@ function requireEditor(req: AuthenticatedRequest, res: Response, next: NextFunct
   next();
 }
 
+// Permission Validation Middleware - validates specific permissions (Phase 27.3)
+function requirePermission(permission: Permission) {
+  return function(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    const userPermissions = req.user?.permissions || [];
+    
+    if (!userPermissions.includes(permission)) {
+      return res.status(403).json({ 
+        error: 'Permission denied',
+        message: `This action requires the "${permission}" permission`,
+        requiredPermission: permission
+      });
+    }
+    next();
+  };
+}
+
 // Mode Validation Middleware - enforces x-app-mode header for mode-isolated endpoints
 function validateMode(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const modeHeader = req.headers['x-app-mode'] as string | undefined;
@@ -943,6 +959,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error stopping trading:', error);
       res.status(500).json({ error: 'Failed to stop trading' });
+    }
+  });
+
+  // Phase 27.4: Set Trading Mode with Permission Validation
+  app.post('/api/trading/set-mode', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const username = req.user!.username;
+      const { mode, reason } = req.body;
+      
+      // Validate mode parameter
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ 
+          error: 'Invalid mode', 
+          message: 'Mode must be either "live" or "paper"' 
+        });
+      }
+      
+      // Check permission based on requested mode
+      const requiredPermission = mode === 'live' ? 'trade_live' : 'trade_paper';
+      const userPermissions = req.user?.permissions || [];
+      
+      if (!userPermissions.includes(requiredPermission as any)) {
+        return res.status(403).json({ 
+          error: 'Permission denied',
+          message: `You don't have permission to ${mode === 'live' ? 'trade live' : 'trade in paper mode'}`,
+          requiredPermission
+        });
+      }
+      
+      // Import and use tradingStateSync service
+      const { tradingStateSync } = await import('./services/trading-state-sync.js');
+      
+      // Set trading mode with persistence and cluster synchronization
+      const context = await tradingStateSync.setTradingMode(
+        userId,
+        mode,
+        username,
+        reason || `User switched to ${mode} mode`
+      );
+      
+      // Also update user record for backward compatibility
+      await storage.updateUser(userId, { tradingMode: mode });
+      
+      res.json({ 
+        success: true,
+        mode: context.tradingMode,
+        previousMode: context.lastSafeState ? (context.lastSafeState as any).mode : undefined,
+        changedAt: context.lastModeChange,
+        changedBy: context.changedBy
+      });
+    } catch (error: any) {
+      console.error('Error setting trading mode:', error);
+      res.status(500).json({ 
+        error: 'Failed to set trading mode',
+        message: error.message 
+      });
     }
   });
 
