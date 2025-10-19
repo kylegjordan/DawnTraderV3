@@ -49,6 +49,7 @@ import { filePersistence } from "./services/file-persistence";
 import { memoryLifecycle } from "./services/memory-lifecycle";
 import { getPermissionsForRole, Permission } from './config/permissions.js';
 import type { UserRole } from './config/permissions.js';
+import { randomUUID } from 'crypto';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -208,7 +209,6 @@ const DIAGNOSTIC_MODE = process.env.DIAGNOSTIC_MODE === 'true';
 
 function diagnosticTraceMiddleware(req: TracedRequest, res: Response, next: NextFunction) {
   // Generate UUID for request correlation
-  const { randomUUID } = require('crypto');
   req.traceId = randomUUID();
   req.traceStartTime = Date.now();
   
