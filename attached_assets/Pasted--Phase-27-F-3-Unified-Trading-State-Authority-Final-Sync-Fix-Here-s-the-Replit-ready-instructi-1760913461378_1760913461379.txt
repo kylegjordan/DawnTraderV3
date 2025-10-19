@@ -1,0 +1,60 @@
+✅ Phase 27.F.3 — Unified Trading State Authority (Final Sync Fix)
+
+Here’s the Replit-ready instruction that will fix it cleanly and permanently.
+
+📋 REPLIT EXECUTION DIRECTIVE
+Proceed with Phase 27.F.3 — Unified Trading State Authority (Final Synchronization Fix).
+
+Objectives:
+Ensure trading start/stop state matches backend reality across Paper and Live modes, even after mode switches or refresh.
+
+Tasks:
+
+1. BACKEND — Broadcast Complete Trading State Snapshot
+   - In trading-state-sync.ts:
+     a. Modify broadcastUserUpdate(userId) to include:
+        { userId, mode, isEngineActive, lastModeChange, tradingModeLabel }
+     b. Whenever /api/trading/start or /api/trading/stop executes:
+        - Emit "trading_state_changed" with the full snapshot.
+     c. Add [TradingSync] log with both mode and active flag for traceability.
+
+2. BACKEND — Expand /api/trading/status
+   - Return a unified object:
+     { mode: "live" | "paper",
+       active: boolean,
+       engineStatus: "ACTIVE" | "STOPPED",
+       lastUpdate: timestamp,
+       lastUserAction: "start" | "stop" | null }
+   - Ensure this endpoint always reads from system_context (not cached).
+
+3. FRONTEND — Consolidate State Management
+   - In useTrading hook or tradingStore:
+     a. Replace separate paper/live caches with a single `currentTradingState` object.
+     b. Subscribe to "trading_state_changed" WebSocket event and fully replace state.
+     c. When switching modes, trigger immediate GET /api/trading/status and reconcile.
+     d. Every 5 seconds, poll /api/trading/status to ensure UI consistency.
+     e. Add console.log("[SYNC]", mode, active) for trace testing.
+
+4. FRONTEND — Fix TopBar Toggle Binding
+   - In TopBar.tsx:
+     a. Derive toggle position directly from tradingStore.active (not local variable).
+     b. When clicked, call /api/trading/start or /api/trading/stop.
+     c. Disable only while pending; re-enable once WS event confirms sync.
+     d. If state mismatches after 3 seconds, force-refresh /api/trading/status.
+
+5. FRONTEND — Update ModeBanner Display
+   - Derive banner state (ACTIVE / STOPPED) only from tradingStore.active and mode.
+   - Remove redundant useState or props that may hold stale status.
+
+6. TEST CASES:
+   ✅ Paper → Start Trading → shows ACTIVE.
+   ✅ Paper → Stop Trading → shows STOPPED.
+   ✅ Switch to Live → inherits true state.
+   ✅ Live → Start → ACTIVE, Stop → STOPPED.
+   ✅ Switch back to Paper → correct status shown instantly.
+   ✅ Refresh page → mode and active both persist correctly.
+
+7. Update replit.md:
+   - Document Phase 27.F.3 “Unified Trading State Authority”
+   - Include before/after screenshots.
+   - Run architect review for final sign-off.

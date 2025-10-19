@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-10-19T22:41:56.859Z",
+  "anomalies": [
+    {
+      "severity": "medium",
+      "message": "CPU load average is high, especially for 15-minute (8.81) and 5-minute (8.18) intervals, which is close to or exceeding the number of CPU cores (8)."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, opportunities generated, or adjustments made, indicating potential inactivity or malfunction."
+    },
+    {
+      "severity": "low",
+      "message": "Trading system has no active trades or profit/loss activity, which might be expected but should be verified."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "medium",
+      "recommendation": "Consider optimizing or scaling the CPU resources to handle the current load more efficiently."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Investigate and possibly restart or debug the AI system to ensure it is functioning and generating trading opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Investigate the high CPU load and consider redistributing workloads or adding more CPU resources.",
+      "rationale": "High CPU load can lead to system slowdowns or failures, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Check the AI system for errors or misconfigurations that might be preventing it from learning or generating opportunities.",
+      "rationale": "The AI system's inactivity could lead to missed trading opportunities and impact profitability."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review trading strategies and ensure they are correctly configured and aligned with market conditions.",
+      "rationale": "No active trades or profit/loss activity might indicate a misalignment with current market conditions or strategy issues."
+    }
+  ],
+  "urgencyLevel": "high"
+}

@@ -111,25 +111,16 @@ export class TradingStateSync {
     
     clusterBus.emit('trading_mode_changed', changeEvent);
     
-    // Phase 27.4.2: Broadcast to frontend via WebSocket (user-scoped)
-    await contextBridge.broadcast({
-      type: 'trading_state_changed',
-      payload: {
-        mode: newMode,
-        active: false, // Will be updated by setEngineActive
-        timestamp: new Date().toISOString()
-      },
-      userId, // CRITICAL: Scope to specific user to prevent cross-user leakage
-      mode: newMode
-    });
+    // Phase 27.F.3: Broadcast complete state snapshot via broadcastUserUpdate
+    await this.broadcastUserUpdate(userId);
     
-    console.log(`[TradingStateSync] Trading mode changed for user ${userId}: ${previousMode} → ${newMode} (by: ${changedBy})`);
+    console.log(`[SYNC][Phase-27.F.3] Trading mode changed for user ${userId}: ${previousMode} → ${newMode} (by: ${changedBy})`);
     
     return context;
   }
 
   /**
-   * Update engine active state
+   * Phase 27.F.3: Update engine active state with full state broadcast
    */
   async setEngineActive(userId: string, isActive: boolean): Promise<void> {
     await storage.updateSystemContext(userId, {
@@ -143,20 +134,10 @@ export class TradingStateSync {
       timestamp: new Date()
     });
     
-    // Phase 27.4.2: Broadcast engine state change to frontend (user-scoped)
-    const context = await storage.getSystemContext(userId);
-    await contextBridge.broadcast({
-      type: 'trading_state_changed',
-      payload: {
-        mode: context?.tradingMode || 'paper',
-        active: isActive,
-        timestamp: new Date().toISOString()
-      },
-      userId, // CRITICAL: Scope to specific user to prevent cross-user leakage
-      mode: context?.tradingMode || 'paper'
-    });
+    // Phase 27.F.3: Broadcast complete state snapshot via broadcastUserUpdate
+    await this.broadcastUserUpdate(userId);
     
-    console.log(`[TradingStateSync] Engine state for user ${userId}: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
+    console.log(`[SYNC][Phase-27.F.3] Engine state updated for user ${userId}: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
   }
 
   /**
@@ -201,19 +182,8 @@ export class TradingStateSync {
       timestamp: new Date()
     });
     
-    // Phase 27.4.2: Broadcast emergency stop to frontend (user-scoped)
-    await contextBridge.broadcast({
-      type: 'trading_state_changed',
-      payload: {
-        mode: 'paper',
-        active: false,
-        emergency: true,
-        reason,
-        timestamp: new Date().toISOString()
-      },
-      userId, // CRITICAL: Scope to specific user to prevent cross-user leakage
-      mode: 'paper'
-    });
+    // Phase 27.F.3: Broadcast complete state snapshot via broadcastUserUpdate
+    await this.broadcastUserUpdate(userId);
   }
 
   /**
@@ -256,7 +226,7 @@ export class TradingStateSync {
   }
 
   /**
-   * Phase 27.F.2: Broadcast full trading state update to user
+   * Phase 27.F.3: Broadcast complete trading state snapshot to user
    * Called after any start/stop/mode change action
    */
   async broadcastUserUpdate(userId: string): Promise<void> {
@@ -271,10 +241,13 @@ export class TradingStateSync {
       const payload = {
         userId,
         mode: context.tradingMode,
-        active: context.isEngineActive || false,
-        timestamp: new Date().toISOString(),
-        lastChange: context.lastModeChange,
-        changedBy: context.changedBy
+        isEngineActive: context.isEngineActive || false,
+        active: context.isEngineActive || false, // Keep both for backwards compatibility
+        tradingModeLabel: context.tradingMode.toUpperCase() + ' TRADING',
+        lastModeChange: context.lastModeChange,
+        changedBy: context.changedBy,
+        changeReason: context.changeReason,
+        timestamp: new Date().toISOString()
       };
       
       await contextBridge.broadcast({
@@ -284,7 +257,7 @@ export class TradingStateSync {
         mode: context.tradingMode
       });
       
-      console.log(`[TradingSync] Broadcasted state update for user ${userId}: mode=${payload.mode}, active=${payload.active}`);
+      console.log(`[SYNC][Phase-27.F.3] Broadcasted complete state snapshot for user ${userId}: mode=${payload.mode}, active=${payload.isEngineActive}, label=${payload.tradingModeLabel}`);
     } catch (error) {
       console.error(`[TradingSync] Error broadcasting update for user ${userId}:`, error);
     }
@@ -308,7 +281,7 @@ export class TradingStateSync {
           
           // Check for mode mismatch
           if (context.tradingMode !== cachedMode) {
-            console.log(`[ReconciliationGuard] Detected mode mismatch for user ${userId}: cache=${cachedMode}, db=${context.tradingMode}`);
+            console.log(`[SYNC][Phase-27.F.3][ReconciliationGuard] Detected mode mismatch for user ${userId}: cache=${cachedMode}, db=${context.tradingMode}`);
             
             // Update cache from DB (DB is source of truth)
             this.currentMode.set(userId, context.tradingMode);
@@ -318,11 +291,11 @@ export class TradingStateSync {
           }
         }
       } catch (error) {
-        console.error('[ReconciliationGuard] Error during reconciliation:', error);
+        console.error('[SYNC][Phase-27.F.3][ReconciliationGuard] Error during reconciliation:', error);
       }
     }, 15000); // Run every 15 seconds
     
-    console.log('[ReconciliationGuard] Started (checks every 15s)');
+    console.log('[SYNC][Phase-27.F.3][ReconciliationGuard] Started (checks every 15s)');
   }
 
   /**

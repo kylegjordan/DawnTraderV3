@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { apiRequest } from '@/lib/queryClient';
+import { useWebSocket } from '@/hooks/use-websocket';
 import { 
   TradingStatus, 
   PortfolioMetrics, 
@@ -13,14 +15,50 @@ import {
 
 export function useTrading() {
   const queryClient = useQueryClient();
+  const { messages: wsMessages } = useWebSocket();
 
-  // Trading status and control (Phase 8.4 Production: Poll every 5s for real-time engine status)
+  // Phase 27.F.3: Trading status and control (Poll every 5s + WebSocket sync for unified state authority)
   const { data: tradingStatus, isLoading: statusLoading } = useQuery<TradingStatus>({
     queryKey: ['/api/trading/status'],
     refetchInterval: 5000, // Poll every 5 seconds for real-time updates
     staleTime: 0, // Always fetch fresh data
     refetchOnWindowFocus: true
   });
+
+  // Phase 27.F.3: Subscribe to WebSocket trading_state_changed events for immediate sync
+  useEffect(() => {
+    const tradingStateUpdates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
+    if (tradingStateUpdates.length > 0) {
+      const latestUpdate = tradingStateUpdates[tradingStateUpdates.length - 1];
+      const payload = latestUpdate.data;
+      
+      console.log('[SYNC][Phase-27.F.3] Trading state changed:', payload?.mode, payload?.active || payload?.isEngineActive);
+      
+      // Immediately invalidate queries to trigger refetch with fresh DB state
+      queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+      
+      // Phase 27.F.3: Force reconciliation after 3 seconds if state still mismatches
+      setTimeout(async () => {
+        const currentStatus = queryClient.getQueryData<TradingStatus>(['/api/trading/status']);
+        const currentPaperStatus = queryClient.getQueryData<{ isRunning: boolean }>(['/api/paper-sim/status']);
+        
+        if (currentStatus && payload) {
+          const expectedActive = payload.active ?? payload.isEngineActive;
+          const actualActive = payload.mode === 'paper' ? currentPaperStatus?.isRunning : currentStatus.engineActive;
+          
+          if (actualActive !== expectedActive || currentStatus.mode !== payload.mode) {
+            console.log('[SYNC][Phase-27.F.3] State mismatch detected, forcing reconciliation...', 
+              { expected: { mode: payload.mode, active: expectedActive }, 
+                actual: { mode: currentStatus.mode, active: actualActive } });
+            queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+          }
+        }
+      }, 3000);
+    }
+  }, [wsMessages, queryClient]);
 
   // Paper trading simulation status (SYSTEM-WIDE - all users see the same status)
   const { data: paperSimStatus, isLoading: paperSimStatusLoading } = useQuery<{ 

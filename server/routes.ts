@@ -1156,16 +1156,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 8.5 Addendum K.4: Returns DUAL-MODE data (both live and paper) regardless of engine status
-  // Phase 27.4.2: Updated to use system_context as single source of truth
+  // Phase 27.F.3: Enhanced to return unified trading state authority
   app.get('/api/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const globalContextId = 'default';
       
-      // Phase 27.4.2: Get trading state from system_context (single source of truth)
+      // Phase 27.F.3: Get trading state from system_context (single source of truth, always fresh from DB)
       const systemContext = await storage.getSystemContext(userId);
-      const currentMode = (systemContext?.trading_mode || 'paper') as 'live' | 'paper';
-      const isEngineActive = systemContext?.is_engine_active || false;
+      const currentMode = (systemContext?.tradingMode || 'paper') as 'live' | 'paper';
+      const isEngineActive = systemContext?.isEngineActive || false;
       
       // Check paper simulation engine status (system-wide)
       const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
@@ -1208,8 +1208,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[Addendum-K.4.1] LiveDataSource = Database (balance: $${liveBalance}, strategies: ${liveActiveStrategies.length}, engine: ${isLiveEngineRunning ? 'running' : 'stopped'})`);
       console.log(`[Addendum-K.4.1] PaperDataSource = Database (balance: $${paperBalance}, strategies: ${paperActiveStrategies.length}, engine: ${isPaperSimRunning ? 'running' : 'stopped'})`);
       
-      // Phase 27.4.2: Log system_context state verification
-      console.log(`[Phase-27.4.2] system_context: mode=${currentMode}, engine_active=${isEngineActive}, last_update=${systemContext?.last_update || 'N/A'}`);
+      // Phase 27.F.3: Log unified state authority verification
+      console.log(`[Phase-27.F.3] Unified State: mode=${currentMode}, active=${isEngineActive}, lastUpdate=${systemContext?.updatedAt || 'N/A'}`);
       
       // Calculate metrics for current mode
       const filteredPairs = watchlist.length;
@@ -1224,11 +1224,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const lastTickISO = new Date().toISOString();
       
-      // Return dual-mode structure with source metadata (Phase 8.5 Addendum K.4.1 + Phase 27.4.2)
+      // Phase 27.F.3: Unified Trading State Authority object
+      const unifiedState = {
+        mode: currentMode,
+        active: isEngineActive,
+        engineStatus: isEngineActive ? 'ACTIVE' : 'STOPPED' as const,
+        lastUpdate: systemContext?.updatedAt?.toISOString() || lastTickISO,
+        lastUserAction: isEngineActive ? 'start' : 'stop' as 'start' | 'stop' | null,
+        lastModeChange: systemContext?.lastModeChange?.toISOString() || null,
+        changedBy: systemContext?.changedBy || null,
+        changeReason: systemContext?.changeReason || null
+      };
+      
+      // Return dual-mode structure with unified state authority (Phase 27.F.3)
       res.json({
+        // Phase 27.F.3: Unified state at the top level for easy access
+        ...unifiedState,
         currentMode,
-        isEngineActive, // Phase 27.4.2: Add system_context engine active state
-        dataSource: 'system_context', // Phase 27.4.2: Now sourced from system_context
+        isEngineActive,
+        dataSource: 'system_context',
         live: {
           portfolioBalance: liveBalance,
           activeStrategies: liveActiveStrategies,

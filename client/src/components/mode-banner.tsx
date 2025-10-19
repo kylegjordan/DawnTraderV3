@@ -1,9 +1,17 @@
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { useTrading } from "@/hooks/use-trading";
 import { cn } from "@/lib/utils";
-import { Beaker, Activity } from "lucide-react";
+import { Beaker, Activity, PlayCircle, PauseCircle } from "lucide-react";
 
+// Phase 27.F.3: Enhanced to derive ACTIVE/STOPPED status from unified trading state authority
 export default function ModeBanner() {
   const { mode, isLive, isPaper } = useTradingMode();
+  const { tradingStatus, paperSimStatus } = useTrading();
+  
+  // Phase 27.F.3: Derive active state from unified trading store (no local state)
+  const isActive = mode === 'paper' 
+    ? paperSimStatus?.isRunning || false
+    : tradingStatus?.engineActive || false;
 
   return (
     <div
@@ -20,6 +28,18 @@ export default function ModeBanner() {
             <Activity className="w-4 h-4" />
             <span className="text-sm font-semibold">Live Trading Mode</span>
             <span className="text-xs opacity-70">• Real capital at risk</span>
+            <span className="mx-2 text-xs opacity-50">|</span>
+            {isActive ? (
+              <>
+                <PlayCircle className="w-3 h-3" />
+                <span className="text-xs font-semibold">ACTIVE</span>
+              </>
+            ) : (
+              <>
+                <PauseCircle className="w-3 h-3 opacity-50" />
+                <span className="text-xs font-semibold opacity-50">STOPPED</span>
+              </>
+            )}
           </>
         )}
         {isPaper && (
@@ -27,6 +47,18 @@ export default function ModeBanner() {
             <Beaker className="w-4 h-4" />
             <span className="text-sm font-semibold">Paper Trading Mode</span>
             <span className="text-xs opacity-70">• Simulated trading • No real money</span>
+            <span className="mx-2 text-xs opacity-50">|</span>
+            {isActive ? (
+              <>
+                <PlayCircle className="w-3 h-3" />
+                <span className="text-xs font-semibold">ACTIVE</span>
+              </>
+            ) : (
+              <>
+                <PauseCircle className="w-3 h-3 opacity-50" />
+                <span className="text-xs font-semibold opacity-50">STOPPED</span>
+              </>
+            )}
           </>
         )}
       </div>
