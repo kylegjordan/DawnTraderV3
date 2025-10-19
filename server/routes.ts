@@ -11902,6 +11902,34 @@ function generateFeesReport(trades: any[]): string {
   return [headers.join(','), ...rows].join('\n');
 }
 
+// Phase 24: Automatic Test Harness API
+app.post('/api/auto-test/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user!.id;
+    
+    console.log('[AutoTest] Running automatic test harness via API...');
+    
+    const { runAutoTests } = await import('./services/auto_test_harness.js');
+    const { markdown, json } = await runAutoTests(userId);
+    
+    // Save reports to filesystem
+    const fs = await import('fs/promises');
+    await fs.writeFile('reports/auto_test_results.md', markdown);
+    await fs.writeFile('reports/auto_test_results.json', JSON.stringify(json, null, 2));
+    
+    console.log('[AutoTest] Reports generated successfully');
+    
+    res.json({
+      success: true,
+      results: json,
+      markdown,
+    });
+  } catch (error: any) {
+    console.error('[AutoTest] Error running tests:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // P&L Report (Monthly, Quarterly, Annual)
 function generatePnLReport(trades: any[], period: 'monthly' | 'quarterly' | 'annual'): string {
   const groupedTrades: { [key: string]: any[] } = {};

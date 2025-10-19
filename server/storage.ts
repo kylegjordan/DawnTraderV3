@@ -482,6 +482,7 @@ export interface IStorage {
   getPaperSimSession(id: string): Promise<PaperSimSession | undefined>;
   getPaperSimSessionBySessionId(sessionId: string): Promise<PaperSimSession | undefined>;
   getActivePaperSimSession(userId: string): Promise<PaperSimSession | undefined>;
+  getActivePaperSimSessions(): Promise<PaperSimSession[]>; // Get all active sessions (for heartbeat)
   getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]>;
   
   // Walter AI Assistant methods
@@ -2652,6 +2653,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(paperSimSessions.startedAt))
       .limit(1);
     return session || undefined;
+  }
+
+  async getActivePaperSimSessions(): Promise<PaperSimSession[]> {
+    // Get all running sessions across all users (for heartbeat monitoring)
+    return await db.select()
+      .from(paperSimSessions)
+      .where(eq(paperSimSessions.status, 'running'))
+      .orderBy(desc(paperSimSessions.startedAt));
   }
 
   async getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]> {

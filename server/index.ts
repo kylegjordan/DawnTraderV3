@@ -417,6 +417,22 @@ app.use((req, res, next) => {
       console.error('[HealthReportScheduler] ⚠️ Startup failed:', error);
     }
 
+    // Phase 23: Paper Simulation Heartbeat & Recovery
+    try {
+      const { paperSimHeartbeat } = await import('./services/paper_sim_heartbeat');
+      
+      // Run recovery logic on startup
+      // Set autoResume to false for now - can be made configurable via env variable
+      const autoResume = process.env.AUTO_RESUME_SIMULATIONS === 'true';
+      await paperSimHeartbeat.recoverSessions(autoResume);
+      
+      // Start heartbeat monitoring
+      paperSimHeartbeat.start();
+      console.log('[PaperSimHeartbeat] ✅ Recovery complete and heartbeat started');
+    } catch (error) {
+      console.error('[PaperSimHeartbeat] ⚠️ Startup failed:', error);
+    }
+
     // Phase 8.6.1: Start Learning Cycle Service (24-hour analysis cycle)
     try {
       const { learningCycleService } = await import('./services/learning-cycle-service');
