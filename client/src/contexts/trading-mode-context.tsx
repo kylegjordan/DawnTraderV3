@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { setGlobalTradingMode, queryClient } from '@/lib/queryClient';
+import { useWebSocket } from '@/hooks/use-websocket';
 
 type TradingMode = 'live' | 'paper';
 
@@ -15,6 +16,7 @@ const TradingModeContext = createContext<TradingModeContextType | undefined>(und
 const MODE_STORAGE_KEY = 'trading_mode_preference';
 
 export function TradingModeProvider({ children }: { children: ReactNode }) {
+  const { messages: wsMessages } = useWebSocket();
   const [mode, setModeState] = useState<TradingMode>(() => {
     const stored = localStorage.getItem(MODE_STORAGE_KEY);
     const initialMode = (stored === 'live' || stored === 'paper') ? stored : 'live';
@@ -31,6 +33,25 @@ export function TradingModeProvider({ children }: { children: ReactNode }) {
     // Invalidate all queries to fetch fresh data for the new mode
     queryClient.invalidateQueries();
   };
+
+  // Phase 27.4.2: Listen for trading_state_changed WebSocket events
+  useEffect(() => {
+    const stateChanges = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
+    if (stateChanges.length > 0) {
+      // Get the latest state change
+      const latestChange = stateChanges[stateChanges.length - 1];
+      const newMode = latestChange.payload?.mode;
+      
+      if (newMode && (newMode === 'live' || newMode === 'paper') && newMode !== mode) {
+        console.log('[TradingMode] Received trading_state_changed:', newMode);
+        setModeState(newMode);
+        localStorage.setItem(MODE_STORAGE_KEY, newMode);
+        setGlobalTradingMode(newMode);
+        // Invalidate all queries to fetch fresh data for the new mode
+        queryClient.invalidateQueries();
+      }
+    }
+  }, [wsMessages, mode]);
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
