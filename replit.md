@@ -43,6 +43,8 @@ Trading State Synchronization & Fail-Safe Recovery provides database-backed trad
 
 Goals Engine Persistence & Audit Logging provides comprehensive audit trails for all goal changes in the Goals Engine via the `goal_audit_log` table, ensuring durable persistence and server-authoritative hydration.
 
+Goals Engine Canonical Metrics (Phase 27.F) implements metric name canonicalization to prevent duplicate goals from being created. The `canonicalizeMetricName` function normalizes metric names (lowercase, remove spaces/special chars) to create a canonical `metric_key` for lookups. Database schema includes unique constraint on `(user_id, metric_key)` to enforce integrity. Migration backfilled 28 existing records, removed 1 duplicate ("Earnings per Day" vs "EarningsPerDay"), and verified all records have canonical keys. Storage layer upserts use `metric_key` for lookups while preserving display-friendly `metric_name`. Comprehensive verification tests confirm canonicalization works correctly and duplicates cannot be created.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
