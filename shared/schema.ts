@@ -1313,6 +1313,28 @@ export const paperSimTradeLogs = pgTable("paper_sim_trade_logs", {
   eventTypeIdx: index("paper_sim_trade_logs_event_type_idx").on(table.eventType),
 }));
 
+// Paper Sim Sessions - Persistent tracking of simulation start/stop sessions
+export const paperSimSessions = pgTable("paper_sim_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id", { length: 100 }).notNull().unique(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: varchar("mode", { length: 10 }).notNull().default("paper"), // Always 'paper' but included for consistency
+  status: varchar("status", { length: 20 }).notNull(), // 'running', 'stopped', 'crashed'
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+  startingBalance: decimal("starting_balance", { precision: 20, scale: 2 }).default("10000"),
+  endingBalance: decimal("ending_balance", { precision: 20, scale: 2 }),
+  runForMs: integer("run_for_ms"), // If time-limited simulation
+  endsAt: timestamp("ends_at", { withTimezone: true }), // Calculated from runForMs
+  startedBy: varchar("started_by", { length: 50 }).default("manual"), // 'manual', 'api', 'scheduled'
+  metadata: jsonb("metadata"), // Additional session context
+}, (table) => ({
+  userIdx: index("paper_sim_sessions_user_idx").on(table.userId),
+  statusIdx: index("paper_sim_sessions_status_idx").on(table.status),
+  sessionIdIdx: uniqueIndex("paper_sim_sessions_session_id_idx").on(table.sessionId),
+  startedAtIdx: index("paper_sim_sessions_started_at_idx").on(table.startedAt),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
@@ -1803,6 +1825,11 @@ export const insertPaperSimTradeLogSchema = createInsertSchema(paperSimTradeLogs
   timestamp: true,
 });
 
+export const insertPaperSimSessionSchema = createInsertSchema(paperSimSessions).omit({
+  id: true,
+  startedAt: true,
+});
+
 // Walter insert schemas
 export const insertWalterPendingApprovalSchema = createInsertSchema(walterPendingApprovals).omit({
   id: true,
@@ -2018,6 +2045,9 @@ export type PaperSimOpenPosition = typeof paperSimOpenPositions.$inferSelect;
 
 export type InsertPaperSimTradeLog = z.infer<typeof insertPaperSimTradeLogSchema>;
 export type PaperSimTradeLog = typeof paperSimTradeLogs.$inferSelect;
+
+export type InsertPaperSimSession = z.infer<typeof insertPaperSimSessionSchema>;
+export type PaperSimSession = typeof paperSimSessions.$inferSelect;
 
 // AI Orchestrator logs table
 export const aiOrchestratorLogs = pgTable("ai_orchestrator_logs", {

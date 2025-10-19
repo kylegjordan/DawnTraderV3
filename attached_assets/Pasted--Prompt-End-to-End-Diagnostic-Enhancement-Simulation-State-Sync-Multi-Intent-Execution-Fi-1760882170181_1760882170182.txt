@@ -1,0 +1,149 @@
+🧠 Prompt: End-to-End Diagnostic & Enhancement — Simulation State Sync + Multi-Intent Execution + File/Text Unity
+
+Purpose:
+Unify and harden Walter’s runtime execution by resolving the simulation-state desynchronization, enabling true multi-intent conversation handling, and confirming that the file + text upload unification fix (implemented during Phase 22) is still covered and fully functional.
+
+Part A — Simulation State: Diagnose & Repair
+A1. Source of Truth & Idempotency
+
+Ensure a single authoritative source of simulation state (paper_sim_sessions or system_state service).
+
+Implement idempotent handlers:
+
+startPaperSim({userId, mode:'paper', runForMs?, startingBalance?})
+
+stopPaperSim({userId, mode:'paper'})
+
+getPaperSimStatus({userId, mode:'paper'}) → {isRunning, startedAt?, endsAt?, sessionId?}
+
+Starting when already active returns current session; stopping when already stopped returns {isRunning:false}.
+
+A2. State Reconciliation Contract
+
+All components (Walter, APIs, UI) must call getPaperSimStatus after every start/stop.
+
+Start sequence: validate → approvals (if needed) → startPaperSim → getPaperSimStatus → reply.
+
+Stop sequence: stopPaperSim → getPaperSimStatus → reply.
+
+A3. Consistent Surfacing (API/UI/Broker)
+
+/api/state/summary, dashboard toggle, and Walter’s “status chip” must all read from the same state source.
+
+Emit and persist cluster_bus_event(topic='simulation_state_changed') on every start/stop.
+
+Create walter_execution_log entries (action_type:'start_sim'|'stop_sim', sessionId, etc.).
+
+Add a missing simulation_sessions record when needed (start_time, mode, portfolio_balance, status:'running').
+
+Include sessionInfo in Walter’s chat JSON output.
+
+A4. Acceptance Tests
+
+1️⃣ Start twice → only one active session.
+2️⃣ Dashboard + /api/state/summary show RUNNING after start, STOPPED after stop.
+3️⃣ Walter’s chat reply mirrors true state (no contradictions).
+4️⃣ Logs and events exist for start and stop.
+
+Part B — Multi-Intent & Multi-Step Execution
+B1. Intent Extraction & Batching
+
+Extend nlai-interpreter.ts to detect and queue multiple intents (guardrails, screeners, goals, strategies, simulation, reporting, etc.) from a single message.
+
+Preserve parameters and execution order.
+
+Chunk oversized messages but never drop sections.
+
+B2. Brokered Sequential Execution
+
+In nlai-execution-broker.ts:
+
+Sequentially execute each intent with policy checks, execution, logging, and cluster events.
+
+Continue on non-critical failures; record all results.
+
+Link child logs to a parent_command_id.
+
+B3. Unified Response Aggregator
+
+Replace JSON fallbacks with a human-readable summary:
+
+Overall Summary of the session.
+
+Per-Intent Results showing old→new values, strategies used, status of sim, approvals, errors (if any).
+
+Use compact tables or short code blocks for data; never dump raw JSON.
+
+B4. Token & Length Safety
+
+Add message chunking and re-ordering logic to avoid context loss for long inputs.
+
+B5. Approvals Integration
+
+Auto-approve low-risk paper-mode actions within guardrails.
+
+Create pending approvals for higher-risk or live actions and return a summary listing which steps executed and which are awaiting approval.
+
+B6. Acceptance Tests
+
+Send the entire “Purpose Alignment & Performance Run” message → detect and execute all intents in order.
+
+Output one well-formatted response with no raw JSON.
+
+Verify each intent’s result and logs in walter_execution_log.
+
+Confirm simulation state accurate throughout (RUNNING then STOPPED).
+
+Part C — File + Text Unity Verification (Phase 22 Continuation)
+
+Even though the fix was recorded as complete in Phase 22, confirm it remains functional and covered by this build cycle.
+
+C1. Diagnostic Checks
+
+Chat UI Upload: When a file (screenshot, .docx, image, etc.) is dragged and text is typed with it, both must be submitted together as one message payload.
+
+Backend Handling: The chat router should receive {messageText, attachments[]} and pass both to the interpreter.
+
+Interpreter Behavior: Walter must analyze file and text jointly and reply accordingly (e.g., referencing the attached file context).
+
+No Drop or Split: Submitting a file and text together should never trigger separate messages or discard either element.
+
+C2. Validation Tests
+
+Upload a screenshot with a question → expect one combined entry in chat and coherent response.
+
+Verify walter_execution_log records the combined context (payload contains file ref + text summary).
+
+Confirm no front-end errors in console on joint submission.
+
+C3. Deliverable
+
+Replit must explicitly confirm in its final report that the file + text unity logic remains operational and covered by this task sequence.
+
+Part D — Instrumentation & Metrics
+
+Log structured events: INTENT_EXTRACTED, BATCH_STARTED, STEP_EXECUTED, STEP_FAILED, STATE_CHANGED.
+
+Emit/persist cluster_bus_event for each executed step and every simulation start/stop.
+
+Add metrics for interpreter queue depth, batch latency, and approval gate outcomes.
+
+Deliverables
+
+reports/simulation_state_repair.md — root-cause analysis and fix validation.
+
+reports/multi_intent_execution_diagnostic.md — intent routing and batch execution summary.
+
+reports/multi_intent_execution_fix.json — executed intents and results for the long message scenario.
+
+reports/file_text_unity_verification.md — confirmation that combined upload handling works end-to-end.
+
+replit.md — updated with Acceptance Criteria and test instructions.
+
+Regression Suite (after fix)
+
+1️⃣ Send the full Simulation-1 charter → Walter executes all steps and starts simulation; UI shows RUNNING.
+2️⃣ Stop simulation → UI and API show STOPPED; event and log persisted.
+3️⃣ Re-send “start simulation” → idempotent response (no duplicate session).
+4️⃣ Guardrails/screeners changes visible only in paper mode.
+5️⃣ Drag-and-drop file + message → both processed as one; combined reply returned.

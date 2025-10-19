@@ -141,6 +141,9 @@ import {
   type PaperSimTradeLog,
   type InsertPaperSimTradeLog,
   paperSimTradeLogs,
+  type PaperSimSession,
+  type InsertPaperSimSession,
+  paperSimSessions,
   type WalterPendingApproval,
   type InsertWalterPendingApproval,
   walterPendingApprovals,
@@ -472,6 +475,14 @@ export interface IStorage {
       totalPnl: number;
     }>;
   }>;
+  
+  // Paper simulation session methods
+  createPaperSimSession(session: InsertPaperSimSession): Promise<PaperSimSession>;
+  updatePaperSimSession(id: string, updates: Partial<PaperSimSession>): Promise<PaperSimSession>;
+  getPaperSimSession(id: string): Promise<PaperSimSession | undefined>;
+  getPaperSimSessionBySessionId(sessionId: string): Promise<PaperSimSession | undefined>;
+  getActivePaperSimSession(userId: string): Promise<PaperSimSession | undefined>;
+  getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]>;
   
   // Walter AI Assistant methods
   createWalterPendingApproval(data: InsertWalterPendingApproval): Promise<WalterPendingApproval>;
@@ -2601,6 +2612,61 @@ export class DatabaseStorage implements IStorage {
       avgHoldingTime,
       byStrategy
     };
+  }
+  
+  // Paper simulation session methods
+  async createPaperSimSession(session: InsertPaperSimSession): Promise<PaperSimSession> {
+    const [result] = await db.insert(paperSimSessions).values(session).returning();
+    return result;
+  }
+
+  async updatePaperSimSession(id: string, updates: Partial<PaperSimSession>): Promise<PaperSimSession> {
+    const [result] = await db.update(paperSimSessions)
+      .set(updates)
+      .where(eq(paperSimSessions.id, id))
+      .returning();
+    return result;
+  }
+
+  async getPaperSimSession(id: string): Promise<PaperSimSession | undefined> {
+    const [session] = await db.select()
+      .from(paperSimSessions)
+      .where(eq(paperSimSessions.id, id));
+    return session || undefined;
+  }
+
+  async getPaperSimSessionBySessionId(sessionId: string): Promise<PaperSimSession | undefined> {
+    const [session] = await db.select()
+      .from(paperSimSessions)
+      .where(eq(paperSimSessions.sessionId, sessionId));
+    return session || undefined;
+  }
+
+  async getActivePaperSimSession(userId: string): Promise<PaperSimSession | undefined> {
+    const [session] = await db.select()
+      .from(paperSimSessions)
+      .where(and(
+        eq(paperSimSessions.userId, userId),
+        eq(paperSimSessions.status, 'running')
+      ))
+      .orderBy(desc(paperSimSessions.startedAt))
+      .limit(1);
+    return session || undefined;
+  }
+
+  async getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]> {
+    const limit = filters?.limit || 50;
+    
+    const conditions = [eq(paperSimSessions.userId, userId)];
+    if (filters?.status) {
+      conditions.push(eq(paperSimSessions.status, filters.status as any));
+    }
+    
+    return await db.select()
+      .from(paperSimSessions)
+      .where(and(...conditions))
+      .orderBy(desc(paperSimSessions.startedAt))
+      .limit(limit);
   }
   
   // Walter AI Assistant methods
