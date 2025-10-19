@@ -40,13 +40,12 @@ export default function GoalsEngineTab() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder();
 
-  const { data, isLoading } = useQuery<GoalsSummary>({
-    queryKey: ['goals', 'summary', mode],
-    queryFn: () => fetch(`/api/goals/summary?mode=${mode}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+  // Phase 27.F.1: Fetch fresh goals data on every mount (no stale cache)
+  const { data, isLoading, refetch } = useQuery<GoalsSummary>({
+    queryKey: ['/api/goals', mode],
+    refetchOnMount: 'always', // Always fetch fresh data on mount
+    staleTime: 0, // Consider data stale immediately
+    gcTime: 0, // Don't cache unmounted queries
   });
 
   // Load chat history
@@ -68,8 +67,10 @@ export default function GoalsEngineTab() {
     mutationFn: async (goals: { metric: string; value: number | null }[]) => {
       return apiRequest('POST', '/api/goals/update', { goals, mode });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals', 'summary', mode] });
+    onSuccess: async () => {
+      // Phase 27.F.1: Invalidate and immediately refetch to ensure UI updates
+      await queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] });
+      await refetch(); // Force immediate refetch
       toast({
         title: "Goals updated",
         description: "Your goals have been saved successfully.",

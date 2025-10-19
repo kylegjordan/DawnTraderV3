@@ -41,13 +41,12 @@ export default function PerformanceTrackingMetrics() {
   const { toast } = useToast();
   const [metrics, setMetrics] = useState<PerformanceMetric[]>(DEFAULT_METRICS);
 
-  const { data: goalsData, isLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
-    queryKey: ['goals', 'summary', mode],
-    queryFn: () => fetch(`/api/goals/summary?mode=${mode}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+  // Phase 27.F.1: Fetch fresh canonical goals data on every mount
+  const { data: goalsData, isLoading, refetch } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
+    queryKey: ['/api/goals', mode],
+    refetchOnMount: 'always', // Always fetch fresh data on mount
+    staleTime: 0, // Consider data stale immediately
+    gcTime: 0, // Don't cache unmounted queries
   });
 
   useEffect(() => {
@@ -150,8 +149,10 @@ export default function PerformanceTrackingMetrics() {
       };
       return apiRequest('POST', '/api/goals/update', payload);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals', 'summary', mode] });
+    onSuccess: async () => {
+      // Phase 27.F.1: Invalidate and immediately refetch to ensure UI updates
+      await queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] });
+      await refetch(); // Force immediate refetch
       toast({
         title: "Metrics Saved",
         description: "Performance tracking metrics have been saved successfully.",

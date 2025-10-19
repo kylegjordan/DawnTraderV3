@@ -1,0 +1,158 @@
+🧩 Phase 27.F.1 — Goals Hydration + Trading Toggle + Mode Switch Final Fix
+
+(Single Replit-ready, no-code instruction set)
+
+🎯 Objectives
+
+Fix Goals hydration — ensure fresh values load from /api/goals after every save or page reload.
+
+Fix Trading engine toggle — guarantee start/stop reflects the real backend state.
+
+Fix Paper ↔ Live mode switching — make the selector fully responsive again.
+
+A. Goals Hydration and UI Persistence
+
+1️⃣ Locate client/src/components/goals/goals-engine-tab.tsx (or similar file).
+2️⃣ Inside this component, ensure:
+
+It fetches /api/goals fresh every time the tab mounts (not from a cached Zustand or React Query store).
+
+The fetch call reads canonicalized fields from the backend (metricKey, goalValue, lastUpdated).
+
+On save, it immediately:
+
+Calls /api/goals/update with { metricKey, goalValue }.
+
+After success, refetches /api/goals and replaces the local state with the returned payload.
+
+3️⃣ Add a lightweight effect:
+
+useEffect(() => {
+  refetchGoals(); // called when component mounts or after save
+}, [currentMode, userId]);
+
+
+4️⃣ Remove any memoized or local fallback that shows pre-login data.
+
+5️⃣ Expected result:
+
+Saving “Earnings per Day = 500” → remains in UI.
+
+Reload browser → still 500 (fetched from canonical record).
+
+B. Trading Toggle Fix (Paper / Live Engine Start-Stop)
+
+1️⃣ Backend:
+
+Make /api/trading/status the only data source (reads from system_context).
+
+Ensure /api/trading/set-mode commits changes atomically (is_engine_active, trading_mode, session_id).
+
+Emit a trading_state_changed WebSocket event after commit.
+
+2️⃣ Frontend:
+
+Add/verify a central useTradingStore or equivalent state hook.
+
+On click of the trading toggle:
+
+Disable the button (isPending = true).
+
+Call /api/trading/set-mode.
+
+On success, update store and wait for WS event.
+
+On WS event, set isPending=false and update display.
+
+Add a fallback poll every 5 seconds to call /api/trading/status in case WS fails.
+
+3️⃣ Expected result:
+
+Click toggle → toast “Trading started” and header changes to ACTIVE.
+
+Click again → toast “Trading stopped” and header changes to STOPPED.
+
+State restored correctly after page reload.
+
+C. Paper ↔ Live Mode Switch Restoration
+
+1️⃣ Backend:
+
+Allow owner|admin roles to call /api/trading/set-mode for both paper and live.
+
+Return { currentMode, active } from /api/trading/modes.
+
+2️⃣ Frontend:
+
+Fix the Mode Selector buttons so they’re never hard-locked to Paper.
+
+Replace any code like:
+
+disabled={currentMode === 'paper'}
+
+
+with:
+
+disabled={isPending || (!can('trade_live') && mode === 'live')}
+
+
+On click:
+
+Call /api/trading/set-mode { mode }.
+
+Update UI optimistically.
+
+Confirm via WS event or fallback poll.
+
+3️⃣ Expected result:
+
+Buttons for Paper and Live are both clickable.
+
+Mode changes immediately reflect in header.
+
+Refresh shows correct mode (restored from /api/trading/status).
+
+D. Verification Checklist
+Step	Expected Result
+Save goal (Earnings per Day = 500)	UI updates, persists after refresh
+Toggle Trading On (Paper)	Header shows ACTIVE
+Toggle Trading Off	Header shows STOPPED
+Switch to Live	Mode changes to LIVE ACTIVE
+Refresh	All states consistent
+E. Deliverables
+
+✅ GoalsEngineTab refetches canonical data on mount
+✅ Trading toggle fully synchronized with backend
+✅ Mode switching between Paper and Live restored
+✅ Updated replit.md under “Phase 27.F.1 — Hydration, Trading, Mode Switch Final Fix”
+✅ Architect review PASS
+
+📋 Paste This to Replit
+Proceed with Phase 27.F.1 — Goals Hydration + Trading Toggle + Mode Switch Final Fix.
+
+Tasks:
+1. Update GoalsEngineTab to refetch /api/goals after every save and on mount, replacing cached data with canonical values.
+2. Ensure /api/goals returns canonicalized metric_key records; disable caching and memoized hydration.
+3. Update trading endpoints:
+   - /api/trading/status → single source of truth from system_context.
+   - /api/trading/set-mode → atomic transaction, emit trading_state_changed after commit.
+4. Fix Trading toggle UI:
+   - Disable only while pending.
+   - Update via WS event and fallback poll.
+5. Restore Paper ↔ Live selector:
+   - Enable both buttons for owner/admin.
+   - Update UI immediately on click.
+   - Confirm via WS event or status poll.
+6. Verify all changes and update replit.md with test logs.
+7. Request architect review and mark Phase 27.F complete.
+
+
+Once this runs:
+
+Goals will persist across refreshes.
+
+Trading toggle will start/stop cleanly.
+
+Mode switch will unlock and reflect instantly in the header.
+
+Then Phase 27.F will finally be fully stabilized — ready for you to move into the performance optimization and AI goal tuning phases.
