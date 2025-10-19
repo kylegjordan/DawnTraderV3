@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Shield, Save, RotateCcw, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -52,6 +52,8 @@ export default function GuardrailsTab() {
   const [settings, setSettings] = useState<Partial<Guardrails>>(DEFAULTS);
   const [globalSettings, setGlobalSettings] = useState<Partial<TradingSettings>>(GLOBAL_DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
+  const initialized = useRef(false);
+  const lastMode = useRef(mode);
 
   const { data: currentSettings, isLoading } = useQuery<Guardrails>({
     queryKey: ['/api/guardrails', mode],
@@ -72,7 +74,9 @@ export default function GuardrailsTab() {
   });
 
   useEffect(() => {
-    if (currentSettings) {
+    if (currentSettings && (!initialized.current || lastMode.current !== mode)) {
+      initialized.current = true;
+      lastMode.current = mode;
       setSettings({
         maxDailyLoss: currentSettings.maxDailyLoss ?? DEFAULTS.maxDailyLoss,
         maxPositionSize: currentSettings.maxPositionSize ?? DEFAULTS.maxPositionSize,
@@ -81,6 +85,7 @@ export default function GuardrailsTab() {
         riskPerTrade: currentSettings.riskPerTrade ?? DEFAULTS.riskPerTrade,
         aiCanAdjust: currentSettings.aiCanAdjust ?? DEFAULTS.aiCanAdjust,
       });
+      setHasChanges(false);
     }
   }, [currentSettings, mode]);
 

@@ -4,7 +4,7 @@ import { ModeIndicator } from "./mode-indicator";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Filter, Save, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTradingMode } from "@/contexts/trading-mode-context";
@@ -67,6 +67,8 @@ export default function ScreenerFiltersTab() {
   const { mode } = useTradingMode();
   const [filters, setFilters] = useState<Partial<ScreenerFilters>>(DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
+  const initialized = useRef(false);
+  const lastMode = useRef(mode);
 
   const { data: currentFilters, isLoading } = useQuery<ScreenerFilters>({
     queryKey: ['/api/screeners', mode],
@@ -77,7 +79,9 @@ export default function ScreenerFiltersTab() {
   });
 
   useEffect(() => {
-    if (currentFilters) {
+    if (currentFilters && (!initialized.current || lastMode.current !== mode)) {
+      initialized.current = true;
+      lastMode.current = mode;
       setFilters({
         minVolume24h: currentFilters.minVolume24h ?? DEFAULTS.minVolume24h,
         avgVolumeRatio: currentFilters.avgVolumeRatio ?? DEFAULTS.avgVolumeRatio,
@@ -92,6 +96,7 @@ export default function ScreenerFiltersTab() {
         stopLossMin: currentFilters.stopLossMin ?? DEFAULTS.stopLossMin,
         stopLossMax: currentFilters.stopLossMax ?? DEFAULTS.stopLossMax,
       });
+      setHasChanges(false);
     }
   }, [currentFilters, mode]);
 
