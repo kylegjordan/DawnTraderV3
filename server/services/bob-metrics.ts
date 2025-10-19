@@ -9,6 +9,7 @@ import { bobCore, FetchContext } from './bob-core';
 import { systemHealthService } from './system-health-service';
 import { systemHealthMonitor } from './system-health-monitor';
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
+import { getPaperSimulationStatus } from './paper-sim-service';
 
 /**
  * MetricsBob Module
@@ -74,25 +75,20 @@ class MetricsBobModule {
   }
 
   /**
-   * Fetch paper simulation status
+   * Fetch paper simulation status with state reconciliation diagnostics
    * Mirrors /api/paper-sim/status endpoint
+   * Uses database as single source of truth
    */
   private async fetchPaperSimStatus(context: FetchContext): Promise<any> {
     const startTime = Date.now();
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching paper-sim status${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      // Use global session tracking (same as /api/paper-sim/status endpoint)
-      const globalSession = (global as any).getGlobalSession?.() as any;
-      const isRunning = !!(globalSession && globalSession.isRunning);
+      // Use a default userId if not provided (for system-wide health)
+      const userId = context.userId || '00000000-0000-0000-0000-000000000000';
       
-      const sessionInfo = globalSession ? {
-        sessionId: globalSession.sessionId,
-        startTime: globalSession.startTime,
-        type: globalSession.type,
-        startedBy: globalSession.startedBy
-      } : null;
-
+      // Get status with diagnostics from new service
+      const status = await getPaperSimulationStatus(userId);
       const duration = Date.now() - startTime;
       
       // Phase 8.6.4: BoB deep-trace logging
@@ -101,19 +97,23 @@ class MetricsBobModule {
           traceId: context.traceId,
           bobModule: this.MODULE_NAME,
           operation: 'fetchPaperSimStatus',
-          sourceTable: 'global_session',
+          sourceTable: 'paper_sim_sessions',
           mode: 'paper',
           globalContextId: 'default',
           cacheHit: false,
           executionTimeMs: duration,
           rowCount: 1,
-          metadata: { isRunning, sessionInfo }
+          metadata: { 
+            isRunning: status.isRunning, 
+            sessionInfo: status.sessionInfo,
+            diagnostics: status.diagnostics,
+          }
         });
       }
       
-      console.log(`[${this.MODULE_NAME}] ✅ Paper-sim status fetched in ${duration}ms`);
+      console.log(`[${this.MODULE_NAME}] ✅ Paper-sim status fetched in ${duration}ms${status.diagnostics?.reconciliationNeeded ? ' (⚠️ reconciliation needed)' : ''}`);
       
-      return { isRunning, sessionInfo };
+      return status;
     } catch (error: any) {
       console.error(`[${this.MODULE_NAME}] ❌ Paper-sim status fetch failed:`, error.message);
       throw error;

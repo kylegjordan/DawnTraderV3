@@ -496,3 +496,70 @@ export function generateConfirmationMessage(intent: ParsedIntent): string {
 
   return 'Confirm this action?';
 }
+
+/**
+ * Parse multiple intents from a single message
+ * Splits message by conjunctions and parses each segment independently
+ * 
+ * @param input - User message that may contain multiple intents
+ * @returns Array of parsed intents (empty if only conversational)
+ * 
+ * @example
+ * "start paper trading and set risk to 2%" 
+ * => [{ action: 'start', entity: 'paper_simulation' }, { action: 'update', entity: 'risk', parameters: { risk: 2 } }]
+ */
+export function parseMultipleIntents(input: string): ParsedIntent[] {
+  const normalizedInput = input.trim();
+  
+  // If entire message is conversational, return single conversation intent
+  if (isConversationalQuery(normalizedInput)) {
+    return [parseIntent(normalizedInput)];
+  }
+  
+  // Split by common conjunctions that indicate multiple intents
+  // Patterns: "and", "then", "also", comma with spaces
+  const conjunctionPattern = /\s+(?:and|then|also)\s+|,\s+(?:and\s+)?/i;
+  const segments = normalizedInput.split(conjunctionPattern).map(s => s.trim()).filter(s => s.length > 0);
+  
+  // If only one segment, use single intent parsing
+  if (segments.length === 1) {
+    const intent = parseIntent(normalizedInput);
+    return intent.type === 'conversation' ? [] : [intent];
+  }
+  
+  // Parse each segment as a separate intent
+  const intents: ParsedIntent[] = [];
+  let intentCount = 0;
+  
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const intent = parseIntent(segment);
+    
+    // Skip pure conversational segments in multi-intent context
+    // (e.g., "please" or "thanks" between commands)
+    if (intent.type !== 'conversation') {
+      intents.push({
+        ...intent,
+        rawInput: segment, // Keep original segment as rawInput for traceability
+      });
+      intentCount++;
+    } else if (intent.confidence > 0.7) {
+      // If high-confidence conversation, it might be the main intent
+      // Only include if it's the first or last segment
+      if (i === 0 || i === segments.length - 1) {
+        intents.push(intent);
+      }
+    }
+  }
+  
+  // If we found no actionable intents, parse the whole message as one
+  if (intentCount === 0) {
+    const singleIntent = parseIntent(normalizedInput);
+    return singleIntent.type === 'conversation' ? [] : [singleIntent];
+  }
+  
+  console.log(`[IntentParser] Detected ${intents.length} intents from multi-intent message:`, 
+    intents.map(i => `${i.action}:${i.entity}`).join(', '));
+  
+  return intents;
+}

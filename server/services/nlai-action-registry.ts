@@ -64,7 +64,7 @@ export class NLAIActionRegistry {
       ],
       category: 'simulation',
       handler: async (userId: string, intent: ActionIntent) => {
-        return await stopPaperSimulation();
+        return await stopPaperSimulation(userId);
       },
       description: 'Stop paper trading simulation',
       requiredAuth: true,
@@ -182,7 +182,7 @@ export class NLAIActionRegistry {
       category: 'simulation',
       handler: async (userId: string, intent: ActionIntent) => {
         try {
-          const statusData = await getPaperSimulationStatus();
+          const statusData = await getPaperSimulationStatus(userId);
           const isRunning = statusData.isRunning;
           
           return {
