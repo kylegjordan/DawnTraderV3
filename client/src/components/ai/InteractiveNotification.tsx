@@ -40,7 +40,7 @@ interface InteractiveNotificationProps {
     id: string;
     traceId?: string;
     action?: string;
-    mode: string;
+    mode?: string;  // Made optional
     status: string;
     risk_pct?: number;  // Phase 27.2 field
     projectedRisk?: number;  // Legacy field
