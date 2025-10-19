@@ -6191,9 +6191,9 @@ Provide specific, actionable recommendations.`,
         ? await storage.getUserGoalsLive(userId)
         : await storage.getUserGoalsPaper(userId);
 
-      // Get most recent updated_at for ETag
+      // Get most recent lastUpdated for ETag
       const mostRecent = goalsData.reduce((latest, goal) => {
-        const goalTime = goal.updatedAt ? new Date(goal.updatedAt).getTime() : 0;
+        const goalTime = goal.lastUpdated ? new Date(goal.lastUpdated).getTime() : 0;
         return goalTime > latest ? goalTime : latest;
       }, 0);
 
