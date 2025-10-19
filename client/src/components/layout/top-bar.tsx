@@ -360,29 +360,41 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               <DropdownMenuLabel>Walter Approvals (Recent 20)</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {approvalsData && approvalsData.length > 0 ? (
-                <div className="flex flex-col gap-2 p-2">
+                <>
                   {/* Pending approvals first */}
                   {approvalsData.filter((a: any) => a.status === 'pending').map((approval: any) => (
-                    <InteractiveNotification
+                    <DropdownMenuItem
                       key={approval.id}
-                      approval={approval}
-                      onClose={() => {
-                        // Dropdown will auto-close if needed, or user can continue reviewing
-                      }}
-                    />
+                      className="p-2 focus:bg-transparent hover:bg-transparent"
+                      data-testid={`approval-${approval.id}`}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      <InteractiveNotification
+                        approval={approval}
+                        onClose={() => {
+                          // Dropdown will auto-close if needed, or user can continue reviewing
+                        }}
+                      />
+                    </DropdownMenuItem>
                   ))}
                   
                   {/* Then show recent resolved approvals */}
                   {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => (
-                    <InteractiveNotification
+                    <DropdownMenuItem
                       key={approval.id}
-                      approval={approval}
-                      onClose={() => {
-                        // Dropdown will auto-close if needed
-                      }}
-                    />
+                      className="p-2 focus:bg-transparent hover:bg-transparent"
+                      data-testid={`approval-resolved-${approval.id}`}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      <InteractiveNotification
+                        approval={approval}
+                        onClose={() => {
+                          // Dropdown will auto-close if needed
+                        }}
+                      />
+                    </DropdownMenuItem>
                   ))}
-                </div>
+                </>
               ) : (
                 <div className="px-2 py-6 text-center">
                   <p className="text-sm text-muted-foreground">No approvals</p>
