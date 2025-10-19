@@ -198,6 +198,46 @@ function requireEditor(req: AuthenticatedRequest, res: Response, next: NextFunct
   next();
 }
 
+// Phase 27.DX: Diagnostic Trace Middleware with Request Correlation
+interface TracedRequest extends AuthenticatedRequest {
+  traceId?: string;
+  traceStartTime?: number;
+}
+
+const DIAGNOSTIC_MODE = process.env.DIAGNOSTIC_MODE === 'true';
+
+function diagnosticTraceMiddleware(req: TracedRequest, res: Response, next: NextFunction) {
+  // Generate UUID for request correlation
+  const { randomUUID } = require('crypto');
+  req.traceId = randomUUID();
+  req.traceStartTime = Date.now();
+  
+  const isDiagnosticEndpoint = 
+    req.path.startsWith('/api/goals') ||
+    req.path.startsWith('/api/trading');
+  
+  if (DIAGNOSTIC_MODE && isDiagnosticEndpoint) {
+    console.log(`[TRACE-IN] req.id=${req.traceId} endpoint=${req.path} user=${req.user?.id || 'anonymous'} mode=${req.query.mode || req.body?.mode || 'unknown'} method=${req.method}`);
+    
+    // Disable caching for diagnostic endpoints
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  
+  // Capture response
+  const originalJson = res.json.bind(res);
+  res.json = function(body: any) {
+    if (DIAGNOSTIC_MODE && isDiagnosticEndpoint && req.traceStartTime) {
+      const duration = Date.now() - req.traceStartTime;
+      console.log(`[TRACE-OUT] req.id=${req.traceId} status=${res.statusCode} duration=${duration}ms endpoint=${req.path}`);
+    }
+    return originalJson(body);
+  };
+  
+  next();
+}
+
 // Permission Validation Middleware - validates specific permissions (Phase 27.3)
 function requirePermission(permission: Permission) {
   return function(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -273,6 +313,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('WebSocket client disconnected');
     });
   });
+
+  // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
+  app.use(diagnosticTraceMiddleware);
 
   // API Routes
 
@@ -963,11 +1006,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 27.4: Set Trading Mode with Permission Validation
-  app.post('/api/trading/set-mode', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/trading/set-mode', authenticateToken, async (req: TracedRequest, res) => {
     try {
       const userId = req.user!.id;
       const username = req.user!.username;
       const { mode, reason } = req.body;
+      
+      if (DIAGNOSTIC_MODE) {
+        console.log(`[DX-TRADING] ========== MODE SWITCH TRACE START (req.id=${req.traceId}) ==========`);
+        console.log(`[DX-TRADING] Request payload:`, JSON.stringify({ userId, username, mode, reason }, null, 2));
+      }
       
       // Validate mode parameter
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
@@ -992,6 +1040,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Import and use tradingStateSync service
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
       
+      // Get DB state before mode change
+      if (DIAGNOSTIC_MODE) {
+        const contextBefore = await storage.getSystemContext(userId);
+        console.log(`[DX-TRADING] system_context.before:`, JSON.stringify(contextBefore, null, 2));
+      }
+      
       // Set trading mode with persistence and cluster synchronization
       const context = await tradingStateSync.setTradingMode(
         userId,
@@ -1000,16 +1054,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reason || `User switched to ${mode} mode`
       );
       
+      // Get DB state after mode change
+      if (DIAGNOSTIC_MODE) {
+        const contextAfter = await storage.getSystemContext(userId);
+        console.log(`[DX-TRADING] system_context.after:`, JSON.stringify(contextAfter, null, 2));
+      }
+      
       // Also update user record for backward compatibility
       await storage.updateUser(userId, { tradingMode: mode });
       
-      res.json({ 
+      const responsePayload = { 
         success: true,
         mode: context.tradingMode,
         previousMode: context.lastSafeState ? (context.lastSafeState as any).mode : undefined,
         changedAt: context.lastModeChange,
         changedBy: context.changedBy
-      });
+      };
+      
+      if (DIAGNOSTIC_MODE) {
+        console.log(`[DX-TRADING] Response payload:`, JSON.stringify(responsePayload, null, 2));
+        console.log(`[DX-TRADING] WS event will be emitted: trading_state_changed`);
+        console.log(`[DX-TRADING] ========== MODE SWITCH TRACE END (req.id=${req.traceId}) ==========`);
+      }
+      
+      res.json(responsePayload);
     } catch (error: any) {
       console.error('Error setting trading mode:', error);
       res.status(500).json({ 
@@ -6263,10 +6331,15 @@ Provide specific, actionable recommendations.`,
   });
 
   // Update goals (mode-aware)
-  app.post('/api/goals/update', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  app.post('/api/goals/update', authenticateToken, async (req: TracedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { goals, mode = 'live' } = req.body;
+
+      if (DIAGNOSTIC_MODE) {
+        console.log(`[DX-GOALS] ========== GOALS SAVE TRACE START (req.id=${req.traceId}) ==========`);
+        console.log(`[DX-GOALS] Request payload:`, JSON.stringify({ userId, mode, goalsCount: goals.length, goals }, null, 2));
+      }
 
       console.log(`[Goals] Saving ${goals.length} goals for user ${userId} in ${mode} mode:`, JSON.stringify(goals));
 
@@ -6277,6 +6350,10 @@ Provide specific, actionable recommendations.`,
         const previousGoal = mode === 'live'
           ? await storage.getGoalLive(userId, goal.metricName)
           : await storage.getGoalPaper(userId, goal.metricName);
+        
+        if (DIAGNOSTIC_MODE) {
+          console.log(`[DX-GOALS] db.before for ${goal.metricName}:`, JSON.stringify(previousGoal, null, 2));
+        }
         
         const goalData = {
           userId,
@@ -6290,6 +6367,10 @@ Provide specific, actionable recommendations.`,
         const result = mode === 'live'
           ? await storage.upsertGoalLive(goalData)
           : await storage.upsertGoalPaper(goalData);
+        
+        if (DIAGNOSTIC_MODE) {
+          console.log(`[DX-GOALS] db.after for ${goal.metricName}:`, JSON.stringify(result, null, 2));
+        }
         
         // Phase 27.5.2: Create audit log entry (non-blocking)
         try {
@@ -6321,6 +6402,16 @@ Provide specific, actionable recommendations.`,
       }
 
       console.log(`[Goals] Successfully saved ${updatedGoals.length} goals in ${mode} mode`);
+      
+      // Phase 27.DX: Immediate verification read
+      if (DIAGNOSTIC_MODE) {
+        const verifyGoals = mode === 'live'
+          ? await storage.getUserGoalsLive(userId)
+          : await storage.getUserGoalsPaper(userId);
+        console.log(`[DX-GOALS] Immediate verification read (count: ${verifyGoals.length}):`, JSON.stringify(verifyGoals, null, 2));
+        console.log(`[DX-GOALS] ========== GOALS SAVE TRACE END (req.id=${req.traceId}) ==========`);
+      }
+      
       res.json({ success: true, data: updatedGoals, mode });
     } catch (error: any) {
       console.error('Error updating goals:', error);

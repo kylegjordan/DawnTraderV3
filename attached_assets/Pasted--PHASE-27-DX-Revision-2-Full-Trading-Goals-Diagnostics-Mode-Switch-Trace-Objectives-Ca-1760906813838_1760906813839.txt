@@ -1,0 +1,150 @@
+🧪 PHASE 27.DX (Revision 2) — Full Trading & Goals Diagnostics + Mode-Switch Trace
+🎯 Objectives
+
+Capture a single, timestamped trace showing why goals revert immediately after save.
+
+Identify exactly where the trading state diverges between UI, backend, and database.
+
+Trace the Paper ↔ Live mode switch logic (both UI and API) to see why the selector is disabled or unresponsive.
+
+Produce one combined report reports/PHASE_27_DX_TRACE.md containing all findings.
+
+A — Enable Trace Logging and Request Correlation
+
+1️⃣ Raise log level to TRACE.
+2️⃣ Attach a unique req.id (UUID) to every API call and log:
+
+[TRACE-IN] req.id=<uuid> endpoint=<path> user=<userId> mode=<mode>
+[TRACE-OUT] req.id=<uuid> status=<code> duration=<ms>
+
+
+3️⃣ Add these endpoints to the trace list:
+
+/api/goals/*
+
+/api/trading/status
+
+/api/trading/set-mode
+
+/api/trading/modes (if exists)
+
+/api/auth/session (if mode info embedded there)
+
+B — Disable Response Caching (temporary)
+
+Set Cache-Control: no-store for all trading and goals endpoints during diagnostics so the client always hits fresh data.
+
+C — Goals Save Trace
+
+1️⃣ Change a single metric (Earnings per Day → 507) and click Save.
+2️⃣ Log sequence:
+
+Request payload
+
+db.before and db.after rows for that goal
+
+Immediate /api/goals?mode=paper response
+
+Any WS or state-store events that update UI after save
+3️⃣ Dump current rows:
+
+SELECT metric_name, goal, lastUpdated
+FROM goals
+WHERE user_id=(SELECT id FROM users WHERE username='testuser123')
+  AND mode='paper'
+ORDER BY metric_name;
+
+
+4️⃣ Dump audit rows:
+
+SELECT metric_name, previous_value, new_value, source, timestamp
+FROM goal_audit_log
+WHERE user_id=(SELECT id FROM users WHERE username='testuser123')
+ORDER BY timestamp DESC LIMIT 10;
+
+D — Trading Toggle and Mode-Switch Trace
+
+1️⃣ Click the Trading toggle to start Paper.
+Log:
+
+/api/trading/set-mode req/res (+ req.id)
+
+system_context.before / after records
+
+Emitted WS trading_state_changed payload
+
+/api/trading/status immediately after
+DB snapshot:
+
+SELECT trading_mode, is_engine_active, session_id, last_mode_change
+FROM system_context
+WHERE user_id=(SELECT id FROM users WHERE username='testuser123');
+
+
+2️⃣ Attempt to stop Paper → capture same data.
+
+3️⃣ Attempt to switch to Live (if UI buttons present or disabled):
+
+If disabled, record tooltip text or error message.
+
+If click works, capture set-mode logs and DB rows again.
+
+4️⃣ Run:
+
+SELECT COUNT(*) AS active_sessions
+FROM paper_sim_sessions WHERE active=true;
+SELECT COUNT(*) AS live_sessions FROM live_sim_sessions WHERE active=true;
+
+E — Ghost and Broken Reference Check
+-- Sessions without context link
+SELECT id, user_id, active, started_at
+FROM paper_sim_sessions s
+WHERE active=true
+ AND NOT EXISTS (SELECT 1 FROM system_context c WHERE c.session_id=s.id);
+
+-- Context rows pointing to missing session
+SELECT user_id, session_id, trading_mode, is_engine_active
+FROM system_context c
+WHERE session_id IS NOT NULL
+ AND NOT EXISTS (SELECT 1 FROM paper_sim_sessions s WHERE s.id=c.session_id);
+
+F — Frontend Console & WebSocket Logs
+
+1️⃣ Open browser dev-tools Console and Network tabs.
+2️⃣ Record:
+
+Any errors on /api/trading/status or /api/goals.
+
+trading_state_changed events received (client payload).
+
+State of Paper/Live buttons (class names or disabled attributes).
+
+G — Compile and Export Report
+
+Replit will aggregate into reports/PHASE_27_DX_TRACE.md with sections:
+
+Goals Trace (save → read-back → DB → audit)
+
+Trading Trace (start → stop → mode switch)
+
+Ghost / Broken Reference counts
+
+Frontend Console extracts
+
+Preliminary Conclusion (“which layer disagrees”)
+
+H — Disable Diagnostics After Report
+
+Return log level to INFO and restore normal ETag handling once report saved.
+
+Expected Output to Share
+
+Please copy or attach:
+
+Goals section (showing save payload, db.after, GET response).
+
+Trading section (showing set-mode response, system_context.after, WS payload, status response).
+
+Ghost check row counts.
+
+Any frontend console errors or disabled-button details.
