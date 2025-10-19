@@ -6179,6 +6179,42 @@ Provide specific, actionable recommendations.`,
 
   // ===== GOALS ENGINE ROUTES =====
 
+  // Phase 27.5.1: Get all goals (durable persistence endpoint)
+  app.get('/api/goals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.query.mode as string) || 'live';
+
+      console.log(`[Goals] Fetching all goals for user ${userId} in ${mode} mode`);
+
+      const goalsData = mode === 'live' 
+        ? await storage.getUserGoalsLive(userId)
+        : await storage.getUserGoalsPaper(userId);
+
+      // Get most recent updated_at for ETag
+      const mostRecent = goalsData.reduce((latest, goal) => {
+        const goalTime = goal.updatedAt ? new Date(goal.updatedAt).getTime() : 0;
+        return goalTime > latest ? goalTime : latest;
+      }, 0);
+
+      // Set ETag header for cache validation
+      if (mostRecent > 0) {
+        res.setHeader('ETag', `W/"${mostRecent}"`);
+      }
+
+      // Return full goal records with updatedAt
+      res.json({ 
+        success: true,
+        goals: goalsData,
+        mode,
+        count: goalsData.length
+      });
+    } catch (error: any) {
+      console.error('Error fetching goals:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Get goals summary (mode-aware)
   // Phase 7.4: ConfigBob transparent routing for goals endpoint
   app.get('/api/goals/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -6255,25 +6291,30 @@ Provide specific, actionable recommendations.`,
           ? await storage.upsertGoalLive(goalData)
           : await storage.upsertGoalPaper(goalData);
         
-        // Phase 27.5: Create audit log entry
-        await storage.createGoalAuditLog({
-          userId,
-          mode: mode as 'live' | 'paper',
-          action: previousGoal ? 'updated' : 'created',
-          metricName: goal.metricName,
-          previousValue: previousGoal ? {
-            goalValue: previousGoal.goalValue,
-            actualValue: previousGoal.actualValue,
-            percentAchieved: previousGoal.percentAchieved
-          } : null,
-          newValue: {
-            goalValue: goal.goalValue,
-            actualValue: goal.actualValue,
-            percentAchieved: goal.percentAchieved
-          },
-          source: 'user',
-          metadata: { endpoint: '/api/goals/update' }
-        });
+        // Phase 27.5.2: Create audit log entry (non-blocking)
+        try {
+          await storage.createGoalAuditLog({
+            userId,
+            mode: mode as 'live' | 'paper',
+            action: previousGoal ? 'updated' : 'created',
+            metricName: goal.metricName,
+            previousValue: previousGoal ? {
+              goalValue: previousGoal.goalValue,
+              actualValue: previousGoal.actualValue,
+              percentAchieved: previousGoal.percentAchieved
+            } : null,
+            newValue: {
+              goalValue: goal.goalValue,
+              actualValue: goal.actualValue,
+              percentAchieved: goal.percentAchieved
+            },
+            source: 'user',
+            metadata: { endpoint: '/api/goals/update' }
+          });
+          console.log(`[GoalAuditLog] Logged ${goal.metricName} update for user ${userId}`);
+        } catch (auditError: any) {
+          console.warn(`[GoalAuditLog] Failed to log goal update, but goal saved successfully:`, auditError.message);
+        }
         
         console.log(`[Goals] Saved goal ${goal.metricName} = ${goal.goalValue} (${mode}) -> DB ID: ${result.id}`);
         updatedGoals.push(result);
@@ -6398,30 +6439,35 @@ Please:
           ? await storage.upsertGoalLive(goalData)
           : await storage.upsertGoalPaper(goalData);
         
-        // Phase 27.5: Create audit log entry for AI-applied goals
-        await storage.createGoalAuditLog({
-          userId,
-          mode: mode as 'live' | 'paper',
-          action: 'applied',
-          metricName: goal.metricName,
-          previousValue: previousGoal ? {
-            goalValue: previousGoal.goalValue,
-            actualValue: previousGoal.actualValue,
-            percentAchieved: previousGoal.percentAchieved
-          } : null,
-          newValue: {
-            goalValue: goal.goalValue,
-            actualValue: '0',
-            percentAchieved: '0'
-          },
-          analysisId: analysisId,
-          source: 'ai',
-          metadata: { 
-            endpoint: '/api/goals/apply',
-            aiValidated: true,
-            configChanges: configChanges || {}
-          }
-        });
+        // Phase 27.5.2: Create audit log entry for AI-applied goals (non-blocking)
+        try {
+          await storage.createGoalAuditLog({
+            userId,
+            mode: mode as 'live' | 'paper',
+            action: 'applied',
+            metricName: goal.metricName,
+            previousValue: previousGoal ? {
+              goalValue: previousGoal.goalValue,
+              actualValue: previousGoal.actualValue,
+              percentAchieved: previousGoal.percentAchieved
+            } : null,
+            newValue: {
+              goalValue: goal.goalValue,
+              actualValue: '0',
+              percentAchieved: '0'
+            },
+            analysisId: analysisId,
+            source: 'ai',
+            metadata: { 
+              endpoint: '/api/goals/apply',
+              aiValidated: true,
+              configChanges: configChanges || {}
+            }
+          });
+          console.log(`[GoalAuditLog] Logged AI-applied goal ${goal.metricName} for user ${userId}`);
+        } catch (auditError: any) {
+          console.warn(`[GoalAuditLog] Failed to log AI goal application, but goal saved successfully:`, auditError.message);
+        }
         
         updatedGoals.push(result);
       }

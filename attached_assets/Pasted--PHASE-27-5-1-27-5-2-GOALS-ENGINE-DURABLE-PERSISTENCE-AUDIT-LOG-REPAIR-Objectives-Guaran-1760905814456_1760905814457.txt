@@ -1,0 +1,115 @@
+🧩 PHASE 27.5.1 + 27.5.2 — GOALS ENGINE DURABLE PERSISTENCE & AUDIT LOG REPAIR
+🎯 Objectives
+
+Guarantee that all goal edits save permanently, survive navigation/reload, and hydrate reliably from the server.
+
+Fix the "goalAuditLog is not defined" error so every goal update is successfully committed and audit-logged without blocking UI actions.
+
+Provide a complete, durable audit trail for user and AI goal changes.
+
+A. Goals Engine Durable Persistence (27.5.1)
+1️⃣ Authoritative Persistence
+
+Confirm the goals table stores the active record for each user + mode (paper/live).
+
+Each save or apply request updates the DB row and returns the fresh record with updated_at.
+
+2️⃣ Endpoints
+
+GET /api/goals?mode=<paper|live> → returns all goals for that user + mode.
+
+PUT /api/goals/:id or POST /api/goals → writes changes, commits transaction, and returns the full updated record.
+
+Each response includes an ETag (W/"<updated_at>") header for cache validation.
+
+3️⃣ Frontend Hydration
+
+On entering Goals tab: fetch /api/goals and replace local form data with server payload.
+
+On Save:
+• Optimistically update UI.
+• When server returns 200 OK, commit server record to local store (goalsStore).
+
+On tab switch or reload: re-fetch and re-hydrate from server to avoid stale rollback.
+
+4️⃣ Cache Invalidation
+
+Clear goalsStore whenever:
+• User logs out or switches accounts
+• Role or permissions change
+• Trading mode changes (paper ↔ live)
+
+Compare updated_at; always prefer the newer server record.
+
+5️⃣ Testing Checklist
+
+✅ Edit goal → Save → Toast “Goal saved successfully”
+✅ Navigate away and return → Goal persists
+✅ Reload browser → Values reload from DB
+✅ Switch mode → Correct set appears
+✅ Audit entry exists for each save (see next section)
+
+B. Audit Log Repair & Validation (27.5.2)
+1️⃣ Root Cause
+
+The endpoints /api/goals/update and /api/goals/apply reference goalAuditLog but never import or instantiate it, causing 500 goalAuditLog is not defined.
+
+2️⃣ Corrections
+
+Import the GoalAuditLog handler from server/storage.ts or server/services/goal-audit-log.ts.
+
+Before the endpoint handlers, instantiate it:
+const goalAuditLog = storage.goalAuditLog || new GoalAuditLog(storage);
+
+In each goal update/apply endpoint:
+a. Perform the goal update transaction.
+b. After commit, call goalAuditLog.createGoalAuditLog({ userId, mode, action:'update', metricName, previousValue, newValue, source }).
+c. If audit write fails, log warning but return success for the goal save.
+
+3️⃣ Error Handling
+
+Return structured response:
+{ success:true, auditLogged:true } or { success:true, auditLogged:false, warning:'Audit log write failed' }
+
+Prevent UI 500 errors if audit fails again.
+
+4️⃣ Audit Schema and Indexes (verify exist)
+
+Table goal_audit_log columns:
+(id, user_id, mode, action, metric_name, previous_value JSONB, new_value JSONB, analysis_id, source, metadata, timestamp timestamptz)
+
+Indexes on (user_id, mode, timestamp) and (analysis_id).
+
+5️⃣ Verification
+
+✅ Editing goal saves without red error toast
+✅ Database shows new goal values
+✅ Audit table populates entries
+✅ Frontend shows success toast
+✅ Subsequent navigations preserve edits
+
+C. Deliverables
+
+✅ Durable Goals persistence verified
+✅ goalAuditLog defined and operational
+✅ Audit entries non-blocking and accurate
+✅ UI Save works with no errors
+✅ replit.md updated with sections:
+• Phase 27.5.1 — Goals Engine Durable Persistence
+• Phase 27.5.2 — Goals Engine Audit Log Repair & Validation
+✅ Architect review PASS
+
+D. Expected Logs
+[GoalsEngine] Goal updated: Earnings per Trade → 50 (prev 40)
+[GoalAuditLog] Inserted user=testuser123 mode=paper id=… auditLogged=true
+
+📋 REPLIT Execution Directive (ready to paste)
+Proceed with combined Phase 27.5.1 and 27.5.2 — Goals Engine Durable Persistence and Audit Log Repair.
+
+Tasks:
+1. Fix "goalAuditLog is not defined" by importing/instantiating the audit logger in goal update and apply endpoints.  
+2. Ensure goal updates complete successfully even if audit logging fails.  
+3. Implement durable goal persistence with authoritative server rehydration and cache invalidation.  
+4. Return updated records with updated_at and ETag headers.  
+5. Verify that UI saves show success toast, values persist after navigation and reload, and goal_audit_log records entries.  
+6. Update replit.md with full documentation and architect approval.
