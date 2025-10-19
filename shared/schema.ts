@@ -676,6 +676,35 @@ export const walterApprovalsAudit = pgTable("walter_approvals_audit", {
   timestampIdx: index("walter_approvals_audit_timestamp_idx").on(table.timestamp),
 }));
 
+// Walter execution log (Phase 22 - tracks all autonomous command executions)
+export const walterExecutionLog = pgTable("walter_execution_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(), // Trading mode (live/paper)
+  commandText: text("command_text").notNull(), // Original natural language command
+  actionType: varchar("action_type", { length: 100 }).notNull(), // NLAI action ID
+  source: varchar("source", { length: 50 }).notNull(), // 'nlai', 'orchestrator', 'api', 'manual'
+  approvalStatus: varchar("approval_status", { length: 30 }).notNull(), // 'auto_approved', 'manual_approved', 'not_required', 'rejected'
+  approvalReason: text("approval_reason"), // Why it was auto-approved or rejected
+  executionStatus: varchar("execution_status", { length: 20 }).notNull(), // 'success', 'failed', 'pending'
+  resultMessage: text("result_message"), // Human-readable result
+  resultDetails: jsonb("result_details"), // Structured execution results
+  projectedRisk: decimal("projected_risk", { precision: 5, scale: 2 }), // Estimated risk %
+  actualRisk: decimal("actual_risk", { precision: 5, scale: 2 }), // Actual risk after execution %
+  executionTimeMs: integer("execution_time_ms"), // Duration in milliseconds
+  chatSessionId: varchar("chat_session_id").references(() => walterChats.id, { onDelete: 'set null' }), // Link to chat if from Walter
+  approvalId: varchar("approval_id").references(() => walterPendingApprovals.id, { onDelete: 'set null' }), // Link to approval if required
+  clusterEventId: varchar("cluster_event_id"), // Link to cluster_bus_event if emitted
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  executedAt: timestamp("executed_at", { withTimezone: true }),
+}, (table) => ({
+  userIdx: index("walter_execution_log_user_idx").on(table.userId),
+  modeIdx: index("walter_execution_log_mode_idx").on(table.mode),
+  actionTypeIdx: index("walter_execution_log_action_type_idx").on(table.actionType),
+  createdAtIdx: index("walter_execution_log_created_at_idx").on(table.createdAt),
+  executionStatusIdx: index("walter_execution_log_status_idx").on(table.executionStatus),
+}));
+
 // Walter purpose (Phase 5.5 - stores Walter's guiding purpose statement, mode-aware as of Phase 6.13)
 export const walterPurpose = pgTable("walter_purpose", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1459,6 +1488,21 @@ export const walterApprovalsAuditRelations = relations(walterApprovalsAudit, ({ 
   }),
 }));
 
+export const walterExecutionLogRelations = relations(walterExecutionLog, ({ one }) => ({
+  user: one(users, {
+    fields: [walterExecutionLog.userId],
+    references: [users.id],
+  }),
+  chatSession: one(walterChats, {
+    fields: [walterExecutionLog.chatSessionId],
+    references: [walterChats.id],
+  }),
+  approval: one(walterPendingApprovals, {
+    fields: [walterExecutionLog.approvalId],
+    references: [walterPendingApprovals.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -1778,6 +1822,12 @@ export const insertWalterChatLogSchema = createInsertSchema(walterChatLogs).omit
 export const insertWalterApprovalsAuditSchema = createInsertSchema(walterApprovalsAudit).omit({
   id: true,
   timestamp: true,
+});
+
+export const insertWalterExecutionLogSchema = createInsertSchema(walterExecutionLog).omit({
+  id: true,
+  createdAt: true,
+  executedAt: true,
 });
 
 export const insertWalterPurposeSchema = createInsertSchema(walterPurpose).omit({
@@ -3196,6 +3246,9 @@ export type WalterChatLog = typeof walterChatLogs.$inferSelect;
 
 export type InsertWalterApprovalsAudit = z.infer<typeof insertWalterApprovalsAuditSchema>;
 export type WalterApprovalsAudit = typeof walterApprovalsAudit.$inferSelect;
+
+export type InsertWalterExecutionLog = z.infer<typeof insertWalterExecutionLogSchema>;
+export type WalterExecutionLog = typeof walterExecutionLog.$inferSelect;
 
 export type InsertWalterPurpose = z.infer<typeof insertWalterPurposeSchema>;
 export type WalterPurpose = typeof walterPurpose.$inferSelect;

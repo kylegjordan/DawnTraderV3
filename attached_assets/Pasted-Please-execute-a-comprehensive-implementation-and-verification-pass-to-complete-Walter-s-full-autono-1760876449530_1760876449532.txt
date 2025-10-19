@@ -1,0 +1,65 @@
+Please execute a comprehensive implementation and verification pass to complete Walter’s full autonomous execution layer and unify related pending fixes.
+
+Objective: enable Walter to reason, decide, and execute multi-step plans (e.g., adjust configurations, confirm approvals, start/stop simulations, and log results) autonomously through a single, cohesive pipeline.
+
+1️⃣ Execution Layer Integration
+
+• Verify that the command flow connects seamlessly:
+  NLAI intent → ExecutionPolicyController → CortexDispatcher → TaskRouter → Service (config-update, paper-sim, trading-engine).
+• If any module is missing, create it:
+  - ExecutionPolicyController — enforces Walter Approvals, auto-approves when within risk guardrails.
+  - CortexDispatcher — sequences multi-step plans (“adjust parameters → confirm → start simulation”).
+  - ExecutionLog — new table/service recording command, source, approval status, result, timestamp.
+• Ensure approved actions persist automatically and trigger corresponding service functions (config-update, paper-sim, etc.) without additional user intervention.
+• Emit a cluster_bus_event for every executed command so all nodes remain synchronized.
+
+2️⃣ Policy and Risk Enforcement
+
+• Integrate Walter Approvals into ExecutionPolicyController:
+  - Auto-approve if cumulative risk ≤ active guardrails.
+  - Request user confirmation only when a command exceeds defined risk thresholds.
+• Confirm that risk checks query the latest guardrails values from the correct mode (paper or live).
+• Document each approval decision and reasoning into execution_log and agent_learning_delta (delta_type: "risk_parameter" or "strategy_adjustment").
+
+3️⃣ End-to-End Persistence Verification
+
+• Confirm that configuration updates (guardrails, goals, screeners) propagate to the database and UI instantly through ConfigBob → Cortex → StateAwareness → WebSocket.
+• Validate that:
+  /api/guardrails?mode=paper and /api/guardrails?mode=live show distinct values.
+  updated_at timestamps differ per mode and increment correctly.
+• Generate a runtime audit report reports/config_update_persistence_verification.md.
+
+4️⃣ Simulation Execution Autonomy
+
+• After configuration changes are applied, Walter must be able to automatically start and manage simulations:
+  “start 10-minute paper simulation” → triggers SimulationEngine.start(600000).
+  “stop simulation” → SimulationEngine.stop().
+  “check status” → returns simulation state and progress metrics.
+• Confirm proper event flow and log each transition in execution_log.
+• Ensure learning fragments are stored at start/stop events with results (P&L, trades, guardrails used).
+
+5️⃣ Combined File + Message Submission Fix
+
+• Update the chat input component so that drag-and-drop files and typed or spoken messages are handled in one combined submission.
+  - The payload should include both "text" and "attachments" fields in a single POST request to /api/messages or /api/chat.
+  - When Walter receives a message containing both, he must process them together, analyzing the text context and the attached file(s).
+  - After submission, both the text box and upload preview should clear.
+• Verify that when a user drops a file and types a message, both appear together in the chat history and are accessible for Walter’s reasoning layer.
+
+6️⃣ Testing & Reporting
+
+• Run an end-to-end test sequence:
+  1. “Set risk per trade to 3 %.” → persists to DB, reflected in UI.
+  2. “Begin 10-minute paper simulation.” → simulation starts and runs.
+  3. “Stop simulation.” → halts trading, generates report.
+  4. Verify execution_log entries, risk checks, and learning deltas.
+• Confirm that multi-step plans execute automatically without additional user messages once approved.
+• Generate consolidated verification report:
+  reports/autonomous_execution_layer_audit.md summarizing:
+  - Component status (controller, dispatcher, log, services)
+  - Approval policy behavior
+  - Database persistence tests
+  - File+message integration test results
+
+Goal: deliver a fully functional autonomous execution layer enabling Walter to reason, approve (per Walter Approvals), execute, log, and learn from every operation—while processing combined file+message submissions as a single contextual input.
+When complete, mark this milestone as Phase 22 — Autonomous Execution & Interaction Layer Integration: Complete.
