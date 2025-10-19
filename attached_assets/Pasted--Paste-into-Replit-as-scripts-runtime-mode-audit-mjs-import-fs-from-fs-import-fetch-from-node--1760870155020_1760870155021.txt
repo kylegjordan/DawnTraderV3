@@ -1,0 +1,188 @@
+📜 Paste into Replit as scripts/runtime_mode_audit.mjs
+import fs from "fs";
+import fetch from "node-fetch";
+
+const BASE_URL = "http://localhost:5000";
+const TEST_USER = { username: "testuser123", password: "SecurePass123!" };
+const REPORT_MD = "./reports/runtime_mode_audit.md";
+const REPORT_JSON = "./reports/runtime_mode_audit.json";
+
+let token = null;
+
+async function login() {
+  console.log("🔐 Logging in...");
+  const res = await fetch(`${BASE_URL}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: TEST_USER.username,
+      password: TEST_USER.password,
+    }),
+  });
+  const data = await res.json();
+  token = data.token;
+  console.log(`✅ Authenticated as ${TEST_USER.username}`);
+}
+
+async function api(endpoint, mode) {
+  return fetch(`${BASE_URL}${endpoint}?mode=${mode}`, {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "x-app-mode": mode,
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+async function verifyAPIModeEndpoints() {
+  console.log("\n📡 Checking API mode routing...");
+  const endpoints = ["/api/guardrails", "/api/screeners", "/api/goals", "/api/strategies"];
+  const results = [];
+  for (const ep of endpoints) {
+    for (const mode of ["paper", "live"]) {
+      const res = await api(ep, mode);
+      results.push({
+        endpoint: ep,
+        mode,
+        status: res.status,
+        ok: res.ok,
+      });
+      console.log(`${res.ok ? "✅" : "❌"} ${ep} (${mode}) → ${res.status}`);
+    }
+  }
+  return results;
+}
+
+async function queryDB(query) {
+  const res = await fetch(`${BASE_URL}/api/dev/sql`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query }),
+  });
+  return res.ok ? res.json() : null;
+}
+
+async function verifyDatabaseModeIsolation() {
+  console.log("\n🗄️ Checking database tables for per-mode data...");
+  const query = `
+    SELECT 'guardrails' AS table, mode, COUNT(*) AS count FROM guardrails GROUP BY mode
+    UNION ALL
+    SELECT 'screener_filters', mode, COUNT(*) FROM screener_filters GROUP BY mode
+    UNION ALL
+    SELECT 'strategy_settings', mode, COUNT(*) FROM strategy_settings GROUP BY mode
+    UNION ALL
+    SELECT 'goals', mode, COUNT(*) FROM goals GROUP BY mode
+    ORDER BY table, mode;
+  `;
+  const data = await queryDB(query);
+  if (!data) {
+    console.error("❌ Database query failed (check /api/dev/sql availability).");
+    return [];
+  }
+  data.forEach(r =>
+    console.log(`✅ ${r.table.padEnd(20)} mode=${r.mode.padEnd(6)} → ${r.count}`)
+  );
+  return data;
+}
+
+async function verifyRuntimePulls() {
+  console.log("\n⚙️ Testing runtime parameter pulls (simulation init traces)...");
+  const modes = ["paper", "live"];
+  const traces = [];
+
+  for (const mode of modes) {
+    const res = await fetch(`${BASE_URL}/api/trading/start?dryRun=true`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "x-app-mode": mode,
+        "Content-Type": "application/json",
+      },
+    });
+    const data = await res.text();
+    traces.push({ mode, trace: data.slice(0, 500) });
+    const snippet = data.match(/risk_per_trade[^,\n]+/i);
+    console.log(`🧠 ${mode.toUpperCase()} trace: ${snippet ? snippet[0] : "no trace found"}`);
+  }
+  return traces;
+}
+
+async function main() {
+  console.log("═══════════════════════════════════════════════════════════════");
+  console.log("🧠  Phase 19 Runtime Parameter Verification");
+  console.log("═══════════════════════════════════════════════════════════════");
+  await login();
+
+  const apiResults = await verifyAPIModeEndpoints();
+  const dbResults = await verifyDatabaseModeIsolation();
+  const runtimeTraces = await verifyRuntimePulls();
+
+  const report = {
+    timestamp: new Date().toISOString(),
+    apiResults,
+    dbResults,
+    runtimeTraces,
+  };
+
+  fs.writeFileSync(REPORT_JSON, JSON.stringify(report, null, 2));
+  const md = [
+    "# Phase 19 Runtime Parameter Verification Report",
+    `**Date:** ${new Date().toLocaleString()}`,
+    "",
+    "## 1️⃣ API Verification",
+    apiResults.map(
+      r => `- ${r.endpoint} (${r.mode}) → ${r.status} ${r.ok ? "✅" : "❌"}`
+    ).join("\n"),
+    "",
+    "## 2️⃣ Database Mode Isolation",
+    dbResults.map(
+      r => `- ${r.table} | ${r.mode} | count=${r.count}`
+    ).join("\n"),
+    "",
+    "## 3️⃣ Runtime Traces",
+    runtimeTraces.map(
+      t => `### ${t.mode.toUpperCase()} TRACE\n\`\`\`\n${t.trace}\n\`\`\`\n`
+    ).join("\n"),
+    "",
+    "✅ **Pass Criteria:** API endpoints respond with correct mode, DB shows both modes with separate records, runtime traces show distinct parameter loads.",
+  ].join("\n");
+
+  fs.writeFileSync(REPORT_MD, md);
+  console.log(`\n✅ Reports written:\n- ${REPORT_MD}\n- ${REPORT_JSON}`);
+}
+
+main().catch(e => console.error("❌ Diagnostic failed:", e));
+
+🧪 How to Run
+
+In Replit shell:
+
+mkdir -p reports
+node scripts/runtime_mode_audit.mjs
+
+
+It will:
+
+Authenticate with testuser123 / SecurePass123!
+
+Query API endpoints for both modes
+
+Query database tables for mode coverage
+
+Launch a dry-run trading start to capture runtime traces
+
+Output results into:
+
+/reports/runtime_mode_audit.md
+
+/reports/runtime_mode_audit.json
+
+✅ Pass Criteria
+Check	Expected Result
+API mode headers/query params	Correct (mode=paper or mode=live)
+DB records	Each table shows ≥1 record per mode
+Runtime trace	Trading engine logs show correct mode parameters
+Overall	No missing mode, no shared values between modes

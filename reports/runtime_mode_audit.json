@@ -1,0 +1,85 @@
+{
+  "timestamp": "2025-10-19T10:38:23.389Z",
+  "apiResults": [
+    {
+      "endpoint": "/api/guardrails",
+      "mode": "paper",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "endpoint": "/api/guardrails",
+      "mode": "live",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "endpoint": "/api/screeners",
+      "mode": "paper",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "endpoint": "/api/screeners",
+      "mode": "live",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "endpoint": "/api/goals",
+      "mode": "paper",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "endpoint": "/api/goals",
+      "mode": "live",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "endpoint": "/api/strategies",
+      "mode": "paper",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "endpoint": "/api/strategies",
+      "mode": "live",
+      "status": 200,
+      "ok": true
+    }
+  ],
+  "dataResults": [
+    {
+      "endpoint": "/api/guardrails",
+      "paper": {
+        "riskPerTrade": "1.50"
+      },
+      "live": {
+        "riskPerTrade": "N/A"
+      },
+      "isolated": true
+    },
+    {
+      "endpoint": "/api/screeners",
+      "paper": {
+        "minVolume": "5000000.00"
+      },
+      "live": {
+        "minVolume": "1000000.00"
+      },
+      "isolated": true
+    }
+  ],
+  "runtimeTraces": [
+    {
+      "mode": "paper",
+      "trace": "{\"status\":\"started\"}"
+    },
+    {
+      "mode": "live",
+      "trace": "{\"status\":\"started\"}"
+    }
+  ]
+}
