@@ -1,10 +1,19 @@
 import type { AuthenticatedRequest } from '../routes';
 import { startPaperSimulation, stopPaperSimulation, getPaperSimulationStatus } from './paper-sim-service';
+import { 
+  updateGuardrails, 
+  updateGoals, 
+  updateScreeners,
+  getGuardrails,
+  getScreeners
+} from './config-update-service';
 
 export interface ActionIntent {
   verb: string;
   object: string;
   modifiers?: string[];
+  originalMessage?: string; // Full message for value extraction
+  extractedValue?: string; // Extracted numeric value or parameter
 }
 
 export interface ActionDefinition {
@@ -291,6 +300,270 @@ export class NLAIActionRegistry {
       description: 'Check system truth and data alignment',
       requiredAuth: true,
     });
+
+    // Config Update Actions
+    this.register({
+      id: 'update_risk_per_trade',
+      patterns: [
+        /(?:please\s+)?(?:set|change|update|adjust|modify)(?:\s+(?:the|my))?(?:\s+risk(?:\s+per\s+trade)?)\s+to\s+([\d.]+)\s*%?/i,
+        /(?:please\s+)?(?:make|put)(?:\s+the)?(?:\s+risk(?:\s+per\s+trade)?)\s+([\d.]+)\s*%?/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          // Extract percentage from intent (captured by regex)
+          const riskPercent = intent.extractedValue ? parseFloat(intent.extractedValue) : null;
+
+          if (!riskPercent || riskPercent <= 0 || riskPercent > 100) {
+            return {
+              success: false,
+              message: 'Please provide a valid risk percentage between 0.1 and 100.',
+              error: 'Invalid risk percentage',
+            };
+          }
+
+          // For now, default to paper mode (could be extracted from context)
+          const mode = 'paper';
+          
+          const result = await updateGuardrails(userId, mode, {
+            riskPerTrade: riskPercent.toString(),
+          });
+
+          if (result.success) {
+            return {
+              success: true,
+              message: `✅ Risk per trade adjusted to ${riskPercent}% for ${mode} mode. Updated at ${result.timestamp}.`,
+              data: result.data,
+            };
+          } else {
+            return {
+              success: false,
+              message: `I attempted to change risk per trade but the database did not confirm the update: ${result.error}`,
+              error: result.error,
+            };
+          }
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `I attempted to change risk per trade but encountered an error: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Update risk per trade percentage',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'update_max_drawdown',
+      patterns: [
+        /(?:please\s+)?(?:set|change|update|adjust|modify|tighten|loosen)(?:\s+(?:the|my))?(?:\s+max(?:imum)?(?:\s+draw\s*down)?)\s+to\s+([\d.]+)\s*%?/i,
+        /(?:please\s+)?(?:make|put)(?:\s+the)?(?:\s+max(?:imum)?(?:\s+draw\s*down)?)\s+([\d.]+)\s*%?/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const drawdownPercent = intent.extractedValue ? parseFloat(intent.extractedValue) : null;
+
+          if (!drawdownPercent || drawdownPercent <= 0 || drawdownPercent > 100) {
+            return {
+              success: false,
+              message: 'Please provide a valid drawdown percentage between 0.1 and 100.',
+              error: 'Invalid drawdown percentage',
+            };
+          }
+
+          const mode = 'paper';
+          
+          const result = await updateGuardrails(userId, mode, {
+            maxDrawdown: drawdownPercent.toString(),
+          });
+
+          if (result.success) {
+            return {
+              success: true,
+              message: `✅ Maximum drawdown adjusted to ${drawdownPercent}% for ${mode} mode. Updated at ${result.timestamp}.`,
+              data: result.data,
+            };
+          } else {
+            return {
+              success: false,
+              message: `I attempted to change max drawdown but the database did not confirm the update: ${result.error}`,
+              error: result.error,
+            };
+          }
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `I attempted to change max drawdown but encountered an error: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Update maximum drawdown percentage',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'update_max_daily_loss',
+      patterns: [
+        /(?:please\s+)?(?:set|change|update|adjust|modify)(?:\s+(?:the|my))?(?:\s+max(?:imum)?(?:\s+daily)?(?:\s+loss)?)\s+to\s+\$?([\d,]+(?:\.\d{2})?)/i,
+        /(?:please\s+)?(?:make|put)(?:\s+the)?(?:\s+max(?:imum)?(?:\s+daily)?(?:\s+loss)?)\s+\$?([\d,]+(?:\.\d{2})?)/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const lossAmount = intent.extractedValue ? parseFloat(intent.extractedValue.replace(/,/g, '')) : null;
+
+          if (!lossAmount || lossAmount <= 0) {
+            return {
+              success: false,
+              message: 'Please provide a valid loss amount greater than 0.',
+              error: 'Invalid loss amount',
+            };
+          }
+
+          const mode = 'paper';
+          
+          const result = await updateGuardrails(userId, mode, {
+            maxDailyLoss: lossAmount.toFixed(2),
+          });
+
+          if (result.success) {
+            return {
+              success: true,
+              message: `✅ Maximum daily loss adjusted to $${lossAmount.toFixed(2)} for ${mode} mode. Updated at ${result.timestamp}.`,
+              data: result.data,
+            };
+          } else {
+            return {
+              success: false,
+              message: `I attempted to change max daily loss but the database did not confirm the update: ${result.error}`,
+              error: result.error,
+            };
+          }
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `I attempted to change max daily loss but encountered an error: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Update maximum daily loss amount',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'update_screener_liquidity',
+      patterns: [
+        /(?:please\s+)?(?:set|change|update|adjust|modify|widen|tighten|increase|decrease)(?:\s+(?:the|my))?(?:\s+screener)?(?:\s+(?:min(?:imum)?)?(?:\s+liquidity)?(?:\s+filter)?)\s+to\s+\$?([\d,]+(?:\.\d{2})?)/i,
+        /(?:please\s+)?(?:make|put)(?:\s+the)?(?:\s+screener)?(?:\s+liquidity)\s+\$?([\d,]+(?:\.\d{2})?)/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const liquidityAmount = intent.extractedValue ? parseFloat(intent.extractedValue.replace(/,/g, '')) : null;
+
+          if (!liquidityAmount || liquidityAmount <= 0) {
+            return {
+              success: false,
+              message: 'Please provide a valid liquidity amount greater than 0.',
+              error: 'Invalid liquidity amount',
+            };
+          }
+
+          const mode = 'paper';
+          
+          const result = await updateScreeners(userId, mode, {
+            minLiquidity: liquidityAmount.toFixed(2),
+          });
+
+          if (result.success) {
+            return {
+              success: true,
+              message: `✅ Minimum liquidity filter adjusted to $${liquidityAmount.toFixed(2)} for ${mode} mode. Updated at ${result.timestamp}.`,
+              data: result.data,
+            };
+          } else {
+            return {
+              success: false,
+              message: `I attempted to change screener liquidity filter but the database did not confirm the update: ${result.error}`,
+              error: result.error,
+            };
+          }
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `I attempted to change screener liquidity filter but encountered an error: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Update screener minimum liquidity filter',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'update_trading_goal',
+      patterns: [
+        /(?:please\s+)?(?:set|change|update|adjust|modify)(?:\s+(?:my|the))?(?:\s+(?:daily|weekly|monthly))?(?:\s+(?:profit|return|win\s*rate|target))\s+(?:goal|target)\s+to\s+([\d.]+)\s*%?/i,
+        /(?:please\s+)?(?:make|put)(?:\s+my)?(?:\s+(?:daily|weekly|monthly))?(?:\s+goal)\s+([\d.]+)\s*%?/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const goalValue = intent.extractedValue ? parseFloat(intent.extractedValue) : null;
+
+          if (!goalValue || goalValue <= 0) {
+            return {
+              success: false,
+              message: 'Please provide a valid goal value greater than 0.',
+              error: 'Invalid goal value',
+            };
+          }
+
+          // Determine metric name from original message
+          const message = (intent.originalMessage || '').toLowerCase();
+          let metricName = 'Daily Return %';
+          if (message.includes('weekly')) metricName = 'Weekly Return %';
+          if (message.includes('monthly')) metricName = 'Monthly Return %';
+          if (message.includes('win rate') || message.includes('winrate')) metricName = 'Win Rate %';
+
+          const mode = 'paper';
+          
+          const result = await updateGoals(userId, mode, [{
+            metricName,
+            goalValue: goalValue.toString(),
+            actualValue: '0',
+            percentAchieved: '0',
+            aiValidationNotes: 'Updated via Walter NLAI',
+          }]);
+
+          if (result.success) {
+            return {
+              success: true,
+              message: `✅ ${metricName} goal set to ${goalValue}% for ${mode} mode. Updated at ${result.timestamp}.`,
+              data: result.data,
+            };
+          } else {
+            return {
+              success: false,
+              message: `I attempted to change the goal but the database did not confirm the update: ${result.error}`,
+              error: result.error,
+            };
+          }
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `I attempted to change the goal but encountered an error: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Update trading goal (profit, return, win rate)',
+      requiredAuth: true,
+    });
   }
 
   register(action: ActionDefinition): void {
@@ -316,16 +589,21 @@ export class NLAIActionRegistry {
   matchIntent(message: string): { actionId: string; intent: ActionIntent } | null {
     for (const [actionId, action] of this.actions.entries()) {
       for (const pattern of action.patterns) {
-        if (pattern.test(message)) {
-          const match = message.match(pattern);
+        const match = message.match(pattern);
+        if (match) {
           const modifiers = message.toLowerCase().split(/\s+/).filter(word => 
             ['daily', 'weekly', 'monthly', 'phase', 'dry-run', 'simulation'].includes(word)
           );
+
+          // Extract numeric value from capture group (if present)
+          const extractedValue = match[1] || undefined;
 
           const intent: ActionIntent = {
             verb: this.extractVerb(message),
             object: this.extractObject(message, action.category),
             modifiers: modifiers.length > 0 ? modifiers : undefined,
+            originalMessage: message,
+            extractedValue,
           };
 
           console.log(`[NLAI-Registry] Matched action: ${actionId} with intent:`, intent);
