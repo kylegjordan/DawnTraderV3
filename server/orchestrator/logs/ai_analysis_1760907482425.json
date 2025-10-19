@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-19T20:58:02.425Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential over-utilization or bottleneck issues."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics indicate no active trades and a win rate of 0%, which may suggest issues with strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by analyzing running processes and workloads to identify and mitigate bottlenecks."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI strategies and models to ensure they are functioning correctly and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments or alternative strategies to improve trading performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough analysis of CPU usage to identify and resolve any bottlenecks or inefficiencies.",
+      "rationale": "High CPU load can lead to system instability and affect platform performance, potentially impacting user experience and trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Perform a diagnostic check on the AI module to ensure it is operational and capable of generating trading opportunities.",
+      "rationale": "The AI module is critical for identifying trading opportunities and optimizing strategies; its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review the current trading strategies and market conditions to determine if adjustments are needed to improve performance.",
+      "rationale": "With no active trades and a win rate of 0%, it is important to assess whether the strategies are aligned with current market conditions."
+    }
+  ],
+  "urgencyLevel": "high"
+}

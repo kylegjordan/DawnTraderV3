@@ -1,0 +1,166 @@
+🧪 PHASE 27.DX — Execute Trace & Package Evidence (Goals + Trading + Mode Switch)
+🎯 Objective
+
+Run the full diagnostic trace and produce one file:
+reports/PHASE_27_DX_TRACE.md
+with timestamped logs, DB snapshots, and API responses for:
+
+Goals save → read-back (reversion bug)
+
+Trading start/stop (toast says started but header shows STOPPED)
+
+Paper ↔ Live mode switch (selector unresponsive)
+
+A) Prep
+
+Confirm DIAGNOSTIC_MODE=true and server restarted.
+
+Ensure temporary cache-bypass is active for /api/goals and /api/trading/status.
+
+B) Goals Persistence Trace (use a unique value)
+
+In Goals Engine → Goals tab, set Earnings per Day to 507 and click Save.
+
+Collect immediately (within 1–2s of the click):
+
+Server log excerpts (last 200 lines) containing [DX-GOALS] with the same request ID:
+
+request payload
+
+db.before
+
+db.after
+
+any immediate re-hydrate event/log
+
+API read-back:
+
+GET /api/goals?mode=paper full JSON body
+
+DB rows:
+
+SELECT metric_name, goal, lastUpdated
+FROM goals
+WHERE user_id=(SELECT id FROM users WHERE username='testuser123')
+  AND mode='paper'
+ORDER BY metric_name;
+
+
+Audit rows:
+
+SELECT metric_name, previous_value, new_value, source, timestamp
+FROM goal_audit_log
+WHERE user_id=(SELECT id FROM users WHERE username='testuser123')
+ORDER BY timestamp DESC LIMIT 10;
+
+
+Note whether the UI visibly flips back to 100 without navigation.
+
+Append all artifacts to the report under “Goals Trace”.
+
+C) Trading Start/Stop Trace (Paper)
+
+Click the Trading toggle to start Paper.
+
+Capture:
+
+/api/trading/set-mode request/response with req.id
+
+system_context.before and system_context.after
+
+emitted WS trading_state_changed payload
+
+immediate GET /api/trading/status JSON
+
+DB snapshots:
+
+SELECT trading_mode, is_engine_active, session_id, last_mode_change
+FROM system_context
+WHERE user_id=(SELECT id FROM users WHERE username='testuser123');
+
+SELECT id, active, started_at, stopped_at
+FROM paper_sim_sessions
+WHERE user_id=(SELECT id FROM users WHERE username='testuser123')
+ORDER BY started_at DESC LIMIT 3;
+
+
+Click the toggle again to stop Paper and collect the same artifacts (note any exact error text like “already running / cannot stop”).
+
+Append to “Trading Trace – Paper (Start/Stop)”.
+
+D) Mode Switch Trace (Paper ↔ Live)
+
+Attempt to switch to Live (via mode selector or Walter approval).
+
+If buttons are disabled, record the tooltip text and disabled attributes/class names.
+
+If an action fires, capture:
+
+/api/trading/set-mode req/res
+
+system_context before/after
+
+WS event payload
+
+GET /api/trading/status JSON
+
+Session counts:
+
+SELECT COUNT(*) AS paper_active FROM paper_sim_sessions WHERE active=true;
+SELECT COUNT(*) AS live_active  FROM live_sim_sessions  WHERE active=true;
+
+
+Append to “Mode Switch Trace”.
+
+E) Ghost & Broken Reference Check
+
+Append results of:
+
+-- Ghost sessions (active session not referenced by system_context)
+SELECT id, user_id, active, started_at
+FROM paper_sim_sessions s
+WHERE active=true
+  AND NOT EXISTS (
+    SELECT 1 FROM system_context c
+    WHERE c.user_id=s.user_id AND c.session_id=s.id
+  );
+
+-- Context pointing to missing session
+SELECT user_id, session_id, trading_mode, is_engine_active
+FROM system_context c
+WHERE session_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM paper_sim_sessions s WHERE s.id=c.session_id
+  );
+
+F) Frontend Console & WS
+
+Capture and append:
+
+Any console errors for /api/goals, /api/trading/status, or WebSocket.
+
+The exact trading_state_changed events received on the client (payloads and timestamps).
+
+G) Package the Report
+
+Create reports/PHASE_27_DX_TRACE.md with sections:
+
+Goals Trace (save → read-back → DB → audit)
+
+Trading Trace – Paper (Start/Stop)
+
+Mode Switch Trace (Paper ↔ Live)
+
+Ghost / Broken Reference Check
+
+Frontend Console & WS
+
+Preliminary Conclusion (1–2 lines indicating which hop disagrees — e.g., “server db.after=507 but GET returns 100” or “WS event active=true but status API reports active=false”)
+
+H) Exit Diagnostic Mode
+
+After the report is generated, restore normal logging level and ETag behavior (do not remove the report).
+
+✅ Deliverable
+
+Attach or paste the Goals, Trading, and Mode Switch sections of reports/PHASE_27_DX_TRACE.md here. That will give us the exact failing hop(s) so we can issue a precise, minimal fix rather than another broad change.
