@@ -48,7 +48,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     isStopping 
   } = useTrading();
   const { toast } = useToast();
-  const { canEdit, role } = useUserRole();
+  const { canEdit, role, can } = useUserRole();
   const queryClient = useQueryClient();
   const [utcTimeDate, setUtcTimeDate] = useState<string>('');
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
@@ -275,18 +275,21 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               </div>
             </div>
             
-            {/* Mode Toggle */}
+            {/* Mode Toggle - Phase 27.3: Permission-gated */}
             <div className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg">
               <Button
                 variant={currentMode === 'live' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => handleModeChange('live')}
+                disabled={!can('trade_live')}
                 className={cn(
                   "px-3 py-1 text-xs font-semibold rounded h-auto",
                   currentMode === 'live' 
                     ? "bg-primary text-primary-foreground" 
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                  !can('trade_live') && "opacity-50 cursor-not-allowed"
                 )}
+                title={!can('trade_live') ? `Live trading requires trade_live permission (Role: ${role})` : ''}
                 data-testid="button-live-mode"
               >
                 LIVE
@@ -295,12 +298,15 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                 variant={currentMode === 'paper' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => handleModeChange('paper')}
+                disabled={!can('trade_paper')}
                 className={cn(
                   "px-3 py-1 text-xs font-semibold rounded h-auto",
                   currentMode === 'paper' 
                     ? "bg-primary text-primary-foreground" 
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                  !can('trade_paper') && "opacity-50 cursor-not-allowed"
                 )}
+                title={!can('trade_paper') ? `Paper trading requires trade_paper permission (Role: ${role})` : ''}
                 data-testid="button-paper-mode"
               >
                 PAPER

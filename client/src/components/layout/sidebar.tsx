@@ -9,6 +9,7 @@ import {
   Settings,
   TrendingUp,
   User,
+  Users,
   FileText,
   Target,
   LogOut,
@@ -23,6 +24,7 @@ import {
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
 import { clearTokens } from "@/lib/auth";
+import { useUserRole } from "@/hooks/useUserRole";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -39,6 +41,7 @@ const navigation = [
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "Watch List", href: "/watchlist", icon: Eye },
   { name: "Search and Analysis", href: "/search", icon: Search },
+  { name: "Users", href: "/admin", icon: Users, requiresPermission: 'view_users' as const },
   { name: "Command Center", href: "/command-center", icon: Terminal, adminOnly: true },
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "System Monitoring", href: "/systems", icon: Activity },
@@ -48,6 +51,7 @@ const navigation = [
 export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
   const [location, setLocation] = useLocation();
   const { activeTrades } = useTrading();
+  const { can } = useUserRole();
   
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   
@@ -82,8 +86,14 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
           {/* Navigation */}
           <nav className="space-y-1">
             {navigation.map((item) => {
+              // Phase 27.3: Permission-based navigation visibility
               // Hide admin-only items from non-admin users
               if ((item as any).adminOnly && !user.isAdmin) {
+                return null;
+              }
+              
+              // Hide permission-gated items if user lacks the permission
+              if ((item as any).requiresPermission && !can((item as any).requiresPermission)) {
                 return null;
               }
               

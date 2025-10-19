@@ -26,7 +26,20 @@ export default function LoginPage() {
       
       if (res?.accessToken) {
         saveTokens(res.accessToken, res.refreshToken);
-        localStorage.setItem("user", JSON.stringify(res.user));
+        
+        // Phase 27.3: Save user with role and permissions
+        const userData = {
+          ...res.user,
+          permissions: res.permissions || []
+        };
+        localStorage.setItem("user", JSON.stringify(userData));
+        
+        console.log('[Login] User authenticated:', {
+          username: userData.username,
+          role: userData.role,
+          permissionCount: userData.permissions.length
+        });
+        
         setLocation("/");
       }
     } catch (err: any) {

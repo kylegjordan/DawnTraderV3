@@ -49,7 +49,14 @@ export default function RegisterPage() {
       
       if (loginRes?.accessToken) {
         saveTokens(loginRes.accessToken, loginRes.refreshToken);
-        localStorage.setItem("user", JSON.stringify(loginRes.user));
+        
+        // Phase 27.3: Save user with role and permissions
+        const userData = {
+          ...loginRes.user,
+          permissions: loginRes.permissions || []
+        };
+        localStorage.setItem("user", JSON.stringify(userData));
+        
         setLocation("/");
       }
     } catch (err: any) {
