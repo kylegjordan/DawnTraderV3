@@ -153,6 +153,9 @@ import {
   type WalterApprovalsAudit,
   type InsertWalterApprovalsAudit,
   walterApprovalsAudit,
+  type WalterExecutionLog,
+  type InsertWalterExecutionLog,
+  walterExecutionLog,
   type WalterMemory,
   type InsertWalterMemory,
   walterMemory,
@@ -494,6 +497,12 @@ export interface IStorage {
   getWalterMemory(id: string): Promise<WalterMemory | undefined>;
   updateWalterMemory(id: string, updates: Partial<WalterMemory>): Promise<WalterMemory>;
   deleteWalterMemory(id: string): Promise<void>;
+  
+  // Walter Execution Log methods (Phase 22)
+  createWalterExecutionLog(data: InsertWalterExecutionLog): Promise<WalterExecutionLog>;
+  updateWalterExecutionLog(id: string, updates: Partial<WalterExecutionLog>): Promise<WalterExecutionLog>;
+  getWalterExecutionLog(id: string): Promise<WalterExecutionLog | undefined>;
+  getWalterExecutionLogs(userId: string, options?: { limit?: number; mode?: 'live' | 'paper' }): Promise<WalterExecutionLog[]>;
   
   // Walter User Preferences methods (Phase 8.4 Addendum B)
   getWalterUserPreferences(userId: string): Promise<WalterUserPreferences | undefined>;
@@ -2713,6 +2722,42 @@ export class DatabaseStorage implements IStorage {
   
   async deleteWalterMemory(id: string): Promise<void> {
     await db.delete(walterMemory).where(eq(walterMemory.id, id));
+  }
+  
+  // Walter Execution Log methods (Phase 22)
+  async createWalterExecutionLog(data: InsertWalterExecutionLog): Promise<WalterExecutionLog> {
+    const [log] = await db.insert(walterExecutionLog).values(data).returning();
+    return log;
+  }
+  
+  async updateWalterExecutionLog(id: string, updates: Partial<WalterExecutionLog>): Promise<WalterExecutionLog> {
+    const [log] = await db.update(walterExecutionLog)
+      .set(updates)
+      .where(eq(walterExecutionLog.id, id))
+      .returning();
+    return log;
+  }
+  
+  async getWalterExecutionLog(id: string): Promise<WalterExecutionLog | undefined> {
+    const [log] = await db.select().from(walterExecutionLog).where(eq(walterExecutionLog.id, id));
+    return log || undefined;
+  }
+  
+  async getWalterExecutionLogs(
+    userId: string,
+    options?: { limit?: number; mode?: 'live' | 'paper' }
+  ): Promise<WalterExecutionLog[]> {
+    const limit = options?.limit || 50;
+    const conditions = [eq(walterExecutionLog.userId, userId)];
+    
+    if (options?.mode) {
+      conditions.push(eq(walterExecutionLog.mode, options.mode));
+    }
+    
+    return await db.select().from(walterExecutionLog)
+      .where(and(...conditions))
+      .orderBy(desc(walterExecutionLog.createdAt))
+      .limit(limit);
   }
   
   // Walter User Preferences methods (Phase 8.4 Addendum B)
