@@ -104,6 +104,11 @@ export const biasTypeEnum = pgEnum("bias_type", ["confirmation", "recency", "anc
 export const knowledgeSourceEnum = pgEnum("knowledge_source", ["web", "api", "research", "market", "internal"]);
 export const retrievalTrustLevelEnum = pgEnum("retrieval_trust_level", ["low", "medium", "high", "verified"]);
 
+// Phase 26.1 enums
+export const tuningApprovalTypeEnum = pgEnum("tuning_approval_type", ["auto", "manual"]);
+export const tuningStatusEnum = pgEnum("tuning_status", ["success", "failed", "reverted"]);
+export const tuningAggressivenessEnum = pgEnum("tuning_aggressiveness", ["conservative", "balanced", "aggressive"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -3509,6 +3514,59 @@ export const crossNodeAlignmentLog = pgTable("cross_node_alignment_log", {
   createdAtIdx: index("cross_node_alignment_log_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 26.1: Auto-Tuning Engine Tables
+export const tuningPolicy = pgTable("tuning_policy", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  aggressiveness: tuningAggressivenessEnum("aggressiveness").default("balanced").notNull(),
+  policyVersion: integer("policy_version").default(1).notNull(),
+  maxStepPercent: decimal("max_step_percent", { precision: 5, scale: 2 }).default("10.00").notNull(),
+  cooldownMinutes: integer("cooldown_minutes").default(60).notNull(),
+  maxDailyAdjustments: integer("max_daily_adjustments").default(10).notNull(),
+  fieldBounds: jsonb("field_bounds").notNull(), // { riskPerTrade: { min: 0.5, max: 3 }, etc }
+  currentCounters: jsonb("current_counters").default(sql`'{"adjustmentsToday":0,"reverts":0}'`).notNull(),
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdModeIdx: index("tuning_policy_user_id_mode_idx").on(table.userId, table.mode),
+  enabledIdx: index("tuning_policy_enabled_idx").on(table.enabled),
+}));
+
+export const tuningEvent = pgTable("tuning_event", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  field: varchar("field", { length: 100 }).notNull(),
+  oldValue: decimal("old_value", { precision: 12, scale: 4 }).notNull(),
+  newValue: decimal("new_value", { precision: 12, scale: 4 }).notNull(),
+  confidence: decimal("confidence", { precision: 3, scale: 2 }).notNull(),
+  reason: text("reason").notNull(),
+  approvalType: tuningApprovalTypeEnum("approval_type").notNull(),
+  status: tuningStatusEnum("status").notNull(),
+  reverted: boolean("reverted").default(false).notNull(),
+  executionLogId: varchar("execution_log_id"), // Link to walter_execution_log if applicable
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdModeIdx: index("tuning_event_user_id_mode_idx").on(table.userId, table.mode),
+  fieldIdx: index("tuning_event_field_idx").on(table.field),
+  statusIdx: index("tuning_event_status_idx").on(table.status),
+  createdAtIdx: index("tuning_event_created_at_idx").on(table.createdAt),
+  revertedIdx: index("tuning_event_reverted_idx").on(table.reverted),
+}));
+
+export const parameterBaseline = pgTable("parameter_baseline", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(),
+  snapshotData: jsonb("snapshot_data").notNull(), // { riskPerTrade: 1.5, maxDrawdown: 10, ... }
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdModeIdx: index("parameter_baseline_user_id_mode_idx").on(table.userId, table.mode),
+  createdAtIdx: index("parameter_baseline_created_at_idx").on(table.createdAt),
+}));
+
 // Insert schemas for Phase 17
 export const insertClusterNodeSchema = createInsertSchema(clusterNode).omit({ 
   id: true, 
@@ -3597,3 +3655,33 @@ export type DomainChannel = typeof domainChannelEnum.enumValues[number];
 export type InsertCrossNodeAlignmentLog = z.infer<typeof insertCrossNodeAlignmentLogSchema>;
 export type CrossNodeAlignmentLog = typeof crossNodeAlignmentLog.$inferSelect;
 export type AlignmentStrategy = typeof alignmentStrategyEnum.enumValues[number];
+
+// Insert schemas for Phase 26.1
+export const insertTuningPolicySchema = createInsertSchema(tuningPolicy).omit({ 
+  id: true, 
+  createdAt: true,
+  lastUpdated: true
+});
+
+export const insertTuningEventSchema = createInsertSchema(tuningEvent).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertParameterBaselineSchema = createInsertSchema(parameterBaseline).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+// Types for Phase 26.1
+export type InsertTuningPolicy = z.infer<typeof insertTuningPolicySchema>;
+export type TuningPolicy = typeof tuningPolicy.$inferSelect;
+export type TuningApprovalType = typeof tuningApprovalTypeEnum.enumValues[number];
+export type TuningStatus = typeof tuningStatusEnum.enumValues[number];
+export type TuningAggressiveness = typeof tuningAggressivenessEnum.enumValues[number];
+
+export type InsertTuningEvent = z.infer<typeof insertTuningEventSchema>;
+export type TuningEvent = typeof tuningEvent.$inferSelect;
+
+export type InsertParameterBaseline = z.infer<typeof insertParameterBaselineSchema>;
+export type ParameterBaseline = typeof parameterBaseline.$inferSelect;
