@@ -1,0 +1,154 @@
+🧩 Phase 19 — Extended Diagnostic: “Mode Isolation & Behavioral Persistence Validation”
+
+(for Replit execution, no code editing required)
+
+Purpose
+Diagnose and resolve any hidden coupling or revert behavior between paper and live trading modes for guardrails, screeners, and strategies.
+Confirm that all UI edits persist, survive cache refresh, and remain independent between modes.
+
+⚙️ Execution Command (paste in Replit)
+
+“Execute Phase 19 Extended Diagnostic — Mode Isolation & Behavioral Persistence Validation.
+Run full behavioral tests for guardrails, screeners, and strategy settings across paper and live modes.
+1️⃣ Detect and log any value reversion after save.
+2️⃣ Detect any cross-mode coupling (editing paper alters live).
+3️⃣ Verify cache invalidation and state refresh actually repopulate the new data.
+4️⃣ Identify any client-side or middleware persistence issues not visible in schema diagnostics.
+5️⃣ Append results to phase19_mode_isolation_diagnostics.md and generate a JSON summary.”
+
+🧠 Test Scope and Steps
+1️⃣ Schema & API Consistency
+
+Confirm each table (screener_filters, guardrails, strategy_settings) has a mode column.
+
+Verify both GET and PUT routes require and honor the mode parameter.
+
+Record which endpoints use:
+
+validateMode middleware
+
+query parameter ?mode=paper|live
+
+default fallback (should never occur)
+
+Expected: Every endpoint explicitly handles mode context.
+
+2️⃣ Behavioral Persistence (Write → Read → Refresh)
+
+For each config type (screeners, guardrails, strategies):
+
+Capture baseline values for paper and live.
+
+Change a single parameter in paper mode (e.g., risk_per_trade = 3.0 %).
+
+Save, then immediately fetch both modes:
+
+/api/guardrails?mode=paper
+
+/api/guardrails?mode=live
+
+Refresh UI via context bridge (simulate front-end reload).
+
+Wait 5 s → fetch both again.
+
+Repeat for screeners and strategies.
+
+Record any automatic reversion or mirrored value.
+
+Expected Results
+
+Condition	Expected Behavior
+Paper edit persists after refresh	✅
+Live mode remains unchanged	✅
+No rollback within 10 s after save	✅
+
+If values revert, flag CACHE_OVERRULE or BACKEND_REVERT in report.
+
+3️⃣ Cache & Context Chain Validation
+
+Monitor logs for each save:
+
+[ConfigChangeHandler] Detected config change (userId, mode, type)
+[ConfigBob] invalidateConfig()
+[CortexCore] delete cache key
+[StateAwareness] cache cleared
+[ContextBridge] broadcast update
+
+
+Check that all five messages appear in sequence.
+If missing any link → identify which layer fails to propagate changes.
+
+4️⃣ UI / State Reflection Test
+
+Observe the dashboard values and state summary in both modes after save.
+
+Verify /api/state/summary shows correct guardrails and screeners per mode.
+
+Refresh the UI → values remain consistent.
+
+If the UI shows old data despite DB update → flag UI_CACHE_DESYNC.
+
+5️⃣ Strategy Mode Isolation
+
+Repeat the same sequence for strategy_settings table.
+
+Activate/deactivate a strategy in paper mode.
+
+Confirm live mode remains untouched.
+
+Verify ConfigBob invalidation (config:strategies:paper:userId).
+
+Confirm updates reflected in /api/state/summary.
+
+6️⃣ Auto-Learning & Safety Bridge Check
+
+Ensure saving any of these configs triggers contextRefreshCoordinator.refresh() so Walter immediately uses the correct mode-specific settings.
+
+Confirm that learning deltas remain shared, i.e., mode-agnostic.
+
+🧾 Diagnostic Report Expectations
+
+Generate two files automatically:
+
+/reports/phase19_behavioral_mode_diagnostics.md
+
+Narrative summary (each subsystem, test results, log excerpts).
+
+Explicit flags for any revert or cross-mode coupling detected.
+
+Suggested patch locations.
+
+/reports/phase19_behavioral_mode_diagnostics.json
+
+Machine-readable pass/fail per subsystem:
+
+{
+  "screeners": {"persistence": "PASS", "crossModeIsolation": "FAIL"},
+  "guardrails": {"persistence": "FAIL", "revertDetected": true},
+  "strategies": {"persistence": "PASS", "crossModeIsolation": "PASS"}
+}
+
+✅ Pass / Fail Criteria
+Test	Pass Condition
+Screeners edit in paper mode	Persists; live mode unchanged
+Guardrails edit in any mode	Persists; no reversion after cache refresh
+Strategies edit in paper mode	Independent of live mode
+Cache invalidation chain	All five services triggered
+State summary consistency	Updated values visible in correct mode
+UI reflection	Values persist after manual reload
+Learning deltas	Continue cross-mode sharing (PASS if unchanged)
+🧭 If Failures Detected
+
+Replit should:
+
+Log affected layer (frontend-cache, ConfigBob, state-awareness, or DB trigger).
+
+Apply a hot-patch to ensure:
+
+Mode is always passed through from front-end to API.
+
+Back-end writes and reads filtered by (userId, mode).
+
+Cache invalidation invalidates only the target mode.
+
+UI re-fetches correct mode data after save.
