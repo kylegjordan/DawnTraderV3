@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-19T18:28:40.245Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high (10.71, 11.83, 11.97) across all intervals, indicating potential performance bottlenecks or overutilization."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, no opportunities generated, and no adjustments made, suggesting it may not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero active trades, zero win rate, and zero ROI, which may indicate issues with trading strategy effectiveness or execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by identifying and addressing processes or tasks causing high load."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially retrain AI models to ensure they are generating opportunities and making adjustments as expected."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments or alternative strategies to improve trading performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU-intensive processes and optimize or redistribute workloads to reduce CPU load.",
+      "rationale": "High CPU load can lead to system slowdowns and affect trading platform performance, impacting user experience and trading outcomes."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Perform a diagnostic review of the AI system to ensure it is operational and capable of generating trading opportunities.",
+      "rationale": "AI inactivity can lead to missed trading opportunities and reduced platform effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Assess the current trading strategies and make necessary adjustments or replacements to improve trade execution and profitability.",
+      "rationale": "Current trading metrics indicate a lack of profitability, necessitating a review of strategy effectiveness."
+    }
+  ],
+  "urgencyLevel": "high"
+}
