@@ -791,7 +791,7 @@ export default function WalterPage() {
                                 setRenameValue('');
                               }
                             }}
-                            className="flex-1 h-7 text-sm"
+                            className="flex-1 h-7 text-sm text-foreground"
                             autoFocus
                             data-testid={`input-rename-chat-${chat.id}`}
                           />
