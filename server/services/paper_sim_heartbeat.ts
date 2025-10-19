@@ -99,6 +99,7 @@ class PaperSimHeartbeatService {
 
   /**
    * Check individual session health and expiration
+   * Phase 27.4.2: Added cross-verification with system_context
    */
   private async checkSession(session: any): Promise<void> {
     try {
@@ -107,10 +108,38 @@ class PaperSimHeartbeatService {
       
       console.log(`[PaperSimHeartbeat] Checking session ${sessionId} for user ${userId}`);
 
-      // Check if session has expired (if there's an end time configured)
-      // For now, we don't have ends_at in the schema, so just check if still running
+      // Phase 27.4.2: Cross-verify against system_context (single source of truth)
+      const systemContext = await storage.getSystemContext(userId);
       
-      // Verify in-memory manager exists
+      if (systemContext) {
+        // Check if trading mode is set to paper
+        if (systemContext.tradingMode !== 'paper') {
+          console.warn(`[PaperSimHeartbeat] ⚠️ Mode mismatch for session ${sessionId}: system_context=${systemContext.tradingMode}, expected=paper`);
+          
+          // Emit warning
+          await clusterBus.publish('health_alert', {
+            alert: 'paper_sim_mode_mismatch',
+            sessionId,
+            userId,
+            systemContextMode: systemContext.tradingMode,
+            expectedMode: 'paper',
+            timestamp: new Date().toISOString(),
+          }, 'paper_sim_heartbeat');
+          
+          // Auto-correct: Stop the simulation as it's running in wrong mode
+          console.log(`[PaperSimHeartbeat] Auto-stopping session ${sessionId} due to mode mismatch`);
+          await storage.updatePaperSimSession(sessionId, {
+            status: 'stopped',
+            stoppedAt: new Date(),
+          });
+          
+          return; // Skip further checks
+        }
+        
+        console.log(`[PaperSimHeartbeat] Mode verification passed: ${systemContext.tradingMode}`);
+      }
+      
+      // Verify in-memory manager exists and check consistency
       const { getPaperSimulationStatus } = await import('./paper-sim-service');
       const status = await getPaperSimulationStatus(userId);
       
