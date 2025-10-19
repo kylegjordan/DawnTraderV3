@@ -30,10 +30,16 @@ export function InteractiveNotification({
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
 
+  // Safety check - if approval is null/undefined, don't render
+  if (!approval) {
+    return null;
+  }
+
   // Use new fields (action, risk_pct) or fall back to old fields (strategyName, projectedRisk)
-  const displayName = approval.action || approval.strategyName || approval.parameterName || 'Unknown';
-  const traceId = approval.traceId || approval.id; // Fall back to approval.id if traceId not set
+  const displayName = approval.action || approval.strategyName || approval.parameterName || 'Unknown Action';
+  const traceId = approval.traceId || approval.id || 'unknown'; // Fall back to approval.id if traceId not set
   const risk = approval.risk_pct ?? approval.projectedRisk ?? 0;  // Prefer risk_pct, fallback to projectedRisk
+  const mode = approval.mode || 'unknown';
 
   const handleApprove = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -163,7 +169,7 @@ export function InteractiveNotification({
           <Badge variant="outline" className="text-xs">
             {risk.toFixed(2)}% risk
           </Badge>
-          <span className="text-xs text-muted-foreground">{approval.mode.toUpperCase()}</span>
+          <span className="text-xs text-muted-foreground">{mode.toUpperCase()}</span>
           <Badge 
             variant="secondary" 
             className="text-[10px] font-mono"
@@ -232,7 +238,7 @@ export function InteractiveNotification({
           <Badge variant="outline" className="text-xs">
             {risk.toFixed(2)}% risk
           </Badge>
-          <span className="text-xs text-muted-foreground">{approval.mode.toUpperCase()}</span>
+          <span className="text-xs text-muted-foreground">{mode.toUpperCase()}</span>
           <Badge 
             variant="secondary" 
             className="text-[10px] font-mono"
