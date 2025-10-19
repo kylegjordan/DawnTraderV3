@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { ensureValidToken } from "@/lib/auth";
 
 const DEFAULTS = {
   minVolume: 1000000,
@@ -28,16 +29,16 @@ const DEFAULTS = {
 };
 
 interface ScreenerFilters {
-  minVolume: number;
-  minPrice: number;
-  maxPrice: number;
-  minMarketCap: number;
-  maxBidAskSpread: number;
+  minVolume: number | string;
+  minPrice: number | string;
+  maxPrice: number | string;
+  minMarketCap: number | string;
+  maxBidAskSpread: number | string;
   rsiMin: number;
   rsiMax: number;
-  volatilityMin: number;
-  volatilityMax: number;
-  minLiquidity: number;
+  volatilityMin: number | string;
+  volatilityMax: number | string;
+  minLiquidity: number | string;
   excludeStablecoins: boolean;
   allowRegulatedOnly: boolean;
 }
@@ -64,27 +65,58 @@ export default function ScreenerFiltersTab() {
 
   const { data: currentFilters, isLoading } = useQuery<ScreenerFilters>({
     queryKey: ['/api/screeners', mode],
+    queryFn: async () => {
+      const token = await ensureValidToken();
+      const res = await fetch('/api/screeners', {
+        credentials: 'include',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-app-mode': mode,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to fetch screener filters');
+      return await res.json();
+    },
   });
 
   const { data: calibration } = useQuery<CalibrationData>({
     queryKey: ['/api/screeners/calibration', mode],
+    queryFn: async () => {
+      const token = await ensureValidToken();
+      const res = await fetch('/api/screeners/calibration', {
+        credentials: 'include',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-app-mode': mode,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to fetch calibration');
+      return await res.json();
+    },
   });
 
   useEffect(() => {
     if (currentFilters && (!initialized.current || lastMode.current !== mode)) {
+      console.log('[ScreenerFiltersTab] Updating filters for mode:', mode, currentFilters);
       initialized.current = true;
       lastMode.current = mode;
+      
+      const parseValue = (val: number | string | undefined, fallback: number): number => {
+        if (val === undefined || val === null) return fallback;
+        return typeof val === 'string' ? parseFloat(val) : val;
+      };
+      
       setFilters({
-        minVolume: currentFilters.minVolume ?? DEFAULTS.minVolume,
-        minPrice: currentFilters.minPrice ?? DEFAULTS.minPrice,
-        maxPrice: currentFilters.maxPrice ?? DEFAULTS.maxPrice,
-        minMarketCap: currentFilters.minMarketCap ?? DEFAULTS.minMarketCap,
-        maxBidAskSpread: currentFilters.maxBidAskSpread ?? DEFAULTS.maxBidAskSpread,
+        minVolume: parseValue(currentFilters.minVolume, DEFAULTS.minVolume),
+        minPrice: parseValue(currentFilters.minPrice, DEFAULTS.minPrice),
+        maxPrice: parseValue(currentFilters.maxPrice, DEFAULTS.maxPrice),
+        minMarketCap: parseValue(currentFilters.minMarketCap, DEFAULTS.minMarketCap),
+        maxBidAskSpread: parseValue(currentFilters.maxBidAskSpread, DEFAULTS.maxBidAskSpread),
         rsiMin: currentFilters.rsiMin ?? DEFAULTS.rsiMin,
         rsiMax: currentFilters.rsiMax ?? DEFAULTS.rsiMax,
-        volatilityMin: currentFilters.volatilityMin ?? DEFAULTS.volatilityMin,
-        volatilityMax: currentFilters.volatilityMax ?? DEFAULTS.volatilityMax,
-        minLiquidity: currentFilters.minLiquidity ?? DEFAULTS.minLiquidity,
+        volatilityMin: parseValue(currentFilters.volatilityMin, DEFAULTS.volatilityMin),
+        volatilityMax: parseValue(currentFilters.volatilityMax, DEFAULTS.volatilityMax),
+        minLiquidity: parseValue(currentFilters.minLiquidity, DEFAULTS.minLiquidity),
         excludeStablecoins: currentFilters.excludeStablecoins ?? DEFAULTS.excludeStablecoins,
         allowRegulatedOnly: currentFilters.allowRegulatedOnly ?? DEFAULTS.allowRegulatedOnly,
       });
