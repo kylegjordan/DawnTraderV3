@@ -263,7 +263,7 @@ class AutoTestHarness {
   }
 
   /**
-   * Scenario 4: Live Trading Activation
+   * Scenario 4: Live Trading Activation (Two-Step Approval Flow)
    */
   private createLiveTradingScenario(): TestScenario {
     return {
@@ -271,23 +271,47 @@ class AutoTestHarness {
       steps: [
         {
           action: 'request_live_trading',
-          description: 'Request live trading activation',
+          description: 'Request live trading activation (expect manual approval prompt)',
           execute: async () => {
             return await startLiveTrading(this.testUserId);
           },
           verify: async (result) => {
-            // Should return manual approval required
-            return result.data?.requiresApproval === true;
+            // Should return success: false with manual approval required
+            return result.success === false && result.data?.requiresApproval === true;
+          },
+        },
+        {
+          action: 'activate_with_approval',
+          description: 'Activate live trading after synthetic approval',
+          execute: async () => {
+            // Call activateLiveTrading directly (simulates post-approval activation)
+            const { activateLiveTrading } = await import('./live-trading-service');
+            return await activateLiveTrading(this.testUserId);
+          },
+          verify: async (result) => {
+            // Should successfully activate (ExecutionPolicyController will auto-approve in test mode)
+            // Or may return policy block if kill switch is enabled
+            return result.success || result.data?.policyBlocked === true;
           },
         },
         {
           action: 'check_live_status',
-          description: 'Check live trading status',
+          description: 'Check live trading status after activation',
           execute: async () => {
             return await checkLiveTradingStatus(this.testUserId);
           },
           verify: async (result) => {
-            return result.success; // Should successfully check status
+            return result.success; // Should successfully check status regardless of active/inactive
+          },
+        },
+        {
+          action: 'cleanup_stop_live_trading',
+          description: 'Stop live trading for cleanup',
+          execute: async () => {
+            return await stopLiveTrading(this.testUserId);
+          },
+          verify: async (result) => {
+            return result.success; // Should successfully stop
           },
         },
       ],

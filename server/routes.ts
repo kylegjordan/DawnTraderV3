@@ -1710,6 +1710,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Phase 24: Automatic Test Harness API
+  app.post('/api/auto-test/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      console.log('[AutoTest] Running automatic test harness via API...');
+      
+      const { runAutoTests } = await import('./services/auto_test_harness.js');
+      const { markdown, json } = await runAutoTests(userId);
+      
+      // Save reports to filesystem
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      // Ensure reports directory exists
+      const reportsDir = path.join(process.cwd(), 'reports');
+      await fs.mkdir(reportsDir, { recursive: true });
+      
+      await fs.writeFile(path.join(reportsDir, 'auto_test_results.md'), markdown);
+      await fs.writeFile(path.join(reportsDir, 'auto_test_results.json'), JSON.stringify(json, null, 2));
+      
+      console.log('[AutoTest] Reports generated successfully');
+      
+      res.json({
+        success: true,
+        results: json,
+        markdown,
+      });
+    } catch (error: any) {
+      console.error('[AutoTest] Error running tests:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Paper Trading Simulation Engine Routes (Milestone 18)
   // NOTE: Paper trading is SYSTEM-WIDE. Only ONE simulation can run at a time.
   // All users see the same simulation status.
@@ -11901,34 +11935,6 @@ function generateFeesReport(trades: any[]): string {
   
   return [headers.join(','), ...rows].join('\n');
 }
-
-// Phase 24: Automatic Test Harness API
-app.post('/api/auto-test/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  try {
-    const userId = req.user!.id;
-    
-    console.log('[AutoTest] Running automatic test harness via API...');
-    
-    const { runAutoTests } = await import('./services/auto_test_harness.js');
-    const { markdown, json } = await runAutoTests(userId);
-    
-    // Save reports to filesystem
-    const fs = await import('fs/promises');
-    await fs.writeFile('reports/auto_test_results.md', markdown);
-    await fs.writeFile('reports/auto_test_results.json', JSON.stringify(json, null, 2));
-    
-    console.log('[AutoTest] Reports generated successfully');
-    
-    res.json({
-      success: true,
-      results: json,
-      markdown,
-    });
-  } catch (error: any) {
-    console.error('[AutoTest] Error running tests:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // P&L Report (Monthly, Quarterly, Annual)
 function generatePnLReport(trades: any[], period: 'monthly' | 'quarterly' | 'annual'): string {

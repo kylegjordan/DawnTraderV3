@@ -8,7 +8,11 @@
 
 import { storage } from '../storage';
 import { clusterBus } from './cluster-bus';
+import ExecutionPolicyController from './execution-policy-controller';
 import type { ActionResult } from './nlai-action-registry';
+
+// Initialize ExecutionPolicyController instance
+const executionPolicyController = new ExecutionPolicyController(storage as any);
 
 interface LiveTradingSession {
   userId: string;
@@ -106,7 +110,36 @@ This is a high-risk operation and requires your explicit consent.`;
         };
       }
 
-      // 2. Initialize trading engine (placeholder for now)
+      // 2. Validate with ExecutionPolicyController
+      const policyResult = await executionPolicyController.validateAndApprove({
+        actionId: 'start_live_trading',
+        userId,
+        context: {
+          mode: 'live',
+          riskLevel: 'critical',
+          requiresApproval: true,
+        },
+        riskLevel: 'critical',
+      });
+
+      // If policy blocks activation, return immediately
+      if (!policyResult.approved) {
+        console.log(`[LiveTrading] ❌ Policy check blocked activation:`, policyResult.reason);
+        
+        return {
+          success: false,
+          message: `Live trading activation blocked: ${policyResult.reason}`,
+          data: {
+            policyBlocked: true,
+            reason: policyResult.reason,
+            requiresApproval: policyResult.requiresApproval,
+          },
+        };
+      }
+
+      console.log(`[LiveTrading] ✅ Policy check approved activation`);
+
+      // 3. Initialize trading engine (placeholder for now)
       // In production, this would initialize the actual TradingEngine with live Kraken API
       const tradingEngines = (global as any).tradingEngines || new Map();
       (global as any).tradingEngines = tradingEngines;
@@ -129,7 +162,7 @@ This is a high-risk operation and requires your explicit consent.`;
         engine,
       });
 
-      // 4. Emit cluster bus event
+      // 4. Emit cluster bus event with policy-confirmed payload
       try {
         await clusterBus.publish('task_completed', {
           taskType: 'live_trading_activation',
@@ -137,10 +170,13 @@ This is a high-risk operation and requires your explicit consent.`;
           mode: 'live',
           action: 'started',
           success: true,
+          policyApproved: true,
+          policyTimestamp: new Date().toISOString(),
+          riskLevel: 'critical',
           timestamp: new Date().toISOString(),
         }, 'live_trading');
         
-        console.log(`[LiveTrading] ✅ Cluster bus event emitted: task_completed (live trading started)`);
+        console.log(`[LiveTrading] ✅ Cluster bus event emitted: task_completed (live trading started, policy approved)`);
       } catch (busError: any) {
         // Non-blocking - log but continue
         console.warn(`[LiveTrading] Failed to emit cluster bus event:`, busError.message);
