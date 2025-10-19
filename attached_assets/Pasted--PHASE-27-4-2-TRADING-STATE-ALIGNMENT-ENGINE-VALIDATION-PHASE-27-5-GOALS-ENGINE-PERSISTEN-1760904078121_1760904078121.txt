@@ -1,0 +1,155 @@
+🧩 PHASE 27.4.2 — TRADING STATE ALIGNMENT & ENGINE VALIDATION
+🧩 PHASE 27.5 — GOALS ENGINE PERSISTENCE AND STATE HYDRATION
+🎯 Objectives
+
+Guarantee that trading status (LIVE / PAPER / STOPPED) is always consistent across the UI, backend, database, and cluster events.
+
+Ensure Goals Engine edits are permanently saved, re-loaded on navigation, and correctly reflected in both UI and database after refresh or restart.
+
+A. Trading State Alignment & Engine Validation (27.4.2)
+1️⃣ Authoritative Data Source
+
+Confirm that system_context is the single truth for:
+
+trading_mode
+
+is_engine_active
+
+last_safe_state
+
+Each toggle click and Walter approval must read/write through system_context, not in-memory flags.
+
+2️⃣ Cluster Broadcast Validation
+
+Every change in trading mode emits a bus event:
+
+topic: trading_state_changed
+
+payload: { mode, active, user, timestamp }
+
+All nodes and the frontend WebSocket listener update immediately on receipt.
+
+Log example:
+[TradingSync] Broadcast trading_state_changed → paper (user=testuser123)
+
+3️⃣ Startup Recovery Consistency
+
+On startup, TradingStateSync checks system_context and:
+
+Resumes paper or live if previously active.
+
+Emits a fresh state broadcast so the UI initializes correctly.
+
+Logs: [TradingSync] Recovered mode=paper after restart.
+
+4️⃣ Heartbeat & Fail-Safe
+
+PaperSimHeartbeatService and LiveTradingService cross-verify against system_context:
+
+If engine missing but context shows active → reset to inactive.
+
+If kill-switch engaged → stop trading system-wide and set trading_mode='stopped'.
+
+5️⃣ Frontend Synchronization
+
+The trading toggle and header display subscribe to trading_state_changed events.
+
+Fallback polling endpoint /api/trading/status returns { mode, active } every 10 s for redundancy.
+
+When user clicks toggle:
+
+UI sends /api/trading/set-mode
+
+Backend validates permission and updates system_context
+
+Success triggers broadcast → UI updates immediately
+
+6️⃣ Testing Checklist
+
+✅ Click Paper → toast “Paper mode active” → toggle shows ACTIVE
+✅ Refresh → status remains ACTIVE
+✅ Click again → toast “Trading halted” → toggle returns to STOPPED
+✅ Walter approval for Live → state switches to LIVE system-wide
+✅ Logs show matching mode and user across services
+
+B. Goals Engine Persistence and State Hydration (27.5)
+1️⃣ Database and API Persistence
+
+Verify the goals table exists with columns (id, user_id, category, target_value, updated_at).
+
+Editing a goal in the UI must trigger a PUT /api/goals/:id or POST /api/goals that writes directly to the database.
+
+Backend returns the updated goal record with its new updated_at.
+
+2️⃣ Frontend State Hydration
+
+On entering Goals Engine tab:
+
+Fetch /api/goals for current user.
+
+Replace local form values with fetched data.
+
+On save:
+
+Optimistically update UI.
+
+Wait for backend 200 OK.
+
+Commit to local store (goalsStore) with lastSync timestamp.
+
+3️⃣ Cache Invalidation
+
+Clear local goalsStore when:
+
+User logs out or switches accounts.
+
+Role or permissions change.
+
+Re-fetch from server to prevent stale rollback.
+
+4️⃣ Cross-Page Persistence
+
+Use persistent storage (sessionStorage or IndexedDB) to retain goals between tab changes.
+
+On tab return or reload, hydrate from cache first, then verify against /api/goals.
+
+If discrepancy detected, merge using latest updated_at.
+
+5️⃣ Audit & Logging
+
+Every change writes an audit row to goal_audit_log with (goal_id, user_id, old_value, new_value, timestamp).
+
+Log example:
+[GoalsEngine] Updated target_value → 5000 (verified server-side)
+
+6️⃣ Testing Checklist
+
+✅ Change goal → toast “Saved successfully”
+✅ Navigate away → return → goal value persists
+✅ Reload browser → values re-loaded from DB
+✅ Audit log shows correct entries
+✅ No reversion to old values after tab switch
+
+C. Documentation & Deliverables
+
+Append to replit.md:
+
+Phase 27.4.2 — Trading State Alignment & Engine Validation
+
+Phase 27.5 — Goals Engine Persistence and State Hydration
+
+Include database schemas, API summaries, and sample audit log entries.
+
+Architect review ✅ PASS once:
+
+Trading toggle and Walter commands accurately reflect real engine status.
+
+Goals Engine retains and reloads edits across navigation and restart.
+
+D. Expected Outcome
+
+Trading State: Fully synchronized between frontend, backend, and cluster.
+
+Goals Engine: Edits persist permanently and hydrate on every return.
+
+System Health: No desynchronization, no “cannot stop” errors, no goal reversion.

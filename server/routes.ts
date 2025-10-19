@@ -1053,12 +1053,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 8.5 Addendum K.4: Returns DUAL-MODE data (both live and paper) regardless of engine status
+  // Phase 27.4.2: Updated to use system_context as single source of truth
   app.get('/api/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const globalContextId = 'default';
-      const user = await storage.getUser(userId);
-      const currentMode = (user?.tradingMode || 'paper') as 'live' | 'paper';
+      
+      // Phase 27.4.2: Get trading state from system_context (single source of truth)
+      const systemContext = await storage.getSystemContext(userId);
+      const currentMode = (systemContext?.trading_mode || 'paper') as 'live' | 'paper';
+      const isEngineActive = systemContext?.is_engine_active || false;
       
       // Check paper simulation engine status (system-wide)
       const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
@@ -1101,6 +1105,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[Addendum-K.4.1] LiveDataSource = Database (balance: $${liveBalance}, strategies: ${liveActiveStrategies.length}, engine: ${isLiveEngineRunning ? 'running' : 'stopped'})`);
       console.log(`[Addendum-K.4.1] PaperDataSource = Database (balance: $${paperBalance}, strategies: ${paperActiveStrategies.length}, engine: ${isPaperSimRunning ? 'running' : 'stopped'})`);
       
+      // Phase 27.4.2: Log system_context state verification
+      console.log(`[Phase-27.4.2] system_context: mode=${currentMode}, engine_active=${isEngineActive}, last_update=${systemContext?.last_update || 'N/A'}`);
+      
       // Calculate metrics for current mode
       const filteredPairs = watchlist.length;
       const activeTradesCount = activeTrades.length;
@@ -1114,10 +1121,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const lastTickISO = new Date().toISOString();
       
-      // Return dual-mode structure with source metadata (Phase 8.5 Addendum K.4.1)
+      // Return dual-mode structure with source metadata (Phase 8.5 Addendum K.4.1 + Phase 27.4.2)
       res.json({
         currentMode,
-        dataSource: 'database', // Phase 8.5 Addendum K.4.1: Always sourced from database
+        isEngineActive, // Phase 27.4.2: Add system_context engine active state
+        dataSource: 'system_context', // Phase 27.4.2: Now sourced from system_context
         live: {
           portfolioBalance: liveBalance,
           activeStrategies: liveActiveStrategies,

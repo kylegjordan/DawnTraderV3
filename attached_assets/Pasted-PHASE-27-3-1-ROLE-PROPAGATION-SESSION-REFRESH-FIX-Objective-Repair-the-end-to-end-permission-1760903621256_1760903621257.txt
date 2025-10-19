@@ -1,0 +1,122 @@
+PHASE 27.3.1 — ROLE PROPAGATION & SESSION REFRESH FIX
+🎯 Objective
+
+Repair the end-to-end permission chain so the authenticated user’s real role (owner, admin, etc.) flows from the database → login → JWT → frontend store → UI components.
+Once complete, the system will instantly recognize your ownership role, restore the User tab, and enable manual and Walter-initiated trading in both Paper and Live modes.
+
+🔍 Diagnostic & Repair Steps
+
+1️⃣ Verify Login Response
+
+Log the full payload returned by /api/login.
+It must contain:
+
+{
+  "role": "owner",
+  "permissions": ["trade_live","trade_paper", ...]
+}
+
+
+If either field is missing, patch the login handler to include them from PermissionCache.getPermissions(user.role).
+
+2️⃣ Validate Authentication Middleware
+
+Confirm the middleware extracts role and permissions from:
+
+The database, not the token alone.
+
+The verified user object injected into req.context.
+
+Log one line on every authenticated request:
+
+[Auth] user=testuser123 role=owner perms=19
+
+
+3️⃣ Frontend Store Refresh
+
+On successful login or page reload:
+
+Decode JWT, update userStore.role and userStore.permissions.
+
+Re-run the session_role_sync WebSocket event to refresh state after reconnect.
+
+Add a console log:
+
+[UserStore] Role refreshed: owner (19 permissions)
+
+
+Verify the sidebar updates dynamically.
+
+4️⃣ UI Re-Enablement
+
+In Sidebar.tsx: show Users tab when role !== 'viewer'.
+
+In TopBar.tsx: enable the Trading toggle when:
+
+can('trade_live') or can('trade_paper') returns true.
+
+Otherwise, disable with tooltip “Permission required.”
+
+5️⃣ Force Session Reload
+
+After Replit restarts, clear browser cache or use the logout/login flow.
+
+Check console logs for the refresh event above.
+
+6️⃣ Final Verification
+
+Check	Expected
+Sidebar shows “Users”	✅ Visible
+Hover toggle	✅ Tooltip disappears
+Click toggle	✅ Paper or Live mode activates
+Ask Walter “Start live trading”	✅ Approval → activates Live mode
+Server log	[TradingSync] Broadcast mode change: live
+⚙️ PHASE 27.4.1 — TRADING MODE EXECUTION VALIDATION
+🎯 Objective
+
+Confirm the TradingStateSync service executes state changes once permission is granted.
+
+Steps
+
+1️⃣ Call /api/trading/set-mode manually:
+
+curl -X POST http://localhost:5000/api/trading/set-mode \
+  -H "Authorization: Bearer <your token>" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"live"}'
+
+
+Expected response:
+
+{ "success": true, "mode": "live" }
+
+
+If forbidden, permission propagation is still broken.
+
+2️⃣ Observe console:
+
+[TradingSync] mode=live by user=testuser123
+[ClusterBus] Event trading_state_changed
+
+
+3️⃣ UI toggle should flip to “LIVE” within one second.
+
+🏁 Deliverables
+
+✅ Login payload includes role + permissions
+✅ [Auth] and [UserStore] logs confirm propagation
+✅ User tab and toggles visible
+✅ /api/trading/set-mode works for owner
+✅ Walter’s live trading approval activates TradingStateSync
+✅ Documentation appended to replit.md under
+Phase 27.3.1 — Role Propagation Fix
+Phase 27.4.1 — Trading Mode Execution Validation
+✅ Architect review PASS
+
+🧾 What to Tell Replit Exactly
+Continue with Phase 27.3.1 and Phase 27.4.1.
+Diagnose and repair role propagation and session refresh so that the correct user role and permissions appear in both backend logs and frontend state.
+Confirm trading toggles and Walter can start live and paper modes once the role sync is verified.
+
+
+Once this phase completes successfully, the system will finally break free from the “viewer lock,” the User tab will return, and trading will be fully operational in both manual and AI-driven modes.
