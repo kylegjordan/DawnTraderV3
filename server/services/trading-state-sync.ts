@@ -28,6 +28,9 @@ export class TradingStateSync {
   constructor() {
     // Listen for cluster bus events to synchronize state across services
     this.setupClusterBusListeners();
+    
+    // Phase 27.F.2: Start reconciliation guard (checks every 15 seconds)
+    this.startReconciliationGuard();
   }
 
   /**
@@ -250,6 +253,76 @@ export class TradingStateSync {
         await this.setTradingMode(userId, mode, changedBy || 'system', reason || 'External request');
       }
     });
+  }
+
+  /**
+   * Phase 27.F.2: Broadcast full trading state update to user
+   * Called after any start/stop/mode change action
+   */
+  async broadcastUserUpdate(userId: string): Promise<void> {
+    try {
+      const context = await storage.getSystemContext(userId);
+      
+      if (!context) {
+        console.warn(`[TradingSync] No context found for user ${userId}, skipping broadcast`);
+        return;
+      }
+      
+      const payload = {
+        userId,
+        mode: context.tradingMode,
+        active: context.isEngineActive || false,
+        timestamp: new Date().toISOString(),
+        lastChange: context.lastModeChange,
+        changedBy: context.changedBy
+      };
+      
+      await contextBridge.broadcast({
+        type: 'trading_state_changed',
+        payload,
+        userId, // Scope to specific user
+        mode: context.tradingMode
+      });
+      
+      console.log(`[TradingSync] Broadcasted state update for user ${userId}: mode=${payload.mode}, active=${payload.active}`);
+    } catch (error) {
+      console.error(`[TradingSync] Error broadcasting update for user ${userId}:`, error);
+    }
+  }
+
+  /**
+   * Phase 27.F.2: Reconciliation Guard
+   * Periodically checks for DB/cache mismatches and re-broadcasts state
+   */
+  private startReconciliationGuard(): void {
+    setInterval(async () => {
+      try {
+        // Get all users with system context (in production, this would be scoped better)
+        // For now, we'll reconcile users we have in memory
+        for (const [userId, cachedMode] of this.currentMode.entries()) {
+          const context = await storage.getSystemContext(userId);
+          
+          if (!context) {
+            continue;
+          }
+          
+          // Check for mode mismatch
+          if (context.tradingMode !== cachedMode) {
+            console.log(`[ReconciliationGuard] Detected mode mismatch for user ${userId}: cache=${cachedMode}, db=${context.tradingMode}`);
+            
+            // Update cache from DB (DB is source of truth)
+            this.currentMode.set(userId, context.tradingMode);
+            
+            // Re-broadcast to sync all clients
+            await this.broadcastUserUpdate(userId);
+          }
+        }
+      } catch (error) {
+        console.error('[ReconciliationGuard] Error during reconciliation:', error);
+      }
+    }, 15000); // Run every 15 seconds
+    
+    console.log('[ReconciliationGuard] Started (checks every 15s)');
   }
 
   /**

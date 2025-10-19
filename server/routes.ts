@@ -953,11 +953,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Trading Engine Control
+  // Phase 27.F.2: Trading Engine Control - Start with deterministic state broadcasting
   app.post('/api/trading/start', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode } = req.body; // 'live' or 'paper'
+      
+      console.log(`[TradingStart] User ${userId} requesting start in ${mode} mode`);
       
       // Get API credentials from environment secrets only
       const apiKey = process.env.KRAKEN_API_KEY;
@@ -980,16 +982,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await engine.start();
       await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
       
-      res.json({ status: 'started', mode });
+      // Phase 27.F.2: Update system_context and broadcast state
+      const { tradingStateSync } = await import('./services/trading-state-sync.js');
+      await tradingStateSync.setEngineActive(userId, true);
+      await tradingStateSync.broadcastUserUpdate(userId);
+      
+      // Get current context for deterministic response
+      const context = await storage.getSystemContext(userId);
+      
+      console.log(`[TradingStart] Completed start for user ${userId} mode=${mode} active=true`);
+      
+      res.json({ 
+        success: true,
+        mode: context?.tradingMode || mode,
+        active: true,
+        sessionId: null // Session ID tracking can be added later if needed
+      });
     } catch (error) {
-      console.error('Error starting trading:', error);
+      console.error('[TradingStart] Error starting trading:', error);
       res.status(500).json({ error: 'Failed to start trading' });
     }
   });
 
+  // Phase 27.F.2: Trading Engine Control - Stop with deterministic state broadcasting
   app.post('/api/trading/stop', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      
+      console.log(`[TradingStop] User ${userId} requesting stop`);
       
       const engine = tradingEngines.get(userId);
       if (engine) {
@@ -998,9 +1018,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.updateUser(userId, { tradingStatus: 'stopped' });
       
-      res.json({ status: 'stopped' });
+      // Phase 27.F.2: Update system_context.is_engine_active=false and broadcast
+      const { tradingStateSync } = await import('./services/trading-state-sync.js');
+      await tradingStateSync.setEngineActive(userId, false);
+      await tradingStateSync.broadcastUserUpdate(userId);
+      
+      // Get current context for deterministic response
+      const context = await storage.getSystemContext(userId);
+      
+      console.log(`[TradingStop] Completed stop for user ${userId} mode=${context?.tradingMode} active=false`);
+      
+      res.json({ 
+        success: true,
+        mode: context?.tradingMode || 'paper',
+        active: false,
+        sessionId: null
+      });
     } catch (error) {
-      console.error('Error stopping trading:', error);
+      console.error('[TradingStop] Error stopping trading:', error);
       res.status(500).json({ error: 'Failed to stop trading' });
     }
   });

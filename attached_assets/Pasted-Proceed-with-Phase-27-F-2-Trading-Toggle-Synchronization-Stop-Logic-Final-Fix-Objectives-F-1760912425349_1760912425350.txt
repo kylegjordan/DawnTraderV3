@@ -1,0 +1,55 @@
+Proceed with Phase 27.F.2 — Trading Toggle Synchronization & Stop Logic Final Fix.
+
+Objectives:
+Fix UI/Backend synchronization so the trading toggle accurately reflects start/stop state in both Paper and Live modes.
+
+Tasks:
+
+1. BACKEND — Confirm and Broadcast Trading State on Every Toggle
+   - In trading-state-sync.ts:
+     a. After any start or stop action, emit a WebSocket event:
+        { userId, mode, active, timestamp }.
+     b. Include current system_context row in payload (mode, is_engine_active).
+     c. Add [TradingSync] log confirming broadcast.
+   - Ensure /api/trading/stop updates system_context.is_engine_active=false
+     and immediately calls tradingStateSync.broadcastUserUpdate(userId).
+
+2. BACKEND — Deterministic Stop Confirmation
+   - Modify stop handler to return the exact new state:
+     { success:true, mode:'live', active:false, sessionId:null }.
+   - Log [TradingStop] Completed stop for user=<id> mode=<mode>.
+
+3. FRONTEND — WebSocket & Store Updates
+   - In TopBar or useTrading hook:
+     a. Listen for 'trading_state_changed' events.
+     b. Update tradingStore.active based on payload.active.
+     c. Trigger a UI re-render on state change.
+     d. Add console log [WS] Trading state updated: {mode, active}.
+   - On toggle click:
+     a. Disable the button (isPending=true).
+     b. Call /api/trading/start or /api/trading/stop accordingly.
+     c. Optimistically update UI, then reconcile when WS event arrives.
+     d. If no event within 2s, poll /api/trading/status and sync manually.
+
+4. FRONTEND — Ensure Header Reflects Active State
+   - In ModeBanner or TopBar header section, derive display directly from
+     tradingStore.active and mode.
+   - Remove any local `isTradingActive` variable not bound to store state.
+
+5. RECONCILIATION GUARD (optional safety)
+   - Adjust the 15-second guard to also re-emit the WS state if a mismatch
+     is detected between DB and cache.
+
+Verification:
+✅ Start Paper → Toast shows “Trading Active,” header flips to ACTIVE.
+✅ Stop Paper → Toast shows “Trading Halted,” header flips to STOPPED.
+✅ Switch to Live → Retains accurate state.
+✅ Start Live → Shows ACTIVE immediately.
+✅ Stop Live → Works from both UI and Walter.
+✅ Refresh → Mode and state persist.
+
+Deliverables:
+✅ UI and backend trading toggle fully synchronized.
+✅ Logs show [TradingStart]/[TradingStop] events followed by [WS Update].
+✅ Update replit.md under “Phase 27.F.2 — Trading Toggle Synchronization Fix”.
+✅ Architect review PASS.
