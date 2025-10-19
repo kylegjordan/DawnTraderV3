@@ -1750,17 +1750,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const { mode, limit = 50 } = req.query;
       
-      const conditions: any[] = [eq(tuningEvent.userId, userId)];
-      if (mode) {
-        conditions.push(eq(tuningEvent.mode, mode as string));
-      }
-      
-      const events = await db
-        .select()
-        .from(tuningEvent)
-        .where(and(...conditions))
-        .orderBy(desc(tuningEvent.createdAt))
-        .limit(Number(limit));
+      const events = await storage.getTuningEvents({
+        userId,
+        mode: mode as string | undefined,
+        limit: Number(limit) || 50
+      });
       
       res.json(events);
     } catch (error: any) {
@@ -1774,18 +1768,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const { mode } = req.query;
       
-      if (!mode) {
-        return res.status(400).json({ error: 'mode parameter required' });
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ error: 'Valid mode parameter required (live or paper)' });
       }
       
-      const [policy] = await db
-        .select()
-        .from(tuningPolicy)
-        .where(and(
-          eq(tuningPolicy.userId, userId),
-          eq(tuningPolicy.mode, mode as string)
-        ))
-        .limit(1);
+      const policy = await storage.getTuningPolicy({ userId, mode: mode as 'live' | 'paper' });
       
       if (!policy) {
         // Return default policy if none exists
@@ -1812,53 +1799,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const { mode, aggressiveness = 'balanced', fieldBounds = {} } = req.body;
       
-      if (!mode) {
-        return res.status(400).json({ error: 'mode is required' });
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ error: 'Valid mode is required (live or paper)' });
       }
       
-      // Check if policy exists
-      const [existingPolicy] = await db
-        .select()
-        .from(tuningPolicy)
-        .where(and(
-          eq(tuningPolicy.userId, userId),
-          eq(tuningPolicy.mode, mode)
-        ))
-        .limit(1);
-      
-      if (existingPolicy) {
-        // Update existing policy
-        const [updated] = await db
-          .update(tuningPolicy)
-          .set({
-            enabled: true,
-            aggressiveness,
-            fieldBounds,
-            lastUpdated: new Date()
-          })
-          .where(eq(tuningPolicy.id, existingPolicy.id))
-          .returning();
-        
-        return res.json({ success: true, policy: updated });
+      const validAggressiveness = ['conservative', 'balanced', 'aggressive'];
+      if (aggressiveness && !validAggressiveness.includes(aggressiveness)) {
+        return res.status(400).json({ error: 'Invalid aggressiveness level' });
       }
       
-      // Create new policy
-      const [newPolicy] = await db
-        .insert(tuningPolicy)
-        .values({
-          userId,
-          mode,
-          enabled: true,
-          aggressiveness,
-          fieldBounds,
-          maxStepPercent: '10.00',
-          cooldownMinutes: 60,
-          maxDailyAdjustments: 10,
-          currentCounters: { adjustmentsToday: 0, reverts: 0 }
-        })
-        .returning();
+      const policy = await storage.upsertTuningPolicy({
+        userId,
+        mode,
+        enabled: true,
+        aggressiveness,
+        fieldBounds,
+        maxStepPercent: '10.00',
+        cooldownMinutes: 60,
+        maxDailyAdjustments: 10,
+        currentCounters: { adjustmentsToday: 0, reverts: 0 }
+      });
       
-      res.json({ success: true, policy: newPolicy });
+      res.json({ success: true, policy });
     } catch (error: any) {
       console.error('[TuningAPI] Error enabling tuning:', error);
       res.status(500).json({ error: error.message });
@@ -1870,23 +1832,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const { mode } = req.body;
       
-      if (!mode) {
-        return res.status(400).json({ error: 'mode is required' });
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ error: 'Valid mode is required (live or paper)' });
       }
       
-      const [updated] = await db
-        .update(tuningPolicy)
-        .set({
-          enabled: false,
-          lastUpdated: new Date()
-        })
-        .where(and(
-          eq(tuningPolicy.userId, userId),
-          eq(tuningPolicy.mode, mode)
-        ))
-        .returning();
+      const policy = await storage.upsertTuningPolicy({
+        userId,
+        mode,
+        enabled: false
+      });
       
-      res.json({ success: true, policy: updated });
+      res.json({ success: true, policy });
     } catch (error: any) {
       console.error('[TuningAPI] Error disabling tuning:', error);
       res.status(500).json({ error: error.message });
@@ -1903,14 +1859,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Fetch the event to rollback
-      const [event] = await db
-        .select()
-        .from(tuningEvent)
-        .where(and(
-          eq(tuningEvent.id, eventId),
-          eq(tuningEvent.userId, userId)
-        ))
-        .limit(1);
+      const events = await storage.getTuningEvents({ userId, limit: 1000 });
+      const event = events.find(e => e.id === eventId);
       
       if (!event) {
         return res.status(404).json({ error: 'Event not found' });
@@ -1921,27 +1871,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Mark event as reverted
-      await db
-        .update(tuningEvent)
-        .set({ reverted: true })
-        .where(eq(tuningEvent.id, eventId));
+      await storage.updateTuningEvent(eventId, { reverted: true });
       
       // Create a rollback event (new tuning event reversing the change)
-      const [rollbackEvent] = await db
-        .insert(tuningEvent)
-        .values({
-          userId: event.userId,
-          mode: event.mode,
-          field: event.field,
-          oldValue: event.newValue, // Swap old and new
-          newValue: event.oldValue,
-          confidence: '1.00', // Manual rollback is certain
-          reason: `Manual rollback of event ${eventId}`,
-          approvalType: 'manual',
-          status: 'success',
-          reverted: false
-        })
-        .returning();
+      const rollbackEvent = await storage.createTuningEvent({
+        userId: event.userId,
+        mode: event.mode,
+        field: event.field,
+        oldValue: event.newValue, // Swap old and new
+        newValue: event.oldValue,
+        confidence: '1.00', // Manual rollback is certain
+        reason: `Manual rollback of event ${eventId}`,
+        approvalType: 'manual',
+        status: 'success',
+        reverted: false
+      });
       
       res.json({ 
         success: true, 
