@@ -1,0 +1,145 @@
+Phase 27.2 — Inline Approvals + Interactive Notifications (Unified Flow)
+Objective
+
+Make manual approvals (e.g., start_live_trading) actionable directly where you work:
+
+Inline Prompt in Walter’s chat thread (default), or a small overlay above the chat input.
+
+Interactive Notifications (Approve / Reject / Dismiss) when opened from the bell icon.
+
+Keep full audit/provenance; remove “ghost” items.
+
+Tasks
+1) Message Contract (Backend → Frontend)
+
+When an action needs approval, Walter emits a structured payload in his chat message:
+
+{
+  "kind":"approval_request",
+  "traceId":"trace_…",
+  "action":"start_live_trading",
+  "mode":"live",
+  "risk_pct":3.0,
+  "status":"pending",
+  "display_mode":"inline",   // "inline" | "notification"
+  "expires_in_sec":60
+}
+
+
+Persist a matching row in your approval/audit table (same traceId).
+
+2) Inline Approval Prompt (Chat)
+
+New React component: ApprovalPrompt.tsx
+
+Rendered directly in the chat stream when a message contains kind:"approval_request" and display_mode:"inline".
+
+Show:
+
+Title (“Manual approval required”)
+
+Summary: Action, Mode, Risk badge
+
+Buttons: ✅ Approve, ❌ Reject, ✖ Dismiss
+
+Countdown (optional) to expires_in_sec
+
+Behavior:
+
+Approve → POST /api/intent/approve { traceId }
+
+Reject → POST /api/intent/reject { traceId }
+
+Dismiss → POST /api/intent/dismiss { traceId } (no execution)
+
+On success, replace the card with Walter’s confirmation line:
+
+“✅ Approved (traceId…) — live trading started.”
+
+“❌ Rejected (traceId…) — no change.”
+
+“⏭️ Dismissed — you can act later from the bell.”
+
+3) Interactive Notification Card
+
+Component: InteractiveNotification.tsx
+
+In the bell menu, clicking an approval item opens this card (dropdown panel or small modal).
+
+The card shows the same three options (Approve/Reject/Dismiss) and calls the same endpoints.
+
+On Approve/Reject, also call POST /api/intent/clear { traceIds:[…] } to remove it from the list.
+
+On Dismiss, keep in list but mark as read.
+
+4) API Endpoints (if not present)
+
+POST /api/intent/approve → executes intent; writes audit decision.
+
+POST /api/intent/reject → writes decision; no execution.
+
+POST /api/intent/dismiss → marks status dismissed.
+
+POST /api/intent/clear → sets cleared_at for resolved items; response { cleared:N }.
+
+All return { success, message, traceId, status }.
+
+5) Real-Time Sync
+
+After any decision, emit a small WS event approval_update:{ traceId, status } so:
+
+The chat prompt, the bell badge count, and the Approvals tab stay in sync.
+
+6) One-Time “Ghost” Cleanup
+
+Admin utility endpoint: POST /api/intent/cleanup-ghosts
+
+Finds approvals with status in ('approved','rejected') but cleared_at IS NULL and clears them.
+
+Returns a summary { cleared:N, skipped:M }.
+
+Run once after deployment to wipe the stuck items you saw.
+
+7) UX Details
+
+Keyboard: Enter = Approve, Esc = Dismiss (Inline + Modal)
+
+Color: Green=Approve, Red=Reject, Gray=Dismiss
+
+Safety copy on Approve: “You’re approving LIVE action at 3.00% risk.” (mode/risk dynamic)
+
+Timeout: If prompt expires, convert to a passive info chip with “Re-open” button (re-opens interactive card).
+
+8) Logging & Audit
+
+Every user decision writes:
+
+traceId, userId, action, decision, ts, preStateHash, postStateHash
+
+Chat confirmation includes the traceId for provenance.
+
+9) Documentation
+
+Add “Phase 27.2 — Inline Approvals + Interactive Notifications” to replit.md:
+
+Message schema, endpoints, UI screenshots, and the cleanup command/results.
+
+Tests & Acceptance
+Test	Steps	Expected
+Inline prompt appears	“Walter, start live trading.”	Approval card shows in chat instantly.
+Approve inline	Click ✅	Walter confirms; trading state → ACTIVE; bell item cleared.
+Reject inline	Click ❌	State unchanged; bell item cleared.
+Dismiss inline	Click ✖	Card closes; bell item remains marked read.
+Notification click	Click bell → click item	Interactive card opens (no auto-action).
+Approve via bell	Approve in card	Same result as inline; removed from list.
+Ghost cleanup	Call /api/intent/cleanup-ghosts	Returns cleared count; list matches reality.
+Audit	Query /api/intent/audit?traceId=…	Decision recorded with hashes & user.
+WS sync	Approve in chat	Bell badge decrements without refresh.
+
+Acceptance Criteria
+
+Zero “unclickable” or “non-disappearing” notifications.
+
+Inline or modal always offers Approve/Reject/Dismiss (no implied action).
+
+All decisions auditable and reflected across chat, bell, and Approvals tab in real time.

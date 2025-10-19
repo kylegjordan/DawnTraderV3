@@ -38,7 +38,8 @@ export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);
 export const opportunityTypeEnum = pgEnum("opportunity_type", ["long_term_hold", "moonshot", "momentum", "breakout", "mean_reversion"]);
 export const opportunityStatusEnum = pgEnum("opportunity_status", ["new", "watchlist", "executed", "dismissed", "expired"]);
 export const dailyBriefStatusEnum = pgEnum("daily_brief_status", ["in_progress", "final"]);
-export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected", "cancelled"]);
+export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected", "cancelled", "dismissed"]);
+export const approvalDisplayModeEnum = pgEnum("approval_display_mode", ["inline", "notification"]);
 export const walterChatStatusEnum = pgEnum("walter_chat_status", ["active", "archived"]);
 export const walterMemoryTypeEnum = pgEnum("walter_memory_type", ["observation", "decision", "result", "goal", "lesson", "purpose", "system_state", "development_history", "contextual_reference"]);
 export const patchSeverityEnum = pgEnum("patch_severity", ["critical", "high", "medium", "low", "info"]);
@@ -649,6 +650,13 @@ export const walterPendingApprovals = pgTable("walter_pending_approvals", {
   rejectedAt: timestamp("rejected_at", { withTimezone: true }),
   approvedBy: varchar("approved_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  // Phase 27.2: Inline Approvals + Interactive Notifications
+  traceId: varchar("trace_id", { length: 100 }).unique(), // Unique trace ID for approval request
+  action: varchar("action", { length: 100 }), // Action type (e.g., "start_live_trading")
+  displayMode: approvalDisplayModeEnum("display_mode").default("inline"), // Where to show: inline chat or notification
+  expiresAt: timestamp("expires_at", { withTimezone: true }), // When approval request expires
+  dismissedAt: timestamp("dismissed_at", { withTimezone: true }), // When user dismissed (no action)
+  clearedAt: timestamp("cleared_at", { withTimezone: true }), // When removed from notification list
 });
 
 // Walter chat logs (all messages and interactions)
