@@ -25,6 +25,8 @@ import { parseIntent } from "./services/intent-parser";
 import { CommandRouter } from "./services/command-router";
 import { commandLogger } from "./services/command-logger";
 import { nlaiInterpreter } from "./services/nlai-interpreter";
+import { nlaiExecutionBroker } from "./services/nlai-execution-broker";
+import ExecutionPolicyController from "./services/execution-policy-controller";
 import { textToSpeech, estimateTTSCost } from "./services/walter-tts";
 import { ingestLearningFile, getIngestionHistory } from "./services/walter-ingest";
 import OpenAI from "openai";
@@ -63,6 +65,10 @@ const aiAnalyst = new AIAnalyst();
 (global as any).tradingEngines = tradingEngines;
 const riskManager = new RiskManager();
 const commandRouter = new CommandRouter(tradingEngines);
+
+// Phase 22: Initialize ExecutionPolicyController for autonomous execution layer
+const executionPolicyController = new ExecutionPolicyController(storage as any);
+nlaiExecutionBroker.initialize(storage, executionPolicyController);
 
 // Phase 6.8: Store pending confirmations per user for bare "yes/no" replies
 const userPendingConfirmations = new Map<string, string>(); // userId -> confirmationId
@@ -6926,7 +6932,12 @@ Please:
       });
       
       // Phase 19+: Try NLAI interpreter first for simulation and action commands
-      const nlaiResponse = await nlaiInterpreter.interpret(userId, content.trim());
+      // Phase 22: Pass mode (default to paper for safety) and chatSessionId for execution logging
+      const nlaiResponse = await nlaiInterpreter.interpret(userId, content.trim(), {
+        mode: 'paper', // Default to paper mode for safety in chat context
+        chatSessionId: id,
+        source: 'chat',
+      });
       let aiResponse: string;
       
       // Get pending confirmation ID for this user FIRST

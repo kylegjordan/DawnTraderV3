@@ -1,4 +1,6 @@
 import { nlaiActionRegistry, type ActionIntent, type ActionResult } from './nlai-action-registry';
+import type ExecutionPolicyController from './execution-policy-controller';
+import type { IStorage } from '../storage';
 
 interface ExecutionLog {
   timestamp: Date;
@@ -14,24 +16,100 @@ export class NLAIExecutionBroker {
   private executionLogs: ExecutionLog[] = [];
   private readonly MAX_LOGS = 100;
   private readonly EXECUTION_TIMEOUT_MS = 30000; // 30 seconds
+  private policyController: ExecutionPolicyController | null = null;
+
+  /**
+   * Initialize the broker with ExecutionPolicyController for approval checks
+   */
+  initialize(storage: IStorage, policyController: ExecutionPolicyController): void {
+    this.policyController = policyController;
+    console.log(`[${this.MODULE_NAME}] Initialized with ExecutionPolicyController`);
+  }
 
   async dispatch(
     userId: string,
     actionId: string,
-    intent: ActionIntent
+    intent: ActionIntent,
+    options?: {
+      mode?: 'live' | 'paper';
+      chatSessionId?: string;
+      source?: 'chat' | 'voice' | 'api';
+    }
   ): Promise<ActionResult> {
     const startTime = Date.now();
+    const mode = options?.mode || 'paper'; // Default to paper mode for safety
+    const source = options?.source || 'chat';
     
-    console.log(`[${this.MODULE_NAME}] Dispatching action: ${actionId} for user: ${userId}`);
+    console.log(`[${this.MODULE_NAME}] Dispatching action: ${actionId} for user: ${userId} (${mode} mode)`);
     console.log(`[${this.MODULE_NAME}] Intent:`, intent);
 
+    let executionLogId: string | undefined;
+
     try {
+      // Step 1: Check approval via ExecutionPolicyController
+      if (this.policyController) {
+        const approvalCheck = await this.policyController.evaluateExecution({
+          userId,
+          mode,
+          commandText: intent.originalMessage || '',
+          actionType: actionId,
+          source,
+          chatSessionId: options?.chatSessionId,
+          proposedChanges: intent.extractedValue ? {
+            proposedValue: intent.extractedValue,
+          } : undefined,
+        });
+
+        executionLogId = approvalCheck.executionLogId;
+
+        if (approvalCheck.requiresManualApproval) {
+          console.log(`[${this.MODULE_NAME}] Action ${actionId} requires manual approval - approval ID: ${approvalCheck.approvalId}`);
+          
+          return {
+            success: false,
+            message: approvalCheck.reason || 'This action requires manual approval due to risk assessment.',
+            data: {
+              requiresApproval: true,
+              approvalId: approvalCheck.approvalId,
+              executionLogId,
+              reason: approvalCheck.reason,
+            },
+          };
+        }
+
+        if (!approvalCheck.approved) {
+          console.log(`[${this.MODULE_NAME}] Action ${actionId} not approved: ${approvalCheck.reason}`);
+          
+          return {
+            success: false,
+            message: approvalCheck.reason || 'Action not approved by policy controller.',
+            data: {
+              requiresApproval: false,
+              approved: false,
+              executionLogId,
+            },
+          };
+        }
+
+        console.log(`[${this.MODULE_NAME}] Action ${actionId} auto-approved for execution`);
+      }
+
+      // Step 2: Execute the action
       const result = await Promise.race([
         nlaiActionRegistry.execute(actionId, userId, intent),
         this.timeoutPromise(),
       ]);
 
       const executionTimeMs = Date.now() - startTime;
+
+      // Step 3: Log execution result
+      if (this.policyController && executionLogId) {
+        await this.policyController.logExecutionResult(executionLogId, {
+          success: result.success,
+          message: result.message,
+          details: result.data,
+        });
+      }
 
       this.logExecution({
         timestamp: new Date(),
@@ -55,6 +133,15 @@ export class NLAIExecutionBroker {
         error: error.message,
       };
 
+      // Log execution failure
+      if (this.policyController && executionLogId) {
+        await this.policyController.logExecutionResult(executionLogId, {
+          success: false,
+          message: error.message,
+          details: { stack: error.stack },
+        });
+      }
+
       this.logExecution({
         timestamp: new Date(),
         userId,
@@ -76,10 +163,15 @@ export class NLAIExecutionBroker {
   async dispatchAsync(
     userId: string,
     actionId: string,
-    intent: ActionIntent
+    intent: ActionIntent,
+    options?: {
+      mode?: 'live' | 'paper';
+      chatSessionId?: string;
+      source?: 'chat' | 'voice' | 'api';
+    }
   ): Promise<void> {
     setImmediate(async () => {
-      await this.dispatch(userId, actionId, intent);
+      await this.dispatch(userId, actionId, intent, options);
     });
   }
 

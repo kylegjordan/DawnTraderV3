@@ -17,7 +17,15 @@ export class NaturalLanguageActionInterpreter {
   private readonly MODULE_NAME = 'NLAI-Interpreter';
   private readonly TARGET_LATENCY_MS = 10; // Target < 10ms for intent detection
 
-  async interpret(userId: string, userMessage: string): Promise<NLAIResponse> {
+  async interpret(
+    userId: string,
+    userMessage: string,
+    options?: {
+      mode?: 'live' | 'paper';
+      chatSessionId?: string;
+      source?: 'chat' | 'voice' | 'api';
+    }
+  ): Promise<NLAIResponse> {
     const startTime = Date.now();
     
     console.log(`[${this.MODULE_NAME}] Interpreting message: "${userMessage.substring(0, 60)}..."`);
@@ -50,7 +58,8 @@ export class NaturalLanguageActionInterpreter {
     const executionResult = await nlaiExecutionBroker.dispatch(
       userId,
       actionId,
-      intent
+      intent,
+      options
     );
 
     const totalTime = Date.now() - startTime;
@@ -72,7 +81,15 @@ export class NaturalLanguageActionInterpreter {
     };
   }
 
-  async interpretAsync(userId: string, userMessage: string): Promise<NLAIResponse> {
+  async interpretAsync(
+    userId: string,
+    userMessage: string,
+    options?: {
+      mode?: 'live' | 'paper';
+      chatSessionId?: string;
+      source?: 'chat' | 'voice' | 'api';
+    }
+  ): Promise<NLAIResponse> {
     const startTime = Date.now();
     
     const matched = nlaiActionRegistry.matchIntent(userMessage);
@@ -86,7 +103,7 @@ export class NaturalLanguageActionInterpreter {
 
     const { actionId, intent } = matched;
     
-    await nlaiExecutionBroker.dispatchAsync(userId, actionId, intent);
+    await nlaiExecutionBroker.dispatchAsync(userId, actionId, intent, options);
 
     return {
       isActionable: true,
