@@ -1469,12 +1469,32 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export const insertTradingSettingsSchema = createInsertSchema(tradingSettings).omit({
   id: true,
   updatedAt: true,
+}).extend({
+  riskPerTrade: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxExposurePercent: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  slippageToleranceMajors: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  slippageToleranceMidcaps: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  slippageToleranceSmall: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  stopBufferPercent: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  minVolume: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  minDailyRange: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  minPrice: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxBidAskSpread: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  dailyLossKillSwitch: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  dailyLossWarningTrigger: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxPositionPercent: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  portfolioValue: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 });
 
 export const insertGuardrailsSchema = createInsertSchema(guardrails).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  maxDailyLoss: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxDrawdown: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxPositionSize: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  riskPerTrade: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 });
 
 export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).omit({
