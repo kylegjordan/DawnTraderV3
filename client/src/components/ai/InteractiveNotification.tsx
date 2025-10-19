@@ -68,7 +68,8 @@ export function InteractiveNotification({
   // Use new fields (action, risk_pct) or fall back to old fields (strategyName, projectedRisk)
   const displayName = approval.action || approval.strategyName || approval.parameterName || 'Unknown Action';
   const traceId = approval.traceId || approval.id || 'unknown'; // Fall back to approval.id if traceId not set
-  const risk = approval.risk_pct ?? approval.projectedRisk ?? 0;  // Prefer risk_pct, fallback to projectedRisk
+  // Parse risk to number - projectedRisk comes from database as string
+  const risk = Number(approval.risk_pct ?? approval.projectedRisk ?? 0);
   const mode = approval.mode || 'unknown';
 
   const handleApprove = async (e: React.MouseEvent) => {
