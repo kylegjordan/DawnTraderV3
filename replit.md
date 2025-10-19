@@ -45,24 +45,28 @@ Multi-Domain Orchestration & Cross-Node Learning utilizes a `LearningCoordinator
 
 ## Recent Changes
 
-### Phase 19: Pre-Simulation Diagnostics (October 19, 2025)
+### Phase 19: Screener & Guardrail Mode Isolation (October 19, 2025)
 **Status**: ✅ COMPLETED
 
-Comprehensive validation of mode isolation and persistence infrastructure confirmed all systems are ready for simulation engine implementation:
+Achieved complete independence between paper and live mode settings. Changes in one mode never affect the other, with separate persistence and proper cache invalidation.
 
-**Validated Systems**:
+**Pre-Implementation Diagnostics**:
 - Mode Isolation: `screener_filters` and `guardrails` tables have proper mode column with unique (userId, mode) constraints
 - Persistence Independence: Paper and live modes maintain separate parameter storage with independent timestamps
-- Cache Invalidation: Multi-layer cache clearing (ConfigBob → Cortex → StateAwareness → ContextRefresh → WebSocket broadcast) properly implemented in `configChangeHandler`
+- Cache Invalidation: Multi-layer cache clearing (ConfigBob → Cortex → StateAwareness → ContextRefresh → WebSocket broadcast)
 - Learning Delta Sharing: `agent_learning_delta` table is mode-agnostic, enabling cross-mode knowledge transfer
+- Diagnostic Pass Rate: 8/8 tests (100%)
 
-**Test Results**: 8/8 tests passed (100% pass rate)
+**Implementation Work**:
+- **ScreenerFiltersTab Rebuilt**: Fixed field name mismatch between component and database schema (12 correct fields: minVolume, minPrice, maxPrice, minMarketCap, maxBidAskSpread, rsiMin/Max, volatilityMin/Max, minLiquidity, excludeStablecoins, allowRegulatedOnly)
+- **URL Construction Bug Fixed**: Modified queryClient's default behavior that was joining queryKey arrays to form URLs. Added custom queryFn functions that fetch from correct endpoints (`/api/screeners`) with x-app-mode header instead of mode in URL path
+- **Authentication Fixed**: Updated custom queryFn to use `ensureValidToken()` helper instead of direct localStorage access, resolving 401 errors
 
-**Blocking Issues**: None detected
-
-**Diagnostic Reports**:
-- `/reports/phase19_mode_isolation_diagnostics.md` - Detailed technical report
-- `/reports/phase19_diagnostic_summary.json` - Machine-readable summary
+**Validation Results**:
+- E2E Test: Paper mode displays values (5M, 250M) independently from live mode (1M, 100M)
+- Isolation Verified: Changes in live mode don't affect paper mode values
+- Database Confirmation: Separate timestamps and values per mode
+- Architect Review: **PASS** - No security issues, correct mode isolation, proper authentication
 
 **Readiness**: ✅ CLEARED FOR PHASE 20 (Paper Trading Simulation Engine)
 
