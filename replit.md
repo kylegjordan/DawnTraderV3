@@ -70,6 +70,65 @@ Achieved complete independence between paper and live mode settings. Changes in 
 
 **Readiness**: ✅ CLEARED FOR PHASE 20 (Paper Trading Simulation Engine)
 
+### Phase 20: Walter Simulation Command Routing Restoration (October 19, 2025)
+**Status**: ✅ COMPLETED
+
+Restored Walter's ability to execute paper trading simulation commands by integrating the NLAI (Natural Language Action Interpreter) system into Walter's message processing pipeline.
+
+**Root Cause Identified**:
+- Walter's message handler used outdated `intent-parser.ts` lacking simulation command patterns
+- Complete NLAI system existed (`nlai-action-registry.ts`, `nlai-interpreter.ts`) with correct patterns but wasn't integrated
+- NLAI handlers made HTTP fetch calls without authentication tokens, causing 401 errors
+
+**Implementation**:
+- **Created `paper-sim-service.ts`**: Shared service layer for paper trading simulation
+  - `startPaperSimulation(userId)` - Direct function call for starting simulation
+  - `stopPaperSimulation()` - Direct function call for stopping simulation
+  - `getPaperSimulationStatus()` - Direct function call for status checks
+  - Eliminates HTTP overhead and authentication complexity
+  - Shared by both API endpoints and NLAI handlers
+
+- **Updated `nlai-action-registry.ts`**: Modified handlers to use service functions
+  - Replaced HTTP fetch calls with direct service function calls
+  - No authentication tokens needed (runs in same process)
+  - Handlers: `start_paper_simulation`, `stop_paper_simulation`, `check_simulation_status`
+
+- **Integrated NLAI into `routes.ts`**: Walter message handler now checks NLAI first
+  - Line 6932: `nlaiInterpreter.interpret(userId, content)` runs first
+  - If actionable, uses NLAI execution result with [NLAI] logging
+  - Falls back to old `intent-parser` + `command-router` for trading commands
+  - Maintains backward compatibility with existing commands
+
+- **Created `reports/simulation_engine_intent_audit.md`**: Comprehensive diagnostic report
+  - Documented dual intent systems (old vs. new)
+  - Mapped patterns, endpoints, and service architecture
+  - Detailed repair implementation and validation checklist
+
+**Validation Results**:
+- E2E Test: ✅ PASSED
+  - "start simulation" → Paper trading started successfully
+  - "check simulation status" → Reports ACTIVE
+  - "stop simulation" → Stopped successfully
+- NLAI logs confirm proper routing: `[NLAI] User ${userId} executed: start_paper_simulation`
+- No authentication errors
+- Paper execution engine activates correctly
+
+**Architect Review**: ✅ PASS
+- Service layer implementation correct
+- Global state management safe (operation lock prevents races)
+- No security vulnerabilities
+- Error handling comprehensive
+- Architecture follows best practices
+
+**Benefits**:
+- Zero HTTP overhead for internal simulation commands
+- No authentication complexity
+- Shared logic between API endpoints and NLAI handlers
+- Maintains global operation lock for thread safety
+- Atomic state management with rollback on errors
+
+**Readiness**: ✅ SYSTEM READY - Walter can now control paper trading simulation via natural language
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
