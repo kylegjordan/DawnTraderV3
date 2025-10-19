@@ -6237,6 +6237,11 @@ Provide specific, actionable recommendations.`,
       const updatedGoals = [];
       
       for (const goal of goals) {
+        // Phase 27.5: Get previous value for audit log
+        const previousGoal = mode === 'live'
+          ? await storage.getGoalLive(userId, goal.metricName)
+          : await storage.getGoalPaper(userId, goal.metricName);
+        
         const goalData = {
           userId,
           metricName: goal.metricName,
@@ -6249,6 +6254,26 @@ Provide specific, actionable recommendations.`,
         const result = mode === 'live'
           ? await storage.upsertGoalLive(goalData)
           : await storage.upsertGoalPaper(goalData);
+        
+        // Phase 27.5: Create audit log entry
+        await storage.createGoalAuditLog({
+          userId,
+          mode: mode as 'live' | 'paper',
+          action: previousGoal ? 'updated' : 'created',
+          metricName: goal.metricName,
+          previousValue: previousGoal ? {
+            goalValue: previousGoal.goalValue,
+            actualValue: previousGoal.actualValue,
+            percentAchieved: previousGoal.percentAchieved
+          } : null,
+          newValue: {
+            goalValue: goal.goalValue,
+            actualValue: goal.actualValue,
+            percentAchieved: goal.percentAchieved
+          },
+          source: 'user',
+          metadata: { endpoint: '/api/goals/update' }
+        });
         
         console.log(`[Goals] Saved goal ${goal.metricName} = ${goal.goalValue} (${mode}) -> DB ID: ${result.id}`);
         updatedGoals.push(result);
@@ -6355,6 +6380,11 @@ Please:
       const updatedGoals = [];
       
       for (const goal of goals) {
+        // Phase 27.5: Get previous value for audit log
+        const previousGoal = mode === 'live'
+          ? await storage.getGoalLive(userId, goal.metricName)
+          : await storage.getGoalPaper(userId, goal.metricName);
+        
         const goalData = {
           userId,
           metricName: goal.metricName,
@@ -6367,6 +6397,31 @@ Please:
         const result = mode === 'live'
           ? await storage.upsertGoalLive(goalData)
           : await storage.upsertGoalPaper(goalData);
+        
+        // Phase 27.5: Create audit log entry for AI-applied goals
+        await storage.createGoalAuditLog({
+          userId,
+          mode: mode as 'live' | 'paper',
+          action: 'applied',
+          metricName: goal.metricName,
+          previousValue: previousGoal ? {
+            goalValue: previousGoal.goalValue,
+            actualValue: previousGoal.actualValue,
+            percentAchieved: previousGoal.percentAchieved
+          } : null,
+          newValue: {
+            goalValue: goal.goalValue,
+            actualValue: '0',
+            percentAchieved: '0'
+          },
+          analysisId: analysisId,
+          source: 'ai',
+          metadata: { 
+            endpoint: '/api/goals/apply',
+            aiValidated: true,
+            configChanges: configChanges || {}
+          }
+        });
         
         updatedGoals.push(result);
       }
