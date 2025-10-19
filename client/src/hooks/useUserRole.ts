@@ -69,8 +69,13 @@ export function useUserRole() {
   /**
    * Check if user has a specific permission
    * Phase 27.3: Unified permission check
+   * Phase 27.F.1: Owner and admin roles have all permissions automatically
    */
   const can = (permission: Permission): boolean => {
+    // Owner and admin roles have all permissions
+    if (role === 'owner' || role === 'admin') {
+      return true;
+    }
     return permissions.includes(permission);
   };
 
