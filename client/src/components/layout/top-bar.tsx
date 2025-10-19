@@ -2,6 +2,7 @@ import { Menu, Bell, Clock, Globe, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { InteractiveNotification } from "@/components/ai/InteractiveNotification";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +23,7 @@ import { formatUTCTimeWithDate, formatLocalTimeWithDate, getTimezoneAbbr } from 
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { useWebSocket } from "@/hooks/use-websocket";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +55,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
   const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
   const [, setLocation] = useLocation();
+  const { messages: wsMessages } = useWebSocket();
 
   // Fetch user settings for timezone and time format
   const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
@@ -93,6 +96,19 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, [settings?.timezone, settings?.timeFormat]);
+
+  // Listen for approval_update WebSocket events to refresh notifications in real-time
+  useEffect(() => {
+    const approvalUpdates = wsMessages.filter((msg: any) => msg.type === 'approval_update');
+    if (approvalUpdates.length > 0) {
+      // Get the latest approval update
+      const latestUpdate = approvalUpdates[approvalUpdates.length - 1];
+      console.log('[TopBar] Received approval_update event:', latestUpdate);
+      
+      // Invalidate approvals query to refresh the notification bell
+      queryClient.invalidateQueries({ queryKey: ['/api/walter/pending-approvals'] });
+    }
+  }, [wsMessages, queryClient]);
 
   const { mode: currentMode, setMode } = useTradingMode();
 
@@ -340,67 +356,33 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+            <DropdownMenuContent align="end" className="w-96 max-h-96 overflow-y-auto">
               <DropdownMenuLabel>Walter Approvals (Recent 20)</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {approvalsData && approvalsData.length > 0 ? (
-                <>
+                <div className="flex flex-col gap-2 p-2">
                   {/* Pending approvals first */}
                   {approvalsData.filter((a: any) => a.status === 'pending').map((approval: any) => (
-                    <DropdownMenuItem
+                    <InteractiveNotification
                       key={approval.id}
-                      onClick={() => setLocation('/walter')}
-                      className="cursor-pointer"
-                      data-testid={`approval-${approval.id}`}
-                    >
-                      <div className="flex flex-col gap-1 w-full">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="destructive" className="text-xs">
-                            PENDING
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {approval.projectedRisk}% risk
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{approval.mode}</span>
-                        </div>
-                        <p className="text-sm font-medium">
-                          {approval.strategyName || approval.parameterName}
-                        </p>
-                      </div>
-                    </DropdownMenuItem>
+                      approval={approval}
+                      onClose={() => {
+                        // Dropdown will auto-close if needed, or user can continue reviewing
+                      }}
+                    />
                   ))}
                   
                   {/* Then show recent resolved approvals */}
                   {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => (
-                    <DropdownMenuItem
+                    <InteractiveNotification
                       key={approval.id}
-                      onClick={() => setLocation('/walter')}
-                      className="cursor-pointer opacity-70"
-                      data-testid={`approval-resolved-${approval.id}`}
-                    >
-                      <div className="flex flex-col gap-1 w-full">
-                        <div className="flex items-center gap-2">
-                          <Badge 
-                            variant={approval.status === 'approved' ? 'default' : 'secondary'} 
-                            className="text-xs"
-                          >
-                            {approval.status === 'approved' ? 'APPROVED' : 'REJECTED'}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {approval.projectedRisk}% risk
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{approval.mode}</span>
-                        </div>
-                        <p className="text-sm font-medium">
-                          {approval.strategyName || approval.parameterName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(approval.status === 'approved' ? approval.approvedAt! : approval.rejectedAt!).toLocaleString()}
-                        </p>
-                      </div>
-                    </DropdownMenuItem>
+                      approval={approval}
+                      onClose={() => {
+                        // Dropdown will auto-close if needed
+                      }}
+                    />
                   ))}
-                </>
+                </div>
               ) : (
                 <div className="px-2 py-6 text-center">
                   <p className="text-sm text-muted-foreground">No approvals</p>
