@@ -1,4 +1,5 @@
 import type { AuthenticatedRequest } from '../routes';
+import { startPaperSimulation, stopPaperSimulation, getPaperSimulationStatus } from './paper-sim-service';
 
 export interface ActionIntent {
   verb: string;
@@ -39,38 +40,7 @@ export class NLAIActionRegistry {
       ],
       category: 'simulation',
       handler: async (userId: string, intent: ActionIntent) => {
-        try {
-          const baseUrl = process.env.API_URL || 'http://localhost:5000';
-          const response = await fetch(`${baseUrl}/api/paper-sim/start`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': userId,
-            },
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            return {
-              success: false,
-              message: `Failed to start paper trading simulation: ${error.error || 'Unknown error'}`,
-              error: error.error,
-            };
-          }
-
-          const data = await response.json();
-          return {
-            success: true,
-            message: 'Paper trading simulation started successfully. Monitoring live market data and executing trades in simulation mode.',
-            data,
-          };
-        } catch (error: any) {
-          return {
-            success: false,
-            message: `Error starting paper trading simulation: ${error.message}`,
-            error: error.message,
-          };
-        }
+        return await startPaperSimulation(userId);
       },
       description: 'Start paper trading simulation',
       requiredAuth: true,
@@ -85,38 +55,7 @@ export class NLAIActionRegistry {
       ],
       category: 'simulation',
       handler: async (userId: string, intent: ActionIntent) => {
-        try {
-          const baseUrl = process.env.API_URL || 'http://localhost:5000';
-          const response = await fetch(`${baseUrl}/api/paper-sim/stop`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': userId,
-            },
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            return {
-              success: false,
-              message: `Failed to stop paper trading simulation: ${error.error || 'Unknown error'}`,
-              error: error.error,
-            };
-          }
-
-          const data = await response.json();
-          return {
-            success: true,
-            message: 'Paper trading simulation stopped successfully. Final report generated.',
-            data,
-          };
-        } catch (error: any) {
-          return {
-            success: false,
-            message: `Error stopping paper trading simulation: ${error.message}`,
-            error: error.message,
-          };
-        }
+        return await stopPaperSimulation();
       },
       description: 'Stop paper trading simulation',
       requiredAuth: true,
@@ -234,24 +173,7 @@ export class NLAIActionRegistry {
       category: 'simulation',
       handler: async (userId: string, intent: ActionIntent) => {
         try {
-          const baseUrl = process.env.API_URL || 'http://localhost:5000';
-          const response = await fetch(`${baseUrl}/api/paper-sim/status`, {
-            method: 'GET',
-            headers: {
-              'x-user-id': userId,
-            },
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            return {
-              success: false,
-              message: `Failed to check simulation status: ${error.error || 'Unknown error'}`,
-              error: error.error,
-            };
-          }
-
-          const statusData = await response.json();
+          const statusData = await getPaperSimulationStatus();
           const isRunning = statusData.isRunning;
           
           return {

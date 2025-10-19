@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-10-19T11:19:36.908Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all time intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "No active trades or recent learning cycles, with zero opportunities generated, suggesting a potential issue with the trading algorithms or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate and potentially adjust trading strategies to ensure they are aligned with current market conditions and capable of generating opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate review of CPU usage to identify and address any processes causing excessive load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Analyze the performance of active trading strategies and make necessary adjustments or enhancements.",
+      "rationale": "Ensuring trading strategies are effective is crucial for generating opportunities and maintaining profitability."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review AI system configurations and ensure it is correctly set up to learn and adapt to market changes.",
+      "rationale": "The AI system should be actively learning and generating opportunities to support trading decisions."
+    }
+  ],
+  "urgencyLevel": "high"
+}
