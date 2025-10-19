@@ -552,6 +552,15 @@ export interface IStorage {
   updateSystemContext(userId: string, updates: Partial<SystemContext>): Promise<SystemContext>;
 }
 
+// Phase 27.F: Canonical metric key generator for goals engine
+// Ensures consistent lookups regardless of metric name variations (case, spaces, special chars)
+export function canonicalizeMetricName(metricName: string): string {
+  return metricName
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '') // Remove spaces, special chars
+    .trim();
+}
+
 export class DatabaseStorage implements IStorage {
   // User methods
   async getUser(id: string): Promise<User | undefined> {
@@ -2120,11 +2129,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive> {
-    const existing = await this.getGoalLive(goal.userId, goal.metricName);
+    // Phase 27.F: Use metric_key for lookups to prevent duplicates
+    const metricKey = goal.metricKey || canonicalizeMetricName(goal.metricName);
+    const [existing] = await db
+      .select()
+      .from(userGoalsLive)
+      .where(and(
+        eq(userGoalsLive.userId, goal.userId),
+        eq(userGoalsLive.metricKey, metricKey)
+      ))
+      .limit(1);
+    
     if (existing) {
-      return this.updateGoalLive(existing.id, goal);
+      return this.updateGoalLive(existing.id, { ...goal, metricKey });
     } else {
-      return this.createGoalLive(goal);
+      return this.createGoalLive({ ...goal, metricKey });
     }
   }
 
@@ -2168,11 +2187,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper> {
-    const existing = await this.getGoalPaper(goal.userId, goal.metricName);
+    // Phase 27.F: Use metric_key for lookups to prevent duplicates
+    const metricKey = goal.metricKey || canonicalizeMetricName(goal.metricName);
+    const [existing] = await db
+      .select()
+      .from(userGoalsPaper)
+      .where(and(
+        eq(userGoalsPaper.userId, goal.userId),
+        eq(userGoalsPaper.metricKey, metricKey)
+      ))
+      .limit(1);
+    
     if (existing) {
-      return this.updateGoalPaper(existing.id, goal);
+      return this.updateGoalPaper(existing.id, { ...goal, metricKey });
     } else {
-      return this.createGoalPaper(goal);
+      return this.createGoalPaper({ ...goal, metricKey });
     }
   }
 

@@ -1763,14 +1763,19 @@ export const insertFeatureSnapshotSchema = createInsertSchema(featureSnapshots).
 });
 
 // Goals Engine insert schemas
+// Phase 27.F: Make metric_key optional since it's auto-generated from metric_name
 export const insertUserGoalLiveSchema = createInsertSchema(userGoalsLive).omit({
   id: true,
   lastUpdated: true,
+}).extend({
+  metricKey: z.string().optional(),
 });
 
 export const insertUserGoalPaperSchema = createInsertSchema(userGoalsPaper).omit({
   id: true,
   lastUpdated: true,
+}).extend({
+  metricKey: z.string().optional(),
 });
 
 export const insertGoalAnalysisHistoryLiveSchema = createInsertSchema(goalAnalysisHistoryLive).omit({
