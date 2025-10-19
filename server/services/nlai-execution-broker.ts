@@ -1,6 +1,7 @@
 import { nlaiActionRegistry, type ActionIntent, type ActionResult } from './nlai-action-registry';
 import type ExecutionPolicyController from './execution-policy-controller';
 import type { IStorage } from '../storage';
+import { clusterBus } from './cluster-bus';
 
 interface ExecutionLog {
   timestamp: Date;
@@ -120,6 +121,22 @@ export class NLAIExecutionBroker {
         executionTimeMs,
       });
 
+      // Step 4: Emit cluster bus event for coordination (Phase 22)
+      try {
+        await clusterBus.publish('task_completed', {
+          taskType: 'walter_command',
+          actionId,
+          userId,
+          mode,
+          success: result.success,
+          executionTimeMs,
+          executionLogId,
+          timestamp: new Date().toISOString(),
+        }, 'walter_nlai');
+      } catch (busError: any) {
+        console.error(`[${this.MODULE_NAME}] Failed to emit cluster bus event:`, busError);
+      }
+
       console.log(
         `[${this.MODULE_NAME}] Action ${actionId} completed in ${executionTimeMs}ms - Success: ${result.success}`
       );
@@ -150,6 +167,23 @@ export class NLAIExecutionBroker {
         result: errorResult,
         executionTimeMs,
       });
+
+      // Emit cluster bus event for failed executions (Phase 22)
+      try {
+        await clusterBus.publish('task_completed', {
+          taskType: 'walter_command',
+          actionId,
+          userId,
+          mode,
+          success: false,
+          executionTimeMs,
+          executionLogId,
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        }, 'walter_nlai');
+      } catch (busError: any) {
+        console.error(`[${this.MODULE_NAME}] Failed to emit cluster bus event:`, busError);
+      }
 
       console.error(
         `[${this.MODULE_NAME}] Action ${actionId} failed after ${executionTimeMs}ms:`,
