@@ -3575,6 +3575,25 @@ export const parameterBaseline = pgTable("parameter_baseline", {
   createdAtIdx: index("parameter_baseline_created_at_idx").on(table.createdAt),
 }));
 
+// Phase 27.4: Trading State Synchronization & Fail-Safe Recovery
+export const systemContext = pgTable("system_context", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  tradingMode: tradingModeEnum("trading_mode").notNull().default("paper"),
+  lastSafeState: jsonb("last_safe_state").notNull().default(sql`'{}'`), // Backup of system state before mode change
+  isEngineActive: boolean("is_engine_active").notNull().default(false),
+  lastModeChange: timestamp("last_mode_change", { withTimezone: true }),
+  changedBy: varchar("changed_by", { length: 50 }), // 'user', 'walter', 'recovery', 'admin'
+  changeReason: text("change_reason"),
+  metadata: jsonb("metadata").default(sql`'{}'`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("system_context_user_id_idx").on(table.userId),
+  tradingModeIdx: index("system_context_trading_mode_idx").on(table.tradingMode),
+  lastModeChangeIdx: index("system_context_last_mode_change_idx").on(table.lastModeChange),
+}));
+
 // Insert schemas for Phase 17
 export const insertClusterNodeSchema = createInsertSchema(clusterNode).omit({ 
   id: true, 
@@ -3693,3 +3712,14 @@ export type TuningEvent = typeof tuningEvent.$inferSelect;
 
 export type InsertParameterBaseline = z.infer<typeof insertParameterBaselineSchema>;
 export type ParameterBaseline = typeof parameterBaseline.$inferSelect;
+
+// Insert schemas for Phase 27.4
+export const insertSystemContextSchema = createInsertSchema(systemContext).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true 
+});
+
+// Types for Phase 27.4
+export type InsertSystemContext = z.infer<typeof insertSystemContextSchema>;
+export type SystemContext = typeof systemContext.$inferSelect;

@@ -167,7 +167,10 @@ import {
   walterUserPreferences,
   type PortfolioState,
   type InsertPortfolioState,
-  portfolioState
+  portfolioState,
+  type SystemContext,
+  type InsertSystemContext,
+  systemContext
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -535,6 +538,11 @@ export interface IStorage {
   getTuningEvents(params: { userId: string; mode?: string; limit?: number }): Promise<any[]>;
   createTuningEvent(data: any): Promise<any>;
   updateTuningEvent(id: string, updates: any): Promise<any>;
+
+  // System Context methods (Phase 27.4)
+  getSystemContext(userId: string): Promise<SystemContext | undefined>;
+  upsertSystemContext(data: Partial<InsertSystemContext> & { userId: string }): Promise<SystemContext>;
+  updateSystemContext(userId: string, updates: Partial<SystemContext>): Promise<SystemContext>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3027,6 +3035,43 @@ export class DatabaseStorage implements IStorage {
       .update(tuningEvent)
       .set(updates)
       .where(eq(tuningEvent.id, id))
+      .returning();
+    return updated;
+  }
+
+  // System Context methods (Phase 27.4: Trading State Synchronization)
+  async getSystemContext(userId: string): Promise<SystemContext | undefined> {
+    const [context] = await db
+      .select()
+      .from(systemContext)
+      .where(eq(systemContext.userId, userId));
+    return context || undefined;
+  }
+
+  async upsertSystemContext(data: Partial<InsertSystemContext> & { userId: string }): Promise<SystemContext> {
+    const existing = await this.getSystemContext(data.userId);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(systemContext)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(systemContext.userId, data.userId))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db
+      .insert(systemContext)
+      .values(data as InsertSystemContext)
+      .returning();
+    return created;
+  }
+
+  async updateSystemContext(userId: string, updates: Partial<SystemContext>): Promise<SystemContext> {
+    const [updated] = await db
+      .update(systemContext)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(systemContext.userId, userId))
       .returning();
     return updated;
   }
