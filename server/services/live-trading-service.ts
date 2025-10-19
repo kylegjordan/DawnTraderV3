@@ -10,6 +10,8 @@ import { storage } from '../storage';
 import { clusterBus } from './cluster-bus';
 import ExecutionPolicyController from './execution-policy-controller';
 import type { ActionResult } from './nlai-action-registry';
+import { permissionCache } from './permission-cache.js';
+import type { UserRole } from '../config/permissions.js';
 
 // Initialize ExecutionPolicyController instance
 const executionPolicyController = new ExecutionPolicyController(storage as any);
@@ -102,7 +104,29 @@ This is a high-risk operation and requires your explicit consent.`;
     try {
       console.log(`[LiveTrading] Activating live mode for user ${userId} (post-approval)`);
 
-      // 1. Check if already running
+      // 1. Phase 27.3: Verify user has trade_live permission (fail closed)
+      const user = await storage.getUser(userId);
+      if (!user || !user.role) {
+        console.log(`[LiveTrading] ❌ Permission denied: user ${userId} not found or role missing`);
+        return {
+          success: false,
+          message: 'Permission denied: User account not found or improperly configured.',
+        };
+      }
+      
+      const userRole = user.role as UserRole;
+      const hasPermission = await permissionCache.hasPermission(userId, userRole, 'trade_live');
+      
+      if (!hasPermission) {
+        console.log(`[LiveTrading] ❌ Permission denied: user ${userId} (${userRole}) lacks trade_live permission`);
+        return {
+          success: false,
+          message: 'Permission denied: You do not have permission to activate live trading.',
+          data: { permissionRequired: 'trade_live', userRole },
+        };
+      }
+
+      // 2. Check if already running
       if (this.sessions.has(userId)) {
         return {
           success: true,
@@ -110,12 +134,12 @@ This is a high-risk operation and requires your explicit consent.`;
         };
       }
 
-      // 2. Note: Since this is called AFTER approval, we skip additional policy evaluation
+      // 3. Note: Since this is called AFTER approval, we skip additional policy evaluation
       // The approval flow already went through ExecutionPolicyController.evaluateExecution()
       // This method is only called when user has explicitly approved the action
-      console.log(`[LiveTrading] ✅ Activation approved by user, proceeding with engine startup`);
+      console.log(`[LiveTrading] ✅ Permission verified and activation approved by user, proceeding with engine startup`);
 
-      // 3. Initialize trading engine (placeholder for now)
+      // 4. Initialize trading engine (placeholder for now)
       // In production, this would initialize the actual TradingEngine with live Kraken API
       const tradingEngines = (global as any).tradingEngines || new Map();
       (global as any).tradingEngines = tradingEngines;

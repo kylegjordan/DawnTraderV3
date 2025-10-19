@@ -13,6 +13,9 @@
 import { ApprovalEvaluator } from './approval-evaluator.js';
 import type { DatabaseStorage } from '../storage.js';
 import type { InsertWalterExecutionLog } from '@shared/schema';
+import { permissionCache } from './permission-cache.js';
+import { getRequiredPermission } from '../config/permissions.js';
+import type { UserRole } from '../config/permissions.js';
 
 export interface ExecutionRequest {
   userId: string;
@@ -55,12 +58,71 @@ export class ExecutionPolicyController {
     try {
       console.log(`[ExecutionPolicy] Evaluating ${request.actionType} for user ${request.userId} (${request.mode} mode)`);
       
-      // 1. Get user's approval matrix
+      // 1. Get user and check permissions (Phase 27.3)
       const user = await this.storage.getUser(request.userId);
       if (!user) {
         throw new Error('User not found');
       }
 
+      // 1a. Check if user has required permission for this action (fail closed)
+      const requiredPermission = getRequiredPermission(request.actionType);
+      if (requiredPermission) {
+        if (!user.role) {
+          console.log(`[ExecutionPolicy] ❌ Permission denied: user ${request.userId} has no role assigned`);
+          
+          const executionLog = await this.storage.createWalterExecutionLog({
+            userId: request.userId,
+            mode: request.mode,
+            commandText: request.commandText,
+            actionType: request.actionType,
+            source: request.source,
+            approvalStatus: 'permission_denied',
+            approvalReason: 'Permission denied: User has no role assigned',
+            executionStatus: 'rejected',
+            projectedRisk: null,
+            chatSessionId: request.chatSessionId,
+            executionTimeMs: Date.now() - startTime,
+          });
+          
+          return {
+            approved: false,
+            requiresManualApproval: false,
+            reason: 'Permission denied: User account improperly configured',
+            executionLogId: executionLog.id,
+          };
+        }
+        
+        const userRole = user.role as UserRole;
+        const hasPermission = await permissionCache.hasPermission(request.userId, userRole, requiredPermission);
+        
+        if (!hasPermission) {
+          console.log(`[ExecutionPolicy] ❌ Permission denied: user ${request.userId} (${userRole}) lacks ${requiredPermission}`);
+          
+          // Create log entry for permission denial
+          const executionLog = await this.storage.createWalterExecutionLog({
+            userId: request.userId,
+            mode: request.mode,
+            commandText: request.commandText,
+            actionType: request.actionType,
+            source: request.source,
+            approvalStatus: 'permission_denied',
+            approvalReason: `Permission denied: User lacks ${requiredPermission} permission`,
+            executionStatus: 'rejected',
+            projectedRisk: null,
+            chatSessionId: request.chatSessionId,
+            executionTimeMs: Date.now() - startTime,
+          });
+          
+          return {
+            approved: false,
+            requiresManualApproval: false,
+            reason: `Permission denied: You do not have permission to ${request.actionType.replace(/_/g, ' ')}`,
+            executionLogId: executionLog.id,
+          };
+        }
+      }
+
+      // 2. Get user's approval matrix
       const approvalMatrix = (user.approvalMatrix as any) || {};
       
       // 2. Map NLAI action to approval matrix key

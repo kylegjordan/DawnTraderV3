@@ -47,8 +47,8 @@ import { uiBob } from "./services/bob-ui";
 import { cortexCore } from "./services/cortex/cortex-core";
 import { filePersistence } from "./services/file-persistence";
 import { memoryLifecycle } from "./services/memory-lifecycle";
-import { getPermissionsForRole, Permission } from './config/permissions';
-import type { UserRole } from './config/permissions';
+import { getPermissionsForRole, Permission } from './config/permissions.js';
+import type { UserRole } from './config/permissions.js';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -79,9 +79,12 @@ const userPendingConfirmations = new Map<string, string>(); // userId -> confirm
 const JWT_SECRET = process.env.JWT_SECRET || "development_secret_change_in_production";
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "development_refresh_secret_change_in_production";
 
-// Issue access and refresh tokens (Phase 27.3: includes permissions)
+// Issue access and refresh tokens (Phase 27.3: includes permissions, fail closed)
 function issueTokens(user: { id: string; username: string; role?: UserRole }) {
-  const userRole = user.role || 'owner';
+  if (!user.role) {
+    throw new Error('Cannot issue token: user has no role assigned');
+  }
+  const userRole = user.role;
   const permissions = getPermissionsForRole(userRole);
   
   const accessToken = jwt.sign(
@@ -135,10 +138,20 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
       permissions?: Permission[];
     };
     
-    // Fetch user from database to get admin status and role
+    // Fetch user from database to get admin status and role (fail closed - no fallback to token)
     const user = await storage.getUser(decoded.id);
-    const userRole = user?.role || decoded.role || 'owner';
-    const permissions = decoded.permissions || getPermissionsForRole(userRole);
+    if (!user) {
+      return res.status(401).json({ error: 'User account not found' });
+    }
+    
+    // Critical: NEVER fallback to decoded.role - always use database as source of truth
+    const userRole = user.role;
+    if (!userRole) {
+      return res.status(403).json({ error: 'User account improperly configured - no role assigned' });
+    }
+    
+    // Always recompute permissions from current DB role, ignore stale token permissions
+    const permissions = getPermissionsForRole(userRole as UserRole);
     
     req.user = { 
       id: decoded.id, 
@@ -356,9 +369,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
       
+      if (!user.role) {
+        return res.status(500).json({ error: 'User account improperly configured - no role assigned' });
+      }
+      
       const { accessToken, refreshToken } = issueTokens({ id: user.id, username: user.username, role: user.role });
-      const userRole = user.role || 'owner';
-      const permissions = getPermissionsForRole(userRole);
+      const userRole = user.role;
+      const permissions = getPermissionsForRole(userRole as UserRole);
       
       res.json({ 
         accessToken, 

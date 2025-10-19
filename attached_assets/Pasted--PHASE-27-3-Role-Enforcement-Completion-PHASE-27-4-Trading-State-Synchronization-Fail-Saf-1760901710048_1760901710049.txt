@@ -1,0 +1,130 @@
+🧩 PHASE 27.3 — Role Enforcement Completion
+🧩 PHASE 27.4 — Trading State Synchronization & Fail-Safe Recovery (Continuation)
+🎯 Immediate Goals
+
+Finish wiring the permission checks into every action path so UI and backend stay aligned.
+
+Restore manual trading toggles and the missing User tab.
+
+Complete Trading State Synchronization so the system reliably enters LIVE or PAPER mode on approval or manual toggle.
+
+A — Finish Phase 27.3 (Role Integration & UI Restoration)
+1 – Backend Action Permission Checks
+
+Files: execution-policy-controller.ts, live-trading-service.ts, routes.ts
+
+Replace any legacy role checks with permission look-ups from the Permission Cache.
+
+Required permissions:
+
+trade_live for live trading
+
+trade_paper for paper trading
+
+approve_actions for manual approvals
+
+If permission denied → return E403_FORBIDDEN.
+
+2 – Frontend Permission Store
+
+Files: userStore.ts, auth.ts, TradingPanel.tsx
+
+Add permissions: string[] to the global user store.
+
+Provide a helper can(action) for components.
+
+Re-enable the User tab and Trading toggle only if can('trade_live') or can('trade_paper').
+
+After login, update UI dynamically using the permission array from JWT.
+
+3 – UI Elements Restore
+
+User Tab: visible to roles owner, editor, admin.
+
+Trading Toggle:
+
+Enabled = permission present.
+
+Disabled = tooltip “Insufficient permissions.”
+
+Walter Approvals: shown only to users with approve_actions.
+
+4 – Verification Checklist
+
+✅ Login JWT includes permissions
+✅ User tab visible for authorized roles
+✅ Toggle works for owner/admin
+✅ Walter approval executes live trading
+
+B — Complete Phase 27.4 (Trading State Synchronization & Fail-Safe)
+1 – Authoritative Trading State
+
+Table system_context stores key trading_mode ='live'|'paper'|'stopped'.
+
+All components read/write this single source.
+
+Ensure backend writes here on every activation or stop event.
+
+2 – Cluster Broadcast
+
+On state change, emit cluster_bus_event topic trading_state_changed with payload:
+{ mode, active, initiator, timestamp }.
+
+Frontend WebSocket updates the Trading toggle in < 1 s.
+
+3 – Startup Recovery
+
+At server startup, read system_context.trading_mode.
+
+If live or paper → resume that engine and emit status.
+
+Log: [TradingSync] Recovered mode=paper after restart.
+
+4 – Kill-Switch & Fail-Safe
+
+Watchdog checks heartbeat every 30 s.
+
+If timeout > 60 s → stop trading and set mode=stopped.
+
+Record event in fail_safe_log with reason.
+
+Auto-recovery attempt after health returns.
+
+5 – Manual Override
+
+User toggle and Walter intent both call /api/trading/set-mode.
+
+This endpoint updates system_context, fires bus event, and returns new mode.
+
+Policy check must validate permissions before change.
+
+6 – Verification Checklist
+
+✅ Startup restores previous mode
+✅ Manual toggle works for authorized roles
+✅ Walter intent syncs with toggle and cluster
+✅ Kill-switch stops trading cleanly
+✅ Audit log records all mode changes with traceIds
+
+C — Deliverables
+
+✅ Permission matrix fully enforced in backend and UI
+✅ User tab and manual toggles restored
+✅ Trading state persists and recovers after restart
+✅ Kill-switch and auto-recovery operational
+✅ Documentation added to replit.md:
+– Phase 27.3: Role Enforcement & Unified Permission Cache
+– Phase 27.4: Trading State Synchronization & Fail-Safe Recovery
+✅ Architect review PASS
+
+D — Expected Result
+
+Login as Owner/Admin → User tab visible + toggles active.
+
+Login as Viewer → read-only UI.
+
+Walter can start/stop trading automatically after approval.
+
+Paper and Live modes switch reliably and restore on restart.
+
+System self-heals if cluster node fails or connection drops.
