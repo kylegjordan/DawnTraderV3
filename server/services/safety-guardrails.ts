@@ -221,7 +221,7 @@ class SafetyGuardrailsService {
   /**
    * Toggle kill switch
    */
-  async toggleKillSwitch(enabled: boolean, reason: string | null): Promise<void> {
+  async toggleKillSwitch(enabled: boolean, reason: string | null, userId?: string): Promise<void> {
     console.log(`[SafetyGuardrails] ${enabled ? '🔴 ENABLING' : '🟢 DISABLING'} kill switch: ${reason || 'No reason'}`);
 
     await db
@@ -233,7 +233,7 @@ class SafetyGuardrailsService {
       })
       .where(eq(killSwitch.id, 'global_kill_switch'));
 
-    // Broadcast kill switch change
+    // Broadcast kill switch change to context bridge (frontend)
     await contextBridge.broadcast({
       type: 'kill_switch_changed',
       payload: {
@@ -242,6 +242,17 @@ class SafetyGuardrailsService {
         timestamp: new Date().toISOString(),
       },
     });
+
+    // Phase 27.4: Emit to cluster bus for backend services (e.g., TradingStateSync)
+    if (enabled) {
+      const { clusterBus } = await import('./cluster-bus.js');
+      clusterBus.emit('kill_switch_activated', {
+        userId: userId || 'system',
+        reason: reason || 'Kill switch enabled',
+        timestamp: new Date(),
+      });
+      console.log(`[SafetyGuardrails] 🚨 Kill switch activation event emitted to cluster bus`);
+    }
 
     console.log(`[SafetyGuardrails] ✅ Kill switch ${enabled ? 'ENABLED' : 'DISABLED'}`);
   }
