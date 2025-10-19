@@ -373,48 +373,61 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                           <Badge variant="destructive" className="text-xs">
                             PENDING
                           </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {approval.projectedRisk}% risk
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{approval.mode}</span>
+                          {approval.projectedRisk != null && (
+                            <Badge variant="outline" className="text-xs">
+                              {approval.projectedRisk}% risk
+                            </Badge>
+                          )}
+                          {approval.mode && (
+                            <span className="text-xs text-muted-foreground">{approval.mode}</span>
+                          )}
                         </div>
                         <p className="text-sm font-medium">
-                          {approval.strategyName || approval.parameterName}
+                          {approval.strategyName || approval.parameterName || approval.action || 'Pending Approval'}
                         </p>
                       </div>
                     </DropdownMenuItem>
                   ))}
                   
                   {/* Then show recent resolved approvals */}
-                  {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => (
-                    <DropdownMenuItem
-                      key={approval.id}
-                      onClick={() => setLocation('/walter')}
-                      className="cursor-pointer opacity-70"
-                      data-testid={`approval-resolved-${approval.id}`}
-                    >
-                      <div className="flex flex-col gap-1 w-full">
-                        <div className="flex items-center gap-2">
-                          <Badge 
-                            variant={approval.status === 'approved' ? 'default' : 'secondary'} 
-                            className="text-xs"
-                          >
-                            {approval.status === 'approved' ? 'APPROVED' : 'REJECTED'}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {approval.projectedRisk}% risk
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{approval.mode}</span>
+                  {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => {
+                    const timestamp = approval.status === 'approved' ? approval.approvedAt : approval.rejectedAt;
+                    return (
+                      <DropdownMenuItem
+                        key={approval.id}
+                        onClick={() => setLocation('/walter')}
+                        className="cursor-pointer opacity-70"
+                        data-testid={`approval-resolved-${approval.id}`}
+                      >
+                        <div className="flex flex-col gap-1 w-full">
+                          <div className="flex items-center gap-2">
+                            <Badge 
+                              variant={approval.status === 'approved' ? 'default' : 'secondary'} 
+                              className="text-xs"
+                            >
+                              {approval.status === 'approved' ? 'APPROVED' : approval.status === 'rejected' ? 'REJECTED' : approval.status?.toUpperCase() || 'RESOLVED'}
+                            </Badge>
+                            {approval.projectedRisk != null && (
+                              <Badge variant="outline" className="text-xs">
+                                {approval.projectedRisk}% risk
+                              </Badge>
+                            )}
+                            {approval.mode && (
+                              <span className="text-xs text-muted-foreground">{approval.mode}</span>
+                            )}
+                          </div>
+                          <p className="text-sm font-medium">
+                            {approval.strategyName || approval.parameterName || approval.action || 'Unknown Action'}
+                          </p>
+                          {timestamp && (
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(timestamp).toLocaleString()}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-sm font-medium">
-                          {approval.strategyName || approval.parameterName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(approval.status === 'approved' ? approval.approvedAt! : approval.rejectedAt!).toLocaleString()}
-                        </p>
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
+                      </DropdownMenuItem>
+                    );
+                  })}
                 </>
               ) : (
                 <div className="px-2 py-6 text-center">
