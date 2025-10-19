@@ -2,7 +2,6 @@ import { Menu, Bell, Clock, Globe, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { InteractiveNotification } from "@/components/ai/InteractiveNotification";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -356,7 +355,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-96 max-h-96 overflow-y-auto">
+            <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
               <DropdownMenuLabel>Walter Approvals (Recent 20)</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {approvalsData && approvalsData.length > 0 ? (
@@ -365,16 +364,24 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   {approvalsData.filter((a: any) => a.status === 'pending').map((approval: any) => (
                     <DropdownMenuItem
                       key={approval.id}
-                      className="p-2 focus:bg-transparent hover:bg-transparent"
+                      onClick={() => setLocation('/walter')}
+                      className="cursor-pointer"
                       data-testid={`approval-${approval.id}`}
-                      onSelect={(e) => e.preventDefault()}
                     >
-                      <InteractiveNotification
-                        approval={approval}
-                        onClose={() => {
-                          // Dropdown will auto-close if needed, or user can continue reviewing
-                        }}
-                      />
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive" className="text-xs">
+                            PENDING
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {approval.projectedRisk}% risk
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{approval.mode}</span>
+                        </div>
+                        <p className="text-sm font-medium">
+                          {approval.strategyName || approval.parameterName}
+                        </p>
+                      </div>
                     </DropdownMenuItem>
                   ))}
                   
@@ -382,16 +389,30 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => (
                     <DropdownMenuItem
                       key={approval.id}
-                      className="p-2 focus:bg-transparent hover:bg-transparent"
+                      onClick={() => setLocation('/walter')}
+                      className="cursor-pointer opacity-70"
                       data-testid={`approval-resolved-${approval.id}`}
-                      onSelect={(e) => e.preventDefault()}
                     >
-                      <InteractiveNotification
-                        approval={approval}
-                        onClose={() => {
-                          // Dropdown will auto-close if needed
-                        }}
-                      />
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={approval.status === 'approved' ? 'default' : 'secondary'} 
+                            className="text-xs"
+                          >
+                            {approval.status === 'approved' ? 'APPROVED' : 'REJECTED'}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {approval.projectedRisk}% risk
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{approval.mode}</span>
+                        </div>
+                        <p className="text-sm font-medium">
+                          {approval.strategyName || approval.parameterName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(approval.status === 'approved' ? approval.approvedAt! : approval.rejectedAt!).toLocaleString()}
+                        </p>
+                      </div>
                     </DropdownMenuItem>
                   ))}
                 </>
