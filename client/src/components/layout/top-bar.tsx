@@ -2,7 +2,7 @@ import { Menu, Bell, Clock, Globe, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { InteractiveNotification } from "@/components/ai/InteractiveNotification";
+import { SafeInteractiveNotification } from "@/components/ai/InteractiveNotification";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -369,7 +369,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                       data-testid={`approval-${approval.id}`}
                       onSelect={(e) => e.preventDefault()}
                     >
-                      <InteractiveNotification
+                      <SafeInteractiveNotification
                         approval={approval}
                         onClose={() => {
                           // Dropdown will auto-close if needed, or user can continue reviewing
@@ -386,7 +386,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                       data-testid={`approval-resolved-${approval.id}`}
                       onSelect={(e) => e.preventDefault()}
                     >
-                      <InteractiveNotification
+                      <SafeInteractiveNotification
                         approval={approval}
                         onClose={() => {
                           // Dropdown will auto-close if needed

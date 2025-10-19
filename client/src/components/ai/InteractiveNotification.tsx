@@ -1,9 +1,39 @@
-import { useState } from "react";
+import { useState, Component, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, SkipForward, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+// Error Boundary for safer rendering
+class NotificationErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error('InteractiveNotification render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="p-2 text-xs text-muted-foreground">
+          Error loading notification
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface InteractiveNotificationProps {
   approval: {
@@ -270,5 +300,14 @@ export function InteractiveNotification({
         </p>
       )}
     </div>
+  );
+}
+
+// Export wrapped version with error boundary
+export function SafeInteractiveNotification(props: InteractiveNotificationProps) {
+  return (
+    <NotificationErrorBoundary>
+      <InteractiveNotification {...props} />
+    </NotificationErrorBoundary>
   );
 }
