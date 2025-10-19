@@ -6971,6 +6971,258 @@ Please:
       res.status(500).json({ ok: false, error: error.message });
     }
   });
+
+  // ==================== Phase 27.2: Inline Approvals + Interactive Notifications ====================
+  
+  // POST /api/intent/approve - Approve by traceId (inline or notification)
+  app.post('/api/intent/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { traceId } = req.body;
+      
+      if (!traceId) {
+        return res.status(400).json({ success: false, error: 'traceId is required' });
+      }
+      
+      // Find approval by traceId
+      const approvals = await storage.getPendingApprovals(userId, 'pending');
+      const approval = approvals.find(a => a.traceId === traceId);
+      
+      if (!approval) {
+        return res.status(404).json({ success: false, error: 'Approval not found or already processed' });
+      }
+      
+      if (approval.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized' });
+      }
+      
+      // Execute the approved change
+      if (approval.strategyName && approval.proposedValue) {
+        await storage.upsertStrategySettings({
+          userId,
+          mode: approval.mode as any,
+          strategy: approval.strategyName as any,
+          enabled: true,
+          params: approval.proposedValue as any,
+        });
+        
+        await storage.insertStrategySettingsAudit({
+          userId,
+          mode: approval.mode as any,
+          strategy: approval.strategyName as any,
+          prevParams: approval.currentValue as any,
+          nextParams: approval.proposedValue as any,
+          actorType: 'user',
+          actorId: userId,
+          reason: `Approved via inline prompt (traceId: ${traceId})`,
+        });
+        
+        // Invalidate caches
+        const { configChangeHandler } = await import('./services/config-change-handler');
+        await configChangeHandler.handleConfigChange({
+          userId,
+          mode: approval.mode as 'live' | 'paper',
+          configType: 'strategies',
+          source: 'api',
+          globalContextId: 'default'
+        });
+      }
+      
+      // Update approval status (do NOT set clearedAt - that's for explicit clearing only)
+      const updated = await storage.updateApprovalStatus(approval.id, 'approved', {
+        approvedAt: new Date() as any,
+        approvedBy: userId,
+      });
+      
+      // Create audit log
+      await storage.createWalterApprovalsAudit({
+        approvalId: approval.id,
+        userId,
+        decision: 'approved',
+        decisionMethod: 'inline_approval',
+        notes: null,
+        executionResult: { success: true, appliedAt: new Date(), mode: approval.mode, traceId },
+      });
+      
+      // Emit WebSocket event for real-time sync
+      const { contextBridge } = await import('./services/context-bridge');
+      await contextBridge.broadcast('approval_update', { traceId, status: 'approved' }, userId);
+      
+      console.log(`[Phase 27.2] Approved ${traceId} by user ${userId} (mode: ${approval.mode})`);
+      
+      res.json({ success: true, message: `Approved — ${approval.action || 'action'} executed`, traceId, status: 'approved' });
+    } catch (error: any) {
+      console.error('[Phase 27.2] Error approving:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // POST /api/intent/reject - Reject by traceId
+  app.post('/api/intent/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { traceId } = req.body;
+      
+      if (!traceId) {
+        return res.status(400).json({ success: false, error: 'traceId is required' });
+      }
+      
+      // Find approval by traceId
+      const approvals = await storage.getPendingApprovals(userId, 'pending');
+      const approval = approvals.find(a => a.traceId === traceId);
+      
+      if (!approval) {
+        return res.status(404).json({ success: false, error: 'Approval not found or already processed' });
+      }
+      
+      if (approval.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized' });
+      }
+      
+      // Update approval status (do NOT set clearedAt - that's for explicit clearing only)
+      const updated = await storage.updateApprovalStatus(approval.id, 'rejected', {
+        rejectedAt: new Date() as any,
+      });
+      
+      // Create audit log
+      await storage.createWalterApprovalsAudit({
+        approvalId: approval.id,
+        userId,
+        decision: 'rejected',
+        decisionMethod: 'inline_rejection',
+        notes: null,
+        executionResult: { success: false, reason: 'User rejected', mode: approval.mode, traceId },
+      });
+      
+      // Emit WebSocket event
+      const { contextBridge } = await import('./services/context-bridge');
+      await contextBridge.broadcast('approval_update', { traceId, status: 'rejected' }, userId);
+      
+      console.log(`[Phase 27.2] Rejected ${traceId} by user ${userId}`);
+      
+      res.json({ success: true, message: 'Rejected — no changes made', traceId, status: 'rejected' });
+    } catch (error: any) {
+      console.error('[Phase 27.2] Error rejecting:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // POST /api/intent/dismiss - Dismiss approval (no action, keep in list)
+  app.post('/api/intent/dismiss', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { traceId } = req.body;
+      
+      if (!traceId) {
+        return res.status(400).json({ success: false, error: 'traceId is required' });
+      }
+      
+      // Find approval by traceId
+      const approvals = await storage.getPendingApprovals(userId, 'pending');
+      const approval = approvals.find(a => a.traceId === traceId);
+      
+      if (!approval) {
+        return res.status(404).json({ success: false, error: 'Approval not found' });
+      }
+      
+      if (approval.userId !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized' });
+      }
+      
+      // Update to dismissed status (keeps in list but marks as seen)
+      const updated = await storage.updateApprovalStatus(approval.id, 'dismissed', {
+        dismissedAt: new Date() as any,
+      });
+      
+      // Emit WebSocket event
+      const { contextBridge } = await import('./services/context-bridge');
+      await contextBridge.broadcast('approval_update', { traceId, status: 'dismissed' }, userId);
+      
+      console.log(`[Phase 27.2] Dismissed ${traceId} by user ${userId}`);
+      
+      res.json({ success: true, message: 'Dismissed — you can act later from the bell', traceId, status: 'dismissed' });
+    } catch (error: any) {
+      console.error('[Phase 27.2] Error dismissing:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+  
+  // POST /api/intent/clear - Clear approvals from notification list
+  app.post('/api/intent/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { traceIds } = req.body;
+      
+      if (!traceIds || !Array.isArray(traceIds)) {
+        return res.status(400).json({ success: false, error: 'traceIds array is required' });
+      }
+      
+      let cleared = 0;
+      const now = new Date();
+      
+      for (const traceId of traceIds) {
+        try {
+          const approvals = await storage.getPendingApprovals(userId);
+          const approval = approvals.find(a => a.traceId === traceId && a.userId === userId);
+          
+          if (approval && (approval.status === 'approved' || approval.status === 'rejected')) {
+            await storage.updateApprovalStatus(approval.id, approval.status, {
+              clearedAt: now as any,
+            });
+            cleared++;
+          }
+        } catch (error) {
+          console.error(`[Phase 27.2] Error clearing traceId ${traceId}:`, error);
+        }
+      }
+      
+      console.log(`[Phase 27.2] Cleared ${cleared} approvals for user ${userId}`);
+      
+      res.json({ success: true, cleared });
+    } catch (error: any) {
+      console.error('[Phase 27.2] Error clearing approvals:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // POST /api/intent/cleanup-ghosts - One-time cleanup of stuck approvals
+  app.post('/api/intent/cleanup-ghosts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get all approved/rejected approvals without cleared_at
+      const allApprovals = await storage.getPendingApprovals(userId);
+      const ghosts = allApprovals.filter(a => 
+        (a.status === 'approved' || a.status === 'rejected') && !a.clearedAt
+      );
+      
+      let cleared = 0;
+      const now = new Date();
+      
+      for (const ghost of ghosts) {
+        try {
+          await storage.updateApprovalStatus(ghost.id, ghost.status, {
+            clearedAt: now as any,
+          });
+          cleared++;
+        } catch (error) {
+          console.error(`[Phase 27.2] Error cleaning ghost ${ghost.id}:`, error);
+        }
+      }
+      
+      console.log(`[Phase 27.2] Ghost cleanup: cleared ${cleared} stuck approvals for user ${userId}`);
+      
+      res.json({ 
+        success: true, 
+        cleared, 
+        skipped: ghosts.length - cleared,
+        message: `Cleaned up ${cleared} stuck approval(s)` 
+      });
+    } catch (error: any) {
+      console.error('[Phase 27.2] Error during ghost cleanup:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
   
   // GET all Walter chats for current user
   app.get('/api/walter/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {

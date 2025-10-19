@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-19T17:25:47.436Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential overutilization or performance bottlenecks."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it might not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero total profit/loss, win rate, and ROI, indicating no successful trades or issues with trading strategies."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to ensure system stability and performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI models to enhance learning and opportunity generation capabilities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate current trading strategies for effectiveness and consider adjustments or alternative strategies."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough investigation of the high CPU load to identify and resolve the root cause.",
+      "rationale": "High CPU load can lead to system instability, slow performance, and potential downtime, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Perform a diagnostic check on the AI system to ensure it is operating correctly and update models if necessary.",
+      "rationale": "The AI system's lack of activity and confidence suggests it may not be contributing effectively to trading decisions."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the performance of active trading strategies and adjust them to improve profitability.",
+      "rationale": "Zero profit/loss and win rate indicate that current strategies may not be effective in the current market conditions."
+    }
+  ],
+  "urgencyLevel": "high"
+}
