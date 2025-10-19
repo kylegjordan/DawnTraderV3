@@ -108,15 +108,16 @@ export class TradingStateSync {
     
     clusterBus.emit('trading_mode_changed', changeEvent);
     
-    // Phase 27.4.2: Broadcast to frontend via WebSocket
+    // Phase 27.4.2: Broadcast to frontend via WebSocket (user-scoped)
     await contextBridge.broadcast({
       type: 'trading_state_changed',
       payload: {
         mode: newMode,
         active: false, // Will be updated by setEngineActive
-        user: userId,
         timestamp: new Date().toISOString()
-      }
+      },
+      userId, // CRITICAL: Scope to specific user to prevent cross-user leakage
+      mode: newMode
     });
     
     console.log(`[TradingStateSync] Trading mode changed for user ${userId}: ${previousMode} → ${newMode} (by: ${changedBy})`);
@@ -139,16 +140,17 @@ export class TradingStateSync {
       timestamp: new Date()
     });
     
-    // Phase 27.4.2: Broadcast engine state change to frontend
+    // Phase 27.4.2: Broadcast engine state change to frontend (user-scoped)
     const context = await storage.getSystemContext(userId);
     await contextBridge.broadcast({
       type: 'trading_state_changed',
       payload: {
         mode: context?.tradingMode || 'paper',
         active: isActive,
-        user: userId,
         timestamp: new Date().toISOString()
-      }
+      },
+      userId, // CRITICAL: Scope to specific user to prevent cross-user leakage
+      mode: context?.tradingMode || 'paper'
     });
     
     console.log(`[TradingStateSync] Engine state for user ${userId}: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
@@ -196,17 +198,18 @@ export class TradingStateSync {
       timestamp: new Date()
     });
     
-    // Phase 27.4.2: Broadcast emergency stop to frontend
+    // Phase 27.4.2: Broadcast emergency stop to frontend (user-scoped)
     await contextBridge.broadcast({
       type: 'trading_state_changed',
       payload: {
         mode: 'paper',
         active: false,
-        user: userId,
         emergency: true,
         reason,
         timestamp: new Date().toISOString()
-      }
+      },
+      userId, // CRITICAL: Scope to specific user to prevent cross-user leakage
+      mode: 'paper'
     });
   }
 
