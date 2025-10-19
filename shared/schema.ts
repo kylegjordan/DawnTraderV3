@@ -1481,6 +1481,15 @@ export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).o
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  minVolume: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  minPrice: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxPrice: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  minMarketCap: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxBidAskSpread: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  volatilityMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  volatilityMax: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  minLiquidity: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 });
 
 export const insertStrategySettingsSchema = createInsertSchema(strategySettings).omit({

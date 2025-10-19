@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-10-19T04:10:20.196Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all time intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, average confidence, opportunities generated, or adjustments made, suggesting it might not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show no active trades and a win rate of 0, indicating potential issues with trading strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation or system instability."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate and enhance AI module's learning and opportunity generation capabilities to improve trading outcomes."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to identify and resolve the root cause.",
+      "rationale": "High CPU load can lead to system instability and affect trading performance, requiring urgent attention."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Review and potentially recalibrate AI strategies to ensure they are functioning and contributing to trading decisions.",
+      "rationale": "The AI module is not generating opportunities or making adjustments, which could hinder trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the current trading strategies and market conditions to understand why there are no active trades and a win rate of 0.",
+      "rationale": "Understanding the lack of active trades and poor win rate is essential for improving trading outcomes."
+    }
+  ],
+  "urgencyLevel": "high"
+}
