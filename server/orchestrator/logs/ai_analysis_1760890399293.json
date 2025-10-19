@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-10-19T16:13:19.293Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "High CPU load averages (9.6, 10.25, 11.06) on an 8-core system indicate potential overutilization."
+    },
+    {
+      "severity": "medium",
+      "message": "No recent learning cycles or AI adjustments, which may indicate a lack of AI-driven trading activity or issues with the AI module."
+    },
+    {
+      "severity": "medium",
+      "message": "Zero active trades and zero total profit/loss suggest a potential issue with trading activity or strategy effectiveness."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI models or strategies to ensure they are actively generating opportunities and making adjustments."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and address processes causing high load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Evaluate the effectiveness of current trading strategies and AI models to ensure they are functioning as intended.",
+      "rationale": "Zero active trades and AI inactivity may indicate issues with strategy execution or AI model performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Perform a system health check to ensure all components are functioning correctly and efficiently.",
+      "rationale": "Regular health checks can prevent unexpected downtime and ensure optimal system performance."
+    }
+  ],
+  "urgencyLevel": "high"
+}

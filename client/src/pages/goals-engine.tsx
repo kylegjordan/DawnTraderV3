@@ -4,8 +4,9 @@ import GuardrailsTab from "@/components/goals/guardrails-tab";
 import ScreenerFiltersTab from "@/components/goals/screener-filters-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
 import WalterPurposeTab from "@/components/goals/walter-purpose-tab";
+import TuningTab from "@/components/goals/tuning-tab";
 import ModeBanner from "@/components/mode-banner";
-import { Target, Shield, Filter, Layers, Lightbulb } from "lucide-react";
+import { Target, Shield, Filter, Layers, Lightbulb, Settings } from "lucide-react";
 
 export default function GoalsEnginePage() {
   return (
@@ -21,7 +22,7 @@ export default function GoalsEnginePage() {
       </div>
 
       <Tabs defaultValue="goals" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 h-auto gap-1 bg-muted p-1">
+        <TabsList className="grid w-full grid-cols-6 h-auto gap-1 bg-muted p-1">
           <TabsTrigger 
             value="goals" 
             className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
@@ -62,6 +63,14 @@ export default function GoalsEnginePage() {
             <Lightbulb className="w-4 h-4" />
             <span className="text-xs sm:text-sm">Purpose</span>
           </TabsTrigger>
+          <TabsTrigger 
+            value="tuning" 
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 data-[state=active]:bg-background"
+            data-testid="tab-tuning"
+          >
+            <Settings className="w-4 h-4" />
+            <span className="text-xs sm:text-sm">Tuning</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="goals" className="mt-6">
@@ -82,6 +91,10 @@ export default function GoalsEnginePage() {
 
         <TabsContent value="purpose" className="mt-6">
           <WalterPurposeTab />
+        </TabsContent>
+
+        <TabsContent value="tuning" className="mt-6">
+          <TuningTab />
         </TabsContent>
       </Tabs>
     </div>

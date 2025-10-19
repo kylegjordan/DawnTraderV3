@@ -528,6 +528,13 @@ export interface IStorage {
   getPortfolioState(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined>;
   upsertPortfolioState(data: InsertPortfolioState & { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState>;
   updatePortfolioBalance(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; balance: number }): Promise<PortfolioState>;
+
+  // Tuning methods (Phase 26.1)
+  getTuningPolicy(params: { userId: string; mode: 'live' | 'paper' }): Promise<any | null>;
+  upsertTuningPolicy(data: any): Promise<any>;
+  getTuningEvents(params: { userId: string; mode?: string; limit?: number }): Promise<any[]>;
+  createTuningEvent(data: any): Promise<any>;
+  updateTuningEvent(id: string, updates: any): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2959,6 +2966,69 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query;
+  }
+
+  // Tuning methods (Phase 26.1)
+  async getTuningPolicy(params: { userId: string; mode: 'live' | 'paper' }): Promise<any | null> {
+    const { tuningPolicy } = await import('@shared/schema');
+    const [policy] = await db
+      .select()
+      .from(tuningPolicy)
+      .where(and(
+        eq(tuningPolicy.userId, params.userId),
+        eq(tuningPolicy.mode, params.mode)
+      ))
+      .limit(1);
+    return policy || null;
+  }
+
+  async upsertTuningPolicy(data: any): Promise<any> {
+    const { tuningPolicy } = await import('@shared/schema');
+    const existing = await this.getTuningPolicy({ userId: data.userId, mode: data.mode });
+    
+    if (existing) {
+      const [updated] = await db
+        .update(tuningPolicy)
+        .set({ ...data, lastUpdated: new Date() })
+        .where(eq(tuningPolicy.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(tuningPolicy).values(data).returning();
+    return created;
+  }
+
+  async getTuningEvents(params: { userId: string; mode?: string; limit?: number }): Promise<any[]> {
+    const { tuningEvent } = await import('@shared/schema');
+    const conditions: any[] = [eq(tuningEvent.userId, params.userId)];
+    
+    if (params.mode) {
+      conditions.push(eq(tuningEvent.mode, params.mode));
+    }
+    
+    return await db
+      .select()
+      .from(tuningEvent)
+      .where(and(...conditions))
+      .orderBy(desc(tuningEvent.createdAt))
+      .limit(params.limit || 50);
+  }
+
+  async createTuningEvent(data: any): Promise<any> {
+    const { tuningEvent } = await import('@shared/schema');
+    const [created] = await db.insert(tuningEvent).values(data).returning();
+    return created;
+  }
+
+  async updateTuningEvent(id: string, updates: any): Promise<any> {
+    const { tuningEvent } = await import('@shared/schema');
+    const [updated] = await db
+      .update(tuningEvent)
+      .set(updates)
+      .where(eq(tuningEvent.id, id))
+      .returning();
+    return updated;
   }
 }
 

@@ -12,7 +12,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
-import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog } from "@shared/schema";
+import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -1740,6 +1740,216 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error('[AutoTest] Error running tests:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Phase 26.1: Auto-Tuning Engine API
+  app.get('/api/tuning/events', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { mode, limit = 50 } = req.query;
+      
+      const conditions: any[] = [eq(tuningEvent.userId, userId)];
+      if (mode) {
+        conditions.push(eq(tuningEvent.mode, mode as string));
+      }
+      
+      const events = await db
+        .select()
+        .from(tuningEvent)
+        .where(and(...conditions))
+        .orderBy(desc(tuningEvent.createdAt))
+        .limit(Number(limit));
+      
+      res.json(events);
+    } catch (error: any) {
+      console.error('[TuningAPI] Error fetching events:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/tuning/policy', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { mode } = req.query;
+      
+      if (!mode) {
+        return res.status(400).json({ error: 'mode parameter required' });
+      }
+      
+      const [policy] = await db
+        .select()
+        .from(tuningPolicy)
+        .where(and(
+          eq(tuningPolicy.userId, userId),
+          eq(tuningPolicy.mode, mode as string)
+        ))
+        .limit(1);
+      
+      if (!policy) {
+        // Return default policy if none exists
+        return res.json({
+          enabled: false,
+          aggressiveness: 'balanced',
+          maxStepPercent: '10.00',
+          cooldownMinutes: 60,
+          maxDailyAdjustments: 10,
+          fieldBounds: {},
+          currentCounters: { adjustmentsToday: 0, reverts: 0 }
+        });
+      }
+      
+      res.json(policy);
+    } catch (error: any) {
+      console.error('[TuningAPI] Error fetching policy:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/tuning/enable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { mode, aggressiveness = 'balanced', fieldBounds = {} } = req.body;
+      
+      if (!mode) {
+        return res.status(400).json({ error: 'mode is required' });
+      }
+      
+      // Check if policy exists
+      const [existingPolicy] = await db
+        .select()
+        .from(tuningPolicy)
+        .where(and(
+          eq(tuningPolicy.userId, userId),
+          eq(tuningPolicy.mode, mode)
+        ))
+        .limit(1);
+      
+      if (existingPolicy) {
+        // Update existing policy
+        const [updated] = await db
+          .update(tuningPolicy)
+          .set({
+            enabled: true,
+            aggressiveness,
+            fieldBounds,
+            lastUpdated: new Date()
+          })
+          .where(eq(tuningPolicy.id, existingPolicy.id))
+          .returning();
+        
+        return res.json({ success: true, policy: updated });
+      }
+      
+      // Create new policy
+      const [newPolicy] = await db
+        .insert(tuningPolicy)
+        .values({
+          userId,
+          mode,
+          enabled: true,
+          aggressiveness,
+          fieldBounds,
+          maxStepPercent: '10.00',
+          cooldownMinutes: 60,
+          maxDailyAdjustments: 10,
+          currentCounters: { adjustmentsToday: 0, reverts: 0 }
+        })
+        .returning();
+      
+      res.json({ success: true, policy: newPolicy });
+    } catch (error: any) {
+      console.error('[TuningAPI] Error enabling tuning:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/tuning/disable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { mode } = req.body;
+      
+      if (!mode) {
+        return res.status(400).json({ error: 'mode is required' });
+      }
+      
+      const [updated] = await db
+        .update(tuningPolicy)
+        .set({
+          enabled: false,
+          lastUpdated: new Date()
+        })
+        .where(and(
+          eq(tuningPolicy.userId, userId),
+          eq(tuningPolicy.mode, mode)
+        ))
+        .returning();
+      
+      res.json({ success: true, policy: updated });
+    } catch (error: any) {
+      console.error('[TuningAPI] Error disabling tuning:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/tuning/rollback', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { eventId } = req.body;
+      
+      if (!eventId) {
+        return res.status(400).json({ error: 'eventId is required' });
+      }
+      
+      // Fetch the event to rollback
+      const [event] = await db
+        .select()
+        .from(tuningEvent)
+        .where(and(
+          eq(tuningEvent.id, eventId),
+          eq(tuningEvent.userId, userId)
+        ))
+        .limit(1);
+      
+      if (!event) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
+      
+      if (event.reverted) {
+        return res.status(400).json({ error: 'Event already reverted' });
+      }
+      
+      // Mark event as reverted
+      await db
+        .update(tuningEvent)
+        .set({ reverted: true })
+        .where(eq(tuningEvent.id, eventId));
+      
+      // Create a rollback event (new tuning event reversing the change)
+      const [rollbackEvent] = await db
+        .insert(tuningEvent)
+        .values({
+          userId: event.userId,
+          mode: event.mode,
+          field: event.field,
+          oldValue: event.newValue, // Swap old and new
+          newValue: event.oldValue,
+          confidence: '1.00', // Manual rollback is certain
+          reason: `Manual rollback of event ${eventId}`,
+          approvalType: 'manual',
+          status: 'success',
+          reverted: false
+        })
+        .returning();
+      
+      res.json({ 
+        success: true, 
+        originalEvent: event,
+        rollbackEvent
+      });
+    } catch (error: any) {
+      console.error('[TuningAPI] Error rolling back event:', error);
       res.status(500).json({ error: error.message });
     }
   });
