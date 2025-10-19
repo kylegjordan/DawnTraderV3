@@ -24,6 +24,7 @@ import { chatLogging } from "./middleware/chat-logging";
 import { parseIntent } from "./services/intent-parser";
 import { CommandRouter } from "./services/command-router";
 import { commandLogger } from "./services/command-logger";
+import { nlaiInterpreter } from "./services/nlai-interpreter";
 import { textToSpeech, estimateTTSCost } from "./services/walter-tts";
 import { ingestLearningFile, getIngestionHistory } from "./services/walter-ingest";
 import OpenAI from "openai";
@@ -6924,8 +6925,8 @@ Please:
         content: content.trim(),
       });
       
-      // Phase 6.8: Parse for command intent FIRST
-      const parsedIntent = parseIntent(content.trim());
+      // Phase 19+: Try NLAI interpreter first for simulation and action commands
+      const nlaiResponse = await nlaiInterpreter.interpret(userId, content.trim());
       let aiResponse: string;
       
       // Get pending confirmation ID for this user FIRST
@@ -6956,31 +6957,47 @@ Please:
         // User has pending confirmation but didn't say yes/no - remind them
         aiResponse = `⚠️  You have a pending confirmation. Please reply with "yes" or "no" first, or say "cancel" to clear it. Then you can issue new commands.`;
       }
-      // If it's a command (not just conversation) and NO pending confirmation, route it
-      else if (parsedIntent.type !== 'conversation' && !pendingConfirmationId) {
-        const startTime = Date.now();
-        const result = await commandRouter.routeCommand(parsedIntent, userId);
-        const executionTimeMs = Date.now() - startTime;
+      // Phase 19+: If NLAI recognized an actionable intent (simulation, system commands, reports)
+      else if (nlaiResponse.isActionable && nlaiResponse.executionResult) {
+        aiResponse = nlaiResponse.executionResult.success
+          ? `✅ ${nlaiResponse.executionResult.message}${nlaiResponse.executionResult.data ? '\n\n📊 Data:\n```json\n' + JSON.stringify(nlaiResponse.executionResult.data, null, 2) + '\n```' : ''}`
+          : `❌ ${nlaiResponse.executionResult.message}`;
         
-        if (result.requiresConfirmation) {
-          // Store confirmation ID for this user (we already checked no pending exists)
-          if (result.confirmationId) {
-            userPendingConfirmations.set(userId, result.confirmationId);
-          }
-          aiResponse = `⚠️  ${result.confirmationMessage}\n\nReply with **"yes"** to confirm or **"no"** to cancel.`;
-        } else if (result.success) {
-          aiResponse = `✅ ${result.message}${result.warnings?.length ? '\n\n⚠️  Warnings:\n' + result.warnings.join('\n') : ''}${result.data ? '\n\n📊 Data:\n```json\n' + JSON.stringify(result.data, null, 2) + '\n```' : ''}`;
-        } else {
-          aiResponse = `❌ ${result.message}${result.errors?.length ? '\n\nErrors:\n' + result.errors.join('\n') : ''}`;
-        }
-        
-        // Log command execution (Phase 6.8)
-        await commandLogger.logCommand(userId, parsedIntent, result, req.user?.username, executionTimeMs);
-        console.log(`[Command] User ${userId} executed: ${parsedIntent.type} - ${parsedIntent.action} ${parsedIntent.entity}`, { result });
+        console.log(`[NLAI] User ${userId} executed: ${nlaiResponse.actionId}`, { 
+          processingTime: nlaiResponse.processingTimeMs,
+          success: nlaiResponse.executionResult.success 
+        });
       }
-      // Normal conversation - generate Walter response
+      // Fallback to old intent parser for trading commands
       else {
-        aiResponse = await generateWalterResponse(userId, id, content.trim());
+        const parsedIntent = parseIntent(content.trim());
+        
+        // If it's a command (not just conversation) and NO pending confirmation, route it
+        if (parsedIntent.type !== 'conversation' && !pendingConfirmationId) {
+          const startTime = Date.now();
+          const result = await commandRouter.routeCommand(parsedIntent, userId);
+          const executionTimeMs = Date.now() - startTime;
+          
+          if (result.requiresConfirmation) {
+            // Store confirmation ID for this user (we already checked no pending exists)
+            if (result.confirmationId) {
+              userPendingConfirmations.set(userId, result.confirmationId);
+            }
+            aiResponse = `⚠️  ${result.confirmationMessage}\n\nReply with **"yes"** to confirm or **"no"** to cancel.`;
+          } else if (result.success) {
+            aiResponse = `✅ ${result.message}${result.warnings?.length ? '\n\n⚠️  Warnings:\n' + result.warnings.join('\n') : ''}${result.data ? '\n\n📊 Data:\n```json\n' + JSON.stringify(result.data, null, 2) + '\n```' : ''}`;
+          } else {
+            aiResponse = `❌ ${result.message}${result.errors?.length ? '\n\nErrors:\n' + result.errors.join('\n') : ''}`;
+          }
+          
+          // Log command execution (Phase 6.8)
+          await commandLogger.logCommand(userId, parsedIntent, result, req.user?.username, executionTimeMs);
+          console.log(`[Command] User ${userId} executed: ${parsedIntent.type} - ${parsedIntent.action} ${parsedIntent.entity}`, { result });
+        }
+        // Normal conversation - generate Walter response
+        else {
+          aiResponse = await generateWalterResponse(userId, id, content.trim());
+        }
       }
       
       // Phase 8.5 Addendum J: Add live data source metadata to Walter responses
