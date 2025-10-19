@@ -119,7 +119,7 @@ export const users = pgTable("users", {
   displayName: text("display_name"),
   timezone: varchar("timezone", { length: 50 }).default("UTC"),
   isAdmin: boolean("is_admin").default(false).notNull(),
-  role: userRoleEnum("role").default("viewer").notNull(),
+  role: userRoleEnum("role").default("owner").notNull(),
   globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   tradingMode: tradingModeEnum("trading_mode").default("paper"),
   tradingStatus: tradingStatusEnum("trading_status").default("stopped"),

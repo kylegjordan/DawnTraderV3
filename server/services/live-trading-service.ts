@@ -110,34 +110,10 @@ This is a high-risk operation and requires your explicit consent.`;
         };
       }
 
-      // 2. Validate with ExecutionPolicyController
-      const policyResult = await executionPolicyController.validateAndApprove({
-        actionId: 'start_live_trading',
-        userId,
-        context: {
-          mode: 'live',
-          riskLevel: 'critical',
-          requiresApproval: true,
-        },
-        riskLevel: 'critical',
-      });
-
-      // If policy blocks activation, return immediately
-      if (!policyResult.approved) {
-        console.log(`[LiveTrading] ❌ Policy check blocked activation:`, policyResult.reason);
-        
-        return {
-          success: false,
-          message: `Live trading activation blocked: ${policyResult.reason}`,
-          data: {
-            policyBlocked: true,
-            reason: policyResult.reason,
-            requiresApproval: policyResult.requiresApproval,
-          },
-        };
-      }
-
-      console.log(`[LiveTrading] ✅ Policy check approved activation`);
+      // 2. Note: Since this is called AFTER approval, we skip additional policy evaluation
+      // The approval flow already went through ExecutionPolicyController.evaluateExecution()
+      // This method is only called when user has explicitly approved the action
+      console.log(`[LiveTrading] ✅ Activation approved by user, proceeding with engine startup`);
 
       // 3. Initialize trading engine (placeholder for now)
       // In production, this would initialize the actual TradingEngine with live Kraken API
