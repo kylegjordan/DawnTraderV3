@@ -6,12 +6,6 @@ This project is a long-only, spot-trading cryptocurrency day trading web applica
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-## Testing Credentials
-For all functionality testing and e2e tests:
-- **Username**: testuser123
-- **Password**: SecurePass123!
-- **Note**: Always use username for login, not email
-
 ## System Architecture
 The application features a React, TypeScript, Vite frontend with a mobile-first, responsive design. The backend uses Node.js and Express, providing a RESTful API and WebSocket support. Data persistence is managed by PostgreSQL via Neon serverless driver and Drizzle ORM.
 
@@ -42,92 +36,6 @@ Cognitive Introspection & Bias Mitigation involves an `IntrospectionEngine` to d
 Controlled Web Intelligence & Knowledge Retrieval uses a `KnowledgeRetrievalService` for policy-bound web acquisition with trust scoring and caching, and a `SemanticCorrelationEngine` for relevance and gap detection using OpenAI embeddings. This also integrates into the Autonomy Controller pipeline: Reasoning → Introspection → Safety → Federated Ethics → Ethical Reasoning → Knowledge Acquisition (if gap >0.4) → Execution.
 
 Multi-Domain Orchestration & Cross-Node Learning utilizes a `LearningCoordinator` to validate, score, and route learning deltas across cluster nodes, a `ModelConsistencyManager` to detect and reconcile model drift, and `CrossDomainReasoning` to transform learning between defined domain channels (Research to Trading, Compliance to Trading, Analytics to Research, Trading to Analytics). A `LearningGateValidator` applies the ethical gate chain to all learning operations.
-
-## Recent Changes
-
-### Phase 19: Screener & Guardrail Mode Isolation (October 19, 2025)
-**Status**: ✅ COMPLETED
-
-Achieved complete independence between paper and live mode settings. Changes in one mode never affect the other, with separate persistence and proper cache invalidation.
-
-**Pre-Implementation Diagnostics**:
-- Mode Isolation: `screener_filters` and `guardrails` tables have proper mode column with unique (userId, mode) constraints
-- Persistence Independence: Paper and live modes maintain separate parameter storage with independent timestamps
-- Cache Invalidation: Multi-layer cache clearing (ConfigBob → Cortex → StateAwareness → ContextRefresh → WebSocket broadcast)
-- Learning Delta Sharing: `agent_learning_delta` table is mode-agnostic, enabling cross-mode knowledge transfer
-- Diagnostic Pass Rate: 8/8 tests (100%)
-
-**Implementation Work**:
-- **ScreenerFiltersTab Rebuilt**: Fixed field name mismatch between component and database schema (12 correct fields: minVolume, minPrice, maxPrice, minMarketCap, maxBidAskSpread, rsiMin/Max, volatilityMin/Max, minLiquidity, excludeStablecoins, allowRegulatedOnly)
-- **URL Construction Bug Fixed**: Modified queryClient's default behavior that was joining queryKey arrays to form URLs. Added custom queryFn functions that fetch from correct endpoints (`/api/screeners`) with x-app-mode header instead of mode in URL path
-- **Authentication Fixed**: Updated custom queryFn to use `ensureValidToken()` helper instead of direct localStorage access, resolving 401 errors
-
-**Validation Results**:
-- E2E Test: Paper mode displays values (5M, 250M) independently from live mode (1M, 100M)
-- Isolation Verified: Changes in live mode don't affect paper mode values
-- Database Confirmation: Separate timestamps and values per mode
-- Architect Review: **PASS** - No security issues, correct mode isolation, proper authentication
-
-**Readiness**: ✅ CLEARED FOR PHASE 20 (Paper Trading Simulation Engine)
-
-### Phase 20: Walter Simulation Command Routing Restoration (October 19, 2025)
-**Status**: ✅ COMPLETED
-
-Restored Walter's ability to execute paper trading simulation commands by integrating the NLAI (Natural Language Action Interpreter) system into Walter's message processing pipeline.
-
-**Root Cause Identified**:
-- Walter's message handler used outdated `intent-parser.ts` lacking simulation command patterns
-- Complete NLAI system existed (`nlai-action-registry.ts`, `nlai-interpreter.ts`) with correct patterns but wasn't integrated
-- NLAI handlers made HTTP fetch calls without authentication tokens, causing 401 errors
-
-**Implementation**:
-- **Created `paper-sim-service.ts`**: Shared service layer for paper trading simulation
-  - `startPaperSimulation(userId)` - Direct function call for starting simulation
-  - `stopPaperSimulation()` - Direct function call for stopping simulation
-  - `getPaperSimulationStatus()` - Direct function call for status checks
-  - Eliminates HTTP overhead and authentication complexity
-  - Shared by both API endpoints and NLAI handlers
-
-- **Updated `nlai-action-registry.ts`**: Modified handlers to use service functions
-  - Replaced HTTP fetch calls with direct service function calls
-  - No authentication tokens needed (runs in same process)
-  - Handlers: `start_paper_simulation`, `stop_paper_simulation`, `check_simulation_status`
-
-- **Integrated NLAI into `routes.ts`**: Walter message handler now checks NLAI first
-  - Line 6932: `nlaiInterpreter.interpret(userId, content)` runs first
-  - If actionable, uses NLAI execution result with [NLAI] logging
-  - Falls back to old `intent-parser` + `command-router` for trading commands
-  - Maintains backward compatibility with existing commands
-
-- **Created `reports/simulation_engine_intent_audit.md`**: Comprehensive diagnostic report
-  - Documented dual intent systems (old vs. new)
-  - Mapped patterns, endpoints, and service architecture
-  - Detailed repair implementation and validation checklist
-
-**Validation Results**:
-- E2E Test: ✅ PASSED
-  - "start simulation" → Paper trading started successfully
-  - "check simulation status" → Reports ACTIVE
-  - "stop simulation" → Stopped successfully
-- NLAI logs confirm proper routing: `[NLAI] User ${userId} executed: start_paper_simulation`
-- No authentication errors
-- Paper execution engine activates correctly
-
-**Architect Review**: ✅ PASS
-- Service layer implementation correct
-- Global state management safe (operation lock prevents races)
-- No security vulnerabilities
-- Error handling comprehensive
-- Architecture follows best practices
-
-**Benefits**:
-- Zero HTTP overhead for internal simulation commands
-- No authentication complexity
-- Shared logic between API endpoints and NLAI handlers
-- Maintains global operation lock for thread safety
-- Atomic state management with rollback on errors
-
-**Readiness**: ✅ SYSTEM READY - Walter can now control paper trading simulation via natural language
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.

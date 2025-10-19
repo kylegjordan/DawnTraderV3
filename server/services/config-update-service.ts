@@ -27,12 +27,23 @@ export async function updateGuardrails(
   try {
     console.log(`[ConfigUpdateService] Updating guardrails for user ${userId}, mode: ${mode}`, updates);
     
-    // Validate data
-    const validatedData = insertGuardrailsSchema.parse({ 
-      ...updates, 
-      userId, 
-      mode 
-    });
+    // Fetch existing guardrails to merge with updates
+    const existing = await storage.getGuardrails({ userId, mode });
+    
+    // Merge existing data with updates to ensure all required fields are present
+    const mergedData = {
+      userId,
+      mode,
+      maxDailyLoss: updates.maxDailyLoss ?? existing?.maxDailyLoss ?? '1000.00',
+      maxDrawdown: updates.maxDrawdown ?? existing?.maxDrawdown ?? '10.00',
+      maxPositionSize: updates.maxPositionSize ?? existing?.maxPositionSize ?? '5000.00',
+      maxOpenPositions: updates.maxOpenPositions ?? existing?.maxOpenPositions ?? 5,
+      riskPerTrade: updates.riskPerTrade ?? existing?.riskPerTrade ?? '1.5',
+      aiCanAdjust: updates.aiCanAdjust ?? existing?.aiCanAdjust ?? false,
+    };
+    
+    // Validate merged data
+    const validatedData = insertGuardrailsSchema.parse(mergedData);
     
     // Update database
     const guardrailsData = await storage.upsertGuardrails(validatedData);
@@ -137,12 +148,29 @@ export async function updateScreeners(
   try {
     console.log(`[ConfigUpdateService] Updating screener filters for user ${userId}, mode: ${mode}`, updates);
     
-    // Validate data
-    const validatedData = insertScreenerFiltersSchema.parse({ 
-      ...updates, 
-      userId, 
-      mode 
-    });
+    // Fetch existing screener filters to merge with updates
+    const existing = await storage.getScreenerFilters({ userId, mode });
+    
+    // Merge existing data with updates to ensure all required fields are present
+    const mergedData = {
+      userId,
+      mode,
+      minVolume: updates.minVolume ?? existing?.minVolume ?? '500000.00',
+      minPrice: updates.minPrice ?? existing?.minPrice ?? '0.001',
+      maxPrice: updates.maxPrice ?? existing?.maxPrice ?? '50000.00',
+      minMarketCap: updates.minMarketCap ?? existing?.minMarketCap ?? '10000000.00',
+      maxBidAskSpread: updates.maxBidAskSpread ?? existing?.maxBidAskSpread ?? '2.50',
+      rsiMin: updates.rsiMin ?? existing?.rsiMin ?? 20,
+      rsiMax: updates.rsiMax ?? existing?.rsiMax ?? 80,
+      volatilityMin: updates.volatilityMin ?? existing?.volatilityMin ?? '0.20',
+      volatilityMax: updates.volatilityMax ?? existing?.volatilityMax ?? '10.00',
+      excludeStablecoins: updates.excludeStablecoins ?? existing?.excludeStablecoins ?? true,
+      minLiquidity: updates.minLiquidity ?? existing?.minLiquidity ?? '250000.00',
+      allowRegulatedOnly: updates.allowRegulatedOnly ?? existing?.allowRegulatedOnly ?? false,
+    };
+    
+    // Validate merged data
+    const validatedData = insertScreenerFiltersSchema.parse(mergedData);
     
     // Update database
     const screenerData = await storage.upsertScreenerFilters(validatedData);

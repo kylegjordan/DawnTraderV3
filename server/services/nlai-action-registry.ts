@@ -587,6 +587,9 @@ export class NLAIActionRegistry {
   }
 
   matchIntent(message: string): { actionId: string; intent: ActionIntent } | null {
+    console.log(`[NLAI-Registry] Attempting to match message: "${message}"`);
+    console.log(`[NLAI-Registry] Total registered actions: ${this.actions.size}`);
+    
     for (const [actionId, action] of this.actions.entries()) {
       for (const pattern of action.patterns) {
         const match = message.match(pattern);
@@ -606,12 +609,13 @@ export class NLAIActionRegistry {
             extractedValue,
           };
 
-          console.log(`[NLAI-Registry] Matched action: ${actionId} with intent:`, intent);
+          console.log(`[NLAI-Registry] ✅ Matched action: ${actionId} with intent:`, intent);
           return { actionId, intent };
         }
       }
     }
 
+    console.log(`[NLAI-Registry] ❌ No action matched for message: "${message}"`);
     return null;
   }
 
