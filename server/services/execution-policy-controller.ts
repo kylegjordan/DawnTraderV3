@@ -110,6 +110,8 @@ export class ExecutionPolicyController {
             evaluation: evaluation.riskAssessment,
           },
           status: 'pending',
+          action: request.actionType, // Phase 27.2: Store action for execution after approval
+          traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`, // Phase 27.2: Unique trace ID
         });
         
         approvalId = approval.id;

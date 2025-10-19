@@ -6999,8 +6999,26 @@ Please:
         return res.status(403).json({ success: false, error: 'Unauthorized' });
       }
       
-      // Execute the approved change
-      if (approval.strategyName && approval.proposedValue) {
+      // Execute the approved change based on action type
+      let executionResult: any = { success: true };
+      
+      // Phase 27.2: Execute action-based approvals (e.g., start_live_trading)
+      if (approval.action) {
+        if (approval.action === 'start_live_trading') {
+          const { liveTradingService } = await import('./services/live-trading-service');
+          const result = await liveTradingService.activateLiveTrading(userId);
+          executionResult = { success: result.success, message: result.message, data: result.data };
+          console.log(`[Phase 27.2] Executed start_live_trading:`, executionResult);
+        } else if (approval.action === 'start_paper_simulation') {
+          const { startPaperSimulation } = await import('./services/paper-sim-service');
+          const result = await startPaperSimulation(userId);
+          executionResult = { success: result.success, message: result.message, data: result.data };
+          console.log(`[Phase 27.2] Executed start_paper_simulation:`, executionResult);
+        }
+        // Add other action handlers as needed
+      }
+      // Legacy: Handle strategy settings updates
+      else if (approval.strategyName && approval.proposedValue) {
         await storage.upsertStrategySettings({
           userId,
           mode: approval.mode as any,
@@ -7031,20 +7049,38 @@ Please:
         });
       }
       
+      // Phase 27.2: Check if execution was successful before marking as approved
+      if (!executionResult.success) {
+        console.error(`[Phase 27.2] Execution failed for ${traceId}:`, executionResult);
+        return res.status(400).json({ 
+          success: false, 
+          error: executionResult.message || 'Action execution failed', 
+          details: executionResult,
+          traceId 
+        });
+      }
+      
       // Update approval status (do NOT set clearedAt - that's for explicit clearing only)
       const updated = await storage.updateApprovalStatus(approval.id, 'approved', {
         approvedAt: new Date() as any,
         approvedBy: userId,
       });
       
-      // Create audit log
+      // Create audit log with execution results
       await storage.createWalterApprovalsAudit({
         approvalId: approval.id,
         userId,
         decision: 'approved',
         decisionMethod: 'inline_approval',
         notes: null,
-        executionResult: { success: true, appliedAt: new Date(), mode: approval.mode, traceId },
+        executionResult: { 
+          success: executionResult.success, 
+          appliedAt: new Date(), 
+          mode: approval.mode, 
+          traceId,
+          message: executionResult.message,
+          data: executionResult.data 
+        },
       });
       
       // Emit WebSocket event for real-time sync
@@ -7053,7 +7089,13 @@ Please:
       
       console.log(`[Phase 27.2] Approved ${traceId} by user ${userId} (mode: ${approval.mode})`);
       
-      res.json({ success: true, message: `Approved — ${approval.action || 'action'} executed`, traceId, status: 'approved' });
+      res.json({ 
+        success: true, 
+        message: executionResult.message || `Approved — ${approval.action || 'action'} executed`, 
+        traceId, 
+        status: 'approved',
+        data: executionResult.data 
+      });
     } catch (error: any) {
       console.error('[Phase 27.2] Error approving:', error);
       res.status(500).json({ success: false, error: error.message });
