@@ -1,0 +1,156 @@
+🧩 PHASE 27.3 – ROLE ENFORCEMENT & UNIFIED PERMISSION CACHE
+🧩 PHASE 27.4 – TRADING STATE SYNCHRONIZATION & FAIL-SAFE RECOVERY
+🎯 Objectives
+
+Ensure every service and UI element relies on a single, authoritative permission source shared by backend, JWT, WebSocket session, and frontend store.
+
+Guarantee trading mode (LIVE / PAPER / STOPPED) remains perfectly synchronized between backend → cluster → frontend, with automatic recovery after restarts or failures.
+
+A. Role and Permission Architecture (Phase 27.3)
+1 — Create Central Permission Matrix
+
+Define one configuration object describing what each role can do.
+Example only – structure, not code:
+
+Owner → Full control (live + paper trading + approvals + settings)
+
+Admin → Paper trading + approvals + report viewing
+
+Trader → Paper trading only
+
+Viewer → Read-only
+
+Each service should read from this matrix rather than hard-coding role checks.
+
+2 — Permission Cache Service
+
+Create a lightweight in-memory cache that:
+
+Loads the matrix at startup.
+
+Attaches the correct permission list to every user session on login.
+
+Refreshes when an admin changes a role or once per day automatically.
+
+Writes a startup log line such as
+[PermissionCache] Synced permissions for user <id> (<role>).
+
+3 — JWT and Session Alignment
+
+When a user logs in:
+
+Embed role + permissions array inside the JWT payload.
+
+Return the same data in the login API response so the frontend immediately knows what actions are allowed.
+
+Ensure permissions are also emitted on WebSocket handshake for live role sync.
+
+4 — Execution Policy Integration
+
+In the Execution Policy Controller and other services (e.g., LiveTradingService, Goal Engine), replace all hard-coded role comparisons with a single permission check:
+
+If user lacks required permission (e.g., trade_live), return a clear forbidden response.
+
+If permission exists, continue execution without redundant approval prompts.
+
+5 — Frontend Permission Awareness
+
+The frontend stores both role and permission array in its user state.
+
+Each button or control uses a simple boolean like can('trade_live') to enable or disable it.
+
+After login or role change, a WebSocket event session_role_sync updates the UI instantly (no reload).
+
+6 — Verification Checklist
+
+✅ Login JWT shows role + permissions
+✅ Trading toggles enabled for owner, disabled for viewer
+✅ Walter approvals honor permissions
+✅ Audit log shows permission decision (granted/denied)
+
+B. Trading State Synchronization and Fail-Safe Recovery (Phase 27.4)
+1 — Establish Authoritative State
+
+Define a single truth source for trading mode:
+
+SystemContext table stores trading_mode = live|paper|stopped.
+
+Every engine read/write and UI refresh originates from this table.
+
+2 — State Broadcast Bus
+
+Whenever the mode changes:
+
+Emit a cluster bus event trading_state_changed with fields (mode, active, timestamp, initiator).
+
+All nodes listening update their local status immediately.
+
+Frontend listens via WebSocket and updates the toggle UI without reload.
+
+3 — Startup Self-Check
+
+At application startup:
+
+Read system_context.trading_mode.
+
+If live or paper → auto-resume that engine and broadcast state.
+
+If stopped → keep idle but report status in System Monitoring tab.
+Log example: [TradingSync] Recovered mode=paper after restart.
+
+4 — Kill-Switch and Fail-Safe Logic
+
+Add a continuous health check that:
+
+Stops trading immediately if a kill-switch is active or heartbeat missing > 60 s.
+
+Writes to system_context.last_safe_state so the system can restore later.
+
+Logs: [FailSafe] Trading halted — heartbeat timeout (60 s).
+
+5 — Manual Override Support
+
+Both Walter and the user can change trading mode manually if permissions allow:
+
+Walter via intent (“Start live trading”).
+
+User via toggle switch.
+Each path calls the same state update and bus event, keeping cluster and UI consistent.
+
+6 — Audit and Recovery Records
+
+For every state change write:
+
+trading_mode, user_id, source (Walter/UI/API), previous_mode, timestamp.
+Create daily log summaries of state transitions and any auto-recovery events.
+
+7 — Verification Checklist
+
+✅ Startup restores previous mode correctly
+✅ Switching paper ↔ live propagates cluster-wide within 1 s
+✅ Kill-switch halts trading and sets status = stopped
+✅ Manual toggle and Walter intent both work and stay synchronized
+✅ Audit logs capture every transition with traceId
+
+C. Documentation & Deliverables
+
+Updated replit.md with two sections:
+Phase 27.3 — Role Enforcement & Unified Permission Cache
+Phase 27.4 — Trading State Synchronization & Fail-Safe Recovery
+
+Add two audit reports:
+reports/PHASE_27_3_PERMISSION_AUDIT.md and reports/PHASE_27_4_TRADING_SYNC_AUDIT.md.
+
+Include startup log samples, key verification tests, and architect approval sign-off.
+
+Mark phase complete when all verification checklists pass and the UI shows real-time role and trading mode synchronization.
+
+✅ Expected Outcomes
+
+Single source of truth for roles and permissions → no more “viewer-only” errors.
+
+Manual toggles and Walter intents activate trading reliably in either mode.
+
+Cluster, database, and UI states stay in perfect sync even after restarts or failures.
+
+System meets compliance and audit requirements for role traceability and safe trading operation.

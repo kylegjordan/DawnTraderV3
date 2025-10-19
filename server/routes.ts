@@ -47,6 +47,8 @@ import { uiBob } from "./services/bob-ui";
 import { cortexCore } from "./services/cortex/cortex-core";
 import { filePersistence } from "./services/file-persistence";
 import { memoryLifecycle } from "./services/memory-lifecycle";
+import { getPermissionsForRole, Permission } from './config/permissions';
+import type { UserRole } from './config/permissions';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -77,10 +79,18 @@ const userPendingConfirmations = new Map<string, string>(); // userId -> confirm
 const JWT_SECRET = process.env.JWT_SECRET || "development_secret_change_in_production";
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "development_refresh_secret_change_in_production";
 
-// Issue access and refresh tokens
-function issueTokens(user: { id: string; username: string }) {
+// Issue access and refresh tokens (Phase 27.3: includes permissions)
+function issueTokens(user: { id: string; username: string; role?: UserRole }) {
+  const userRole = user.role || 'owner';
+  const permissions = getPermissionsForRole(userRole);
+  
   const accessToken = jwt.sign(
-    { id: user.id, username: user.username }, 
+    { 
+      id: user.id, 
+      username: user.username,
+      role: userRole,
+      permissions 
+    }, 
     JWT_SECRET, 
     { expiresIn: '12h' }
   );
@@ -98,7 +108,8 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     username: string;
     isAdmin?: boolean;
-    role?: 'owner' | 'editor' | 'viewer';
+    role?: UserRole;
+    permissions?: Permission[];
   };
   mode?: 'live' | 'paper';
 }
@@ -117,16 +128,24 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
   }
   
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { 
+      id: string; 
+      username: string;
+      role?: UserRole;
+      permissions?: Permission[];
+    };
     
     // Fetch user from database to get admin status and role
     const user = await storage.getUser(decoded.id);
+    const userRole = user?.role || decoded.role || 'owner';
+    const permissions = decoded.permissions || getPermissionsForRole(userRole);
     
     req.user = { 
       id: decoded.id, 
       username: decoded.username,
       isAdmin: user?.isAdmin || false,
-      role: user?.role || 'viewer'
+      role: userRole,
+      permissions
     };
     next();
   } catch (error) {
@@ -337,7 +356,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
       
-      const { accessToken, refreshToken } = issueTokens({ id: user.id, username: user.username });
+      const { accessToken, refreshToken } = issueTokens({ id: user.id, username: user.username, role: user.role });
+      const userRole = user.role || 'owner';
+      const permissions = getPermissionsForRole(userRole);
       
       res.json({ 
         accessToken, 
@@ -347,7 +368,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: user.id, 
           username: user.username,
           isAdmin: user.isAdmin || false,
-          role: user.role || 'viewer'
+          role: userRole,
+          permissions // Phase 27.3: Return permissions array
         } 
       });
     } catch (error) {

@@ -76,6 +76,10 @@ app.use((req, res, next) => {
   const { seedTestUser } = await import('./startup/test-user-seeder');
   await seedTestUser();
 
+  // Phase 27.3: Initialize Permission Cache
+  const { permissionCache } = await import('./services/permission-cache');
+  await permissionCache.initialize();
+
   // Phase 13.0: Seed default ethical principles
   const { seedEthicalPrinciples } = await import('./startup/ethical-principles-seeder');
   await seedEthicalPrinciples();
