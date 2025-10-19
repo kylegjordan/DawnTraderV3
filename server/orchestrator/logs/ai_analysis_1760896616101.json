@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-19T17:56:56.101Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly higher than the number of cores, indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "No active trades or positive P&L despite active strategies, suggesting potential issues with strategy execution or market conditions."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, confidence, or generated opportunities, indicating possible malfunction or misconfiguration."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and adjust trading strategies to ensure they are aligned with current market conditions and capable of generating trades."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate AI system configurations to ensure it is properly learning and generating trading opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a detailed analysis of CPU usage to identify and resolve any bottlenecks or inefficient processes.",
+      "rationale": "High CPU load can lead to performance degradation and impact trading operations, requiring prompt attention."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review and potentially recalibrate trading strategies to ensure they are functioning as intended and capable of executing trades.",
+      "rationale": "Active strategies with no trades or P&L may indicate misalignment with market conditions or execution issues."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Investigate the AI system's lack of activity and make necessary adjustments to ensure it is learning and contributing to trading decisions.",
+      "rationale": "An inactive AI system may result in missed trading opportunities and reduced platform effectiveness."
+    }
+  ],
+  "urgencyLevel": "high"
+}

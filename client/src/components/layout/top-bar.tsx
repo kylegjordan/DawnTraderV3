@@ -2,6 +2,7 @@ import { Menu, Bell, Clock, Globe, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { InteractiveNotification } from "@/components/ai/InteractiveNotification";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -355,7 +356,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+            <DropdownMenuContent align="end" className="w-96 max-h-96 overflow-y-auto">
               <DropdownMenuLabel>Walter Approvals (Recent 20)</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {approvalsData && approvalsData.length > 0 ? (
@@ -364,70 +365,35 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   {approvalsData.filter((a: any) => a.status === 'pending').map((approval: any) => (
                     <DropdownMenuItem
                       key={approval.id}
-                      onClick={() => setLocation('/walter')}
-                      className="cursor-pointer"
+                      className="p-2 focus:bg-transparent hover:bg-transparent"
                       data-testid={`approval-${approval.id}`}
+                      onSelect={(e) => e.preventDefault()}
                     >
-                      <div className="flex flex-col gap-1 w-full">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="destructive" className="text-xs">
-                            PENDING
-                          </Badge>
-                          {approval.projectedRisk != null && (
-                            <Badge variant="outline" className="text-xs">
-                              {approval.projectedRisk}% risk
-                            </Badge>
-                          )}
-                          {approval.mode && (
-                            <span className="text-xs text-muted-foreground">{approval.mode}</span>
-                          )}
-                        </div>
-                        <p className="text-sm font-medium">
-                          {approval.strategyName || approval.parameterName || approval.action || 'Pending Approval'}
-                        </p>
-                      </div>
+                      <InteractiveNotification
+                        approval={approval}
+                        onClose={() => {
+                          // Dropdown will auto-close if needed, or user can continue reviewing
+                        }}
+                      />
                     </DropdownMenuItem>
                   ))}
                   
                   {/* Then show recent resolved approvals */}
-                  {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => {
-                    const timestamp = approval.status === 'approved' ? approval.approvedAt : approval.rejectedAt;
-                    return (
-                      <DropdownMenuItem
-                        key={approval.id}
-                        onClick={() => setLocation('/walter')}
-                        className="cursor-pointer opacity-70"
-                        data-testid={`approval-resolved-${approval.id}`}
-                      >
-                        <div className="flex flex-col gap-1 w-full">
-                          <div className="flex items-center gap-2">
-                            <Badge 
-                              variant={approval.status === 'approved' ? 'default' : 'secondary'} 
-                              className="text-xs"
-                            >
-                              {approval.status === 'approved' ? 'APPROVED' : approval.status === 'rejected' ? 'REJECTED' : approval.status?.toUpperCase() || 'RESOLVED'}
-                            </Badge>
-                            {approval.projectedRisk != null && (
-                              <Badge variant="outline" className="text-xs">
-                                {approval.projectedRisk}% risk
-                              </Badge>
-                            )}
-                            {approval.mode && (
-                              <span className="text-xs text-muted-foreground">{approval.mode}</span>
-                            )}
-                          </div>
-                          <p className="text-sm font-medium">
-                            {approval.strategyName || approval.parameterName || approval.action || 'Unknown Action'}
-                          </p>
-                          {timestamp && (
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(timestamp).toLocaleString()}
-                            </p>
-                          )}
-                        </div>
-                      </DropdownMenuItem>
-                    );
-                  })}
+                  {approvalsData.filter((a: any) => a.status !== 'pending').map((approval: any) => (
+                    <DropdownMenuItem
+                      key={approval.id}
+                      className="p-2 focus:bg-transparent hover:bg-transparent"
+                      data-testid={`approval-resolved-${approval.id}`}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      <InteractiveNotification
+                        approval={approval}
+                        onClose={() => {
+                          // Dropdown will auto-close if needed
+                        }}
+                      />
+                    </DropdownMenuItem>
+                  ))}
                 </>
               ) : (
                 <div className="px-2 py-6 text-center">
