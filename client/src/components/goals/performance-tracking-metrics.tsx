@@ -44,6 +44,10 @@ export default function PerformanceTrackingMetrics() {
   // Phase 27.F.1: Fetch fresh canonical goals data on every mount
   const { data: goalsData, isLoading, refetch } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
     queryKey: ['/api/goals', mode],
+    queryFn: async () => {
+      // Use proper query parameter format: /api/goals?mode=paper
+      return apiRequest('GET', `/api/goals?mode=${mode}`);
+    },
     refetchOnMount: 'always', // Always fetch fresh data on mount
     staleTime: 0, // Consider data stale immediately
     gcTime: 0, // Don't cache unmounted queries

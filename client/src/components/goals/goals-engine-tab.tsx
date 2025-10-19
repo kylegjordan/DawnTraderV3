@@ -43,6 +43,10 @@ export default function GoalsEngineTab() {
   // Phase 27.F.1: Fetch fresh goals data on every mount (no stale cache)
   const { data, isLoading, refetch } = useQuery<GoalsSummary>({
     queryKey: ['/api/goals', mode],
+    queryFn: async () => {
+      // Use proper query parameter format: /api/goals?mode=paper
+      return apiRequest('GET', `/api/goals?mode=${mode}`);
+    },
     refetchOnMount: 'always', // Always fetch fresh data on mount
     staleTime: 0, // Consider data stale immediately
     gcTime: 0, // Don't cache unmounted queries
