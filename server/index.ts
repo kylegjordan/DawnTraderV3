@@ -80,6 +80,25 @@ app.use((req, res, next) => {
   const { permissionCache } = await import('./services/permission-cache');
   await permissionCache.initialize();
 
+  // Phase 27.4: Initialize Trading State Recovery
+  const { tradingStateSync } = await import('./services/trading-state-sync.js');
+  const { db } = await import('./db.js');
+  const { users } = await import('@shared/schema');
+  try {
+    // Get all users and recover their trading state
+    const allUsers = await db.select().from(users);
+    console.log(`[TradingStateSync] Recovering trading state for ${allUsers.length} user(s)...`);
+    
+    for (const user of allUsers) {
+      await tradingStateSync.initialize(user.id);
+    }
+    
+    console.log(`[TradingStateSync] ✅ Trading state recovery complete`);
+  } catch (error) {
+    console.error('[TradingStateSync] ⚠️ Failed to recover trading state:', error);
+    // Continue server startup even if recovery fails
+  }
+
   // Phase 13.0: Seed default ethical principles
   const { seedEthicalPrinciples } = await import('./startup/ethical-principles-seeder');
   await seedEthicalPrinciples();
