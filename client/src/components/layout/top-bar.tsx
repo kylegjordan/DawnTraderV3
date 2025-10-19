@@ -97,6 +97,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     return () => clearInterval(interval);
   }, [settings?.timezone, settings?.timeFormat]);
 
+  const { mode: currentMode, setMode } = useTradingMode();
+
   // Listen for approval_update WebSocket events to refresh notifications in real-time
   useEffect(() => {
     const approvalUpdates = wsMessages.filter((msg: any) => msg.type === 'approval_update');
@@ -110,7 +112,23 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   }, [wsMessages, queryClient]);
 
-  const { mode: currentMode, setMode } = useTradingMode();
+  // Phase 27.F.1: Listen for trading_state_changed WebSocket events to sync UI
+  useEffect(() => {
+    const tradingStateUpdates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
+    if (tradingStateUpdates.length > 0) {
+      const latestUpdate = tradingStateUpdates[tradingStateUpdates.length - 1];
+      console.log('[TopBar] Received trading_state_changed event:', latestUpdate);
+      
+      // Invalidate trading status queries to immediately reflect changes
+      queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      
+      // Update local mode if changed (WebSocketMessage uses 'data' property)
+      if (latestUpdate.data?.mode) {
+        setMode(latestUpdate.data.mode);
+      }
+    }
+  }, [wsMessages, queryClient, setMode]);
 
   const handleTradingToggle = async (enabled: boolean) => {
     // If turning ON in Live mode, show confirmation modal first
@@ -208,24 +226,54 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   };
 
   const handleModeChange = async (newMode: 'live' | 'paper') => {
+    // Phase 27.F.1: Don't switch if already in that mode
+    if (newMode === currentMode) {
+      return;
+    }
+
     try {
-      // Update local state
-      setMode(newMode);
+      // Phase 27.F.1: Use /api/trading/set-mode to trigger WebSocket broadcast
+      await apiRequest('POST', '/api/trading/set-mode', { 
+        mode: newMode,
+        reason: `User switched to ${newMode} mode via UI`
+      });
       
-      // Persist to database via API
-      await apiRequest('PUT', '/api/settings', { currentMode: newMode });
+      // Optimistic UI update
+      setMode(newMode);
       
       toast({
         title: "Mode Changed",
         description: `Switched to ${newMode === 'live' ? 'Live' : 'Paper'} trading mode`,
       });
+      
+      // WebSocket event will trigger automatic refetch via listener above
     } catch (error: any) {
       console.error('Failed to update mode:', error);
+      
+      // Parse error message for better UX
+      let errorMessage = "Failed to update trading mode";
+      if (error?.message) {
+        try {
+          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
+          if (jsonMatch) {
+            const errorData = JSON.parse(jsonMatch[1]);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            errorMessage = error.message;
+          }
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to update trading mode",
+        description: errorMessage,
         variant: "destructive",
       });
+      
+      // Refetch to ensure UI reflects actual backend state
+      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };
 
