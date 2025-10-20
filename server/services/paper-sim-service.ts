@@ -233,15 +233,16 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
           // IDEMPOTENT: No running session, return success
           console.log('[PaperSimService] Paper trading already stopped or not started');
           
-          // Clean up orphaned in-memory manager if exists
-          if (global.globalPaperPortfolioManager) {
+          // Phase 27.F.9: Clean up orphaned in-memory manager if exists
+          const orphanedManager = getGlobalPaperSimManager();
+          if (orphanedManager) {
             console.log('[PaperSimService] Cleaning up orphaned manager');
             try {
-              await global.globalPaperPortfolioManager.stop();
+              await orphanedManager.stop();
             } catch (cleanupError) {
               console.warn('[PaperSimService] Error cleaning up manager:', cleanupError);
             }
-            global.globalPaperPortfolioManager = null;
+            clearGlobalPaperSimManager();
           }
           
           return {
@@ -251,11 +252,11 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
           };
         }
 
-        // Stop portfolio manager
-        const currentManager = global.globalPaperPortfolioManager;
+        // Phase 27.F.9: Stop portfolio manager and clear both references
+        const currentManager = getGlobalPaperSimManager();
         if (currentManager) {
           await currentManager.stop();
-          global.globalPaperPortfolioManager = null;
+          clearGlobalPaperSimManager();
         } else {
           console.warn('[PaperSimService] No active manager found, updating database only');
         }
@@ -264,7 +265,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         const stoppedAt = new Date();
         const runDuration = stoppedAt.getTime() - new Date(existingSession.startedAt).getTime();
 
-        // Update session in database
+        // Update session in database (end DB session)
         await storage.updatePaperSimSession(existingSession.id, {
           status: 'stopped',
           stoppedAt: stoppedAt.toISOString(),
@@ -272,6 +273,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         });
 
         console.log(`[PaperSimService] Stopped session: ${existingSession.sessionId}, duration: ${runDuration}ms`);
+        console.log('[PaperSimService] Manager cleared (service + global), DB session ended');
 
         // Emit cluster bus event for distributed awareness
         try {
