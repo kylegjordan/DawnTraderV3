@@ -24,6 +24,24 @@ declare global {
 }
 
 /**
+ * Phase 27.F.9: Synchronized Manager API
+ * Provides atomic access to global PaperSim manager with reconciliation
+ */
+export function getGlobalPaperSimManager(): any {
+  return global.globalPaperPortfolioManager || null;
+}
+
+export function setGlobalPaperSimManager(manager: any): void {
+  global.globalPaperPortfolioManager = manager;
+  console.log('[PaperSimService] Manager registered globally');
+}
+
+export function clearGlobalPaperSimManager(): void {
+  global.globalPaperPortfolioManager = null;
+  console.log('[PaperSimService] Manager cleared from global scope');
+}
+
+/**
  * Start paper trading simulation (IDEMPOTENT)
  * - Checks database for existing running session
  * - If running session exists, returns success with existing session info

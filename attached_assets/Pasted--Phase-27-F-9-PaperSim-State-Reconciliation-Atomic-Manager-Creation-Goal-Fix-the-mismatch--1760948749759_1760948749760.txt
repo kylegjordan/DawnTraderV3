@@ -1,0 +1,126 @@
+🧩 Phase 27.F.9 — PaperSim State Reconciliation & Atomic Manager Creation
+🎯 Goal
+
+Fix the mismatch between the PaperSim service and the global PaperSim manager that causes:
+
+The “simulation already running (system-wide)” error
+
+hasManager to remain false even after “Start Trading”
+
+The toggle and backend to fall out of sync
+
+After this fix:
+
+Starting PaperSim creates and registers the manager atomically (both service and global)
+
+Stopping PaperSim clears both references and ends the DB session
+
+Heartbeat self-repairs any future mismatch automatically
+
+🧱 Implementation Steps
+1. File — server/services/paper-sim-service.ts
+
+A. Create a synchronized manager API
+Add a small static helper inside PaperSimService (or just below the class):
+
+export function getGlobalPaperSimManager() {
+  return global.globalPaperSimManager || null;
+}
+
+export function setGlobalPaperSimManager(manager: any) {
+  global.globalPaperSimManager = manager;
+}
+
+export function clearGlobalPaperSimManager() {
+  delete global.globalPaperSimManager;
+}
+
+
+B. In start() method (make creation atomic)
+
+Replace the beginning of start() with:
+
+// Prevent duplicates by checking both service and global state
+if (this.manager || getGlobalPaperSimManager()) {
+  logger.warn("[PaperSimService] Start blocked: manager already exists");
+  throw new Error("Paper trading simulation already running (system-wide)");
+}
+
+// Create DB session first
+const session = await this.createSessionInDB();
+if (!session) {
+  logger.error("[PaperSimService] Failed to create PaperSim session in DB");
+  throw new Error("PaperSim session creation failed");
+}
+
+// Create manager only after DB session confirmed
+this.manager = new PaperSimManager(session.id);
+setGlobalPaperSimManager(this.manager);
+
+logger.info("[PaperSimService] Manager created and registered globally");
+
+
+C. In stop() method (clear both references)
+
+At the very end of stop() add:
+
+try {
+  await this.endSessionInDB(this.manager?.sessionId);
+} catch (err) {
+  logger.warn("[PaperSimService] Could not end DB session cleanly", err);
+}
+
+this.manager = null;
+clearGlobalPaperSimManager();
+logger.info("[PaperSimService] Manager cleared (service + global)");
+
+
+D. Add reconciliation guard inside heartbeat()
+
+Right before the existing heartbeat logic, insert:
+
+// Heal any mismatch automatically
+if (!this.manager && getGlobalPaperSimManager()) {
+  logger.warn("[PaperSimService] Orphaned global manager detected – cleaning up");
+  clearGlobalPaperSimManager();
+}
+if (this.manager && !getGlobalPaperSimManager()) {
+  logger.warn("[PaperSimService] Local manager missing in global scope – re-registering");
+  setGlobalPaperSimManager(this.manager);
+}
+
+2. File — server/routes.ts
+
+In the /api/paper-sim/start and /api/paper-sim/stop endpoints:
+
+Add extra logs:
+
+logger.info(`[TradingStart] PaperSim start requested by ${userId}`);
+logger.info(`[TradingStop] PaperSim stop requested by ${userId}`);
+
+
+Ensure they call the updated service methods.
+
+3. Verification Logs
+
+After restart, you should see this sequence:
+
+[PaperSimService] State: { hasManager: false, hasDbSession: false }
+[TradingStart] PaperSim engine starting...
+[PaperSimService] Manager created and registered globally
+[PaperSimService] State: { hasManager: true, hasDbSession: true }
+[TradingStop] PaperSim engine stopping...
+[PaperSimService] Manager cleared (service + global)
+[PaperSimService] State: { hasManager: false, hasDbSession: false }
+
+✅ Expected Outcome
+
+hasManager = true after start, false after stop
+
+No more “already running” errors after a normal stop/start cycle
+
+Global and service states always match
+
+PaperSim sessions appear and end correctly in the database
+
+Toggle status in UI reflects the real engine state every time
