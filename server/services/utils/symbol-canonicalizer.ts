@@ -21,9 +21,30 @@
 export function toCanonical(exchangeIdOrPair: string): string {
   if (!exchangeIdOrPair) return '';
 
-  // Already in BASE/QUOTE format
+  // Map of Kraken's asset codes to standard symbols
+  const krakenToStandard: Record<string, string> = {
+    // Base currencies
+    'XBT': 'BTC',
+    'XDG': 'DOGE',
+    'XLM': 'XLM',
+    'XRP': 'XRP',
+    'XTZ': 'XTZ',
+    
+    // Quote currencies (Kraken prefixes with Z or X)
+    'ZUSD': 'USD',
+    'ZEUR': 'EUR',
+    'ZGBP': 'GBP',
+    'ZJPY': 'JPY',
+    'XXBT': 'BTC',
+    'XETH': 'ETH'
+  };
+
+  // Already in BASE/QUOTE format - normalize both currencies
   if (exchangeIdOrPair.includes('/')) {
-    return exchangeIdOrPair;
+    const [base, quote] = exchangeIdOrPair.split('/');
+    const normalizedBase = krakenToStandard[base] || base;
+    const normalizedQuote = krakenToStandard[quote] || quote;
+    return `${normalizedBase}/${normalizedQuote}`;
   }
 
   // Kraken's exchange IDs often have X/Z prefixes and no slash
@@ -33,15 +54,6 @@ export function toCanonical(exchangeIdOrPair: string): string {
   // - XXDGZUSD = XDG/USD (DOGE)
   // - SOLUSD = SOL/USD
   
-  // Map of Kraken's asset codes to standard symbols
-  const krakenToStandard: Record<string, string> = {
-    'XBT': 'BTC',
-    'XDG': 'DOGE',
-    'XLM': 'XLM',
-    'XRP': 'XRP',
-    'XTZ': 'XTZ'
-  };
-
   // Try to parse Kraken format
   let base = '';
   let quote = '';
@@ -92,8 +104,16 @@ export function toKrakenId(baseQuote: string): string {
   
   // Map standard symbols to Kraken's asset codes
   const standardToKraken: Record<string, string> = {
+    // Base currencies
     'BTC': 'XBT',
-    'DOGE': 'XDG'
+    'DOGE': 'XDG',
+    
+    // Quote currencies (reverse mapping)
+    'USD': 'ZUSD',
+    'EUR': 'ZEUR',
+    'GBP': 'ZGBP',
+    'JPY': 'ZJPY'
+    // Note: BTC/ETH as quote currencies handled by logic below
   };
 
   const krakenBase = standardToKraken[base] || base;
