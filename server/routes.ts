@@ -2941,6 +2941,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user!.id;
     
     try {
+      // Phase 27.F.9: Enhanced logging for state reconciliation tracking
+      console.log(`[TradingStart] PaperSim start requested by ${userId}`);
       console.log(`[TradingStart] PaperSim engine starting (user=${userId})`);
       
       // Check for existing GLOBAL manager (system-wide check)
@@ -3015,6 +3017,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user!.id;
     
     try {
+      // Phase 27.F.9: Enhanced logging for state reconciliation tracking
+      console.log(`[TradingStop] PaperSim stop requested by ${userId}`);
       console.log(`[TradingStop] PaperSim engine stopping (user=${userId})`);
       
       // Check GLOBAL manager (system-wide)
