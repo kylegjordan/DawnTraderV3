@@ -301,8 +301,8 @@ export async function getPaperSimulationStatus(userId: string): Promise<any> {
     // Get session from database (single source of truth)
     const dbSession = await storage.getActivePaperSimSession(userId);
     
-    // Get in-memory manager state
-    const hasManager = global.globalPaperPortfolioManager !== null;
+    // Get in-memory manager state (check for both null and undefined)
+    const hasManager = !!global.globalPaperPortfolioManager;
     
     // State reconciliation diagnostics
     const isConsistent = (dbSession !== undefined) === hasManager;
