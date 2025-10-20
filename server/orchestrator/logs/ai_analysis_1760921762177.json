@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-20T00:56:02.177Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it might not be functioning properly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading activity is minimal with no active trades and a win rate of 0, which could indicate issues with strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider optimizing or scaling the CPU resources to handle the high load more effectively."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI models or strategies to ensure they are functioning and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate and refine active trading strategies to improve engagement and performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate the cause of high CPU load and address any underlying issues such as inefficient processes or insufficient resources.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting overall platform reliability."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough review of the AI system to diagnose why it is not generating learning cycles or opportunities.",
+      "rationale": "AI inactivity could lead to missed trading opportunities and reduced platform competitiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the current market conditions and trading strategies to identify reasons for low trading activity and zero win rate.",
+      "rationale": "Understanding and adjusting to market conditions is crucial for maintaining a profitable trading platform."
+    }
+  ],
+  "urgencyLevel": "high"
+}
