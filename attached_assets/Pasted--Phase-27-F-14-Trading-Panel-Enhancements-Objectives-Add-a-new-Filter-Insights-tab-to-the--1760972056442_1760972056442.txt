@@ -1,0 +1,74 @@
+🧠 Phase 27.F.14 – Trading Panel Enhancements
+🎯 Objectives
+
+Add a new “Filter Insights” tab to the Trading page
+• It must appear after the “Filtered Pairs” tab, making it the final tab in the Trading panel.
+
+Ensure both Live-Trading confirmation modals (“Start Live Trading” and “Stop Live Trading”)
+• Appear inline / on-top of the Walter Chat instead of only in the notification drawer.
+• Continue using the existing modal designs already in the system (no redesign).
+
+Fix the Filtered Pairs data feed so its metrics and charts show live statistics again:
+• “Pairs Scanned,” “Eligible Pairs %,” and “Top Failure Reason” must update in real time whenever Paper Trading Mode is running.
+• Even if eligible pairs = 0 %, it must display the total pairs scanned during each cycle.
+
+Configure the Filter Insights data refresh
+• Auto-refresh every 30 minutes (using the latest filter-cycle snapshot, not cumulative totals).
+• Include a “Refresh Now” button inside the Filter Insights tab for manual on-demand updates.
+• When manually refreshed, the 30-minute timer resets from that new time.
+
+⚙️ Implementation Tasks
+1️⃣ Filter Insights Tab
+
+Add a final tab labeled “Filter Insights” to the Trading panel (after Filtered Pairs).
+
+Inside the tab show:
+• Universe Count, Evaluated Count, Eligible Count, Ineligible Count
+• Breakdown by filter rule (volume, spread, quote currency, guardrails, etc.)
+• Top 10 candidate pairs (symbol + confidence or strategy tag)
+• “Last Updated” timestamp
+
+Auto-refresh every 30 minutes and include a Refresh Now button that updates immediately and resets the 30-minute cycle.
+
+2️⃣ Live-Trading Confirmation Modals
+
+Re-use the two existing modals already in the system:
+• Confirm Live Trading Activation (for starting live mode)
+• Confirm Stop Live Trading (for stopping live mode)
+
+When the user types “Start live trading” or “Stop live trading” in Walter Chat:
+• The appropriate modal appears inline above the chat session window (overlay style).
+• Confirming or canceling behaves exactly as before (affecting live status and audit logs).
+• Notification entries still exist for recordkeeping but are marked “handled” once the modal is used.
+
+3️⃣ Filtered Pairs Tab Fix
+
+Ensure the Filtered Pairs tab receives live data from the Paper Sim feed.
+• The “Pairs Scanned” metric should increment each time the filter cycle runs (approx. every 10 seconds during Paper Trading Mode).
+• The “Eligible Pairs %” and “Top Failure Reason” fields must update with each cycle’s results.
+• Verify that turning Paper Trading ON or OFF instantly toggles these updates.
+
+Confirm that the backend broadcast event for paper_sim_status_update is triggering and that the frontend listener on Filtered Pairs receives it.
+
+🧪 Verification Checklist (after Replit implements)
+Action	Expected Result
+Go to Trading → Filter Insights tab	Tab visible after Filtered Pairs
+Wait for 30 minutes or click “Refresh Now”	Statistics update (show current filter state)
+Activate Paper Trading Mode	Filtered Pairs metrics (“Pairs Scanned,” “Eligible %”) start updating
+Deactivate Paper Trading Mode	Metrics pause or freeze
+Type “Start live trading.” in chat	“Confirm Live Trading Activation” modal appears above chat
+Confirm or Cancel	Modal closes; state changes or stays stopped appropriately
+Type “Stop live trading.” in chat	“Confirm Stop Live Trading” modal appears above chat
+Confirm or Cancel	Modal closes; state updates appropriately
+Check Filtered Pairs after 30 min	“Pairs Scanned” count reflects ongoing 10-second cycles
+🧾 Deliverables
+
+✅ New “Filter Insights” tab on Trading panel (after Filtered Pairs)
+✅ Automatic 30-minute refresh + manual “Refresh Now” button
+✅ Inline modals for both Start and Stop Live Trading above Walter Chat
+✅ Filtered Pairs metrics and feed fully functional again
+✅ Verification checklist passed using test user credentials below
+
+🔐 Test Credentials (for Replit validation)
+TEST_USER_USERNAME="testuser123"
+TEST_USER_PASSWORD="SecurePass123!"

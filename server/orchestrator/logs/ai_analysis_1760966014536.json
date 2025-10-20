@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-20T13:13:34.536Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential overutilization or a bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has not generated any learning cycles, opportunities, or adjustments, suggesting it may not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show no active trades, zero profit/loss, and zero ROI, indicating a lack of trading activity or potential issues with strategy execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI components to ensure they are functioning and contributing to trading strategies."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate and adjust trading strategies to ensure they are aligned with current market conditions and capable of executing trades."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Immediately investigate the cause of high CPU load and take corrective actions, such as redistributing workloads or upgrading hardware.",
+      "rationale": "High CPU load can lead to system instability and degrade performance, affecting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart and test AI components to ensure they are operational and contributing to trading decisions.",
+      "rationale": "AI inactivity can result in missed trading opportunities and reduced system effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review and optimize trading strategies to ensure they are active and capable of generating trades.",
+      "rationale": "Inactive trading strategies can lead to missed opportunities and impact overall profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}
