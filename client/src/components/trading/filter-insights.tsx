@@ -40,13 +40,47 @@ interface FilterInsightsData {
   ts: string;
 }
 
+interface FilterThresholds {
+  minVolume?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  minMarketCap?: string;
+  maxBidAskSpread?: string;
+  rsiMin?: number;
+  rsiMax?: number;
+  volatilityMin?: string;
+  volatilityMax?: string;
+  minLiquidity?: string;
+  excludeStablecoins?: boolean;
+  allowRegulatedOnly?: boolean;
+  minDailyRange?: string;
+  allowedTradingPairs?: string[];
+  minDataHistoryDays?: number;
+}
+
+interface FilterDiagnosticsResponse {
+  pairsScanned: number;
+  eligiblePairs: number;
+  topFailureReason: string;
+  failurePercent: number;
+  timestamp?: string;
+  thresholds?: FilterThresholds | null;
+}
+
 export function FilterInsights() {
   const [lastManualRefresh, setLastManualRefresh] = useState<number>(Date.now());
   const [nextAutoRefresh, setNextAutoRefresh] = useState<number>(Date.now() + 30 * 60 * 1000);
 
-  // Query with 30-minute stale time
+  // Query with 30-minute stale time (breakdown data)
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
     queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'],
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
+  });
+
+  // Phase 27.F.15.B: Query for threshold values
+  const { data: diagnosticsData } = useQuery<FilterDiagnosticsResponse>({
+    queryKey: ['/api/filters/diagnostics'],
     staleTime: 30 * 60 * 1000, // 30 minutes
     refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
   });
@@ -56,7 +90,35 @@ export function FilterInsights() {
     setLastManualRefresh(Date.now());
     setNextAutoRefresh(Date.now() + 30 * 60 * 1000);
     queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
     refetch();
+  };
+
+  // Phase 27.F.15.B: Helper to get threshold value for a filter
+  const getThreshold = (filterKey: string): string | null => {
+    if (!diagnosticsData?.thresholds) return null;
+    
+    const thresholds = diagnosticsData.thresholds;
+    
+    // Filters not currently implemented (require expensive operations or unavailable data)
+    const notImplemented = ['failed_rsi', 'failed_liquidity', 'failed_market_cap', 'failed_regulated'];
+    if (notImplemented.includes(filterKey)) {
+      return 'Not Available';
+    }
+    
+    const map: Record<string, string> = {
+      'failed_min_volume': thresholds.minVolume ? `≥ $${parseFloat(thresholds.minVolume).toLocaleString()}` : '',
+      'failed_min_price': thresholds.minPrice ? `≥ $${parseFloat(thresholds.minPrice)}` : '',
+      'failed_max_price': thresholds.maxPrice ? `≤ $${parseFloat(thresholds.maxPrice).toLocaleString()}` : '',
+      'failed_spread': thresholds.maxBidAskSpread ? `≤ ${parseFloat(thresholds.maxBidAskSpread)}%` : '',
+      'failed_daily_range': thresholds.minDailyRange ? `≥ ${parseFloat(thresholds.minDailyRange)}%` : '',
+      'failed_volatility': thresholds.volatilityMin && thresholds.volatilityMax ? `${parseFloat(thresholds.volatilityMin)}-${parseFloat(thresholds.volatilityMax)}%` : '',
+      'failed_stablecoin': thresholds.excludeStablecoins ? 'Excluded' : 'Allowed',
+      'failed_quote_currency': thresholds.allowedTradingPairs ? thresholds.allowedTradingPairs.join(', ') : '',
+      'failed_history': thresholds.minDataHistoryDays ? `≥ ${thresholds.minDataHistoryDays} days` : '',
+    };
+    
+    return map[filterKey] || null;
   };
 
   // Update next auto-refresh time
@@ -215,6 +277,9 @@ export function FilterInsights() {
             <div className="space-y-2">
               {allBreakdownEntries.map(([key, count], index) => {
                 const isTopFailure = index < 3 && count > 0;
+                const threshold = getThreshold(key);
+                const isUserAdjustable = !['failed_blacklist', 'failed_whitelist', 'failed_quote_currency', 'failed_guardrail_risk', 'strategy_none_triggered'].includes(key);
+                
                 return (
                   <div 
                     key={key} 
@@ -224,26 +289,50 @@ export function FilterInsights() {
                       count === 0 && "opacity-40"
                     )}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-1">
                       {count > 0 ? (
                         <XCircle className={cn(
-                          "w-4 h-4",
+                          "w-4 h-4 shrink-0",
                           isTopFailure ? "text-destructive" : "text-warning"
                         )} />
                       ) : (
-                        <CheckCircle2 className="w-4 h-4 text-success" />
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
                       )}
-                      <span className={cn(
-                        "text-sm",
-                        isTopFailure && count > 0 ? "font-medium" : "font-normal"
-                      )}>
-                        {formatFailureReason(key)}
-                      </span>
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "text-sm",
+                            isTopFailure && count > 0 ? "font-medium" : "font-normal"
+                          )}>
+                            {formatFailureReason(key)}
+                          </span>
+                          {isUserAdjustable && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Info className="w-3 h-3 text-muted-foreground" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">User-adjustable in Filters tab</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
+                        {threshold && (
+                          <span className="text-xs text-muted-foreground">
+                            Threshold: {threshold}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <Badge 
                       variant={count > 0 ? (isTopFailure ? "destructive" : "secondary") : "outline"}
                       data-testid={`badge-filter-${key}`}
-                      className={count === 0 ? "text-success border-success/20" : ""}
+                      className={cn(
+                        "shrink-0",
+                        count === 0 && "text-success border-success/20"
+                      )}
                     >
                       {count > 0 ? count.toLocaleString() : "✓ Pass"}
                     </Badge>

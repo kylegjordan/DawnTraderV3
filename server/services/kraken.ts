@@ -666,8 +666,17 @@ export class KrakenService {
     // Phase 27.F.15.B: Parse new filter parameters
     const volatilityMin = settings.volatilityMin ? parseFloat(settings.volatilityMin) : undefined;
     const volatilityMax = settings.volatilityMax ? parseFloat(settings.volatilityMax) : undefined;
-    // Note: RSI, market cap, liquidity (orderbook depth), and regulated status require additional
-    // API calls or data not available from Kraken. These will be tracked as "not applicable" in diagnostics.
+    
+    /**
+     * Phase 27.F.15.B: Filters NOT IMPLEMENTED (require expensive operations or unavailable data):
+     * - RSI (rsiMin/rsiMax): Requires calculating RSI indicator from historical price data for each pair (expensive)
+     * - Liquidity (minLiquidity): Requires orderbook depth analysis for each pair (expensive + rate limits)
+     * - Market Cap (minMarketCap): Not provided by Kraken API
+     * - Regulated Only (allowRegulatedOnly): Not provided by Kraken API
+     * 
+     * These parameters are accepted for future implementation but currently ignored.
+     * UI displays these as "Not Available" to indicate they don't affect filtering.
+     */
 
     // Stablecoin patterns
     const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD'];
