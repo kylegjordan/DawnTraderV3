@@ -4,6 +4,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { Filter, CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { useEffect } from "react";
+import { queryClient } from "@/lib/queryClient";
 
 interface FilterDiagnostics {
   pairsScanned: number;
@@ -13,12 +16,40 @@ interface FilterDiagnostics {
   timestamp?: string;
 }
 
+interface TradingStatus {
+  mode: 'live' | 'paper';
+  active: boolean;
+}
+
 export function FilterHealthWidget() {
+  const { messages: wsMessages } = useWebSocket();
+
+  // Query trading status to determine refresh rate
+  const { data: tradingStatus } = useQuery<TradingStatus>({
+    queryKey: ['/api/trading/status'],
+    staleTime: 5000,
+  });
+
+  const isPaperTradingActive = tradingStatus?.mode === 'paper' && tradingStatus?.active;
+
+  // Use faster refresh when paper trading is active
   const { data: diagnostics, isLoading } = useQuery<FilterDiagnostics>({
     queryKey: ['/api/filters/diagnostics'],
-    refetchInterval: 60000, // Refresh every minute
-    staleTime: 60000,
+    refetchInterval: isPaperTradingActive ? 10000 : 60000, // 10s when active, 60s otherwise
+    staleTime: isPaperTradingActive ? 10000 : 60000,
   });
+
+  // Listen to WebSocket events and refresh filter diagnostics
+  useEffect(() => {
+    if (wsMessages.length === 0) return;
+    
+    const latestMessage = wsMessages[wsMessages.length - 1];
+    
+    // Refresh filter diagnostics on trading state changes or trade updates
+    if (latestMessage.type === 'trading_state_changed' || latestMessage.type === 'trade_update') {
+      queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
+    }
+  }, [wsMessages]);
 
   if (isLoading) {
     return (
