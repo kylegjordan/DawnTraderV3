@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-10-20T09:48:31.775Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (15.13, 14.56, 13.79) which indicates potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "No active trades or recent AI learning cycles, which might suggest a potential issue with trading activity or AI functionality."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation or system instability."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart AI learning processes to ensure trading strategies are being actively evaluated and adjusted."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Analyze the processes consuming high CPU resources and optimize or redistribute the load.",
+      "rationale": "High CPU load can lead to slower system performance and affect the platform's ability to process trades efficiently."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Check the status of the AI modules and ensure they are operational and configured correctly.",
+      "rationale": "The lack of AI activity could hinder the platform's ability to identify and capitalize on trading opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review trading strategies and ensure they are functioning as intended, possibly by running diagnostic tests.",
+      "rationale": "No active trades and zero total profit/loss could indicate issues with strategy execution or market conditions."
+    }
+  ],
+  "urgencyLevel": "high"
+}
