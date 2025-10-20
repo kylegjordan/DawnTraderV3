@@ -5,8 +5,9 @@ import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import ModeBanner from "@/components/mode-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Filter } from "lucide-react";
+import { BarChart3, TrendingUp, Filter, Lightbulb } from "lucide-react";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
+import { FilterInsights } from "@/components/trading/filter-insights";
 
 function FilteredPairsTab() {
   return (
@@ -44,7 +45,7 @@ export default function TradingPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3" data-testid="trading-tabs">
+        <TabsList className="grid w-full grid-cols-4" data-testid="trading-tabs">
           <TabsTrigger value="open" className="flex items-center gap-2" data-testid="tab-open-trades">
             <BarChart3 className="w-4 h-4" />
             Open Trades
@@ -56,6 +57,10 @@ export default function TradingPage() {
           <TabsTrigger value="filtered" className="flex items-center gap-2" data-testid="tab-filtered-pairs">
             <Filter className="w-4 h-4" />
             Filtered Pairs
+          </TabsTrigger>
+          <TabsTrigger value="insights" className="flex items-center gap-2" data-testid="tab-filter-insights">
+            <Lightbulb className="w-4 h-4" />
+            Filter Insights
           </TabsTrigger>
         </TabsList>
 
@@ -69,6 +74,10 @@ export default function TradingPage() {
 
         <TabsContent value="filtered" className="mt-6">
           <FilteredPairsTab />
+        </TabsContent>
+
+        <TabsContent value="insights" className="mt-6">
+          <FilterInsights />
         </TabsContent>
       </Tabs>
     </div>
