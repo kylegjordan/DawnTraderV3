@@ -227,6 +227,7 @@ export class TradingStateSync {
 
   /**
    * Phase 27.F.3: Broadcast complete trading state snapshot to user
+   * Phase 27.F.12: Extended to include both isEngineActivePaper and isEngineActiveLive
    * Called after any start/stop/mode change action
    */
   async broadcastUserUpdate(userId: string): Promise<void> {
@@ -238,11 +239,22 @@ export class TradingStateSync {
         return;
       }
       
+      // Phase 27.F.12: Compute mode-specific engine states
+      // Check if paper sim session is active
+      const paperSimSession = await storage.getActivePaperSimSession(userId);
+      const isEngineActivePaper = paperSimSession !== null;
+      
+      // For live mode, check system_context.isEngineActive when mode is 'live'
+      const isEngineActiveLive = context.tradingMode === 'live' && context.isEngineActive;
+      
       const payload = {
         userId,
         mode: context.tradingMode,
         isEngineActive: context.isEngineActive || false,
         active: context.isEngineActive || false, // Keep both for backwards compatibility
+        // Phase 27.F.12: Add mode-specific status
+        isEngineActivePaper,
+        isEngineActiveLive,
         tradingModeLabel: context.tradingMode.toUpperCase() + ' TRADING',
         lastModeChange: context.lastModeChange,
         changedBy: context.changedBy,
@@ -257,7 +269,7 @@ export class TradingStateSync {
         mode: context.tradingMode
       });
       
-      console.log(`[SYNC][Phase-27.F.3] Broadcasted complete state snapshot for user ${userId}: mode=${payload.mode}, active=${payload.isEngineActive}, label=${payload.tradingModeLabel}`);
+      console.log(`[SYNC][Phase-27.F.12] Broadcasted complete state snapshot for user ${userId}: mode=${payload.mode}, activePaper=${payload.isEngineActivePaper}, activeLive=${payload.isEngineActiveLive}`);
     } catch (error) {
       console.error(`[TradingSync] Error broadcasting update for user ${userId}:`, error);
     }

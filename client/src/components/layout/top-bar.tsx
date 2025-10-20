@@ -334,10 +334,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   };
 
-  // Determine if trading is active based on current mode
+  // Phase 27.F.12: Determine if trading is active based on current mode using mode-specific fields
   const isActive = currentMode === 'paper' 
-    ? paperSimStatus?.isRunning || false
-    : tradingStatus?.engineActive || false;
+    ? tradingStatus?.isEngineActivePaper || false
+    : tradingStatus?.isEngineActiveLive || false;
 
   return (
     <header 

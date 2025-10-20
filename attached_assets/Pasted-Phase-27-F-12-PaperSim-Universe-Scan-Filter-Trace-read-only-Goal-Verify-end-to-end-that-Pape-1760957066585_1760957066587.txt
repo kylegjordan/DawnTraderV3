@@ -1,0 +1,128 @@
+Phase 27.F.12 — PaperSim Universe Scan & Filter Trace (read-only)
+
+Goal: Verify end-to-end that PaperSim can ingest the entire Kraken universe, run it through the same Screener + Guardrails + Strategy prechecks, and produce a diagnostic report showing counts, reasons filtered, and sample candidates — without starting engines or changing state.
+
+1) Add a read-only diagnostic endpoint
+
+Create a new endpoint that does not start trading. It only scans and reports.
+
+Route: GET /api/paper-sim/diagnostics/scan
+
+Auth: same auth as other protected routes.
+
+Inputs (query):
+
+mode=paper|live (default paper)
+
+limit (optional; default 500) — cap number of pairs to evaluate to keep it fast
+
+trace=true|false (default true) — include per-rule breakdown
+
+strategies=true|false (default true) — run lightweight strategy prechecks (no positions)
+
+Behavior:
+
+Load Kraken symbols list from our MarketDataCoordinator (prefer cached, fallback to REST).
+
+For each symbol, run the same pipeline used by PaperSim:
+
+Screener Filters
+
+Guardrails
+
+(Optional) lightweight Strategy precheck (only eligibility, no order sizing, no persistence).
+
+No DB writes, no sessions, no orders. Pure compute + logs.
+
+Response JSON (example):
+
+{
+  "mode": "paper",
+  "universe_count": 1289,
+  "evaluated": 500,
+  "eligible_count": 37,
+  "ineligible_count": 463,
+  "breakdown": {
+    "failed_min_volume": 211,
+    "failed_spread": 138,
+    "failed_volatility_band": 64,
+    "failed_guardrail_risk": 32,
+    "strategy_none_triggered": 18
+  },
+  "top_candidates": [
+    {
+      "symbol": "BTC/USD",
+      "reasons": ["passes_spread","passes_volume","vwap_pullback:0.72"],
+      "snapshot": {"price": 67215.12, "spread_bps": 3.1, "vol_24h": 1234567}
+    }
+  ],
+  "ts": "2025-10-20T09:45:12Z"
+}
+
+2) Add concise, high-signal logs
+
+Emit these once per scan (not per symbol) to avoid log spam:
+
+[UniverseLoad] kraken_pairs={total} evaluated={n}
+
+[FilterEval] eligible={n} ineligible={m} by_rule={...}
+
+[StrategyProbe] candidates={n} sample=[SYMB1,SYMB2,...]
+
+If trace=true, include first 10 rejects with top reason (one line each):
+
+[TraceReject] SYMB=ETH/USD reason=failed_min_volume vol=...
+
+3) Reuse existing code paths (no divergence)
+
+Use the same Screener + Guardrails functions already used by PaperSim.
+
+Strategy precheck should call the strategy detectors but skip position sizing and DB writes.
+
+4) Frontend (optional helper)
+
+Add a small admin-only button (Goals/Trading admin area) to call:
+
+GET /api/paper-sim/diagnostics/scan?mode=paper&limit=500&trace=true&strategies=true
+Render:
+
+Universe count, eligible count, breakdown by rule, and top 10 candidates.
+
+5) Quick validation steps (what I will run)
+
+After you ship this:
+
+Run the scan (no engines):
+
+curl -sS "http://localhost:5000/api/paper-sim/diagnostics/scan?mode=paper&limit=500&trace=true&strategies=true" -b cookies.txt | jq .
+
+
+Check logs for one-liners:
+
+grep -E "UniverseLoad|FilterEval|StrategyProbe|TraceReject" $(ls -t /tmp/logs/Start_application_*.log | head -1) | tail -50
+
+
+We’ll compare:
+
+universe_count vs evaluated
+
+eligible_count and breakdown by rule (to see what’s killing candidates)
+
+top_candidates[] content (price/spread/volume sanity)
+
+6) Paper toggle correctness (UI)
+
+While you’re in there, make one small UI/state fix so the toggle reflects the correct mode:
+
+Extend the status payload and the trading_state_changed event to include both:
+
+isEngineActivePaper
+
+isEngineActiveLive
+
+In TopBar, compute:
+
+const isActive = mode==='paper' ? status.isEngineActivePaper : status.isEngineActiveLive;
+
+
+On receiving a WebSocket event, update only the matching mode in local state.

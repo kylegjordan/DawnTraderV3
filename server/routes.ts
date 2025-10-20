@@ -1263,11 +1263,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Return dual-mode structure with unified state authority (Phase 27.F.3)
+      // Phase 27.F.12: Added mode-specific engine status fields
       res.json({
         // Phase 27.F.3: Unified state at the top level for easy access
         ...unifiedState,
         currentMode,
         isEngineActive,
+        // Phase 27.F.12: Mode-specific engine status
+        isEngineActivePaper: isPaperSimRunning,
+        isEngineActiveLive: isLiveEngineRunning,
         dataSource: 'system_context',
         live: {
           portfolioBalance: liveBalance,
@@ -3276,6 +3280,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching paper sim logs:', error);
       res.status(500).json({ error: 'Failed to fetch logs' });
+    }
+  });
+
+  // Phase 27.F.12: Universe Scan & Filter Trace (read-only diagnostic, admin/owner only)
+  app.get('/api/paper-sim/diagnostics/scan', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      // Check for admin or owner role
+      const userRole = req.user?.role;
+      if (!req.user?.isAdmin && userRole !== 'owner' && userRole !== 'admin') {
+        return res.status(403).json({ 
+          error: 'Access denied',
+          message: 'Admin or owner privileges required for diagnostic scans'
+        });
+      }
+
+      const userId = req.user!.id;
+      const { mode, limit, trace, strategies } = req.query;
+      
+      const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+      
+      const scanResult = await paperSimDiagnosticService.performUniverseScan({
+        userId,
+        mode: (mode as 'paper' | 'live') || 'paper',
+        limit: limit ? parseInt(limit as string) : 500,
+        trace: trace === 'true' || trace === undefined,
+        strategies: strategies === 'true' || strategies === undefined
+      });
+      
+      res.json(scanResult);
+    } catch (error) {
+      console.error('Error performing universe scan:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to perform scan' });
     }
   });
 

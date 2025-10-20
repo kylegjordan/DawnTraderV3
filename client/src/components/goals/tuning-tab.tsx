@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Download, RotateCcw, Power, PowerOff, TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { format } from "date-fns";
+import PaperSimDiagnostic from "@/components/goals/paper-sim-diagnostic";
 
 interface TuningEvent {
   id: string;
@@ -400,6 +401,9 @@ export default function TuningTab() {
           </div>
         </div>
       </Card>
+
+      {/* Phase 27.F.12: PaperSim Universe Scan Diagnostics */}
+      <PaperSimDiagnostic />
     </div>
   );
 }

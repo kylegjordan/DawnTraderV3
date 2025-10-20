@@ -135,6 +135,9 @@ export interface PortfolioMetrics {
 export interface TradingStatus {
   mode: 'live' | 'paper';
   engineActive: boolean;
+  // Phase 27.F.12: Mode-specific engine status
+  isEngineActivePaper?: boolean;
+  isEngineActiveLive?: boolean;
   activeStrategies: string[];
   activeStrategiesCount: number;
   filteredPairs: number;
