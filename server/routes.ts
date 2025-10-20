@@ -824,6 +824,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Filter diagnostics endpoint - fetches latest 24h metrics
+  // Phase 27.F.15.B: Enhanced to include threshold values alongside failure counts
   app.get('/api/filters/diagnostics', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -832,12 +833,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get diagnostics from last 24 hours
       const diagnostics = await storage.getFilterDiagnostics({ userId, mode, hours: 24 });
 
+      // Phase 27.F.15.B: Get screener filter thresholds
+      const screenerSettings = await storage.getScreenerFilters({ userId, mode });
+      const tradingSettings = await storage.getTradingSettings(userId);
+
       if (!diagnostics || diagnostics.length === 0) {
         return res.json({
           pairsScanned: 0,
           eligiblePairs: 0,
           topFailureReason: 'No data',
           failurePercent: 0,
+          thresholds: screenerSettings ? {
+            minVolume: screenerSettings.minVolume,
+            minPrice: screenerSettings.minPrice,
+            maxPrice: screenerSettings.maxPrice,
+            minMarketCap: screenerSettings.minMarketCap,
+            maxBidAskSpread: screenerSettings.maxBidAskSpread,
+            rsiMin: screenerSettings.rsiMin,
+            rsiMax: screenerSettings.rsiMax,
+            volatilityMin: screenerSettings.volatilityMin,
+            volatilityMax: screenerSettings.volatilityMax,
+            minLiquidity: screenerSettings.minLiquidity,
+            excludeStablecoins: screenerSettings.excludeStablecoins,
+            allowRegulatedOnly: screenerSettings.allowRegulatedOnly,
+            minDailyRange: tradingSettings?.minDailyRange,
+            allowedTradingPairs: tradingSettings?.allowedTradingPairs,
+            minDataHistoryDays: tradingSettings?.minDataHistoryDays
+          } : null
         });
       }
 
@@ -850,6 +872,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         topFailureReason: latest.topFailureReason || 'Unknown',
         failurePercent: parseFloat(latest.failurePercent || '0'),
         timestamp: latest.timestamp,
+        // Phase 27.F.15.B: Include active threshold values
+        thresholds: screenerSettings ? {
+          minVolume: screenerSettings.minVolume,
+          minPrice: screenerSettings.minPrice,
+          maxPrice: screenerSettings.maxPrice,
+          minMarketCap: screenerSettings.minMarketCap,
+          maxBidAskSpread: screenerSettings.maxBidAskSpread,
+          rsiMin: screenerSettings.rsiMin,
+          rsiMax: screenerSettings.rsiMax,
+          volatilityMin: screenerSettings.volatilityMin,
+          volatilityMax: screenerSettings.volatilityMax,
+          minLiquidity: screenerSettings.minLiquidity,
+          excludeStablecoins: screenerSettings.excludeStablecoins,
+          allowRegulatedOnly: screenerSettings.allowRegulatedOnly,
+          minDailyRange: tradingSettings?.minDailyRange,
+          allowedTradingPairs: tradingSettings?.allowedTradingPairs,
+          minDataHistoryDays: tradingSettings?.minDataHistoryDays
+        } : null
       });
     } catch (error) {
       console.error('Error fetching filter diagnostics:', error);

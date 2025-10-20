@@ -1,0 +1,105 @@
+🧠 Phase 27.F.15.B — Align Filter Insights with Adjustable Screener Variables
+🎯 Objectives
+
+Ensure that the Filter Insights panel on the Trading page fully matches and transparently represents the adjustable Filters from the Goals Engine tab.
+All user-controlled thresholds (Min Volume, Liquidity, Spread, RSI, etc.) must directly drive the diagnostic counts shown as failed_* fields, and their current setting values should appear in the insights breakdown.
+
+⚙️ Tasks for Replit
+1️⃣ Confirm data source linkage
+
+Verify that every filter applied in scanForSignals() and the Screener service pulls its thresholds from the same database record used by the Goals Engine Filters tab (normally trading_settings or screener_settings).
+
+There should be no hard-coded numeric constants for volume, spread, volatility, etc.
+
+Confirm that changing a variable in the UI (e.g., Min Volume ($)) immediately affects the next PaperSim cycle and diagnostic scan.
+
+2️⃣ Expand Filter Insights Breakdown
+
+Extend the Filter Insights list so it includes all active filters — both user-adjustable and system-level — in the same order and wording used in the Goals Engine tab.
+
+Final list to display:
+
+Min Volume ($) → failed_min_volume
+
+Min Liquidity ($) → failed_liquidity
+
+Price Range (Min / Max $) → failed_min_price and failed_max_price
+
+Market Cap ($) → failed_market_cap
+
+Bid-Ask Spread (%) → failed_spread
+
+RSI Range (Min / Max) → failed_rsi
+
+Volatility Range (%) → failed_volatility
+
+Exclude Stablecoins → failed_stablecoin
+
+Regulated Assets Only → failed_regulated
+
+Quote Currency Rule → failed_quote_currency
+
+Blacklist / Whitelist → failed_blacklist, failed_whitelist
+
+Insufficient History → failed_history
+
+Guardrail / Risk Cap → failed_guardrail_risk
+
+No Strategy Triggered → strategy_none_triggered
+
+Each entry should show:
+
+The count of pairs failing that rule.
+
+The threshold value currently applied (e.g., “Min Volume: $5M”).
+
+Optional tooltip or info icon showing the variable source (“User-adjustable in Filters tab” vs. “System-level rule”).
+
+3️⃣ Back-end consistency audit
+
+Review screener-service.ts and paper-execution-engine.ts to confirm that each rule references the live user settings object (not constants).
+
+For RSI, Volatility Range, Market Cap, and Regulated-Assets-Only — ensure they are included in the diagnostic breakdown object returned to /api/paper-sim/filters/status.
+
+Add any missing metrics (e.g., failed_rsi, failed_market_cap) to the JSON response.
+
+4️⃣ UI synchronization
+
+In the Filter Insights component, display both the count and active threshold beside each rule.
+
+Example:
+Min Volume — 189 fails | Threshold: ≥ $5,000,000
+
+Pull these threshold values from the same endpoint that serves the Filters tab or merge them into the /filters/status response.
+
+5️⃣ Verification steps
+
+Change several thresholds in the Filters tab (e.g., lower Min Volume or widen Spread).
+
+Start a PaperSim session and run a diagnostic scan.
+
+Confirm the Filter Insights tab now reflects those exact thresholds and the failure counts respond dynamically.
+
+Logs should confirm “Settings reloaded for user X” at the next cycle.
+
+🧪 Validation Checklist
+Test	Expected Result
+Adjust Min Volume in Goals Engine	failed_min_volume count and threshold label update in Filter Insights
+Toggle Exclude Stablecoins	failed_stablecoin count appears/disappears accordingly
+Change RSI Range	failed_rsi entries change to match new limits
+Modify Max Spread (%)	failed_spread adjusts on next refresh
+View Filter Insights	All filters from 1–14 listed with counts and current threshold values
+Diagnostic logs	No hard-coded constants; all filters reference user settings
+🔐 Test Credentials for Validation
+TEST_USER_USERNAME="testuser123"
+TEST_USER_PASSWORD="SecurePass123!"
+
+✅ Deliverables
+
+Filter Insights tab fully synchronized with adjustable Filters tab (one-to-one mapping).
+
+/api/paper-sim/filters/status includes thresholds and counts for all 14 filters.
+
+Updated documentation in replit.md confirming this linkage and example output showing thresholds reflected correctly.
+
+Manual test evidence (screenshots or logs) showing filter adjustments dynamically affect diagnostic results.

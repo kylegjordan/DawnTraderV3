@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
-import { Filter, RefreshCw, TrendingUp, XCircle, CheckCircle2 } from "lucide-react";
+import { Filter, RefreshCw, TrendingUp, XCircle, CheckCircle2, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface FilterBreakdown {

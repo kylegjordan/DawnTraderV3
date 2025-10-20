@@ -618,12 +618,21 @@ export class KrakenService {
     minVolume: string;
     minDailyRange: string;
     minPrice?: string;
+    maxPrice?: string;
     maxBidAskSpread?: string;
     excludeStablecoins?: boolean;
     allowedTradingPairs?: string[];
     blacklistedSymbols?: string[];
     whitelistedSymbols?: string[];
     minHistoryDays?: number;
+    // Phase 27.F.15.B: Add missing filters
+    rsiMin?: number;
+    rsiMax?: number;
+    volatilityMin?: string;
+    volatilityMax?: string;
+    minLiquidity?: string;
+    minMarketCap?: string;
+    allowRegulatedOnly?: boolean;
   }): Promise<Array<{
     symbol: string;
     baseCurrency: string;
@@ -647,12 +656,18 @@ export class KrakenService {
     const minVolume = parseFloat(settings.minVolume || '30000000');
     const minDailyRange = parseFloat(settings.minDailyRange || '6.5');
     const minPrice = parseFloat(settings.minPrice || '0.01');
+    const maxPrice = settings.maxPrice ? parseFloat(settings.maxPrice) : undefined;
     const maxBidAskSpread = parseFloat(settings.maxBidAskSpread || '1.00');
     const excludeStablecoins = settings.excludeStablecoins ?? true;
     const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT'];
     const blacklist = normalizeSymbolArray(settings.blacklistedSymbols);
     const whitelist = normalizeSymbolArray(settings.whitelistedSymbols);
     const minHistoryDays = settings.minHistoryDays || 90;
+    // Phase 27.F.15.B: Parse new filter parameters
+    const volatilityMin = settings.volatilityMin ? parseFloat(settings.volatilityMin) : undefined;
+    const volatilityMax = settings.volatilityMax ? parseFloat(settings.volatilityMax) : undefined;
+    // Note: RSI, market cap, liquidity (orderbook depth), and regulated status require additional
+    // API calls or data not available from Kraken. These will be tracked as "not applicable" in diagnostics.
 
     // Stablecoin patterns
     const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD'];
@@ -717,13 +732,30 @@ export class KrakenService {
         return;
       }
 
-      // Filter 8: Maximum bid-ask spread
+      // Filter 8: Maximum price threshold (Phase 27.F.15.B)
+      if (maxPrice && currentPrice > maxPrice) {
+        exclusionReasons[pairName] = `Price $${currentPrice} > $${maxPrice}`;
+        return;
+      }
+
+      // Filter 9: Maximum bid-ask spread
       if (bidAskSpread > maxBidAskSpread) {
         exclusionReasons[pairName] = `Bid-ask spread ${bidAskSpread.toFixed(2)}% > ${maxBidAskSpread}%`;
         return;
       }
 
-      // All basic filters passed - add to candidate pairs for history check
+      // Filter 10: Volatility range (Phase 27.F.15.B)
+      // Using daily range as a proxy for volatility
+      if (volatilityMin !== undefined && dailyRange < volatilityMin) {
+        exclusionReasons[pairName] = `Volatility ${dailyRange.toFixed(2)}% < ${volatilityMin}%`;
+        return;
+      }
+      if (volatilityMax !== undefined && dailyRange > volatilityMax) {
+        exclusionReasons[pairName] = `Volatility ${dailyRange.toFixed(2)}% > ${volatilityMax}%`;
+        return;
+      }
+
+      // All pre-history filters passed - add to candidate pairs for history check
       candidatePairs.push({
         symbol: pairName,
         baseCurrency: pairInfo.base,

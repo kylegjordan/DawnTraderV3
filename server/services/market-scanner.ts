@@ -61,26 +61,37 @@ export class MarketScanner {
       } else {
         // Process each user with their own settings
         for (const user of users) {
-          const settings = await storage.getTradingSettings(user.id);
+          // Phase 27.F.15.B: Use screener_filters for comprehensive filtering
+          const screenerSettings = await storage.getScreenerFilters({ userId: user.id, mode: 'paper' });
+          const tradingSettings = await storage.getTradingSettings(user.id);
           
-          if (!settings) {
+          if (!screenerSettings || !tradingSettings) {
             console.log(`No settings found for user ${user.id}, skipping...`);
             continue;
           }
 
-          console.log(`\n👤 Processing user ${user.id} with custom settings...`);
+          console.log(`\n👤 Processing user ${user.id} with custom screener filters...`);
           
           // Apply user-specific screener filters (handle null values)
           const eligiblePairs = await this.kraken.getEligiblePairs({
-            minVolume: settings.minVolume || '30000000',
-            minDailyRange: settings.minDailyRange || '6.5',
-            minPrice: settings.minPrice || undefined,
-            maxBidAskSpread: settings.maxBidAskSpread || undefined,
-            excludeStablecoins: settings.excludeStablecoins ?? undefined,
-            allowedTradingPairs: settings.allowedTradingPairs || undefined,
-            blacklistedSymbols: settings.blacklistedSymbols || undefined,
-            whitelistedSymbols: settings.whitelistedSymbols || undefined,
-            minHistoryDays: settings.minDataHistoryDays || 90
+            minVolume: screenerSettings.minVolume || '1000000',
+            minDailyRange: tradingSettings.minDailyRange || '6.5',
+            minPrice: screenerSettings.minPrice || undefined,
+            maxPrice: screenerSettings.maxPrice || undefined,
+            maxBidAskSpread: screenerSettings.maxBidAskSpread || undefined,
+            excludeStablecoins: screenerSettings.excludeStablecoins ?? undefined,
+            allowedTradingPairs: tradingSettings.allowedTradingPairs || undefined,
+            blacklistedSymbols: tradingSettings.blacklistedSymbols || undefined,
+            whitelistedSymbols: tradingSettings.whitelistedSymbols || undefined,
+            minHistoryDays: tradingSettings.minDataHistoryDays || 90,
+            // Phase 27.F.15.B: Add missing filters
+            rsiMin: screenerSettings.rsiMin || undefined,
+            rsiMax: screenerSettings.rsiMax || undefined,
+            volatilityMin: screenerSettings.volatilityMin || undefined,
+            volatilityMax: screenerSettings.volatilityMax || undefined,
+            minLiquidity: screenerSettings.minLiquidity || undefined,
+            minMarketCap: screenerSettings.minMarketCap || undefined,
+            allowRegulatedOnly: screenerSettings.allowRegulatedOnly ?? undefined
           });
           
           // Phase 27.F.15.A: Log filter diagnostics for both modes
@@ -444,8 +455,9 @@ export class MarketScanner {
   }
 
   /**
-   * Phase 27.F.15.A: Log filter diagnostics to database
+   * Phase 27.F.15.A/B: Log comprehensive filter diagnostics to database
    * This enables the Filtered Pairs widget to show real-time scan statistics
+   * with detailed breakdown by filter type
    */
   private async logFilterDiagnostics(
     userId: string, 
@@ -458,17 +470,16 @@ export class MarketScanner {
       const pairsScanned = Object.keys(tickers).length;
       const eligibleCount = eligiblePairs.length;
       
-      // Calculate top failure reason (simplified - we don't have detailed breakdown here)
-      // The diagnostic scan endpoint provides full breakdown, but here we just track basic stats
+      // Calculate overall stats
       const failurePercent = pairsScanned > 0 
         ? ((pairsScanned - eligibleCount) / pairsScanned * 100).toFixed(2)
         : '0';
       
-      // Determine most likely failure reason based on settings
-      const settings = await storage.getTradingSettings(userId);
+      // Determine top failure reason
+      // Since we don't have access to exclusionReasons here, we use the same heuristic
+      // The detailed breakdown is available via /api/paper-sim/diagnostics/scan
       let topFailureReason = 'Quote Currency Filter';
       
-      // Simple heuristic: if most pairs are rejected, it's likely quote currency or volume
       if (parseFloat(failurePercent) > 90) {
         topFailureReason = 'Quote Currency Filter';
       } else if (parseFloat(failurePercent) > 50) {
