@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-20T10:01:25.026Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals, indicating potential performance bottlenecks or resource contention."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has not generated any learning cycles, opportunities, or adjustments, which may indicate a malfunction or misconfiguration."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading performance metrics such as total P&L, win rate, and ROI are all zero, suggesting that trading strategies may not be functioning as expected."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Optimize or scale the CPU resources to handle the high load average, potentially by distributing workloads or upgrading hardware."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially recalibrate AI models to ensure they are functioning correctly and generating insights or opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the active trading strategies to ensure they are properly configured and aligned with current market conditions."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Investigate the cause of the high CPU load and take immediate steps to mitigate it, such as redistributing workloads or increasing CPU capacity.",
+      "rationale": "High CPU load can lead to degraded system performance, impacting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a thorough review of the AI system to diagnose why it is not generating learning cycles or opportunities.",
+      "rationale": "Ensuring the AI system is operational is crucial for maintaining competitive trading strategies and adapting to market changes."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the trading strategies and their configurations to ensure they are effectively engaging with the market.",
+      "rationale": "Zero trading performance metrics suggest that strategies may not be executing trades, which could be a missed opportunity for profit."
+    }
+  ],
+  "urgencyLevel": "high"
+}
