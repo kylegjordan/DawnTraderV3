@@ -66,22 +66,13 @@ export async function startPaperSimulation(
     // Create lock to serialize all start/stop operations
     const startPromise = (async () => {
       try {
-        // Check database for existing running session (single source of truth)
+        // Phase 27.F.9: Prevent duplicates by checking both DB and global state atomically
         const existingSession = await storage.getActivePaperSimSession(userId);
+        const existingManager = getGlobalPaperSimManager();
         
-        if (existingSession) {
-          // IDEMPOTENT: Session already running, return success with existing info
+        if (existingSession && existingManager) {
+          // IDEMPOTENT: Both session and manager exist, return success
           console.log(`[PaperSimService] Paper trading already running (session: ${existingSession.sessionId})`);
-          
-          // Reconcile in-memory state with database
-          if (!global.globalPaperPortfolioManager) {
-            // Manager was lost (e.g., server restart), recreate it
-            console.log('[PaperSimService] Reconciling manager from database session');
-            const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
-            const manager = new PaperPortfolioManager(userId);
-            global.globalPaperPortfolioManager = manager;
-            await manager.start();
-          }
           
           return {
             success: true,
@@ -95,8 +86,36 @@ export async function startPaperSimulation(
             },
           };
         }
+        
+        if (existingSession && !existingManager) {
+          // Reconcile: DB session exists but manager was lost (e.g., server restart)
+          console.log('[PaperSimService] Reconciling manager from database session');
+          const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
+          const manager = new PaperPortfolioManager(userId);
+          setGlobalPaperSimManager(manager);
+          await manager.start();
+          
+          return {
+            success: true,
+            message: 'Paper trading simulation already running (manager reconciled)',
+            data: {
+              sessionId: existingSession.sessionId,
+              startedAt: existingSession.startedAt,
+              status: existingSession.status,
+              mode: existingSession.mode,
+              isIdempotentReuse: true,
+              wasReconciled: true,
+            },
+          };
+        }
+        
+        if (!existingSession && existingManager) {
+          // Orphaned manager exists without DB session - clear it
+          console.warn('[PaperSimService] Orphaned manager detected without DB session - clearing');
+          clearGlobalPaperSimManager();
+        }
 
-        // No existing session - create new one
+        // No existing session - create new one atomically
         const sessionId = `paper_${nanoid(10)}`;
         const startedAt = new Date();
         
@@ -105,7 +124,7 @@ export async function startPaperSimulation(
           ? new Date(startedAt.getTime() + options.runForMs) 
           : null;
 
-        // Create session in database FIRST (source of truth)
+        // Phase 27.F.9: Create session in database FIRST (source of truth)
         const sessionData: InsertPaperSimSession = {
           sessionId,
           userId,
@@ -122,12 +141,12 @@ export async function startPaperSimulation(
         const dbSession = await storage.createPaperSimSession(sessionData);
         console.log(`[PaperSimService] Created new session in database: ${sessionId}`);
 
-        // Start portfolio manager
+        // Phase 27.F.9: Create and register manager atomically (both local and global)
         const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
         const manager = new PaperPortfolioManager(userId);
         
-        // Set global manager
-        global.globalPaperPortfolioManager = manager;
+        setGlobalPaperSimManager(manager);
+        console.log('[PaperSimService] Manager created and registered globally');
         
         await manager.start();
         
@@ -166,8 +185,8 @@ export async function startPaperSimulation(
           },
         };
       } catch (error: any) {
-        // Rollback: Clean up manager and database session on failure
-        global.globalPaperPortfolioManager = null;
+        // Phase 27.F.9: Rollback - clean up manager using synchronized API
+        clearGlobalPaperSimManager();
         
         console.error('[PaperSimService] Error during start, rolling back:', error);
         throw error;
