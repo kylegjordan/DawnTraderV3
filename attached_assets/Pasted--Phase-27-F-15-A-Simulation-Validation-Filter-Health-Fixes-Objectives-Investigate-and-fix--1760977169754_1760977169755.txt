@@ -1,0 +1,105 @@
+🧠 Phase 27.F.15.A — Simulation Validation & Filter Health Fixes
+🎯 Objectives
+
+Investigate and fix the following issues now visible in the Trading interface after the Phase 27.F.14 deployment:
+
+Filter Insights tab refresh problem
+
+The “Refresh Now” button does not update the data when clicked.
+
+The automatic 30-minute refresh appears scheduled correctly but is not triggering a data reload or screen update.
+
+Filtered Pairs tab data feed
+
+“Pairs Scanned,” “Eligible Pairs %,” and “Top Failure Reason” remain at 0 even while Paper Trading mode is active.
+
+Verify that the backend broadcast (paper_sim_status_update or equivalent) is firing every 10 seconds and that the frontend listener in the FilterHealthWidget is subscribed and updating correctly.
+
+Ensure Paper Sim cycle data is writing to the live widget values (not cached or stale).
+
+Incomplete Filter Breakdown list in Filter Insights
+
+The list currently shows only four categories (Quote Currency, Min Volume, Min Price, Daily Range).
+
+It must include all filter categories used in the diagnostic output:
+
+failed_min_volume
+failed_spread
+failed_daily_range
+failed_min_price
+failed_stablecoin
+failed_quote_currency
+failed_blacklist
+failed_whitelist
+failed_history
+failed_guardrail_risk
+strategy_none_triggered
+
+
+Each filter type should display with its count and indicator (pass/fail icon) exactly as other items do.
+
+⚙️ Action Items for Replit
+
+Investigate the “Refresh Now” button behavior
+
+Confirm the onClick handler is re-fetching data from /api/paper-sim/filters/status and updating component state.
+
+Ensure the component invalidates or refetches the React Query key (or equivalent) and triggers a visible UI refresh.
+
+Verify automatic 30-minute refresh
+
+Confirm the timer is firing and successfully calling the same data-fetch logic used by the manual refresh.
+
+Check that the response from the endpoint includes updated timestamps and values.
+
+Trace Paper Sim data flow to Filtered Pairs
+
+Inspect the backend broadcast event that pushes live Paper Sim stats.
+
+Verify the frontend subscription updates the FilterHealthWidget values each cycle.
+
+If missing, re-emit or re-subscribe to the event so “Pairs Scanned” and “Eligible Pairs %” increment during Paper Trading.
+
+Expand Filter Breakdown list
+
+Add the remaining filter fields to the Filter Insights component.
+
+Order them consistently with the diagnostic JSON output.
+
+Ensure counts are pulled dynamically from the backend breakdown object.
+
+Re-test end-to-end
+
+Start Paper Trading Mode.
+
+Confirm:
+
+“Pairs Scanned” increments in Filtered Pairs.
+
+“Filter Insights” updates when clicking Refresh Now.
+
+The 30-minute auto-refresh refreshes stats automatically.
+
+All 11 filter categories appear with correct counts.
+
+🧪 Verification Checklist
+Test	Expected Result
+Click Refresh Now	Data reloads instantly; timestamp updates
+Wait 30 min (or simulate timer)	Auto-refresh occurs; counts change
+Start Paper Trading Mode	“Pairs Scanned” increases every 10 s
+Stop Paper Trading Mode	“Pairs Scanned” freezes
+Filter Insights → Breakdown	Shows all 11 filter categories with counts
+Filter Insights → Universe Overview	Reflects live totals (Universe, Evaluated, Eligible, Ineligible)
+🔐 Test Credentials (for Replit validation)
+TEST_USER_USERNAME="testuser123"
+TEST_USER_PASSWORD="SecurePass123!"
+
+✅ Deliverables
+
+Fixed Filter Insights manual and auto refresh
+
+Filtered Pairs metrics updating correctly during Paper Sim
+
+Complete Filter Breakdown list displayed
+
+Verified updates in replit.md with screenshots or metrics proof

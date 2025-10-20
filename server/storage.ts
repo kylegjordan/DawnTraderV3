@@ -202,6 +202,7 @@ export interface IStorage {
 
   // Filter diagnostics methods
   getFilterDiagnostics(params: { userId: string; mode: 'live' | 'paper'; hours?: number }): Promise<any[]>;
+  logFilterDiagnostic(data: { userId: string; mode: 'live' | 'paper'; pairsScanned: number; eligiblePairs: number; topFailureReason: string; failurePercent: string }): Promise<void>;
 
   // Filter calibration methods
   getLatestCalibration(params: { userId: string; mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null>;
@@ -684,6 +685,24 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(filterDiagnostics.timestamp));
       
     return results;
+  }
+
+  async logFilterDiagnostic(data: { 
+    userId: string; 
+    mode: 'live' | 'paper'; 
+    pairsScanned: number; 
+    eligiblePairs: number; 
+    topFailureReason: string; 
+    failurePercent: string 
+  }): Promise<void> {
+    await db.insert(filterDiagnostics).values({
+      userId: data.userId,
+      mode: data.mode,
+      pairsScanned: data.pairsScanned,
+      eligiblePairs: data.eligiblePairs,
+      topFailureReason: data.topFailureReason,
+      failurePercent: data.failurePercent
+    });
   }
 
   // Filter calibration methods

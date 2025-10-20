@@ -119,16 +119,15 @@ export function FilterInsights() {
     ? ((data.eligible_count / data.evaluated) * 100).toFixed(1)
     : '0.0';
 
-  // Get top 3 failure reasons
-  const breakdownEntries = Object.entries(data.breakdown)
-    .filter(([_, count]) => count > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+  // Get ALL breakdown entries sorted by count (Phase 27.F.15.A: Show all 11 categories)
+  const allBreakdownEntries = Object.entries(data.breakdown)
+    .sort((a, b) => b[1] - a[1]);
 
   const formatFailureReason = (key: string): string => {
     return key
       .replace('failed_', '')
-      .replace('_', ' ')
+      .replace('strategy_none_triggered', 'No Strategy Triggered')
+      .replace(/_/g, ' ')
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
@@ -200,43 +199,56 @@ export function FilterInsights() {
         </CardContent>
       </Card>
 
-      {/* Filter Breakdown */}
+      {/* Filter Breakdown - Phase 27.F.15.A: Show all 11 categories */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Filter Breakdown</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            All {allBreakdownEntries.length} filter categories (sorted by rejection count)
+          </p>
         </CardHeader>
         <CardContent>
-          {breakdownEntries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">All pairs passed filters</p>
+          {allBreakdownEntries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No filter data available</p>
           ) : (
-            <div className="space-y-3">
-              {breakdownEntries.map(([key, count]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-destructive" />
-                    <span className="text-sm font-medium">{formatFailureReason(key)}</span>
-                  </div>
-                  <Badge variant="destructive" data-testid={`badge-filter-${key}`}>
-                    {count.toLocaleString()}
-                  </Badge>
-                </div>
-              ))}
-              
-              {/* Show all other filters with counts */}
-              {Object.entries(data.breakdown)
-                .filter(([key, _]) => !breakdownEntries.find(([k]) => k === key))
-                .filter(([_, count]) => count > 0)
-                .map(([key, count]) => (
-                  <div key={key} className="flex items-center justify-between opacity-60">
+            <div className="space-y-2">
+              {allBreakdownEntries.map(([key, count], index) => {
+                const isTopFailure = index < 3 && count > 0;
+                return (
+                  <div 
+                    key={key} 
+                    className={cn(
+                      "flex items-center justify-between p-2 rounded border",
+                      isTopFailure ? "border-destructive/20 bg-destructive/5" : "border-border",
+                      count === 0 && "opacity-40"
+                    )}
+                  >
                     <div className="flex items-center gap-2">
-                      <XCircle className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{formatFailureReason(key)}</span>
+                      {count > 0 ? (
+                        <XCircle className={cn(
+                          "w-4 h-4",
+                          isTopFailure ? "text-destructive" : "text-warning"
+                        )} />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 text-success" />
+                      )}
+                      <span className={cn(
+                        "text-sm",
+                        isTopFailure && count > 0 ? "font-medium" : "font-normal"
+                      )}>
+                        {formatFailureReason(key)}
+                      </span>
                     </div>
-                    <Badge variant="secondary" data-testid={`badge-filter-${key}`}>
-                      {count.toLocaleString()}
+                    <Badge 
+                      variant={count > 0 ? (isTopFailure ? "destructive" : "secondary") : "outline"}
+                      data-testid={`badge-filter-${key}`}
+                      className={count === 0 ? "text-success border-success/20" : ""}
+                    >
+                      {count > 0 ? count.toLocaleString() : "✓ Pass"}
                     </Badge>
                   </div>
-                ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

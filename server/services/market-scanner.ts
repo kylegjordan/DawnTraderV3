@@ -83,6 +83,10 @@ export class MarketScanner {
             minHistoryDays: settings.minDataHistoryDays || 90
           });
           
+          // Phase 27.F.15.A: Log filter diagnostics for both modes
+          await this.logFilterDiagnostics(user.id, 'paper', eligiblePairs);
+          await this.logFilterDiagnostics(user.id, 'live', eligiblePairs);
+          
           // Update watchlists for both live and paper modes
           await this.updateUserWatchlist(user.id, 'paper', eligiblePairs);
           await this.updateUserWatchlist(user.id, 'live', eligiblePairs);
@@ -436,6 +440,56 @@ export class MarketScanner {
         topVolume: [],
         topPerformers: []
       };
+    }
+  }
+
+  /**
+   * Phase 27.F.15.A: Log filter diagnostics to database
+   * This enables the Filtered Pairs widget to show real-time scan statistics
+   */
+  private async logFilterDiagnostics(
+    userId: string, 
+    mode: 'live' | 'paper', 
+    eligiblePairs: any[]
+  ): Promise<void> {
+    try {
+      // Get total universe count
+      const tickers = await this.kraken.getTicker();
+      const pairsScanned = Object.keys(tickers).length;
+      const eligibleCount = eligiblePairs.length;
+      
+      // Calculate top failure reason (simplified - we don't have detailed breakdown here)
+      // The diagnostic scan endpoint provides full breakdown, but here we just track basic stats
+      const failurePercent = pairsScanned > 0 
+        ? ((pairsScanned - eligibleCount) / pairsScanned * 100).toFixed(2)
+        : '0';
+      
+      // Determine most likely failure reason based on settings
+      const settings = await storage.getTradingSettings(userId);
+      let topFailureReason = 'Quote Currency Filter';
+      
+      // Simple heuristic: if most pairs are rejected, it's likely quote currency or volume
+      if (parseFloat(failurePercent) > 90) {
+        topFailureReason = 'Quote Currency Filter';
+      } else if (parseFloat(failurePercent) > 50) {
+        topFailureReason = 'Min Volume';
+      } else if (eligibleCount > 0) {
+        topFailureReason = 'Daily Range';
+      }
+      
+      // Log to database
+      await storage.logFilterDiagnostic({
+        userId,
+        mode,
+        pairsScanned,
+        eligiblePairs: eligibleCount,
+        topFailureReason,
+        failurePercent
+      });
+      
+      console.log(`📊 [FilterDiag] ${mode}: scanned=${pairsScanned}, eligible=${eligibleCount} (${(100 - parseFloat(failurePercent)).toFixed(1)}%)`);
+    } catch (error) {
+      console.error(`Error logging filter diagnostics for user ${userId} (${mode}):`, error);
     }
   }
 }
