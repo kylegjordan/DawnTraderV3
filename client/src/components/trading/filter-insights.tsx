@@ -45,7 +45,7 @@ export function FilterInsights() {
 
   // Query with 30-minute stale time
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
-    queryKey: ['/api/paper-sim/diagnostics/scan', { mode: 'paper', limit: 500, trace: false, strategies: true }],
+    queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'],
     staleTime: 30 * 60 * 1000, // 30 minutes
     refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
   });
@@ -54,7 +54,7 @@ export function FilterInsights() {
   const handleManualRefresh = () => {
     setLastManualRefresh(Date.now());
     setNextAutoRefresh(Date.now() + 30 * 60 * 1000);
-    queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'] });
     refetch();
   };
 

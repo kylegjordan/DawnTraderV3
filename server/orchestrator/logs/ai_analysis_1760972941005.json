@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-20T15:09:01.005Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential overutilization or bottleneck issues."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics indicate no active trades and zero total profit/loss, win rate, and ROI, which is unusual for an active trading platform."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential performance degradation or system instability."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart the AI module to ensure it's actively learning and generating trading opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and adjust them to increase trading activity and profitability."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Address the high CPU load immediately by identifying and resolving the root cause, such as optimizing processes or scaling resources.",
+      "rationale": "High CPU load can lead to system instability and affect the platform's ability to process trades efficiently."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Investigate the AI module's inactivity and resolve any issues preventing it from learning and generating opportunities.",
+      "rationale": "The AI module is crucial for identifying trading opportunities and optimizing strategies, and its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a review of the current trading strategies and make necessary adjustments to improve trading performance.",
+      "rationale": "With no active trades and zero profitability, it's important to ensure that strategies are aligned with current market conditions."
+    }
+  ],
+  "urgencyLevel": "high"
+}
