@@ -1,70 +1,70 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-20T07:41:47.664Z",
+    "timestamp": "2025-10-20T07:42:47.666Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-20T07:41:47.662Z",
+        "lastUpdate": "2025-10-20T07:42:47.664Z",
         "stale": false,
-        "hitRate": "72.2%",
-        "cacheSize": 0,
+        "hitRate": "72.7%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-20T07:41:47.662Z",
+        "lastUpdate": "2025-10-20T07:42:47.664Z",
         "stale": false,
-        "hitRate": "72.2%",
-        "cacheSize": 0,
+        "hitRate": "72.7%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-20T07:41:47.662Z",
+        "lastUpdate": "2025-10-20T07:42:47.664Z",
         "stale": false,
-        "hitRate": "72.2%",
-        "cacheSize": 0,
+        "hitRate": "72.7%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-20T07:41:47.662Z",
+        "lastUpdate": "2025-10-20T07:42:47.664Z",
         "stale": false,
-        "hitRate": "72.2%",
-        "cacheSize": 0,
+        "hitRate": "72.7%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-20T07:41:47.662Z",
+        "lastUpdate": "2025-10-20T07:42:47.664Z",
         "stale": false,
-        "hitRate": "72.2%",
-        "cacheSize": 0,
+        "hitRate": "72.7%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-10-20T07:41:47.662Z",
+        "lastUpdate": "2025-10-20T07:42:47.664Z",
         "stale": false,
-        "hitRate": "72.2%",
-        "cacheSize": 0,
+        "hitRate": "72.7%",
+        "cacheSize": 1,
         "ttl": 30
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-10-20T07:41:47.662Z",
+        "lastUpdate": "2025-10-20T07:42:47.664Z",
         "stale": false,
-        "hitRate": "72.2%",
-        "cacheSize": 0,
+        "hitRate": "72.7%",
+        "cacheSize": 1,
         "ttl": 30
       }
     },
     "overallStats": {
       "modulesActive": 7,
-      "totalCacheSize": 0,
-      "overallHitRate": "72.2%",
-      "totalHits": 26,
-      "totalMisses": 10
+      "totalCacheSize": 1,
+      "overallHitRate": "72.7%",
+      "totalHits": 32,
+      "totalMisses": 12
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -129,23 +129,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-10-20T07:41:47.664Z",
+        "timestamp": "2025-10-20T07:42:47.666Z",
         "system": {
           "cpuUsage": 49.1,
           "memoryUsage": {
             "total": 67436752896,
-            "used": 30054711296,
-            "free": 37382041600,
+            "used": 30374739968,
+            "free": 37062012928,
             "percentUsed": 45
           },
-          "uptime": 218
+          "uptime": 278
         },
         "cache": {
-          "hitRate": 73,
-          "missRate": 27,
-          "totalRequests": 30,
-          "hits": 22,
-          "misses": 8
+          "hitRate": 74,
+          "missRate": 26,
+          "totalRequests": 38,
+          "hits": 28,
+          "misses": 10
         },
         "latency": {
           "cortex": null,
@@ -154,11 +154,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 218,
-            "lastRun": "2025-10-20T07:41:17.663Z"
+            "uptime": 278,
+            "lastRun": "2025-10-20T07:42:17.666Z"
           },
           "analytics": {
-            "uptime": 218,
+            "uptime": 278,
             "lastRun": "2025-10-20T07:38:22.424Z"
           }
         },
@@ -214,10 +214,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-20T07:41:47.662Z"
+      "timestamp": "2025-10-20T07:42:47.664Z"
     }
   },
-  "last_sync": "2025-10-20T07:41:47.664Z",
+  "last_sync": "2025-10-20T07:42:47.666Z",
   "memory": {
     "analytics_live_1": {
       "value": {
