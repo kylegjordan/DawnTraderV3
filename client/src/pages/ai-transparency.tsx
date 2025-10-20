@@ -1,15 +1,37 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target, Settings, LineChart, Terminal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Sparkles, CheckCircle2, XCircle, Clock, TrendingUp, AlertTriangle, Brain, Target, Settings, LineChart, Terminal, Activity, Loader2, AlertCircle, CheckCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+
+// Helper function to format category labels
+const getCategoryLabel = (category: string): string => {
+  const categoryLabels: Record<string, string> = {
+    'system': 'System Health',
+    'trading': 'Trading Strategy',
+    'optimization': 'Performance Optimization',
+    'ai_analysis': 'AI Analysis',
+    'walter_command': 'Walter Command',
+    'walter_action': 'Walter Action',
+    'risk_management': 'Risk Management',
+    'market_analysis': 'Market Analysis'
+  };
+  return categoryLabels[category] || category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+};
 
 export default function AITransparencyPage() {
-  const [activeTab, setActiveTab] = useState("automation-logs");
+  const [activeTab, setActiveTab] = useState("ai-command-center");
   const { mode } = useTradingMode();
+  const { toast } = useToast();
+  const [approvingLogId, setApprovingLogId] = useState<number | null>(null);
+  const [auditReport, setAuditReport] = useState<any | null>(null);
   
   // Check if current user is admin
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -96,6 +118,184 @@ export default function AITransparencyPage() {
     refetchInterval: 60000, // Refresh every minute
   });
 
+  // Fetch latest telemetry (for AI Command Center tab)
+  const { data: telemetryData, isLoading: telemetryLoading } = useQuery<any>({
+    queryKey: ['/api/orchestrator/telemetry'],
+    refetchInterval: 30000,
+  });
+
+  // Fetch latest AI analysis (for AI Analysis tab)
+  const { data: analysisData, isLoading: analysisLoading } = useQuery<any>({
+    queryKey: ['/api/orchestrator/analysis'],
+    refetchInterval: 30000,
+  });
+
+  // Fetch orchestrator recommendation logs (for AI Recommendations tab)
+  const { data: recommendationLogsData, isLoading: recommendationLogsLoading } = useQuery<{ logs: any[] }>({
+    queryKey: ['/api/orchestrator/logs?limit=50'],
+    refetchInterval: 30000,
+  });
+
+  // Manual analysis trigger
+  const triggerAnalysisMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/orchestrator/analyze', {});
+    },
+    onSuccess: () => {
+      toast({
+        title: "Analysis Triggered",
+        description: "GPT-4o is analyzing the system. Results will appear shortly.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/analysis'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/telemetry'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to trigger analysis",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // System audit trigger
+  const runSystemAuditMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/orchestrator/audit', {});
+    },
+    onSuccess: (response: any) => {
+      setAuditReport(response.audit);
+      toast({
+        title: "System Audit Complete",
+        description: `Overall health: ${response.audit.health.overall.toUpperCase()}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to run system audit",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Update log status (reject)
+  const updateLogMutation = useMutation({
+    mutationFn: async ({ id, status, actionTaken }: { id: number; status: string; actionTaken?: string }) => {
+      return await apiRequest('PATCH', `/api/orchestrator/logs/${id}`, { status, actionTaken });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Recommendation Rejected",
+        description: "The recommendation has been rejected",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/logs?limit=50'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to update log",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Approve recommendation and execute change
+  const approveRecommendation = async (log: any) => {
+    setApprovingLogId(log.id);
+    try {
+      let endpoint = '';
+      let payload: any = {};
+
+      if (log.category === 'goal_update' && log.metadata) {
+        endpoint = '/api/orchestrator/updateGoal';
+        payload = {
+          mode: log.metadata.mode,
+          metricName: log.metadata.metricName,
+          goalValue: log.metadata.goalValue,
+          approved: true,
+          reason: 'Approved by admin via AI Transparency'
+        };
+      } else if (log.category === 'guardrail_update' && log.metadata) {
+        endpoint = '/api/orchestrator/updateGuardrail';
+        payload = {
+          mode: log.metadata.mode,
+          field: log.metadata.field,
+          value: log.metadata.value,
+          approved: true,
+          reason: 'Approved by admin via AI Transparency'
+        };
+      } else if (log.category === 'strategy_update' && log.metadata) {
+        endpoint = '/api/orchestrator/updateStrategy';
+        payload = {
+          mode: log.metadata.mode,
+          strategy: log.metadata.strategy,
+          field: log.metadata.field,
+          value: log.metadata.value,
+          approved: true,
+          reason: 'Approved by admin via AI Transparency'
+        };
+      } else {
+        await apiRequest('PATCH', `/api/orchestrator/logs/${log.id}`, { 
+          status: 'approved', 
+          actionTaken: 'Approved by admin' 
+        });
+        
+        toast({
+          title: "Recommendation Approved",
+          description: "The recommendation has been approved",
+        });
+        
+        queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/logs?limit=50'] });
+        return;
+      }
+
+      await apiRequest('POST', endpoint, payload);
+      await apiRequest('PATCH', `/api/orchestrator/logs/${log.id}`, { 
+        status: 'approved', 
+        actionTaken: 'Approved and applied by admin' 
+      });
+
+      toast({
+        title: "Recommendation Approved",
+        description: "Configuration has been updated successfully",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/logs?limit=50'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/guardrails'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/strategy-settings'] });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to approve recommendation",
+        variant: "destructive",
+      });
+    } finally {
+      setApprovingLogId(null);
+    }
+  };
+
+  const getUrgencyColor = (level: string) => {
+    switch (level) {
+      case 'critical': return 'destructive';
+      case 'high': return 'destructive';
+      case 'medium': return 'default';
+      case 'low': return 'outline';
+      default: return 'outline';
+    }
+  };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity?.toLowerCase()) {
+      case 'critical': return 'text-red-500';
+      case 'error': return 'text-red-500';
+      case 'warning': return 'text-yellow-500';
+      case 'info': return 'text-blue-500';
+      default: return 'text-muted-foreground';
+    }
+  };
+
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];
@@ -110,6 +310,9 @@ export default function AITransparencyPage() {
   const paperPositions = paperPositionsData?.positions || [];
   const orchestratorLogs = orchestratorLogsData?.logs ?? [];
   const learningSummary = learningSummaryData?.summary || null;
+  const telemetry = telemetryData;
+  const analysis = analysisData;
+  const recommendationLogs = recommendationLogsData?.logs || [];
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -177,6 +380,18 @@ export default function AITransparencyPage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap gap-2 justify-start w-full h-auto p-2" data-testid="tabs-ai-transparency">
+          <TabsTrigger value="ai-command-center" data-testid="tab-ai-command-center" className="min-w-[140px] text-sm px-3 py-2">
+            <Activity className="w-4 h-4 mr-2" />
+            AI Command Center
+          </TabsTrigger>
+          <TabsTrigger value="ai-analysis" data-testid="tab-ai-analysis" className="min-w-[140px] text-sm px-3 py-2">
+            <Brain className="w-4 h-4 mr-2" />
+            AI Analysis
+          </TabsTrigger>
+          <TabsTrigger value="ai-recommendations" data-testid="tab-ai-recommendations" className="min-w-[140px] text-sm px-3 py-2">
+            <TrendingUp className="w-4 h-4 mr-2" />
+            AI Recommendations
+          </TabsTrigger>
           <TabsTrigger value="automation-logs" data-testid="tab-automation-logs" className="min-w-[140px] text-sm px-3 py-2">
             <Clock className="w-4 h-4 mr-2" />
             Automation Logs
@@ -218,6 +433,402 @@ export default function AITransparencyPage() {
             System Health
           </TabsTrigger>
         </TabsList>
+
+        {/* AI Command Center Tab (formerly Overview from Command Center) */}
+        <TabsContent value="ai-command-center" className="space-y-6 mt-6" data-testid="content-ai-command-center">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              {analysis && (
+                <Badge 
+                  variant={getUrgencyColor(analysis.urgencyLevel)}
+                  className="text-sm px-3 py-1"
+                  data-testid={`badge-urgency-${analysis?.urgencyLevel}`}
+                >
+                  {analysis.urgencyLevel?.toUpperCase()}
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => runSystemAuditMutation.mutate()}
+                disabled={runSystemAuditMutation.isPending}
+                data-testid="button-run-audit"
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                {runSystemAuditMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Running Audit...
+                  </>
+                ) : (
+                  <>
+                    <Activity className="w-4 h-4" />
+                    Run System Audit
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={() => triggerAnalysisMutation.mutate()}
+                disabled={triggerAnalysisMutation.isPending}
+                data-testid="button-trigger-analysis"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                {triggerAnalysisMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Trigger Analysis
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {telemetryLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : telemetry ? (
+            <>
+              {/* System Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card data-testid="card-system-metrics">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Activity className="w-4 h-4" />
+                      System Health
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">CPU Load</span>
+                      <span className="text-sm font-semibold" data-testid="text-cpu">{telemetry.system?.cpu?.loadAverage?.[0]?.toFixed(2) || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Memory</span>
+                      <span className="text-sm font-semibold" data-testid="text-memory">{telemetry.system?.memory?.usagePercent?.toFixed(1) || 'N/A'}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Uptime</span>
+                      <span className="text-sm font-semibold" data-testid="text-uptime">
+                        {telemetry.system?.uptime ? Math.floor(telemetry.system.uptime / 3600) : 'N/A'}h
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-trading-metrics">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      Trading Performance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Total P/L</span>
+                      <span className={`text-sm font-semibold ${(telemetry.trading?.totalPL || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`} data-testid="text-total-pl">
+                        ${telemetry.trading?.totalPL?.toFixed(2) || '0.00'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Win Rate</span>
+                      <span className="text-sm font-semibold" data-testid="text-win-rate">{telemetry.trading?.winRate?.toFixed(1) || '0.0'}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">ROI</span>
+                      <span className="text-sm font-semibold" data-testid="text-roi">{telemetry.trading?.roi?.toFixed(2) || '0.00'}%</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-ai-metrics">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Brain className="w-4 h-4" />
+                      AI Activity
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Learning Cycles</span>
+                      <span className="text-sm font-semibold" data-testid="text-learning-cycles">{telemetry.ai?.recentLearningCycles || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Opportunities</span>
+                      <span className="text-sm font-semibold" data-testid="text-opportunities">{telemetry.ai?.opportunitiesGenerated || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Adjustments</span>
+                      <span className="text-sm font-semibold" data-testid="text-adjustments">{telemetry.ai?.adjustmentsMade || 0}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Goals and Guardrails */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card data-testid="card-goals">
+                  <CardHeader>
+                    <CardTitle className="text-base">Active Goals</CardTitle>
+                    <CardDescription>Current user-defined trading goals</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {telemetry.goals?.length > 0 ? (
+                      <ul className="space-y-2">
+                        {telemetry.goals.slice(0, 3).map((goal: any, idx: number) => (
+                          <li key={idx} className="text-sm flex items-start gap-2" data-testid={`text-goal-${idx}`}>
+                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span>{goal.description || goal.target}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground" data-testid="text-no-goals">No active goals</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-guardrails">
+                  <CardHeader>
+                    <CardTitle className="text-base">Active Guardrails</CardTitle>
+                    <CardDescription>Protective rules and boundaries</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {telemetry.guardrails && Object.keys(telemetry.guardrails).length > 0 ? (
+                      <div className="space-y-2">
+                        {Object.entries(telemetry.guardrails).map(([key, value], idx) => (
+                          <div key={idx} className="text-sm flex items-start gap-2" data-testid={`text-guardrail-${idx}`}>
+                            <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                            <span className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}: {String(value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground" data-testid="text-no-guardrails">No active guardrails</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* System Audit Report */}
+              {auditReport && (
+                <Card data-testid="card-audit-report">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          System Audit Report
+                          <Badge 
+                            variant={
+                              auditReport.health.overall === 'healthy' ? 'default' :
+                              auditReport.health.overall === 'fair' ? 'outline' :
+                              auditReport.health.overall === 'degraded' ? 'secondary' : 'destructive'
+                            }
+                            data-testid={`badge-health-${auditReport.health.overall}`}
+                          >
+                            {auditReport.health.overall.toUpperCase()}
+                          </Badge>
+                        </CardTitle>
+                        <CardDescription>
+                          Generated {formatDistanceToNow(new Date(auditReport.timestamp))} ago
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Health Checks */}
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3">Health Checks</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        {Object.entries(auditReport.health.checks).map(([check, status]: [string, any]) => (
+                          <div key={check} className="flex items-center gap-2" data-testid={`check-${check}`}>
+                            {status === 'pass' ? (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            ) : status === 'warning' ? (
+                              <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            )}
+                            <span className="text-sm capitalize">{check}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>No telemetry data available</AlertDescription>
+            </Alert>
+          )}
+        </TabsContent>
+
+        {/* AI Analysis Tab (from Command Center) */}
+        <TabsContent value="ai-analysis" className="space-y-6 mt-6" data-testid="content-ai-analysis">
+          {analysisLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : analysis ? (
+            <>
+              {/* Anomalies */}
+              <Card data-testid="card-anomalies">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5" />
+                    Detected Anomalies
+                  </CardTitle>
+                  <CardDescription>Issues requiring attention</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {analysis.anomalies && analysis.anomalies.length > 0 ? (
+                    <ul className="space-y-3">
+                      {analysis.anomalies.map((anomaly: any, idx: number) => (
+                        <li key={idx} className="flex items-start gap-3 pb-3 border-b last:border-0" data-testid={`anomaly-${idx}`}>
+                          <AlertTriangle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${getSeverityColor(anomaly.severity)}`} />
+                          <div className="flex-1">
+                            <Badge variant="outline" className="mb-1">{anomaly.severity}</Badge>
+                            <p className="text-sm">{anomaly.message}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground" data-testid="text-no-anomalies">No anomalies detected</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Optimizations */}
+              <Card data-testid="card-optimizations">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" />
+                    Optimization Opportunities
+                  </CardTitle>
+                  <CardDescription>Performance improvement suggestions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {analysis.optimizations && analysis.optimizations.length > 0 ? (
+                    <ul className="space-y-3">
+                      {analysis.optimizations.map((opt: any, idx: number) => (
+                        <li key={idx} className="flex items-start gap-3 pb-3 border-b last:border-0" data-testid={`optimization-${idx}`}>
+                          <TrendingUp className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                          <div className="flex-1">
+                            <Badge variant="outline" className="mb-1">{opt.impact}</Badge>
+                            <p className="text-sm">{opt.recommendation}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground" data-testid="text-no-optimizations">No optimizations suggested</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>No analysis data available. Trigger an analysis to generate insights.</AlertDescription>
+            </Alert>
+          )}
+        </TabsContent>
+
+        {/* AI Recommendations Tab (from Command Center) */}
+        <TabsContent value="ai-recommendations" className="space-y-6 mt-6" data-testid="content-ai-recommendations">
+          {recommendationLogsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : recommendationLogs.length > 0 ? (
+            <div className="space-y-4">
+              {recommendationLogs.map((log: any) => (
+                <Card key={log.id} data-testid={`card-log-${log.id}`}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" data-testid={`badge-category-${log.id}`}>{getCategoryLabel(log.category)}</Badge>
+                          <Badge variant={getUrgencyColor(log.urgencyLevel)} data-testid={`badge-urgency-${log.id}`}>
+                            {log.urgencyLevel}
+                          </Badge>
+                          <Badge 
+                            variant={log.status === 'approved' ? 'default' : log.status === 'rejected' ? 'destructive' : 'outline'}
+                            data-testid={`badge-status-${log.id}`}
+                          >
+                            {log.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground" data-testid={`text-timestamp-${log.id}`}>
+                          {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm mb-3" data-testid={`text-recommendation-${log.id}`}>
+                      {(log.metadata as any)?.source === 'Walter' && (
+                        <span className="font-semibold text-primary">Walter Recommends: </span>
+                      )}
+                      {log.recommendation}
+                    </p>
+                    {log.actionTaken && (
+                      <div className="bg-muted p-3 rounded-md">
+                        <p className="text-xs text-muted-foreground mb-1">Action Taken:</p>
+                        <p className="text-sm" data-testid={`text-action-${log.id}`}>{log.actionTaken}</p>
+                      </div>
+                    )}
+                    {log.status === 'pending' && (
+                      <div className="flex gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => approveRecommendation(log)}
+                          disabled={approvingLogId === log.id || updateLogMutation.isPending}
+                          data-testid={`button-approve-${log.id}`}
+                        >
+                          {approvingLogId === log.id ? (
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                          )}
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => updateLogMutation.mutate({ id: log.id, status: 'rejected', actionTaken: 'Rejected by admin' })}
+                          disabled={approvingLogId === log.id || updateLogMutation.isPending}
+                          data-testid={`button-reject-${log.id}`}
+                        >
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>No recommendations available</AlertDescription>
+            </Alert>
+          )}
+        </TabsContent>
 
         {/* Tab 1: Recent Automation Logs */}
         <TabsContent value="automation-logs" className="space-y-4">
