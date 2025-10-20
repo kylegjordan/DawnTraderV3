@@ -3005,6 +3005,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('[TradingAudit] Failed to log start action:', auditError);
       }
       
+      // Phase 27.F.10: Broadcast state change for PaperSim
+      try {
+        const { tradingStateSync } = await import('./services/trading-state-sync.js');
+        await tradingStateSync.setEngineActive(userId, true);
+        await tradingStateSync.broadcastUserUpdate(userId);
+        console.log('[TradingSync][PaperSim] Broadcasted paper trading_state_changed update (start)');
+      } catch (broadcastError) {
+        console.error('[TradingSync][PaperSim] Failed to broadcast start:', broadcastError);
+      }
+      
       res.json({ success: true, message: 'Paper trading simulation started' });
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
@@ -3074,6 +3084,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (auditError) {
         console.error('[TradingAudit] Failed to log stop action:', auditError);
+      }
+      
+      // Phase 27.F.10: Broadcast state change for PaperSim (stop)
+      try {
+        const { tradingStateSync } = await import('./services/trading-state-sync.js');
+        await tradingStateSync.setEngineActive(userId, false);
+        await tradingStateSync.broadcastUserUpdate(userId);
+        console.log('[TradingSync][PaperSim] Broadcasted paper trading_state_changed update (stop)');
+      } catch (broadcastError) {
+        console.error('[TradingSync][PaperSim] Failed to broadcast stop:', broadcastError);
       }
       
       res.json({ success: true, message: 'Paper trading simulation stopped' });

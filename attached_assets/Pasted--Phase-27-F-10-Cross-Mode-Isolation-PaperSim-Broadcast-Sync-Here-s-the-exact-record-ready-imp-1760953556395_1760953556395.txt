@@ -1,0 +1,52 @@
+🧩 Phase 27.F.10 – Cross-Mode Isolation + PaperSim Broadcast Sync
+
+Here’s the exact record-ready implementation plan for Replit to run — no edits or guesswork needed.
+
+🧱 Files to Modify
+
+1. server/routes.ts
+2. server/services/trading-state-sync.ts (no major changes, just used here)
+
+🧩 Step 1 – Update /api/paper-sim/start
+
+Inside the endpoint after the line that creates the PaperSim manager / session but before returning success:
+
+// ✅ Phase 27.F.10 – Broadcast state change for PaperSim
+const { tradingStateSync } = await import("../services/trading-state-sync.js");
+await tradingStateSync.setEngineActive(userId, true, "paper");
+await tradingStateSync.broadcastUserUpdate(userId);
+
+🧩 Step 2 – Update /api/paper-sim/stop
+
+Inside the stop endpoint after the manager/session is destroyed but before returning the response:
+
+// ✅ Phase 27.F.10 – Broadcast state change for PaperSim (stop)
+const { tradingStateSync } = await import("../services/trading-state-sync.js");
+await tradingStateSync.setEngineActive(userId, false, "paper");
+await tradingStateSync.broadcastUserUpdate(userId);
+
+🧩 Step 3 – Optional Logging (Recommended)
+
+Add a small log line after each broadcast call so it’s easy to confirm later:
+
+console.log("[TradingSync][PaperSim] Broadcasted paper trading_state_changed update");
+
+🧩 Step 4 – Frontend Guard for Mode-Scoped Events
+
+In client/src/hooks/use-trading.tsx, locate the WebSocket event listener for
+trading_state_changed and wrap the state update with a mode check:
+
+if (event.mode === currentMode) {
+  setEngineActive(event.payload.isEngineActive);
+}
+
+
+This prevents a Live update from changing the Paper toggle (and vice versa).
+
+🧪 Expected Behavior After Deployment
+Action	Result
+Start Paper Mode	Toast appears ✅ Toggle turns green ✅ Broadcast fires (mode:"paper")
+Stop Paper Mode	Toast appears ✅ Toggle returns to stopped ✅ No ghost manager
+Start/Stop Live Mode	Works independently ✅ Does not affect Paper mode
+Cross-Mode Sync	Independent states verified (mode:"paper" vs "live")
+Logs	[TradingSync][PaperSim] Broadcasted paper trading_state_changed update
