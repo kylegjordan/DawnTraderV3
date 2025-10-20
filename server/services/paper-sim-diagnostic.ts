@@ -7,6 +7,7 @@ import { KrakenService } from './kraken.js';
 import { StrategyEngine, type TechnicalIndicators } from './strategy-engine.js';
 import { RiskManager } from './risk-manager.js';
 import { storage } from '../storage.js';
+import { toCanonical, canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
 import type { TradingSettings, PriceData } from '@shared/schema';
 
 interface UniverseScanOptions {
@@ -40,6 +41,11 @@ interface CandidateSnapshot {
     vol_24h: number;
     daily_range: number;
   };
+  // Phase 27.F.12.b - Validation fields (temporary)
+  symbol_canonical?: string;
+  kraken_id?: string;
+  whitelist_hit?: boolean;
+  blacklist_hit?: boolean;
 }
 
 interface UniverseScanResult {
@@ -99,8 +105,8 @@ export class PaperSimDiagnosticService {
     const maxBidAskSpread = parseFloat(settings.maxBidAskSpread || '1.00');
     const excludeStablecoins = settings.excludeStablecoins ?? true;
     const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT'];
-    const blacklist = settings.blacklistedSymbols || [];
-    const whitelist = settings.whitelistedSymbols || [];
+    const blacklist = normalizeSymbolArray(settings.blacklistedSymbols);
+    const whitelist = normalizeSymbolArray(settings.whitelistedSymbols);
     const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD'];
 
     // Track actual breakdown
@@ -138,19 +144,22 @@ export class PaperSimDiagnosticService {
       const bidPrice = parseFloat(ticker.b[0]);
       const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 100;
 
+      // Get canonical symbol for comparison (BASE/QUOTE format)
+      const canonicalSymbol = canonicalFromPairInfo(pairInfo);
+
       // Apply filters in order and track first failure
       let rejected = false;
       let rejectReason = '';
 
-      // Filter 1: Whitelist
-      if (!rejected && whitelist.length > 0 && !whitelist.includes(pairInfo.base)) {
+      // Filter 1: Whitelist (compare canonical symbols)
+      if (!rejected && whitelist.length > 0 && !whitelist.includes(canonicalSymbol)) {
         breakdown.failed_whitelist++;
         rejected = true;
         rejectReason = 'failed_whitelist';
       }
 
-      // Filter 2: Blacklist
-      if (!rejected && blacklist.includes(pairInfo.base)) {
+      // Filter 2: Blacklist (compare canonical symbols)
+      if (!rejected && blacklist.includes(canonicalSymbol)) {
         breakdown.failed_blacklist++;
         rejected = true;
         rejectReason = 'failed_blacklist';
@@ -199,7 +208,17 @@ export class PaperSimDiagnosticService {
       }
 
       if (rejected && trace && evaluated_count <= 15) {
-        console.log(`[TraceReject] SYMB=${pairName} reason=${rejectReason}`);
+        console.log(`[TraceReject] SYMB=${pairName} canonical=${canonicalSymbol} reason=${rejectReason}`);
+      }
+
+      // Log whitelist/blacklist hits when trace enabled
+      if (trace && evaluated_count <= 15) {
+        if (whitelist.length > 0 && whitelist.includes(canonicalSymbol)) {
+          console.log(`[FilterEval] WHITELIST_HIT ${canonicalSymbol}`);
+        }
+        if (blacklist.includes(canonicalSymbol)) {
+          console.log(`[FilterEval] BLACKLIST_HIT ${canonicalSymbol}`);
+        }
       }
 
       if (!rejected) {

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
 
 interface KrakenConfig {
   apiKey: string;
@@ -649,8 +650,8 @@ export class KrakenService {
     const maxBidAskSpread = parseFloat(settings.maxBidAskSpread || '1.00');
     const excludeStablecoins = settings.excludeStablecoins ?? true;
     const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT'];
-    const blacklist = settings.blacklistedSymbols || [];
-    const whitelist = settings.whitelistedSymbols || [];
+    const blacklist = normalizeSymbolArray(settings.blacklistedSymbols);
+    const whitelist = normalizeSymbolArray(settings.whitelistedSymbols);
     const minHistoryDays = settings.minHistoryDays || 90;
 
     // Stablecoin patterns
@@ -671,14 +672,17 @@ export class KrakenService {
       const bidPrice = parseFloat(ticker.b[0]);
       const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 100;
 
+      // Get canonical symbol for comparison (BASE/QUOTE format)
+      const canonicalSymbol = canonicalFromPairInfo(pairInfo);
+
       // Filter 1: Whitelist check (if whitelist exists and is not empty, ONLY allow whitelisted symbols)
-      if (whitelist.length > 0 && !whitelist.includes(pairInfo.base)) {
+      if (whitelist.length > 0 && !whitelist.includes(canonicalSymbol)) {
         exclusionReasons[pairName] = `Not in whitelist`;
         return;
       }
 
       // Filter 2: Blacklist check
-      if (blacklist.includes(pairInfo.base)) {
+      if (blacklist.includes(canonicalSymbol)) {
         exclusionReasons[pairName] = `Blacklisted symbol`;
         return;
       }

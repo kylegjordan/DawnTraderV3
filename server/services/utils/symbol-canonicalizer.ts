@@ -1,0 +1,128 @@
+/**
+ * Phase 27.F.12.b - Symbol Canonicalization
+ * 
+ * Enforces one canonical pair format (BASE/QUOTE) across:
+ * - Whitelist/Blacklist
+ * - Screener filters
+ * - Guardrails
+ * - Strategy prechecks
+ * - MarketDataCoordinator
+ */
+
+/**
+ * Converts any exchange ID or pair format to canonical BASE/QUOTE format
+ * 
+ * Examples:
+ * - "XXBTZUSD" -> "BTC/USD"
+ * - "XETHZUSD" -> "ETH/USD"
+ * - "BTC/USD" -> "BTC/USD" (already canonical)
+ * - "ETH" -> "ETH" (base currency only)
+ */
+export function toCanonical(exchangeIdOrPair: string): string {
+  if (!exchangeIdOrPair) return '';
+
+  // Already in BASE/QUOTE format
+  if (exchangeIdOrPair.includes('/')) {
+    return exchangeIdOrPair;
+  }
+
+  // Kraken's exchange IDs often have X/Z prefixes and no slash
+  // Common patterns:
+  // - XXBTZUSD = XBT/USD (BTC)
+  // - XETHZUSD = ETH/USD
+  // - XXDGZUSD = XDG/USD (DOGE)
+  // - SOLUSD = SOL/USD
+  
+  // Map of Kraken's asset codes to standard symbols
+  const krakenToStandard: Record<string, string> = {
+    'XBT': 'BTC',
+    'XDG': 'DOGE',
+    'XLM': 'XLM',
+    'XRP': 'XRP',
+    'XTZ': 'XTZ'
+  };
+
+  // Try to parse Kraken format
+  let base = '';
+  let quote = '';
+
+  // Pattern 1: X[base]Z[quote] (e.g., XXBTZUSD)
+  if (exchangeIdOrPair.startsWith('X') && exchangeIdOrPair.includes('Z')) {
+    const zIndex = exchangeIdOrPair.lastIndexOf('Z');
+    base = exchangeIdOrPair.substring(1, zIndex);
+    quote = exchangeIdOrPair.substring(zIndex + 1);
+  }
+  // Pattern 2: [base][quote] where quote is known (USD, USDT, EUR, etc.)
+  else {
+    const knownQuotes = ['USD', 'USDT', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF'];
+    for (const q of knownQuotes) {
+      if (exchangeIdOrPair.endsWith(q)) {
+        base = exchangeIdOrPair.substring(0, exchangeIdOrPair.length - q.length);
+        quote = q;
+        break;
+      }
+    }
+  }
+
+  // If we found both base and quote, normalize and return
+  if (base && quote) {
+    base = krakenToStandard[base] || base;
+    quote = krakenToStandard[quote] || quote;
+    return `${base}/${quote}`;
+  }
+
+  // If it's just a base currency, return as-is
+  return exchangeIdOrPair;
+}
+
+/**
+ * Converts BASE/QUOTE format to Kraken's exchange ID format
+ * 
+ * Examples:
+ * - "BTC/USD" -> "XXBTZUSD"
+ * - "ETH/USD" -> "XETHZUSD"
+ * - "SOL/USD" -> "SOLUSD"
+ */
+export function toKrakenId(baseQuote: string): string {
+  if (!baseQuote || !baseQuote.includes('/')) {
+    return baseQuote;
+  }
+
+  const [base, quote] = baseQuote.split('/');
+  
+  // Map standard symbols to Kraken's asset codes
+  const standardToKraken: Record<string, string> = {
+    'BTC': 'XBT',
+    'DOGE': 'XDG'
+  };
+
+  const krakenBase = standardToKraken[base] || base;
+  const krakenQuote = standardToKraken[quote] || quote;
+
+  // Kraken uses X prefix for base and Z prefix for quote in many pairs
+  // But not all - SOL/USD is just SOLUSD
+  // For now, return a best-effort format
+  if (['BTC', 'ETH', 'DOGE'].includes(base) && ['USD', 'EUR'].includes(quote)) {
+    return `X${krakenBase}Z${krakenQuote}`;
+  }
+
+  // Default: just concatenate
+  return `${krakenBase}${krakenQuote}`;
+}
+
+/**
+ * Normalizes an array of symbols to canonical format
+ */
+export function normalizeSymbolArray(symbols: string[] | null | undefined): string[] {
+  if (!symbols || !Array.isArray(symbols)) {
+    return [];
+  }
+  return symbols.map(s => toCanonical(s)).filter(s => s !== '');
+}
+
+/**
+ * Given a Kraken pair info object, return canonical BASE/QUOTE
+ */
+export function canonicalFromPairInfo(pairInfo: { base: string; quote: string }): string {
+  return `${pairInfo.base}/${pairInfo.quote}`;
+}
