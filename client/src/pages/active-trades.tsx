@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Filter, Lightbulb } from "lucide-react";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 import { FilterInsights } from "@/components/trading/filter-insights";
+import { useUserRole } from "@/hooks/useUserRole";
 
 function FilteredPairsTab() {
   return (
@@ -28,6 +29,10 @@ function FilteredPairsTab() {
 
 export default function TradingPage() {
   const [activeTab, setActiveTab] = useState("open");
+  const { isAdmin, isOwner } = useUserRole();
+  
+  // Filter Insights tab is only available for admin/owner users
+  const showFilterInsights = isAdmin || isOwner;
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-testid="trading-page">
@@ -45,7 +50,7 @@ export default function TradingPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4" data-testid="trading-tabs">
+        <TabsList className={`grid w-full ${showFilterInsights ? 'grid-cols-4' : 'grid-cols-3'}`} data-testid="trading-tabs">
           <TabsTrigger value="open" className="flex items-center gap-2" data-testid="tab-open-trades">
             <BarChart3 className="w-4 h-4" />
             Open Trades
@@ -58,10 +63,12 @@ export default function TradingPage() {
             <Filter className="w-4 h-4" />
             Filtered Pairs
           </TabsTrigger>
-          <TabsTrigger value="insights" className="flex items-center gap-2" data-testid="tab-filter-insights">
-            <Lightbulb className="w-4 h-4" />
-            Filter Insights
-          </TabsTrigger>
+          {showFilterInsights && (
+            <TabsTrigger value="insights" className="flex items-center gap-2" data-testid="tab-filter-insights">
+              <Lightbulb className="w-4 h-4" />
+              Filter Insights
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="open" className="mt-6">
@@ -76,9 +83,11 @@ export default function TradingPage() {
           <FilteredPairsTab />
         </TabsContent>
 
-        <TabsContent value="insights" className="mt-6">
-          <FilterInsights />
-        </TabsContent>
+        {showFilterInsights && (
+          <TabsContent value="insights" className="mt-6">
+            <FilterInsights />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
