@@ -54,13 +54,22 @@ class PaperSimHeartbeatService {
 
   /**
    * Run heartbeat check on all active sessions
+   * Phase 27.F.9: Added reconciliation guard to heal state mismatches
    */
   private async runHeartbeatCheck(): Promise<void> {
     try {
       console.log('[PaperSimHeartbeat] Running heartbeat check...');
       
-      // Get all active paper simulation sessions from database
+      // Phase 27.F.9: Reconciliation guard - heal any mismatch automatically
+      const { getGlobalPaperSimManager, clearGlobalPaperSimManager } = await import('./paper-sim-service');
       const activeSessions = await storage.getActivePaperSimSessions();
+      const globalManager = getGlobalPaperSimManager();
+      
+      // Heal orphaned global manager (manager exists but no DB session)
+      if (globalManager && activeSessions.length === 0) {
+        console.warn('[PaperSimHeartbeat] Orphaned global manager detected – cleaning up');
+        clearGlobalPaperSimManager();
+      }
       
       console.log(`[PaperSimHeartbeat] Found ${activeSessions.length} active session(s)`);
       
