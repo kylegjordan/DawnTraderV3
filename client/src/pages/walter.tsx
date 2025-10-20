@@ -26,6 +26,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useWebSocket } from '@/hooks/use-websocket';
+import { ConfirmLiveTradingModal } from '@/components/trading/confirm-live-trading-modal';
+import { ConfirmStopLiveTradingModal } from '@/components/trading/confirm-stop-live-trading-modal';
+import { useTrading } from '@/hooks/use-trading';
 
 interface WalterChatLog {
   id: string;
@@ -81,6 +84,9 @@ export default function WalterPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [showStartLiveTradingModal, setShowStartLiveTradingModal] = useState(false);
+  const [showStopLiveTradingModal, setShowStopLiveTradingModal] = useState(false);
+  const [pendingLiveTradingMessage, setPendingLiveTradingMessage] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
@@ -554,8 +560,44 @@ export default function WalterPage() {
     }
 
     const trimmedMessage = inputMessage.trim();
-    if (trimmedMessage && !sendMessageMutation.isPending && selectedChatId) {
-      sendMessageMutation.mutate(trimmedMessage);
+    if (!trimmedMessage || sendMessageMutation.isPending || !selectedChatId) return;
+
+    // Detect live trading commands and show inline confirmation modals
+    const startLiveTradingPattern = /(?:please\s+)?(?:start|begin|run|initiate|launch|activate|enable)(?:\s+the)?(?:\s+live[\s-]?(?:trad(?:e|ing)|mode))|(?:please\s+)?(?:go\s+)?live(?:\s+with)?(?:\s+trading)?|(?:please\s+)?(?:switch|change)(?:\s+to)?(?:\s+live[\s-]?mode)/i;
+    const stopLiveTradingPattern = /(?:please\s+)?(?:stop|end|halt|terminate|kill|deactivate|disable)(?:\s+the)?(?:\s+live[\s-]?(?:trad(?:e|ing)|mode))|(?:please\s+)?(?:exit|leave)(?:\s+live)?(?:\s+mode|trading)?/i;
+
+    if (startLiveTradingPattern.test(trimmedMessage)) {
+      // Show inline start live trading modal
+      setPendingLiveTradingMessage(trimmedMessage);
+      setShowStartLiveTradingModal(true);
+      return;
+    }
+
+    if (stopLiveTradingPattern.test(trimmedMessage)) {
+      // Show inline stop live trading modal
+      setPendingLiveTradingMessage(trimmedMessage);
+      setShowStopLiveTradingModal(true);
+      return;
+    }
+
+    // Normal message - send to Walter
+    sendMessageMutation.mutate(trimmedMessage);
+  };
+
+  // Handle live trading confirmation
+  const handleConfirmStartLiveTrading = async () => {
+    if (pendingLiveTradingMessage && selectedChatId) {
+      sendMessageMutation.mutate(pendingLiveTradingMessage);
+      setInputMessage(''); // Clear input after sending
+      setPendingLiveTradingMessage(null);
+    }
+  };
+
+  const handleConfirmStopLiveTrading = async () => {
+    if (pendingLiveTradingMessage && selectedChatId) {
+      sendMessageMutation.mutate(pendingLiveTradingMessage);
+      setInputMessage(''); // Clear input after sending
+      setPendingLiveTradingMessage(null);
     }
   };
 
@@ -1243,6 +1285,19 @@ export default function WalterPage() {
           )}
         </Card>
       </div>
+
+      {/* Inline Live Trading Confirmation Modals */}
+      <ConfirmLiveTradingModal
+        open={showStartLiveTradingModal}
+        onOpenChange={setShowStartLiveTradingModal}
+        onConfirm={handleConfirmStartLiveTrading}
+      />
+
+      <ConfirmStopLiveTradingModal
+        open={showStopLiveTradingModal}
+        onOpenChange={setShowStopLiveTradingModal}
+        onConfirm={handleConfirmStopLiveTrading}
+      />
     </div>
   );
 }
