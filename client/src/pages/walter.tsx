@@ -562,22 +562,61 @@ export default function WalterPage() {
     const trimmedMessage = inputMessage.trim();
     if (!trimmedMessage || sendMessageMutation.isPending || !selectedChatId) return;
 
-    // Detect live trading commands and show inline confirmation modals
-    const startLiveTradingPattern = /(?:please\s+)?(?:start|begin|run|initiate|launch|activate|enable)(?:\s+the)?(?:\s+live[\s-]?(?:trad(?:e|ing)|mode))|(?:please\s+)?(?:go\s+)?live(?:\s+with)?(?:\s+trading)?|(?:please\s+)?(?:switch|change)(?:\s+to)?(?:\s+live[\s-]?mode)/i;
-    const stopLiveTradingPattern = /(?:please\s+)?(?:stop|end|halt|terminate|kill|deactivate|disable)(?:\s+the)?(?:\s+live[\s-]?(?:trad(?:e|ing)|mode))|(?:please\s+)?(?:exit|leave)(?:\s+live)?(?:\s+mode|trading)?/i;
-
-    if (startLiveTradingPattern.test(trimmedMessage)) {
-      // Show inline start live trading modal
-      setPendingLiveTradingMessage(trimmedMessage);
-      setShowStartLiveTradingModal(true);
-      return;
+    // Phase 27.F.16.C: Detect trading mode intent with priority ordering
+    // Priority: 1️⃣ Paper → 2️⃣ Simulation → 3️⃣ Live
+    
+    // Check for paper/simulation keywords FIRST (highest priority)
+    const paperKeywords = /\b(paper|simulation|simulated|practice|test|demo)\b/i;
+    const isPaperContext = paperKeywords.test(trimmedMessage);
+    
+    // Start trading patterns
+    const startPattern = /(?:please\s+)?(?:start|begin|run|initiate|launch|activate|enable)/i;
+    const tradingPattern = /\b(trad(?:e|ing)|mode)\b/i;
+    const livePattern = /\blive\b/i;
+    
+    // Stop trading patterns  
+    const stopPattern = /(?:please\s+)?(?:stop|end|halt|terminate|kill|deactivate|disable|exit|leave)/i;
+    
+    const isStartCommand = startPattern.test(trimmedMessage) && tradingPattern.test(trimmedMessage);
+    const isStopCommand = stopPattern.test(trimmedMessage) && tradingPattern.test(trimmedMessage);
+    const hasLiveKeyword = livePattern.test(trimmedMessage);
+    
+    // Log intent detection for debugging
+    console.log('[INTENT] Message:', trimmedMessage.substring(0, 50));
+    console.log('[INTENT] isPaperContext:', isPaperContext);
+    console.log('[INTENT] isStartCommand:', isStartCommand);
+    console.log('[INTENT] isStopCommand:', isStopCommand);
+    console.log('[INTENT] hasLiveKeyword:', hasLiveKeyword);
+    
+    // Route to appropriate modal based on priority
+    if (isStartCommand) {
+      if (isPaperContext) {
+        console.log('[INTENT] Parsed mode: paper (start)');
+        // Paper trading start - send directly (no modal needed for paper)
+        sendMessageMutation.mutate(trimmedMessage);
+        return;
+      } else if (hasLiveKeyword) {
+        console.log('[INTENT] Parsed mode: live (start)');
+        // Live trading start - show confirmation modal
+        setPendingLiveTradingMessage(trimmedMessage);
+        setShowStartLiveTradingModal(true);
+        return;
+      }
     }
-
-    if (stopLiveTradingPattern.test(trimmedMessage)) {
-      // Show inline stop live trading modal
-      setPendingLiveTradingMessage(trimmedMessage);
-      setShowStopLiveTradingModal(true);
-      return;
+    
+    if (isStopCommand) {
+      if (isPaperContext) {
+        console.log('[INTENT] Parsed mode: paper (stop)');
+        // Paper trading stop - send directly (no modal needed for paper)
+        sendMessageMutation.mutate(trimmedMessage);
+        return;
+      } else if (hasLiveKeyword) {
+        console.log('[INTENT] Parsed mode: live (stop)');
+        // Live trading stop - show confirmation modal
+        setPendingLiveTradingMessage(trimmedMessage);
+        setShowStopLiveTradingModal(true);
+        return;
+      }
     }
 
     // Normal message - send to Walter

@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-20T17:57:45.816Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (19.74, 17.33, 15.13) compared to the number of cores (8), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning as expected."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system has zero active trades and a win rate of 0%, indicating potential issues with strategy effectiveness or market conditions."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system performance."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially retrain AI models to ensure they are generating opportunities and making adjustments as expected."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments or alternative strategies to improve trading outcomes."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough analysis of CPU usage to identify and resolve any processes causing excessive load.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Investigate the AI system's lack of activity and ensure it is properly configured and trained.",
+      "rationale": "AI inactivity can lead to missed trading opportunities and reduced platform effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze current trading strategies and market conditions to determine why there are no active trades and a 0% win rate.",
+      "rationale": "Understanding and addressing these issues is crucial for improving trading performance and profitability."
+    }
+  ],
+  "urgencyLevel": "high"
+}
