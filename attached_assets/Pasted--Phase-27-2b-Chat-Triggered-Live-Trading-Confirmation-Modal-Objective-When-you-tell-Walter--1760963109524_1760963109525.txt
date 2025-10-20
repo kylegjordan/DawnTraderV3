@@ -1,0 +1,121 @@
+⚙️ Phase 27.2b — Chat-Triggered Live Trading Confirmation Modal
+
+🎯 Objective
+When you tell Walter “Start live trading” or “Stop live trading” in chat, display the same confirmation modal used by the dashboard toggles on top of the chat view (inline or centered overlay), so you can confirm or cancel immediately—without touching the dashboard or notification icon.
+
+🧩 Implementation Plan
+1. Expose the existing modals as re-usable components
+
+Files (already exist):
+
+client/src/components/modals/ConfirmStartLiveModal.tsx
+
+client/src/components/modals/ConfirmStopLiveModal.tsx
+
+Refactor slightly:
+
+export const ConfirmStartLiveModal = ({ open, onConfirm, onCancel }: Props) => { … }
+export const ConfirmStopLiveModal  = ({ open, onConfirm, onCancel }: Props) => { … }
+
+
+✅ Goal – they can now be rendered anywhere (not only under Dashboard).
+
+2. Add a Chat-Level Modal Controller
+
+File: client/src/components/walter/ChatModalController.tsx
+
+Purpose: listen for system events from Walter that signal start_live_trading or stop_live_trading, then display the corresponding modal overlay.
+
+import { useState, useEffect } from "react";
+import { ConfirmStartLiveModal, ConfirmStopLiveModal } from "@/components/modals";
+import { useIntentBus } from "@/hooks/useIntentBus"; // WS intent event stream
+
+export const ChatModalController = () => {
+  const [modal, setModal] = useState<"start"|"stop"|null>(null);
+  const bus = useIntentBus();
+
+  useEffect(() => {
+    const handler = (msg:any) => {
+      if (msg.intent === "start_live_trading") setModal("start");
+      if (msg.intent === "stop_live_trading")  setModal("stop");
+    };
+    bus.subscribe("intent_request", handler);
+    return () => bus.unsubscribe("intent_request", handler);
+  }, []);
+
+  const handleConfirm = async () => {
+    const route = modal === "start" ? "/api/trading/live/start" : "/api/trading/live/stop";
+    await fetch(route, { method:"POST", credentials:"include" });
+    setModal(null);
+  };
+  const handleCancel = () => setModal(null);
+
+  return (
+    <>
+      {modal === "start" && (
+        <ConfirmStartLiveModal open={true} onConfirm={handleConfirm} onCancel={handleCancel}/>
+      )}
+      {modal === "stop" && (
+        <ConfirmStopLiveModal open={true} onConfirm={handleConfirm} onCancel={handleCancel}/>
+      )}
+    </>
+  );
+};
+
+
+Mount this component once inside client/src/components/walter/ChatContainer.tsx, just above the chat message list:
+
+<ChatModalController />
+
+3. Emit intent events from Walter
+
+File: server/services/nlai-intent-executor.ts
+
+When Walter parses user input like “Start live trading” or “Stop live trading”, before requiring manual approval, broadcast:
+
+broadcastUserEvent(userId, {
+  type: "intent_request",
+  intent: "start_live_trading", // or stop_live_trading
+  requires_confirmation: true
+});
+
+
+This is already the same point that triggers notifications; now it also triggers the chat-overlay modal.
+
+4. Audit and fallback logic
+
+Keep the existing notification entry for audit purposes but mark it “handled” when the modal completes.
+
+If the user dismisses the modal or closes chat, the notification remains pending for later approval.
+
+5. Visual behavior
+
+The modal appears centered over chat (uses the same styling as Dashboard modals).
+
+Chat input is temporarily disabled behind a blur overlay.
+
+Two variants:
+
+🟢 Confirm & Start Live Trading
+
+🔴 Confirm & Stop Live Trading
+
+Keyboard shortcuts: Enter = Confirm, Esc = Cancel.
+
+6. Verification Steps
+Test Action	Expected Result
+Type in chat “Start live trading.”	Walter responds and the Confirm Live Trading Activation modal appears over chat.
+Click Confirm	Live mode toggles to ACTIVE; Walter acknowledges in chat ✅ “Live trading started.”
+Click Cancel	Modal closes, state unchanged.
+Type “Stop live trading.”	Confirm Stop Live Trading modal appears over chat.
+Confirm	Trading stops and Walter replies ✅ “Live trading stopped.”
+Check notifications	Corresponding entry marked “handled” or cleared.
+7. Deliverables
+
+✅ Refactored modal components
+✅ ChatModalController added to ChatContainer
+✅ Intent broadcast hook from NLAI executor
+✅ Overlay appearance and keyboard controls
+✅ Notification integration for audit
+✅ Updated replit.md section “Phase 27.2b — Chat-Triggered Live Trading Confirmation Modal”
+✅ Architect review PASS
