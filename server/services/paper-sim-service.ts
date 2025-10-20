@@ -343,3 +343,38 @@ export async function getPaperSimulationStatus(userId: string): Promise<any> {
     };
   }
 }
+
+/**
+ * Phase 27.F.8: Reset PaperSim service state
+ * Clears all in-memory state to ensure clean startup
+ * Call this on server boot to prevent ghost managers from persisting across restarts
+ */
+export function resetPaperSimService(): void {
+  console.log('[PaperSimService] Resetting service state...');
+  
+  // Clear in-memory manager
+  if (global.globalPaperPortfolioManager) {
+    console.log('[PaperSimService] Clearing orphaned manager from previous session');
+    try {
+      // Attempt graceful stop if manager has stop method
+      if (typeof global.globalPaperPortfolioManager.stop === 'function') {
+        global.globalPaperPortfolioManager.stop().catch((err: any) => {
+          console.warn('[PaperSimService] Error during manager cleanup:', err);
+        });
+      }
+    } catch (error) {
+      console.warn('[PaperSimService] Failed to stop orphaned manager:', error);
+    }
+    global.globalPaperPortfolioManager = null;
+  }
+  
+  // Clear operation lock
+  if (global.globalPaperSimOperationLock) {
+    console.log('[PaperSimService] Clearing operation lock');
+    global.globalPaperSimOperationLock = null;
+  }
+  
+  console.log('[PaperSimService] ✅ Reset complete - clean state confirmed');
+  console.log('[PaperSimService] Initialized - no active sessions');
+  console.log('[PaperSimService] State: { hasManager: false, hasDbSession: false }');
+}

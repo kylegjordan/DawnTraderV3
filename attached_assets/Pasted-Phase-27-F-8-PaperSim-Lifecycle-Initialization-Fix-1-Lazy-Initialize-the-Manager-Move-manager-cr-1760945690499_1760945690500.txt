@@ -1,0 +1,78 @@
+Phase 27.F.8 — PaperSim Lifecycle Initialization Fix
+1. Lazy-Initialize the Manager
+
+Move manager creation from startup → to the /api/paper-sim/start route only.
+
+Remove or comment out any initialization like:
+
+PaperSimService.getInstance();
+
+
+or:
+
+new PaperSimManager();
+
+
+that runs during app boot.
+
+Instead, modify /api/paper-sim/start to include:
+
+if (!PaperSimService.hasManager()) {
+  PaperSimService.createManager();
+}
+
+
+and /api/paper-sim/stop to include:
+
+if (PaperSimService.hasManager()) {
+  PaperSimService.destroyManager();
+}
+
+
+This ensures:
+
+No manager exists until the user explicitly starts paper trading
+
+When stopped, the manager is fully destroyed and cannot “linger”
+
+On app restart, no ghost appears until the first start command
+
+2. Add a Safety Reset at Boot (Optional)
+
+To make startup even safer, add a reset function in server/index.ts:
+
+PaperSimService.reset();
+
+
+That should:
+
+Set hasManager = false
+
+Clear any cached intervals, tickers, or heartbeats
+
+Ensure no background task is left running
+
+This guarantees a clean state before anything else loads.
+
+3. Add Logging Verification
+
+After this fix, the startup log should look like this:
+
+[PaperSimService] Initialized - no active sessions
+hasManager: false
+hasDbSession: false
+
+
+Only after you click “Start Paper Trading” should you then see:
+
+[TradingStart] PaperSim engine starting
+[PaperSimService] Session created
+hasManager: true
+hasDbSession: true
+
+🚦 Summary of What Replit Must Do
+Issue	Root Cause	Fix
+Ghost manager reappears after restart	Manager is created automatically on app boot	Remove auto-init and make it lazy-loaded via /api/paper-sim/start
+Ghost blocks all new sessions	Safety guard detects hasManager: true	Destroy manager on stop and never pre-create it
+Desync logs appear on every launch	Startup heartbeat runs before any session exists	Delay heartbeat until manager created
+State confusion on UI	Backend misreports active manager at boot	Backend should report hasManager: false until session created

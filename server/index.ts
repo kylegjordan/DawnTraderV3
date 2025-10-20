@@ -68,6 +68,14 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // Phase 27.F.8: Reset PaperSim service state FIRST (before any other services)
+  try {
+    const { resetPaperSimService } = await import('./services/paper-sim-service');
+    resetPaperSimService();
+  } catch (error) {
+    console.error('[PaperSimService] ⚠️ Reset failed:', error);
+  }
+
   // Reset rate limiter for clean test state (non-production only)
   const { resetRateLimiter } = await import('./startup/rate-limiter-reset');
   await resetRateLimiter();
