@@ -35,6 +35,9 @@ export function toCanonical(exchangeIdOrPair: string): string {
     'ZEUR': 'EUR',
     'ZGBP': 'GBP',
     'ZJPY': 'JPY',
+    'ZAUD': 'AUD',
+    'ZCAD': 'CAD',
+    'ZCHF': 'CHF',
     'XXBT': 'BTC',
     'XETH': 'ETH'
   };
@@ -112,7 +115,10 @@ export function toKrakenId(baseQuote: string): string {
     'USD': 'ZUSD',
     'EUR': 'ZEUR',
     'GBP': 'ZGBP',
-    'JPY': 'ZJPY'
+    'JPY': 'ZJPY',
+    'AUD': 'ZAUD',
+    'CAD': 'ZCAD',
+    'CHF': 'ZCHF'
     // Note: BTC/ETH as quote currencies handled by logic below
   };
 
