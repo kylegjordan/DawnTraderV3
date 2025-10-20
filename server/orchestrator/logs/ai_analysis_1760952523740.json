@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-20T09:28:43.739Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all time intervals (1, 5, and 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system metrics show no recent learning cycles, zero average confidence, and no opportunities generated, suggesting the AI component may not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics indicate no active trades and zero total profit/loss, win rate, and ROI, which may suggest trading strategies are not effectively engaging the market."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent potential system slowdowns or failures."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI algorithms and data inputs to ensure the AI component is functioning and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments or alternative strategies to improve engagement and performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough analysis of CPU-intensive processes and optimize or redistribute workloads to reduce CPU load.",
+      "rationale": "High CPU load can lead to performance degradation and system instability, impacting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Perform diagnostics on the AI system to identify and resolve issues preventing learning cycles and opportunity generation.",
+      "rationale": "The AI component is crucial for identifying trading opportunities and should be operational to enhance trading performance."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review current trading strategies for effectiveness and market alignment, and consider implementing new strategies or adjusting parameters.",
+      "rationale": "Active strategies are not yielding results, indicating a need for reassessment to improve trading outcomes."
+    }
+  ],
+  "urgencyLevel": "high"
+}
