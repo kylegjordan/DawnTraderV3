@@ -25,19 +25,24 @@ export function useTrading() {
     refetchOnWindowFocus: true
   });
 
-  // Phase 27.F.3: Subscribe to WebSocket trading_state_changed events for immediate sync
+  // Phase 27.F.3 + 27.F.10: Subscribe to WebSocket trading_state_changed events for immediate sync
   useEffect(() => {
     const tradingStateUpdates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
     if (tradingStateUpdates.length > 0) {
       const latestUpdate = tradingStateUpdates[tradingStateUpdates.length - 1];
       const payload = latestUpdate.data;
       
-      console.log('[SYNC][Phase-27.F.3] Trading state changed:', payload?.mode, payload?.active || payload?.isEngineActive);
+      console.log('[SYNC][Phase-27.F.10] Trading state changed:', payload?.mode, payload?.active || payload?.isEngineActive);
       
-      // Immediately invalidate queries to trigger refetch with fresh DB state
+      // Phase 27.F.10: Mode-scoped invalidation to prevent cross-mode pollution
+      // Always invalidate trading status (contains mode info)
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+      
+      // Only invalidate paper-sim queries if this is a paper mode update
+      if (payload?.mode === 'paper') {
+        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+      }
       
       // Phase 27.F.3: Force reconciliation after 3 seconds if state still mismatches
       setTimeout(async () => {
