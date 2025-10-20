@@ -1,0 +1,103 @@
+Phase 27.F.16.D — Paper vs Live Intent Hardening + Inline Modal Enforcement
+Objectives
+
+Guarantee that prompts containing “paper”, “simulation”, “simulated”, “demo”, or “practice” are routed to paper (and never to live).
+
+Enforce inline modals for live start/stop (no notification-only fallback).
+
+Add trace logging so we can see what intent the parser chose and why.
+
+Tasks
+1) Reproduce & trace with Kyle’s exact prompt
+
+Run the exact message Kyle posted (10/20/2025 Simulation Prompt).
+
+Add one-shot trace logs for this and future messages:
+
+[INTENT] raw_text=...
+
+[INTENT] tokens={paper:true, simulation:true, live:false, stop:false}
+
+[INTENT] selected=start_paper_sim (or start_live_trading)
+
+[INTENT] source=walter.tsx rule=<rule_id>
+
+Deliverable: a short log snippet confirming the trace lines appear on each send.
+
+2) Parser precedence (PAPER must win)
+
+In the chat intent matcher (walter.tsx or the action registry), change the order so the Paper/Simulation check runs before any “start trading” / “live” checks.
+
+Add hard override rules:
+
+If message contains any of: paper|simulation|simulated|demo|practice → intent=start_paper_sim even if “live” is present.
+
+If message contains stop and paper is active → intent=stop_paper_sim.
+
+Use word-boundary regex and case-insensitive matching to avoid substring traps (e.g., “lives”, “delivery”).
+
+Deliverable: unit-style test cases for the parser (can be lightweight) that assert:
+
+“run a paper simulation for 10 minutes” → start_paper_sim
+
+“start live trading now” → start_live_trading
+
+“start a paper sim live on the stream” → start_paper_sim (paper wins)
+
+“stop trading” when paper active → stop_paper_sim
+
+3) NLAI action routing guard
+
+In nlai-action-registry (or equivalent), add a guard before dispatching:
+
+If intent === start_paper_sim, block any route to live-api and force paper-sim service.
+
+Record [INTENT] guard_applied=paper_forced.
+
+Deliverable: log shows the guard on Kyle’s long prompt (paper_forced=true).
+
+4) Inline modal enforcement for LIVE
+
+For live start/stop:
+
+Ensure the overlay modal (not a notification) is always invoked from Walter chat (openLiveTradingModal() and openStopLiveTradingModal()).
+
+Only after user clicks Confirm/Cancel should a notification be created (for audit), marked handled=true.
+
+Add a sanity check: if code path would only enqueue a notification without rendering the modal, throw a warning in console:
+
+[MODAL] Live modal fallback prevented; forcing inline overlay.
+
+Deliverable: starting live via chat shows the inline confirmation modal above the chat; no silent “notification-only” path.
+
+5) Paper mode should not show a live modal
+
+When intent === start_paper_sim, execute PaperSim directly (no modal).
+
+For stop paper, show a light inline confirm banner (optional), but never the live modal.
+
+6) Temporary “intent pill” in Walter header (debug only)
+
+Add a small, dev-only pill in the Walter page header: Parsed: PAPER / Parsed: LIVE / Parsed: STOP.
+
+Hide behind ENV.DEBUG_INTENT === true.
+
+Deliverable: screenshot showing Parsed: PAPER with Kyle’s prompt.
+
+Verification Checklist
+
+Send Kyle’s full prompt → Parsed: PAPER; no live modal; PaperSim starts.
+
+Send “start live trading” → Parsed: LIVE; inline live confirmation modal appears (not a notification).
+
+Send “stop paper trading” while paper active → Parsed: STOP(PAPER); PaperSim stops (no live modal).
+
+Console shows the [INTENT] trace for each message.
+
+No notification-only path for live start/stop; notifications are created after the inline modal decision, marked handled.
+
+Notes
+
+We previously saw Source: live-api and Action 'start_live_trading' requires manual approval… in a notification. That means the parser still chose the live route. This phase must eliminate that path when “paper/simulation” is present.
+
+Keep the previous Phase 27.F.14 inline-modal work intact; this task only fixes when they are triggered.

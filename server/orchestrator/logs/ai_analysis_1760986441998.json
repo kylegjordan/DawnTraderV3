@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-20T18:54:01.997Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential CPU bottleneck or excessive demand."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has not generated any learning cycles, opportunities, or adjustments, suggesting it might not be functioning as intended."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system shows zero active trades and zero profit/loss, which is unusual given active strategies are listed."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider optimizing or scaling the CPU resources to handle the high load average more effectively."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Investigate and potentially restart or reconfigure the AI system to ensure it is operational and generating insights."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially adjust trading strategies or parameters to ensure they are engaging in trades as expected."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "high",
+      "action": "Investigate the cause of high CPU load and consider scaling resources or optimizing processes.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Check the AI system's logs and configuration to ensure it is running correctly and contributing to trading decisions.",
+      "rationale": "The AI system not generating outputs could lead to missed trading opportunities and reduced platform effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review the trading strategy configurations to ensure they are correctly set up and capable of executing trades.",
+      "rationale": "Zero active trades despite active strategies could indicate configuration issues or market conditions not being met."
+    }
+  ],
+  "urgencyLevel": "high"
+}

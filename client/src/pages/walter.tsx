@@ -87,6 +87,7 @@ export default function WalterPage() {
   const [showStartLiveTradingModal, setShowStartLiveTradingModal] = useState(false);
   const [showStopLiveTradingModal, setShowStopLiveTradingModal] = useState(false);
   const [pendingLiveTradingMessage, setPendingLiveTradingMessage] = useState<string | null>(null);
+  const [lastDetectedIntent, setLastDetectedIntent] = useState<string>(''); // Phase 27.F.16.D: Debug intent pill
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
@@ -562,64 +563,96 @@ export default function WalterPage() {
     const trimmedMessage = inputMessage.trim();
     if (!trimmedMessage || sendMessageMutation.isPending || !selectedChatId) return;
 
-    // Phase 27.F.16.C: Detect trading mode intent with priority ordering
-    // Priority: 1️⃣ Paper → 2️⃣ Simulation → 3️⃣ Live
+    // Phase 27.F.16.D: Enhanced intent detection with comprehensive logging and hard override rules
+    // Priority: 1️⃣ Paper → 2️⃣ Simulation → 3️⃣ Live (PAPER MUST ALWAYS WIN)
     
-    // Check for paper/simulation keywords FIRST (highest priority)
+    // Word-boundary regex patterns to avoid substring traps (e.g., "lives", "delivery")
     const paperKeywords = /\b(paper|simulation|simulated|practice|test|demo)\b/i;
-    const isPaperContext = paperKeywords.test(trimmedMessage);
+    const liveKeyword = /\blive\b/i;
+    const startPattern = /\b(?:start|begin|run|initiate|launch|activate|enable)\b/i;
+    const stopPattern = /\b(?:stop|end|halt|terminate|kill|deactivate|disable|exit|leave)\b/i;
+    const tradingPattern = /\b(?:trad(?:e|ing)|sim(?:ulation)?|mode)\b/i;
     
-    // Start trading patterns
-    const startPattern = /(?:please\s+)?(?:start|begin|run|initiate|launch|activate|enable)/i;
-    const tradingPattern = /\b(trad(?:e|ing)|mode)\b/i;
-    const livePattern = /\blive\b/i;
+    // Token detection
+    const hasPaperToken = paperKeywords.test(trimmedMessage);
+    const hasLiveToken = liveKeyword.test(trimmedMessage);
+    const hasStartToken = startPattern.test(trimmedMessage);
+    const hasStopToken = stopPattern.test(trimmedMessage);
+    const hasTradingToken = tradingPattern.test(trimmedMessage);
     
-    // Stop trading patterns  
-    const stopPattern = /(?:please\s+)?(?:stop|end|halt|terminate|kill|deactivate|disable|exit|leave)/i;
+    // Command detection (requires trading context)
+    const isStartCommand = hasStartToken && hasTradingToken;
+    const isStopCommand = hasStopToken && hasTradingToken;
     
-    const isStartCommand = startPattern.test(trimmedMessage) && tradingPattern.test(trimmedMessage);
-    const isStopCommand = stopPattern.test(trimmedMessage) && tradingPattern.test(trimmedMessage);
-    const hasLiveKeyword = livePattern.test(trimmedMessage);
+    // HARD OVERRIDE RULE: Paper keywords ALWAYS win, even if "live" is also present
+    // Examples: "start a paper sim live on the stream" → paper wins
+    let selectedIntent = 'normal_message';
+    let ruleId = 'R0_default';
     
-    // Log intent detection for debugging
-    console.log('[INTENT] Message:', trimmedMessage.substring(0, 50));
-    console.log('[INTENT] isPaperContext:', isPaperContext);
-    console.log('[INTENT] isStartCommand:', isStartCommand);
-    console.log('[INTENT] isStopCommand:', isStopCommand);
-    console.log('[INTENT] hasLiveKeyword:', hasLiveKeyword);
-    
-    // Route to appropriate modal based on priority
     if (isStartCommand) {
-      if (isPaperContext) {
-        console.log('[INTENT] Parsed mode: paper (start)');
-        // Paper trading start - send directly (no modal needed for paper)
-        sendMessageMutation.mutate(trimmedMessage);
-        return;
-      } else if (hasLiveKeyword) {
-        console.log('[INTENT] Parsed mode: live (start)');
-        // Live trading start - show confirmation modal
-        setPendingLiveTradingMessage(trimmedMessage);
-        setShowStartLiveTradingModal(true);
-        return;
+      if (hasPaperToken) {
+        selectedIntent = 'start_paper_sim';
+        ruleId = 'R1_paper_override';
+      } else if (hasLiveToken) {
+        selectedIntent = 'start_live_trading';
+        ruleId = 'R2_live_start';
+      }
+    } else if (isStopCommand) {
+      if (hasPaperToken) {
+        selectedIntent = 'stop_paper_sim';
+        ruleId = 'R3_paper_stop';
+      } else if (hasLiveToken) {
+        selectedIntent = 'stop_live_trading';
+        ruleId = 'R4_live_stop';
       }
     }
     
-    if (isStopCommand) {
-      if (isPaperContext) {
-        console.log('[INTENT] Parsed mode: paper (stop)');
-        // Paper trading stop - send directly (no modal needed for paper)
-        sendMessageMutation.mutate(trimmedMessage);
-        return;
-      } else if (hasLiveKeyword) {
-        console.log('[INTENT] Parsed mode: live (stop)');
-        // Live trading stop - show confirmation modal
-        setPendingLiveTradingMessage(trimmedMessage);
-        setShowStopLiveTradingModal(true);
-        return;
+    // Phase 27.F.16.D: Enhanced trace logging
+    console.log('[INTENT] raw_text=', trimmedMessage.substring(0, 100));
+    console.log('[INTENT] tokens={paper:', hasPaperToken, ', live:', hasLiveToken, ', start:', hasStartToken, ', stop:', hasStopToken, ', trading:', hasTradingToken, '}');
+    console.log('[INTENT] selected=', selectedIntent);
+    console.log('[INTENT] source=walter.tsx rule=', ruleId);
+    
+    // Update debug intent state for header pill
+    setLastDetectedIntent(selectedIntent);
+    
+    // Route to appropriate handler based on selected intent
+    if (selectedIntent === 'start_paper_sim') {
+      console.log('[INTENT] Routing to paper simulation (no modal)');
+      sendMessageMutation.mutate(trimmedMessage);
+      return;
+    }
+    
+    if (selectedIntent === 'start_live_trading') {
+      console.log('[INTENT] Routing to live trading modal (inline confirmation required)');
+      // Phase 27.F.16.D: Enforce inline modal (no notification-only path)
+      if (!setShowStartLiveTradingModal) {
+        console.warn('[MODAL] Live modal fallback prevented; forcing inline overlay.');
       }
+      setPendingLiveTradingMessage(trimmedMessage);
+      setShowStartLiveTradingModal(true);
+      return;
+    }
+    
+    if (selectedIntent === 'stop_paper_sim') {
+      console.log('[INTENT] Routing to stop paper simulation (no modal)');
+      sendMessageMutation.mutate(trimmedMessage);
+      return;
+    }
+    
+    if (selectedIntent === 'stop_live_trading') {
+      console.log('[INTENT] Routing to stop live trading modal (inline confirmation required)');
+      // Phase 27.F.16.D: Enforce inline modal (no notification-only path)
+      if (!setShowStopLiveTradingModal) {
+        console.warn('[MODAL] Live modal fallback prevented; forcing inline overlay.');
+      }
+      setPendingLiveTradingMessage(trimmedMessage);
+      setShowStopLiveTradingModal(true);
+      return;
     }
 
     // Normal message - send to Walter
+    console.log('[INTENT] Routing to normal Walter processing');
     sendMessageMutation.mutate(trimmedMessage);
   };
 
@@ -718,6 +751,16 @@ export default function WalterPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Walter</h1>
           <ModeIndicator />
+          {/* Phase 27.F.16.D: Debug intent pill (only shown when DEBUG_INTENT env is true) */}
+          {import.meta.env.VITE_DEBUG_INTENT === 'true' && lastDetectedIntent && (
+            <Badge 
+              variant="secondary" 
+              className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+              data-testid="badge-debug-intent"
+            >
+              Parsed: {lastDetectedIntent.replace(/_/g, ' ').toUpperCase()}
+            </Badge>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Badge 

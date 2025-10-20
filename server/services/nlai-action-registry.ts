@@ -628,6 +628,27 @@ export class NLAIActionRegistry {
       };
     }
 
+    // Phase 27.F.16.D: NLAI action routing guard
+    // Force paper-sim service when paper keywords are detected (hard override)
+    const paperKeywords = /\b(paper|simulation|simulated|practice|test|demo)\b/i;
+    const originalMessage = intent.originalMessage || '';
+    const hasPaperContext = paperKeywords.test(originalMessage);
+    
+    // If message contains paper keywords but action is live trading, force to paper
+    if (hasPaperContext && (actionId === 'start_live_trading' || actionId === 'stop_live_trading')) {
+      console.log('[INTENT] guard_applied=paper_forced (blocking live-api route)');
+      console.log(`[NLAI-Registry] 🔒 GUARD: Forcing paper simulation (detected paper keywords in: "${originalMessage.substring(0, 50)}...")`);
+      
+      // Force to paper simulation action instead
+      const paperActionId = actionId === 'start_live_trading' ? 'start_paper_simulation' : 'stop_paper_simulation';
+      const paperAction = this.actions.get(paperActionId);
+      
+      if (paperAction) {
+        console.log(`[NLAI-Registry] ↪️  Redirecting ${actionId} → ${paperActionId}`);
+        return await paperAction.handler(userId, intent);
+      }
+    }
+
     console.log(`[NLAI-Registry] Executing action: ${actionId} for user: ${userId}`);
     return await action.handler(userId, intent);
   }
