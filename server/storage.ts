@@ -20,6 +20,7 @@ import {
   errorLogs,
   aiTransparencyLog,
   killSwitchEvents,
+  tradingAuditLog,
   aiOpportunityRuns,
   aiOpportunities,
   dailyBriefs,
@@ -306,6 +307,10 @@ export interface IStorage {
   getKillSwitchEventById(id: string): Promise<KillSwitchEvent | undefined>;
   getLatestKillSwitchEvent(userId: string): Promise<KillSwitchEvent | undefined>;
   resolveKillSwitchEvent(id: string, method: string, notes?: string): Promise<KillSwitchEvent>;
+
+  // Trading audit log methods (Phase 27.F.6)
+  createTradingAuditLog(data: { userId: string; action: string; mode: string; triggeredBy?: string; metadata?: any }): Promise<void>;
+  getTradingAuditLogs(userId: string, limit?: number): Promise<any[]>;
 
   // AI Opportunities methods
   createAIOpportunityRun(run: InsertAIOpportunityRun): Promise<AIOpportunityRun>;
@@ -1501,6 +1506,26 @@ export class DatabaseStorage implements IStorage {
       .where(eq(killSwitchEvents.id, id))
       .returning();
     return result;
+  }
+
+  // Trading audit log methods (Phase 27.F.6)
+  async createTradingAuditLog(data: { userId: string; action: string; mode: string; triggeredBy?: string; metadata?: any }): Promise<void> {
+    await db.insert(tradingAuditLog).values({
+      userId: data.userId,
+      action: data.action,
+      mode: data.mode,
+      triggeredBy: data.triggeredBy || 'manual',
+      metadata: data.metadata
+    });
+  }
+
+  async getTradingAuditLogs(userId: string, limit: number = 50): Promise<any[]> {
+    return await db
+      .select()
+      .from(tradingAuditLog)
+      .where(eq(tradingAuditLog.userId, userId))
+      .orderBy(desc(tradingAuditLog.createdAt))
+      .limit(limit);
   }
 
   // Task 8: Safety Telemetry methods

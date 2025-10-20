@@ -1375,6 +1375,22 @@ export const paperSimSessions = pgTable("paper_sim_sessions", {
   startedAtIdx: index("paper_sim_sessions_started_at_idx").on(table.startedAt),
 }));
 
+// Trading Audit Log - Track all trading engine start/stop actions (Phase 27.F.6)
+export const tradingAuditLog = pgTable("trading_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  action: varchar("action", { length: 50 }).notNull(), // 'start', 'stop'
+  mode: varchar("mode", { length: 10 }).notNull(), // 'live', 'paper'
+  triggeredBy: varchar("triggered_by", { length: 50 }).default("manual"), // 'manual', 'walter', 'api', 'scheduled'
+  metadata: jsonb("metadata"), // Additional context (e.g., confirmation details, reason)
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  userIdx: index("trading_audit_log_user_idx").on(table.userId),
+  actionIdx: index("trading_audit_log_action_idx").on(table.action),
+  modeIdx: index("trading_audit_log_mode_idx").on(table.mode),
+  createdAtIdx: index("trading_audit_log_created_at_idx").on(table.createdAt),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),

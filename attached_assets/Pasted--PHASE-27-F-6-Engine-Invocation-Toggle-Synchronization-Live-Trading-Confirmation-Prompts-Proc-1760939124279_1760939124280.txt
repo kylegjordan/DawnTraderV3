@@ -1,0 +1,188 @@
+🧩 PHASE 27.F.6 — Engine Invocation, Toggle Synchronization & Live Trading Confirmation Prompts
+Proceed with Phase 27.F.6 — Trading Engine Invocation, Toggle Synchronization, and Confirmation Prompts.
+
+Objective:
+Fix the engine start/stop logic, ensure the toggle accurately reflects backend state, and enforce live trading confirmations through interactive modal prompts (never hidden in the notification list).
+
+---
+
+A. FRONTEND — ENGINE & TOGGLE LOGIC
+
+1️⃣ TopBar.tsx — Connect Toggle to Real Engine Actions
+Replace current handleTradingToggle() logic with:
+
+    const handleTradingToggle = async () => {
+        if (mode === 'paper') {
+            if (!active) await api.post('/api/paper-sim/start');
+            else await api.post('/api/paper-sim/stop');
+        } else if (mode === 'live') {
+            if (!active) {
+                const confirmed = await showConfirmLiveTradingModal();
+                if (!confirmed) return; // user canceled
+                await api.post('/api/trading/start', { mode: 'live' });
+            } else {
+                const confirmed = await showConfirmStopLiveTradingModal();
+                if (!confirmed) return;
+                await api.post('/api/trading/stop', { mode: 'live' });
+            }
+        }
+    };
+
+Note:
+- `showConfirmLiveTradingModal()` opens the same modal you see now (Confirm + Cancel).
+- If user clicks Cancel → nothing changes.
+- If Confirm → executes the API call immediately.
+
+2️⃣ Replace Local State with Backend State
+Use `useTradingStore()` or `useTrading()` hook values directly:
+
+    const { active, mode, isPending } = useTradingStore();
+
+    <Switch
+      checked={active}
+      disabled={isPending}
+      onCheckedChange={handleTradingToggle}
+      className={active ? 'bg-green-500' : 'bg-gray-500'}
+    />
+    <span>{active ? 'Active' : 'Stopped'}</span>
+
+This ensures:
+✅ Green = active trading  
+✅ Gray = stopped  
+✅ Always synced with backend-confirmed engine state.
+
+3️⃣ WebSocket Live Sync
+In useTrading hook or store:
+
+    socket.on('trading_state_changed', payload => {
+        set({ active: payload.isEngineActive, mode: payload.mode });
+    });
+
+This updates all open browser tabs instantly when the backend changes state.
+
+4️⃣ Heartbeat Reconciliation
+Add a 10-second polling fallback:
+
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            const { data } = await api.get('/api/trading/status');
+            if (data.isEngineActive !== store.active) {
+                store.set({ active: data.isEngineActive });
+            }
+        }, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
+Ensures UI auto-corrects even if a WebSocket packet is missed.
+
+---
+
+B. FRONTEND — CONFIRMATION PROMPTS
+
+5️⃣ Add Dedicated Modal Components
+
+**ConfirmLiveTradingModal.tsx**
+Displays the prompt exactly as in your screenshot:
+
+    ⚠️ "You are about to activate Live Trading. This will place real market orders with actual funds."
+    Buttons: [Cancel] [Confirm & Start Live Trading]
+
+Returns `true` if Confirm clicked, `false` otherwise.
+
+**ConfirmStopLiveTradingModal.tsx**
+Displays:
+    ⚠️ "You are about to stop Live Trading. All active orders will be canceled and trading halted."
+    Buttons: [Cancel] [Confirm & Stop Live Trading]
+
+Integrate both via the same modal system used in TopBar or a shared confirmation provider.
+
+6️⃣ Walter Integration
+When Walter (AI agent) is instructed to start or stop live trading:
+- Walter triggers the same modal via the same API.
+- The modal appears to you, allowing manual confirmation.
+- The AI never starts or stops trading without your explicit confirmation.
+
+7️⃣ Notifications Cleanup
+- Remove live trading confirmations from the notification bell list.
+- Only system info (e.g. “Kraken connection stable”, “API key refreshed”) should appear there.
+- All high-risk actions must always use modal confirmations.
+
+---
+
+C. BACKEND — ENGINE & LOGGING
+
+8️⃣ Confirm Engine Endpoints
+
+Ensure:
+- `/api/paper-sim/start` → creates `paper_sim_sessions` entry, starts simulation engine.
+- `/api/paper-sim/stop` → ends session.
+- `/api/trading/start` → starts live engine, connects to Kraken WebSocket feed.
+- `/api/trading/stop` → stops engine cleanly.
+
+9️⃣ Add Explicit Log Lines
+
+
+[TradingStart] PaperSim engine started (user=<id>)
+[TradingStop] PaperSim engine stopped
+[TradingStart] LiveTrading engine started (user=<id>)
+[TradingStop] LiveTrading engine stopped
+[KrakenFeed] Connected successfully
+
+
+10️⃣ Create `trading_audit_log` Table (if missing)
+
+
+CREATE TABLE IF NOT EXISTS trading_audit_log (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+user_id UUID NOT NULL REFERENCES users(id),
+action VARCHAR(50) NOT NULL,
+mode VARCHAR(10) NOT NULL,
+created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+Log all engine start/stop events for traceability.
+
+---
+
+D. VERIFICATION TESTS
+
+✅ Paper Mode Test
+- Click toggle → modal not shown → green light on, logs show `[TradingStart] PaperSim engine started`.
+- Toggle off → gray light, `[TradingStop] PaperSim engine stopped`.
+
+✅ Live Mode Test
+- Click toggle → modal appears → click “Confirm & Start Live Trading”.
+- Logs show `[TradingStart] LiveTrading engine started`, `[KrakenFeed] Connected`.
+- Toggle off → modal appears again for confirmation → click confirm.
+- Logs show `[TradingStop] LiveTrading engine stopped`.
+
+✅ Cross-Check
+- Switching between modes keeps toggle accurate.
+- WebSocket + polling ensure consistent UI across tabs.
+- `paper_sim_sessions` and `trading_audit_log` show proper entries.
+
+---
+
+E. DOCUMENTATION
+Update `replit.md` with:
+- **Phase 27.F.6 — Trading Engine Invocation, Toggle Synchronization, and Confirmation Prompts**
+- Include confirmation modal screenshots, toggle state diagram, and full verification log output.
+
+---
+
+Expected Outcome:
+✅ Toggle now truly controls trading engines  
+✅ Green/Gray status matches backend reality  
+✅ PaperSim & LiveTrading both start/stop correctly  
+✅ Confirmation modals always appear for live actions  
+✅ Walter requests trigger same prompts  
+✅ Full auditability in logs & database
+
+
+Once this is implemented, you’ll have:
+
+Real trading engine control,
+
+Visually accurate status indicators,
+
+And a safety-confirmation UX that ensures nothing critical happens without your explicit consent.

@@ -992,6 +992,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[TradingStart] Completed start for user ${userId} mode=${mode} active=true`);
       
+      // Phase 27.F.6: Log to trading_audit_log
+      try {
+        await storage.createTradingAuditLog({
+          userId,
+          action: 'start',
+          mode: mode || 'live',
+          triggeredBy: 'manual',
+          metadata: { engineStatus: 'started' }
+        });
+      } catch (auditError) {
+        console.error('[TradingAudit] Failed to log start action:', auditError);
+      }
+      
       res.json({ 
         success: true,
         mode: context?.tradingMode || mode,
@@ -1027,6 +1040,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const context = await storage.getSystemContext(userId);
       
       console.log(`[TradingStop] Completed stop for user ${userId} mode=${context?.tradingMode} active=false`);
+      
+      // Phase 27.F.6: Log to trading_audit_log
+      try {
+        await storage.createTradingAuditLog({
+          userId,
+          action: 'stop',
+          mode: context?.tradingMode || 'live',
+          triggeredBy: 'manual',
+          metadata: { engineStatus: 'stopped' }
+        });
+      } catch (auditError) {
+        console.error('[TradingAudit] Failed to log stop action:', auditError);
+      }
       
       res.json({ 
         success: true,
@@ -2915,6 +2941,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user!.id;
     
     try {
+      console.log(`[TradingStart] PaperSim engine starting (user=${userId})`);
+      
       // Check for existing GLOBAL manager (system-wide check)
       if (globalPaperPortfolioManager) {
         return res.status(400).json({ error: 'Paper trading simulation already running (system-wide)' });
@@ -2960,6 +2988,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Emit start acknowledgment log
       const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
       console.log(`[TradeEngine] start_ack { runId: "${globalSession?.sessionId || 'unknown'}", mode: "paper", t: "${new Date().toISOString()}" }`);
+      console.log(`[TradingStart] PaperSim engine started (user=${userId})`);
+      
+      // Phase 27.F.6: Log to trading_audit_log
+      try {
+        await storage.createTradingAuditLog({
+          userId,
+          action: 'start',
+          mode: 'paper',
+          triggeredBy: 'manual',
+          metadata: { sessionId: globalSession?.sessionId }
+        });
+      } catch (auditError) {
+        console.error('[TradingAudit] Failed to log start action:', auditError);
+      }
       
       res.json({ success: true, message: 'Paper trading simulation started' });
     } catch (error: any) {
@@ -2970,7 +3012,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/paper-sim/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const userId = req.user!.id;
+    
     try {
+      console.log(`[TradingStop] PaperSim engine stopping (user=${userId})`);
+      
       // Check GLOBAL manager (system-wide)
       if (!globalPaperPortfolioManager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });
@@ -3011,6 +3057,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Emit stop acknowledgment log
       const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
       console.log(`[TradeEngine] stop_ack { runId: "${globalSession?.sessionId || 'unknown'}", t: "${new Date().toISOString()}" }`);
+      console.log(`[TradingStop] PaperSim engine stopped (user=${userId})`);
+      
+      // Phase 27.F.6: Log to trading_audit_log
+      try {
+        await storage.createTradingAuditLog({
+          userId,
+          action: 'stop',
+          mode: 'paper',
+          triggeredBy: 'manual',
+          metadata: { sessionId: globalSession?.sessionId }
+        });
+      } catch (auditError) {
+        console.error('[TradingAudit] Failed to log stop action:', auditError);
+      }
       
       res.json({ success: true, message: 'Paper trading simulation stopped' });
     } catch (error: any) {

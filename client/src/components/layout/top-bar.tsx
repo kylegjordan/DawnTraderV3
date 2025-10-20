@@ -13,6 +13,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ConfirmLiveTradingModal } from "@/components/trading/confirm-live-trading-modal";
+import { ConfirmStopLiveTradingModal } from "@/components/trading/confirm-stop-live-trading-modal";
 import { useTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -54,6 +56,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
   const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
+  const [showStopConfirmation, setShowStopConfirmation] = useState(false);
   const [, setLocation] = useLocation();
   const { messages: wsMessages } = useWebSocket();
 
@@ -135,25 +138,36 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   }, [wsMessages, queryClient, setMode]);
 
   const handleTradingToggle = async (enabled: boolean) => {
-    // If turning ON in Live mode, show confirmation modal first
-    if (enabled && currentMode === 'live') {
-      setShowLiveConfirmation(true);
-      return;
+    console.log('[Phase-27.F.6] Toggle clicked:', { enabled, mode: currentMode });
+    
+    // Phase 27.F.6: Show confirmation modals for live trading
+    if (currentMode === 'live') {
+      if (enabled) {
+        // Starting live trading - show confirmation
+        setShowLiveConfirmation(true);
+        return;
+      } else {
+        // Stopping live trading - show stop confirmation
+        setShowStopConfirmation(true);
+        return;
+      }
     }
     
-    // For Paper mode or turning OFF, proceed directly
+    // For Paper mode, proceed directly without confirmation
     try {
       if (enabled) {
-        await startTrading(currentMode);
+        console.log('[Phase-27.F.6] Starting paper trading...');
+        await startTrading('paper');
         toast({
           title: "Trading Started",
-          description: `${currentMode === 'paper' ? 'Paper Trading Simulation' : 'Live Trading'} engine started successfully`,
+          description: "Paper Trading Simulation engine started successfully",
         });
       } else {
-        await stopTrading(currentMode);
+        console.log('[Phase-27.F.6] Stopping paper trading...');
+        await stopTrading('paper');
         toast({
           title: "Trading Stopped",
-          description: `${currentMode === 'paper' ? 'Paper Trading Simulation' : 'Live Trading'} engine has been stopped`,
+          description: "Paper Trading Simulation engine has been stopped",
         });
       }
     } catch (error: any) {
@@ -175,6 +189,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         }
       }
       
+      console.error('[Phase-27.F.6] Trading toggle error:', errorMessage);
       toast({
         title: "Error",
         description: errorMessage,
@@ -182,16 +197,13 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       });
       
       // Refetch status to ensure UI reflects actual backend state
-      if (currentMode === 'paper') {
-        await queryClient.refetchQueries({ queryKey: ['/api/paper-sim/status'] });
-      } else {
-        await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
-      }
+      await queryClient.refetchQueries({ queryKey: ['/api/paper-sim/status'] });
+      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };
 
   const handleConfirmLiveTrading = async () => {
-    setShowLiveConfirmation(false);
+    console.log('[Phase-27.F.6] Live trading start confirmed');
     
     try {
       await startTrading('live');
@@ -218,13 +230,54 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         }
       }
       
+      console.error('[Phase-27.F.6] Live trading start error:', errorMessage);
       toast({
         title: "Error",
         description: errorMessage,
         variant: "destructive",
       });
       
-      // Refetch status to ensure UI reflects actual backend state (Live mode only)
+      // Refetch status to ensure UI reflects actual backend state
+      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
+    }
+  };
+
+  const handleConfirmStopLiveTrading = async () => {
+    console.log('[Phase-27.F.6] Live trading stop confirmed');
+    
+    try {
+      await stopTrading('live');
+      toast({
+        title: "Trading Stopped",
+        description: "Live Trading engine has been stopped",
+      });
+    } catch (error: any) {
+      let errorMessage = "Failed to stop Live Trading";
+      
+      // Parse error message from API response
+      if (error?.message) {
+        try {
+          // Extract JSON from error message (format: "400: {json}")
+          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
+          if (jsonMatch) {
+            const errorData = JSON.parse(jsonMatch[1]);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            errorMessage = error.message;
+          }
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
+      console.error('[Phase-27.F.6] Live trading stop error:', errorMessage);
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      
+      // Refetch status to ensure UI reflects actual backend state
       await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };
@@ -463,37 +516,18 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         </div>
       </div>
 
-      {/* Live Trading Confirmation Modal */}
-      <AlertDialog open={showLiveConfirmation} onOpenChange={setShowLiveConfirmation}>
-        <AlertDialogContent data-testid="dialog-live-confirmation">
-          <AlertDialogHeader>
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-orange-500" />
-              </div>
-              <AlertDialogTitle className="text-lg font-semibold">
-                Confirm Live Trading Activation
-              </AlertDialogTitle>
-            </div>
-            <AlertDialogDescription className="text-base pt-4">
-              <span className="font-semibold text-orange-600 dark:text-orange-400">⚠️ Warning:</span> You are about to activate Live Trading. 
-              This will place <span className="font-semibold">real market orders</span> with actual funds.
-              <br /><br />
-              Please confirm that you wish to proceed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-live">Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleConfirmLiveTrading}
-              className="bg-orange-600 hover:bg-orange-700 text-white"
-              data-testid="button-confirm-live"
-            >
-              Confirm & Start Live Trading
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Phase 27.F.6: Live Trading Confirmation Modals */}
+      <ConfirmLiveTradingModal
+        open={showLiveConfirmation}
+        onOpenChange={setShowLiveConfirmation}
+        onConfirm={handleConfirmLiveTrading}
+      />
+      
+      <ConfirmStopLiveTradingModal
+        open={showStopConfirmation}
+        onOpenChange={setShowStopConfirmation}
+        onConfirm={handleConfirmStopLiveTrading}
+      />
     </header>
   );
 }
