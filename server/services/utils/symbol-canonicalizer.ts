@@ -142,7 +142,9 @@ export function normalizeSymbolArray(symbols: string[] | null | undefined): stri
 
 /**
  * Given a Kraken pair info object, return canonical BASE/QUOTE
+ * Normalizes quote currencies (ZUSD→USD, ZEUR→EUR, etc.)
  */
 export function canonicalFromPairInfo(pairInfo: { base: string; quote: string }): string {
-  return `${pairInfo.base}/${pairInfo.quote}`;
+  // Pass through toCanonical to normalize quote currencies
+  return toCanonical(`${pairInfo.base}/${pairInfo.quote}`);
 }

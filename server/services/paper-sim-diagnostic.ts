@@ -146,6 +146,9 @@ export class PaperSimDiagnosticService {
 
       // Get canonical symbol for comparison (BASE/QUOTE format)
       const canonicalSymbol = canonicalFromPairInfo(pairInfo);
+      
+      // Extract normalized quote currency from canonical symbol
+      const normalizedQuote = canonicalSymbol.split('/')[1] || pairInfo.quote;
 
       // Apply filters in order and track first failure
       let rejected = false;
@@ -165,8 +168,8 @@ export class PaperSimDiagnosticService {
         rejectReason = 'failed_blacklist';
       }
 
-      // Filter 3: Quote currency
-      if (!rejected && !allowedQuotes.includes(pairInfo.quote)) {
+      // Filter 3: Quote currency (use normalized quote)
+      if (!rejected && !allowedQuotes.includes(normalizedQuote)) {
         breakdown.failed_quote_currency++;
         rejected = true;
         rejectReason = 'failed_quote_currency';
