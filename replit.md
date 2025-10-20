@@ -39,6 +39,8 @@ Filter Health Diagnostic Logging enables real-time filter statistics tracking by
 
 Screener Alignment with Goals Engine Filters unifies data sources by migrating filtering logic from `trading_settings` to the `screener_filters` table, ensuring consistency between MarketScanner and Goals Engine. `KrakenService.getEligiblePairs()` accepts 14 filter parameters, and the system implements 9 operational filters (Min Volume, Daily Range, Min/Max Price, Bid-Ask Spread, Stablecoins, Quote Currency, Blacklist, Whitelist, History) plus Volatility (using daily range). Four filters (RSI, market cap, regulated status, liquidity) are noted as unavailable due to Kraken API limitations. The `/api/filters/diagnostics` endpoint returns threshold values, and the Filter Insights UI displays these thresholds with tooltips.
 
+Walter Chat Intent Detection implements priority-based keyword matching to correctly distinguish between paper and live trading commands. The system checks for paper/simulation keywords (paper, simulation, simulated, practice, test, demo) BEFORE matching live trading patterns, preventing false modal triggers when users request paper trading actions. Console logging provides debugging visibility for intent classification. Paper trading commands bypass live trading confirmation modals and execute directly, while live trading commands trigger inline confirmation modals above the Walter chat interface.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
