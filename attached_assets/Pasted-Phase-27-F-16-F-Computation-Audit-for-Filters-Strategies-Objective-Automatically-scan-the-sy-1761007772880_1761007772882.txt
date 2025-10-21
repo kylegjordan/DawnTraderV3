@@ -1,0 +1,71 @@
+Phase 27.F.16.F — Computation Audit for Filters + Strategies
+🎯 Objective
+
+Automatically scan the system to extract and verify every numeric computation used in screeners, guardrails, and strategies.
+Generate a diagnostic report comparing each formula to its expected specification.
+
+🧩 Tasks for Replit
+
+Formula Discovery
+
+Search the codebase for these expressions:
+minVolume, spread, dailyRange, volatility, RSI, ATR, VWAP, SMA, EMA, drawdown, risk, exposure.
+
+List the file + line number + expression for each calculation found.
+Example output snippet:
+
+server/services/kraken.ts L142: volUSD = volume24h_base * lastPriceUSD
+server/services/strategy-engine.ts L73: rsi = 100 - (100 / (1 + avgGain / avgLoss))
+
+
+Computation Audit Run
+
+For each found formula, compute a sample using mock data and log both:
+
+The expected result from textbook formula
+
+The actual result from current function
+
+Report discrepancies > 1 % difference or any unit mismatch.
+
+Generate Report
+
+Output JSON summary + console lines:
+
+[AUDIT] RSI deviation 0.3 % ✅
+[AUDIT] Volatility band unit mismatch ⚠️
+[AUDIT] Volume USD calc incorrect ❌
+
+
+Save a text copy to /tmp/audit_report.txt and include top 5 issues in console.
+
+Diagnostics Endpoint
+
+Expose temporary endpoint /api/system/formula-audit (read-only) returning the same JSON for quick re-checks.
+
+Validation
+
+Run the audit with live Kraken data sample and confirm:
+
+RSI, VWAP, SMA, ATR, spread, daily range match industry-standard formulas.
+
+Units (USD vs base coin) are consistent across all filters.
+
+✅ Deliverables
+
+Console + /tmp/audit_report.txt listing every formula, its expected form, actual expression, and deviation.
+
+Confirmation that all indicators (RSI, VWAP, ATR, spread, etc.) compute correctly in USD or percentage units.
+
+If mismatches exist, mark them in the report for Phase 27.F.16.G (fix phase).
+
+🔍 Example Verification Lines
+[AUDIT] minVolumeUSD → Expected base × priceUSD = OK
+[AUDIT] spread % → (ask − bid)/mid × 100 = OK
+[AUDIT] dailyRange → (high − low)/close × 100 = OK
+[AUDIT] RSI → difference = 0.8 % ✅
+[AUDIT] ATR → unit = price ✅
+
+🧠 Why This Matters
+
+This audit ensures your simulator’s entire numerical foundation is sound — so when you loosen or tighten filters, the changes actually reflect real-world math, not mis-scaled variables.
