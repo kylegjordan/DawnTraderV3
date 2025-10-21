@@ -11,11 +11,14 @@
  * 💤 Defer/Suppress — Benign, low-impact anomalies quietly tracked
  * 🚨 Escalate — Issues with trading or systemic risk routed to action queue
  * 
- * Safety Features (Architect Feedback):
- * - Incident key generation for deduplication
- * - Cooldown logic (5-10 min per component)
- * - Strengthened auto-resolve gates (severity='warning', confidence ≥0.75)
+ * Safety Features:
+ * - Impact-first pipeline (critical incidents bypass cooldown/dedup)
+ * - Incident key generation with anomaly normalization
+ * - Cooldown logic (5-10 min, env-configurable)
  * - Hourly action limits to prevent loops
+ * - Comprehensive DB error handling with synthetic fallbacks
+ * - In-memory dedup guard (fallback while DB unique constraint is pending)
+ * - Auto-resolve gates: severity='warning', confidence ≥0.75, component-specific thresholds
  */
 
 import { db } from '../db';
@@ -50,6 +53,7 @@ export interface MaintenanceAction {
   resolution: string;
   confidence: number;
   deduplicated?: boolean; // True if this was a duplicate incident
+  db_error?: boolean; // True if DB was unavailable
 }
 
 /**
@@ -62,14 +66,23 @@ interface CooldownState {
   lastActionId: string;
 }
 
+/**
+ * In-memory dedup entry with TTL
+ */
+interface DedupEntry {
+  incidentKey: string;
+  timestamp: number;
+  actionId: string;
+}
+
 export class WalterOpsEngine {
   private static maintenanceLog: any[] = [];
-  private static cooldownMap: Map<string, CooldownState> = new Map(); // Track cooldowns
-  private static hourlyActionCounts: Map<string, { count: number; resetAt: number }> = new Map(); // Hourly limits
+  private static cooldownMap: Map<string, CooldownState> = new Map();
+  private static hourlyActionCounts: Map<string, { count: number; resetAt: number }> = new Map();
   
-  // Temporary in-memory dedup guard (fallback while DB unique constraint is pending)
-  private static inMemoryDedupSet: Set<string> = new Set();
-  private static readonly DEDUP_MEMORY_TTL_MS = 60 * 60 * 1000; // 1 hour
+  // In-memory dedup guard (fallback while DB unique constraint is pending)
+  private static dedupMap: Map<string, DedupEntry> = new Map();
+  private static readonly DEDUP_TTL_MS = 60 * 60 * 1000; // 1 hour
   
   // Configuration (env-configurable with sane defaults)
   private static readonly COOLDOWN_MS = parseInt(process.env.WALTER_COOLDOWN_MS || '300000'); // Default: 5 minutes
@@ -108,6 +121,20 @@ export class WalterOpsEngine {
     
     // STEP 3: Non-critical incidents apply dedup/cooldown logic
     
+    // Check in-memory dedup first (faster than DB)
+    const memoryDedup = this.checkInMemoryDedup(incidentKey);
+    if (memoryDedup.isDuplicate) {
+      console.log(`[WalterOps] 🔄 In-memory duplicate detected: ${incidentKey}`);
+      return {
+        action_id: memoryDedup.actionId || 'mem_dedup',
+        action_type: 'auto_suppress',
+        status: 'monitored',
+        resolution: `In-memory duplicate (recent action at ${new Date(memoryDedup.timestamp!).toISOString()})`,
+        confidence: 1.0,
+        deduplicated: true,
+      };
+    }
+    
     // Check if we're in cooldown for this incident
     const cooldownCheck = this.checkCooldown(incidentKey);
     if (cooldownCheck.inCooldown) {
@@ -126,14 +153,13 @@ export class WalterOpsEngine {
     const hourlyCheck = this.checkHourlyLimit(incidentKey);
     if (hourlyCheck.exceeded) {
       console.log(`[WalterOps] ⚠️ Hourly limit exceeded for ${incidentKey}: ${hourlyCheck.count}/${this.HOURLY_LIMIT}`);
-      // Escalate to prevent runaway loops
       return await this.escalateDueToLimit(userId, mode, anomaly, incidentKey, hourlyCheck.count);
     }
     
-    // Check for existing duplicate incidents
+    // Check for existing duplicate incidents in DB (if available)
     const duplicate = await this.checkDuplicateIncident(userId, mode, incidentKey);
     if (duplicate) {
-      console.log(`[WalterOps] 🔄 Duplicate incident detected: ${incidentKey}`);
+      console.log(`[WalterOps] 🔄 DB duplicate incident detected: ${incidentKey}`);
       return await this.handleDuplicateIncident(userId, mode, anomaly, incidentKey, duplicate);
     }
     
@@ -195,6 +221,7 @@ export class WalterOpsEngine {
       if (desc.includes('latency') || desc.includes('lag')) return 'feed_latency';
       if (desc.includes('stale') || desc.includes('tick')) return 'feed_stale_data';
       if (desc.includes('uptime')) return 'feed_uptime';
+      if (desc.includes('sequence') || desc.includes('gap')) return 'feed_sequence_gap';
       return 'feed_other';
     }
     
@@ -205,11 +232,13 @@ export class WalterOpsEngine {
       if (desc.includes('sma') || desc.includes('moving average')) return 'formula_sma';
       if (desc.includes('volume')) return 'formula_volume';
       if (desc.includes('spread')) return 'formula_spread';
-      if (desc.includes('deviation')) return 'formula_deviation';
+      if (desc.includes('deviation') || desc.includes('divergence')) return 'formula_deviation';
       return 'formula_other';
     }
     
     // System categories
+    if (desc.includes('rate') || desc.includes('limit')) return 'system_rate_limit';
+    if (desc.includes('database') || desc.includes('db') || desc.includes('connection')) return 'system_db_connectivity';
     return 'system_generic';
   }
   
@@ -244,7 +273,54 @@ export class WalterOpsEngine {
       else buckets.push('reconn_high');
     }
     
+    if (metrics.uptime_percent !== undefined) {
+      // Bucket uptime: >99%, 95-99%, <95%
+      if (metrics.uptime_percent > 99) buckets.push('uptime_high');
+      else if (metrics.uptime_percent > 95) buckets.push('uptime_med');
+      else buckets.push('uptime_low');
+    }
+    
     return buckets.length > 0 ? buckets.join('_') : 'default';
+  }
+  
+  /**
+   * Check in-memory dedup (pre-DB guard)
+   */
+  private static checkInMemoryDedup(incidentKey: string): {
+    isDuplicate: boolean;
+    timestamp?: number;
+    actionId?: string;
+  } {
+    const entry = this.dedupMap.get(incidentKey);
+    if (!entry) {
+      return { isDuplicate: false };
+    }
+    
+    const now = Date.now();
+    const age = now - entry.timestamp;
+    
+    // Clean up if expired
+    if (age > this.DEDUP_TTL_MS) {
+      this.dedupMap.delete(incidentKey);
+      return { isDuplicate: false };
+    }
+    
+    return {
+      isDuplicate: true,
+      timestamp: entry.timestamp,
+      actionId: entry.actionId,
+    };
+  }
+  
+  /**
+   * Record incident in memory dedup
+   */
+  private static recordInMemoryDedup(incidentKey: string, actionId: string): void {
+    this.dedupMap.set(incidentKey, {
+      incidentKey,
+      timestamp: Date.now(),
+      actionId,
+    });
   }
   
   /**
@@ -324,37 +400,45 @@ export class WalterOpsEngine {
     } else {
       state.count += 1;
     }
+    
+    console.log(`[WalterOps] Hourly count for ${incidentKey}: ${state ? state.count : 1}/${this.HOURLY_LIMIT}`);
   }
   
   /**
-   * Check for duplicate incidents in database
+   * Check for duplicate incidents in database (with error handling)
    */
   private static async checkDuplicateIncident(
     userId: string,
     mode: 'live' | 'paper',
     incidentKey: string
   ): Promise<any | null> {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    
-    const existing = await db
-      .select()
-      .from(walterActions)
-      .where(
-        and(
-          eq(walterActions.userId, userId),
-          eq(walterActions.mode, mode),
-          eq(walterActions.incidentKey, incidentKey),
-          gte(walterActions.detectedAt, oneHourAgo)
+    try {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      
+      const existing = await db
+        .select()
+        .from(walterActions)
+        .where(
+          and(
+            eq(walterActions.userId, userId),
+            eq(walterActions.mode, mode),
+            eq(walterActions.incidentKey, incidentKey),
+            gte(walterActions.detectedAt, oneHourAgo)
+          )
         )
-      )
-      .orderBy(desc(walterActions.detectedAt))
-      .limit(1);
-    
-    return existing.length > 0 ? existing[0] : null;
+        .orderBy(desc(walterActions.detectedAt))
+        .limit(1);
+      
+      return existing.length > 0 ? existing[0] : null;
+    } catch (error) {
+      console.error('[WalterOps] DB error checking duplicate incident:', error);
+      // Fallback to in-memory check (already done)
+      return null;
+    }
   }
   
   /**
-   * Handle duplicate incident
+   * Handle duplicate incident (with error handling)
    */
   private static async handleDuplicateIncident(
     userId: string,
@@ -367,15 +451,20 @@ export class WalterOpsEngine {
     
     const retryCount = (existingAction.retryCount || 0) + 1;
     
-    // Update existing action with new retry attempt
-    await db
-      .update(walterActions)
-      .set({
-        retryCount,
-        lastAttemptAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(walterActions.id, existingAction.id));
+    try {
+      // Update existing action with new retry attempt
+      await db
+        .update(walterActions)
+        .set({
+          retryCount,
+          lastAttemptAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(walterActions.id, existingAction.id));
+    } catch (error) {
+      console.error('[WalterOps] DB error updating duplicate incident:', error);
+      // Continue with in-memory tracking
+    }
     
     // Set cooldown with increased retry count
     this.setCooldown(incidentKey, retryCount, existingAction.id);
@@ -403,14 +492,16 @@ export class WalterOpsEngine {
   ): Promise<MaintenanceAction> {
     console.log(`[WalterOps] 🚨 Escalating: hourly limit exceeded (${actionCount} actions)`);
     
+    const actionId = 'rate_limit_' + Date.now();
+    
     try {
       const action = await db.insert(walterActions).values({
         userId,
         mode,
         actionType: 'escalate',
-        category: 'system', // Rate limit is a system issue, not feed/formula
+        category: 'system',
         status: 'pending',
-        impactScore: '100', // Critical due to runaway condition
+        impactScore: '100',
         affectedComponent: `${anomaly.component} (rate limit)`,
         detectedAnomaly: `Recurring issue: ${anomaly.anomaly}`,
         contextData: { ...anomaly.metrics, actionCount, reason: 'hourly_limit_exceeded' },
@@ -419,10 +510,12 @@ export class WalterOpsEngine {
         confidenceScore: '1.00',
         requiresApproval: true,
         escalated: true,
-        tradingPaused: false, // Rate limits don't pause trading
+        tradingPaused: false,
         incidentKey,
         retryCount: 0,
       }).returning();
+      
+      this.recordInMemoryDedup(incidentKey, action[0].id);
       
       return {
         action_id: action[0].id,
@@ -433,13 +526,14 @@ export class WalterOpsEngine {
       };
     } catch (error) {
       console.error('[WalterOps] DB error creating rate-limit escalation:', error);
-      // Fallback: return synthetic action
+      this.recordInMemoryDedup(incidentKey, actionId);
       return {
-        action_id: 'db_error_' + Date.now(),
+        action_id: actionId,
         action_type: 'escalate',
         status: 'escalated',
         resolution: `Hourly limit exceeded (${actionCount}/${this.HOURLY_LIMIT}) [DB unavailable]`,
         confidence: 1.0,
+        db_error: true,
       };
     }
   }
@@ -478,7 +572,7 @@ export class WalterOpsEngine {
   }
   
   /**
-   * Auto-suppress benign events
+   * Auto-suppress benign events (with error handling)
    */
   private static async autoSuppress(
     userId: string,
@@ -489,44 +583,63 @@ export class WalterOpsEngine {
   ): Promise<MaintenanceAction> {
     console.log(`[WalterOps] Auto-suppressing: ${anomaly.anomaly} (impact: ${impact.impact_score})`);
     
-    // Create suppressed action record
-    const action = await db.insert(walterActions).values({
-      userId,
-      mode,
-      actionType: 'auto_suppress',
-      category: anomaly.source,
-      status: 'completed',
-      impactScore: impact.impact_score.toString(),
-      affectedComponent: anomaly.component,
-      detectedAnomaly: anomaly.anomaly,
-      contextData: anomaly.metrics || {},
-      suggestedFix: 'Auto-suppressed due to negligible impact',
-      executedAction: 'Suppressed',
-      resolutionStatus: 'fixed',
-      resolutionNotes: impact.reason,
-      confidenceScore: impact.confidence.toString(),
-      requiresApproval: false,
-      escalated: false,
-      suppressReason: impact.reason,
-      actionedAt: new Date(),
-      resolvedAt: new Date(),
-      incidentKey,
-      retryCount: 0,
-    }).returning();
+    const actionId = 'suppress_' + Date.now();
     
-    this.logMaintenance('auto_suppress', anomaly.component, anomaly.anomaly, 'Suppressed', impact.confidence);
-    
-    return {
-      action_id: action[0].id,
-      action_type: 'auto_suppress',
-      status: 'auto_resolved',
-      resolution: `Suppressed (negligible impact: ${impact.impact_score})`,
-      confidence: impact.confidence,
-    };
+    try {
+      const action = await db.insert(walterActions).values({
+        userId,
+        mode,
+        actionType: 'auto_suppress',
+        category: anomaly.source,
+        status: 'completed',
+        impactScore: impact.impact_score.toString(),
+        affectedComponent: anomaly.component,
+        detectedAnomaly: anomaly.anomaly,
+        contextData: anomaly.metrics || {},
+        suggestedFix: 'Auto-suppressed due to negligible impact',
+        executedAction: 'Suppressed',
+        resolutionStatus: 'fixed',
+        resolutionNotes: impact.reason,
+        confidenceScore: impact.confidence.toString(),
+        requiresApproval: false,
+        escalated: false,
+        suppressReason: impact.reason,
+        actionedAt: new Date(),
+        resolvedAt: new Date(),
+        incidentKey,
+        retryCount: 0,
+      }).returning();
+      
+      this.recordInMemoryDedup(incidentKey, action[0].id);
+      this.incrementHourlyCount(incidentKey);
+      this.logMaintenance('auto_suppress', anomaly.component, anomaly.anomaly, 'Suppressed', impact.confidence);
+      
+      return {
+        action_id: action[0].id,
+        action_type: 'auto_suppress',
+        status: 'auto_resolved',
+        resolution: `Suppressed (negligible impact: ${impact.impact_score})`,
+        confidence: impact.confidence,
+      };
+    } catch (error) {
+      console.error('[WalterOps] DB error auto-suppressing:', error);
+      this.recordInMemoryDedup(incidentKey, actionId);
+      this.incrementHourlyCount(incidentKey);
+      this.logMaintenance('auto_suppress', anomaly.component, anomaly.anomaly, 'Suppressed [DB error]', impact.confidence);
+      
+      return {
+        action_id: actionId,
+        action_type: 'auto_suppress',
+        status: 'auto_resolved',
+        resolution: `Suppressed (negligible impact: ${impact.impact_score}) [DB unavailable]`,
+        confidence: impact.confidence,
+        db_error: true,
+      };
+    }
   }
   
   /**
-   * Log and monitor without immediate action
+   * Log and monitor without immediate action (with error handling)
    */
   private static async logAndMonitor(
     userId: string,
@@ -537,38 +650,58 @@ export class WalterOpsEngine {
   ): Promise<MaintenanceAction> {
     console.log(`[WalterOps] Logging for monitoring: ${anomaly.anomaly} (impact: ${impact.impact_score})`);
     
-    const action = await db.insert(walterActions).values({
-      userId,
-      mode,
-      actionType: 'health_check',
-      category: anomaly.source,
-      status: 'completed',
-      impactScore: impact.impact_score.toString(),
-      affectedComponent: anomaly.component,
-      detectedAnomaly: anomaly.anomaly,
-      contextData: anomaly.metrics || {},
-      suggestedFix: 'Monitoring - no immediate action required',
-      executedAction: 'Logged for monitoring',
-      resolutionStatus: 'monitored',
-      resolutionNotes: impact.reason,
-      confidenceScore: impact.confidence.toString(),
-      requiresApproval: false,
-      escalated: false,
-      actionedAt: new Date(),
-      resolvedAt: new Date(),
-      incidentKey,
-      retryCount: 0,
-    }).returning();
+    const actionId = 'monitor_' + Date.now();
     
-    this.logMaintenance('log_only', anomaly.component, anomaly.anomaly, 'Monitored', impact.confidence);
-    
-    return {
-      action_id: action[0].id,
-      action_type: 'health_check',
-      status: 'monitored',
-      resolution: `Monitoring (moderate impact: ${impact.impact_score})`,
-      confidence: impact.confidence,
-    };
+    try {
+      const action = await db.insert(walterActions).values({
+        userId,
+        mode,
+        actionType: 'health_check',
+        category: anomaly.source,
+        status: 'completed',
+        impactScore: impact.impact_score.toString(),
+        affectedComponent: anomaly.component,
+        detectedAnomaly: anomaly.anomaly,
+        contextData: anomaly.metrics || {},
+        suggestedFix: 'Monitoring - no immediate action required',
+        executedAction: 'Logged for monitoring',
+        resolutionStatus: 'monitored',
+        resolutionNotes: impact.reason,
+        confidenceScore: impact.confidence.toString(),
+        requiresApproval: false,
+        escalated: false,
+        actionedAt: new Date(),
+        resolvedAt: new Date(),
+        incidentKey,
+        retryCount: 0,
+      }).returning();
+      
+      this.recordInMemoryDedup(incidentKey, action[0].id);
+      this.incrementHourlyCount(incidentKey);
+      this.logMaintenance('log_only', anomaly.component, anomaly.anomaly, 'Monitored', impact.confidence);
+      
+      return {
+        action_id: action[0].id,
+        action_type: 'health_check',
+        status: 'monitored',
+        resolution: `Monitoring (moderate impact: ${impact.impact_score})`,
+        confidence: impact.confidence,
+      };
+    } catch (error) {
+      console.error('[WalterOps] DB error logging for monitoring:', error);
+      this.recordInMemoryDedup(incidentKey, actionId);
+      this.incrementHourlyCount(incidentKey);
+      this.logMaintenance('log_only', anomaly.component, anomaly.anomaly, 'Monitored [DB error]', impact.confidence);
+      
+      return {
+        action_id: actionId,
+        action_type: 'health_check',
+        status: 'monitored',
+        resolution: `Monitoring (moderate impact: ${impact.impact_score}) [DB unavailable]`,
+        confidence: impact.confidence,
+        db_error: true,
+      };
+    }
   }
   
   /**
@@ -610,7 +743,7 @@ export class WalterOpsEngine {
   }
   
   /**
-   * Auto-resolve issues with autonomous actions
+   * Auto-resolve issues with autonomous actions (with error handling)
    */
   private static async autoResolve(
     userId: string,
@@ -635,46 +768,65 @@ export class WalterOpsEngine {
     
     console.log(`[WalterOps] Auto-resolved: ${anomaly.anomaly} via ${action_type}`);
     
-    const action = await db.insert(walterActions).values({
-      userId,
-      mode,
-      actionType: action_type,
-      category: anomaly.source,
-      status: 'completed',
-      impactScore: impact.impact_score.toString(),
-      affectedComponent: anomaly.component,
-      detectedAnomaly: anomaly.anomaly,
-      contextData: anomaly.metrics || {},
-      suggestedFix: `Auto-resolve via ${action_type}`,
-      executedAction: executed_action,
-      resolutionStatus: 'fixed',
-      resolutionNotes: resolution_notes,
-      confidenceScore: impact.confidence.toString(),
-      requiresApproval: false,
-      escalated: false,
-      actionedAt: new Date(),
-      resolvedAt: new Date(),
-      incidentKey,
-      retryCount: 0,
-    }).returning();
+    const actionId = action_type + '_' + Date.now();
     
-    // Set cooldown and increment hourly count
-    this.setCooldown(incidentKey, 0, action[0].id);
-    this.incrementHourlyCount(incidentKey);
-    
-    this.logMaintenance(action_type, anomaly.component, anomaly.anomaly, executed_action, impact.confidence);
-    
-    return {
-      action_id: action[0].id,
-      action_type,
-      status: 'auto_resolved',
-      resolution: resolution_notes,
-      confidence: impact.confidence,
-    };
+    try {
+      const action = await db.insert(walterActions).values({
+        userId,
+        mode,
+        actionType: action_type,
+        category: anomaly.source,
+        status: 'completed',
+        impactScore: impact.impact_score.toString(),
+        affectedComponent: anomaly.component,
+        detectedAnomaly: anomaly.anomaly,
+        contextData: anomaly.metrics || {},
+        suggestedFix: `Auto-resolve via ${action_type}`,
+        executedAction: executed_action,
+        resolutionStatus: 'fixed',
+        resolutionNotes: resolution_notes,
+        confidenceScore: impact.confidence.toString(),
+        requiresApproval: false,
+        escalated: false,
+        actionedAt: new Date(),
+        resolvedAt: new Date(),
+        incidentKey,
+        retryCount: 0,
+      }).returning();
+      
+      // Set cooldown and increment hourly count
+      this.setCooldown(incidentKey, 0, action[0].id);
+      this.recordInMemoryDedup(incidentKey, action[0].id);
+      this.incrementHourlyCount(incidentKey);
+      this.logMaintenance(action_type, anomaly.component, anomaly.anomaly, executed_action, impact.confidence);
+      
+      return {
+        action_id: action[0].id,
+        action_type,
+        status: 'auto_resolved',
+        resolution: resolution_notes,
+        confidence: impact.confidence,
+      };
+    } catch (error) {
+      console.error('[WalterOps] DB error auto-resolving:', error);
+      this.setCooldown(incidentKey, 0, actionId);
+      this.recordInMemoryDedup(incidentKey, actionId);
+      this.incrementHourlyCount(incidentKey);
+      this.logMaintenance(action_type, anomaly.component, anomaly.anomaly, executed_action + ' [DB error]', impact.confidence);
+      
+      return {
+        action_id: actionId,
+        action_type,
+        status: 'auto_resolved',
+        resolution: resolution_notes + ' [DB unavailable]',
+        confidence: impact.confidence,
+        db_error: true,
+      };
+    }
   }
   
   /**
-   * Escalate to user action queue
+   * Escalate to user action queue (with error handling)
    */
   private static async escalateToUser(
     userId: string,
@@ -687,43 +839,60 @@ export class WalterOpsEngine {
     
     const suggested_fix = this.getSuggestedFix(anomaly, impact);
     
-    // Determine if trading should be paused
+    // Determine if trading should be paused (only for impact ≥40 in live mode)
     const shouldPauseTrading = impact.impact_score >= 40 && mode === 'live';
     
-    const action = await db.insert(walterActions).values({
-      userId,
-      mode,
-      actionType: 'escalate',
-      category: anomaly.source,
-      status: 'pending',
-      impactScore: impact.impact_score.toString(),
-      affectedComponent: anomaly.component,
-      detectedAnomaly: anomaly.anomaly,
-      contextData: anomaly.metrics || {},
-      suggestedFix: suggested_fix,
-      executedAction: null,
-      resolutionStatus: 'escalated',
-      resolutionNotes: null,
-      confidenceScore: impact.confidence.toString(),
-      requiresApproval: true,
-      escalated: true,
-      tradingPaused: shouldPauseTrading,
-      incidentKey,
-      retryCount: 0,
-    }).returning();
+    const actionId = 'escalate_' + Date.now();
     
-    this.logMaintenance('escalate', anomaly.component, anomaly.anomaly, 'Escalated to user', impact.confidence);
-    
-    // Increment hourly count for escalations too
-    this.incrementHourlyCount(incidentKey);
-    
-    return {
-      action_id: action[0].id,
-      action_type: 'escalate',
-      status: 'escalated',
-      resolution: `Requires manual approval (critical impact: ${impact.impact_score})`,
-      confidence: impact.confidence,
-    };
+    try {
+      const action = await db.insert(walterActions).values({
+        userId,
+        mode,
+        actionType: 'escalate',
+        category: anomaly.source,
+        status: 'pending',
+        impactScore: impact.impact_score.toString(),
+        affectedComponent: anomaly.component,
+        detectedAnomaly: anomaly.anomaly,
+        contextData: anomaly.metrics || {},
+        suggestedFix: suggested_fix,
+        executedAction: null,
+        resolutionStatus: 'escalated',
+        resolutionNotes: null,
+        confidenceScore: impact.confidence.toString(),
+        requiresApproval: true,
+        escalated: true,
+        tradingPaused: shouldPauseTrading,
+        incidentKey,
+        retryCount: 0,
+      }).returning();
+      
+      this.recordInMemoryDedup(incidentKey, action[0].id);
+      this.incrementHourlyCount(incidentKey);
+      this.logMaintenance('escalate', anomaly.component, anomaly.anomaly, 'Escalated to user', impact.confidence);
+      
+      return {
+        action_id: action[0].id,
+        action_type: 'escalate',
+        status: 'escalated',
+        resolution: `Requires manual approval (critical impact: ${impact.impact_score})`,
+        confidence: impact.confidence,
+      };
+    } catch (error) {
+      console.error('[WalterOps] DB error escalating to user:', error);
+      this.recordInMemoryDedup(incidentKey, actionId);
+      this.incrementHourlyCount(incidentKey);
+      this.logMaintenance('escalate', anomaly.component, anomaly.anomaly, 'Escalated [DB error]', impact.confidence);
+      
+      return {
+        action_id: actionId,
+        action_type: 'escalate',
+        status: 'escalated',
+        resolution: `Requires manual approval (critical impact: ${impact.impact_score}) [DB unavailable]`,
+        confidence: impact.confidence,
+        db_error: true,
+      };
+    }
   }
   
   /**
@@ -806,12 +975,13 @@ export class WalterOpsEngine {
   }
   
   /**
-   * Clear expired cooldowns (called periodically)
+   * Clear expired cooldowns and dedup entries (called periodically)
    */
-  static clearExpiredCooldowns(): void {
+  static clearExpired(): void {
     const now = Date.now();
     let cleared = 0;
     
+    // Clear expired cooldowns
     for (const [key, state] of this.cooldownMap.entries()) {
       if (now >= state.cooldownUntil) {
         this.cooldownMap.delete(key);
@@ -819,8 +989,16 @@ export class WalterOpsEngine {
       }
     }
     
+    // Clear expired dedup entries
+    for (const [key, entry] of this.dedupMap.entries()) {
+      if (now - entry.timestamp > this.DEDUP_TTL_MS) {
+        this.dedupMap.delete(key);
+        cleared++;
+      }
+    }
+    
     if (cleared > 0) {
-      console.log(`[WalterOps] Cleared ${cleared} expired cooldowns`);
+      console.log(`[WalterOps] Cleared ${cleared} expired cooldowns/dedup entries`);
     }
   }
   
@@ -843,12 +1021,17 @@ export class WalterOpsEngine {
    */
   static getStats(): {
     activeCooldowns: number;
+    activeDedups: number;
     hourlyLimits: { incidentKey: string; count: number; limit: number }[];
   } {
     const now = Date.now();
     
     const activeCooldowns = Array.from(this.cooldownMap.values())
       .filter(state => now < state.cooldownUntil)
+      .length;
+    
+    const activeDedups = Array.from(this.dedupMap.values())
+      .filter(entry => now - entry.timestamp < this.DEDUP_TTL_MS)
       .length;
     
     const hourlyLimits = Array.from(this.hourlyActionCounts.entries())
@@ -859,11 +1042,11 @@ export class WalterOpsEngine {
         limit: this.HOURLY_LIMIT,
       }));
     
-    return { activeCooldowns, hourlyLimits };
+    return { activeCooldowns, activeDedups, hourlyLimits };
   }
 }
 
-// Clear expired cooldowns every 5 minutes
+// Clear expired cooldowns and dedup entries every 5 minutes
 setInterval(() => {
-  WalterOpsEngine.clearExpiredCooldowns();
+  WalterOpsEngine.clearExpired();
 }, 5 * 60 * 1000);
