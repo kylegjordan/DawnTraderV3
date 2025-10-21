@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { Filter, RefreshCw, TrendingUp, XCircle, CheckCircle2, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -69,8 +70,9 @@ interface FilterDiagnosticsResponse {
 }
 
 export function FilterInsights() {
-  const [lastManualRefresh, setLastManualRefresh] = useState<number>(Date.now());
-  const [nextAutoRefresh, setNextAutoRefresh] = useState<number>(Date.now() + 10 * 1000); // Phase 27.F.19: 10-second refresh
+  // Phase 27.F.19: WebSocket subscription for scan_complete events
+  const { messages: wsMessages } = useWebSocket();
+  const [nextAutoRefresh, setNextAutoRefresh] = useState<number | null>(null);
 
   // Phase 27.F.19: Query with 10-second stale time for real-time insights
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
@@ -86,10 +88,26 @@ export function FilterInsights() {
     refetchInterval: 10 * 1000, // Phase 27.F.19: Auto-refresh every 10 seconds
   });
 
-  // Handle manual refresh - Phase 27.F.19: 10-second interval
+  // Phase 27.F.19: Listen for scan_complete WebSocket events
+  useEffect(() => {
+    const scanCompleteEvents = wsMessages.filter((msg: any) => msg.type === 'scan_complete');
+    if (scanCompleteEvents.length > 0) {
+      console.log('[FilterInsights] Received scan_complete event, refreshing data...');
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
+    }
+  }, [wsMessages]);
+
+  // Phase 27.F.19: Update nextAutoRefresh from API response
+  useEffect(() => {
+    if (data?.nextScanAt) {
+      const nextScanTime = new Date(data.nextScanAt).getTime();
+      setNextAutoRefresh(nextScanTime);
+    }
+  }, [data?.nextScanAt]);
+
+  // Handle manual refresh - Phase 27.F.19: Manual refresh trigger
   const handleManualRefresh = () => {
-    setLastManualRefresh(Date.now());
-    setNextAutoRefresh(Date.now() + 10 * 1000);
     queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'] });
     queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
     refetch();
@@ -122,17 +140,8 @@ export function FilterInsights() {
     return map[filterKey] || null;
   };
 
-  // Update next auto-refresh time - Phase 27.F.19: 10-second interval
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNextAutoRefresh(lastManualRefresh + 10 * 1000);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [lastManualRefresh]);
-
-  // Calculate time until next refresh - Phase 27.F.19: Show seconds for 10-second refresh
-  const timeUntilRefresh = Math.max(0, nextAutoRefresh - Date.now());
+  // Phase 27.F.19: Calculate time until next refresh using backend-provided nextScanAt
+  const timeUntilRefresh = nextAutoRefresh ? Math.max(0, nextAutoRefresh - Date.now()) : 0;
   const secondsUntilRefresh = Math.floor(timeUntilRefresh / 1000);
 
   if (isLoading) {
