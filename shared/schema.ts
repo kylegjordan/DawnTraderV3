@@ -825,6 +825,25 @@ export const walterActions = pgTable("walter_actions", {
   parentActionIdx: index("walter_actions_parent_action_idx").on(table.parentActionId), // For chained actions
 }));
 
+// Phase 27.F.20: Execution Config Table (Auto-Execution Settings)
+export const executionConfig = pgTable("execution_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(), // paper or live
+  actionType: walterActionTypeEnum("action_type").notNull(), // Which action type this config applies to
+  autoExecuteEnabled: boolean("auto_execute_enabled").default(false).notNull(), // Whether to auto-execute without approval
+  requiresApproval: boolean("requires_approval").default(true).notNull(), // Whether user approval is required
+  maxImpactThreshold: decimal("max_impact_threshold", { precision: 5, scale: 2 }).default("50.00"), // Max impact score for auto-execution
+  notes: text("notes"), // User notes about this configuration
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  // Unique constraint: one config per user, mode, and action type
+  uniqueConfig: unique("execution_config_unique").on(table.userId, table.mode, table.actionType),
+  userModeIdx: index("execution_config_user_mode_idx").on(table.userId, table.mode),
+  actionTypeIdx: index("execution_config_action_type_idx").on(table.actionType),
+}));
+
 // Learning Fragments (Phase 8.6.1 - cognitive layer learning and improvement)
 export const learningFragments = pgTable("learning_fragments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -3854,3 +3873,17 @@ export const insertSystemContextSchema = createInsertSchema(systemContext).omit(
 // Types for Phase 27.4
 export type InsertSystemContext = z.infer<typeof insertSystemContextSchema>;
 export type SystemContext = typeof systemContext.$inferSelect;
+
+// Insert schemas for Phase 27.F.20
+export const insertExecutionConfigSchema = createInsertSchema(executionConfig).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true 
+});
+
+// Types for Phase 27.F.20
+export type InsertExecutionConfig = z.infer<typeof insertExecutionConfigSchema>;
+export type ExecutionConfig = typeof executionConfig.$inferSelect;
+export type WalterActionType = typeof walterActionTypeEnum.enumValues[number];
+export type WalterActionStatus = typeof walterActionStatusEnum.enumValues[number];
+export type WalterActionCategory = typeof walterActionCategoryEnum.enumValues[number];
