@@ -38,6 +38,7 @@ interface FilterInsightsData {
   breakdown: FilterBreakdown;
   top_candidates: TopCandidate[];
   ts: string;
+  nextScanAt?: string; // Phase 27.F.19b: Next scheduled scan time
 }
 
 interface FilterThresholds {

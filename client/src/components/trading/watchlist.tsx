@@ -1,17 +1,30 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTrading } from "@/hooks/use-trading";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { WatchlistPair } from "@/lib/types";
 
 function WatchlistCard({ pair }: { pair: WatchlistPair }) {
-  const currentPrice = parseFloat(pair.currentPrice);
-  const vwap = parseFloat(pair.vwap || '0');
-  const volume24h = parseFloat(pair.volume24h);
-  const dailyRange = parseFloat(pair.dailyRange);
+  // Phase 27.F.19b: Map real API fields, handle missing values with "—"
+  const currentPrice = pair.currentPrice && !isNaN(parseFloat(pair.currentPrice)) 
+    ? parseFloat(pair.currentPrice) 
+    : null;
+  const vwap = pair.vwap && !isNaN(parseFloat(pair.vwap)) 
+    ? parseFloat(pair.vwap) 
+    : null;
+  const volume24h = pair.volume24h && !isNaN(parseFloat(pair.volume24h)) 
+    ? parseFloat(pair.volume24h) 
+    : null;
+  const dailyRange = pair.dailyRange && !isNaN(parseFloat(pair.dailyRange)) 
+    ? parseFloat(pair.dailyRange) 
+    : null;
   
-  const vwapDiff = vwap > 0 ? ((currentPrice - vwap) / vwap) * 100 : 0;
-  const isAboveVWAP = vwapDiff > 0;
+  const vwapDiff = (currentPrice !== null && vwap !== null && vwap > 0) 
+    ? ((currentPrice - vwap) / vwap) * 100 
+    : null;
+  const isAboveVWAP = vwapDiff !== null && vwapDiff > 0;
   
   const getSymbolColor = (symbol: string) => {
     if (symbol.includes('BTC')) return 'bg-orange-500/10 text-orange-500';
@@ -40,7 +53,7 @@ function WatchlistCard({ pair }: { pair: WatchlistPair }) {
             <div>
               <div className="font-semibold text-foreground text-sm">{pair.symbol}</div>
               <div className="text-xs text-muted-foreground">
-                24h Vol: ${(volume24h / 1000000).toFixed(0)}M
+                24h Vol: {volume24h !== null ? `$${(volume24h / 1000000).toFixed(0)}M` : '—'}
               </div>
             </div>
           </div>
@@ -51,7 +64,7 @@ function WatchlistCard({ pair }: { pair: WatchlistPair }) {
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Price</span>
             <span className="font-mono text-sm font-semibold text-foreground">
-              ${currentPrice.toFixed(currentPrice < 1 ? 4 : 2)}
+              {currentPrice !== null ? `$${currentPrice.toFixed(currentPrice < 1 ? 4 : 2)}` : '—'}
             </span>
           </div>
           
@@ -59,16 +72,16 @@ function WatchlistCard({ pair }: { pair: WatchlistPair }) {
             <span className="text-xs text-muted-foreground">vs VWAP</span>
             <span className={cn(
               "font-mono text-sm font-semibold",
-              isAboveVWAP ? "text-success" : "text-destructive"
+              vwapDiff !== null ? (isAboveVWAP ? "text-success" : "text-destructive") : "text-muted-foreground"
             )}>
-              {vwapDiff >= 0 ? '+' : ''}{vwapDiff.toFixed(1)}%
+              {vwapDiff !== null ? `${vwapDiff >= 0 ? '+' : ''}${vwapDiff.toFixed(1)}%` : '—'}
             </span>
           </div>
           
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Range</span>
             <span className="font-mono text-sm font-semibold text-primary">
-              {dailyRange.toFixed(1)}%
+              {dailyRange !== null ? `${dailyRange.toFixed(1)}%` : '—'}
             </span>
           </div>
         </div>
@@ -79,6 +92,40 @@ function WatchlistCard({ pair }: { pair: WatchlistPair }) {
 
 export default function Watchlist() {
   const { watchlist, watchlistLoading } = useTrading();
+  const [countdown, setCountdown] = useState<string>('—:—');
+  
+  // Phase 27.F.19b: Fetch diagnostics for nextScanAt
+  const { data: diagnosticsData } = useQuery<{ nextScanAt?: string }>({
+    queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=10&trace=false&strategies=false'],
+    staleTime: 10 * 1000, // 10 seconds
+    refetchInterval: 10 * 1000, // Auto-refresh every 10 seconds
+  });
+  
+  // Phase 27.F.19b: Countdown timer using nextScanAt
+  useEffect(() => {
+    const updateCountdown = () => {
+      if (!diagnosticsData?.nextScanAt) {
+        setCountdown('—:—');
+        return;
+      }
+      
+      const now = Date.now();
+      const nextScan = new Date(diagnosticsData.nextScanAt).getTime();
+      const diff = Math.max(0, nextScan - now);
+      
+      const minutes = Math.floor(diff / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      
+      setCountdown(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+    };
+    
+    // Update immediately
+    updateCountdown();
+    
+    // Then update every second
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [diagnosticsData?.nextScanAt]);
   
   // Show only first 4 pairs for dashboard preview
   const displayPairs = watchlist.slice(0, 4);
@@ -131,7 +178,7 @@ export default function Watchlist() {
             </CardTitle>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Next scan in:</span>
-              <span className="font-mono text-sm font-semibold text-primary">--:--</span>
+              <span className="font-mono text-sm font-semibold text-primary">{countdown}</span>
             </div>
           </div>
         </CardHeader>
@@ -154,7 +201,7 @@ export default function Watchlist() {
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Next scan in:</span>
             <span className="font-mono text-sm font-semibold text-primary" data-testid="text-next-scan-time">
-              28:45
+              {countdown}
             </span>
           </div>
         </div>

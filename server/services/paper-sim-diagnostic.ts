@@ -57,6 +57,7 @@ interface UniverseScanResult {
   breakdown: FilterBreakdown;
   top_candidates: CandidateSnapshot[];
   ts: string;
+  nextScanAt?: string; // Phase 27.F.19b: Next scheduled scan time (ISO string)
 }
 
 export class PaperSimDiagnosticService {
@@ -278,6 +279,10 @@ export class PaperSimDiagnosticService {
     const ineligibleCount = evaluated - eligiblePairs.length;
     console.log(`[FilterEval] eligible=${eligiblePairs.length} ineligible=${ineligibleCount} by_rule={vol:${breakdown.failed_min_volume}, spread:${breakdown.failed_spread}, range:${breakdown.failed_daily_range}, history:${breakdown.failed_history}}`);
 
+    // Phase 27.F.19b: Calculate next scan time (10-minute interval)
+    const SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+    const nextScanAt = new Date(Date.now() + SCAN_INTERVAL_MS).toISOString();
+
     return {
       mode,
       universe_count: universeCount,
@@ -286,7 +291,8 @@ export class PaperSimDiagnosticService {
       ineligible_count: ineligibleCount,
       breakdown,
       top_candidates: topCandidates.slice(0, 10),
-      ts: new Date().toISOString()
+      ts: new Date().toISOString(),
+      nextScanAt // Phase 27.F.19b: Next scheduled scan time
     };
   }
 
