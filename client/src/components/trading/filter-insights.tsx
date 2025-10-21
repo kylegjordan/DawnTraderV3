@@ -73,6 +73,7 @@ export function FilterInsights() {
   // Phase 27.F.19: WebSocket subscription for scan_complete events
   const { messages: wsMessages } = useWebSocket();
   const [nextAutoRefresh, setNextAutoRefresh] = useState<number | null>(null);
+  const [currentTime, setCurrentTime] = useState<number>(Date.now()); // Phase 27.F.19: Ticking state for countdown
 
   // Phase 27.F.19: Query with 10-second stale time for real-time insights
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
@@ -105,6 +106,15 @@ export function FilterInsights() {
       setNextAutoRefresh(nextScanTime);
     }
   }, [data?.nextScanAt]);
+
+  // Phase 27.F.19: Tick currentTime every second for live countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Handle manual refresh - Phase 27.F.19: Manual refresh trigger
   const handleManualRefresh = () => {
@@ -140,8 +150,8 @@ export function FilterInsights() {
     return map[filterKey] || null;
   };
 
-  // Phase 27.F.19: Calculate time until next refresh using backend-provided nextScanAt
-  const timeUntilRefresh = nextAutoRefresh ? Math.max(0, nextAutoRefresh - Date.now()) : 0;
+  // Phase 27.F.19: Calculate time until next refresh using backend-provided nextScanAt and ticking currentTime
+  const timeUntilRefresh = nextAutoRefresh ? Math.max(0, nextAutoRefresh - currentTime) : 0;
   const secondsUntilRefresh = Math.floor(timeUntilRefresh / 1000);
 
   if (isLoading) {
