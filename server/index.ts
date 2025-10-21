@@ -387,27 +387,6 @@ app.use((req, res, next) => {
     }
   });
 
-  // ✅ Namespace backend routes under /api after all routes are registered
-  if (app && app._router && app._router.stack) {
-    const apiRouter = express.Router();
-    app._router.stack
-      .filter((r: any) => r.route && r.route.path)
-      .forEach((r: any) => {
-        const routePath = r.route.path;
-        apiRouter.use(routePath, r.route.stack[0].handle);
-      });
-    app._router = express.Router().use("/api", apiRouter);
-    console.log("✅ API routes are now mounted under /api");
-  }
-
-  // ✅ Serve frontend dashboard after API routes
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  app.use(express.static(path.join(__dirname, "../dist")));
-
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../dist/index.html"));
-  });
-
   server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
 
