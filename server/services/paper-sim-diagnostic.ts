@@ -82,10 +82,12 @@ export class PaperSimDiagnosticService {
 
     console.log(`[UniverseScan] Starting diagnostic scan (mode=${mode}, limit=${limit}, trace=${trace}, strategies=${strategies})`);
 
-    // Get user's trading settings
-    const settings = await storage.getTradingSettings(userId);
-    if (!settings) {
-      throw new Error('No trading settings found for user');
+    // Get user's screener filters and trading settings
+    const screenerSettings = await storage.getScreenerFilters({ userId, mode });
+    const tradingSettings = await storage.getTradingSettings(userId);
+    
+    if (!screenerSettings || !tradingSettings) {
+      throw new Error('No screener filters or trading settings found for user');
     }
 
     // Load raw Kraken universe
@@ -99,15 +101,15 @@ export class PaperSimDiagnosticService {
     const evaluated = Math.min(limit, universeCount);
     console.log(`[UniverseLoad] kraken_pairs=${universeCount} evaluated=${evaluated}`);
 
-    // Parse settings
-    const minVolume = parseFloat(settings.minVolume || '30000000');
-    const minDailyRange = parseFloat(settings.minDailyRange || '6.5');
-    const minPrice = parseFloat(settings.minPrice || '0.01');
-    const maxBidAskSpread = parseFloat(settings.maxBidAskSpread || '1.00');
-    const excludeStablecoins = settings.excludeStablecoins ?? true;
-    const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT'];
-    const blacklist = normalizeSymbolArray(settings.blacklistedSymbols);
-    const whitelist = normalizeSymbolArray(settings.whitelistedSymbols);
+    // Parse settings from screener_filters (aligned with MarketScanner)
+    const minVolume = parseFloat(screenerSettings.minVolume || '1000000');
+    const minDailyRange = parseFloat(tradingSettings.minDailyRange || '6.5');
+    const minPrice = screenerSettings.minPrice ? parseFloat(screenerSettings.minPrice) : 0.01;
+    const maxBidAskSpread = screenerSettings.maxBidAskSpread ? parseFloat(screenerSettings.maxBidAskSpread) : 1.00;
+    const excludeStablecoins = screenerSettings.excludeStablecoins ?? true;
+    const allowedQuotes = tradingSettings.allowedTradingPairs || ['USD', 'USDT'];
+    const blacklist = normalizeSymbolArray(tradingSettings.blacklistedSymbols);
+    const whitelist = normalizeSymbolArray(tradingSettings.whitelistedSymbols);
     const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD'];
 
     // Track actual breakdown
@@ -248,7 +250,7 @@ export class PaperSimDiagnosticService {
 
       for (const pair of eligiblePairs.slice(0, 25)) {
         try {
-          const candidate = await this.checkPairForSignals(pair.symbol, settings, trace);
+          const candidate = await this.checkPairForSignals(pair.symbol, tradingSettings, trace);
           
           if (candidate.reasons.some(r => r.startsWith('guardrail:'))) {
             guardrailRejectCount++;

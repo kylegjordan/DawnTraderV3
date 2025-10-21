@@ -116,13 +116,24 @@ export class MarketScanner {
   }
 
   private async getAllActiveUsers(): Promise<Array<{ id: string; tradingStatus: string }>> {
-    // This would normally query all users from the database
-    // For now, we'll return empty array since we don't have user management
-    // In a real implementation:
-    // return await db.select({ id: users.id, tradingStatus: users.tradingStatus })
-    //   .from(users)
-    //   .where(eq(users.tradingStatus, 'active'));
-    return [];
+    // Query all users from the database who have trading settings
+    // The scanner updates watchlists for all users, not just those actively trading
+    const allUsers = await storage.getAllUsers();
+    
+    // Return users who have trading settings configured
+    const usersWithSettings = [];
+    for (const user of allUsers) {
+      const settings = await storage.getTradingSettings(user.id);
+      if (settings) {
+        usersWithSettings.push({
+          id: user.id,
+          tradingStatus: user.tradingStatus || 'stopped'
+        });
+      }
+    }
+    
+    console.log(`[MarketScan] Found ${usersWithSettings.length} users with trading settings`);
+    return usersWithSettings;
   }
 
   private async updateUserWatchlist(userId: string, mode: 'live' | 'paper', eligiblePairs: any[]): Promise<void> {

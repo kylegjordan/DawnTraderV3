@@ -282,9 +282,6 @@ function validateMode(req: AuthenticatedRequest, res: Response, next: NextFuncti
   next();
 }
 
-// TEMPORARILY DISABLED: Do not ping Kraken for 1 hour (maintenance mode)
-// marketScanner.startHourlyScanning();
-
 // AI Opportunities service will be started conditionally based on user settings
 // (service checks settings before starting hourly generation)
 // TEMPORARILY DISABLED: Do not ping Kraken for 1 hour
@@ -323,6 +320,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log('WebSocket client disconnected');
     });
   });
+
+  // Start market scanner after WebSocket is initialized (runs every 10 minutes)
+  await marketScanner.startHourlyScanning();
 
   // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
   apiRouter.use(diagnosticTraceMiddleware);

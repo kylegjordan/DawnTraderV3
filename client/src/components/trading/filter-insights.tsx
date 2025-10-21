@@ -75,18 +75,18 @@ export function FilterInsights() {
   const [nextAutoRefresh, setNextAutoRefresh] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(Date.now()); // Phase 27.F.19: Ticking state for countdown
 
-  // Phase 27.F.19: Query with 10-second stale time for real-time insights
+  // Query filter insights with 30-minute refresh interval
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
     queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'],
-    staleTime: 10 * 1000, // 10 seconds
-    refetchInterval: 10 * 1000, // Phase 27.F.19: Auto-refresh every 10 seconds
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
   });
 
-  // Phase 27.F.15.B + 27.F.19: Query for threshold values with 10-second refresh
+  // Query for threshold values with 30-minute refresh
   const { data: diagnosticsData } = useQuery<FilterDiagnosticsResponse>({
     queryKey: ['/api/filters/diagnostics'],
-    staleTime: 10 * 1000, // 10 seconds
-    refetchInterval: 10 * 1000, // Phase 27.F.19: Auto-refresh every 10 seconds
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
   });
 
   // Phase 27.F.19: Listen for scan_complete WebSocket events
@@ -150,9 +150,15 @@ export function FilterInsights() {
     return map[filterKey] || null;
   };
 
-  // Phase 27.F.19: Calculate time until next refresh using backend-provided nextScanAt and ticking currentTime
+  // Calculate time until next refresh using backend-provided nextScanAt and ticking currentTime
   const timeUntilRefresh = nextAutoRefresh ? Math.max(0, nextAutoRefresh - currentTime) : 0;
-  const secondsUntilRefresh = Math.floor(timeUntilRefresh / 1000);
+  const minutesUntilRefresh = Math.floor(timeUntilRefresh / (60 * 1000));
+  const secondsRemainder = Math.floor((timeUntilRefresh % (60 * 1000)) / 1000);
+  
+  // Format countdown display in minutes
+  const countdownDisplay = minutesUntilRefresh > 0 
+    ? `${minutesUntilRefresh}m ${secondsRemainder}s` 
+    : `${secondsRemainder}s`;
 
   if (isLoading) {
     return (
@@ -226,7 +232,7 @@ export function FilterInsights() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
-              Next refresh in {secondsUntilRefresh}s
+              Next refresh in {countdownDisplay}
             </span>
             <Button
               onClick={handleManualRefresh}
