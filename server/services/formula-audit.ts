@@ -37,10 +37,68 @@ interface AuditReport {
 }
 
 export class FormulaAuditService {
-  private readonly DEVIATION_THRESHOLD = 0.01; // 1% tolerance
+  private readonly DEVIATION_THRESHOLD_PASS = 0.001; // 0.1% - excellent match
+  private readonly DEVIATION_THRESHOLD_WARNING = 0.01; // 1% - minor deviation
+  // Above 1% = FAIL
   
   /**
+   * Helper: Determine test status based on deviation percentage
+   */
+  private getStatus(deviationPercent: number): 'PASS' | 'WARNING' | 'FAIL' {
+    if (deviationPercent < this.DEVIATION_THRESHOLD_PASS * 100) {
+      return 'PASS';
+    } else if (deviationPercent < this.DEVIATION_THRESHOLD_WARNING * 100) {
+      return 'WARNING';
+    } else {
+      return 'FAIL';
+    }
+  }
+
+  /**
+   * Helper: Check if units match expected range/scale
+   */
+  private checkUnitMatch(expectedValue: number, actualValue: number, unit: string): boolean {
+    // For percentages (0-100 range) - detect scale mismatch
+    if (unit.includes('percentage') && (unit.includes('0-100') || unit.includes('percent'))) {
+      const inFullRange = (val: number) => val >= 0 && val <= 100;
+      const inDecimalRange = (val: number) => val >= 0 && val <= 1;
+      
+      // Check if both are in the same scale
+      const bothFullRange = inFullRange(expectedValue) && inFullRange(actualValue);
+      const bothDecimalRange = inDecimalRange(expectedValue) && inDecimalRange(actualValue);
+      
+      return bothFullRange || bothDecimalRange;
+    }
+    
+    // For decimal/rate of change - enforce reasonable bounds
+    if (unit.includes('decimal') || unit.includes('rate of change')) {
+      // Values should be in similar magnitude and within reasonable bounds (-10 to 10)
+      const inBounds = (val: number) => Math.abs(val) <= 10;
+      return inBounds(expectedValue) && inBounds(actualValue);
+    }
+    
+    // For price/USD values (positive)
+    if (unit.includes('price') || unit.includes('USD')) {
+      return expectedValue > 0 && actualValue > 0;
+    }
+    
+    // Default: just check both have same sign
+    return (expectedValue >= 0 && actualValue >= 0) || (expectedValue < 0 && actualValue < 0);
+  }
+
+  /**
+   * Helper: Calculate deviation percentage safely
+   */
+  private calculateDeviationPercent(expected: number, actual: number): number {
+    const epsilon = 0.0001; // Avoid division by zero
+    const denominator = Math.max(Math.abs(expected), epsilon);
+    const deviation = Math.abs(expected - actual);
+    return (deviation / denominator) * 100;
+  }
+
+  /**
    * Formula Discovery - All formulas used in the system
+   * Note: Line numbers are approximate and may drift as code evolves
    */
   private getFormulaLocations(): FormulaLocation[] {
     return [
@@ -250,7 +308,10 @@ export class FormulaAuditService {
     const actualResult = (featureService as any).calculateRSI(samplePrices, 14);
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = (deviation / expectedResult) * 100;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    
+    // Check unit match - RSI should be in 0-100 range
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -262,9 +323,9 @@ export class FormulaAuditService {
       actualResult,
       deviation: Number(deviation.toFixed(4)),
       deviationPercent: Number(deviationPercent.toFixed(2)),
-      status: deviationPercent < this.DEVIATION_THRESHOLD * 100 ? 'PASS' : (deviationPercent < 1 ? 'WARNING' : 'FAIL'),
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Standard RSI(14) calculation'
     };
   }
@@ -303,7 +364,8 @@ export class FormulaAuditService {
     const actualResult = strategyEngine.calculateVWAP(sampleData);
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = (deviation / expectedResult) * 100;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -315,9 +377,9 @@ export class FormulaAuditService {
       actualResult: Number(actualResult.toFixed(6)),
       deviation: Number(deviation.toFixed(6)),
       deviationPercent: Number(deviationPercent.toFixed(4)),
-      status: deviationPercent < this.DEVIATION_THRESHOLD * 100 ? 'PASS' : (deviationPercent < 1 ? 'WARNING' : 'FAIL'),
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'VWAP uses typical price (H+L+C)/3 weighted by volume'
     };
   }
@@ -353,7 +415,8 @@ export class FormulaAuditService {
     const actualResult = strategyEngine.calculateSMA(sampleData, period);
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = (deviation / expectedResult) * 100;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -365,9 +428,9 @@ export class FormulaAuditService {
       actualResult: Number(actualResult.toFixed(4)),
       deviation: Number(deviation.toFixed(6)),
       deviationPercent: Number(deviationPercent.toFixed(4)),
-      status: deviationPercent < this.DEVIATION_THRESHOLD * 100 ? 'PASS' : (deviationPercent < 1 ? 'WARNING' : 'FAIL'),
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Simple moving average of close prices'
     };
   }
@@ -396,7 +459,8 @@ export class FormulaAuditService {
     const actualResult = sampleData.volume24h * sampleData.lastPriceUSD;
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = expectedResult > 0 ? (deviation / expectedResult) * 100 : 0;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -408,9 +472,9 @@ export class FormulaAuditService {
       actualResult,
       deviation,
       deviationPercent: Number(deviationPercent.toFixed(4)),
-      status: 'PASS',
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Volume in USD = base volume × USD price'
     };
   }
@@ -439,7 +503,8 @@ export class FormulaAuditService {
     const actualResult = ((sampleData.ask - sampleData.bid) / sampleData.bid) * 100;
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = expectedResult > 0 ? (deviation / expectedResult) * 100 : 0;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -451,9 +516,9 @@ export class FormulaAuditService {
       actualResult: Number(actualResult.toFixed(4)),
       deviation: Number(deviation.toFixed(6)),
       deviationPercent: Number(deviationPercent.toFixed(4)),
-      status: 'PASS',
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Using bid as base (some systems use midpoint)'
     };
   }
@@ -482,7 +547,8 @@ export class FormulaAuditService {
     const actualResult = ((sampleData.high24h - sampleData.low24h) / sampleData.low24h) * 100;
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = expectedResult > 0 ? (deviation / expectedResult) * 100 : 0;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -494,9 +560,9 @@ export class FormulaAuditService {
       actualResult: Number(actualResult.toFixed(4)),
       deviation: Number(deviation.toFixed(6)),
       deviationPercent: Number(deviationPercent.toFixed(4)),
-      status: 'PASS',
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Using low as base (some systems use close)'
     };
   }
@@ -523,6 +589,8 @@ export class FormulaAuditService {
     const expectedResult = dailyRange;
     const actualResult = dailyRange;
     
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
+    
     return {
       name,
       location,
@@ -535,7 +603,7 @@ export class FormulaAuditService {
       deviationPercent: 0,
       status: 'WARNING',
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Using daily range as proxy - true volatility would use standard deviation of returns'
     };
   }
@@ -565,7 +633,8 @@ export class FormulaAuditService {
     const actualResult = (sampleData.high + sampleData.low + sampleData.close) / 3;
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = expectedResult > 0 ? (deviation / expectedResult) * 100 : 0;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -577,9 +646,9 @@ export class FormulaAuditService {
       actualResult: Number(actualResult.toFixed(6)),
       deviation: Number(deviation.toFixed(8)),
       deviationPercent: Number(deviationPercent.toFixed(4)),
-      status: 'PASS',
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Typical price used in VWAP calculation'
     };
   }
@@ -608,7 +677,8 @@ export class FormulaAuditService {
     const actualResult = (sampleData.sma1 - sampleData.sma2) / sampleData.sma2;
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = expectedResult > 0 ? (deviation / expectedResult) * 100 : 0;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -620,9 +690,9 @@ export class FormulaAuditService {
       actualResult: Number(actualResult.toFixed(6)),
       deviation: Number(deviation.toFixed(8)),
       deviationPercent: Number(deviationPercent.toFixed(4)),
-      status: 'PASS',
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Rate of change of SMA over time'
     };
   }
@@ -651,7 +721,8 @@ export class FormulaAuditService {
     const actualResult = (sampleData.recentAvg - sampleData.olderAvg) / sampleData.olderAvg;
     
     const deviation = Math.abs(expectedResult - actualResult);
-    const deviationPercent = expectedResult > 0 ? (deviation / expectedResult) * 100 : 0;
+    const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
+    const unitMatch = this.checkUnitMatch(expectedResult, actualResult, expectedInfo.unit);
     
     return {
       name,
@@ -663,9 +734,9 @@ export class FormulaAuditService {
       actualResult: Number(actualResult.toFixed(6)),
       deviation: Number(deviation.toFixed(8)),
       deviationPercent: Number(deviationPercent.toFixed(4)),
-      status: 'PASS',
+      status: this.getStatus(deviationPercent),
       unit: expectedInfo.unit,
-      unitMatch: true,
+      unitMatch,
       notes: 'Relative change in volume over time'
     };
   }
@@ -679,6 +750,10 @@ export class FormulaAuditService {
     summary.push('═══════════════════════════════════════════════════════');
     summary.push('           FORMULA AUDIT SUMMARY');
     summary.push('═══════════════════════════════════════════════════════');
+    summary.push('');
+    summary.push('⚠️  NOTE: Line numbers in formula locations are approximate');
+    summary.push('    and may drift as code evolves. Use file paths and');
+    summary.push('    expression patterns to locate formulas.');
     summary.push('');
     
     // Top 5 issues
