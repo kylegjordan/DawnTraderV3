@@ -115,14 +115,37 @@ export class PaperPortfolioManager {
       // Refresh market data for each symbol
       for (const pair of watchlist) {
         try {
-          const ticker = await this.kraken.getTicker(pair.symbol);
+          // getTicker returns Record<string, KrakenTicker>
+          const tickerResponse = await this.kraken.getTicker(pair.symbol);
           
+          // Extract the ticker data (Kraken returns an object keyed by pair name)
+          const tickerData = Object.values(tickerResponse)[0];
+          
+          if (!tickerData) {
+            console.log(`[PaperPortfolio:${this.userId}] No ticker data for ${pair.symbol}`);
+            continue;
+          }
+
+          // Parse raw Kraken ticker fields with null-safety
+          // c[0] = last trade price, v[1] = 24h volume, p[1] = 24h VWAP
+          // h[1] = 24h high, l[1] = 24h low
+          const currentPrice = tickerData.c?.[0] ? parseFloat(tickerData.c[0]) : null;
+          const volume24h = tickerData.v?.[1] ? parseFloat(tickerData.v[1]) : null;
+          const vwap = tickerData.p?.[1] ? parseFloat(tickerData.p[1]) : null;
+          const high24h = tickerData.h?.[1] ? parseFloat(tickerData.h[1]) : null;
+          const low24h = tickerData.l?.[1] ? parseFloat(tickerData.l[1]) : null;
+          
+          // Calculate daily range percentage if we have both high and low
+          const dailyRange = (high24h && low24h && low24h > 0)
+            ? ((high24h - low24h) / low24h) * 100
+            : null;
+
           // Update watchlist with fresh market data
           await storage.updateWatchlistPair(pair.id, {
-            currentPrice: ticker.lastPrice.toString(),
-            vwap: ticker.vwap24h.toString(),
-            volume24h: ticker.volume24h.toString(),
-            dailyRange: ticker.dailyRange?.toString(),
+            currentPrice: currentPrice?.toString() || null,
+            vwap: vwap?.toString() || null,
+            volume24h: volume24h?.toString() || null,
+            dailyRange: dailyRange?.toString() || null,
             lastScanned: new Date()
           });
         } catch (error: any) {
