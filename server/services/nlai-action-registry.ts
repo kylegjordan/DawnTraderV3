@@ -610,6 +610,198 @@ export class NLAIActionRegistry {
       description: 'Update trading goal (profit, return, win rate)',
       requiredAuth: true,
     });
+
+    // Watchlist Actions
+    this.register({
+      id: 'set_default_watchlist',
+      patterns: [
+        /(?:please\s+)?(?:set|create|load|use)(?:\s+(?:a|the))?(?:\s+default)?(?:\s+watchlist)/i,
+        /(?:please\s+)?(?:initialize|setup)(?:\s+(?:the|my))?(?:\s+watchlist)/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const baseUrl = process.env.API_URL || 'http://localhost:5000';
+          const mode = 'paper';
+          
+          // Default watchlist with high-volume, liquid pairs
+          const defaultPairs = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'ADAUSD', 'MATICUSD'];
+          
+          let addedCount = 0;
+          let skippedCount = 0;
+          const errors: string[] = [];
+          
+          for (const symbol of defaultPairs) {
+            try {
+              const response = await fetch(`${baseUrl}/api/watchlist`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-user-id': userId,
+                  'x-trading-mode': mode,
+                },
+                body: JSON.stringify({ symbol }),
+              });
+              
+              if (response.ok) {
+                addedCount++;
+              } else {
+                const error = await response.json();
+                // If already exists, count as skipped
+                if (error.error?.includes('already') || error.error?.includes('exists')) {
+                  skippedCount++;
+                } else {
+                  errors.push(`${symbol}: ${error.error || 'Unknown error'}`);
+                }
+              }
+            } catch (error: any) {
+              errors.push(`${symbol}: ${error.message}`);
+            }
+          }
+          
+          const totalAttempted = defaultPairs.length;
+          const successMessage = addedCount > 0 
+            ? `✅ Added ${addedCount} pair(s) to watchlist.` 
+            : '';
+          const skippedMessage = skippedCount > 0 
+            ? ` ${skippedCount} already existed.` 
+            : '';
+          const errorMessage = errors.length > 0 
+            ? ` Failed: ${errors.join(', ')}` 
+            : '';
+          
+          return {
+            success: addedCount > 0 || skippedCount === totalAttempted,
+            message: `Default watchlist loaded for ${mode} mode. ${successMessage}${skippedMessage}${errorMessage}`,
+            data: { added: addedCount, skipped: skippedCount, errors },
+          };
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `Error setting default watchlist: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Set default watchlist with popular crypto pairs',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'add_to_watchlist',
+      patterns: [
+        /(?:please\s+)?(?:add|include|put)(?:\s+)?([A-Z]{3,10}(?:USD|USDT|BTC|ETH)?)(?:\s+(?:to|in|on))?(?:\s+(?:the|my))?(?:\s+watchlist)/i,
+        /(?:please\s+)?(?:watchlist|watch)(?:\s+)?([A-Z]{3,10}(?:USD|USDT|BTC|ETH)?)/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const symbol = intent.extractedValue?.toUpperCase();
+          
+          if (!symbol) {
+            return {
+              success: false,
+              message: 'Please specify a symbol to add (e.g., "add BTCUSD to watchlist").',
+              error: 'Missing symbol',
+            };
+          }
+          
+          const baseUrl = process.env.API_URL || 'http://localhost:5000';
+          const mode = 'paper';
+          
+          const response = await fetch(`${baseUrl}/api/watchlist`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': userId,
+              'x-trading-mode': mode,
+            },
+            body: JSON.stringify({ symbol }),
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            return {
+              success: false,
+              message: `Failed to add ${symbol} to watchlist: ${error.error || 'Unknown error'}`,
+              error: error.error,
+            };
+          }
+          
+          const data = await response.json();
+          return {
+            success: true,
+            message: `✅ Added ${symbol} to ${mode} mode watchlist.`,
+            data,
+          };
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `Error adding to watchlist: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Add a symbol to watchlist',
+      requiredAuth: true,
+    });
+
+    this.register({
+      id: 'get_watchlist',
+      patterns: [
+        /(?:please\s+)?(?:show|display|get|list|view)(?:\s+(?:me|the|my))?(?:\s+watchlist)/i,
+        /(?:what(?:'s|\s+is))?(?:\s+(?:on|in))?(?:\s+(?:the|my))?(?:\s+watchlist)/i,
+      ],
+      category: 'system',
+      handler: async (userId: string, intent: ActionIntent) => {
+        try {
+          const baseUrl = process.env.API_URL || 'http://localhost:5000';
+          const mode = 'paper';
+          
+          const response = await fetch(`${baseUrl}/api/watchlist`, {
+            method: 'GET',
+            headers: {
+              'x-user-id': userId,
+              'x-trading-mode': mode,
+            },
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            return {
+              success: false,
+              message: `Failed to retrieve watchlist: ${error.error || 'Unknown error'}`,
+              error: error.error,
+            };
+          }
+          
+          const watchlist = await response.json();
+          
+          if (!Array.isArray(watchlist) || watchlist.length === 0) {
+            return {
+              success: true,
+              message: `Your ${mode} mode watchlist is empty. You can add pairs using "add BTCUSD to watchlist".`,
+              data: { pairs: [] },
+            };
+          }
+          
+          const symbols = watchlist.map((p: any) => p.symbol).join(', ');
+          return {
+            success: true,
+            message: `Your ${mode} mode watchlist contains ${watchlist.length} pair(s): ${symbols}`,
+            data: { pairs: watchlist },
+          };
+        } catch (error: any) {
+          return {
+            success: false,
+            message: `Error retrieving watchlist: ${error.message}`,
+            error: error.message,
+          };
+        }
+      },
+      description: 'Get current watchlist',
+      requiredAuth: true,
+    });
   }
 
   register(action: ActionDefinition): void {
