@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-21T01:04:51.744Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, and 15 minutes), indicating potential CPU bottleneck or overload."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows zero recent learning cycles, average confidence, opportunities generated, and adjustments made, suggesting it may not be functioning or is inactive."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero active trades and total profit/loss, indicating potential inactivity or issues with trading execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to prevent system performance degradation."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart or reconfigure AI systems to ensure they are actively learning and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate trading strategies and system configurations to ensure trades are being executed as expected."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Perform an immediate investigation into the high CPU load to identify and resolve the cause of the overload.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Check the AI system's configuration and logs to ensure it is operational and correctly configured to learn and generate opportunities.",
+      "rationale": "AI inactivity can result in missed trading opportunities and reduced platform effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Review the trading system's logs and configurations to ensure that trades are being executed and closed correctly.",
+      "rationale": "Ensuring active trading is crucial for platform profitability and user satisfaction."
+    }
+  ],
+  "urgencyLevel": "high"
+}
