@@ -176,7 +176,10 @@ import {
   type InsertSystemContext,
   systemContext,
   type WalterAction,
-  walterActions
+  walterActions,
+  type ExecutionConfig,
+  type InsertExecutionConfig,
+  executionConfig
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -563,6 +566,12 @@ export interface IStorage {
   getWalterActions(userId: string, mode: 'live' | 'paper', filters?: { status?: string; source?: string; limit?: number }): Promise<WalterAction[]>;
   getWalterActionById(actionId: string, userId: string, mode: 'live' | 'paper'): Promise<WalterAction | undefined>;
   updateWalterAction(actionId: string, userId: string, mode: 'live' | 'paper', updates: Partial<WalterAction>): Promise<WalterAction>;
+  
+  // Execution Config methods (Phase 27.F.20)
+  getExecutionConfigs(userId: string, mode: 'live' | 'paper'): Promise<ExecutionConfig[]>;
+  getExecutionConfig(userId: string, mode: 'live' | 'paper', actionType: string): Promise<ExecutionConfig | undefined>;
+  upsertExecutionConfig(config: InsertExecutionConfig): Promise<ExecutionConfig>;
+  deleteExecutionConfig(id: string): Promise<void>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -3260,6 +3269,68 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return updated;
+  }
+  
+  // Execution Config methods (Phase 27.F.20: Auto-Execution Settings)
+  async getExecutionConfigs(userId: string, mode: 'live' | 'paper'): Promise<ExecutionConfig[]> {
+    const configs = await db
+      .select()
+      .from(executionConfig)
+      .where(and(
+        eq(executionConfig.userId, userId),
+        eq(executionConfig.mode, mode)
+      ))
+      .orderBy(asc(executionConfig.actionType));
+    
+    return configs;
+  }
+  
+  async getExecutionConfig(userId: string, mode: 'live' | 'paper', actionType: string): Promise<ExecutionConfig | undefined> {
+    const [config] = await db
+      .select()
+      .from(executionConfig)
+      .where(and(
+        eq(executionConfig.userId, userId),
+        eq(executionConfig.mode, mode),
+        eq(executionConfig.actionType, actionType)
+      ));
+    
+    return config || undefined;
+  }
+  
+  async upsertExecutionConfig(config: InsertExecutionConfig): Promise<ExecutionConfig> {
+    const existing = await this.getExecutionConfig(config.userId, config.mode, config.actionType);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(executionConfig)
+        .set({ ...config, updatedAt: new Date() })
+        .where(and(
+          eq(executionConfig.userId, config.userId),
+          eq(executionConfig.mode, config.mode),
+          eq(executionConfig.actionType, config.actionType)
+        ))
+        .returning();
+      
+      console.log(`[ExecutionConfig] Updated ${config.mode} config for ${config.actionType}: autoExecute=${config.autoExecuteEnabled}`);
+      return updated;
+    }
+    
+    const [created] = await db
+      .insert(executionConfig)
+      .values(config)
+      .returning();
+    
+    console.log(`[ExecutionConfig] Created ${config.mode} config for ${config.actionType}: autoExecute=${config.autoExecuteEnabled}`);
+    return created;
+  }
+  
+  async deleteExecutionConfig(id: string): Promise<void> {
+    await db
+      .delete(executionConfig)
+      .where(eq(executionConfig.id, id));
+    
+    console.log(`[ExecutionConfig] Deleted config ${id}`);
   }
 }
 
