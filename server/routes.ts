@@ -5725,6 +5725,93 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // ============================================
+  // Phase 27.F.20: Execution Config (Auto-Execution Settings)
+  // ============================================
+  
+  // Get all execution configs for a mode
+  app.get('/api/execution-config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      console.log(`[EXECUTION-CONFIG] Fetching configs for user ${userId} (mode: ${mode})`);
+      
+      const configs = await storage.getExecutionConfigs(userId, mode);
+      
+      res.json({ 
+        ok: true, 
+        configs,
+        count: configs.length
+      });
+    } catch (error: any) {
+      console.error('[EXECUTION-CONFIG] Error fetching configs:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Create or update an execution config
+  app.post('/api/execution-config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { mode, actionType, autoExecuteEnabled, requiresApproval, maxImpactThreshold, notes } = req.body;
+      
+      // Validate required fields
+      if (!mode || !actionType) {
+        return res.status(400).json({ 
+          error: 'Missing required fields',
+          message: 'mode and actionType are required'
+        });
+      }
+      
+      // Validate mode
+      if (!['live', 'paper'].includes(mode)) {
+        return res.status(400).json({ error: 'Invalid mode. Must be "live" or "paper"' });
+      }
+      
+      console.log(`[EXECUTION-CONFIG] Upserting config for user ${userId} (mode: ${mode}, actionType: ${actionType}, autoExecute: ${autoExecuteEnabled})`);
+      
+      const config = await storage.upsertExecutionConfig({
+        userId,
+        mode,
+        actionType,
+        autoExecuteEnabled: autoExecuteEnabled ?? false,
+        requiresApproval: requiresApproval ?? true,
+        maxImpactThreshold: maxImpactThreshold || '50.00',
+        notes: notes || null
+      });
+      
+      res.json({ 
+        ok: true, 
+        config,
+        message: 'Execution config saved successfully'
+      });
+    } catch (error: any) {
+      console.error('[EXECUTION-CONFIG] Error saving config:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Delete an execution config
+  app.delete('/api/execution-config/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const configId = req.params.id;
+      
+      console.log(`[EXECUTION-CONFIG] Deleting config ${configId} for user ${userId}`);
+      
+      await storage.deleteExecutionConfig(configId);
+      
+      res.json({ 
+        ok: true, 
+        message: 'Execution config deleted successfully'
+      });
+    } catch (error: any) {
+      console.error('[EXECUTION-CONFIG] Error deleting config:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // System Logs (simple in-memory log - placeholder)
   app.get('/api/system/logs', async (_req, res) => {
     try {
