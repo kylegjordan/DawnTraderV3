@@ -111,6 +111,11 @@ export const tuningApprovalTypeEnum = pgEnum("tuning_approval_type", ["auto", "m
 export const tuningStatusEnum = pgEnum("tuning_status", ["success", "failed", "reverted"]);
 export const tuningAggressivenessEnum = pgEnum("tuning_aggressiveness", ["conservative", "balanced", "aggressive"]);
 
+// Phase 27.F.19-20 enums (Walter Autonomous Maintenance)
+export const walterActionTypeEnum = pgEnum("walter_action_type", ["feed_reconnect", "feed_pause", "formula_recalc", "cache_refresh", "health_check", "threshold_adjust", "auto_suppress", "escalate"]);
+export const walterActionStatusEnum = pgEnum("walter_action_status", ["pending", "in_progress", "completed", "failed", "acknowledged", "approved", "rejected"]);
+export const walterActionCategoryEnum = pgEnum("walter_action_category", ["feed", "formula", "system", "risk", "performance"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -762,6 +767,61 @@ export const walterUserPreferences = pgTable("walter_user_preferences", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
+
+// Walter autonomous actions (Phase 27.F.19-20 - Maintenance & Intelligence)
+export const walterActions = pgTable("walter_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull(), // Trading mode (live/paper)
+  actionType: walterActionTypeEnum("action_type").notNull(), // Type of action Walter took
+  category: walterActionCategoryEnum("category").notNull(), // feed, formula, system, risk, performance
+  status: walterActionStatusEnum("status").notNull().default("pending"), // pending, in_progress, completed, failed, acknowledged, approved, rejected
+  
+  // Impact & Context
+  impactScore: decimal("impact_score", { precision: 5, scale: 2 }).notNull(), // 0-100 impact score
+  affectedComponent: text("affected_component").notNull(), // e.g., "Kraken WebSocket", "RSI Formula"
+  detectedAnomaly: text("detected_anomaly").notNull(), // Description of what was wrong
+  contextData: jsonb("context_data"), // Additional context (latency, deviation %, etc.)
+  
+  // Action & Resolution
+  suggestedFix: text("suggested_fix").notNull(), // What Walter recommends/did
+  executedAction: text("executed_action"), // What Walter actually executed (if auto-resolved)
+  resolutionStatus: varchar("resolution_status", { length: 50 }), // 'fixed', 'monitored', 'pending', 'escalated'
+  resolutionNotes: text("resolution_notes"), // Outcome details
+  confidenceScore: decimal("confidence_score", { precision: 3, scale: 2 }), // 0-1 confidence in action
+  
+  // Deduplication & Safety (Architect feedback)
+  incidentKey: varchar("incident_key", { length: 255 }).notNull(), // Hash of (userId+mode+component+anomaly_type+metric_bucket) for deduplication
+  retryCount: integer("retry_count").default(0).notNull(), // Number of retry attempts for this incident
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }), // Last retry timestamp
+  cooldownUntil: timestamp("cooldown_until", { withTimezone: true }), // Cooldown expiry for this action
+  parentActionId: varchar("parent_action_id"), // Link to parent action if this is a chained action
+  tradingPaused: boolean("trading_paused").default(false).notNull(), // Whether trading was paused due to this action
+  
+  // Timestamps
+  detectedAt: timestamp("detected_at", { withTimezone: true }).defaultNow(),
+  actionedAt: timestamp("action_at", { withTimezone: true }), // When action was taken
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }), // When issue was resolved
+  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }), // When user acknowledged
+  
+  // Learning & Escalation
+  requiresApproval: boolean("requires_approval").default(false).notNull(), // Whether user approval needed
+  escalated: boolean("escalated").default(false).notNull(), // Whether escalated to user
+  suppressReason: text("suppress_reason"), // Why action was suppressed (if applicable)
+  userFeedback: text("user_feedback"), // User's feedback on Walter's action
+  
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userModeIdx: index("walter_actions_user_mode_idx").on(table.userId, table.mode),
+  statusIdx: index("walter_actions_status_idx").on(table.status),
+  categoryIdx: index("walter_actions_category_idx").on(table.category),
+  impactIdx: index("walter_actions_impact_idx").on(table.impactScore),
+  detectedAtIdx: index("walter_actions_detected_at_idx").on(table.detectedAt),
+  escalatedIdx: index("walter_actions_escalated_idx").on(table.escalated),
+  incidentKeyIdx: index("walter_actions_incident_key_idx").on(table.incidentKey), // For deduplication
+  parentActionIdx: index("walter_actions_parent_action_idx").on(table.parentActionId), // For chained actions
+}));
 
 // Learning Fragments (Phase 8.6.1 - cognitive layer learning and improvement)
 export const learningFragments = pgTable("learning_fragments", {
@@ -1938,6 +1998,16 @@ export const insertWalterUserPreferencesSchema = createInsertSchema(walterUserPr
   id: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertWalterActionSchema = createInsertSchema(walterActions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  detectedAt: true,
+  actionedAt: true,
+  resolvedAt: true,
+  acknowledgedAt: true,
 });
 
 export const insertLearningFragmentSchema = createInsertSchema(learningFragments).omit({
@@ -3357,6 +3427,9 @@ export type WalterMemory = typeof walterMemory.$inferSelect;
 
 export type InsertWalterUserPreferences = z.infer<typeof insertWalterUserPreferencesSchema>;
 export type WalterUserPreferences = typeof walterUserPreferences.$inferSelect;
+
+export type InsertWalterAction = z.infer<typeof insertWalterActionSchema>;
+export type WalterAction = typeof walterActions.$inferSelect;
 
 export type InsertLearningFragment = z.infer<typeof insertLearningFragmentSchema>;
 export type LearningFragment = typeof learningFragments.$inferSelect;
