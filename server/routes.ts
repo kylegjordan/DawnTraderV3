@@ -5412,6 +5412,53 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // System Health Summary - Get today's feed/formula issue counts for dashboard widget
+  app.get('/api/system/health-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { walterActions } = await import('@shared/schema');
+      
+      // Get start of today in UTC
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      
+      // Query walter_actions for today's feed and formula events
+      const todayActions = await db
+        .select()
+        .from(walterActions)
+        .where(
+          and(
+            eq(walterActions.userId, userId),
+            sql`${walterActions.createdAt} >= ${today.toISOString()}`
+          )
+        );
+      
+      // Count by category
+      const feedActions = todayActions.filter(a => a.category === 'feed');
+      const formulaActions = todayActions.filter(a => a.category === 'formula');
+      
+      // Count detected (all actions) vs resolved (completed status)
+      const feedDetected = feedActions.length;
+      const feedResolved = feedActions.filter(a => a.status === 'completed').length;
+      const formulaDetected = formulaActions.length;
+      const formulaResolved = formulaActions.filter(a => a.status === 'completed').length;
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        summary: {
+          feedHealthIssuesDetected: feedDetected,
+          feedHealthIssuesResolved: feedResolved,
+          formulaHealthIssuesDetected: formulaDetected,
+          formulaHealthIssuesResolved: formulaResolved
+        }
+      });
+    } catch (error: any) {
+      console.error('[SYSTEM-HEALTH-SUMMARY] Error fetching summary:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ============================================
   // Walter Autonomous Maintenance Actions
   // ============================================

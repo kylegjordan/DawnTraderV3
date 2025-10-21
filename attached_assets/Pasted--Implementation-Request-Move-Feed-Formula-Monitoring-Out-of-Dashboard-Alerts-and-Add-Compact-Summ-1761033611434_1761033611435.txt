@@ -1,0 +1,88 @@
+🧭 Implementation Request: Move Feed/Formula Monitoring Out of Dashboard Alerts and Add Compact Summary Widget
+
+Please remove all Feed and Formula Health alerts and notifications from the main dashboard banner and replace them with a single slim summary widget at the bottom of the dashboard.
+All detailed diagnostics and logs should remain accessible in the AI Command Center (AI Transparency page), within the Feed Health and Formula Health cards.
+
+Scope of Change
+1. Remove Dashboard Alerts
+
+Remove all Feed Health and Formula Health alerts from:
+
+The Dashboard Alerts banner / panel
+
+Any alert counters or cards currently referencing system health
+
+Ensure these alert types no longer trigger visual updates or “critical” badges in the dashboard.
+
+2. Preserve Monitoring and Logging
+
+Continue running all Feed and Formula integrity checks, auto-resolve, and WalterOps maintenance routines.
+
+Continue logging results and actions to:
+
+walter_actions table (backend tracking)
+
+Feed & Formula Health cards in AI Command Center
+
+Daily Brief summary section for recap visibility
+
+3. Add New “System Health Summary” Widget (Bottom of Dashboard)
+
+Add a new horizontal widget at the bottom of the Dashboard — full width, low height (approx. one table row tall).
+
+Label it: “System Health Summary” or “Walter System Activity”.
+
+Display the following four counters in a clean, tabular layout:
+
+Metric	Count
+Feed Health Issues Detected	n
+Feed Health Issues Resolved	n
+Formula Health Issues Detected	n
+Formula Health Issues Resolved	n
+
+Each counter should pull from the walter_actions table (or equivalent) filtered for the current day.
+
+Include a small footer link below the table:
+“View Details in AI Command Center →”
+which navigates directly to the Feed & Formula Health section.
+
+Style:
+
+Minimalist (no cards or boxes).
+
+Muted header text.
+
+Green text for “resolved” counts, amber/red for “issues detected.”
+
+Automatically refresh counts every 5 minutes.
+
+4. Adjust Feed & Formula Health in AI Command Center
+
+Keep detailed timelines, logs, and daily summaries there.
+
+Optionally, show a rolling 7-day trend chart for each category.
+
+5. Clean-up & Migration
+
+Run a one-time cleanup:
+
+Remove all existing Feed and Formula Health alerts from the dashboard.
+
+Verify that they remain accessible within AI Command Center history.
+
+Update the dashboard alert count so it reflects only trading-related alerts.
+
+Goal
+
+Create a clean, professional dashboard focused purely on trading and performance,
+while still giving a concise, non-intrusive summary of Walter’s system maintenance work at the bottom.
+
+✅ Expected Outcome
+
+Dashboard remains calm and actionable.
+
+Feed and Formula details live entirely in AI Command Center.
+
+“System Health Summary” provides just enough visibility to confirm Walter is maintaining the system.
+
+The rest of the health monitoring continues autonomously and silently in the background.
