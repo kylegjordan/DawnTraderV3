@@ -5257,6 +5257,55 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Feed Health - Get current health metrics
+  app.get('/api/system/feed-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getFeedIntegrityMonitor } = await import('./services/feed-integrity-monitor');
+      const monitor = getFeedIntegrityMonitor();
+      
+      const report = monitor.generateReport();
+      
+      res.json({ 
+        ok: true, 
+        timestamp: report.timestamp,
+        grade: report.overallGrade,
+        metrics: report.metrics,
+        issues: report.issues,
+        history: monitor.getHealthHistory().map(h => ({
+          timestamp: h.timestamp,
+          latencyMs: h.latencyMs,
+          wasHealthy: h.wasHealthy
+        }))
+      });
+    } catch (error: any) {
+      console.error('[FEED-HEALTH] Error fetching feed health:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Feed Health - Manual Trigger (Admin Only)
+  app.get('/api/system/feed-health/run', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
+    try {
+      console.log('[FEED-HEALTH] Manual check triggered by user:', req.user!.username);
+      
+      const { runFeedIntegrityCheck } = await import('./jobs/feed-integrity-auto-check');
+      const report = await runFeedIntegrityCheck('manual');
+      
+      res.json({ 
+        ok: true,
+        runType: 'manual',
+        timestamp: report.timestamp,
+        grade: report.overallGrade,
+        metrics: report.metrics,
+        issues: report.issues,
+        summary: report.summary
+      });
+    } catch (error: any) {
+      console.error('[FEED-HEALTH] Manual check error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // System Logs (simple in-memory log - placeholder)
   app.get('/api/system/logs', async (_req, res) => {
     try {

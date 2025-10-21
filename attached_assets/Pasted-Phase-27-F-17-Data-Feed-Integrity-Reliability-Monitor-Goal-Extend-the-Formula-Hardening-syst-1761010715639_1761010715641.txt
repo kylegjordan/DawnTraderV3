@@ -1,0 +1,147 @@
+Phase 27.F.17 — Data Feed Integrity & Reliability Monitor
+🎯 Goal
+
+Extend the Formula Hardening system to include data integrity monitoring for all live and simulated trading feeds (Kraken WebSocket + REST fallback).
+This ensures Walter’s trading logic always runs on accurate, fresh, and complete market data — with real-time visibility and automatic alerts.
+
+⚙️ Tasks for Replit
+1️⃣ Add Feed Integrity Monitor Service
+
+Create server/services/feed-integrity-monitor.ts
+
+Responsibilities:
+
+Track health metrics for each Kraken data source:
+
+feed_type: WebSocket / REST
+
+latency_ms: time between last tick received and now
+
+staleness_sec: time since last valid update
+
+uptime_percent: % of 1-min intervals where feed was healthy
+
+pair_count: number of active pairs currently streaming
+
+error_rate: ratio of failed updates to total attempts
+
+Categorize health:
+
+Healthy     → latency < 2s and uptime ≥ 99%
+Warning     → latency 2–5s or uptime 95–99%
+Critical    → latency > 5s or uptime < 95%
+
+
+Store rolling metrics in memory and write periodic summaries to:
+/tmp/feed_health_<YYYYMMDD>.json
+
+2️⃣ Add Scheduled Job for 5-Minute Checks
+
+Create cron job: server/jobs/feed-integrity-auto-check.ts
+
+Schedule every 5 minutes:
+
+Collect feed metrics from MarketDataCoordinator.
+
+Write report file (/tmp/feed_health_latest.json).
+
+Log summary line:
+
+[FEED-HEALTH] WS latency=1.4s uptime=99.7% REST fallback=0 critical=0
+
+
+Add health scoring to produce overall grade:
+
+A: All feeds healthy
+
+B: Minor warnings
+
+C: Major warning (≥1 feed degraded)
+
+F: Critical outage
+
+3️⃣ Alert & Notification Logic
+
+Integrate with AlertsService:
+
+severity:'warning', category:'actionable' when health drops to “Warning.”
+
+severity:'critical', category:'critical' when feed outage >15s or uptime <95%.
+
+Message example:
+
+Data Feed Warning — Kraken WebSocket latency 4.7s (fallback engaged)
+
+
+Auto-clear alerts when feed returns to Healthy for ≥2 consecutive cycles.
+
+4️⃣ Admin UI Integration
+
+Add new “Feed Health” card to the AI Command Center page, below Formula Health.
+
+Display:
+
+Latest overall grade (A–F)
+
+Last update timestamp
+
+Latency (ms), uptime %, pair count
+
+Small 1-hour sparkline graph (use existing MiniChart component)
+
+Status icons:
+
+🟢 Healthy
+
+🟡 Warning
+
+🔴 Critical
+
+Include button: “Recheck Now” → triggers /api/system/feed-health/run.
+
+5️⃣ Add API Endpoints
+
+GET /api/system/feed-health → return latest snapshot.
+
+GET /api/system/feed-health/run → force recheck (admin-only).
+Response:
+
+{
+  "timestamp": "2025-10-21T03:00:00Z",
+  "feed_type": "websocket",
+  "latency_ms": 1320,
+  "uptime_percent": 99.8,
+  "pair_count": 124,
+  "grade": "A"
+}
+
+6️⃣ Testing Checklist
+Test	Expected Result
+Disconnect WebSocket manually	Logs [FEED-HEALTH] latency >5s → alert raised
+REST fallback engaged	Grade = “B” (warning)
+No data for 10s	Grade = “C” or “F” with alert
+Restore normal flow	Alert auto-clears, grade returns to “A”
+/api/system/feed-health/run	Returns JSON metrics immediately
+✅ Deliverables
+
+Continuous 5-minute health monitoring for Kraken feeds
+
+Live REST fallback awareness
+
+Alerting on degraded or stale data
+
+Feed Health card in AI Command Center
+
+Report storage + cleanup (7-day retention)
+
+/api/system/feed-health and /api/system/feed-health/run endpoints
+
+🧠 Outcome
+
+You’ll gain end-to-end trading reliability awareness:
+
+PaperSim and Live Trading always run on verified, fresh data
+
+Instant alerts if feeds slow down, stall, or fall back
+
+Transparent Feed Health panel beside Formula Health for full system integrity view
