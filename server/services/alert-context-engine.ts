@@ -63,19 +63,37 @@ export class AlertContextEngine {
     
     // Determine initial severity and action
     let severity = this.getSeverity(impact_score);
-    const action = this.getAction(impact_score, context);
-    const reason = reason_parts.join('; ');
+    let action = this.getAction(impact_score, context);
     const confidence = this.calculateConfidence(context);
     
-    // CONTEXTUAL DOWNGRADING: Downgrade critical→warning for feed alerts with moderate latency in low volatility
-    if (component === 'feed' && severity === 'warning') {
-      // 10-30s latency AND low volatility: keep as warning (don't escalate)
-      if (context.latency_ms !== undefined && 
+    // CONTEXTUAL SUPPRESSION & DOWNGRADING (when no active trades)
+    // CRITICAL: Never override escalations required by impact≥15 AND (live OR trades>0)
+    if (component === 'feed' && context.active_trade_count === 0) {
+      
+      // Suppress low-latency feed alerts (<10s) regardless of mode
+      if (context.latency_ms !== undefined && context.latency_ms < 10000) {
+        // Only suppress if impact didn't already require escalation
+        if (action !== 'escalate') {
+          action = 'auto_suppress';
+          reason_parts.push(`Suppressed: latency <10s, no active trades (${context.mode} mode)`);
+        }
+      }
+      
+      // Downgrade moderate-latency alerts (10-30s) when volatility is low (paper mode only)
+      if (context.mode === 'paper' &&
+          context.latency_ms !== undefined &&
           context.latency_ms >= 10000 && 
           context.latency_ms <= 30000 &&
           context.current_volatility_index < 0.3) {
-        // Already warning, but ensure we log the context
-        reason_parts.push('Low volatility - keeping as warning');
+        // Downgrade to log_only (but respect already-suppressed actions)
+        if (action !== 'auto_suppress') {
+          action = 'log_only';
+          reason_parts.push('Downgraded: low volatility, paper mode, no trades');
+        }
+        if (severity === 'critical') {
+          severity = 'warning';
+          reason_parts.push('Severity downgraded: low volatility, paper mode, no trades');
+        }
       }
     }
     
@@ -230,32 +248,14 @@ export class AlertContextEngine {
   
   /**
    * Determine action based on impact score and context
-   * Phase 27.F.20: Enhanced contextual suppression to reduce alert noise
-   * 
-   * Suppression Rules:
-   * - Feed alerts: suppress if latency <10s AND no active trades
-   * - Feed alerts: suppress if latency <10s during recovery (REST fallback active)
-   * - All: suppress if impact <5
+   * Note: Contextual suppression/downgrading is applied in assessImpact() post-processing
    * 
    * Escalation Rules:
    * - Always escalate: impact ≥40 (critical)
    * - Escalate if: impact ≥15 AND (active trades >0 OR mode=live)
-   * - Otherwise: log only
+   * - Otherwise: log only or suppress based on impact
    */
   private static getAction(impact_score: number, context: AlertContext): 'auto_suppress' | 'log_only' | 'escalate' {
-    // CONTEXTUAL SUPPRESSION: Feed alerts with low latency and no trades
-    if (context.component === 'feed') {
-      // Suppress if latency <10s AND no active trades
-      if (context.latency_ms !== undefined && context.latency_ms < 10000 && context.active_trade_count === 0) {
-        return 'auto_suppress';
-      }
-      
-      // Suppress if very low impact (<5) even with some latency
-      if (impact_score < 5) {
-        return 'auto_suppress';
-      }
-    }
-    
     // Very low impact: always suppress (all components)
     if (impact_score < 5) {
       return 'auto_suppress';

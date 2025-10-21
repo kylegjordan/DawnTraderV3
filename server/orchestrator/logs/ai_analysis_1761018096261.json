@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-21T03:41:36.261Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (1, 5, 15 minutes), indicating potential overutilization or bottleneck."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning correctly."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system has zero active trades and a win rate of 0%, which is unusual for a platform with active strategies."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Consider scaling up or optimizing CPU resources to handle current load more efficiently."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Investigate and potentially restart AI modules to ensure they are functioning and generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and possibly recalibrate trading strategies to ensure they are aligned with current market conditions."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate the cause of high CPU load and take immediate steps to mitigate it, such as optimizing processes or scaling resources.",
+      "rationale": "High CPU load can lead to system instability and degraded performance, affecting trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart or debug the AI system to ensure it is operational and generating trading opportunities.",
+      "rationale": "The AI system is not performing its expected functions, which could impact trading effectiveness and decision-making."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Conduct a review of the trading strategies to ensure they are effectively engaging with the market.",
+      "rationale": "Zero active trades and a win rate of 0% suggest that strategies may not be executing as intended."
+    }
+  ],
+  "urgencyLevel": "high"
+}
