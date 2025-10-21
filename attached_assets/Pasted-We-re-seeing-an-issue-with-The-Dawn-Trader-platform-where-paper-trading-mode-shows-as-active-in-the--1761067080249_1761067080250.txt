@@ -1,0 +1,75 @@
+We’re seeing an issue with The Dawn Trader platform where paper trading mode shows as active in the UI, but the backend appears to not actually be running the paper trading engine or simulation loop.
+
+Symptoms
+
+The blue status bar at the top still says “Stopped” even though the trading toggle is switched to “Active.”
+
+The Filter Insights section shows the same static numbers (e.g., Total Universe: 1441, Evaluated: 300, Eligible: 0) and never updates.
+
+The Ready to Buy tab shows the same four symbols (LIST, MATICUSD, ADAUSD, SOLUSD) but all numeric values inside them (price, VWAP, range) are blank or zero.
+
+The refresh timers in both sections count down from ~600 seconds but reset every ~10 seconds, suggesting the frontend is polling data endpoints that return empty results.
+
+There are no open trades or signs that the paper engine is performing scans or generating metrics.
+
+Observed Behavior
+
+The frontend correctly toggles the “Active” state visually.
+
+The backend endpoints under /api/paper/... (such as /api/paper/trades/active and /api/paper/metrics/earnings-chart) exist and return valid JSON, but the data remains empty.
+
+The /api/trading/status endpoint reports "engineActive": false, which aligns with the blue “Stopped” bar, meaning the backend never set the engine to active.
+
+Suspected Cause
+After the routing architecture was refactored and namespaced under /api, it looks like the paper trading engine process (the background loop or scheduler) is no longer being started automatically on app startup.
+
+Previously, this engine was likely initialized in one of the following ways:
+
+A startup function like startPaperTrading() being called directly inside server/index.ts or a related bootstrap file.
+
+Or, a service (e.g., paperEngine.ts, paperSim.ts, or tradingService.ts) that automatically registered itself when imported.
+
+Now, that import or initialization step might have been lost, or the startup function is being registered after the app begins listening and is therefore skipped.
+
+As a result:
+
+The paper trading engine loop isn’t running.
+
+It’s not fetching or simulating market data.
+
+The UI keeps polling empty endpoints and stays “Stopped.”
+
+Requested Investigation
+Please investigate the backend and confirm:
+
+Whether the paper trading engine or scheduler loop is still being initialized during server startup (look inside server/index.ts, server/services/, and any related worker or simulation modules).
+
+Whether the trading control endpoints (e.g., /api/paper-sim/start or /api/trading/toggle) are actually triggering the background simulation process, or if they only change a flag without starting a worker.
+
+Whether any imports or service registrations were broken by the /api route namespacing refactor.
+
+Goal
+
+Diagnose why the paper trading engine never starts when “Active” is toggled in the UI.
+
+If confirmed, restore automatic initialization or ensure that activating trading from the UI properly launches the paper simulation loop.
+
+Avoid adding heavy runtime logic; ideally re-link or re-import the missing service.
+
+Deliverable
+Provide:
+
+A short explanation of the root cause (if confirmed).
+
+A description of the fix or adjustment needed (no code required in the explanation).
+
+Then implement the fix and verify that:
+
+The /api/trading/status endpoint reports "engineActive": true when the toggle is set to Active.
+
+The “Paper Trading Mode” bar in the UI changes to “Running.”
+
+The filter insights and ready-to-buy sections begin refreshing dynamically instead of staying static.
+
+Important Note
+Please do not alter unrelated APIs or route structures — only focus on ensuring that the paper trading simulation engine starts and updates properly when trading is activated.

@@ -2315,8 +2315,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Paper Trading Simulation Engine Routes (Milestone 18)
   // NOTE: Paper trading is SYSTEM-WIDE. Only ONE simulation can run at a time.
   // All users see the same simulation status.
-  let globalPaperPortfolioManager: any = null;
-  let globalPaperSimOperationLock: Promise<void> | null = null;
+  
+  // Initialize on global object so paper-sim-service can access it
+  if ((global as any).globalPaperPortfolioManager === undefined) {
+    (global as any).globalPaperPortfolioManager = null;
+  }
+  if ((global as any).globalPaperSimOperationLock === undefined) {
+    (global as any).globalPaperSimOperationLock = null;
+  }
 
   // Global system-wide simulation session registry
   // NOTE: This is SYSTEM-WIDE, not user-specific. All users see the same simulation status.
@@ -3092,84 +3098,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     const userId = req.user!.id;
     
     try {
-      // Phase 27.F.9: Enhanced logging for state reconciliation tracking
-      console.log(`[TradingStart] PaperSim start requested by ${userId}`);
-      console.log(`[TradingStart] PaperSim engine starting (user=${userId})`);
+      // Use unified service function to ensure consistent state management
+      const { startPaperSimulation } = await import('./services/paper-sim-service.js');
+      const result = await startPaperSimulation(userId);
       
-      // Check for existing GLOBAL manager (system-wide check)
-      if (globalPaperPortfolioManager) {
-        return res.status(400).json({ error: 'Paper trading simulation already running (system-wide)' });
-      }
-
-      // Check for pending operation (prevent race condition)
-      if (globalPaperSimOperationLock) {
-        return res.status(409).json({ error: 'Paper trading operation already in progress' });
-      }
-
-      // Create lock to serialize all start/stop operations
-      const startPromise = (async () => {
-        try {
-          const { PaperPortfolioManager } = await import('./services/paper-portfolio-manager.js');
-          const manager = new PaperPortfolioManager(userId);
-          
-          // Set the global manager before starting to prevent race condition
-          globalPaperPortfolioManager = manager;
-          
-          // Register GLOBAL session for status tracking
-          (global as any).registerSimulationSession({
-            sessionId: `manual_${Date.now()}`,
-            startedBy: userId,
-            startTime: new Date(),
-            isRunning: true,
-            type: 'manual'
-          });
-          
-          await manager.start();
-        } catch (error) {
-          // Rollback on failure - clean up both manager and session
-          globalPaperPortfolioManager = null;
-          (global as any).deregisterSimulationSession();
-          throw error;
-        } finally {
-          globalPaperSimOperationLock = null;
-        }
-      })();
-
-      globalPaperSimOperationLock = startPromise;
-      await startPromise;
+      // Invalidate Bob Core cache for paper-sim status
+      bobCore.invalidate('metrics:paperSimStatus');
+      console.log('[PaperSim] Invalidated paperSimStatus cache after start');
       
-      // Emit start acknowledgment log
-      const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
-      console.log(`[TradeEngine] start_ack { runId: "${globalSession?.sessionId || 'unknown'}", mode: "paper", t: "${new Date().toISOString()}" }`);
-      console.log(`[TradingStart] PaperSim engine started (user=${userId})`);
-      
-      // Phase 27.F.6: Log to trading_audit_log
-      try {
-        await storage.createTradingAuditLog({
-          userId,
-          action: 'start',
-          mode: 'paper',
-          triggeredBy: 'manual',
-          metadata: { sessionId: globalSession?.sessionId }
-        });
-      } catch (auditError) {
-        console.error('[TradingAudit] Failed to log start action:', auditError);
+      // Return success/error based on service result
+      if (!result.success) {
+        return res.status(400).json({ error: result.message || result.error });
       }
       
-      // Phase 27.F.10: Broadcast state change for PaperSim
-      try {
-        const { tradingStateSync } = await import('./services/trading-state-sync.js');
-        await tradingStateSync.setEngineActive(userId, true);
-        await tradingStateSync.broadcastUserUpdate(userId);
-        console.log('[TradingSync][PaperSim] Broadcasted paper trading_state_changed update (start)');
-      } catch (broadcastError) {
-        console.error('[TradingSync][PaperSim] Failed to broadcast start:', broadcastError);
-      }
-      
-      res.json({ success: true, message: 'Paper trading simulation started' });
+      res.json({ success: true, message: result.message });
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
-      globalPaperSimOperationLock = null;
+      (global as any).globalPaperSimOperationLock = null;
       res.status(500).json({ error: error.message || 'Failed to start paper trading simulation' });
     }
   });
@@ -3178,79 +3123,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     const userId = req.user!.id;
     
     try {
-      // Phase 27.F.9: Enhanced logging for state reconciliation tracking
-      console.log(`[TradingStop] PaperSim stop requested by ${userId}`);
-      console.log(`[TradingStop] PaperSim engine stopping (user=${userId})`);
+      // Use unified service function to ensure consistent state management
+      const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
+      const result = await stopPaperSimulation(userId);
       
-      // Check GLOBAL manager (system-wide)
-      if (!globalPaperPortfolioManager) {
-        return res.status(400).json({ error: 'Paper trading simulation not running' });
-      }
-
-      // Check for pending operation (prevent race condition)
-      if (globalPaperSimOperationLock) {
-        return res.status(409).json({ error: 'Paper trading operation already in progress' });
-      }
-
-      // Create lock to serialize all start/stop operations
-      const stopPromise = (async () => {
-        // Store reference to current manager for rollback
-        const currentManager = globalPaperPortfolioManager;
-        
-        try {
-          // Clear global manager first to prevent new operations
-          globalPaperPortfolioManager = null;
-          
-          // Deregister GLOBAL session
-          (global as any).deregisterSimulationSession();
-          
-          await currentManager.stop();
-        } catch (error) {
-          // Only restore if no newer manager was started
-          if (!globalPaperPortfolioManager) {
-            globalPaperPortfolioManager = currentManager;
-          }
-          throw error;
-        } finally {
-          globalPaperSimOperationLock = null;
-        }
-      })();
-
-      globalPaperSimOperationLock = stopPromise;
-      await stopPromise;
+      // Invalidate Bob Core cache for paper-sim status
+      bobCore.invalidate('metrics:paperSimStatus');
+      console.log('[PaperSim] Invalidated paperSimStatus cache after stop');
       
-      // Emit stop acknowledgment log
-      const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
-      console.log(`[TradeEngine] stop_ack { runId: "${globalSession?.sessionId || 'unknown'}", t: "${new Date().toISOString()}" }`);
-      console.log(`[TradingStop] PaperSim engine stopped (user=${userId})`);
-      
-      // Phase 27.F.6: Log to trading_audit_log
-      try {
-        await storage.createTradingAuditLog({
-          userId,
-          action: 'stop',
-          mode: 'paper',
-          triggeredBy: 'manual',
-          metadata: { sessionId: globalSession?.sessionId }
-        });
-      } catch (auditError) {
-        console.error('[TradingAudit] Failed to log stop action:', auditError);
+      // Return success/error based on service result
+      if (!result.success) {
+        return res.status(400).json({ error: result.message || result.error });
       }
       
-      // Phase 27.F.10: Broadcast state change for PaperSim (stop)
-      try {
-        const { tradingStateSync } = await import('./services/trading-state-sync.js');
-        await tradingStateSync.setEngineActive(userId, false);
-        await tradingStateSync.broadcastUserUpdate(userId);
-        console.log('[TradingSync][PaperSim] Broadcasted paper trading_state_changed update (stop)');
-      } catch (broadcastError) {
-        console.error('[TradingSync][PaperSim] Failed to broadcast stop:', broadcastError);
-      }
-      
-      res.json({ success: true, message: 'Paper trading simulation stopped' });
+      res.json({ success: true, message: result.message });
     } catch (error: any) {
       console.error('Error stopping paper trading simulation:', error);
-      globalPaperSimOperationLock = null;
+      (global as any).globalPaperSimOperationLock = null;
       res.status(500).json({ error: error.message || 'Failed to stop paper trading simulation' });
     }
   });
@@ -3272,7 +3161,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     // Original implementation (fallback or when Bob disabled)
     try {
       // Return GLOBAL system-wide status (same for all users)
-      const hasUISimulation = globalPaperPortfolioManager !== null;
+      const hasUISimulation = (global as any).globalPaperPortfolioManager !== null;
       const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
       const has48HrSimulation = !!(globalSession && globalSession.isRunning);
       

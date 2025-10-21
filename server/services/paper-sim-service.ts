@@ -461,7 +461,7 @@ export async function getPaperSimulationStatus(userId: string): Promise<any> {
     }
 
     return {
-      isRunning: !!dbSession,
+      isRunning: !!dbSession || hasManager,
       sessionInfo: dbSession ? {
         sessionId: dbSession.sessionId,
         startTime: dbSession.startedAt,
