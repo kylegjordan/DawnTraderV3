@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-21T04:29:20.987Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high, especially over the 15-minute period (9.82), which is above the number of CPU cores (8)."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system is not generating any opportunities or making adjustments, indicating potential issues with AI functionality or data feed."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading system shows no active trades and a win rate of 0%, which is unusual for a platform with active strategies."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Optimize CPU usage by reviewing and potentially redistributing workloads or upgrading hardware."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Investigate AI system to ensure it is receiving data correctly and is capable of generating opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review trading strategies and market conditions to ensure they are aligned and capable of executing trades."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Investigate and resolve high CPU load immediately to prevent potential system slowdowns or crashes.",
+      "rationale": "High CPU load can lead to degraded system performance, impacting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Diagnose and fix the AI system's inability to generate opportunities or make adjustments.",
+      "rationale": "The AI system is crucial for identifying trading opportunities and optimizing strategies; its malfunction can lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze and adjust trading strategies to ensure they are functioning correctly and capable of executing trades.",
+      "rationale": "Active strategies should be generating trades; a lack of activity may indicate misconfiguration or market misalignment."
+    }
+  ],
+  "urgencyLevel": "high"
+}
