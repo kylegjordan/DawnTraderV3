@@ -40,14 +40,76 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     
     // Handle alerting with deduplication
     const { metrics, overallGrade } = report;
+    
+    // Check if feed recovered to healthy (auto-resolve independent of alert throttling)
+    if (metrics.status === 'healthy' && monitor.getActiveAlertId()) {
+      console.log(`[FeedIntegrity] Feed recovered - auto-resolving incident`);
+      
+      // Get all admin users to record auto-resolution
+      const users = await storage.getAllUsers();
+      const adminUsers = users.filter(u => u.isAdmin);
+      
+      if (adminUsers.length > 0) {
+          const primaryAdmin = adminUsers[0];
+          
+          // Create auto-resolution records for both modes
+          try {
+            await WalterOpsEngine.autoResolveIncident(
+              primaryAdmin.id,
+              'live',
+              'feed',
+              'Kraken WebSocket',
+              {
+                previousIssue: `Feed health degraded (Grade ${monitor.getActiveAlertId()})`,
+                normalizedMetrics: {
+                  latency_ms: metrics.latencyMs,
+                  tick_age_sec: metrics.tickAgeSec,
+                  reconnect_count: metrics.reconnectCount,
+                  uptime_percent: metrics.uptimePercent,
+                  grade: overallGrade,
+                },
+                confidence: metrics.latencyMs < 1000 && metrics.reconnectCount === 0 ? 95 : 80,
+                timestamp: new Date(),
+              }
+            );
+            console.log(`[FeedIntegrity] ✅ Live auto-resolution recorded`);
+          } catch (error) {
+            console.error(`[FeedIntegrity] Failed to record live auto-resolution:`, error);
+          }
+          
+          try {
+            await WalterOpsEngine.autoResolveIncident(
+              primaryAdmin.id,
+              'paper',
+              'feed',
+              'Kraken WebSocket',
+              {
+                previousIssue: `Feed health degraded (Grade ${monitor.getActiveAlertId()})`,
+                normalizedMetrics: {
+                  latency_ms: metrics.latencyMs,
+                  tick_age_sec: metrics.tickAgeSec,
+                  reconnect_count: metrics.reconnectCount,
+                  uptime_percent: metrics.uptimePercent,
+                  grade: overallGrade,
+                },
+                confidence: metrics.latencyMs < 1000 && metrics.reconnectCount === 0 ? 95 : 80,
+                timestamp: new Date(),
+              }
+            );
+            console.log(`[FeedIntegrity] ✅ Paper auto-resolution recorded`);
+          } catch (error) {
+            console.error(`[FeedIntegrity] Failed to record paper auto-resolution:`, error);
+          }
+        }
+        
+      monitor.updateAlertState(metrics.status, overallGrade, null);
+    }
+    
+    // Handle new alerts (warnings/critical) with deduplication
     const shouldAlert = monitor.shouldSendAlert(metrics.status, overallGrade);
     
     if (shouldAlert) {
-      if (metrics.status === 'healthy') {
-        // Clear active alert (feed recovered)
-        console.log(`[FeedIntegrity] Feed recovered - clearing alert tracking`);
-        monitor.updateAlertState(metrics.status, overallGrade, null);
-      } else {
+      if (metrics.status !== 'healthy') {
         // Create new alert for all admin users (warning or critical)
         const severity = metrics.status === 'critical' ? 'critical' : 'warning';
         const message = `Feed Health: ${metrics.status.toUpperCase()} (Grade ${overallGrade})\n${report.issues.join('\n')}`;
@@ -135,8 +197,10 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
         }
         
         monitor.updateAlertState(metrics.status, overallGrade, null);
+      } else {
+        console.log(`[FeedIntegrity] Feed healthy, no action needed`);
       }
-    } else {
+    } else if (metrics.status !== 'healthy') {
       console.log(`[FeedIntegrity] Alert suppressed (cooldown or duplicate)`);
     }
     

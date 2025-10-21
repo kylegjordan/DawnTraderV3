@@ -138,7 +138,7 @@ async function createAlertNotification(formulaName: string, deviation: number, s
       try {
         console.log(`[WalterOps-FormulaAudit] Processing formula anomaly for ${formulaName} (live mode)`);
         const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', anomaly);
-        console.log(`[WalterOps-FormulaAudit] Live action result: ${liveAction.action_type} - ${liveAction.status}`);
+        console.log(`[WalterOps-FormulaAudit] Live action result: ${liveAction.actionType} - ${liveAction.status}`);
       } catch (walterError) {
         console.error(`[WalterOps-FormulaAudit] Failed to process live anomaly:`, walterError);
       }
@@ -146,7 +146,7 @@ async function createAlertNotification(formulaName: string, deviation: number, s
       try {
         console.log(`[WalterOps-FormulaAudit] Processing formula anomaly for ${formulaName} (paper mode)`);
         const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', anomaly);
-        console.log(`[WalterOps-FormulaAudit] Paper action result: ${paperAction.action_type} - ${paperAction.status}`);
+        console.log(`[WalterOps-FormulaAudit] Paper action result: ${paperAction.actionType} - ${paperAction.status}`);
       } catch (walterError) {
         console.error(`[WalterOps-FormulaAudit] Failed to process paper anomaly:`, walterError);
       }
@@ -196,6 +196,10 @@ export async function runFormulaAudit(runType: 'scheduled' | 'manual' = 'schedul
         await createAlertNotification(test.name, test.deviationPercent, test.status);
       }
     }
+    
+    // TODO: Add auto-resolve for formulas that recovered from WARNING/FAIL to PASS
+    // Requires tracking previous audit state to avoid spurious resolutions
+    // This will be implemented in a future phase with proper state management
     
     // Cleanup old reports
     cleanupOldReports();

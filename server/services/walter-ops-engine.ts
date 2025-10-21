@@ -1058,6 +1058,79 @@ export class WalterOpsEngine {
   }
   
   /**
+   * Auto-resolve an incident when conditions normalize
+   * Creates a Walter action record for the auto-resolution
+   * 
+   * @param userId - User ID (typically admin who owns the incident)
+   * @param mode - Trading mode
+   * @param source - Incident source ('feed' or 'formula')
+   * @param component - Affected component name
+   * @param resolution - Resolution details (what normalized, metrics, timestamp)
+   * @returns Created action record
+   */
+  static async autoResolveIncident(
+    userId: string,
+    mode: 'live' | 'paper',
+    source: 'feed' | 'formula',
+    component: string,
+    resolution: {
+      previousIssue: string;
+      normalizedMetrics: Record<string, any>;
+      confidence: number; // 0-100
+      timestamp: Date;
+    }
+  ): Promise<MaintenanceAction> {
+    console.log(`[WalterOps-AutoResolve] ${source}/${component}: ${resolution.previousIssue} → normalized`);
+    
+    const actionId = 'auto_resolve_' + Date.now();
+    
+    try {
+      const action = await db.insert(walterActions).values({
+        userId,
+        mode,
+        actionType: 'health_check', // Use existing enum value (auto-resolution is a health verification)
+        category: source,
+        status: 'completed', // Use existing enum value
+        impactScore: '0', // Resolved = no impact
+        affectedComponent: component,
+        detectedAnomaly: resolution.previousIssue,
+        contextData: {
+          ...resolution.normalizedMetrics,
+          confidence: resolution.confidence,
+          resolvedAt: resolution.timestamp.toISOString(),
+          autoResolved: true, // Flag to identify auto-resolutions
+        },
+        suggestedFix: 'System auto-resolved - metrics returned to normal',
+        executedAction: 'Auto-resolved - metrics normalized',
+        resolutionStatus: 'fixed',
+        resolutionNotes: `Auto-resolved: ${Object.entries(resolution.normalizedMetrics).map(([k, v]) => `${k}=${v}`).join(', ')}`,
+        confidenceScore: (resolution.confidence / 100).toString(), // Convert to 0-1 scale
+        requiresApproval: false,
+        escalated: false,
+        tradingPaused: false,
+        incidentKey: `auto_resolve_${source}_${component}_${Date.now()}`,
+        retryCount: 0,
+        resolvedAt: resolution.timestamp,
+      }).returning();
+      
+      console.log(`[WalterOps-AutoResolve] ✅ Created action ${action[0].id} (confidence: ${resolution.confidence}%)`);
+      
+      return {
+        actionId: action[0].id,
+        actionType: 'health_check',
+        status: 'monitored', // Use MaintenanceAction-compatible status
+        resolution: 'Auto-resolved - metrics normalized',
+        confidence: resolution.confidence / 100,
+        impact_score: 0,
+        requires_approval: false,
+      } as MaintenanceAction;
+    } catch (error: any) {
+      console.error('[WalterOps-AutoResolve] Failed to create action:', error);
+      throw new Error(`Failed to record auto-resolution: ${error.message}`);
+    }
+  }
+  
+  /**
    * Get Walter actions with filtering
    */
   static async getActions(

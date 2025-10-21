@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-21T04:02:08.182Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is consistently above the number of cores (8), indicating potential overutilization."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system shows no recent learning cycles, zero average confidence, and no opportunities generated, suggesting it may not be functioning correctly."
+    },
+    {
+      "severity": "low",
+      "message": "Trading system has zero active trades and a win rate of 0, which might indicate inactivity or issues with strategy execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU-intensive processes to reduce load and improve system responsiveness."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially update AI models or algorithms to ensure they are functioning and generating opportunities."
+    },
+    {
+      "impact": "low",
+      "recommendation": "Evaluate the effectiveness of active trading strategies and consider adjustments to improve performance."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct an immediate investigation into the high CPU load to prevent potential system instability or downtime.",
+      "rationale": "The CPU load average exceeding the number of cores can lead to performance degradation and system failures."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Diagnose and resolve issues with the AI system to ensure it resumes learning and generating trading opportunities.",
+      "rationale": "The AI system is crucial for identifying trading opportunities and optimizing strategies; its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the trading strategies in use and adjust parameters or switch strategies to improve trading outcomes.",
+      "rationale": "With zero active trades and a win rate of 0, it is important to ensure that strategies are aligned with current market conditions."
+    }
+  ],
+  "urgencyLevel": "high"
+}
