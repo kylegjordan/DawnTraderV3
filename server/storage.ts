@@ -174,7 +174,9 @@ import {
   portfolioState,
   type SystemContext,
   type InsertSystemContext,
-  systemContext
+  systemContext,
+  type WalterAction,
+  walterActions
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -556,6 +558,11 @@ export interface IStorage {
   getSystemContext(userId: string): Promise<SystemContext | undefined>;
   upsertSystemContext(data: Partial<InsertSystemContext> & { userId: string }): Promise<SystemContext>;
   updateSystemContext(userId: string, updates: Partial<SystemContext>): Promise<SystemContext>;
+  
+  // Walter Actions methods (Phase 27.F)
+  getWalterActions(userId: string, mode: 'live' | 'paper', filters?: { status?: string; source?: string; limit?: number }): Promise<WalterAction[]>;
+  getWalterActionById(actionId: string, userId: string, mode: 'live' | 'paper'): Promise<WalterAction | undefined>;
+  updateWalterAction(actionId: string, userId: string, mode: 'live' | 'paper', updates: Partial<WalterAction>): Promise<WalterAction>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -3170,6 +3177,88 @@ export class DatabaseStorage implements IStorage {
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(systemContext.userId, userId))
       .returning();
+    return updated;
+  }
+  
+  // Walter Actions methods (Phase 27.F: Autonomous Maintenance System)
+  async getWalterActions(
+    userId: string,
+    mode: 'live' | 'paper',
+    filters?: { status?: string; source?: string; limit?: number }
+  ): Promise<WalterAction[]> {
+    let baseQuery = db
+      .select()
+      .from(walterActions)
+      .where(and(
+        eq(walterActions.userId, userId),
+        eq(walterActions.mode, mode)
+      ));
+    
+    // Apply status filter if provided
+    if (filters?.status) {
+      baseQuery = db
+        .select()
+        .from(walterActions)
+        .where(and(
+          eq(walterActions.userId, userId),
+          eq(walterActions.mode, mode),
+          eq(walterActions.status, filters.status)
+        ));
+    }
+    
+    // Apply source filter if provided
+    if (filters?.source) {
+      baseQuery = db
+        .select()
+        .from(walterActions)
+        .where(and(
+          eq(walterActions.userId, userId),
+          eq(walterActions.mode, mode),
+          filters.status ? eq(walterActions.status, filters.status) : sql`true`,
+          eq(walterActions.source, filters.source)
+        ));
+    }
+    
+    const actions = await baseQuery
+      .orderBy(desc(walterActions.createdAt))
+      .limit(filters?.limit || 50);
+    
+    return actions;
+  }
+  
+  async getWalterActionById(
+    actionId: string,
+    userId: string,
+    mode: 'live' | 'paper'
+  ): Promise<WalterAction | undefined> {
+    const [action] = await db
+      .select()
+      .from(walterActions)
+      .where(and(
+        eq(walterActions.id, actionId),
+        eq(walterActions.userId, userId),
+        eq(walterActions.mode, mode)
+      ));
+    
+    return action || undefined;
+  }
+  
+  async updateWalterAction(
+    actionId: string,
+    userId: string,
+    mode: 'live' | 'paper',
+    updates: Partial<WalterAction>
+  ): Promise<WalterAction> {
+    const [updated] = await db
+      .update(walterActions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(
+        eq(walterActions.id, actionId),
+        eq(walterActions.userId, userId),
+        eq(walterActions.mode, mode)
+      ))
+      .returning();
+    
     return updated;
   }
 }

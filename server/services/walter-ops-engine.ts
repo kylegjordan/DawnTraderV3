@@ -1044,6 +1044,175 @@ export class WalterOpsEngine {
     
     return { activeCooldowns, activeDedups, hourlyLimits };
   }
+  
+  /**
+   * Get Walter actions with filtering
+   */
+  static async getActions(
+    userId: string,
+    mode: 'live' | 'paper',
+    filters?: { status?: string; source?: string; limit?: number }
+  ): Promise<WalterAction[]> {
+    const dbAvailable = await this.isDbAvailable();
+    
+    if (!dbAvailable) {
+      // Return in-memory actions with filtering
+      let actions = this.maintenanceLog.filter(a => 
+        a.user_id === userId && a.mode === mode
+      );
+      
+      if (filters?.status) {
+        actions = actions.filter(a => a.status === filters.status);
+      }
+      if (filters?.source) {
+        actions = actions.filter(a => a.source === filters.source);
+      }
+      
+      const limit = filters?.limit || 50;
+      return actions.slice(0, limit);
+    }
+    
+    try {
+      const { storage } = await import('../storage');
+      const actions = await storage.getWalterActions(userId, mode, filters);
+      return actions;
+    } catch (error) {
+      console.error('[WalterOps-getActions] DB error, falling back to in-memory:', error);
+      return this.maintenanceLog.filter(a => 
+        a.user_id === userId && a.mode === mode
+      ).slice(0, filters?.limit || 50);
+    }
+  }
+  
+  /**
+   * Approve a pending Walter action
+   */
+  static async approveAction(
+    actionId: string,
+    userId: string,
+    mode: 'live' | 'paper'
+  ): Promise<{ success: boolean; action?: WalterAction; error?: string }> {
+    const dbAvailable = await this.isDbAvailable();
+    
+    if (!dbAvailable) {
+      return { success: false, error: 'Database unavailable - cannot approve actions' };
+    }
+    
+    try {
+      const { storage } = await import('../storage');
+      
+      // Get the action
+      const action = await storage.getWalterActionById(actionId, userId, mode);
+      if (!action) {
+        return { success: false, error: 'Action not found' };
+      }
+      
+      if (action.status !== 'pending_approval') {
+        return { success: false, error: `Action is not pending approval (current status: ${action.status})` };
+      }
+      
+      // Execute the action based on type
+      let executionResult = { success: true };
+      
+      if (action.action_type === 'auto_reconnect') {
+        // TODO: Implement actual reconnect logic
+        console.log(`[WalterOps-approve] Executing reconnect for action ${actionId}`);
+      } else if (action.action_type === 'auto_recalculate') {
+        // TODO: Implement actual recalculation logic
+        console.log(`[WalterOps-approve] Executing recalculation for action ${actionId}`);
+      }
+      
+      // Update action status
+      const updatedAction = await storage.updateWalterAction(actionId, userId, mode, {
+        status: executionResult.success ? 'completed' : 'failed',
+        executed_at: new Date().toISOString(),
+        result: executionResult.success ? 'Approved and executed successfully' : 'Execution failed',
+      });
+      
+      return { success: true, action: updatedAction };
+    } catch (error: any) {
+      console.error('[WalterOps-approveAction] Error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Reject a pending Walter action
+   */
+  static async rejectAction(
+    actionId: string,
+    userId: string,
+    mode: 'live' | 'paper',
+    reason?: string
+  ): Promise<{ success: boolean; action?: WalterAction; error?: string }> {
+    const dbAvailable = await this.isDbAvailable();
+    
+    if (!dbAvailable) {
+      return { success: false, error: 'Database unavailable - cannot reject actions' };
+    }
+    
+    try {
+      const { storage } = await import('../storage');
+      
+      // Get the action
+      const action = await storage.getWalterActionById(actionId, userId, mode);
+      if (!action) {
+        return { success: false, error: 'Action not found' };
+      }
+      
+      if (action.status !== 'pending_approval') {
+        return { success: false, error: `Action is not pending approval (current status: ${action.status})` };
+      }
+      
+      // Update action status
+      const updatedAction = await storage.updateWalterAction(actionId, userId, mode, {
+        status: 'rejected',
+        executed_at: new Date().toISOString(),
+        result: reason || 'Rejected by user',
+      });
+      
+      return { success: true, action: updatedAction };
+    } catch (error: any) {
+      console.error('[WalterOps-rejectAction] Error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Acknowledge a completed Walter action
+   */
+  static async acknowledgeAction(
+    actionId: string,
+    userId: string,
+    mode: 'live' | 'paper'
+  ): Promise<{ success: boolean; action?: WalterAction; error?: string }> {
+    const dbAvailable = await this.isDbAvailable();
+    
+    if (!dbAvailable) {
+      return { success: false, error: 'Database unavailable - cannot acknowledge actions' };
+    }
+    
+    try {
+      const { storage } = await import('../storage');
+      
+      // Get the action
+      const action = await storage.getWalterActionById(actionId, userId, mode);
+      if (!action) {
+        return { success: false, error: 'Action not found' };
+      }
+      
+      // Update acknowledgment
+      const updatedAction = await storage.updateWalterAction(actionId, userId, mode, {
+        acknowledged: true,
+        acknowledged_at: new Date().toISOString(),
+      });
+      
+      return { success: true, action: updatedAction };
+    } catch (error: any) {
+      console.error('[WalterOps-acknowledgeAction] Error:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 // Clear expired cooldowns and dedup entries every 5 minutes

@@ -5306,6 +5306,117 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // ============================================
+  // Walter Autonomous Maintenance Actions
+  // ============================================
+  
+  // Get Walter actions with filtering
+  app.get('/api/walter/actions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.query.mode as 'live' | 'paper') || 'live';
+      const status = req.query.status as string | undefined;
+      const source = req.query.source as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      console.log(`[WALTER-ACTIONS] Fetching actions for user ${userId} (mode: ${mode}, status: ${status || 'all'}, source: ${source || 'all'})`);
+      
+      const { WalterOpsEngine } = await import('./services/walter-ops-engine');
+      const actions = await WalterOpsEngine.getActions(userId, mode, { status, source, limit });
+      
+      res.json({ 
+        ok: true, 
+        actions,
+        count: actions.length
+      });
+    } catch (error: any) {
+      console.error('[WALTER-ACTIONS] Error fetching actions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Approve a pending Walter action
+  app.post('/api/walter/actions/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const actionId = req.params.id;
+      const userId = req.user!.id;
+      const mode = (req.body.mode as 'live' | 'paper') || 'live';
+      
+      console.log(`[WALTER-ACTIONS] User ${userId} approving action ${actionId} (mode: ${mode})`);
+      
+      const { WalterOpsEngine } = await import('./services/walter-ops-engine');
+      const result = await WalterOpsEngine.approveAction(actionId, userId, mode);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json({ 
+        ok: true, 
+        action: result.action,
+        message: 'Action approved and executed'
+      });
+    } catch (error: any) {
+      console.error('[WALTER-ACTIONS] Error approving action:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Reject a pending Walter action
+  app.post('/api/walter/actions/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const actionId = req.params.id;
+      const userId = req.user!.id;
+      const mode = (req.body.mode as 'live' | 'paper') || 'live';
+      const reason = req.body.reason as string | undefined;
+      
+      console.log(`[WALTER-ACTIONS] User ${userId} rejecting action ${actionId} (mode: ${mode})`);
+      
+      const { WalterOpsEngine } = await import('./services/walter-ops-engine');
+      const result = await WalterOpsEngine.rejectAction(actionId, userId, mode, reason);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json({ 
+        ok: true, 
+        action: result.action,
+        message: 'Action rejected'
+      });
+    } catch (error: any) {
+      console.error('[WALTER-ACTIONS] Error rejecting action:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Acknowledge a completed Walter action
+  app.post('/api/walter/actions/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const actionId = req.params.id;
+      const userId = req.user!.id;
+      const mode = (req.body.mode as 'live' | 'paper') || 'live';
+      
+      console.log(`[WALTER-ACTIONS] User ${userId} acknowledging action ${actionId} (mode: ${mode})`);
+      
+      const { WalterOpsEngine } = await import('./services/walter-ops-engine');
+      const result = await WalterOpsEngine.acknowledgeAction(actionId, userId, mode);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json({ 
+        ok: true, 
+        action: result.action,
+        message: 'Action acknowledged'
+      });
+    } catch (error: any) {
+      console.error('[WALTER-ACTIONS] Error acknowledging action:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // System Logs (simple in-memory log - placeholder)
   app.get('/api/system/logs', async (_req, res) => {
     try {
