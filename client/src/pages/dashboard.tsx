@@ -18,6 +18,7 @@ import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel
 import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
 import { AutoResolvedWidget } from "@/components/dashboard/auto-resolved-widget";
 import AlertBanner from "@/components/alerts/alert-banner";
+import SystemHealthSummary from "@/components/system-health-summary";
 import { useSystemHealth } from "@/hooks/use-system-health";
 import { useState, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
@@ -106,6 +107,9 @@ export default function Dashboard() {
 
       {/* Developer-Only Data Flow Trace */}
       <DataFlowTracePanel />
+
+      {/* System Health Summary - Walter Activity (Feed/Formula Monitoring) */}
+      <SystemHealthSummary />
     </div>
   );
 }
