@@ -9,6 +9,7 @@ import { nanoid } from 'nanoid';
 import { storage } from '../storage.js';
 import type { InsertPaperSimSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
+import { KrakenService } from './kraken.js';
 
 export interface PaperSimResult {
   success: boolean;
@@ -141,35 +142,74 @@ export async function startPaperSimulation(
         const dbSession = await storage.createPaperSimSession(sessionData);
         console.log(`[PaperSimService] Created new session in database: ${sessionId}`);
 
-        // Phase 27.F.17: Auto-Configuration - Ensure minimum viable configuration
-        console.log('[PaperSimService][Phase-27.F.17] Checking auto-configuration...');
+        // Phase 27.F.17a: Auto-Configuration - Screener-driven watchlist
+        console.log('[PaperSimService][AutoWatchlist] Checking auto-configuration...');
         
-        // 1. Check watchlist and add default pairs if empty
+        // 1. Check watchlist and add screener-filtered pairs if empty
         const watchlist = await storage.getWatchlist({ userId, mode: 'paper' });
         if (!watchlist || watchlist.length === 0) {
-          console.log('[PaperSimService][Phase-27.F.17] Empty watchlist detected - adding default pairs');
+          console.log('[PaperSimService][AutoWatchlist] Empty watchlist detected - querying screener for eligible pairs');
           
-          const defaultPairs = [
-            { symbol: 'BTCUSD', base: 'BTC', quote: 'USD' },
-            { symbol: 'ETHUSD', base: 'ETH', quote: 'USD' }
-          ];
-          
-          for (const pair of defaultPairs) {
-            try {
-              await storage.addWatchlistPair({
-                userId,
-                mode: 'paper',
-                symbol: pair.symbol,
-                baseCurrency: pair.base,
-                quoteCurrency: pair.quote,
-              });
-              console.log(`[PaperSimService][Phase-27.F.17] Added ${pair.symbol} to watchlist`);
-            } catch (error) {
-              console.warn(`[PaperSimService][Phase-27.F.17] Failed to add ${pair.symbol}:`, error);
+          try {
+            // Get current screener filter settings
+            const filters = await storage.getScreenerFilters({ userId, mode: 'paper' });
+            console.log('[PaperSimService][AutoWatchlist] Retrieved screener filters:', filters ? 'configured' : 'using defaults');
+            
+            // Initialize KrakenService
+            const krakenService = new KrakenService();
+            
+            // Query eligible pairs based on current filter settings
+            // Note: Some parameters use hardcoded defaults as they're not in screener_filters table
+            const eligiblePairs = await krakenService.getEligiblePairs({
+              minVolume: filters?.minVolume || '5000000',
+              minDailyRange: '6.5', // Hardcoded: Not in screener_filters schema
+              minPrice: filters?.minPrice || '0.01',
+              maxPrice: filters?.maxPrice || undefined,
+              maxBidAskSpread: filters?.maxBidAskSpread || '1.00',
+              excludeStablecoins: filters?.excludeStablecoins ?? true,
+              allowedTradingPairs: ['USD', 'USDT'], // Hardcoded: Not in screener_filters schema
+              blacklistedSymbols: [], // Hardcoded: Not in screener_filters schema
+              whitelistedSymbols: [], // Hardcoded: Not in screener_filters schema
+              minHistoryDays: 90, // Hardcoded: Not in screener_filters schema
+              volatilityMin: filters?.volatilityMin || undefined,
+              volatilityMax: filters?.volatilityMax || undefined,
+            });
+            
+            if (eligiblePairs.length === 0) {
+              console.log('[PaperSimService][AutoWatchlist] ⚠️  No eligible pairs found matching current screener filters');
+              console.log('[PaperSimService][AutoWatchlist] Engine will remain idle until next scan cycle or manual watchlist configuration');
+            } else {
+              // Cap at 10 pairs maximum to prevent WebSocket overload
+              const MAX_AUTO_PAIRS = 10;
+              const pairsToAdd = eligiblePairs.slice(0, MAX_AUTO_PAIRS);
+              
+              console.log(`[PaperSimService][AutoWatchlist] Found ${eligiblePairs.length} eligible pairs, adding top ${pairsToAdd.length} to watchlist`);
+              
+              for (const pair of pairsToAdd) {
+                try {
+                  await storage.addWatchlistPair({
+                    userId,
+                    mode: 'paper',
+                    symbol: pair.symbol,
+                    baseCurrency: pair.baseCurrency,
+                    quoteCurrency: pair.quoteCurrency,
+                  });
+                  console.log(`[PaperSimService][AutoWatchlist] ✅ Added ${pair.symbol} (Vol: $${(pair.volume24h/1000000).toFixed(1)}M, Range: ${pair.dailyRange.toFixed(1)}%)`);
+                } catch (error) {
+                  console.warn(`[PaperSimService][AutoWatchlist] Failed to add ${pair.symbol}:`, error);
+                }
+              }
+              
+              if (eligiblePairs.length > MAX_AUTO_PAIRS) {
+                console.log(`[PaperSimService][AutoWatchlist] Note: ${eligiblePairs.length - MAX_AUTO_PAIRS} additional eligible pairs were not added (10-pair cap)`);
+              }
             }
+          } catch (error) {
+            console.error('[PaperSimService][AutoWatchlist] Error querying screener for eligible pairs:', error);
+            console.log('[PaperSimService][AutoWatchlist] Engine will start with empty watchlist (idle state)');
           }
         } else {
-          console.log(`[PaperSimService][Phase-27.F.17] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
+          console.log(`[PaperSimService][AutoWatchlist] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
         }
         
         // 2. Set default minVolume to 5,000,000 in screener filters
