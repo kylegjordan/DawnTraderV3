@@ -5327,6 +5327,86 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // PHASE 27.F.21.FINAL: Feed Health - Retrospective Cleanup (Admin Only)
+  // Cleans up DORMANT-MODE feed-health alerts only (older than 30 min + dormant flag)
+  app.post('/api/system/feed-health/cleanup-old-alerts', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      console.log(`[FEED-HEALTH] Retrospective cleanup triggered by user: ${req.user!.username}`);
+      
+      // Target dormant-mode alerts older than 30 minutes
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+      
+      // Get all users
+      const users = await storage.getAllUsers();
+      let totalCleaned = 0;
+      let skippedActiveAlerts = 0;
+      
+      for (const user of users) {
+        // Get old unacknowledged feed-health alerts
+        const liveAlerts = await AlertsService.getUnacknowledgedAlerts(user.id, 'live');
+        const paperAlerts = await AlertsService.getUnacknowledgedAlerts(user.id, 'paper');
+        
+        // Filter to DORMANT-MODE feed-health alerts (old + dormant metadata)
+        // This preserves legitimate active-mode alerts
+        const dormantLiveFeedAlerts = liveAlerts.filter(a => {
+          const isOld = new Date(a.timestamp) < thirtyMinutesAgo;
+          const isFeedHealth = a.alertType === 'feed_health';
+          const isDormant = a.metadata?.dormant === true;
+          
+          if (isFeedHealth && isOld && !isDormant) {
+            skippedActiveAlerts++;
+          }
+          
+          return isFeedHealth && isOld && isDormant;
+        });
+        
+        const dormantPaperFeedAlerts = paperAlerts.filter(a => {
+          const isOld = new Date(a.timestamp) < thirtyMinutesAgo;
+          const isFeedHealth = a.alertType === 'feed_health';
+          const isDormant = a.metadata?.dormant === true;
+          
+          if (isFeedHealth && isOld && !isDormant) {
+            skippedActiveAlerts++;
+          }
+          
+          return isFeedHealth && isOld && isDormant;
+        });
+        
+        // Acknowledge dormant alerts only
+        for (const alert of dormantLiveFeedAlerts) {
+          await AlertsService.acknowledgeAlert(alert.id, user.id);
+          totalCleaned++;
+        }
+        
+        for (const alert of dormantPaperFeedAlerts) {
+          await AlertsService.acknowledgeAlert(alert.id, user.id);
+          totalCleaned++;
+        }
+      }
+      
+      console.log(`[FEED-HEALTH] Retrospective cleanup complete: ${totalCleaned} dormant alerts cleaned, ${skippedActiveAlerts} active-mode alerts preserved`);
+      
+      // Reset feed health monitor state (clears history, resets uptime counters)
+      const { getFeedIntegrityMonitor } = await import('./services/feed-integrity-monitor');
+      const monitor = getFeedIntegrityMonitor();
+      monitor.reset();
+      console.log(`[FEED-HEALTH] Monitor state reset - dormant periods excluded from future grading`);
+      
+      res.json({ 
+        ok: true,
+        message: 'Retrospective cleanup completed (dormant-mode alerts only)',
+        alertsCleaned: totalCleaned,
+        activeAlertsPreserved: skippedActiveAlerts,
+        cutoffTime: thirtyMinutesAgo.toISOString(),
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[FEED-HEALTH] Cleanup error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ============================================
   // Walter Autonomous Maintenance Actions
   // ============================================

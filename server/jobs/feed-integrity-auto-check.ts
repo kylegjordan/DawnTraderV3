@@ -29,17 +29,24 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
   console.log(`[FeedIntegrity:${trigger}] Starting feed health check...`);
   
   try {
-    // PHASE 27.F.21: Gating Logic - Skip feed checks if trading is inactive
+    // PHASE 27.F.21.FINAL: Global Gating - Skip ALL checks if trading is inactive
     // Check if any user has active trading (live or paper)
     const users = await storage.getAllUsers();
     const anyTradingActive = await Promise.all(
       users.map(u => tradingStateSync.isEngineActive(u.id))
     ).then(results => results.some(active => active));
     
-    if (!anyTradingActive && trigger === 'auto') {
-      console.log(`[FeedIntegrity:${trigger}] ⏸️  Feed check skipped: trading inactive (no active stream to monitor)`);
+    if (!anyTradingActive) {
+      const skipReason = trigger === 'auto' 
+        ? 'Auto-check skipped: trading inactive (no active stream to monitor)'
+        : 'Manual check skipped: trading inactive (no active stream exists)';
       
-      // Return minimal report without alerting
+      console.log(`[FeedIntegrity:${trigger}] ⏸️  ${skipReason}`);
+      
+      // PHASE 27.F.21.FINAL: Return dormant report with perfect grade 'A'
+      // This excludes dormant periods from feed health grading - when trading is stopped,
+      // there's no stream to monitor, so degraded metrics don't reflect actual system health.
+      // Grade calculations only consider active trading sessions.
       const dormantReport: FeedHealthReport = {
         timestamp: new Date().toISOString(),
         overallGrade: 'A',
@@ -439,23 +446,74 @@ export function registerFeedIntegrityJob() {
 }
 
 /**
- * PHASE 27.F.21: Clear feed-health alerts on trading stop
+ * PHASE 27.F.21.FINAL: Clear feed-health alerts on trading stop
  * Called when trading mode transitions to inactive
+ * 
+ * Enhanced to:
+ * - Clear only feed-related alerts
+ * - Log to Walter for transparency
+ * - Broadcast state update via context bridge
  * 
  * @param userId - User ID to clear alerts for
  */
 export async function clearFeedHealthAlertsOnStop(userId: string): Promise<void> {
   try {
-    console.log(`[FeedIntegrity] 🔇 Clearing feed-health alerts for user ${userId} (trading stopped)`);
+    console.log(`[FeedIntegrity] 🔇 Auto-clearing feed-health alerts for user ${userId} (trading stopped)`);
     
-    // Acknowledge all unacknowledged alerts for this user (both modes)
-    // This will clear all alerts including feed-health alerts
-    await AlertsService.acknowledgeAll(userId, 'live');
-    await AlertsService.acknowledgeAll(userId, 'paper');
+    // Get all unacknowledged feed-health alerts for this user
+    const liveAlerts = await AlertsService.getUnacknowledgedAlerts(userId, 'live');
+    const paperAlerts = await AlertsService.getUnacknowledgedAlerts(userId, 'paper');
     
-    // Log action for transparency
-    console.log(`[FeedIntegrity] ✅ Feed monitoring paused - trading inactive (no active stream to monitor)`);
-    console.log(`[FeedIntegrity] ✅ Feed-health alerts cleared for user ${userId}`);
+    // Filter to feed-health alerts only
+    const liveFeedAlerts = liveAlerts.filter(a => a.alertType === 'feed_health');
+    const paperFeedAlerts = paperAlerts.filter(a => a.alertType === 'feed_health');
+    
+    let totalCleared = 0;
+    
+    // Acknowledge live mode feed alerts
+    for (const alert of liveFeedAlerts) {
+      await AlertsService.acknowledgeAlert(alert.id, userId);
+      totalCleared++;
+    }
+    
+    // Acknowledge paper mode feed alerts
+    for (const alert of paperFeedAlerts) {
+      await AlertsService.acknowledgeAlert(alert.id, userId);
+      totalCleared++;
+    }
+    
+    if (totalCleared > 0) {
+      console.log(`[FeedIntegrity] ✅ Cleared ${totalCleared} feed-health alerts (${liveFeedAlerts.length} live, ${paperFeedAlerts.length} paper)`);
+      
+      // Create Walter action log entry for transparency (both modes)
+      try {
+        const logMessage = `Feed alerts cleared automatically on trading stop (${totalCleared} alerts cleared)`;
+        
+        await WalterOpsEngine.processAnomaly(userId, 'live', {
+          source: 'feed',
+          component: 'Feed Monitor',
+          anomaly: logMessage,
+          metrics: {
+            alerts_cleared: totalCleared,
+            live_alerts: liveFeedAlerts.length,
+            paper_alerts: paperFeedAlerts.length,
+          },
+          severity: 'info',
+          metadata: {
+            action: 'auto_clear_on_stop',
+            reason: 'Trading inactive - no active stream to monitor',
+          }
+        });
+        
+        console.log(`[FeedIntegrity] ✅ Walter action logged (live mode)`);
+      } catch (walterError) {
+        console.error(`[FeedIntegrity] Failed to log Walter action:`, walterError);
+      }
+    } else {
+      console.log(`[FeedIntegrity] No feed-health alerts to clear for user ${userId}`);
+    }
+    
+    console.log(`[FeedIntegrity] Feed monitoring paused - trading inactive (no active stream to monitor)`);
   } catch (error) {
     console.error(`[FeedIntegrity] Failed to clear feed-health alerts for user ${userId}:`, error);
   }
