@@ -1244,6 +1244,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const isEngineActive = systemContext?.isEngineActive || false;
       
       // Check paper simulation engine status (system-wide)
+      // Phase 27.F.13: Check global session for accurate running status
       const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
       const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
       

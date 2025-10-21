@@ -1,5 +1,6 @@
 import { storage } from '../storage';
 import { PaperExecutionEngine } from './paper-execution-engine';
+import { KrakenService } from './kraken';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -35,16 +36,20 @@ interface PortfolioHealth {
 export class PaperPortfolioManager {
   private userId: string;
   private executionEngine: PaperExecutionEngine;
+  private kraken: KrakenService;
   private isRunning: boolean = false;
+  private watchlistRefreshInterval: NodeJS.Timeout | null = null;
   
   // Portfolio-level guardrails
   private readonly MAX_DRAWDOWN_PERCENT = 20; // Max 20% drawdown
   private readonly MAX_OPEN_POSITIONS = 10; // Max 10 concurrent positions
   private readonly MAX_PORTFOLIO_EXPOSURE_PERCENT = 80; // Max 80% capital deployed
+  private readonly WATCHLIST_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 
   constructor(userId: string) {
     this.userId = userId;
     this.executionEngine = new PaperExecutionEngine(userId);
+    this.kraken = new KrakenService();
   }
 
   async start(): Promise<void> {
@@ -66,6 +71,15 @@ export class PaperPortfolioManager {
 
     // Start execution engine
     await this.executionEngine.start();
+
+    // Start watchlist refresh cycle
+    console.log(`[PaperPortfolio:${this.userId}] Starting watchlist refresh (every ${this.WATCHLIST_REFRESH_INTERVAL_MS / 1000}s)`);
+    this.watchlistRefreshInterval = setInterval(
+      () => this.refreshWatchlistData(),
+      this.WATCHLIST_REFRESH_INTERVAL_MS
+    );
+    // Run initial refresh immediately
+    await this.refreshWatchlistData();
   }
 
   async stop(): Promise<void> {
@@ -76,8 +90,51 @@ export class PaperPortfolioManager {
     this.isRunning = false;
     console.log(`[PaperPortfolio:${this.userId}] Stopping paper portfolio manager`);
 
+    // Stop watchlist refresh
+    if (this.watchlistRefreshInterval) {
+      clearInterval(this.watchlistRefreshInterval);
+      this.watchlistRefreshInterval = null;
+      console.log(`[PaperPortfolio:${this.userId}] Stopped watchlist refresh`);
+    }
+
     // Stop execution engine
     await this.executionEngine.stop();
+  }
+
+  private async refreshWatchlistData(): Promise<void> {
+    try {
+      // Get user's paper mode watchlist
+      const watchlist = await storage.getWatchlist({ userId: this.userId, mode: 'paper' });
+      
+      if (watchlist.length === 0) {
+        return; // No symbols to refresh
+      }
+
+      console.log(`[PaperPortfolio:${this.userId}] Refreshing ${watchlist.length} watchlist pairs`);
+
+      // Refresh market data for each symbol
+      for (const pair of watchlist) {
+        try {
+          const ticker = await this.kraken.getTicker(pair.symbol);
+          
+          // Update watchlist with fresh market data
+          await storage.updateWatchlistPair(pair.id, {
+            currentPrice: ticker.lastPrice.toString(),
+            vwap: ticker.vwap24h.toString(),
+            volume24h: ticker.volume24h.toString(),
+            dailyRange: ticker.dailyRange?.toString(),
+            lastScanned: new Date()
+          });
+        } catch (error: any) {
+          // Log but don't fail the whole refresh if one symbol fails
+          console.log(`[PaperPortfolio:${this.userId}] Failed to refresh ${pair.symbol}: ${error.message}`);
+        }
+      }
+
+      console.log(`[PaperPortfolio:${this.userId}] Watchlist refresh complete`);
+    } catch (error) {
+      console.error(`[PaperPortfolio:${this.userId}] Error refreshing watchlist:`, error);
+    }
   }
 
   async getPortfolioMetrics(): Promise<PortfolioMetrics> {
