@@ -1966,6 +1966,103 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  apiRouter.get('/paper/metrics/earnings-chart', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const days = parseInt(req.query.days as string) || 30;
+      
+      // Get paper trades for the specified period
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      
+      const trades = await storage.getAllPaperTrades(userId);
+      
+      // Group trades by date and calculate daily earnings
+      const earningsByDate = new Map<string, number>();
+      
+      for (const trade of trades) {
+        if (trade.status === 'closed' && trade.closedAt) {
+          const closeDate = new Date(trade.closedAt);
+          if (closeDate >= startDate && closeDate <= endDate) {
+            const dateKey = closeDate.toISOString().split('T')[0];
+            const currentEarnings = earningsByDate.get(dateKey) || 0;
+            earningsByDate.set(dateKey, currentEarnings + (trade.realizedPnl || 0));
+          }
+        }
+      }
+      
+      // Convert to array format expected by frontend
+      const chartData = Array.from(earningsByDate.entries()).map(([date, earnings]) => ({
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        earnings: parseFloat(earnings.toFixed(2)),
+        timestamp: new Date(date).getTime()
+      })).sort((a, b) => a.timestamp - b.timestamp);
+      
+      res.json(chartData);
+    } catch (error) {
+      console.error('Error fetching paper earnings chart:', error);
+      res.status(500).json({ error: 'Failed to fetch paper earnings chart' });
+    }
+  });
+
+  apiRouter.get('/paper/metrics/history', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const days = parseInt(req.query.days as string) || 30;
+      
+      // Get paper trades for the specified period
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      
+      const trades = await storage.getAllPaperTrades(userId);
+      const settings = await storage.getTradingSettings(userId);
+      const initialBalance = settings?.paperInitialBalance || 10000;
+      
+      // Calculate running balance over time
+      const historyByDate = new Map<string, number>();
+      let runningBalance = initialBalance;
+      
+      for (const trade of trades.sort((a, b) => 
+        new Date(a.closedAt || a.createdAt).getTime() - new Date(b.closedAt || b.createdAt).getTime()
+      )) {
+        if (trade.status === 'closed' && trade.closedAt) {
+          const closeDate = new Date(trade.closedAt);
+          if (closeDate >= startDate && closeDate <= endDate) {
+            runningBalance += (trade.realizedPnl || 0);
+            const dateKey = closeDate.toISOString().split('T')[0];
+            historyByDate.set(dateKey, runningBalance);
+          }
+        }
+      }
+      
+      // Convert to array format
+      const historyData = Array.from(historyByDate.entries()).map(([date, balance]) => ({
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        totalValue: parseFloat(balance.toFixed(2)),
+        timestamp: new Date(date).getTime()
+      })).sort((a, b) => a.timestamp - b.timestamp);
+      
+      res.json(historyData);
+    } catch (error) {
+      console.error('Error fetching paper metrics history:', error);
+      res.status(500).json({ error: 'Failed to fetch paper metrics history' });
+    }
+  });
+
+  apiRouter.get('/paper/trades/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const allTrades = await storage.getAllPaperTrades(userId);
+      const activeTrades = allTrades.filter(t => t.status === 'open');
+      res.json(activeTrades);
+    } catch (error) {
+      console.error('Error fetching active paper trades:', error);
+      res.status(500).json({ error: 'Failed to fetch active paper trades' });
+    }
+  });
+
   // Live Trading Routes (Phase 22.3)
   // Control live trading mode with manual approval requirements
   apiRouter.post('/live-trading/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
