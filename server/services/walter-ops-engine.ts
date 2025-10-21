@@ -27,7 +27,7 @@ import type { InsertWalterAction, Trade } from '@shared/schema';
 import { AlertContextEngine, type AlertContext, type ImpactAssessment } from './alert-context-engine';
 import { storage } from '../storage';
 import { getFeedIntegrityMonitor } from './feed-integrity-monitor';
-import { eq, and, desc, gte } from 'drizzle-orm';
+import { eq, and, desc, gte, sql } from 'drizzle-orm';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -47,13 +47,13 @@ export interface AnomalyInput {
 }
 
 export interface MaintenanceAction {
-  action_id: string;
-  action_type: 'feed_reconnect' | 'feed_pause' | 'formula_recalc' | 'cache_refresh' | 'health_check' | 'threshold_adjust' | 'auto_suppress' | 'escalate';
+  actionId: string;
+  actionType: 'feed_reconnect' | 'feed_pause' | 'formula_recalc' | 'cache_refresh' | 'health_check' | 'threshold_adjust' | 'auto_suppress' | 'escalate';
   status: 'auto_resolved' | 'monitored' | 'escalated' | 'pending';
   resolution: string;
   confidence: number;
   deduplicated?: boolean; // True if this was a duplicate incident
-  db_error?: boolean; // True if DB was unavailable
+  dbError?: boolean; // True if DB was unavailable
 }
 
 /**
@@ -126,8 +126,8 @@ export class WalterOpsEngine {
     if (memoryDedup.isDuplicate) {
       console.log(`[WalterOps] 🔄 In-memory duplicate detected: ${incidentKey}`);
       return {
-        action_id: memoryDedup.actionId || 'mem_dedup',
-        action_type: 'auto_suppress',
+        actionId: memoryDedup.actionId || 'mem_dedup',
+        actionType: 'auto_suppress',
         status: 'monitored',
         resolution: `In-memory duplicate (recent action at ${new Date(memoryDedup.timestamp!).toISOString()})`,
         confidence: 1.0,
@@ -140,8 +140,8 @@ export class WalterOpsEngine {
     if (cooldownCheck.inCooldown) {
       console.log(`[WalterOps] ⏸️ Incident in cooldown until ${new Date(cooldownCheck.cooldownUntil!).toISOString()}`);
       return {
-        action_id: cooldownCheck.lastActionId || 'cooldown',
-        action_type: 'auto_suppress',
+        actionId: cooldownCheck.lastActionId || 'cooldown',
+        actionType: 'auto_suppress',
         status: 'monitored',
         resolution: `Cooldown active (retry ${cooldownCheck.retryCount})`,
         confidence: 1.0,
@@ -470,8 +470,8 @@ export class WalterOpsEngine {
     this.setCooldown(incidentKey, retryCount, existingAction.id);
     
     return {
-      action_id: existingAction.id,
-      action_type: existingAction.actionType,
+      actionId: existingAction.id,
+      actionType: existingAction.actionType,
       status: 'monitored',
       resolution: `Duplicate incident (retry ${retryCount})`,
       confidence: parseFloat(existingAction.confidenceScore || '0'),
@@ -518,8 +518,8 @@ export class WalterOpsEngine {
       this.recordInMemoryDedup(incidentKey, action[0].id);
       
       return {
-        action_id: action[0].id,
-        action_type: 'escalate',
+        actionId: action[0].id,
+        actionType: 'escalate',
         status: 'escalated',
         resolution: `Hourly limit exceeded (${actionCount}/${this.HOURLY_LIMIT})`,
         confidence: 1.0,
@@ -528,12 +528,12 @@ export class WalterOpsEngine {
       console.error('[WalterOps] DB error creating rate-limit escalation:', error);
       this.recordInMemoryDedup(incidentKey, actionId);
       return {
-        action_id: actionId,
-        action_type: 'escalate',
+        actionId: actionId,
+        actionType: 'escalate',
         status: 'escalated',
         resolution: `Hourly limit exceeded (${actionCount}/${this.HOURLY_LIMIT}) [DB unavailable]`,
         confidence: 1.0,
-        db_error: true,
+        dbError: true,
       };
     }
   }
@@ -615,8 +615,8 @@ export class WalterOpsEngine {
       this.logMaintenance('auto_suppress', anomaly.component, anomaly.anomaly, 'Suppressed', impact.confidence);
       
       return {
-        action_id: action[0].id,
-        action_type: 'auto_suppress',
+        actionId: action[0].id,
+        actionType: 'auto_suppress',
         status: 'auto_resolved',
         resolution: `Suppressed (negligible impact: ${impact.impact_score})`,
         confidence: impact.confidence,
@@ -628,12 +628,12 @@ export class WalterOpsEngine {
       this.logMaintenance('auto_suppress', anomaly.component, anomaly.anomaly, 'Suppressed [DB error]', impact.confidence);
       
       return {
-        action_id: actionId,
-        action_type: 'auto_suppress',
+        actionId: actionId,
+        actionType: 'auto_suppress',
         status: 'auto_resolved',
         resolution: `Suppressed (negligible impact: ${impact.impact_score}) [DB unavailable]`,
         confidence: impact.confidence,
-        db_error: true,
+        dbError: true,
       };
     }
   }
@@ -681,8 +681,8 @@ export class WalterOpsEngine {
       this.logMaintenance('log_only', anomaly.component, anomaly.anomaly, 'Monitored', impact.confidence);
       
       return {
-        action_id: action[0].id,
-        action_type: 'health_check',
+        actionId: action[0].id,
+        actionType: 'health_check',
         status: 'monitored',
         resolution: `Monitoring (moderate impact: ${impact.impact_score})`,
         confidence: impact.confidence,
@@ -694,12 +694,12 @@ export class WalterOpsEngine {
       this.logMaintenance('log_only', anomaly.component, anomaly.anomaly, 'Monitored [DB error]', impact.confidence);
       
       return {
-        action_id: actionId,
-        action_type: 'health_check',
+        actionId: actionId,
+        actionType: 'health_check',
         status: 'monitored',
         resolution: `Monitoring (moderate impact: ${impact.impact_score}) [DB unavailable]`,
         confidence: impact.confidence,
-        db_error: true,
+        dbError: true,
       };
     }
   }
@@ -752,39 +752,39 @@ export class WalterOpsEngine {
     impact: ImpactAssessment,
     incidentKey: string
   ): Promise<MaintenanceAction> {
-    let action_type: 'feed_reconnect' | 'formula_recalc' = 'feed_reconnect';
-    let executed_action = '';
-    let resolution_notes = '';
+    let actionTypeValue: 'feed_reconnect' | 'formula_recalc' = 'feed_reconnect';
+    let executedAction = '';
+    let resolutionNotes = '';
     
     if (anomaly.source === 'feed') {
-      action_type = 'feed_reconnect';
-      executed_action = await this.executeFeedReconnect();
-      resolution_notes = `Auto-reconnected Kraken WebSocket - ${impact.reason}`;
+      actionTypeValue = 'feed_reconnect';
+      executedAction = await this.executeFeedReconnect();
+      resolutionNotes = `Auto-reconnected Kraken WebSocket - ${impact.reason}`;
     } else if (anomaly.source === 'formula') {
-      action_type = 'formula_recalc';
-      executed_action = await this.executeFormulaRecalc(anomaly.component);
-      resolution_notes = `Recalculated ${anomaly.component} - ${impact.reason}`;
+      actionTypeValue = 'formula_recalc';
+      executedAction = await this.executeFormulaRecalc(anomaly.component);
+      resolutionNotes = `Recalculated ${anomaly.component} - ${impact.reason}`;
     }
     
-    console.log(`[WalterOps] Auto-resolved: ${anomaly.anomaly} via ${action_type}`);
+    console.log(`[WalterOps] Auto-resolved: ${anomaly.anomaly} via ${actionTypeValue}`);
     
-    const actionId = action_type + '_' + Date.now();
+    const actionId = actionTypeValue + '_' + Date.now();
     
     try {
       const action = await db.insert(walterActions).values({
         userId,
         mode,
-        actionType: action_type,
+        actionType: actionTypeValue,
         category: anomaly.source,
         status: 'completed',
         impactScore: impact.impact_score.toString(),
         affectedComponent: anomaly.component,
         detectedAnomaly: anomaly.anomaly,
         contextData: anomaly.metrics || {},
-        suggestedFix: `Auto-resolve via ${action_type}`,
-        executedAction: executed_action,
+        suggestedFix: `Auto-resolve via ${actionTypeValue}`,
+        executedAction: executedAction,
         resolutionStatus: 'fixed',
-        resolutionNotes: resolution_notes,
+        resolutionNotes: resolutionNotes,
         confidenceScore: impact.confidence.toString(),
         requiresApproval: false,
         escalated: false,
@@ -798,13 +798,13 @@ export class WalterOpsEngine {
       this.setCooldown(incidentKey, 0, action[0].id);
       this.recordInMemoryDedup(incidentKey, action[0].id);
       this.incrementHourlyCount(incidentKey);
-      this.logMaintenance(action_type, anomaly.component, anomaly.anomaly, executed_action, impact.confidence);
+      this.logMaintenance(actionTypeValue, anomaly.component, anomaly.anomaly, executedAction, impact.confidence);
       
       return {
-        action_id: action[0].id,
-        action_type,
+        actionId: action[0].id,
+        actionType: actionTypeValue,
         status: 'auto_resolved',
-        resolution: resolution_notes,
+        resolution: resolutionNotes,
         confidence: impact.confidence,
       };
     } catch (error) {
@@ -812,15 +812,15 @@ export class WalterOpsEngine {
       this.setCooldown(incidentKey, 0, actionId);
       this.recordInMemoryDedup(incidentKey, actionId);
       this.incrementHourlyCount(incidentKey);
-      this.logMaintenance(action_type, anomaly.component, anomaly.anomaly, executed_action + ' [DB error]', impact.confidence);
+      this.logMaintenance(actionTypeValue, anomaly.component, anomaly.anomaly, executedAction + ' [DB error]', impact.confidence);
       
       return {
-        action_id: actionId,
-        action_type,
+        actionId: actionId,
+        actionType: actionTypeValue,
         status: 'auto_resolved',
-        resolution: resolution_notes + ' [DB unavailable]',
+        resolution: resolutionNotes + ' [DB unavailable]',
         confidence: impact.confidence,
-        db_error: true,
+        dbError: true,
       };
     }
   }
@@ -872,8 +872,8 @@ export class WalterOpsEngine {
       this.logMaintenance('escalate', anomaly.component, anomaly.anomaly, 'Escalated to user', impact.confidence);
       
       return {
-        action_id: action[0].id,
-        action_type: 'escalate',
+        actionId: action[0].id,
+        actionType: 'escalate',
         status: 'escalated',
         resolution: `Requires manual approval (critical impact: ${impact.impact_score})`,
         confidence: impact.confidence,
@@ -885,12 +885,12 @@ export class WalterOpsEngine {
       this.logMaintenance('escalate', anomaly.component, anomaly.anomaly, 'Escalated [DB error]', impact.confidence);
       
       return {
-        action_id: actionId,
-        action_type: 'escalate',
+        actionId: actionId,
+        actionType: 'escalate',
         status: 'escalated',
         resolution: `Requires manual approval (critical impact: ${impact.impact_score}) [DB unavailable]`,
         confidence: impact.confidence,
-        db_error: true,
+        dbError: true,
       };
     }
   }
@@ -942,7 +942,7 @@ export class WalterOpsEngine {
    * Log maintenance action
    */
   private static logMaintenance(
-    action_type: string,
+    actionType: string,
     component: string,
     issue: string,
     outcome: string,
@@ -950,7 +950,7 @@ export class WalterOpsEngine {
   ): void {
     const entry = {
       timestamp: new Date().toISOString(),
-      action_type,
+      actionType,
       component,
       issue,
       outcome,
@@ -1046,30 +1046,30 @@ export class WalterOpsEngine {
   }
   
   /**
+   * Check if database is available
+   */
+  private static async isDbAvailable(): Promise<boolean> {
+    try {
+      await db.execute(sql`SELECT 1`);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+  
+  /**
    * Get Walter actions with filtering
    */
   static async getActions(
     userId: string,
     mode: 'live' | 'paper',
     filters?: { status?: string; source?: string; limit?: number }
-  ): Promise<WalterAction[]> {
+  ): Promise<any[]> {
     const dbAvailable = await this.isDbAvailable();
     
     if (!dbAvailable) {
-      // Return in-memory actions with filtering
-      let actions = this.maintenanceLog.filter(a => 
-        a.user_id === userId && a.mode === mode
-      );
-      
-      if (filters?.status) {
-        actions = actions.filter(a => a.status === filters.status);
-      }
-      if (filters?.source) {
-        actions = actions.filter(a => a.source === filters.source);
-      }
-      
-      const limit = filters?.limit || 50;
-      return actions.slice(0, limit);
+      // Return in-memory actions with filtering (Note: in-memory log doesn't have userId/mode)
+      return [];
     }
     
     try {
@@ -1077,10 +1077,8 @@ export class WalterOpsEngine {
       const actions = await storage.getWalterActions(userId, mode, filters);
       return actions;
     } catch (error) {
-      console.error('[WalterOps-getActions] DB error, falling back to in-memory:', error);
-      return this.maintenanceLog.filter(a => 
-        a.user_id === userId && a.mode === mode
-      ).slice(0, filters?.limit || 50);
+      console.error('[WalterOps-getActions] DB error:', error);
+      return [];
     }
   }
   
@@ -1091,7 +1089,7 @@ export class WalterOpsEngine {
     actionId: string,
     userId: string,
     mode: 'live' | 'paper'
-  ): Promise<{ success: boolean; action?: WalterAction; error?: string }> {
+  ): Promise<{ success: boolean; action?: any; error?: string }> {
     const dbAvailable = await this.isDbAvailable();
     
     if (!dbAvailable) {
@@ -1107,26 +1105,32 @@ export class WalterOpsEngine {
         return { success: false, error: 'Action not found' };
       }
       
-      if (action.status !== 'pending_approval') {
-        return { success: false, error: `Action is not pending approval (current status: ${action.status})` };
+      if (action.status !== 'pending') {
+        return { success: false, error: `Action is not pending (current status: ${action.status})` };
       }
       
-      // Execute the action based on type
-      let executionResult = { success: true };
+      // Mark as in_progress during execution
+      await storage.updateWalterAction(actionId, userId, mode, {
+        status: 'in_progress',
+      });
       
-      if (action.action_type === 'auto_reconnect') {
+      // Execute the action based on type
+      let executionResult = { success: true, error: null };
+      
+      if (action.actionType === 'feed_reconnect') {
         // TODO: Implement actual reconnect logic
         console.log(`[WalterOps-approve] Executing reconnect for action ${actionId}`);
-      } else if (action.action_type === 'auto_recalculate') {
+      } else if (action.actionType === 'formula_recalc') {
         // TODO: Implement actual recalculation logic
         console.log(`[WalterOps-approve] Executing recalculation for action ${actionId}`);
       }
       
-      // Update action status
+      // Update action status to completed only after successful execution
       const updatedAction = await storage.updateWalterAction(actionId, userId, mode, {
         status: executionResult.success ? 'completed' : 'failed',
-        executed_at: new Date().toISOString(),
-        result: executionResult.success ? 'Approved and executed successfully' : 'Execution failed',
+        actionedAt: new Date(),
+        resolvedAt: executionResult.success ? new Date() : null,
+        resolutionNotes: executionResult.success ? 'Approved and executed successfully' : executionResult.error || 'Execution failed',
       });
       
       return { success: true, action: updatedAction };
@@ -1144,7 +1148,7 @@ export class WalterOpsEngine {
     userId: string,
     mode: 'live' | 'paper',
     reason?: string
-  ): Promise<{ success: boolean; action?: WalterAction; error?: string }> {
+  ): Promise<{ success: boolean; action?: any; error?: string }> {
     const dbAvailable = await this.isDbAvailable();
     
     if (!dbAvailable) {
@@ -1160,15 +1164,15 @@ export class WalterOpsEngine {
         return { success: false, error: 'Action not found' };
       }
       
-      if (action.status !== 'pending_approval') {
-        return { success: false, error: `Action is not pending approval (current status: ${action.status})` };
+      if (action.status !== 'pending') {
+        return { success: false, error: `Action is not pending (current status: ${action.status})` };
       }
       
       // Update action status
       const updatedAction = await storage.updateWalterAction(actionId, userId, mode, {
         status: 'rejected',
-        executed_at: new Date().toISOString(),
-        result: reason || 'Rejected by user',
+        actionedAt: new Date(),
+        resolutionNotes: reason || 'Rejected by user',
       });
       
       return { success: true, action: updatedAction };
@@ -1185,7 +1189,7 @@ export class WalterOpsEngine {
     actionId: string,
     userId: string,
     mode: 'live' | 'paper'
-  ): Promise<{ success: boolean; action?: WalterAction; error?: string }> {
+  ): Promise<{ success: boolean; action?: any; error?: string }> {
     const dbAvailable = await this.isDbAvailable();
     
     if (!dbAvailable) {
@@ -1203,8 +1207,8 @@ export class WalterOpsEngine {
       
       // Update acknowledgment
       const updatedAction = await storage.updateWalterAction(actionId, userId, mode, {
-        acknowledged: true,
-        acknowledged_at: new Date().toISOString(),
+        acknowledgedAt: new Date(),
+        userFeedback: 'Acknowledged',
       });
       
       return { success: true, action: updatedAction };

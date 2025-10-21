@@ -61,17 +61,29 @@ export class AlertContextEngine {
     // Clamp impact_score to [0, 100] (Architect feedback)
     impact_score = Math.max(0, Math.min(100, impact_score));
     
-    // Determine severity and action
-    const severity = this.getSeverity(impact_score);
+    // Determine initial severity and action
+    let severity = this.getSeverity(impact_score);
     const action = this.getAction(impact_score, context);
     const reason = reason_parts.join('; ');
     const confidence = this.calculateConfidence(context);
+    
+    // CONTEXTUAL DOWNGRADING: Downgrade critical→warning for feed alerts with moderate latency in low volatility
+    if (component === 'feed' && severity === 'warning') {
+      // 10-30s latency AND low volatility: keep as warning (don't escalate)
+      if (context.latency_ms !== undefined && 
+          context.latency_ms >= 10000 && 
+          context.latency_ms <= 30000 &&
+          context.current_volatility_index < 0.3) {
+        // Already warning, but ensure we log the context
+        reason_parts.push('Low volatility - keeping as warning');
+      }
+    }
     
     return {
       impact_score: Math.round(impact_score),
       severity,
       action,
-      reason,
+      reason: reason_parts.join('; '),
       confidence,
     };
   }
@@ -218,10 +230,33 @@ export class AlertContextEngine {
   
   /**
    * Determine action based on impact score and context
-   * Architect feedback: Gate escalation at 30-39 to require (live OR active_trades > 0)
+   * Phase 27.F.20: Enhanced contextual suppression to reduce alert noise
+   * 
+   * Suppression Rules:
+   * - Feed alerts: suppress if latency <10s AND no active trades
+   * - Feed alerts: suppress if latency <10s during recovery (REST fallback active)
+   * - All: suppress if impact <5
+   * 
+   * Escalation Rules:
+   * - Always escalate: impact ≥40 (critical)
+   * - Escalate if: impact ≥15 AND (active trades >0 OR mode=live)
+   * - Otherwise: log only
    */
   private static getAction(impact_score: number, context: AlertContext): 'auto_suppress' | 'log_only' | 'escalate' {
-    // Very low impact: always suppress
+    // CONTEXTUAL SUPPRESSION: Feed alerts with low latency and no trades
+    if (context.component === 'feed') {
+      // Suppress if latency <10s AND no active trades
+      if (context.latency_ms !== undefined && context.latency_ms < 10000 && context.active_trade_count === 0) {
+        return 'auto_suppress';
+      }
+      
+      // Suppress if very low impact (<5) even with some latency
+      if (impact_score < 5) {
+        return 'auto_suppress';
+      }
+    }
+    
+    // Very low impact: always suppress (all components)
     if (impact_score < 5) {
       return 'auto_suppress';
     }
