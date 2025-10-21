@@ -52,6 +52,7 @@ import { memoryLifecycle } from "./services/memory-lifecycle";
 import { getPermissionsForRole, Permission } from './config/permissions.js';
 import type { UserRole } from './config/permissions.js';
 import { randomUUID } from 'crypto';
+import { getPaperSimulationStatus } from './services/paper-sim-service';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -3222,9 +3223,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/paper-sim/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const manager = paperPortfolioManagers.get(userId);
+      const status = await getPaperSimulationStatus(userId);
+      const manager = (global as any).globalPaperPortfolioManager;
       
-      if (!manager) {
+      if (!status.isRunning || !manager) {
         const stats = await storage.getPaperSimStats(userId);
         return res.json({
           isRunning: false,
@@ -3259,9 +3261,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/paper-sim/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const manager = paperPortfolioManagers.get(userId);
+      const status = await getPaperSimulationStatus(userId);
+      const manager = (global as any).globalPaperPortfolioManager;
       
-      if (!manager) {
+      if (!status.isRunning || !manager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });
       }
 
@@ -3276,9 +3279,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/paper-sim/close-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const manager = paperPortfolioManagers.get(userId);
+      const status = await getPaperSimulationStatus(userId);
+      const manager = (global as any).globalPaperPortfolioManager;
       
-      if (!manager) {
+      if (!status.isRunning || !manager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });
       }
 
@@ -3295,9 +3299,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const manager = paperPortfolioManagers.get(userId);
+      const status = await getPaperSimulationStatus(userId);
+      const manager = (global as any).globalPaperPortfolioManager;
       
-      if (!manager) {
+      if (!status.isRunning || !manager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });
       }
 
@@ -9721,10 +9726,10 @@ Summary:`;
       const liveEngine = tradingEngines.get(userId);
       const liveEngineStatus = liveEngine?.getStatus?.() || { tradingStatus: 'stopped' };
       
-      const paperIsRunning = paperPortfolioManagers.has(userId);
+      const paperStatus = await getPaperSimulationStatus(userId);
       const paperEngineStatus = { 
-        isRunning: paperIsRunning,
-        status: paperIsRunning ? 'running' : 'stopped'
+        isRunning: paperStatus.isRunning,
+        status: paperStatus.isRunning ? 'running' : 'stopped'
       };
 
       // 4. AI Systems Status
