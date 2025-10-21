@@ -1,127 +1,29 @@
 import cron from 'node-cron';
-import { getFeedIntegrityMonitor, FeedHealthReport } from '../services/feed-integrity-monitor';
+import { getFeedIntegrityMonitor } from '../services/feed-integrity-monitor';
 import { AlertsService } from '../services/alerts-service';
 import { storage } from '../storage';
-import fs from 'fs';
+import type { FeedHealthReport } from '../services/feed-integrity-monitor';
 
 /**
  * Feed Integrity Auto-Check Job
  * Runs every 5 minutes to monitor Kraken feed health
+ * Features: Deduplication, alert cooldown, auto-resolution on recovery
  */
 
-const ENABLED = process.env.FEED_INTEGRITY_ENABLED !== 'false'; // Enabled by default
-const SCHEDULE = '*/5 * * * *'; // Every 5 minutes
-const CONSECUTIVE_HEALTHY_THRESHOLD = 2; // Clear alerts after 2 healthy cycles
-
-// Track alert state for auto-clear logic
-let lastStatus: 'healthy' | 'warning' | 'critical' = 'healthy';
-let consecutiveHealthyCount = 0;
-let activeAlertIds: Set<string> = new Set();
+let job: cron.ScheduledTask | null = null;
+let isEnabled = false;
 
 /**
- * Create system notification for feed health issues
+ * Run feed integrity check (automated or manual)
+ * 
+ * @param trigger - 'auto' for scheduled, 'manual' for admin-triggered
+ * @returns Feed health report with execution metadata
  */
-async function createFeedAlert(grade: string, issues: string[], metrics: any) {
-  try {
-    // Get all admin users
-    const users = await storage.getAllUsers();
-    const adminUsers = users.filter(u => u.isAdmin);
-    
-    // Determine severity based on grade
-    const severity = grade === 'F' ? 'critical' : 'warning';
-    const category = grade === 'F' ? 'critical' : 'actionable';
-    
-    // Build message
-    const mainIssue = issues[0] || 'Feed performance degraded';
-    const message = grade === 'F'
-      ? `Data Feed CRITICAL — ${mainIssue}`
-      : `Data Feed Warning — ${mainIssue}`;
-    
-    for (const admin of adminUsers) {
-      // Create alert for both paper and live modes
-      const paperAlert = await AlertsService.createAlert({
-        userId: admin.id,
-        mode: 'paper',
-        alertType: 'feed_integrity',
-        severity,
-        category,
-        message,
-        metadata: { grade, issues, metrics }
-      });
-      
-      const liveAlert = await AlertsService.createAlert({
-        userId: admin.id,
-        mode: 'live',
-        alertType: 'feed_integrity',
-        severity,
-        category,
-        message,
-        metadata: { grade, issues, metrics }
-      });
-      
-      // Track alert IDs for potential auto-clear
-      activeAlertIds.add(paperAlert.id);
-      activeAlertIds.add(liveAlert.id);
-    }
-    
-    console.log(`[FEED-ALERT] ${severity.toUpperCase()} alert created: ${message}`);
-  } catch (error: any) {
-    console.error('[FEED-INTEGRITY] ❌ Alert creation error:', error.message);
-  }
-}
-
-/**
- * Auto-clear alerts when feed returns to healthy
- */
-async function clearFeedAlerts() {
-  try {
-    // Note: AlertsService doesn't have a delete method yet
-    // For now, just clear the tracking set
-    // In production, you'd want to mark these as resolved or delete them
-    activeAlertIds.clear();
-    console.log('[FEED-ALERT] ✅ Alerts auto-cleared (feed healthy for 2+ cycles)');
-  } catch (error: any) {
-    console.error('[FEED-INTEGRITY] ❌ Alert clear error:', error.message);
-  }
-}
-
-/**
- * Cleanup old report files (older than 7 days)
- */
-function cleanupOldReports(): void {
-  try {
-    const files = fs.readdirSync('/tmp');
-    const feedReports = files.filter(f => f.startsWith('feed_health_') && f.endsWith('.json'));
-    const cutoffDate = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days ago
-    
-    let deletedCount = 0;
-    for (const file of feedReports) {
-      const filePath = `/tmp/${file}`;
-      const stats = fs.statSync(filePath);
-      
-      if (stats.mtimeMs < cutoffDate) {
-        fs.unlinkSync(filePath);
-        deletedCount++;
-      }
-    }
-    
-    if (deletedCount > 0) {
-      console.log(`[FEED-INTEGRITY] 🧹 Cleaned ${deletedCount} old report(s)`);
-    }
-  } catch (error: any) {
-    console.error('[FEED-INTEGRITY] Cleanup error:', error.message);
-  }
-}
-
-/**
- * Run feed integrity check and handle results
- */
-export async function runFeedIntegrityCheck(runType: 'scheduled' | 'manual' = 'scheduled'): Promise<FeedHealthReport> {
-  const monitor = getFeedIntegrityMonitor();
+export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise<FeedHealthReport & { duration: number; reportPath: string }> {
   const startTime = Date.now();
-  const timestamp = new Date().toISOString();
+  const monitor = getFeedIntegrityMonitor();
   
-  console.log(`[FEED-INTEGRITY] ${runType === 'scheduled' ? '⏰' : '🔍'} Starting ${runType} check at ${timestamp}...`);
+  console.log(`[FeedIntegrity:${trigger}] Starting feed health check...`);
   
   try {
     // Record health snapshot
@@ -130,79 +32,200 @@ export async function runFeedIntegrityCheck(runType: 'scheduled' | 'manual' = 's
     // Generate report
     const report = monitor.generateReport();
     
-    // Generate dated filename
-    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    // Save report to file (with date in filename)
+    const dateStr = new Date().toISOString().split('T')[0];
     const reportPath = `/tmp/feed_health_${dateStr}.json`;
-    const latestPath = '/tmp/feed_health_latest.json';
-    
-    // Save reports
     monitor.saveReport(report, reportPath);
-    monitor.saveReport(report, latestPath);
     
-    // Log summary
-    const duration = Date.now() - startTime;
-    const metrics = report.metrics;
-    console.log(
-      `[FEED-HEALTH] completed in ${duration}ms ` +
-      `grade=${report.overallGrade} ` +
-      `latency=${metrics.latencyMs}ms ` +
-      `uptime=${metrics.uptimePercent.toFixed(1)}% ` +
-      `pairs=${metrics.pairCount} ` +
-      `status=${metrics.status}`
-    );
+    // Handle alerting with deduplication
+    const { metrics, overallGrade } = report;
+    const shouldAlert = monitor.shouldSendAlert(metrics.status, overallGrade);
     
-    // Alert logic
-    const currentStatus = metrics.status;
-    
-    if (currentStatus === 'healthy') {
-      consecutiveHealthyCount++;
-      
-      // Auto-clear alerts after 2+ consecutive healthy checks
-      if (consecutiveHealthyCount >= CONSECUTIVE_HEALTHY_THRESHOLD && activeAlertIds.size > 0) {
-        await clearFeedAlerts();
+    if (shouldAlert) {
+      if (metrics.status === 'healthy') {
+        // Clear active alert (feed recovered)
+        console.log(`[FeedIntegrity] Feed recovered - clearing alert tracking`);
+        monitor.updateAlertState(metrics.status, overallGrade, null);
+      } else {
+        // Create new alert for all admin users (warning or critical)
+        const severity = metrics.status === 'critical' ? 'critical' : 'warning';
+        const message = `Feed Health: ${metrics.status.toUpperCase()} (Grade ${overallGrade})\n${report.issues.join('\n')}`;
+        
+        console.log(`[FeedIntegrity] Creating ${severity} alert for admin users`);
+        
+        // Get all admin users
+        const users = await storage.getAllUsers();
+        const adminUsers = users.filter(u => u.isAdmin);
+        
+        // Create alert for each admin user (both modes)
+        for (const admin of adminUsers) {
+          await AlertsService.createAlert({
+            userId: admin.id,
+            mode: 'live',
+            alertType: 'feed_health',
+            severity,
+            category: severity === 'critical' ? 'critical' : 'actionable',
+            message,
+            metadata: {
+              grade: overallGrade,
+              latencyMs: metrics.latencyMs,
+              uptimePercent: metrics.uptimePercent,
+              reconnectCount: metrics.reconnectCount,
+              tickAgeSec: metrics.tickAgeSec,
+              feedType: metrics.feedType,
+              trigger,
+            },
+          });
+          
+          await AlertsService.createAlert({
+            userId: admin.id,
+            mode: 'paper',
+            alertType: 'feed_health',
+            severity,
+            category: severity === 'critical' ? 'critical' : 'actionable',
+            message,
+            metadata: {
+              grade: overallGrade,
+              latencyMs: metrics.latencyMs,
+              uptimePercent: metrics.uptimePercent,
+              reconnectCount: metrics.reconnectCount,
+              tickAgeSec: metrics.tickAgeSec,
+              feedType: metrics.feedType,
+              trigger,
+            },
+          });
+        }
+        
+        monitor.updateAlertState(metrics.status, overallGrade, null);
       }
     } else {
-      // Reset healthy count
-      consecutiveHealthyCount = 0;
-      
-      // Create alert for warning or critical status
-      if (currentStatus === 'warning' || currentStatus === 'critical') {
-        await createFeedAlert(report.overallGrade, report.issues, metrics);
-      }
+      console.log(`[FeedIntegrity] Alert suppressed (cooldown or duplicate)`);
     }
     
-    lastStatus = currentStatus;
+    const duration = Date.now() - startTime;
     
-    // Cleanup old reports
-    cleanupOldReports();
+    console.log(`[FeedIntegrity:${trigger}] ✅ Check complete in ${duration}ms - Grade: ${overallGrade}, Status: ${metrics.status}`);
+    console.log(`[FeedIntegrity:${trigger}] Metrics: Latency=${metrics.latencyMs}ms, Uptime=${metrics.uptimePercent}%, Reconnects=${metrics.reconnectCount}, TickAge=${metrics.tickAgeSec}s`);
     
-    return report;
+    return {
+      ...report,
+      duration,
+      reportPath,
+    };
   } catch (error: any) {
-    console.error('[FEED-INTEGRITY] ❌ Check failed:', error.message);
-    console.error(error.stack);
+    console.error(`[FeedIntegrity:${trigger}] ❌ Check failed:`, error);
+    
+    // Create critical alert for check failure for all admin users
+    try {
+      const users = await storage.getAllUsers();
+      const adminUsers = users.filter(u => u.isAdmin);
+      
+      for (const admin of adminUsers) {
+        await AlertsService.createAlert({
+          userId: admin.id,
+          mode: 'live',
+          alertType: 'feed_health',
+          severity: 'critical',
+          category: 'critical',
+          message: `Feed Health Check Failed: ${error.message}`,
+          metadata: { error: error.message, trigger },
+        });
+        
+        await AlertsService.createAlert({
+          userId: admin.id,
+          mode: 'paper',
+          alertType: 'feed_health',
+          severity: 'critical',
+          category: 'critical',
+          message: `Feed Health Check Failed: ${error.message}`,
+          metadata: { error: error.message, trigger },
+        });
+      }
+    } catch (alertError) {
+      console.error(`[FeedIntegrity] Failed to create alert:`, alertError);
+    }
+    
     throw error;
   }
 }
 
 /**
- * Register the feed integrity cron job
+ * Initialize feed integrity auto-check job
+ * Runs every 5 minutes with configurable cron schedule
  */
-export function registerFeedIntegrityJob() {
-  if (!ENABLED) {
-    console.log('[FeedIntegrityJob] ❌ Disabled via FEED_INTEGRITY_ENABLED env');
+export function initFeedIntegrityAutoCheck() {
+  // Check if disabled via env
+  if (process.env.DISABLE_FEED_INTEGRITY_CHECK === 'true') {
+    console.log('[FeedIntegrity] Auto-check DISABLED via env');
     return;
   }
   
-  console.log(`[FeedIntegrityJob] ⏰ Scheduling checks: ${SCHEDULE} (every 5 minutes)`);
+  if (isEnabled) {
+    console.log('[FeedIntegrity] Auto-check already enabled');
+    return;
+  }
   
-  cron.schedule(SCHEDULE, async () => {
-    try {
-      await runFeedIntegrityCheck('scheduled');
-    } catch (error: any) {
-      console.error('[FeedIntegrityJob] ❌ Scheduled check failed:', error.message);
-      console.error(error.stack);
+  // Get cron schedule from env (default: every 5 minutes with jitter)
+  const cronSchedule = process.env.FEED_INTEGRITY_CRON || '*/5 * * * *';
+  
+  console.log(`[FeedIntegrity] Initializing auto-check with schedule: ${cronSchedule}`);
+  
+  // Schedule job with timezone enforcement
+  job = cron.schedule(
+    cronSchedule,
+    async () => {
+      // Add jitter (0-30 seconds) to avoid thundering herd
+      const jitter = Math.floor(Math.random() * 30 * 1000);
+      
+      console.log(`[FeedIntegrity] Waiting ${jitter}ms jitter before check...`);
+      await new Promise(resolve => setTimeout(resolve, jitter));
+      
+      try {
+        await runFeedIntegrityCheck('auto');
+      } catch (error) {
+        console.error('[FeedIntegrity] Scheduled check failed:', error);
+      }
+    },
+    {
+      timezone: 'UTC',
+      scheduled: true,
     }
-  });
+  );
   
-  console.log('[FeedIntegrityJob] ✅ Job registered successfully');
+  isEnabled = true;
+  console.log('[FeedIntegrity] ✅ Auto-check enabled');
+  
+  // Run initial check after 30 seconds
+  setTimeout(async () => {
+    console.log('[FeedIntegrity] Running initial check...');
+    try {
+      await runFeedIntegrityCheck('auto');
+    } catch (error) {
+      console.error('[FeedIntegrity] Initial check failed:', error);
+    }
+  }, 30000);
+}
+
+/**
+ * Stop feed integrity auto-check
+ */
+export function stopFeedIntegrityAutoCheck() {
+  if (job) {
+    job.stop();
+    job = null;
+    isEnabled = false;
+    console.log('[FeedIntegrity] Auto-check stopped');
+  }
+}
+
+/**
+ * Check if feed integrity auto-check is enabled
+ */
+export function isFeedIntegrityAutoCheckEnabled(): boolean {
+  return isEnabled;
+}
+
+// Alias for backward compatibility
+export function registerFeedIntegrityJob() {
+  initFeedIntegrityAutoCheck();
 }

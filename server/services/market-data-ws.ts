@@ -272,6 +272,15 @@ export class MarketDataWebSocket extends EventEmitter {
   public getLastTickAge(): number {
     return this.lastTickTimestamp > 0 ? Date.now() - this.lastTickTimestamp : -1;
   }
+
+  /**
+   * Get and reset reconnect count (for interval-based monitoring)
+   */
+  public getAndResetReconnectCount(): number {
+    const count = this.reconnectCount;
+    this.reconnectCount = 0;
+    return count;
+  }
 }
 
 // Singleton instance

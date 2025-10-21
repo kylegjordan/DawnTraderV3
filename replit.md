@@ -47,6 +47,8 @@ Formula Audit & Computation Verification implements a `FormulaAuditService` to v
 
 Formula Hardening Auto-Recheck extends the Formula Audit system with automated daily scheduled monitoring, creating system alerts for admin users when deviations are detected (WARNING for 0.1-1%, CRITICAL for ≥1%). An on-demand audit execution endpoint `/api/system/formula-audit/run` is available, and a Formula Health card in the AI Transparency page displays real-time audit status.
 
+Data Feed Integrity Monitor provides continuous monitoring of the Kraken WebSocket and REST fallback feeds with a `FeedIntegrityMonitor` service. It runs 5-minute automated health checks with three-tier status levels (Healthy/Warning/Critical) and an A/B/C/D/F grading system. Metrics tracked include interval-based reconnect count (resets each check), tick staleness, latency (currently using tick age as proxy), and time-based uptime percentage. Thresholds are fully configurable via 16 environment variables (WARNING/CRITICAL for reconnects, tick age, latency, uptime; A/B/C/D grading thresholds for each metric). Alert deduplication with 5-minute cooldown prevents spam, and alerts auto-clear after 2+ consecutive healthy checks. A Feed Health card in the AI Transparency page displays grade, status, latency, uptime, interval reconnects, active pairs, and data source type. Health reports are saved to `/tmp/feed_health_*.json` with 7-day retention.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

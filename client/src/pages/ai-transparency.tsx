@@ -936,7 +936,7 @@ export default function AITransparencyPage() {
                       </div>
 
                       {/* Feed Metrics */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         <div className="text-center p-3 bg-muted/30 rounded-lg">
                           <div className="text-2xl font-bold text-foreground" data-testid="text-feed-latency">
                             {feedHealthData.metrics.latencyMs}ms
@@ -948,6 +948,12 @@ export default function AITransparencyPage() {
                             {feedHealthData.metrics.uptimePercent}%
                           </div>
                           <div className="text-xs text-muted-foreground">Uptime</div>
+                        </div>
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-2xl font-bold text-foreground" data-testid="text-feed-reconnects">
+                            {feedHealthData.metrics.reconnectCount}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Reconnects (last 5min)</div>
                         </div>
                         <div className="text-center p-3 bg-muted/30 rounded-lg">
                           <div className="text-2xl font-bold text-foreground" data-testid="text-feed-pairs">
