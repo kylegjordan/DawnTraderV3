@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getFeedIntegrityMonitor } from '../services/feed-integrity-monitor';
 import { AlertsService } from '../services/alerts-service';
+import { WalterOpsEngine, type AnomalyInput } from '../services/walter-ops-engine';
 import { storage } from '../storage';
 import type { FeedHealthReport } from '../services/feed-integrity-monitor';
 
@@ -51,13 +52,28 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
         const severity = metrics.status === 'critical' ? 'critical' : 'warning';
         const message = `Feed Health: ${metrics.status.toUpperCase()} (Grade ${overallGrade})\n${report.issues.join('\n')}`;
         
-        console.log(`[FeedIntegrity] Creating ${severity} alert for admin users`);
+        console.log(`[FeedIntegrity] Creating ${severity} alert for admin users + triggering Walter autonomous maintenance`);
         
         // Get all admin users
         const users = await storage.getAllUsers();
         const adminUsers = users.filter(u => u.isAdmin);
         
-        // Create alert for each admin user (both modes)
+        // Prepare anomaly for Walter autonomous maintenance (global system-level)
+        const anomaly: AnomalyInput = {
+          source: 'feed',
+          component: 'Kraken WebSocket',
+          anomaly: message,
+          metrics: {
+            latency_ms: metrics.latencyMs,
+            deviation_percent: undefined,
+            reconnect_count: metrics.reconnectCount,
+            tick_age_sec: metrics.tickAgeSec,
+            uptime_percent: metrics.uptimePercent,
+          },
+          severity,
+        };
+        
+        // Create alerts for each admin user (existing AlertsService flow)
         for (const admin of adminUsers) {
           await AlertsService.createAlert({
             userId: admin.id,
@@ -94,6 +110,28 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
               trigger,
             },
           });
+        }
+        
+        // NEW: Trigger Walter autonomous maintenance ONCE per mode (feed ops are global, not per-user)
+        // Use first admin as representative user for action tracking
+        if (adminUsers.length > 0) {
+          const primaryAdmin = adminUsers[0];
+          
+          try {
+            console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (live mode)`);
+            const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', anomaly);
+            console.log(`[WalterOps-FeedIntegrity] Live action result: ${liveAction.action_type} - ${liveAction.status}`);
+          } catch (walterError) {
+            console.error(`[WalterOps-FeedIntegrity] Failed to process live anomaly:`, walterError);
+          }
+          
+          try {
+            console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (paper mode)`);
+            const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', anomaly);
+            console.log(`[WalterOps-FeedIntegrity] Paper action result: ${paperAction.action_type} - ${paperAction.status}`);
+          } catch (walterError) {
+            console.error(`[WalterOps-FeedIntegrity] Failed to process paper anomaly:`, walterError);
+          }
         }
         
         monitor.updateAlertState(metrics.status, overallGrade, null);
