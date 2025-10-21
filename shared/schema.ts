@@ -769,6 +769,8 @@ export const walterUserPreferences = pgTable("walter_user_preferences", {
 });
 
 // Walter autonomous actions (Phase 27.F.19-20 - Maintenance & Intelligence)
+// Production TODO: Add unique constraint on (incidentKey, status) for race-safe dedup:
+// UNIQUE INDEX CONCURRENTLY ON walter_actions(incident_key) WHERE status IN ('pending', 'in_progress')
 export const walterActions = pgTable("walter_actions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),

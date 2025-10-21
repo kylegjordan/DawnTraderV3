@@ -208,11 +208,12 @@ export class AlertContextEngine {
   
   /**
    * Determine severity level from impact score
+   * Aligned with WalterOpsEngine critical bypass threshold (≥40)
    */
   private static getSeverity(impact_score: number): 'info' | 'warning' | 'critical' {
-    if (impact_score >= 30) return 'critical';
-    if (impact_score >= 15) return 'warning';
-    return 'info';
+    if (impact_score >= 40) return 'critical'; // Only ≥40 is critical (bypasses cooldown/dedup)
+    if (impact_score >= 15) return 'warning';  // 15-39 is warning (subject to dedup/cooldown gating)
+    return 'info'; // <15 is informational
   }
   
   /**

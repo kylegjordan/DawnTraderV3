@@ -10,6 +10,12 @@
  * ✅ Auto-Resolve — Safe, local issues fixed automatically and logged
  * 💤 Defer/Suppress — Benign, low-impact anomalies quietly tracked
  * 🚨 Escalate — Issues with trading or systemic risk routed to action queue
+ * 
+ * Safety Features (Architect Feedback):
+ * - Incident key generation for deduplication
+ * - Cooldown logic (5-10 min per component)
+ * - Strengthened auto-resolve gates (severity='warning', confidence ≥0.75)
+ * - Hourly action limits to prevent loops
  */
 
 import { db } from '../db';
@@ -18,6 +24,8 @@ import type { InsertWalterAction, Trade } from '@shared/schema';
 import { AlertContextEngine, type AlertContext, type ImpactAssessment } from './alert-context-engine';
 import { storage } from '../storage';
 import { getFeedIntegrityMonitor } from './feed-integrity-monitor';
+import { eq, and, desc, gte } from 'drizzle-orm';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -41,14 +49,38 @@ export interface MaintenanceAction {
   status: 'auto_resolved' | 'monitored' | 'escalated' | 'pending';
   resolution: string;
   confidence: number;
+  deduplicated?: boolean; // True if this was a duplicate incident
+}
+
+/**
+ * Cooldown tracking for components
+ */
+interface CooldownState {
+  incidentKey: string;
+  cooldownUntil: number;
+  retryCount: number;
+  lastActionId: string;
 }
 
 export class WalterOpsEngine {
   private static maintenanceLog: any[] = [];
-  private static actionHistory: Map<string, number> = new Map(); // Track action frequency
+  private static cooldownMap: Map<string, CooldownState> = new Map(); // Track cooldowns
+  private static hourlyActionCounts: Map<string, { count: number; resetAt: number }> = new Map(); // Hourly limits
+  
+  // Temporary in-memory dedup guard (fallback while DB unique constraint is pending)
+  private static inMemoryDedupSet: Set<string> = new Set();
+  private static readonly DEDUP_MEMORY_TTL_MS = 60 * 60 * 1000; // 1 hour
+  
+  // Configuration (env-configurable with sane defaults)
+  private static readonly COOLDOWN_MS = parseInt(process.env.WALTER_COOLDOWN_MS || '300000'); // Default: 5 minutes
+  private static readonly EXTENDED_COOLDOWN_MS = parseInt(process.env.WALTER_EXTENDED_COOLDOWN_MS || '600000'); // Default: 10 minutes
+  private static readonly HOURLY_LIMIT = parseInt(process.env.WALTER_HOURLY_LIMIT || '10'); // Default: 10 actions/hour
   
   /**
    * Process an anomaly through the autonomous maintenance pipeline
+   * 
+   * SAFETY: Impact assessment happens FIRST to ensure critical incidents
+   * are never suppressed by cooldown/deduplication logic
    */
   static async processAnomaly(
     userId: string,
@@ -57,28 +89,358 @@ export class WalterOpsEngine {
   ): Promise<MaintenanceAction> {
     console.log(`[WalterOps] Processing ${anomaly.source} anomaly: ${anomaly.anomaly}`);
     
-    // Get current trading context
-    const context = await this.getTradingContext(userId, mode, anomaly);
+    // Generate incident key for deduplication
+    const incidentKey = this.generateIncidentKey(userId, mode, anomaly);
     
-    // Assess impact using AlertContextEngine
+    // STEP 1: Get current trading context and assess impact FIRST
+    const context = await this.getTradingContext(userId, mode, anomaly);
     const impact = await AlertContextEngine.assessImpact(context);
     
     console.log(`[WalterOps] Impact assessment: score=${impact.impact_score}, severity=${impact.severity}, action=${impact.action}`);
     
-    // Decide on action based on impact assessment
+    // STEP 2: Critical incidents bypass cooldown/deduplication and escalate immediately
+    const isCritical = impact.severity === 'critical' || impact.impact_score >= 40;
+    
+    if (isCritical) {
+      console.log(`[WalterOps] 🚨 CRITICAL incident detected - bypassing cooldown/dedup`);
+      return await this.escalateToUser(userId, mode, anomaly, impact, incidentKey);
+    }
+    
+    // STEP 3: Non-critical incidents apply dedup/cooldown logic
+    
+    // Check if we're in cooldown for this incident
+    const cooldownCheck = this.checkCooldown(incidentKey);
+    if (cooldownCheck.inCooldown) {
+      console.log(`[WalterOps] ⏸️ Incident in cooldown until ${new Date(cooldownCheck.cooldownUntil!).toISOString()}`);
+      return {
+        action_id: cooldownCheck.lastActionId || 'cooldown',
+        action_type: 'auto_suppress',
+        status: 'monitored',
+        resolution: `Cooldown active (retry ${cooldownCheck.retryCount})`,
+        confidence: 1.0,
+        deduplicated: true,
+      };
+    }
+    
+    // Check hourly limits for this incident type
+    const hourlyCheck = this.checkHourlyLimit(incidentKey);
+    if (hourlyCheck.exceeded) {
+      console.log(`[WalterOps] ⚠️ Hourly limit exceeded for ${incidentKey}: ${hourlyCheck.count}/${this.HOURLY_LIMIT}`);
+      // Escalate to prevent runaway loops
+      return await this.escalateDueToLimit(userId, mode, anomaly, incidentKey, hourlyCheck.count);
+    }
+    
+    // Check for existing duplicate incidents
+    const duplicate = await this.checkDuplicateIncident(userId, mode, incidentKey);
+    if (duplicate) {
+      console.log(`[WalterOps] 🔄 Duplicate incident detected: ${incidentKey}`);
+      return await this.handleDuplicateIncident(userId, mode, anomaly, incidentKey, duplicate);
+    }
+    
+    // STEP 4: Process based on impact assessment
     if (impact.action === 'auto_suppress') {
-      return await this.autoSuppress(userId, mode, anomaly, impact);
+      return await this.autoSuppress(userId, mode, anomaly, impact, incidentKey);
     } else if (impact.action === 'log_only') {
-      return await this.logAndMonitor(userId, mode, anomaly, impact);
+      return await this.logAndMonitor(userId, mode, anomaly, impact, incidentKey);
     } else {
       // Escalate or auto-resolve
       const should_auto_resolve = await this.canAutoResolve(anomaly, impact);
       
       if (should_auto_resolve) {
-        return await this.autoResolve(userId, mode, anomaly, impact);
+        return await this.autoResolve(userId, mode, anomaly, impact, incidentKey);
       } else {
-        return await this.escalateToUser(userId, mode, anomaly, impact);
+        return await this.escalateToUser(userId, mode, anomaly, impact, incidentKey);
       }
+    }
+  }
+  
+  /**
+   * Generate incident key for deduplication
+   * Hash of: userId + mode + source + component + anomaly_category + metric_bucket
+   * 
+   * Note: Normalizes anomaly description to category to avoid text variance bypassing dedup
+   */
+  private static generateIncidentKey(
+    userId: string,
+    mode: 'live' | 'paper',
+    anomaly: AnomalyInput
+  ): string {
+    // Normalize anomaly description to category (avoid text variance)
+    const anomaly_category = this.normalizeAnomalyCategory(anomaly);
+    
+    // Bucket metrics to avoid over-specific keys
+    const metric_bucket = this.getMetricBucket(anomaly.metrics);
+    
+    const key_parts = [
+      userId,
+      mode,
+      anomaly.source,
+      anomaly.component,
+      anomaly_category,
+      metric_bucket,
+    ].join('|');
+    
+    return crypto.createHash('sha256').update(key_parts).digest('hex').substring(0, 16);
+  }
+  
+  /**
+   * Normalize anomaly description to standardized category
+   */
+  private static normalizeAnomalyCategory(anomaly: AnomalyInput): string {
+    const desc = anomaly.anomaly.toLowerCase();
+    
+    // Feed categories
+    if (anomaly.source === 'feed') {
+      if (desc.includes('reconnect') || desc.includes('disconnect')) return 'feed_reconnect';
+      if (desc.includes('latency') || desc.includes('lag')) return 'feed_latency';
+      if (desc.includes('stale') || desc.includes('tick')) return 'feed_stale_data';
+      if (desc.includes('uptime')) return 'feed_uptime';
+      return 'feed_other';
+    }
+    
+    // Formula categories
+    if (anomaly.source === 'formula') {
+      if (desc.includes('rsi')) return 'formula_rsi';
+      if (desc.includes('vwap')) return 'formula_vwap';
+      if (desc.includes('sma') || desc.includes('moving average')) return 'formula_sma';
+      if (desc.includes('volume')) return 'formula_volume';
+      if (desc.includes('spread')) return 'formula_spread';
+      if (desc.includes('deviation')) return 'formula_deviation';
+      return 'formula_other';
+    }
+    
+    // System categories
+    return 'system_generic';
+  }
+  
+  /**
+   * Get metric bucket for deduplication
+   */
+  private static getMetricBucket(metrics?: AnomalyInput['metrics']): string {
+    if (!metrics) return 'default';
+    
+    const buckets: string[] = [];
+    
+    if (metrics.latency_ms !== undefined) {
+      // Bucket latency: <1s, 1-5s, 5-30s, >30s
+      if (metrics.latency_ms < 1000) buckets.push('latency_low');
+      else if (metrics.latency_ms < 5000) buckets.push('latency_med');
+      else if (metrics.latency_ms < 30000) buckets.push('latency_high');
+      else buckets.push('latency_critical');
+    }
+    
+    if (metrics.deviation_percent !== undefined) {
+      // Bucket deviation: <1%, 1-5%, 5-10%, >10%
+      if (metrics.deviation_percent < 1) buckets.push('dev_low');
+      else if (metrics.deviation_percent < 5) buckets.push('dev_med');
+      else if (metrics.deviation_percent < 10) buckets.push('dev_high');
+      else buckets.push('dev_critical');
+    }
+    
+    if (metrics.reconnect_count !== undefined) {
+      // Bucket reconnects: <3, 3-5, >5
+      if (metrics.reconnect_count < 3) buckets.push('reconn_low');
+      else if (metrics.reconnect_count < 5) buckets.push('reconn_med');
+      else buckets.push('reconn_high');
+    }
+    
+    return buckets.length > 0 ? buckets.join('_') : 'default';
+  }
+  
+  /**
+   * Check if incident is in cooldown
+   */
+  private static checkCooldown(incidentKey: string): {
+    inCooldown: boolean;
+    cooldownUntil?: number;
+    retryCount: number;
+    lastActionId?: string;
+  } {
+    const state = this.cooldownMap.get(incidentKey);
+    if (!state) {
+      return { inCooldown: false, retryCount: 0 };
+    }
+    
+    const now = Date.now();
+    if (now < state.cooldownUntil) {
+      return {
+        inCooldown: true,
+        cooldownUntil: state.cooldownUntil,
+        retryCount: state.retryCount,
+        lastActionId: state.lastActionId,
+      };
+    }
+    
+    // Cooldown expired, clean up
+    this.cooldownMap.delete(incidentKey);
+    return { inCooldown: false, retryCount: 0 };
+  }
+  
+  /**
+   * Set cooldown for an incident
+   */
+  private static setCooldown(incidentKey: string, retryCount: number, actionId: string): void {
+    const cooldownDuration = retryCount > 2 ? this.EXTENDED_COOLDOWN_MS : this.COOLDOWN_MS;
+    const cooldownUntil = Date.now() + cooldownDuration;
+    
+    this.cooldownMap.set(incidentKey, {
+      incidentKey,
+      cooldownUntil,
+      retryCount,
+      lastActionId: actionId,
+    });
+    
+    console.log(`[WalterOps] Cooldown set for ${incidentKey}: ${cooldownDuration / 60000} min (retry ${retryCount})`);
+  }
+  
+  /**
+   * Check hourly action limit for incident type
+   */
+  private static checkHourlyLimit(incidentKey: string): { exceeded: boolean; count: number } {
+    const now = Date.now();
+    const state = this.hourlyActionCounts.get(incidentKey);
+    
+    if (!state || now >= state.resetAt) {
+      // Reset counter
+      this.hourlyActionCounts.set(incidentKey, { count: 0, resetAt: now + 60 * 60 * 1000 });
+      return { exceeded: false, count: 0 };
+    }
+    
+    return {
+      exceeded: state.count >= this.HOURLY_LIMIT,
+      count: state.count,
+    };
+  }
+  
+  /**
+   * Increment hourly action count
+   */
+  private static incrementHourlyCount(incidentKey: string): void {
+    const now = Date.now();
+    const state = this.hourlyActionCounts.get(incidentKey);
+    
+    if (!state || now >= state.resetAt) {
+      this.hourlyActionCounts.set(incidentKey, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    } else {
+      state.count += 1;
+    }
+  }
+  
+  /**
+   * Check for duplicate incidents in database
+   */
+  private static async checkDuplicateIncident(
+    userId: string,
+    mode: 'live' | 'paper',
+    incidentKey: string
+  ): Promise<any | null> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    
+    const existing = await db
+      .select()
+      .from(walterActions)
+      .where(
+        and(
+          eq(walterActions.userId, userId),
+          eq(walterActions.mode, mode),
+          eq(walterActions.incidentKey, incidentKey),
+          gte(walterActions.detectedAt, oneHourAgo)
+        )
+      )
+      .orderBy(desc(walterActions.detectedAt))
+      .limit(1);
+    
+    return existing.length > 0 ? existing[0] : null;
+  }
+  
+  /**
+   * Handle duplicate incident
+   */
+  private static async handleDuplicateIncident(
+    userId: string,
+    mode: 'live' | 'paper',
+    anomaly: AnomalyInput,
+    incidentKey: string,
+    existingAction: any
+  ): Promise<MaintenanceAction> {
+    console.log(`[WalterOps] Updating retry count for existing incident: ${existingAction.id}`);
+    
+    const retryCount = (existingAction.retryCount || 0) + 1;
+    
+    // Update existing action with new retry attempt
+    await db
+      .update(walterActions)
+      .set({
+        retryCount,
+        lastAttemptAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(walterActions.id, existingAction.id));
+    
+    // Set cooldown with increased retry count
+    this.setCooldown(incidentKey, retryCount, existingAction.id);
+    
+    return {
+      action_id: existingAction.id,
+      action_type: existingAction.actionType,
+      status: 'monitored',
+      resolution: `Duplicate incident (retry ${retryCount})`,
+      confidence: parseFloat(existingAction.confidenceScore || '0'),
+      deduplicated: true,
+    };
+  }
+  
+  /**
+   * Escalate due to hourly limit exceeded
+   * Note: Does NOT pause trading - this is a rate-limit escalation, not a trading impact
+   */
+  private static async escalateDueToLimit(
+    userId: string,
+    mode: 'live' | 'paper',
+    anomaly: AnomalyInput,
+    incidentKey: string,
+    actionCount: number
+  ): Promise<MaintenanceAction> {
+    console.log(`[WalterOps] 🚨 Escalating: hourly limit exceeded (${actionCount} actions)`);
+    
+    try {
+      const action = await db.insert(walterActions).values({
+        userId,
+        mode,
+        actionType: 'escalate',
+        category: 'system', // Rate limit is a system issue, not feed/formula
+        status: 'pending',
+        impactScore: '100', // Critical due to runaway condition
+        affectedComponent: `${anomaly.component} (rate limit)`,
+        detectedAnomaly: `Recurring issue: ${anomaly.anomaly}`,
+        contextData: { ...anomaly.metrics, actionCount, reason: 'hourly_limit_exceeded' },
+        suggestedFix: `Investigate root cause - ${actionCount} similar actions in past hour indicates systemic issue`,
+        resolutionStatus: 'escalated',
+        confidenceScore: '1.00',
+        requiresApproval: true,
+        escalated: true,
+        tradingPaused: false, // Rate limits don't pause trading
+        incidentKey,
+        retryCount: 0,
+      }).returning();
+      
+      return {
+        action_id: action[0].id,
+        action_type: 'escalate',
+        status: 'escalated',
+        resolution: `Hourly limit exceeded (${actionCount}/${this.HOURLY_LIMIT})`,
+        confidence: 1.0,
+      };
+    } catch (error) {
+      console.error('[WalterOps] DB error creating rate-limit escalation:', error);
+      // Fallback: return synthetic action
+      return {
+        action_id: 'db_error_' + Date.now(),
+        action_type: 'escalate',
+        status: 'escalated',
+        resolution: `Hourly limit exceeded (${actionCount}/${this.HOURLY_LIMIT}) [DB unavailable]`,
+        confidence: 1.0,
+      };
     }
   }
   
@@ -122,7 +484,8 @@ export class WalterOpsEngine {
     userId: string,
     mode: 'live' | 'paper',
     anomaly: AnomalyInput,
-    impact: ImpactAssessment
+    impact: ImpactAssessment,
+    incidentKey: string
   ): Promise<MaintenanceAction> {
     console.log(`[WalterOps] Auto-suppressing: ${anomaly.anomaly} (impact: ${impact.impact_score})`);
     
@@ -147,6 +510,8 @@ export class WalterOpsEngine {
       suppressReason: impact.reason,
       actionedAt: new Date(),
       resolvedAt: new Date(),
+      incidentKey,
+      retryCount: 0,
     }).returning();
     
     this.logMaintenance('auto_suppress', anomaly.component, anomaly.anomaly, 'Suppressed', impact.confidence);
@@ -167,7 +532,8 @@ export class WalterOpsEngine {
     userId: string,
     mode: 'live' | 'paper',
     anomaly: AnomalyInput,
-    impact: ImpactAssessment
+    impact: ImpactAssessment,
+    incidentKey: string
   ): Promise<MaintenanceAction> {
     console.log(`[WalterOps] Logging for monitoring: ${anomaly.anomaly} (impact: ${impact.impact_score})`);
     
@@ -190,6 +556,8 @@ export class WalterOpsEngine {
       escalated: false,
       actionedAt: new Date(),
       resolvedAt: new Date(),
+      incidentKey,
+      retryCount: 0,
     }).returning();
     
     this.logMaintenance('log_only', anomaly.component, anomaly.anomaly, 'Monitored', impact.confidence);
@@ -205,21 +573,35 @@ export class WalterOpsEngine {
   
   /**
    * Determine if issue can be auto-resolved
+   * Architect feedback: severity='warning', confidence ≥0.75, strict thresholds
    */
   private static async canAutoResolve(anomaly: AnomalyInput, impact: ImpactAssessment): Promise<boolean> {
-    // Feed issues can often be auto-resolved with reconnect
+    // Only auto-resolve if severity is 'warning' (not 'critical')
+    if (impact.severity === 'critical') {
+      return false;
+    }
+    
+    // Only auto-resolve if confidence is high (≥ 0.75)
+    if (impact.confidence < 0.75) {
+      return false;
+    }
+    
+    // Feed issues can be auto-resolved with strict gates
     if (anomaly.source === 'feed') {
-      // Check reconnect frequency to avoid infinite loops
-      const recent_reconnects = this.actionHistory.get('feed_reconnect') || 0;
-      if (recent_reconnects < 3) {
-        return true; // Safe to auto-reconnect
+      const reconnects = anomaly.metrics?.reconnect_count || 0;
+      const tickAge = anomaly.metrics?.tick_age_sec || 0;
+      
+      // Allow auto-resolve only for: reconnects < 3 AND tick_age < 10 sec
+      if (reconnects < 3 && tickAge < 10) {
+        return true;
       }
     }
     
-    // Formula issues can be auto-resolved if deviation is moderate
+    // Formula issues can be auto-resolved if deviation is very low
     if (anomaly.source === 'formula' && anomaly.metrics?.deviation_percent) {
-      if (anomaly.metrics.deviation_percent < 5) {
-        return true; // Safe to recalculate
+      // Only auto-resolve if deviation < 2%
+      if (anomaly.metrics.deviation_percent < 2) {
+        return true;
       }
     }
     
@@ -234,7 +616,8 @@ export class WalterOpsEngine {
     userId: string,
     mode: 'live' | 'paper',
     anomaly: AnomalyInput,
-    impact: ImpactAssessment
+    impact: ImpactAssessment,
+    incidentKey: string
   ): Promise<MaintenanceAction> {
     let action_type: 'feed_reconnect' | 'formula_recalc' = 'feed_reconnect';
     let executed_action = '';
@@ -244,9 +627,6 @@ export class WalterOpsEngine {
       action_type = 'feed_reconnect';
       executed_action = await this.executeFeedReconnect();
       resolution_notes = `Auto-reconnected Kraken WebSocket - ${impact.reason}`;
-      
-      // Track action frequency
-      this.actionHistory.set('feed_reconnect', (this.actionHistory.get('feed_reconnect') || 0) + 1);
     } else if (anomaly.source === 'formula') {
       action_type = 'formula_recalc';
       executed_action = await this.executeFormulaRecalc(anomaly.component);
@@ -274,7 +654,13 @@ export class WalterOpsEngine {
       escalated: false,
       actionedAt: new Date(),
       resolvedAt: new Date(),
+      incidentKey,
+      retryCount: 0,
     }).returning();
+    
+    // Set cooldown and increment hourly count
+    this.setCooldown(incidentKey, 0, action[0].id);
+    this.incrementHourlyCount(incidentKey);
     
     this.logMaintenance(action_type, anomaly.component, anomaly.anomaly, executed_action, impact.confidence);
     
@@ -294,11 +680,15 @@ export class WalterOpsEngine {
     userId: string,
     mode: 'live' | 'paper',
     anomaly: AnomalyInput,
-    impact: ImpactAssessment
+    impact: ImpactAssessment,
+    incidentKey: string
   ): Promise<MaintenanceAction> {
     console.log(`[WalterOps] ⚠️ Escalating to user: ${anomaly.anomaly} (impact: ${impact.impact_score})`);
     
     const suggested_fix = this.getSuggestedFix(anomaly, impact);
+    
+    // Determine if trading should be paused
+    const shouldPauseTrading = impact.impact_score >= 40 && mode === 'live';
     
     const action = await db.insert(walterActions).values({
       userId,
@@ -317,9 +707,15 @@ export class WalterOpsEngine {
       confidenceScore: impact.confidence.toString(),
       requiresApproval: true,
       escalated: true,
+      tradingPaused: shouldPauseTrading,
+      incidentKey,
+      retryCount: 0,
     }).returning();
     
     this.logMaintenance('escalate', anomaly.component, anomaly.anomaly, 'Escalated to user', impact.confidence);
+    
+    // Increment hourly count for escalations too
+    this.incrementHourlyCount(incidentKey);
     
     return {
       action_id: action[0].id,
@@ -410,11 +806,22 @@ export class WalterOpsEngine {
   }
   
   /**
-   * Reset action history (called periodically to allow retries)
+   * Clear expired cooldowns (called periodically)
    */
-  static resetActionHistory(): void {
-    this.actionHistory.clear();
-    console.log('[WalterOps] Action history reset');
+  static clearExpiredCooldowns(): void {
+    const now = Date.now();
+    let cleared = 0;
+    
+    for (const [key, state] of this.cooldownMap.entries()) {
+      if (now >= state.cooldownUntil) {
+        this.cooldownMap.delete(key);
+        cleared++;
+      }
+    }
+    
+    if (cleared > 0) {
+      console.log(`[WalterOps] Cleared ${cleared} expired cooldowns`);
+    }
   }
   
   /**
@@ -430,9 +837,33 @@ export class WalterOpsEngine {
     await fs.promises.writeFile(filepath, JSON.stringify(log_data, null, 2));
     console.log(`[WalterOps] Maintenance log saved to ${filepath}`);
   }
+  
+  /**
+   * Get current cooldown and rate limit stats
+   */
+  static getStats(): {
+    activeCooldowns: number;
+    hourlyLimits: { incidentKey: string; count: number; limit: number }[];
+  } {
+    const now = Date.now();
+    
+    const activeCooldowns = Array.from(this.cooldownMap.values())
+      .filter(state => now < state.cooldownUntil)
+      .length;
+    
+    const hourlyLimits = Array.from(this.hourlyActionCounts.entries())
+      .filter(([_, state]) => now < state.resetAt)
+      .map(([key, state]) => ({
+        incidentKey: key,
+        count: state.count,
+        limit: this.HOURLY_LIMIT,
+      }));
+    
+    return { activeCooldowns, hourlyLimits };
+  }
 }
 
-// Reset action history every 5 minutes to allow retries
+// Clear expired cooldowns every 5 minutes
 setInterval(() => {
-  WalterOpsEngine.resetActionHistory();
+  WalterOpsEngine.clearExpiredCooldowns();
 }, 5 * 60 * 1000);
