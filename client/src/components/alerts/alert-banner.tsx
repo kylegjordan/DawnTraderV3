@@ -102,10 +102,13 @@ export default function AlertBanner() {
   );
 
   // Critical and actionable alerts to show in banner
+  // Filter out feed_health and formula_audit alerts (moved to System Health Summary widget)
   const bannerAlerts = [
     ...categorizedAlerts.critical,
     ...categorizedAlerts.actionable,
-  ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  ]
+    .filter((alert) => alert.alertType !== 'feed_health' && alert.alertType !== 'formula_audit')
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   if (isLoading) {
     return null;
