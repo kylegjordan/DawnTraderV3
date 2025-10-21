@@ -86,10 +86,15 @@ export default function AlertBanner() {
     },
   });
 
-  const alerts = data?.alerts || [];
+  const rawAlerts = data?.alerts || [];
   const showSystemAlerts = settings?.showSystemAlerts !== false;
 
-  // Categorize alerts
+  // Filter out feed_health and formula_audit alerts (moved to System Health Summary widget)
+  const alerts = rawAlerts.filter(
+    (alert) => alert.alertType !== 'feed_health' && alert.alertType !== 'formula_audit'
+  );
+
+  // Categorize alerts (now excluding feed/formula health)
   const categorizedAlerts = {
     critical: alerts.filter((a) => categorizeAlert(a) === 'critical'),
     actionable: alerts.filter((a) => categorizeAlert(a) === 'actionable'),
@@ -102,13 +107,10 @@ export default function AlertBanner() {
   );
 
   // Critical and actionable alerts to show in banner
-  // Filter out feed_health and formula_audit alerts (moved to System Health Summary widget)
   const bannerAlerts = [
     ...categorizedAlerts.critical,
     ...categorizedAlerts.actionable,
-  ]
-    .filter((alert) => alert.alertType !== 'feed_health' && alert.alertType !== 'formula_audit')
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   if (isLoading) {
     return null;
