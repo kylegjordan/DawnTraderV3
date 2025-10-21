@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { databaseMonitor } from "./services/database-monitor";
@@ -391,12 +393,20 @@ app.use((req, res, next) => {
     app._router.stack
       .filter((r: any) => r.route && r.route.path)
       .forEach((r: any) => {
-        const path = r.route.path;
-        apiRouter.use(path, r.route.stack[0].handle);
+        const routePath = r.route.path;
+        apiRouter.use(routePath, r.route.stack[0].handle);
       });
     app._router = express.Router().use("/api", apiRouter);
     console.log("✅ API routes are now mounted under /api");
   }
+
+  // ✅ Serve frontend dashboard after API routes
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  app.use(express.static(path.join(__dirname, "../dist")));
+
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "../dist/index.html"));
+  });
 
   server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
