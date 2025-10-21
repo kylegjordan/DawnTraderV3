@@ -5459,6 +5459,38 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // One-time cleanup: Acknowledge all feed_health and formula_audit alerts
+  app.post('/api/system/cleanup-health-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      console.log(`[CLEANUP] Acknowledging all feed_health and formula_audit alerts for user ${userId}`);
+      
+      // Get all unacknowledged feed_health and formula_audit alerts
+      const alerts = await AlertsService.getAlerts(userId);
+      const healthAlerts = alerts.filter(a => 
+        a.alertType === 'feed_health' || a.alertType === 'formula_audit'
+      );
+      
+      let acknowledgedCount = 0;
+      for (const alert of healthAlerts) {
+        await AlertsService.acknowledgeAlert(alert.id, userId);
+        acknowledgedCount++;
+      }
+      
+      console.log(`[CLEANUP] Acknowledged ${acknowledgedCount} health alerts`);
+      
+      res.json({
+        ok: true,
+        message: `Successfully acknowledged ${acknowledgedCount} feed/formula health alerts`,
+        count: acknowledgedCount,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CLEANUP] Error acknowledging health alerts:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ============================================
   // Walter Autonomous Maintenance Actions
   // ============================================
