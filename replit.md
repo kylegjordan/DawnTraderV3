@@ -65,6 +65,8 @@ Execution Config (Walter Auto-Execution Settings) introduces per-mode, per-actio
 
 API Routing Architecture implements a dedicated Express Router for all backend routes, mounted at `/api` prefix before Vite middleware in server/index.ts. All 411 routes are refactored to use `apiRouter` instead of direct `app` registration. A catch-all handler (`apiRouter.all('*', ...)`) ensures unmatched `/api/*` routes return JSON 404 responses instead of falling through to Vite's HTML handler. Diagnostic trace middleware updated to use `req.baseUrl + req.path` for proper route detection after router mounting.
 
+Global Session Registration for Paper Trading implements registration of paper trading sessions with the global session tracking system. When paper trading starts, `registerSimulationSession()` is called to register the session globally, enabling the `/api/trading/status` endpoint to correctly report `isEngineActivePaper: true` for accurate UI toggle button state. When paper trading stops, `deregisterSimulationSession()` clears the global session. This ensures the top bar toggle button accurately reflects the running state of the paper trading engine.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

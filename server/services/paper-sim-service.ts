@@ -253,6 +253,18 @@ export async function startPaperSimulation(
         
         await manager.start();
         
+        // Register global session for status tracking
+        if (typeof (global as any).registerSimulationSession === 'function') {
+          (global as any).registerSimulationSession({
+            sessionId,
+            startedBy: options?.startedBy || 'manual',
+            startTime: startedAt,
+            isRunning: true,
+            type: 'paper'
+          });
+          console.log('[PaperSimService] Global session registered');
+        }
+        
         // Emit cluster bus event for distributed awareness
         try {
           const { clusterBus } = await import('./cluster-bus.js');
@@ -357,6 +369,12 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
           clearGlobalPaperSimManager();
         } else {
           console.warn('[PaperSimService] No active manager found, updating database only');
+        }
+        
+        // Deregister global session
+        if (typeof (global as any).deregisterSimulationSession === 'function') {
+          (global as any).deregisterSimulationSession();
+          console.log('[PaperSimService] Global session deregistered');
         }
 
         // Calculate final metrics
