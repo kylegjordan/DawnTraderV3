@@ -3,6 +3,8 @@ import { getFeedIntegrityMonitor } from '../services/feed-integrity-monitor';
 import { AlertsService } from '../services/alerts-service';
 import { WalterOpsEngine, type AnomalyInput } from '../services/walter-ops-engine';
 import { storage } from '../storage';
+import { tradingStateSync } from '../services/trading-state-sync';
+import { clusterBus } from '../services/cluster-bus';
 import type { FeedHealthReport } from '../services/feed-integrity-monitor';
 
 /**
@@ -27,6 +29,44 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
   console.log(`[FeedIntegrity:${trigger}] Starting feed health check...`);
   
   try {
+    // PHASE 27.F.21: Gating Logic - Skip feed checks if trading is inactive
+    // Check if any user has active trading (live or paper)
+    const users = await storage.getAllUsers();
+    const anyTradingActive = await Promise.all(
+      users.map(u => tradingStateSync.isEngineActive(u.id))
+    ).then(results => results.some(active => active));
+    
+    if (!anyTradingActive && trigger === 'auto') {
+      console.log(`[FeedIntegrity:${trigger}] ⏸️  Feed check skipped: trading inactive (no active stream to monitor)`);
+      
+      // Return minimal report without alerting
+      const dormantReport: FeedHealthReport = {
+        timestamp: new Date().toISOString(),
+        overallGrade: 'A',
+        metrics: {
+          feedType: 'websocket',
+          latencyMs: 0,
+          stalenessSec: 0,
+          uptimePercent: 100,
+          pairCount: 0,
+          errorRate: 0,
+          reconnectCount: 0,
+          tickAgeSec: 0,
+          status: 'healthy',
+          lastUpdateISO: new Date().toISOString(),
+        },
+        issues: [],
+        summary: ['Feed monitoring paused - trading inactive'],
+      };
+      
+      const duration = Date.now() - startTime;
+      return {
+        ...dormantReport,
+        duration,
+        reportPath: '/tmp/feed_health_dormant.json',
+      };
+    }
+    
     // Record health snapshot
     monitor.recordSnapshot();
     
@@ -110,14 +150,26 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     
     if (shouldAlert) {
       if (metrics.status !== 'healthy') {
+        // PHASE 27.F.21: Check if trading is inactive (dormant mode)
+        const users = await storage.getAllUsers();
+        const tradingActiveStates = await Promise.all(
+          users.map(u => tradingStateSync.isEngineActive(u.id))
+        );
+        const anyTradingActive = tradingActiveStates.some(active => active);
+        const isDormantMode = !anyTradingActive;
+        
         // Create new alert for all admin users (warning or critical)
         const severity = metrics.status === 'critical' ? 'critical' : 'warning';
-        const message = `Feed Health: ${metrics.status.toUpperCase()} (Grade ${overallGrade})\n${report.issues.join('\n')}`;
+        const dormantPrefix = isDormantMode ? '[DORMANT] ' : '';
+        const message = `${dormantPrefix}Feed Health: ${metrics.status.toUpperCase()} (Grade ${overallGrade})\n${report.issues.join('\n')}`;
         
-        console.log(`[FeedIntegrity] Creating ${severity} alert for admin users + triggering Walter autonomous maintenance`);
+        if (isDormantMode) {
+          console.log(`[FeedIntegrity] 🔇 Dormant mode detected: Suppressing dashboard alerts (trading inactive)`);
+        } else {
+          console.log(`[FeedIntegrity] Creating ${severity} alert for admin users + triggering Walter autonomous maintenance`);
+        }
         
         // Get all admin users
-        const users = await storage.getAllUsers();
         const adminUsers = users.filter(u => u.isAdmin);
         
         // Prepare anomaly for Walter autonomous maintenance (global system-level)
@@ -135,14 +187,17 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
           severity,
         };
         
-        // Create alerts for each admin user (existing AlertsService flow)
+        // PHASE 27.F.21: Create alerts with dormant suppression
+        // Dormant alerts use 'informational' category (not shown in dashboard critical banner)
+        const alertCategory = isDormantMode ? 'informational' : (severity === 'critical' ? 'critical' : 'actionable');
+        
         for (const admin of adminUsers) {
           await AlertsService.createAlert({
             userId: admin.id,
             mode: 'live',
             alertType: 'feed_health',
             severity,
-            category: severity === 'critical' ? 'critical' : 'actionable',
+            category: alertCategory,
             message,
             metadata: {
               grade: overallGrade,
@@ -152,6 +207,8 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
               tickAgeSec: metrics.tickAgeSec,
               feedType: metrics.feedType,
               trigger,
+              dormant: isDormantMode,
+              suppressReason: isDormantMode ? 'Trading inactive - no active stream to monitor' : undefined,
             },
           });
           
@@ -160,7 +217,7 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
             mode: 'paper',
             alertType: 'feed_health',
             severity,
-            category: severity === 'critical' ? 'critical' : 'actionable',
+            category: alertCategory,
             message,
             metadata: {
               grade: overallGrade,
@@ -170,19 +227,21 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
               tickAgeSec: metrics.tickAgeSec,
               feedType: metrics.feedType,
               trigger,
+              dormant: isDormantMode,
+              suppressReason: isDormantMode ? 'Trading inactive - no active stream to monitor' : undefined,
             },
           });
         }
         
-        // NEW: Trigger Walter autonomous maintenance ONCE per mode (feed ops are global, not per-user)
-        // Use first admin as representative user for action tracking
-        if (adminUsers.length > 0) {
+        // PHASE 27.F.21: Trigger Walter autonomous maintenance ONLY if not dormant
+        // Skip Walter actions in dormant mode (trading inactive, no stream to fix)
+        if (adminUsers.length > 0 && !isDormantMode) {
           const primaryAdmin = adminUsers[0];
           
           try {
             console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (live mode)`);
             const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', anomaly);
-            console.log(`[WalterOps-FeedIntegrity] Live action result: ${liveAction.action_type} - ${liveAction.status}`);
+            console.log(`[WalterOps-FeedIntegrity] Live action result: ${liveAction.actionType} - ${liveAction.status}`);
           } catch (walterError) {
             console.error(`[WalterOps-FeedIntegrity] Failed to process live anomaly:`, walterError);
           }
@@ -190,10 +249,12 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
           try {
             console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (paper mode)`);
             const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', anomaly);
-            console.log(`[WalterOps-FeedIntegrity] Paper action result: ${paperAction.action_type} - ${paperAction.status}`);
+            console.log(`[WalterOps-FeedIntegrity] Paper action result: ${paperAction.actionType} - ${paperAction.status}`);
           } catch (walterError) {
             console.error(`[WalterOps-FeedIntegrity] Failed to process paper anomaly:`, walterError);
           }
+        } else if (isDormantMode) {
+          console.log(`[WalterOps-FeedIntegrity] Skipping Walter actions (dormant mode - trading inactive)`);
         }
         
         monitor.updateAlertState(metrics.status, overallGrade, null);
@@ -290,12 +351,24 @@ export function initFeedIntegrityAutoCheck() {
     },
     {
       timezone: 'UTC',
-      scheduled: true,
     }
   );
   
   isEnabled = true;
   console.log('[FeedIntegrity] ✅ Auto-check enabled');
+  
+  // PHASE 27.F.21: Listen for engine state changes to clear alerts when trading stops
+  clusterBus.on('engine_state_changed', async (data: any) => {
+    const { userId, isActive } = data;
+    
+    // When trading stops (isActive = false), clear feed-health alerts
+    if (isActive === false) {
+      console.log(`[FeedIntegrity] Trading stopped for user ${userId} - clearing feed-health alerts`);
+      await clearFeedHealthAlertsOnStop(userId);
+    }
+  });
+  
+  console.log('[FeedIntegrity] ✅ Engine state change listener registered');
   
   // Run initial check after 30 seconds
   setTimeout(async () => {
@@ -330,4 +403,27 @@ export function isFeedIntegrityAutoCheckEnabled(): boolean {
 // Alias for backward compatibility
 export function registerFeedIntegrityJob() {
   initFeedIntegrityAutoCheck();
+}
+
+/**
+ * PHASE 27.F.21: Clear feed-health alerts on trading stop
+ * Called when trading mode transitions to inactive
+ * 
+ * @param userId - User ID to clear alerts for
+ */
+export async function clearFeedHealthAlertsOnStop(userId: string): Promise<void> {
+  try {
+    console.log(`[FeedIntegrity] 🔇 Clearing feed-health alerts for user ${userId} (trading stopped)`);
+    
+    // Acknowledge all unacknowledged alerts for this user (both modes)
+    // This will clear all alerts including feed-health alerts
+    await AlertsService.acknowledgeAll(userId, 'live');
+    await AlertsService.acknowledgeAll(userId, 'paper');
+    
+    // Log action for transparency
+    console.log(`[FeedIntegrity] ✅ Feed monitoring paused - trading inactive (no active stream to monitor)`);
+    console.log(`[FeedIntegrity] ✅ Feed-health alerts cleared for user ${userId}`);
+  } catch (error) {
+    console.error(`[FeedIntegrity] Failed to clear feed-health alerts for user ${userId}:`, error);
+  }
 }
