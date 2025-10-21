@@ -142,6 +142,12 @@ export default function AITransparencyPage() {
     refetchInterval: 300000, // Refresh every 5 minutes
   });
 
+  // Fetch feed health data (for Feed Health in AI Command Center)
+  const { data: feedHealthData, isLoading: feedHealthLoading } = useQuery<{ ok: boolean; grade: string; metrics: any; issues: string[]; history: any[] }>({
+    queryKey: ['/api/system/feed-health'],
+    refetchInterval: 300000, // Refresh every 5 minutes
+  });
+
   // Manual analysis trigger
   const triggerAnalysisMutation = useMutation({
     mutationFn: async () => {
@@ -201,6 +207,27 @@ export default function AITransparencyPage() {
       toast({
         title: "Error",
         description: error?.message || "Failed to run system audit",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Feed health check trigger (admin-only)
+  const runFeedHealthCheckMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('GET', '/api/system/feed-health/run', {});
+    },
+    onSuccess: (response: any) => {
+      toast({
+        title: "Feed Health Check Complete",
+        description: `Overall grade: ${response.grade} (${response.metrics.status})`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/system/feed-health'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to run feed health check",
         variant: "destructive",
       });
     }
@@ -834,6 +861,161 @@ export default function AITransparencyPage() {
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
                         No formula audit data available. {isAdmin && "Click 'Run Audit Now' to generate a report."}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Feed Health */}
+              <Card data-testid="card-feed-health">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Activity className="w-5 h-5" />
+                        Feed Health
+                      </CardTitle>
+                      <CardDescription>
+                        Real-time monitoring of Kraken WebSocket + REST fallback data feeds
+                      </CardDescription>
+                    </div>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        onClick={() => runFeedHealthCheckMutation.mutate()}
+                        disabled={runFeedHealthCheckMutation.isPending}
+                        data-testid="button-run-feed-health-check"
+                      >
+                        {runFeedHealthCheckMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Checking...
+                          </>
+                        ) : (
+                          <>
+                            <Activity className="w-4 h-4 mr-2" />
+                            Recheck Now
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {feedHealthLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : feedHealthData?.metrics ? (
+                    <>
+                      {/* Overall Grade */}
+                      <div className="text-center p-6 bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg">
+                        <div className="text-5xl font-bold mb-2" data-testid="text-feed-grade">
+                          {feedHealthData.grade}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Overall Grade</div>
+                        <div className="mt-2 flex items-center justify-center gap-2">
+                          {feedHealthData.metrics.status === 'healthy' ? (
+                            <Badge variant="default" className="bg-green-500">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Healthy
+                            </Badge>
+                          ) : feedHealthData.metrics.status === 'warning' ? (
+                            <Badge variant="outline" className="border-yellow-500 text-yellow-600">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Warning
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive">
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Critical
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Feed Metrics */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-2xl font-bold text-foreground" data-testid="text-feed-latency">
+                            {feedHealthData.metrics.latencyMs}ms
+                          </div>
+                          <div className="text-xs text-muted-foreground">Latency</div>
+                        </div>
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-2xl font-bold text-foreground" data-testid="text-feed-uptime">
+                            {feedHealthData.metrics.uptimePercent}%
+                          </div>
+                          <div className="text-xs text-muted-foreground">Uptime</div>
+                        </div>
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-2xl font-bold text-foreground" data-testid="text-feed-pairs">
+                            {feedHealthData.metrics.pairCount}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Active Pairs</div>
+                        </div>
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-2xl font-bold text-foreground" data-testid="text-feed-type">
+                            {feedHealthData.metrics.feedType === 'websocket' ? 'WS' : 'REST'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Feed Type</div>
+                        </div>
+                      </div>
+
+                      {/* Last Update Info */}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="w-4 h-4" />
+                        <span data-testid="text-last-feed-check">
+                          Last check: {formatDistanceToNow(new Date(feedHealthData.timestamp))} ago
+                        </span>
+                      </div>
+
+                      {/* Issues Alert */}
+                      {feedHealthData.issues && feedHealthData.issues.length > 0 && (
+                        <Alert variant={feedHealthData.metrics.status === 'critical' ? "destructive" : "default"}>
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            <div className="space-y-1">
+                              {feedHealthData.issues.map((issue, idx) => (
+                                <div key={idx} className="text-sm">
+                                  • {issue}
+                                </div>
+                              ))}
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {/* Health History Sparkline */}
+                      {feedHealthData.history && feedHealthData.history.length > 0 && (
+                        <div className="space-y-2">
+                          <h3 className="text-sm font-semibold">Latency History (1 hour)</h3>
+                          <div className="h-16 flex items-end justify-between gap-1">
+                            {feedHealthData.history.map((h: any, idx: number) => {
+                              const heightPercent = Math.min(100, (h.latencyMs / 5000) * 100);
+                              const isHealthy = h.wasHealthy;
+                              return (
+                                <div
+                                  key={idx}
+                                  className={`flex-1 rounded-sm ${isHealthy ? 'bg-green-500/50' : 'bg-red-500/50'}`}
+                                  style={{ height: `${heightPercent}%` }}
+                                  title={`${h.latencyMs}ms`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <div className="text-xs text-muted-foreground text-center">
+                            Green = healthy (&lt;2s), Red = degraded (≥2s)
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        No feed health data available. {isAdmin && "Click 'Recheck Now' to generate a report."}
                       </AlertDescription>
                     </Alert>
                   )}
