@@ -5228,6 +5228,35 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Formula Audit - Manual Trigger (Admin Only)
+  app.get('/api/system/formula-audit/run', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
+    try {
+      console.log('[AUDIT] Manual formula audit triggered by user:', req.user!.username);
+      
+      const { runFormulaAudit } = await import('./jobs/formula-auto-audit');
+      const result = await runFormulaAudit('manual');
+      
+      res.json({ 
+        ok: true,
+        runType: 'manual',
+        timestamp: result.timestamp,
+        reportPath: result.reportPath,
+        duration: result.duration,
+        report: {
+          totalFormulas: result.totalFormulas,
+          passed: result.passed,
+          warnings: result.warnings,
+          failed: result.failed,
+          tests: result.tests,
+          summary: result.summary
+        }
+      });
+    } catch (error: any) {
+      console.error('[AUDIT] Manual formula audit error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // System Logs (simple in-memory log - placeholder)
   app.get('/api/system/logs', async (_req, res) => {
     try {

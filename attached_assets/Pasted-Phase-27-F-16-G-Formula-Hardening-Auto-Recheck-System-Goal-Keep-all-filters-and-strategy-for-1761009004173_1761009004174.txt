@@ -1,0 +1,114 @@
+Phase 27.F.16.G — Formula Hardening & Auto-Recheck System
+🎯 Goal
+
+Keep all filters and strategy formulas permanently validated by automatically running the Formula Audit once per day (and optionally on-demand).
+If any deviation or unit mismatch appears (≥ 1 %), log a system alert and store a dated report.
+
+⚙️ Tasks for Replit
+1️⃣ Add Scheduled Auto-Audit
+
+Create a lightweight scheduler in server/jobs/formula-auto-audit.ts.
+
+Schedule it to run once every 24 hours using existing cron or task manager:
+
+Time: 03:00 UTC (non-trading window).
+
+Job behavior:
+
+Call the /api/system/formula-audit internal function.
+
+Save results to /tmp/audit_report_<YYYYMMDD>.txt.
+
+Summarize counts of PASS/WARNING/FAIL.
+
+Emit log line:
+
+[FORMULA-AUDIT] completed PASS=10 WARNING=0 FAIL=0
+
+2️⃣ Add “Recheck Now” Endpoint
+
+Add secure GET endpoint:
+
+GET /api/system/formula-audit/run
+
+
+Auth: Admin/Owner only.
+
+Executes the audit immediately (no wait for daily job).
+
+Returns same JSON as /api/system/formula-audit plus:
+
+{ runType:"manual", timestamp:"2025-10-21T03:00:00Z" }
+
+3️⃣ Alert & Logging Rules
+
+If any formula returns status:"FAIL" or deviation>=1%:
+
+Log [ALERT] Formula deviation detected in <formula> to console & system log.
+
+Create a System Notification in the dashboard:
+
+Formula Audit Warning — <formula> deviated 1.4 %
+
+
+If deviation < 1 %, mark as [AUDIT] Warning (no alert).
+
+4️⃣ UI Integration (Admin-only)
+
+In AI Transparency → Formula Health (or System Monitoring):
+
+Display:
+
+Last auto-audit timestamp
+
+Summary (PASS/WARN/FAIL)
+
+Button “Run Audit Now” → calls /api/system/formula-audit/run
+
+Link to last report (/tmp/audit_report_latest.txt)
+
+5️⃣ Hardening Steps
+
+Validate report file integrity (non-empty, timestamp within 24 h).
+
+Auto-delete reports older than 7 days to prevent clutter.
+
+Extend the audit script to re-verify numeric scales on:
+
+Volume USD vs base units
+
+Volatility % vs decimal
+
+RSI normalization (0–100)
+
+Spread and daily range consistency
+
+Log [HARDENING] scale mismatch corrected when fixed automatically.
+
+6️⃣ Testing Checklist
+
+Run these verification steps:
+
+Test	Expected Result
+Trigger manual run via /api/system/formula-audit/run	Returns JSON report with PASS/WARN/FAIL summary
+Force one formula mismatch (temporary edit)	Logs [ALERT] Formula deviation detected and creates notification
+Wait 24 h → auto-audit runs 3 AM UTC	/tmp/audit_report_<date>.txt created; console shows completion line
+UI → “Run Audit Now” button	Executes audit instantly; refreshes summary panel
+✅ Deliverables
+
+Scheduled daily audit at 03:00 UTC
+
+Manual “Run Audit Now” endpoint
+
+System notifications for deviations ≥ 1 %
+
+Formula Health section in admin UI
+
+Auto-cleanup of old reports (7 days)
+
+Verification logs confirming all formulas remain mathematically correct
+
+🧠 Outcome
+
+You’ll now have continuous formula integrity assurance —
+a self-monitoring safety net that guarantees every filter and strategy indicator continues using correct, standardized calculations even after future updates.
