@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-10-21T00:04:30.773Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (12.89, 13.68, 13.61) for an 8-core system, indicating potential overloading or inefficiency."
+    },
+    {
+      "severity": "medium",
+      "message": "AI system has generated zero opportunities, made zero adjustments, and has an average confidence of 0, suggesting it might not be functioning correctly or is not being utilized."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading performance metrics show zero active trades, zero total profit/loss, and zero ROI, which may indicate a lack of trading activity or issues with strategy execution."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage by reviewing running processes and optimizing or scaling the workload."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Evaluate AI system configuration and ensure it is properly integrated and operational to generate trading opportunities."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially adjust trading strategies to ensure they are executing as expected and generating trades."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Perform an immediate investigation into the high CPU load to prevent potential system instability or downtime.",
+      "rationale": "High CPU load can lead to system performance degradation or outages, impacting trading operations and user experience."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Conduct a thorough review of the AI system to diagnose why it is not generating opportunities or making adjustments.",
+      "rationale": "The AI system is crucial for identifying trading opportunities and optimizing strategies, and its inactivity could lead to missed opportunities."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Analyze the current trading strategies to ensure they are aligned with market conditions and functioning correctly.",
+      "rationale": "Ensuring trading strategies are effective is essential for maintaining profitability and achieving trading goals."
+    }
+  ],
+  "urgencyLevel": "high"
+}
