@@ -1,0 +1,71 @@
+🧠 Phase 27.F.17a — Filter-Driven Auto-Watchlist (No-Code Brief)
+
+Goal:
+Eliminate hard-coded BTC/USD and ETH/USD defaults so that when the Paper Trading toggle is pressed, the system automatically creates a watchlist based only on pairs that actually pass all screener filters.
+If no pairs qualify, the system will stay idle and clearly log that fact — no forced data activity.
+
+🧩 Implementation Steps (Replit Agent Instructions)
+
+Audit the Current Logic
+
+Open server/services/paper-sim-service.ts.
+
+Locate the logic that checks if the watchlist is empty when startPaperSimulation() runs.
+
+It currently auto-adds BTC/USD and ETH/USD.
+
+Replace Hard-Coded Behavior with Screener Integration
+
+Remove any logic that hard-codes default pairs.
+
+Instead, call the screener or filter service that already exists in the app (e.g., screenerService.getEligiblePairs() or equivalent).
+
+Use it to query for eligible pairs according to current screener thresholds (minVolume, spread, volatility, guardrails, etc.).
+
+Select the top few (up to five) that meet all active filters and add those to the watchlist.
+
+If no pairs meet the criteria, log a clear message that says:
+“No eligible pairs found — engine will remain idle until next scan cycle.”
+
+Logging & Traceability
+
+Add clear logs for all outcomes:
+
+When the screener query runs
+
+When eligible pairs are added
+
+When no pairs qualify
+
+Example log tags: [PaperSimService][AutoWatchlist] for every relevant step.
+
+Safety & Caps
+
+Cap the number of auto-added pairs at 10 maximum to prevent Kraken WebSocket overload.
+
+Keep all existing concurrency locks and database safety checks intact.
+
+State Synchronization
+
+Do not modify the existing tradingStateSync.setEngineActive(userId, true) or systemContextService.set('paper_engine_status','RUNNING') logic.
+
+This ensures the status bar and API still show accurate “RUNNING” / “STOPPED” states.
+
+Idle Handling
+
+If no pairs are eligible, PaperSim should stay in a healthy but idle state — not error, not crash.
+
+The Filter Insights tab should reflect “0 eligible pairs” gracefully.
+
+Final Deliverables
+
+Hard-coded pair logic removed.
+
+Screener-driven auto-watchlist integrated.
+
+Logging shows which pairs were auto-selected or that none qualified.
+
+replit.md updated with:
+Phase 27.F.17a — Filter-Driven Auto-Watchlist (screener-based initialization for PaperSim)
+
+Architect review PASS.
