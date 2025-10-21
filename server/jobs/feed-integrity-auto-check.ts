@@ -399,12 +399,15 @@ export function initFeedIntegrityAutoCheck() {
   
   // PHASE 27.F.21: Listen for engine state changes to clear alerts when trading stops
   clusterBus.on('engine_state_changed', async (data: any) => {
+    console.log(`[FeedIntegrity][EventListener] 🎧 engine_state_changed event received:`, data);
     const { userId, isActive } = data;
     
     // When trading stops (isActive = false), clear feed-health alerts
     if (isActive === false) {
-      console.log(`[FeedIntegrity] Trading stopped for user ${userId} - clearing feed-health alerts`);
+      console.log(`[FeedIntegrity] 🔇 Trading stopped for user ${userId} - triggering auto-clear of feed-health alerts`);
       await clearFeedHealthAlertsOnStop(userId);
+    } else {
+      console.log(`[FeedIntegrity] Trading started for user ${userId} (isActive=${isActive}) - no action needed`);
     }
   });
   
