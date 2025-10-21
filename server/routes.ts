@@ -5351,6 +5351,46 @@ Provide specific, actionable recommendations.`,
     }
   });
   
+  // Get auto-resolved incidents count for today
+  app.get('/api/walter/auto-resolved-today', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Get start of today (midnight UTC)
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      
+      // Query auto-resolved actions from today
+      const { and, eq, gte, sql: drizzleSql } = await import('drizzle-orm');
+      const { walterActions } = await import('../shared/schema');
+      
+      const autoResolvedActions = await db
+        .select()
+        .from(walterActions)
+        .where(
+          and(
+            eq(walterActions.userId, userId),
+            eq(walterActions.status, 'completed'),
+            gte(walterActions.detectedAt, todayStart),
+            drizzleSql`${walterActions.contextData}->>'autoResolved' = 'true'`
+          )
+        );
+      
+      // Count by source
+      const feedCount = autoResolvedActions.filter(a => a.category === 'feed').length;
+      const formulaCount = autoResolvedActions.filter(a => a.category === 'formula').length;
+      
+      res.json({
+        total: autoResolvedActions.length,
+        feed: feedCount,
+        formula: formulaCount
+      });
+    } catch (error: any) {
+      console.error('[WALTER-AUTO-RESOLVED] Error fetching stats:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   // Approve a pending Walter action (RBAC + validation)
   app.post('/api/walter/actions/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

@@ -10,6 +10,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { RecentActionsTimeline } from "@/components/dashboard/recent-actions-timeline";
 
 // Helper function to format category labels
 const getCategoryLabel = (category: string): string => {
@@ -855,6 +856,9 @@ export default function AITransparencyPage() {
                           </div>
                         </div>
                       )}
+                      
+                      {/* Recent Auto-Resolutions */}
+                      <RecentActionsTimeline source="formula" maxItems={5} />
                     </>
                   ) : (
                     <Alert>
@@ -973,7 +977,7 @@ export default function AITransparencyPage() {
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Clock className="w-4 h-4" />
                         <span data-testid="text-last-feed-check">
-                          Last check: {formatDistanceToNow(new Date(feedHealthData.timestamp))} ago
+                          Recently checked
                         </span>
                       </div>
 
@@ -1016,6 +1020,9 @@ export default function AITransparencyPage() {
                           </div>
                         </div>
                       )}
+                      
+                      {/* Recent Auto-Resolutions */}
+                      <RecentActionsTimeline source="feed" maxItems={5} />
                     </>
                   ) : (
                     <Alert>

@@ -16,6 +16,7 @@ import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
 import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
+import { AutoResolvedWidget } from "@/components/dashboard/auto-resolved-widget";
 import AlertBanner from "@/components/alerts/alert-banner";
 import { useSystemHealth } from "@/hooks/use-system-health";
 import { useState, useEffect } from "react";
@@ -61,14 +62,15 @@ export default function Dashboard() {
       {/* System Alerts Banner */}
       <AlertBanner />
 
-      {/* Dashboard Widgets - 4-Widget Layout */}
+      {/* Dashboard Widgets - 5-Widget Layout */}
       <section>
         <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-3 sm:mb-4">Dashboard Overview</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <PortfolioValueWidget />
           <EarningsWidget />
           <TradingActivityWidget />
           <AveragesWidget />
+          <AutoResolvedWidget />
         </div>
       </section>
 

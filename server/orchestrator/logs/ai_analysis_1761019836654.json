@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-10-21T04:10:36.654Z",
+  "anomalies": [
+    {
+      "severity": "high",
+      "message": "CPU load average is significantly high across all intervals (12.41, 9.94, 9.91) which is unusual given there are no active trades."
+    },
+    {
+      "severity": "medium",
+      "message": "AI module shows no recent learning cycles, average confidence, opportunities generated, or adjustments made, indicating it might not be functioning as expected."
+    },
+    {
+      "severity": "medium",
+      "message": "Trading metrics show zero total profit/loss, win rate, and ROI, which is concerning if the strategies are expected to be actively trading."
+    }
+  ],
+  "optimizations": [
+    {
+      "impact": "high",
+      "recommendation": "Investigate and optimize CPU usage to ensure system resources are efficiently utilized."
+    },
+    {
+      "impact": "medium",
+      "recommendation": "Review and potentially restart the AI module to ensure it is actively learning and generating opportunities."
+    }
+  ],
+  "recommendations": [
+    {
+      "urgencyLevel": "critical",
+      "action": "Conduct a thorough investigation into the high CPU load to identify and resolve the underlying cause.",
+      "rationale": "High CPU load can lead to system instability and affect the performance of trading operations."
+    },
+    {
+      "urgencyLevel": "high",
+      "action": "Restart or troubleshoot the AI module to ensure it is operational and contributing to trading strategies.",
+      "rationale": "The AI module is not performing any learning cycles or generating opportunities, which may hinder trading effectiveness."
+    },
+    {
+      "urgencyLevel": "medium",
+      "action": "Evaluate the performance and configuration of active trading strategies to ensure they are functioning as intended.",
+      "rationale": "Zero trading activity and metrics may indicate misconfiguration or issues with the strategies."
+    }
+  ],
+  "urgencyLevel": "high"
+}

@@ -1115,6 +1115,51 @@ export class WalterOpsEngine {
       
       console.log(`[WalterOps-AutoResolve] ✅ Created action ${action[0].id} (confidence: ${resolution.confidence}%)`);
       
+      // Acknowledge corresponding critical alerts for this component
+      try {
+        const alertType = source === 'feed' ? 'feed_health_critical' : 'formula_deviation_critical';
+        const { storage } = await import('../storage');
+        const { systemAlerts } = await import('../../shared/schema');
+        const { and, eq, ilike } = await import('drizzle-orm');
+        
+        // Find unacknowledged critical alerts for this component
+        const alerts = await db
+          .select()
+          .from(systemAlerts)
+          .where(
+            and(
+              eq(systemAlerts.userId, userId),
+              eq(systemAlerts.mode, mode),
+              eq(systemAlerts.acknowledged, false),
+              eq(systemAlerts.severity, 'critical')
+            )
+          )
+          .limit(10); // Limit to avoid large updates
+        
+        // Acknowledge alerts that match this component
+        let acknowledgedCount = 0;
+        for (const alert of alerts) {
+          // Check if alert message or metadata references the component
+          if (
+            alert.message?.toLowerCase().includes(component.toLowerCase()) ||
+            alert.alertType === alertType
+          ) {
+            await db
+              .update(systemAlerts)
+              .set({ acknowledged: true })
+              .where(eq(systemAlerts.id, alert.id));
+            acknowledgedCount++;
+          }
+        }
+        
+        if (acknowledgedCount > 0) {
+          console.log(`[WalterOps-AutoResolve] Acknowledged ${acknowledgedCount} critical alert(s) for ${component}`);
+        }
+      } catch (alertError) {
+        console.error('[WalterOps-AutoResolve] Failed to acknowledge alerts:', alertError);
+        // Continue - auto-resolution still succeeded
+      }
+      
       return {
         actionId: action[0].id,
         actionType: 'health_check',
