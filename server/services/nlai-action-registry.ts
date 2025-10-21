@@ -8,6 +8,7 @@ import {
   getGuardrails,
   getScreeners
 } from './config-update-service';
+import { storage } from '../storage';
 
 export interface ActionIntent {
   verb: string;
@@ -621,7 +622,6 @@ export class NLAIActionRegistry {
       category: 'system',
       handler: async (userId: string, intent: ActionIntent) => {
         try {
-          const baseUrl = process.env.API_URL || 'http://localhost:5000';
           const mode = 'paper';
           
           // Default watchlist with high-volume, liquid pairs
@@ -633,27 +633,29 @@ export class NLAIActionRegistry {
           
           for (const symbol of defaultPairs) {
             try {
-              const response = await fetch(`${baseUrl}/api/watchlist`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-user-id': userId,
-                  'x-trading-mode': mode,
-                },
-                body: JSON.stringify({ symbol }),
+              // Check if pair already exists
+              const existing = await storage.getWatchlist({ userId, mode });
+              const alreadyExists = existing.some(p => p.symbol === symbol);
+              
+              if (alreadyExists) {
+                skippedCount++;
+                continue;
+              }
+              
+              // Add to watchlist
+              const [baseCurrency, quoteCurrency] = symbol.includes('USD') 
+                ? [symbol.replace('USD', ''), 'USD']
+                : [symbol.substring(0, 3), symbol.substring(3)];
+              
+              await storage.addWatchlistPair({
+                userId,
+                mode,
+                symbol,
+                baseCurrency,
+                quoteCurrency,
               });
               
-              if (response.ok) {
-                addedCount++;
-              } else {
-                const error = await response.json();
-                // If already exists, count as skipped
-                if (error.error?.includes('already') || error.error?.includes('exists')) {
-                  skippedCount++;
-                } else {
-                  errors.push(`${symbol}: ${error.error || 'Unknown error'}`);
-                }
-              }
+              addedCount++;
             } catch (error: any) {
               errors.push(`${symbol}: ${error.message}`);
             }
@@ -706,33 +708,38 @@ export class NLAIActionRegistry {
             };
           }
           
-          const baseUrl = process.env.API_URL || 'http://localhost:5000';
           const mode = 'paper';
           
-          const response = await fetch(`${baseUrl}/api/watchlist`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': userId,
-              'x-trading-mode': mode,
-            },
-            body: JSON.stringify({ symbol }),
-          });
+          // Check if pair already exists
+          const existing = await storage.getWatchlist({ userId, mode });
+          const alreadyExists = existing.some(p => p.symbol === symbol);
           
-          if (!response.ok) {
-            const error = await response.json();
+          if (alreadyExists) {
             return {
               success: false,
-              message: `Failed to add ${symbol} to watchlist: ${error.error || 'Unknown error'}`,
-              error: error.error,
+              message: `${symbol} is already in your ${mode} mode watchlist.`,
+              error: 'Already exists',
             };
           }
           
-          const data = await response.json();
+          // Parse symbol to extract base and quote currencies
+          const [baseCurrency, quoteCurrency] = symbol.includes('USD') 
+            ? [symbol.replace('USD', ''), 'USD']
+            : [symbol.substring(0, 3), symbol.substring(3)];
+          
+          // Add to watchlist
+          const pair = await storage.addWatchlistPair({
+            userId,
+            mode,
+            symbol,
+            baseCurrency,
+            quoteCurrency,
+          });
+          
           return {
             success: true,
             message: `✅ Added ${symbol} to ${mode} mode watchlist.`,
-            data,
+            data: pair,
           };
         } catch (error: any) {
           return {
@@ -755,27 +762,9 @@ export class NLAIActionRegistry {
       category: 'system',
       handler: async (userId: string, intent: ActionIntent) => {
         try {
-          const baseUrl = process.env.API_URL || 'http://localhost:5000';
           const mode = 'paper';
           
-          const response = await fetch(`${baseUrl}/api/watchlist`, {
-            method: 'GET',
-            headers: {
-              'x-user-id': userId,
-              'x-trading-mode': mode,
-            },
-          });
-          
-          if (!response.ok) {
-            const error = await response.json();
-            return {
-              success: false,
-              message: `Failed to retrieve watchlist: ${error.error || 'Unknown error'}`,
-              error: error.error,
-            };
-          }
-          
-          const watchlist = await response.json();
+          const watchlist = await storage.getWatchlist({ userId, mode });
           
           if (!Array.isArray(watchlist) || watchlist.length === 0) {
             return {
