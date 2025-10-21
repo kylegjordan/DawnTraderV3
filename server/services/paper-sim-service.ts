@@ -231,16 +231,17 @@ export async function startPaperSimulation(
           console.warn('[PaperSimService][Phase-27.F.17] Failed to set minVolume:', error);
         }
         
-        // Phase 27.F.17: State Integrity Fix - Explicitly set engine active and verify
-        console.log('[PaperSimService][Phase-27.F.17] Setting engine active state...');
+        // Phase 27.F.17b: State Persistence and Broadcast Verification
+        console.log('[PaperSimService][Phase-27.F.17b] Setting engine active state...');
         await tradingStateSync.setEngineActive(userId, true);
         
-        // Verify system_context status
+        // Verify system_context status and log with [StateSync] prefix
         const context = await storage.getSystemContext(userId);
         if (context && context.isEngineActive) {
-          console.log('[PaperSimService][Phase-27.F.17] ✅ Verified system_context.isEngineActive = true');
+          console.log('[StateSync] paper_engine_status = RUNNING confirmed');
+          console.log('[PaperSimService][Phase-27.F.17b] ✅ Verified system_context.isEngineActive = true');
         } else {
-          console.warn('[PaperSimService][Phase-27.F.17] ⚠️ Failed to verify engine active state');
+          console.warn('[PaperSimService][Phase-27.F.17b] ⚠️ Failed to verify engine active state');
         }
 
         // Phase 27.F.9: Create and register manager atomically (both local and global)
@@ -371,6 +372,19 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
 
         console.log(`[PaperSimService] Stopped session: ${existingSession.sessionId}, duration: ${runDuration}ms`);
         console.log('[PaperSimService] Manager cleared (service + global), DB session ended');
+
+        // Phase 27.F.17b: State Persistence and Broadcast Verification
+        console.log('[PaperSimService][Phase-27.F.17b] Setting engine inactive state...');
+        await tradingStateSync.setEngineActive(userId, false);
+        
+        // Verify system_context status and log with [StateSync] prefix
+        const stoppedContext = await storage.getSystemContext(userId);
+        if (stoppedContext && !stoppedContext.isEngineActive) {
+          console.log('[StateSync] paper_engine_status = STOPPED confirmed');
+          console.log('[PaperSimService][Phase-27.F.17b] ✅ Verified system_context.isEngineActive = false');
+        } else {
+          console.warn('[PaperSimService][Phase-27.F.17b] ⚠️ Failed to verify engine inactive state');
+        }
 
         // Emit cluster bus event for distributed awareness
         try {

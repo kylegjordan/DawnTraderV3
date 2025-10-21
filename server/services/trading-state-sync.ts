@@ -247,9 +247,15 @@ export class TradingStateSync {
       // For live mode, check system_context.isEngineActive when mode is 'live'
       const isEngineActiveLive = context.tradingMode === 'live' && context.isEngineActive;
       
+      // Phase 27.F.17b: Add explicit status field (RUNNING/STOPPED)
+      const status = (context.tradingMode === 'paper' ? isEngineActivePaper : isEngineActiveLive) 
+        ? 'RUNNING' 
+        : 'STOPPED';
+      
       const payload = {
         userId,
         mode: context.tradingMode,
+        status, // Phase 27.F.17b: Explicit RUNNING/STOPPED status
         isEngineActive: context.isEngineActive || false,
         active: context.isEngineActive || false, // Keep both for backwards compatibility
         // Phase 27.F.12: Add mode-specific status
