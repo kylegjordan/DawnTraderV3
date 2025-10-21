@@ -136,6 +136,12 @@ export default function AITransparencyPage() {
     refetchInterval: 30000,
   });
 
+  // Fetch formula audit data (for Formula Health in AI Command Center)
+  const { data: formulaAuditData, isLoading: formulaAuditLoading } = useQuery<{ ok: boolean; report: any }>({
+    queryKey: ['/api/system/formula-audit'],
+    refetchInterval: 300000, // Refresh every 5 minutes
+  });
+
   // Manual analysis trigger
   const triggerAnalysisMutation = useMutation({
     mutationFn: async () => {
@@ -169,6 +175,27 @@ export default function AITransparencyPage() {
         title: "System Audit Complete",
         description: `Overall health: ${response.audit.health.overall.toUpperCase()}`,
       });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to run audit",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Formula audit trigger (admin-only)
+  const runFormulaAuditMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('GET', '/api/system/formula-audit/run', {});
+    },
+    onSuccess: (response: any) => {
+      toast({
+        title: "Formula Audit Complete",
+        description: `${response.report.passed}/${response.report.totalFormulas} formulas passed validation`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/system/formula-audit'] });
     },
     onError: (error: any) => {
       toast({
@@ -665,6 +692,153 @@ export default function AITransparencyPage() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Formula Health */}
+              <Card data-testid="card-formula-health">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <LineChart className="w-5 h-5" />
+                        Formula Health
+                      </CardTitle>
+                      <CardDescription>
+                        Verification of all formulas used in screeners, guardrails, and strategies
+                      </CardDescription>
+                    </div>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        onClick={() => runFormulaAuditMutation.mutate()}
+                        disabled={runFormulaAuditMutation.isPending}
+                        data-testid="button-run-formula-audit"
+                      >
+                        {runFormulaAuditMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Running...
+                          </>
+                        ) : (
+                          <>
+                            <Activity className="w-4 h-4 mr-2" />
+                            Run Audit Now
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {formulaAuditLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : formulaAuditData?.report ? (
+                    <>
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center p-3 bg-muted/30 rounded-lg">
+                          <div className="text-2xl font-bold text-foreground" data-testid="text-total-formulas">
+                            {formulaAuditData.report.totalFormulas}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Total Formulas</div>
+                        </div>
+                        <div className="text-center p-3 bg-green-500/10 rounded-lg">
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-passed-formulas">
+                            {formulaAuditData.report.passed}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Passed</div>
+                        </div>
+                        <div className="text-center p-3 bg-yellow-500/10 rounded-lg">
+                          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400" data-testid="text-warning-formulas">
+                            {formulaAuditData.report.warnings}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Warnings</div>
+                        </div>
+                        <div className="text-center p-3 bg-red-500/10 rounded-lg">
+                          <div className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="text-failed-formulas">
+                            {formulaAuditData.report.failed}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Failed</div>
+                        </div>
+                      </div>
+
+                      {/* Last Audit Info */}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Clock className="w-4 h-4" />
+                        <span data-testid="text-last-audit">
+                          Last audit: {formatDistanceToNow(new Date(formulaAuditData.report.timestamp))} ago
+                        </span>
+                      </div>
+
+                      {/* Warning/Failure Alerts */}
+                      {(formulaAuditData.report.warnings > 0 || formulaAuditData.report.failed > 0) && (
+                        <Alert variant={formulaAuditData.report.failed > 0 ? "destructive" : "default"}>
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            {formulaAuditData.report.failed > 0 ? (
+                              <>
+                                <strong>{formulaAuditData.report.failed} formula(s) failed validation</strong> with deviations ≥1%.
+                                {isAdmin && " Review /tmp/audit_report.txt for details."}
+                              </>
+                            ) : (
+                              <>
+                                <strong>{formulaAuditData.report.warnings} formula(s)</strong> have minor deviations (0.1-1%).
+                                {isAdmin && " Review /tmp/audit_report.txt for details."}
+                              </>
+                            )}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {/* Formula Details Summary */}
+                      {formulaAuditData.report.tests && formulaAuditData.report.tests.length > 0 && (
+                        <div className="space-y-2">
+                          <h3 className="text-sm font-semibold">Formula Tests</h3>
+                          <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                            {formulaAuditData.report.tests.map((test: any, idx: number) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 transition-colors"
+                                data-testid={`formula-test-${idx}`}
+                              >
+                                <div className="flex items-center gap-2 flex-1">
+                                  {test.status === 'PASS' ? (
+                                    <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                                  ) : test.status === 'WARNING' ? (
+                                    <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                                  ) : (
+                                    <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                                  )}
+                                  <span className="text-sm font-medium">{test.name}</span>
+                                </div>
+                                <div className="text-right">
+                                  <Badge
+                                    variant={
+                                      test.status === 'PASS' ? 'default' :
+                                      test.status === 'WARNING' ? 'outline' : 'destructive'
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {test.deviationPercent.toFixed(2)}% deviation
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        No formula audit data available. {isAdmin && "Click 'Run Audit Now' to generate a report."}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
             </>
           ) : (
             <Alert>
