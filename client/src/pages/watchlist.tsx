@@ -1,4 +1,4 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,10 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/hooks/use-trading";
 import { useState } from "react";
-import { Plus, Trash2, TrendingUp, TrendingDown, Activity, Sparkles, List } from "lucide-react";
+import { Plus, Trash2, TrendingUp, TrendingDown, Activity, Sparkles, List, Search, DollarSign, BarChart3, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WatchlistPair } from "@/lib/types";
 import { AIOpportunitiesTab } from "@/components/ai/ai-opportunities-tab";
+import { useQuery } from "@tanstack/react-query";
 
 function WatchlistCard({ pair, onRemove }: { pair: WatchlistPair; onRemove: (id: string) => void }) {
   const currentPrice = parseFloat(pair.currentPrice);
@@ -130,6 +131,14 @@ function WatchlistCard({ pair, onRemove }: { pair: WatchlistPair; onRemove: (id:
   );
 }
 
+interface SymbolData {
+  symbol: string;
+  price: number;
+  volume24h: number;
+  dailyRange: number;
+  vwap?: number;
+}
+
 export default function WatchlistPage() {
   const { watchlist, watchlistLoading, addToWatchlist, removeFromWatchlist } = useTrading();
   const { toast } = useToast();
@@ -138,6 +147,26 @@ export default function WatchlistPage() {
   const [baseCurrency, setBaseCurrency] = useState('');
   const [quoteCurrency, setQuoteCurrency] = useState('');
   const [activeTab, setActiveTab] = useState("user-watchlist");
+  
+  // Search and Analysis state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+
+  // Search queries for Search and Analysis tab
+  const { data: searchResults, isLoading: searchLoading } = useQuery<SymbolData[]>({
+    queryKey: ['/api/symbols/search', searchQuery],
+    enabled: searchQuery.length > 2,
+  });
+
+  const { data: symbolDetails } = useQuery<SymbolData>({
+    queryKey: ['/api/symbols/details', selectedSymbol],
+    enabled: !!selectedSymbol,
+  });
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Search is triggered automatically via useQuery
+  };
 
   const handleAddPair = async () => {
     if (!symbol || !baseCurrency || !quoteCurrency) {
@@ -241,7 +270,7 @@ export default function WatchlistPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2" data-testid="watchlist-tabs">
+        <TabsList className="grid w-full grid-cols-3" data-testid="watchlist-tabs">
           <TabsTrigger value="ai-opportunities" className="flex items-center gap-2" data-testid="tab-ai-opportunities">
             <Sparkles className="w-4 h-4" />
             AI Opportunities
@@ -249,6 +278,10 @@ export default function WatchlistPage() {
           <TabsTrigger value="user-watchlist" className="flex items-center gap-2" data-testid="tab-user-watchlist">
             <List className="w-4 h-4" />
             User Watchlists
+          </TabsTrigger>
+          <TabsTrigger value="search-analysis" className="flex items-center gap-2" data-testid="tab-search-analysis">
+            <Search className="w-4 h-4" />
+            Search and Analysis
           </TabsTrigger>
         </TabsList>
 
@@ -333,6 +366,147 @@ export default function WatchlistPage() {
                 <WatchlistCard key={pair.id} pair={pair} onRemove={handleRemovePair} />
               ))}
             </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="search-analysis" className="mt-6">
+          {/* Search Input */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="w-5 h-5" />
+                Symbol Search
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSearch} className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="Search for symbols (e.g., BTC, ETH, SOL)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="flex-1"
+                  data-testid="input-symbol-search"
+                />
+                <Button type="submit" data-testid="button-search">
+                  <Search className="w-4 h-4 mr-2" />
+                  Search
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Search Results */}
+          {searchQuery.length > 2 && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Search Results</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {searchLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : searchResults && searchResults.length > 0 ? (
+                  <div className="space-y-2">
+                    {searchResults.map((result) => (
+                      <div
+                        key={result.symbol}
+                        className="p-4 border rounded-lg cursor-pointer hover:bg-muted transition-colors"
+                        onClick={() => setSelectedSymbol(result.symbol)}
+                        data-testid={`symbol-result-${result.symbol}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-semibold">{result.symbol}</div>
+                          <div className="text-sm text-muted-foreground">
+                            ${result.price.toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No symbols found. Try a different search term.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Symbol Analysis */}
+          {selectedSymbol && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Symbol Analysis: {selectedSymbol}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                      <DollarSign className="w-4 h-4" />
+                      Current Price
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {symbolDetails?.price ? `$${symbolDetails.price.toLocaleString()}` : '-'}
+                    </div>
+                  </div>
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                      <Activity className="w-4 h-4" />
+                      24h Volume
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {symbolDetails?.volume24h ? `$${(symbolDetails.volume24h / 1000000).toFixed(1)}M` : '-'}
+                    </div>
+                  </div>
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                      <TrendingUp className="w-4 h-4" />
+                      Daily Range
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {symbolDetails?.dailyRange ? `${symbolDetails.dailyRange.toFixed(2)}%` : '-'}
+                    </div>
+                  </div>
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                      <BarChart3 className="w-4 h-4" />
+                      VWAP
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {symbolDetails?.vwap ? `$${symbolDetails.vwap.toLocaleString()}` : '-'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    <Brain className="w-4 h-4 inline mr-2" />
+                    AI analysis for this symbol will be available here. This includes strategy recommendations, risk assessment, and entry/exit suggestions.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Empty State */}
+          {searchQuery.length <= 2 && !selectedSymbol && (
+            <Card className="mt-6">
+              <CardContent className="py-12 text-center">
+                <Search className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <h3 className="text-lg font-semibold mb-2">Search for Symbols</h3>
+                <p className="text-muted-foreground">
+                  Enter a symbol name or ticker to search and analyze trading opportunities
+                </p>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
       </Tabs>
