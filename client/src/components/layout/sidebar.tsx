@@ -12,7 +12,6 @@ import {
   LogOut,
   Activity,
   Newspaper,
-  Search,
   Sparkles,
   Bot
 } from "lucide-react";
@@ -35,7 +34,6 @@ const navigation = [
   { name: "Goals Engine", href: "/goals-engine", icon: Target },
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "Watch List", href: "/watchlist", icon: Eye },
-  { name: "Search and Analysis", href: "/search", icon: Search },
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "System Monitoring", href: "/systems", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },

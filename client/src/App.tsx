@@ -30,7 +30,6 @@ const BriefingsPage = lazy(() => import("@/pages/briefings"));
 const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
 const SystemsPage = lazy(() => import("@/pages/systems"));
 const AITransparencyPage = lazy(() => import("@/pages/ai-transparency"));
-const SearchPage = lazy(() => import("@/pages/search"));
 
 function LoadingFallback() {
   return (
@@ -85,7 +84,6 @@ function getPageContext(location: string): string {
     '/dashboard': 'Dashboard',
     '/watchlist': 'Watch List',
     '/active-trades': 'Trading',
-    '/search': 'Search and Analysis',
     '/reports': 'Reports',
     '/daily-brief': 'Daily Brief',
     '/briefings': 'Briefings',
@@ -156,7 +154,6 @@ function Router() {
               <Route path="/walter" component={WalterPage} />
               <Route path="/watchlist" component={WatchlistPage} />
               <Route path="/active-trades" component={ActiveTradesPage} />
-              <Route path="/search" component={SearchPage} />
               <Route path="/reports" component={ReportsPage} />
               <Route path="/daily-brief" component={DailyBriefPage} />
               <Route path="/briefings" component={BriefingsPage} />
