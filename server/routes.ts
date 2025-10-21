@@ -13142,6 +13142,19 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Catch-all handler for unmatched /api/* routes
+  // This prevents requests from falling through to Vite's HTML handler
+  // and ensures all API routes return JSON (even 404s)
+  // Using .all() instead of .use() to properly catch all HTTP methods as a route
+  apiRouter.all('*', (req, res) => {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `API endpoint not found: ${req.baseUrl}${req.path}`,
+      path: `${req.baseUrl}${req.path}`,
+      method: req.method
+    });
+  });
+
   return { httpServer, apiRouter };
 }
 
