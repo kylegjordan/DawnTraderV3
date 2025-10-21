@@ -12,6 +12,7 @@ import { MarketScanner } from "./services/market-scanner";
 import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
+import { formulaAuditService } from "./services/formula-audit";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent } from "@shared/schema";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
@@ -5198,6 +5199,31 @@ Provide specific, actionable recommendations.`,
       res.json({ ok: true, audits });
     } catch (error: any) {
       console.error('Strategy audit fetch error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Formula Audit - Verify all formulas used in screeners, guardrails, and strategies
+  app.get('/api/system/formula-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      console.log('[AUDIT] Starting formula audit...');
+      const report = await formulaAuditService.runAudit();
+      console.log(`[AUDIT] Completed: ${report.passed} passed, ${report.warnings} warnings, ${report.failed} failed`);
+      
+      res.json({ 
+        ok: true, 
+        report: {
+          timestamp: report.timestamp,
+          totalFormulas: report.totalFormulas,
+          passed: report.passed,
+          warnings: report.warnings,
+          failed: report.failed,
+          tests: report.tests,
+          summary: report.summary
+        }
+      });
+    } catch (error: any) {
+      console.error('[AUDIT] Formula audit error:', error);
       res.status(500).json({ error: error.message });
     }
   });
