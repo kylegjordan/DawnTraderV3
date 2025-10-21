@@ -76,11 +76,18 @@ function validateReportFile(filePath: string): boolean {
 /**
  * Create system notification for formula deviations
  */
-async function createAlertNotification(formulaName: string, deviation: number) {
+async function createAlertNotification(formulaName: string, deviation: number, status: 'WARNING' | 'FAIL') {
   try {
     // Get all admin users
     const users = await storage.getAllUsers();
     const adminUsers = users.filter(u => u.isAdmin);
+    
+    // Set severity based on status: FAIL = critical, WARNING = warning
+    const severity = status === 'FAIL' ? 'critical' : 'warning';
+    const category = status === 'FAIL' ? 'critical' : 'actionable';
+    const message = status === 'FAIL' 
+      ? `Formula Audit FAILURE — ${formulaName} deviated ${deviation.toFixed(2)}% (≥1%)`
+      : `Formula Audit Warning — ${formulaName} deviated ${deviation.toFixed(2)}% (0.1-1%)`;
     
     for (const admin of adminUsers) {
       // Create alert for both paper and live modes
@@ -88,24 +95,24 @@ async function createAlertNotification(formulaName: string, deviation: number) {
         userId: admin.id,
         mode: 'paper',
         alertType: 'formula_audit',
-        severity: 'warning',
-        category: 'informational',
-        message: `Formula Audit Warning — ${formulaName} deviated ${deviation.toFixed(2)}%`,
-        metadata: { formulaName, deviation }
+        severity,
+        category,
+        message,
+        metadata: { formulaName, deviation, status }
       });
       
       await AlertsService.createAlert({
         userId: admin.id,
         mode: 'live',
         alertType: 'formula_audit',
-        severity: 'warning',
-        category: 'informational',
-        message: `Formula Audit Warning — ${formulaName} deviated ${deviation.toFixed(2)}%`,
-        metadata: { formulaName, deviation }
+        severity,
+        category,
+        message,
+        metadata: { formulaName, deviation, status }
       });
     }
     
-    console.log(`[ALERT] Formula deviation detected in ${formulaName} (${deviation.toFixed(2)}%)`);
+    console.log(`[ALERT] Formula ${status.toLowerCase()} detected in ${formulaName} (${deviation.toFixed(2)}%)`);
   } catch (error: any) {
     console.error('[FORMULA-AUDIT] ❌ Alert creation error:', error.message);
   }
@@ -145,12 +152,10 @@ export async function runFormulaAudit(runType: 'scheduled' | 'manual' = 'schedul
     const duration = Date.now() - startTime;
     console.log(`[FORMULA-AUDIT] completed in ${duration}ms PASS=${report.passed} WARNING=${report.warnings} FAIL=${report.failed}`);
     
-    // Check for failures or significant warnings
+    // Check for failures and warnings (≥0.1% deviation per spec)
     for (const test of report.tests) {
-      if (test.status === 'FAIL' || test.deviationPercent >= 1) {
-        await createAlertNotification(test.name, test.deviationPercent);
-      } else if (test.status === 'WARNING') {
-        console.log(`[AUDIT] Warning in ${test.name}: ${test.deviationPercent.toFixed(4)}% deviation`);
+      if (test.status === 'WARNING' || test.status === 'FAIL') {
+        await createAlertNotification(test.name, test.deviationPercent, test.status);
       }
     }
     
@@ -180,11 +185,18 @@ export function registerFormulaAuditJob() {
     return;
   }
 
-  console.log(`[FormulaAuditJob] ⏰ Scheduling daily audit: ${SCHEDULE}`);
+  console.log(`[FormulaAuditJob] ⏰ Scheduling daily audit: ${SCHEDULE} (UTC)`);
 
   cron.schedule(SCHEDULE, async () => {
-    await runFormulaAudit('scheduled');
+    try {
+      await runFormulaAudit('scheduled');
+    } catch (error: any) {
+      console.error('[FormulaAuditJob] ❌ Scheduled audit failed:', error.message);
+      console.error(error.stack);
+    }
+  }, {
+    timezone: 'Etc/UTC'
   });
 
-  console.log('[FormulaAuditJob] ✅ Job registered successfully');
+  console.log('[FormulaAuditJob] ✅ Job registered successfully (timezone: UTC)');
 }
