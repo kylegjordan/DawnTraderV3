@@ -68,7 +68,12 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  // Register routes and get the API router + HTTP server
+  const { httpServer: server, apiRouter } = await registerRoutes(app);
+
+  // Mount API router BEFORE Vite middleware to ensure backend routes take precedence
+  app.use('/api', apiRouter);
+  console.log('[Server] API routes mounted at /api');
 
   // Phase 27.F.8: Reset PaperSim service state FIRST (before any other services)
   try {

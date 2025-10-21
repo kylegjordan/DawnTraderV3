@@ -1,4 +1,5 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response, NextFunction, Router as ExpressRouter } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import rateLimit from "express-rate-limit";
@@ -215,12 +216,14 @@ function diagnosticTraceMiddleware(req: TracedRequest, res: Response, next: Next
   req.traceId = randomUUID();
   req.traceStartTime = Date.now();
   
+  // Router-aware path checking: combine baseUrl + path to get full path
+  const fullPath = req.baseUrl + req.path;
   const isDiagnosticEndpoint = 
-    req.path.startsWith('/api/goals') ||
-    req.path.startsWith('/api/trading');
+    fullPath.startsWith('/api/goals') ||
+    fullPath.startsWith('/api/trading');
   
   if (DIAGNOSTIC_MODE && isDiagnosticEndpoint) {
-    console.log(`[TRACE-IN] req.id=${req.traceId} endpoint=${req.path} user=${req.user?.id || 'anonymous'} mode=${req.query.mode || req.body?.mode || 'unknown'} method=${req.method}`);
+    console.log(`[TRACE-IN] req.id=${req.traceId} endpoint=${fullPath} user=${req.user?.id || 'anonymous'} mode=${req.query.mode || req.body?.mode || 'unknown'} method=${req.method}`);
     
     // Disable caching for diagnostic endpoints
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -286,8 +289,12 @@ function validateMode(req: AuthenticatedRequest, res: Response, next: NextFuncti
 // (service checks settings before starting hourly generation)
 // TEMPORARILY DISABLED: Do not ping Kraken for 1 hour
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<{ httpServer: Server; apiRouter: ExpressRouter }> {
   const httpServer = createServer(app);
+  
+  // Create dedicated Express Router for all API routes
+  // This router will be mounted at /api in server/index.ts BEFORE Vite middleware
+  const apiRouter = express.Router();
   
   // Phase 8.7.4: Import Context Bridge
   const { contextBridge } = await import('./services/context-bridge');
@@ -318,12 +325,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
-  app.use(diagnosticTraceMiddleware);
+  apiRouter.use(diagnosticTraceMiddleware);
 
   // API Routes
 
   // Health check endpoint
-  app.get('/api/health', (_req, res) => {
+  apiRouter.get('/health', (_req, res) => {
     res.json({ 
       status: 'ok', 
       timestamp: new Date().toISOString(),
@@ -336,7 +343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // REGISTER - DISABLED FOR SINGLE-USER MODE
   // To enable registration, remove the error response below and uncomment the registration logic
-  app.post('/api/auth/register', async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/auth/register', async (req: AuthenticatedRequest, res) => {
     return res.status(403).json({ 
       error: 'Registration is disabled. This is a single-user application.' 
     });
@@ -403,7 +410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // LOGIN - Rate limited to prevent brute force attacks
-  app.post('/api/auth/login', loginLimiter, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/auth/login', loginLimiter, async (req: AuthenticatedRequest, res) => {
     try {
       const { username, password } = req.body;
       
@@ -458,7 +465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // VERIFY TOKEN
-  app.get('/api/auth/verify', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/auth/verify', async (req: AuthenticatedRequest, res) => {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader) {
@@ -478,7 +485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // REFRESH TOKEN
-  app.post('/api/auth/refresh', async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/auth/refresh', async (req: AuthenticatedRequest, res) => {
     try {
       const { token } = req.body;
       
@@ -506,7 +513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User and Authentication
-  app.get('/api/user/profile', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/user/profile', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const user = await storage.getUser(req.user!.id);
     
     if (!user) {
@@ -517,7 +524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update user approval matrix
-  app.patch('/api/user/approval-matrix', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/user/approval-matrix', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { approvalMatrix } = req.body;
       
@@ -544,7 +551,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin Routes - User Management
-  app.get('/api/admin/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/admin/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const users = await storage.getAllUsers();
       
@@ -565,7 +572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/admin/users', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { email, username, password, isAdmin } = req.body;
       
@@ -623,7 +630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/admin/users/:userId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/admin/users/:userId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { userId } = req.params;
       const { isAdmin } = req.body;
@@ -659,7 +666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Reset user password
-  app.post('/api/admin/users/:userId/reset-password', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/admin/users/:userId/reset-password', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { userId } = req.params;
       const { password } = req.body;
@@ -696,7 +703,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trading Settings
-  app.get('/api/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -724,7 +731,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.put('/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -749,7 +756,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Guardrails endpoints (mode-isolated)
   // Phase 7.4: ConfigBob transparent routing for guardrails endpoint
-  app.get('/api/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
@@ -796,7 +803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/guardrails', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+  apiRouter.put('/guardrails', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
@@ -828,7 +835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Filter diagnostics endpoint - fetches latest 24h metrics
   // Phase 27.F.15.B: Enhanced to include threshold values alongside failure counts
-  app.get('/api/filters/diagnostics', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/filters/diagnostics', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -901,7 +908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Filter calibration endpoint - fetches latest with Paper→Live fallback
-  app.get('/api/screeners/calibration', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/screeners/calibration', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -921,7 +928,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Screener filters endpoints (mode-isolated)
   // Phase 7.4: ConfigBob transparent routing for screeners endpoint
-  app.get('/api/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -970,7 +977,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.put('/screeners', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -997,7 +1004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 27.F.2: Trading Engine Control - Start with deterministic state broadcasting
-  app.post('/api/trading/start', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/trading/start', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode } = req.body; // 'live' or 'paper'
@@ -1061,7 +1068,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 27.F.2: Trading Engine Control - Stop with deterministic state broadcasting
-  app.post('/api/trading/stop', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/trading/stop', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -1110,7 +1117,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 27.4: Set Trading Mode with Permission Validation
-  app.post('/api/trading/set-mode', authenticateToken, async (req: TracedRequest, res) => {
+  apiRouter.post('/trading/set-mode', authenticateToken, async (req: TracedRequest, res) => {
     try {
       const userId = req.user!.id;
       const username = req.user!.username;
@@ -1192,7 +1199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 8.7.3: Pre-Execution Validator - Validate trade intent before execution
-  app.post('/api/trading/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/trading/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { signal, mode, traceId } = req.body;
@@ -1226,7 +1233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Phase 8.5 Addendum K.4: Returns DUAL-MODE data (both live and paper) regardless of engine status
   // Phase 27.F.3: Enhanced to return unified trading state authority
-  app.get('/api/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const globalContextId = 'default';
@@ -1350,7 +1357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Portfolio and Metrics
-  app.get('/api/portfolio/overview', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/portfolio/overview', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -1380,7 +1387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/earnings', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/portfolio/earnings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const earnings = await riskManager.getEarnings(userId);
@@ -1391,7 +1398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/earnings-chart', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/portfolio/earnings-chart', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 30;
@@ -1403,7 +1410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/history', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/portfolio/history', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const period = (req.query.period as string) || '1M';
@@ -1486,7 +1493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/value-history', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/portfolio/value-history', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const period = (req.query.period as string) || '30d';
@@ -1563,7 +1570,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolio/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/portfolio/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -1602,7 +1609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trades
-  app.get('/api/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { status, symbol, strategy, limit } = req.query;
@@ -1621,7 +1628,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trades/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/trades/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -1637,7 +1644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/trades/:id/close', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/trades/:id/close', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -1663,7 +1670,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Watchlist
-  app.get('/api/watchlist', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/watchlist', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -1675,7 +1682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/watchlist', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/watchlist', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -1689,7 +1696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/watchlist/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.delete('/watchlist/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       await storage.removeWatchlistPair(id);
@@ -1701,7 +1708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Market Data
-  app.get('/api/market/overview', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/market/overview', async (req: AuthenticatedRequest, res) => {
     try {
       const overview = await marketScanner.getMarketOverview();
       res.json(overview);
@@ -1711,7 +1718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/market/ticker/:symbol', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/market/ticker/:symbol', async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const kraken = new KrakenService();
@@ -1724,7 +1731,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI Features
-  app.get('/api/ai/reports', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ai/reports', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { type, limit } = req.query;
@@ -1742,7 +1749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/reports/generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ai/reports/generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { type } = req.body; // 'daily', 'weekly', 'monthly'
@@ -1769,7 +1776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/analyze-symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ai/analyze-symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { symbol } = req.body;
@@ -1783,7 +1790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Daily Briefs
-  app.get('/api/daily-briefs/today', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/daily-briefs/today', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const today = new Date().toISOString().split('T')[0];
@@ -1796,7 +1803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/daily-briefs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/daily-briefs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { status, limit, startDate, endDate } = req.query;
@@ -1815,7 +1822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/daily-briefs/:date', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/daily-briefs/:date', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { date } = req.params;
@@ -1828,7 +1835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/daily-briefs/update', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/daily-briefs/update', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -1841,7 +1848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Paper Trading Routes (Complete data isolation from live trading)
-  app.get('/api/paper/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const trades = await storage.getAllPaperTrades(userId);
@@ -1852,7 +1859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/trades/open', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper/trades/open', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -1868,7 +1875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/paper/trades/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.delete('/paper/trades/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       await storage.deleteAllPaperTrades(userId);
@@ -1884,7 +1891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/briefs/today', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper/briefs/today', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const today = new Date().toISOString().split('T')[0];
@@ -1897,7 +1904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/briefs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper/briefs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { status, limit } = req.query;
@@ -1914,7 +1921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { PaperMetricsService } = await import('./services/paper-metrics.js');
@@ -1945,7 +1952,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper/metrics/portfolio', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper/metrics/portfolio', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { PaperMetricsService } = await import('./services/paper-metrics.js');
@@ -1961,7 +1968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Live Trading Routes (Phase 22.3)
   // Control live trading mode with manual approval requirements
-  app.post('/api/live-trading/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/live-trading/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { liveTradingService } = await import('./services/live-trading-service.js');
@@ -1980,7 +1987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/live-trading/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/live-trading/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { liveTradingService } = await import('./services/live-trading-service.js');
@@ -1993,7 +2000,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/live-trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/live-trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { liveTradingService } = await import('./services/live-trading-service.js');
@@ -2007,7 +2014,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Approval endpoint for live trading (called after user confirms)
-  app.post('/api/live-trading/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/live-trading/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { liveTradingService } = await import('./services/live-trading-service.js');
@@ -2021,7 +2028,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 24: Automatic Test Harness API
-  app.post('/api/auto-test/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/auto-test/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -2055,7 +2062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 26.1: Auto-Tuning Engine API
-  app.get('/api/tuning/events', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/tuning/events', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode, limit = 50 } = req.query;
@@ -2073,7 +2080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/tuning/policy', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/tuning/policy', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode } = req.query;
@@ -2104,7 +2111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/tuning/enable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/tuning/enable', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode, aggressiveness = 'balanced', fieldBounds = {} } = req.body;
@@ -2137,7 +2144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/tuning/disable', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/tuning/disable', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode } = req.body;
@@ -2159,7 +2166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/tuning/rollback', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/tuning/rollback', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { eventId } = req.body;
@@ -2244,7 +2251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   // Internal endpoint for 48hr simulation script to register session (no auth required - internal use only)
-  app.post('/api/internal/paper-sim/register-session', async (req, res) => {
+  apiRouter.post('/internal/paper-sim/register-session', async (req, res) => {
     try {
       const { sessionId, startedBy, startTime, type } = req.body;
       
@@ -2269,7 +2276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Internal endpoint for 48hr simulation script to deregister session (no auth required - internal use only)
-  app.post('/api/internal/paper-sim/deregister-session', async (req, res) => {
+  apiRouter.post('/internal/paper-sim/deregister-session', async (req, res) => {
     try {
       if (globalSimulationSession) {
         console.log(`[SimRegistry] Deregistered GLOBAL session ${globalSimulationSession.sessionId} via API`);
@@ -2288,10 +2295,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========================================
 
   // Bob stats endpoint for monitoring cache performance (no auth for monitoring tools)
-  app.get('/api/bob/stats', bobStatsHandler);
+  apiRouter.get('/bob/stats', bobStatsHandler);
 
   // Phase 7.7: Bob Insight endpoint - system introspection and meta-information
-  app.get('/api/bob/insight', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/bob/insight', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const summary = await insightBob.getInsightSummary();
       res.json(summary);
@@ -2302,7 +2309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 7.7: UI State endpoint - current UI context and visibility
-  app.get('/api/ui/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ui/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as 'live' | 'paper') || 'live';
@@ -2315,7 +2322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 7.7: Update UI State endpoint - frontend sends current view context
-  app.post('/api/ui/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ui/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { view, subView, mode, filters } = req.body;
@@ -2332,7 +2339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bob prefetch endpoint - triggered by Walter chat open or mode change
   // Phase 7.3: Extended to include DataBob prefetch
   // Phase 7.4: Extended to include ConfigBob prefetch
-  app.post('/api/bob/prefetch', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/bob/prefetch', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const { mode, trigger } = req.body;
     const userId = req.user!.id;
     
@@ -2374,7 +2381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========================================
 
   // Cortex status endpoint - provides memory and sync status
-  app.get('/api/cortex/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cortex/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const status = cortexCore.getStatus();
       res.json(status);
@@ -2385,7 +2392,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cortex snapshot endpoint - get Bob/UI snapshots
-  app.get('/api/cortex/snapshot', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cortex/snapshot', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const type = req.query.type as 'bob' | 'ui' | undefined;
       
@@ -2409,7 +2416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cortex flush endpoint - clear memory cache
-  app.post('/api/cortex/flush', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/cortex/flush', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       await cortexCore.flush();
       res.json({ success: true, message: 'Memory flushed' });
@@ -2420,7 +2427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cortex force sync endpoint - manually trigger snapshot sync
-  app.post('/api/cortex/force-sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/cortex/force-sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       // Define snapshot fetch functions
       const fetchBobSnapshot = async () => {
@@ -2443,7 +2450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Global System Health Endpoint - provides comprehensive system status
   // Phase 7.2: Uses Bob Core for caching with transparent fallback
-  app.get('/api/system/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     const mode = (req.query.mode as string) || 'live';
 
@@ -2521,7 +2528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 8.3: Detailed System Health Metrics from SystemHealthMonitor
-  app.get('/api/system/health-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/health-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const healthMetrics = await metricsBob.getSystemHealthMetrics(5); // 5s TTL
       res.json(healthMetrics);
@@ -2532,7 +2539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 8.3: Manual System Recovery Trigger
-  app.post('/api/system/recover', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/system/recover', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { selfRepairService } = await import('./services/self-repair');
       const result = await selfRepairService.manualRecover();
@@ -2554,7 +2561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 8.3: Health Log Viewer - Returns recent health reports
-  app.get('/api/system/health-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/health-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
@@ -2580,7 +2587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== Phase 8.5 Addendum G + H: System Truth & Context Refresh ====================
 
   // GET /api/system/truth-check - Compare backend, Cortex, and Walter snapshots
-  app.get('/api/system/truth-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/truth-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
@@ -2608,7 +2615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/system/truth-check/report - Get truth check as Markdown report
-  app.get('/api/system/truth-check/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/truth-check/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
@@ -2631,7 +2638,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/context/refresh - Force context refresh across all layers
-  app.post('/api/context/refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/context/refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
@@ -2659,7 +2666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/context/metrics - Get context refresh metrics
-  app.get('/api/context/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/context/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { contextRefreshCoordinator } = await import('./services/context-refresh-coordinator');
       
@@ -2682,7 +2689,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== Phase 8.8.4: Cognitive Tuning & Testing ====================
 
   // GET /api/cognitive/status - Get latest cognitive benchmark summary
-  app.get('/api/cognitive/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cognitive/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { cognitiveTuner } = await import('./services/cognitive-tuner');
       const status = await cognitiveTuner.getStatus();
@@ -2702,7 +2709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/cognitive/run - Trigger new cognitive benchmark (admin-only)
-  app.post('/api/cognitive/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/cognitive/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const user = await storage.getUser(userId);
@@ -2739,7 +2746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/cognitive/report - Get benchmark report in Markdown format
-  app.get('/api/cognitive/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cognitive/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { cognitiveTuner } = await import('./services/cognitive-tuner');
       const report = await cognitiveTuner.generateReport();
@@ -2758,7 +2765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== Phase 8.7.1: State Awareness Layer ====================
 
   // GET /api/state/summary - Get authoritative system state snapshot
-  app.get('/api/state/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/state/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { stateAwarenessService } = await import('./services/state-awareness');
@@ -2776,7 +2783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/state/debug - Get system state snapshot with provenance info
-  app.get('/api/state/debug', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/state/debug', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { stateAwarenessService } = await import('./services/state-awareness');
@@ -2798,7 +2805,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== Phase 8.7.2: Intent Execution Framework ====================
 
   // POST /api/intent/execute - Execute validated intent
-  app.post('/api/intent/execute', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/intent/execute', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const userRole = req.user!.role as 'owner' | 'editor' | 'viewer';
@@ -2838,7 +2845,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/intent/audit - Get intent audit history
-  app.get('/api/intent/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/intent/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const traceId = req.query.traceId as string | undefined;
@@ -2870,7 +2877,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 8.7.4: Context Bridge Stats and Status
-  app.get('/api/context/bridge/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/context/bridge/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const stats = contextBridge.getStats();
       
@@ -2891,7 +2898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== Phase 8.5: Real-Time Execution Layer ====================
 
   // Get execution metrics
-  app.get('/api/execution/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/execution/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { realtimePaperExecutor } = await import('./services/realtime-paper-executor');
       const { executionTiming } = await import('./services/execution-timing');
@@ -2928,7 +2935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export execution timing data to CSV
-  app.get('/api/execution/timing/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/execution/timing/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { executionTiming } = await import('./services/execution-timing');
       
@@ -2946,7 +2953,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Run parity gate check
-  app.get('/api/execution/parity-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/execution/parity-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { parityGate } = await import('./services/parity-gate');
       
@@ -2964,7 +2971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate parity gate report
-  app.post('/api/execution/parity-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/execution/parity-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { parityGate } = await import('./services/parity-gate');
       
@@ -2984,7 +2991,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== End Phase 8.5 ====================
 
-  app.post('/api/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     
     try {
@@ -3070,7 +3077,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/paper-sim/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/paper-sim/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     
     try {
@@ -3152,7 +3159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 7.2: Paper trading status with Bob Core caching
-  app.get('/api/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     // Phase 7.2: Try Bob Core first if enabled
     if (bobCore.isEnabled()) {
       try {
@@ -3192,7 +3199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper-sim/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper-sim/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { limit, closedOnly } = req.query;
@@ -3209,7 +3216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper-sim/positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper-sim/positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const positions = await storage.getPaperSimOpenPositions(userId);
@@ -3220,7 +3227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper-sim/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper-sim/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const status = await getPaperSimulationStatus(userId);
@@ -3258,7 +3265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper-sim/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper-sim/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const status = await getPaperSimulationStatus(userId);
@@ -3276,7 +3283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/paper-sim/close-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/paper-sim/close-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const status = await getPaperSimulationStatus(userId);
@@ -3296,7 +3303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const status = await getPaperSimulationStatus(userId);
@@ -3315,7 +3322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/paper-sim/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper-sim/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { limit } = req.query;
@@ -3331,7 +3338,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 27.F.12: Universe Scan & Filter Trace (read-only diagnostic, admin/owner only)
-  app.get('/api/paper-sim/diagnostics/scan', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper-sim/diagnostics/scan', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       // Check for admin or owner role
       const userRole = req.user?.role;
@@ -3362,7 +3369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/ai/conversation', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ai/conversation', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const conversation = await storage.getAIConversation(userId);
@@ -3374,7 +3381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get context-specific chat history (for Goals, Guardrails, etc.)
-  app.get('/api/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { context } = req.query;
@@ -3392,7 +3399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Save chat message to context-specific history
-  app.post('/api/chats/save', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/chats/save', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { role, message, context } = req.body;
@@ -3416,7 +3423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 7.1c Deliverable 5: Delete chat history for a context
-  app.delete('/api/chats/:context', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.delete('/chats/:context', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { context } = req.params;
@@ -3431,7 +3438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Phase 7.1c Deliverable 5: Create new chat session (clears current session)
-  app.post('/api/chats/new', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/chats/new', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { context } = req.body;
@@ -3450,7 +3457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ai/chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { message, context } = req.body;
@@ -3463,7 +3470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/settings/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ai/settings/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { settingName, newValue, confirmation } = req.body;
@@ -3476,7 +3483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/ai/audit-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ai/audit-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { limit } = req.query;
@@ -3489,7 +3496,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/ai/error-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ai/error-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { resolved, errorType, limit } = req.query;
@@ -3507,7 +3514,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/diagnose-error', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ai/diagnose-error', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { errorId } = req.body;
@@ -3521,7 +3528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI Conversations - Multiple chats management
-  app.get('/api/conversations', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/conversations', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const conversations = await storage.getAIConversations(userId);
@@ -3532,7 +3539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/conversations/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/conversations/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const conversation = await storage.getAIConversationById(id);
@@ -3548,7 +3555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/conversations', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/conversations', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { title } = req.body;
@@ -3568,7 +3575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/conversations/:id', async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/conversations/:id', async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { title, maxContextMessages } = req.body;
@@ -3585,7 +3592,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/conversations/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.delete('/conversations/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       await storage.deleteAIConversation(id);
@@ -3597,7 +3604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get conversation summaries (Milestone 14)
-  app.get('/api/conversations/:id/summaries', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/conversations/:id/summaries', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { conversationSummarizationService } = await import('./services/conversation-summarization');
@@ -3610,7 +3617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/conversations/:id/message', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/conversations/:id/message', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -3625,7 +3632,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Kill Switch Incident Analysis Conversation
-  app.post('/api/kill-switch/create-analysis-chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/kill-switch/create-analysis-chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { eventId } = req.body;
@@ -3768,7 +3775,7 @@ Provide specific, actionable recommendations.`,
     },
   });
 
-  app.post('/api/transcribe', authenticateToken, upload.single('audio'), async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/transcribe', authenticateToken, upload.single('audio'), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No audio file provided' });
@@ -3816,7 +3823,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Phase 6.3: Text-to-Speech endpoint
-  app.post('/api/walter/tts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/tts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { text, voice, speed } = req.body;
       
@@ -3856,7 +3863,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Phase 6.3: Learning file upload and ingestion  
-  app.post('/api/walter/ingest', authenticateToken, (req: AuthenticatedRequest, res, next) => {
+  apiRouter.post('/walter/ingest', authenticateToken, (req: AuthenticatedRequest, res, next) => {
     upload.single('file')(req as any, res as any, (err: any) => {
       if (err) {
         console.error('[Ingest] Multer error:', err);
@@ -3910,7 +3917,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get ingestion history
-  app.get('/api/walter/ingest/history', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/ingest/history', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
       const history = await getIngestionHistory(limit);
@@ -3922,7 +3929,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Phase 27: Context ingestion endpoint (manual trigger)
-  app.post('/api/context/ingest', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/context/ingest', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { files, overwrite } = req.body;
       
@@ -3941,7 +3948,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Chat cost tracking
-  app.get('/api/chat-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/chat-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { conversationId, limit } = req.query;
@@ -3958,7 +3965,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/chat-costs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/chat-costs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { fromDate, toDate } = req.query;
@@ -3975,7 +3982,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/ai/error-logs/:id/resolve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ai/error-logs/:id/resolve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { notes } = req.body;
@@ -3989,7 +3996,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // AI Opportunities routes
-  app.get('/api/ai/opportunities', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ai/opportunities', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { status, type, minProbability } = req.query;
@@ -4007,7 +4014,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/ai/opportunities/latest-run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ai/opportunities/latest-run', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const latestRun = await aiOpportunitiesService.getLatestRun(userId);
@@ -4018,7 +4025,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/ai/opportunities/validation-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ai/opportunities/validation-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const report = await aiOpportunitiesService.getValidationReport(userId);
@@ -4029,7 +4036,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.patch('/api/ai/opportunities/:id/status', async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/ai/opportunities/:id/status', async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -4042,7 +4049,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/ai/opportunities/generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ai/opportunities/generate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -4072,7 +4079,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Market Context (AI Market Analysis) routes
-  app.get('/api/market-context/latest', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/market-context/latest', async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as string) || 'live';
       
@@ -4088,7 +4095,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/market-context/history', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/market-context/history', async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as string) || 'live';
       const days = parseInt(req.query.days as string) || 7;
@@ -4113,7 +4120,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/market-context/analyze', async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/market-context/analyze', async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode = 'live' } = req.body;
@@ -4155,7 +4162,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Stock API routes
-  app.get('/api/stocks/quote/:symbol', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/stocks/quote/:symbol', async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const quote = await stockService.getQuote(symbol);
@@ -4166,7 +4173,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/stocks/company/:symbol', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/stocks/company/:symbol', async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const company = await stockService.getCompanyInfo(symbol);
@@ -4177,7 +4184,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/stocks/search/:query', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/stocks/search/:query', async (req: AuthenticatedRequest, res) => {
     try {
       const { query } = req.params;
       const results = await stockService.search(query);
@@ -4188,7 +4195,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/symbol/data', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/symbol/data', async (req: AuthenticatedRequest, res) => {
     try {
       const symbol = (req.query.symbol as string)?.toUpperCase();
       if (!symbol) {
@@ -4215,7 +4222,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint for Finnhub feed
-  app.get('/api/test/finnhub-feed', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/test/finnhub-feed', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const testSymbol = 'AAPL';
       const timestamp = new Date().toISOString();
@@ -4295,7 +4302,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Crypto search route
-  app.get('/api/crypto/search/:query', async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/crypto/search/:query', async (req: AuthenticatedRequest, res) => {
     try {
       const { query } = req.params;
       const normalizedQuery = query.toLowerCase().trim();
@@ -4345,7 +4352,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Reports Export API
-  app.get('/api/reports/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/reports/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { reportType, format, from, to, symbol, strategy, mode } = req.query;
@@ -4443,7 +4450,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // File Download API - Persistent Files
-  app.get('/api/files/download/:category/:filename', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/files/download/:category/:filename', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { category, filename } = req.params;
       
@@ -4483,7 +4490,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // List Files API
-  app.get('/api/files/list/:category', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/files/list/:category', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { category } = req.params;
       
@@ -4500,7 +4507,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // File Persistence Metrics API
-  app.get('/api/files/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/files/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const metrics = filePersistence.getMetrics();
       const healthSummary = filePersistence.getHealthSummary();
@@ -4512,7 +4519,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Export functionality
-  app.get('/api/export/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/export/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { from, to, format } = req.query;
@@ -4551,7 +4558,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Database monitoring
-  app.get('/api/database/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/database/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const currentStatus = await databaseMonitor.checkDatabaseSize();
       const history = await storage.getDatabaseSizeHistory(7); // Last 7 days
@@ -4576,14 +4583,14 @@ Provide specific, actionable recommendations.`,
   });
 
   // Maintenance mode status
-  app.get('/api/maintenance/status', (req, res) => {
+  apiRouter.get('/maintenance/status', (req, res) => {
     res.json({
       isMaintenanceMode: process.env.MAINTENANCE_MODE === 'true'
     });
   });
 
   // Screener test endpoint for demonstrating different filter configurations
-  app.post('/api/screener/test', async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/screener/test', async (req: AuthenticatedRequest, res) => {
     try {
       const kraken = new KrakenService();
       const testSettings = req.body || {
@@ -4614,7 +4621,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Portfolio guardrails test endpoint - simulate multiple signals
-  app.post('/api/guardrails/test', async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/guardrails/test', async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
@@ -4763,7 +4770,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Kill Switch endpoints
-  app.get('/api/kill-switch/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/kill-switch/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
@@ -4788,7 +4795,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/kill-switch/check', async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/kill-switch/check', async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
@@ -4812,7 +4819,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.post('/api/kill-switch/reset', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/kill-switch/reset', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { notes } = req.body;
@@ -4846,7 +4853,7 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  app.get('/api/kill-switch/events', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/kill-switch/events', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
@@ -4861,7 +4868,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint for simulating kill switch scenarios
-  app.post('/api/test/simulate-loss', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/test/simulate-loss', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { scenario } = req.body; // 'warning', 'kill', or custom loss %
@@ -4929,7 +4936,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Test endpoint to check if trade execution is blocked during suspension
-  app.post('/api/test/attempt-trade', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/test/attempt-trade', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const settings = await storage.getTradingSettings(userId);
@@ -4965,7 +4972,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Strategy test endpoint - analyze watchlist pairs for signals
-  app.post('/api/strategies/test', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/strategies/test', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -5060,7 +5067,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // VALIDATION ENDPOINT: Run strategy validation tests (Stage A: Historical Replay)
-  app.post('/api/strategies/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/strategies/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       console.log(`\n🚀 Running strategy validation for user ${userId}...`);
@@ -5106,7 +5113,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // STAGE B VALIDATION: Paper trading with real market data
-  app.post('/api/strategies/validate-stageb', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/strategies/validate-stageb', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       console.log(`\n🚀 Running Stage B validation with real market data for user ${userId}...`);
@@ -5153,7 +5160,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // TEST ENDPOINT: Test Kraken credentials
-  app.get('/api/test/kraken-balance', authenticateToken, async (_req, res) => {
+  apiRouter.get('/test/kraken-balance', authenticateToken, async (_req, res) => {
     try {
       const krakenService = new KrakenService();
       const balances = await krakenService.getAccountBalance();
@@ -5177,7 +5184,7 @@ Provide specific, actionable recommendations.`,
   // ========================================
 
   // System Health Check
-  app.get('/api/system/health', async (_req, res) => {
+  apiRouter.get('/system/health', async (_req, res) => {
     try {
       const uptime = process.uptime();
       const status = {
@@ -5196,7 +5203,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Strategy Settings Audit Log
-  app.get('/api/system/strategy-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/strategy-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -5210,7 +5217,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Formula Audit - Verify all formulas used in screeners, guardrails, and strategies
-  app.get('/api/system/formula-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/formula-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       console.log('[AUDIT] Starting formula audit...');
       const report = await formulaAuditService.runAudit();
@@ -5235,7 +5242,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Formula Audit - Manual Trigger (Admin Only)
-  app.get('/api/system/formula-audit/run', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/formula-audit/run', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
     try {
       console.log('[AUDIT] Manual formula audit triggered by user:', req.user!.username);
       
@@ -5264,7 +5271,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Feed Health - Get current health metrics
-  app.get('/api/system/feed-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/feed-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { getFeedIntegrityMonitor } = await import('./services/feed-integrity-monitor');
       const monitor = getFeedIntegrityMonitor();
@@ -5290,7 +5297,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Feed Health - Manual Trigger (Admin Only)
-  app.get('/api/system/feed-health/run', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/feed-health/run', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
     try {
       console.log('[FEED-HEALTH] Manual check triggered by user:', req.user!.username);
       
@@ -5313,7 +5320,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // PHASE 27.F.21: Feed Health - Clear Alerts (Admin Only, for testing)
-  app.post('/api/system/feed-health/clear-alerts', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/system/feed-health/clear-alerts', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       console.log(`[FEED-HEALTH] Manual alert clear triggered by user: ${req.user!.username}`);
@@ -5334,7 +5341,7 @@ Provide specific, actionable recommendations.`,
 
   // PHASE 27.F.21.FINAL: Feed Health - Retrospective Cleanup (Admin Only)
   // Cleans up DORMANT-MODE feed-health alerts only (older than 30 min + dormant flag)
-  app.post('/api/system/feed-health/cleanup-old-alerts', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/system/feed-health/cleanup-old-alerts', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       console.log(`[FEED-HEALTH] Retrospective cleanup triggered by user: ${req.user!.username}`);
@@ -5413,7 +5420,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // System Health Summary - Get today's feed/formula issue counts for dashboard widget
-  app.get('/api/system/health-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/health-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { walterActions } = await import('@shared/schema');
@@ -5460,7 +5467,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // One-time cleanup: Acknowledge all feed_health and formula_audit alerts
-  app.post('/api/system/cleanup-health-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/system/cleanup-health-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       console.log(`[CLEANUP] Acknowledging all feed_health and formula_audit alerts for user ${userId}`);
@@ -5511,7 +5518,7 @@ Provide specific, actionable recommendations.`,
   }
   
   // Get Walter actions with filtering
-  app.get('/api/walter/actions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/actions', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as 'live' | 'paper') || 'live';
@@ -5536,7 +5543,7 @@ Provide specific, actionable recommendations.`,
   });
   
   // Get auto-resolved incidents count for today
-  app.get('/api/walter/auto-resolved-today', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/auto-resolved-today', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -5576,7 +5583,7 @@ Provide specific, actionable recommendations.`,
   });
   
   // Approve a pending Walter action (RBAC + validation)
-  app.post('/api/walter/actions/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/actions/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const actionId = req.params.id;
       const userId = req.user!.id;
@@ -5626,7 +5633,7 @@ Provide specific, actionable recommendations.`,
   });
   
   // Reject a pending Walter action (RBAC + validation)
-  app.post('/api/walter/actions/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/actions/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const actionId = req.params.id;
       const userId = req.user!.id;
@@ -5676,7 +5683,7 @@ Provide specific, actionable recommendations.`,
   });
   
   // Acknowledge a completed Walter action (RBAC + validation)
-  app.post('/api/walter/actions/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/actions/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const actionId = req.params.id;
       const userId = req.user!.id;
@@ -5730,7 +5737,7 @@ Provide specific, actionable recommendations.`,
   // ============================================
   
   // Get all execution configs for a mode
-  app.get('/api/execution-config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/execution-config', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
@@ -5751,7 +5758,7 @@ Provide specific, actionable recommendations.`,
   });
   
   // Create or update an execution config
-  app.post('/api/execution-config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/execution-config', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode, actionType, autoExecuteEnabled, requiresApproval, maxImpactThreshold, notes } = req.body;
@@ -5793,7 +5800,7 @@ Provide specific, actionable recommendations.`,
   });
   
   // Delete an execution config
-  app.delete('/api/execution-config/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.delete('/execution-config/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const configId = req.params.id;
@@ -5813,7 +5820,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // System Logs (simple in-memory log - placeholder)
-  app.get('/api/system/logs', async (_req, res) => {
+  apiRouter.get('/system/logs', async (_req, res) => {
     try {
       // For now, return a simple message. In the future, could implement proper log aggregation
       const logs = [
@@ -5828,7 +5835,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // AI Audit Log
-  app.get('/api/system/ai-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/ai-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -5842,7 +5849,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Error Logs
-  app.get('/api/system/error-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/error-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 100;
@@ -5858,7 +5865,7 @@ Provide specific, actionable recommendations.`,
   // ===== DIAGNOSTICS ENDPOINTS (Phase 5) =====
   
   // System Metrics (CPU, Memory, Latency, API Health)
-  app.get('/api/diagnostics/system-metrics', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/system-metrics', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getSystemMetrics } = await import('./diagnostics/metrics.js');
       const metrics = await getSystemMetrics();
@@ -5870,7 +5877,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Trading Engine Status
-  app.get('/api/diagnostics/trading-engine', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/trading-engine', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getTradingEngineStatus } = await import('./diagnostics/metrics.js');
       const status = await getTradingEngineStatus();
@@ -5882,7 +5889,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Walter Activity Metrics
-  app.get('/api/diagnostics/walter-activity', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/walter-activity', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getWalterActivity } = await import('./diagnostics/metrics.js');
       const activity = await getWalterActivity();
@@ -5894,7 +5901,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Database Health Metrics
-  app.get('/api/diagnostics/database-health', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/database-health', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getDatabaseHealth } = await import('./diagnostics/metrics.js');
       const health = await getDatabaseHealth();
@@ -5906,7 +5913,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Expert Insights Metrics
-  app.get('/api/diagnostics/expert-insights', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/expert-insights', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getExpertInsightsMetrics } = await import('./diagnostics/expert-insights-metrics.js');
       const metrics = await getExpertInsightsMetrics();
@@ -5918,7 +5925,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Expert Insights Health Check
-  app.get('/api/diagnostics/expert-insights/health', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/expert-insights/health', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { checkExpertInsightsHealth } = await import('./diagnostics/expert-insights-metrics.js');
       const health = await checkExpertInsightsHealth();
@@ -5930,7 +5937,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Export System Report
-  app.get('/api/diagnostics/export-report', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/export-report', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getSystemMetrics, getTradingEngineStatus, getWalterActivity, getDatabaseHealth } = await import('./diagnostics/metrics.js');
       const { getExpertInsightsMetrics } = await import('./diagnostics/expert-insights-metrics.js');
@@ -5962,7 +5969,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Acknowledge/Resolve Alert
-  app.post('/api/diagnostics/acknowledge-alert', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/diagnostics/acknowledge-alert', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { alertId } = req.body;
       
@@ -5979,7 +5986,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Run Diagnostic Analysis (on-demand)
-  app.post('/api/diagnostics/analyze', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.post('/diagnostics/analyze', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { diagnosticsAnalyzer } = await import('./diagnostics/analyzer.js');
       const analysis = await diagnosticsAnalyzer.runDiagnosticAnalysis();
@@ -5991,7 +5998,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get Diagnostic Analysis History
-  app.get('/api/diagnostics/analysis-history', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/analysis-history', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const analyses = await storage.getOrchestratorLogsByCategory(null, 'diagnostics', 20);
       res.json({ ok: true, analyses });
@@ -6004,7 +6011,7 @@ Provide specific, actionable recommendations.`,
   // ===== OPTIMIZATION ENDPOINTS (Phase 5) =====
 
   // Run Optimization Analysis (on-demand)
-  app.post('/api/optimization/analyze', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.post('/optimization/analyze', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { optimizationAnalyzer } = await import('./optimization/analyzer.js');
       await optimizationAnalyzer.runOptimizationAnalysis();
@@ -6016,7 +6023,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get Optimization Recommendations
-  app.get('/api/optimization/recommendations', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/optimization/recommendations', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const recommendations = await storage.getOrchestratorLogsByCategory(null, 'optimization', 20);
       res.json({ ok: true, recommendations });
@@ -6029,7 +6036,7 @@ Provide specific, actionable recommendations.`,
   // ===== SCHEDULER ENDPOINTS =====
   
   // Get scheduler status for all tasks
-  app.get('/api/schedulers/status', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+  apiRouter.get('/schedulers/status', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { schedulerRegistry } = await import('./services/scheduler-registry');
       const tasks = schedulerRegistry.getAllTaskStatuses();
@@ -6052,7 +6059,7 @@ Provide specific, actionable recommendations.`,
   });
   
   // Manually trigger a specific scheduler task
-  app.post('/api/schedulers/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/schedulers/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { taskName } = req.body;
       
@@ -6076,7 +6083,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get transparency logs
-  app.get('/api/schedulers/transparency-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/schedulers/transparency-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const taskName = req.query.taskName as string;
@@ -6098,7 +6105,7 @@ Provide specific, actionable recommendations.`,
   // ===== LEARNING DATA ENDPOINTS =====
 
   // Get filter calibration logs
-  app.get('/api/learning/calibration-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/calibration-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper' | undefined;
@@ -6129,7 +6136,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get intraday adjustments
-  app.get('/api/learning/intraday-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/intraday-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper' | undefined;
@@ -6146,7 +6153,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get AI lessons
-  app.get('/api/learning/ai-lessons', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/ai-lessons', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper' | undefined;
@@ -6164,7 +6171,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get portfolio adjustments
-  app.get('/api/learning/portfolio-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/portfolio-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper' | undefined;
@@ -6181,7 +6188,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get prediction outcomes
-  app.get('/api/learning/prediction-outcomes', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/prediction-outcomes', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper' | undefined;
@@ -6207,7 +6214,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Database cross-check for Milestone 12 verification (Part A-1)
-  app.get('/api/learning/database-cross-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/database-cross-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -6334,7 +6341,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Performance snapshot for Milestone 12 verification (Part B-1)
-  app.get('/api/learning/performance-snapshot', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/performance-snapshot', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const hours = parseInt(req.query.hours as string) || 24;
@@ -6433,7 +6440,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Autonomy Confidence Index for Milestone 12 verification (Part B-2)
-  app.get('/api/learning/autonomy-confidence', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/autonomy-confidence', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -6483,7 +6490,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Paper→Live Fallback Test for Milestone 12 verification (Part A-2)
-  app.get('/api/learning/fallback-test', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/fallback-test', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const token = req.headers.authorization?.replace('Bearer ', '');
@@ -6594,7 +6601,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // ENDPOINT: Get Kraken API cache statistics
-  app.get('/api/kraken/cache-stats', async (_req, res) => {
+  apiRouter.get('/kraken/cache-stats', async (_req, res) => {
     try {
       const krakenService = new KrakenService();
       const stats = krakenService.getCacheStats();
@@ -6620,7 +6627,7 @@ Provide specific, actionable recommendations.`,
   // ===== STRATEGY METRICS ROUTES =====
 
   // Get strategy-level metrics for Live trading
-  app.get('/api/metrics/strategies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/metrics/strategies', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 7;
@@ -6716,7 +6723,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get strategy-level metrics for Paper trading
-  app.get('/api/paper/metrics/strategies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/paper/metrics/strategies', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const days = parseInt(req.query.days as string) || 7;
@@ -6808,7 +6815,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get detailed strategy view
-  app.get('/api/metrics/strategies/:strategy/details', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/metrics/strategies/:strategy/details', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { strategy } = req.params;
@@ -6916,7 +6923,7 @@ Provide specific, actionable recommendations.`,
   // ===== LEARNING FEEDBACK ENGINE ROUTES =====
 
   // Get prediction accuracy metrics
-  app.get('/api/learning/prediction-accuracy', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/prediction-accuracy', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'paper';
@@ -6939,7 +6946,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get signal weight insights
-  app.get('/api/learning/signal-insights', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/signal-insights', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'paper';
@@ -6959,7 +6966,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get signal weights
-  app.get('/api/learning/signal-weights', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/signal-weights', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const strategy = req.query.strategy as string;
@@ -6979,7 +6986,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get prediction outcomes
-  app.get('/api/learning/prediction-outcomes', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/prediction-outcomes', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as string;
@@ -7009,7 +7016,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Get enriched features for a symbol
-  app.get('/api/learning/features/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/features/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const { featureEnrichmentService } = await import('./services/feature-enrichment');
@@ -7027,7 +7034,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Trigger manual signal weight optimization
-  app.post('/api/learning/optimize-weights', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/learning/optimize-weights', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.body.mode as string) || 'paper';
@@ -7048,7 +7055,7 @@ Provide specific, actionable recommendations.`,
   // ===== CACHE STATS (Milestone 14) =====
   
   // Get cache statistics
-  app.get('/api/cache/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cache/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { responseCacheService } = await import('./services/response-cache');
       
@@ -7067,7 +7074,7 @@ Provide specific, actionable recommendations.`,
   // ===== GOALS ENGINE ROUTES =====
 
   // Phase 27.5.1: Get all goals (durable persistence endpoint)
-  app.get('/api/goals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/goals', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
@@ -7104,7 +7111,7 @@ Provide specific, actionable recommendations.`,
 
   // Get goals summary (mode-aware)
   // Phase 7.4: ConfigBob transparent routing for goals endpoint
-  app.get('/api/goals/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/goals/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
@@ -7150,7 +7157,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Update goals (mode-aware)
-  app.post('/api/goals/update', authenticateToken, async (req: TracedRequest, res) => {
+  apiRouter.post('/goals/update', authenticateToken, async (req: TracedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { goals, mode = 'live' } = req.body;
@@ -7239,7 +7246,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Analyze goals with AI (conversational goal-setting)
-  app.post('/api/goals/analyze', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/goals/analyze', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { userMessage, mode = 'live' } = req.body;
@@ -7323,7 +7330,7 @@ Please:
   });
 
   // Apply goals and configuration changes
-  app.post('/api/goals/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/goals/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { goals, configChanges, analysisId, mode = 'live' } = req.body;
@@ -7404,7 +7411,7 @@ Please:
   // Phase 7.3: DataBob caching disabled for activity endpoint
   // Reason: DataBob implementation doesn't support period filtering (incompatible with original endpoint)
 
-  app.get('/api/trading/activity', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/trading/activity', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
@@ -7474,7 +7481,7 @@ Please:
   // ===== TRADING AVERAGES ROUTE =====
   // Phase 7.3: DataBob transparent routing for averages endpoint
 
-  app.get('/api/trading/averages', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/trading/averages', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
@@ -7564,7 +7571,7 @@ Please:
   // ===== TRADING RESULTS ROUTE =====
   // Phase 7.3: DataBob transparent routing for results endpoint
 
-  app.get('/api/trading/results', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/trading/results', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
@@ -7659,7 +7666,7 @@ Please:
   // ===== EARNINGS SUMMARY ROUTE =====
 
   // Get earnings summary for Earnings widget
-  app.get('/api/earnings/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/earnings/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as string) || 'live';
@@ -7713,7 +7720,7 @@ Please:
   
   // GET current settings for a specific strategy
   // Phase 8.5 Addendum K.3: Uses global context for shared strategies
-  app.get('/api/strategies/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategies/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const globalContextId = 'default';
       const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
@@ -7729,7 +7736,7 @@ Please:
 
   // GET all settings for a mode
   // Phase 8.5 Addendum K.3: Uses global context for shared strategies
-  app.get('/api/strategies/settings/all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategies/settings/all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const globalContextId = 'default';
       const mode = (String(req.query.mode) === 'paper' ? 'paper' : 'live') as 'live' | 'paper';
@@ -7755,7 +7762,7 @@ Please:
   });
 
   // POST validate settings (no save)
-  app.post('/api/strategies/settings/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/strategies/settings/validate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { strategy, params } = req.body || {};
       const { getValidator } = await import('./services/strategy-validators');
@@ -7776,7 +7783,7 @@ Please:
 
   // PUT save settings (validated) + audit + hot-reload
   // Phase 8.5 Addendum K.3: Uses global context for shared strategies
-  app.put('/api/strategies/settings', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+  apiRouter.put('/strategies/settings', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const globalContextId = 'default';
@@ -7923,7 +7930,7 @@ Please:
   });
 
   // GET list of presets for a strategy
-  app.get('/api/strategies/presets', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategies/presets', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
       const strategy = String(req.query.strategy || '');
@@ -7940,7 +7947,7 @@ Please:
   });
 
   // GET a specific preset
-  app.get('/api/strategies/presets/:strategy/:presetName', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategies/presets/:strategy/:presetName', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { STRATEGY_PRESETS } = await import('./services/strategy-presets');
       const { strategy, presetName } = req.params;
@@ -7960,7 +7967,7 @@ Please:
   // ==================== Walter AI Assistant API (Phase 5.4) ====================
   
   // GET pending approvals for current user
-  app.get('/api/walter/pending-approvals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/pending-approvals', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const status = req.query.status as string | undefined;
@@ -7975,7 +7982,7 @@ Please:
   });
   
   // POST approve a pending approval
-  app.post('/api/walter/approvals/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/approvals/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -8056,7 +8063,7 @@ Please:
   });
   
   // POST reject a pending approval
-  app.post('/api/walter/approvals/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/approvals/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -8106,7 +8113,7 @@ Please:
   // ==================== Phase 27.2: Inline Approvals + Interactive Notifications ====================
   
   // POST /api/intent/approve - Approve by traceId (inline or notification)
-  app.post('/api/intent/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/intent/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { traceId } = req.body;
@@ -8234,7 +8241,7 @@ Please:
   });
   
   // POST /api/intent/reject - Reject by traceId
-  app.post('/api/intent/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/intent/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { traceId } = req.body;
@@ -8287,7 +8294,7 @@ Please:
   });
   
   // POST /api/intent/dismiss - Dismiss approval (no action, keep in list)
-  app.post('/api/intent/dismiss', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/intent/dismiss', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { traceId } = req.body;
@@ -8327,7 +8334,7 @@ Please:
   });
   
   // POST /api/intent/clear - Clear approvals from notification list
-  app.post('/api/intent/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/intent/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { traceIds } = req.body;
@@ -8365,7 +8372,7 @@ Please:
   });
 
   // POST /api/intent/cleanup-ghosts - One-time cleanup of stuck approvals
-  app.post('/api/intent/cleanup-ghosts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/intent/cleanup-ghosts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -8404,7 +8411,7 @@ Please:
   });
   
   // GET all Walter chats for current user
-  app.get('/api/walter/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const status = req.query.status as string | undefined;
@@ -8449,7 +8456,7 @@ Please:
   });
   
   // GET specific Walter chat with messages
-  app.get('/api/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -8487,7 +8494,7 @@ Please:
   });
   
   // POST create new Walter chat
-  app.post('/api/walter/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/chats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { title } = req.body;
@@ -8511,7 +8518,7 @@ Please:
   });
   
   // PATCH update Walter chat (archive, rename, etc.)
-  app.patch('/api/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -8561,7 +8568,7 @@ Please:
   });
 
   // Phase 8.4: DELETE Walter chat
-  app.delete('/api/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.delete('/walter/chats/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -8592,7 +8599,7 @@ Please:
   });
   
   // POST send message to Walter chat
-  app.post('/api/walter/chats/:id/messages', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/chats/:id/messages', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -8761,7 +8768,7 @@ Please:
   
   // GET current user's Walter purpose (mode-aware)
   // Phase 7.4: ConfigBob transparent routing for purpose endpoint
-  app.get('/api/walter/purpose', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/purpose', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -8798,7 +8805,7 @@ Please:
   });
   
   // POST create or update Walter purpose (mode-aware)
-  app.post('/api/walter/purpose', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/purpose', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
@@ -8869,7 +8876,7 @@ Please:
   });
   
   // GET Walter memories for current user
-  app.get('/api/walter/memory', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/memory', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const type = req.query.type as string | undefined;
@@ -8900,7 +8907,7 @@ Please:
   });
   
   // POST create Walter memory entry
-  app.post('/api/walter/memory', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/memory', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const data = insertWalterMemorySchema.parse(req.body);
@@ -8930,7 +8937,7 @@ Please:
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   });
 
-  app.post('/api/walter/analyze-file', authenticateToken, fileUpload.single('file'), async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/analyze-file', authenticateToken, fileUpload.single('file'), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const file = req.file;
@@ -9026,7 +9033,7 @@ Summary:`;
   // ==================== Walter UI Preferences & UX API (Phase 8.4 Addendum B) ====================
   
   // GET user's Walter UI preferences
-  app.get('/api/walter/preferences', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/preferences', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const preferences = await storage.getWalterUserPreferences(userId);
@@ -9053,7 +9060,7 @@ Summary:`;
   });
   
   // PUT update user's Walter UI preferences
-  app.put('/api/walter/preferences', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.put('/walter/preferences', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { viewMode, theme, tone, sendKeyPreference, sidebarCollapsed } = req.body;
@@ -9076,7 +9083,7 @@ Summary:`;
   });
   
   // POST pin a Walter chat
-  app.post('/api/walter/chats/:id/pin', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/chats/:id/pin', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -9101,7 +9108,7 @@ Summary:`;
   });
   
   // POST unpin a Walter chat
-  app.post('/api/walter/chats/:id/unpin', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/chats/:id/unpin', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -9126,7 +9133,7 @@ Summary:`;
   });
   
   // GET export Walter chat (PDF or Markdown)
-  app.get('/api/walter/chats/:id/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/walter/chats/:id/export', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -9195,7 +9202,7 @@ Summary:`;
   // ==================== Reasoning Orchestrator API (Phase 8.8.3) ====================
   
   // POST enqueue a new reasoning task
-  app.post('/api/reasoning/enqueue', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/reasoning/enqueue', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { reasoningOrchestrator } = await import('./services/reasoning-orchestrator');
       const userId = req.user!.id;
@@ -9231,7 +9238,7 @@ Summary:`;
   });
 
   // GET reasoning queue status and recent traces
-  app.get('/api/reasoning/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/reasoning/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { taskQueue } = await import('./services/task-queue');
@@ -9278,7 +9285,7 @@ Summary:`;
   // ==================== Reasoning Orchestrator Debug API (Phase 8.8.1) ====================
   
   // GET reasoning trace by ID for debugging
-  app.get('/api/reasoning/debug/:traceId', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/reasoning/debug/:traceId', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { traceId } = req.params;
       const userId = req.user!.id;
@@ -9352,7 +9359,7 @@ Summary:`;
   // ==================== Phase 8.8.2: Memory Lifecycle Manager API ====================
   
   // GET /api/memory/status - Get current memory status
-  app.get('/api/memory/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/memory/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const status = memoryLifecycle.getStatus();
       res.json({ ok: true, data: status });
@@ -9363,7 +9370,7 @@ Summary:`;
   });
 
   // POST /api/memory/rehydrate - Manually trigger memory rehydration (admin only)
-  app.post('/api/memory/rehydrate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/memory/rehydrate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -9385,7 +9392,7 @@ Summary:`;
   });
 
   // GET /api/memory/audit - Get recent audit records
-  app.get('/api/memory/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/memory/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
       const records = await memoryLifecycle.getAuditRecords(limit);
@@ -9399,7 +9406,7 @@ Summary:`;
   // ==================== Semantic Memory API (Milestone 15) ====================
   
   // Search semantic memories by similarity
-  app.post('/api/semantic/search', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/semantic/search', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { query, tags, limit = 10 } = req.body;
       
@@ -9441,7 +9448,7 @@ Summary:`;
   });
   
   // Get latest semantic memories
-  app.get('/api/semantic/latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/semantic/latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 20;
       const tags = req.query.tags as string | undefined;
@@ -9466,7 +9473,7 @@ Summary:`;
   });
   
   // Get all unique tags
-  app.get('/api/semantic/tags', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/semantic/tags', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const result = await db.execute(sql`
         SELECT DISTINCT unnest(tags) as tag
@@ -9485,7 +9492,7 @@ Summary:`;
   // ==================== Learning Metrics API (Milestone 16 - Intelligence Refinement) ====================
   
   // Get learning health metrics from Cognitive Weight Adjuster
-  app.get('/api/ai/learning-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ai/learning-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { cognitiveWeightAdjuster } = await import('./services/cognitive-weight-adjuster');
       
@@ -9504,7 +9511,7 @@ Summary:`;
   // ==================== Historic Signals Backfill API (Milestone 17C) ====================
   
   // Get historic signals statistics
-  app.get('/api/historic-signals/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/historic-signals/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const stats = await storage.getHistoricSignalStats(userId);
@@ -9516,7 +9523,7 @@ Summary:`;
   });
 
   // Get recent historic signals
-  app.get('/api/historic-signals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/historic-signals', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -9542,7 +9549,7 @@ Summary:`;
   });
   
   // Backfill historic signals for learning (admin-only)
-  app.post('/api/backfill/signals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/backfill/signals', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       // Check if user is admin
       if (!req.user?.isAdmin) {
@@ -9673,7 +9680,7 @@ Summary:`;
   // ==================== Actuation Policy API (Milestone 17A) ====================
   
   // Get actuation policies for user
-  app.get('/api/actuation-policies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/actuation-policies', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const policies = await storage.getActuationPolicies(userId);
@@ -9685,7 +9692,7 @@ Summary:`;
   });
 
   // Get actuation metrics
-  app.get('/api/actuation-policies/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/actuation-policies/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const metrics = await actuationPolicyService.getActuationMetrics(userId);
@@ -9697,7 +9704,7 @@ Summary:`;
   });
 
   // Get proposed adjustments
-  app.get('/api/proposed-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/proposed-adjustments', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper' | undefined;
@@ -9715,7 +9722,7 @@ Summary:`;
   });
 
   // Approve proposed adjustment
-  app.post('/api/proposed-adjustments/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/proposed-adjustments/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { notes } = req.body;
@@ -9730,7 +9737,7 @@ Summary:`;
   });
 
   // Reject proposed adjustment
-  app.post('/api/proposed-adjustments/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/proposed-adjustments/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { reason } = req.body;
@@ -9745,7 +9752,7 @@ Summary:`;
   });
 
   // Apply approved adjustment
-  app.post('/api/proposed-adjustments/:id/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/proposed-adjustments/:id/apply', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       
@@ -9760,7 +9767,7 @@ Summary:`;
   // ==================== Asset Capabilities API (Milestone 17B) ====================
   
   // Get asset capabilities
-  app.get('/api/asset-capabilities', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/asset-capabilities', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const capabilities = await storage.getAssetCapabilities();
       res.json({ ok: true, capabilities });
@@ -9771,7 +9778,7 @@ Summary:`;
   });
 
   // Get specific asset capability
-  app.get('/api/asset-capabilities/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/asset-capabilities/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { symbol } = req.params;
       const capability = await storage.getAssetCapability(symbol);
@@ -9788,7 +9795,7 @@ Summary:`;
   });
 
   // Sync asset capabilities from Kraken
-  app.post('/api/asset-capabilities/sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/asset-capabilities/sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const result = await assetCapabilitiesService.syncFromKraken();
       res.json({ ok: true, result });
@@ -9801,7 +9808,7 @@ Summary:`;
   // ==================== AI Orchestrator / Command Center API ====================
   
   // Get latest telemetry snapshot
-  app.get('/api/orchestrator/telemetry', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/orchestrator/telemetry', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { aiOrchestrator } = await import('./orchestrator/orchestrator');
       const telemetry = await aiOrchestrator.getLatestTelemetry();
@@ -9818,7 +9825,7 @@ Summary:`;
   });
 
   // Get latest AI analysis
-  app.get('/api/orchestrator/analysis', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/orchestrator/analysis', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { aiOrchestrator } = await import('./orchestrator/orchestrator');
       const analysis = await aiOrchestrator.getLatestAnalysis();
@@ -9835,7 +9842,7 @@ Summary:`;
   });
 
   // Trigger immediate diagnostic analysis (admin only)
-  app.post('/api/orchestrator/analyze', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/orchestrator/analyze', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { aiOrchestrator } = await import('./orchestrator/orchestrator');
       await aiOrchestrator.triggerImmediateAnalysis();
@@ -9848,7 +9855,7 @@ Summary:`;
   });
 
   // Run comprehensive system audit (admin only)
-  app.post('/api/orchestrator/audit', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/orchestrator/audit', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const os = await import('os');
@@ -9998,7 +10005,7 @@ Summary:`;
   });
 
   // Get learning summary (cumulative AI learning metrics)
-  app.get('/api/orchestrator/learning-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/orchestrator/learning-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       // Import necessary tables and functions
       const { aiOpportunities, paperTrades, aiOrchestratorLogs } = await import('@shared/schema');
@@ -10082,7 +10089,7 @@ Summary:`;
   });
 
   // Get orchestrator logs
-  app.get('/api/orchestrator/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/orchestrator/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const isAdmin = req.user!.isAdmin;
@@ -10115,7 +10122,7 @@ Summary:`;
   });
 
   // Create orchestrator log (admin only - for storing AI recommendations)
-  app.post('/api/orchestrator/logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/orchestrator/logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -10144,7 +10151,7 @@ Summary:`;
   });
 
   // Update orchestrator log (admin only - approve/reject recommendation)
-  app.patch('/api/orchestrator/logs/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/orchestrator/logs/:id', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       
@@ -10165,7 +10172,7 @@ Summary:`;
   });
 
   // Update Goal (admin only - AI-proposed configuration change)
-  app.post('/api/orchestrator/updateGoal', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/orchestrator/updateGoal', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -10216,7 +10223,7 @@ Summary:`;
   });
 
   // Update Guardrail (admin only - AI-proposed configuration change)
-  app.post('/api/orchestrator/updateGuardrail', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/orchestrator/updateGuardrail', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -10281,7 +10288,7 @@ Summary:`;
   });
 
   // Update Strategy (admin only - AI-proposed configuration change)
-  app.post('/api/orchestrator/updateStrategy', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/orchestrator/updateStrategy', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -10352,7 +10359,7 @@ Summary:`;
   });
 
   // Walter AI SysAdmin Co-Pilot - Command Interpretation
-  app.post('/api/walter/interpret-command', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/walter/interpret-command', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { message, context } = req.body;
@@ -10816,7 +10823,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   // ========================================
 
   // Get unacknowledged alerts for current user
-  app.get('/api/alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
@@ -10832,7 +10839,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Acknowledge a specific alert
-  app.post('/api/alerts/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/alerts/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const alertId = req.params.id;
@@ -10852,7 +10859,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Acknowledge all alerts
-  app.post('/api/alerts/acknowledge-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/alerts/acknowledge-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
@@ -10868,7 +10875,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Mute low severity (info) alerts
-  app.post('/api/alerts/mute-low-severity', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/alerts/mute-low-severity', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
@@ -10884,7 +10891,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Handle actionable alert actions
-  app.post('/api/alerts/:id/action', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/alerts/:id/action', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const alertId = req.params.id;
@@ -10935,7 +10942,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   // ==============================================================================
 
   // Trigger user-initiated diagnostic
-  app.post('/api/diagnostics/inspect', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/diagnostics/inspect', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { inspectionType, searchScope } = req.body;
@@ -10956,7 +10963,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Trigger error-based diagnostic
-  app.post('/api/diagnostics/inspect-error/:errorId', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/diagnostics/inspect-error/:errorId', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { errorId } = req.params;
@@ -10973,7 +10980,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Analyze inspection report and generate patch proposals
-  app.post('/api/diagnostics/analyze-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/diagnostics/analyze-report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { report } = req.body;
@@ -10990,7 +10997,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Approve or reject a patch proposal
-  app.post('/api/diagnostics/patch/:proposalId/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/diagnostics/patch/:proposalId/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { proposalId } = req.params;
@@ -11012,7 +11019,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get diagnostic transparency logs
-  app.get('/api/diagnostics/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/diagnostics/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       
@@ -11033,7 +11040,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   // ========================================
 
   // Get autonomy system status
-  app.get('/api/autonomy/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/autonomy/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { autonomyController } = await import('./services/autonomy-controller');
       const { metaReasoningEngine } = await import('./services/meta-reasoning-engine');
@@ -11058,7 +11065,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Trigger manual self-check
-  app.post('/api/autonomy/self-check', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/autonomy/self-check', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { simulate, simulateHealth } = req.body;
@@ -11077,7 +11084,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Analyze reasoning trace integrity
-  app.post('/api/autonomy/analyze-trace', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/autonomy/analyze-trace', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { traceId } = req.body;
       const { metaReasoningEngine } = await import('./services/meta-reasoning-engine');
@@ -11092,7 +11099,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get meta-reasoning analyses
-  app.get('/api/autonomy/meta-reasoning', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/autonomy/meta-reasoning', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
       const { metaReasoningEngine } = await import('./services/meta-reasoning-engine');
@@ -11107,7 +11114,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Generate exploration prompts
-  app.post('/api/autonomy/exploration', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/autonomy/exploration', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { curiosityEngine } = await import('./services/curiosity-engine');
@@ -11122,7 +11129,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Run optimization cycle
-  app.post('/api/autonomy/optimize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/autonomy/optimize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { selfOptimizer } = await import('./services/self-optimizer');
       
@@ -11136,7 +11143,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get optimization history
-  app.get('/api/autonomy/optimizations', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/autonomy/optimizations', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
       const { selfOptimizer } = await import('./services/self-optimizer');
@@ -11155,7 +11162,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   // ========================================
 
   // Get current awareness state
-  app.get('/api/awareness/state', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/awareness/state', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       // Get the most recent awareness state
       const states = await db
@@ -11174,7 +11181,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Trigger manual reflection
-  app.post('/api/awareness/reflect', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/awareness/reflect', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { awarenessCore } = await import('./services/awareness-core');
       
@@ -11188,7 +11195,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get awareness state history
-  app.get('/api/awareness/history', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/awareness/history', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 20;
       
@@ -11210,7 +11217,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   // ========================================
 
   // Get overall cluster status
-  app.get('/api/cluster/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cluster/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { clusterRegistry } = await import('./services/cluster-registry');
       const { taskRouter } = await import('./services/task-router');
@@ -11234,7 +11241,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get all cluster nodes with health metrics
-  app.get('/api/cluster/nodes', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cluster/nodes', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { clusterRegistry } = await import('./services/cluster-registry');
       
@@ -11248,7 +11255,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get cluster task queue
-  app.get('/api/cluster/queue', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cluster/queue', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const status = req.query.status as string | undefined;
@@ -11265,7 +11272,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get cluster task results
-  app.get('/api/cluster/results', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cluster/results', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       
@@ -11283,7 +11290,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Trigger manual cluster rebalance
-  app.post('/api/cluster/rebalance', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/cluster/rebalance', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { taskRouter } = await import('./services/task-router');
       
@@ -11301,7 +11308,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Drain a specific node (mark unhealthy and reassign tasks)
-  app.post('/api/cluster/drain/:nodeId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/cluster/drain/:nodeId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { nodeId } = req.params;
       const { clusterRegistry } = await import('./services/cluster-registry');
@@ -11326,7 +11333,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 17.5: Get circuit breaker status for all nodes
-  app.get('/api/cluster/circuit-breaker', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cluster/circuit-breaker', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { circuitBreaker } = await import('./services/circuit-breaker');
       
@@ -11343,7 +11350,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 17.5: Reset circuit breaker for a specific node
-  app.post('/api/cluster/circuit-breaker/reset/:nodeId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/cluster/circuit-breaker/reset/:nodeId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { nodeId } = req.params;
       const { circuitBreaker } = await import('./services/circuit-breaker');
@@ -11362,7 +11369,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 17.6: Get audit logs for ethical gate executions
-  app.get('/api/cluster/audit-logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/cluster/audit-logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 100;
       const taskId = req.query.taskId as string | undefined;
@@ -11401,7 +11408,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   // ========================================
 
   // Get learning delta statistics
-  app.get('/api/learning/delta-stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/delta-stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { learningCoordinator } = await import('./services/learning-coordinator');
       const stats = await learningCoordinator.getStatistics();
@@ -11413,7 +11420,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get recent learning deltas
-  app.get('/api/learning/deltas', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/deltas', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
       const { learningCoordinator } = await import('./services/learning-coordinator');
@@ -11426,7 +11433,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get model alignment statistics
-  app.get('/api/learning/alignment-stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/alignment-stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { modelConsistencyManager } = await import('./services/model-consistency-manager');
       const stats = await modelConsistencyManager.getStatistics();
@@ -11438,7 +11445,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get recent model alignments
-  app.get('/api/learning/alignments', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/alignments', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
       const { modelConsistencyManager } = await import('./services/model-consistency-manager');
@@ -11451,7 +11458,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get cross-domain proposals
-  app.get('/api/learning/proposals', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/proposals', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const targetDomain = req.query.targetDomain as string | undefined;
       const { crossDomainReasoning } = await import('./services/cross-domain-reasoning');
@@ -11465,7 +11472,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Trigger manual learning sync
-  app.post('/api/learning/sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/learning/sync', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { nanoid } = await import('nanoid');
       const { clusterBus } = await import('./services/cluster-bus');
@@ -11501,7 +11508,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   // ===== PHASE 9.0: ADAPTIVE LEARNING & ALIGNMENT ROUTES =====
 
   // Verify action alignment
-  app.post('/api/alignment/verify', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/alignment/verify', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { AlignmentVerifier } = await import('./services/alignment-verifier');
@@ -11531,7 +11538,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get verification history
-  app.get('/api/alignment/history', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/alignment/history', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { AlignmentVerifier } = await import('./services/alignment-verifier');
       const { contextBridge } = await import('./services/context-bridge');
@@ -11549,7 +11556,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Trigger experience synthesis
-  app.post('/api/alignment/synthesize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/alignment/synthesize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { ExperienceMemoryService } = await import('./services/experience-memory');
@@ -11567,7 +11574,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get recent experience insights
-  app.get('/api/alignment/experiences', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/alignment/experiences', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { ExperienceMemoryService } = await import('./services/experience-memory');
       const { contextBridge } = await import('./services/context-bridge');
@@ -11585,7 +11592,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Evaluate performance drift
-  app.post('/api/alignment/evaluate-drift', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/alignment/evaluate-drift', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
@@ -11603,7 +11610,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get current alignment profile
-  app.get('/api/alignment/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/alignment/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
       const { contextBridge } = await import('./services/context-bridge');
@@ -11620,7 +11627,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Get alignment adjustment history
-  app.get('/api/alignment/adjustments', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/alignment/adjustments', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { AdaptiveObjectiveEngine } = await import('./services/adaptive-objective-engine');
       const { contextBridge } = await import('./services/context-bridge');
@@ -11638,7 +11645,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 9.2: Strategic Plan Management
-  app.post('/api/strategic/plans', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/strategic/plans', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { strategicPlannerService } = await import('./services/strategic-planner');
@@ -11655,7 +11662,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/strategic/plans', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategic/plans', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { strategicPlannerService } = await import('./services/strategic-planner');
       
@@ -11668,7 +11675,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/strategic/plans/active', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategic/plans/active', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { strategicPlannerService } = await import('./services/strategic-planner');
       
@@ -11681,7 +11688,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.patch('/api/strategic/plans/:planId/progress', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/strategic/plans/:planId/progress', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { strategicPlannerService } = await import('./services/strategic-planner');
@@ -11700,7 +11707,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.patch('/api/strategic/plans/:planId/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/strategic/plans/:planId/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { strategicPlannerService } = await import('./services/strategic-planner');
@@ -11733,7 +11740,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/strategic/recommendations', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategic/recommendations', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { strategicPlannerService } = await import('./services/strategic-planner');
@@ -11748,7 +11755,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 9.2: Learning Profile Management
-  app.post('/api/learning/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/learning/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { continuousLearningEngine } = await import('./services/continuous-learning');
@@ -11762,7 +11769,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/learning/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/profile', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { continuousLearningEngine } = await import('./services/continuous-learning');
       
@@ -11775,7 +11782,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.patch('/api/learning/profile/:profileId/weights', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/learning/profile/:profileId/weights', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { continuousLearningEngine } = await import('./services/continuous-learning');
@@ -11808,7 +11815,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.patch('/api/learning/profile/:profileId/phase', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/learning/profile/:profileId/phase', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { continuousLearningEngine } = await import('./services/continuous-learning');
@@ -11827,7 +11834,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/learning/profile/:profileId/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/profile/:profileId/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { continuousLearningEngine } = await import('./services/continuous-learning');
@@ -11846,7 +11853,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 9.2: Policy Compliance
-  app.get('/api/strategic/compliance', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategic/compliance', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { strategicPolicyGuard } = await import('./services/strategic-policy-guard');
       
@@ -11860,7 +11867,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 9.3: Strategic Simulation & Memory
-  app.post('/api/simulation/run', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/simulation/run', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { simulationEngine } = await import('./services/simulation-engine');
@@ -11878,7 +11885,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/simulation/list', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/simulation/list', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { simulationEngine } = await import('./services/simulation-engine');
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
@@ -11892,7 +11899,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/simulation/:simulationId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/simulation/:simulationId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { simulationEngine } = await import('./services/simulation-engine');
       
@@ -11909,7 +11916,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.patch('/api/simulation/:simulationId/outcome', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/simulation/:simulationId/outcome', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { simulationEngine } = await import('./services/simulation-engine');
@@ -11932,7 +11939,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/simulation/decision', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/simulation/decision', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { simulationEngine } = await import('./services/simulation-engine');
@@ -11950,7 +11957,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/strategic/memory/capture', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/strategic/memory/capture', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { strategicMemory } = await import('./services/strategic-memory');
@@ -11968,7 +11975,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/strategic/memory/lessons', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/strategic/memory/lessons', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { strategicMemory } = await import('./services/strategic-memory');
       
@@ -11981,7 +11988,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/strategic/memory/extract', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/strategic/memory/extract', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { strategicMemory } = await import('./services/strategic-memory');
@@ -11996,7 +12003,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 9.4: Reflective Intelligence API Endpoints
-  app.post('/api/reflection/reflect', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/reflection/reflect', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
@@ -12014,7 +12021,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/reflection/audit', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/reflection/audit', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
@@ -12032,7 +12039,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/reflection/list', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/reflection/list', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
       const limit = parseInt(req.query.limit as string) || 20;
@@ -12046,7 +12053,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/reflection/audits', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/reflection/audits', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { reflectiveIntelligence } = await import('./services/reflective-intelligence');
       const limit = parseInt(req.query.limit as string) || 20;
@@ -12061,7 +12068,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 9.5: Ethical Reasoning & Value Alignment API Endpoints
-  app.post('/api/ethics/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ethics/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
@@ -12079,7 +12086,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/ethics/audits', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ethics/audits', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
       const limit = parseInt(req.query.limit as string) || 20;
@@ -12093,7 +12100,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/ethics/rules', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ethics/rules', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
       
@@ -12106,7 +12113,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/ethics/init', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ethics/init', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { ethicalReasoningEngine } = await import('./services/ethical-reasoning-engine');
       
@@ -12119,7 +12126,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/alignment/matrix', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/alignment/matrix', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { valueAlignmentService } = await import('./services/value-alignment');
       
@@ -12132,7 +12139,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/alignment/overall', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/alignment/overall', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { valueAlignmentService } = await import('./services/value-alignment');
       
@@ -12145,7 +12152,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/alignment/init', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/alignment/init', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { valueAlignmentService } = await import('./services/value-alignment');
       
@@ -12159,7 +12166,7 @@ Important: Extract the exact field names and numeric values from the user's requ
   });
 
   // Phase 9.6: Collaborative Cognition & Cross-Domain Reasoning API Endpoints
-  app.post('/api/collaboration/sessions', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/collaboration/sessions', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { collaborationManager } = await import('./services/collaboration-manager');
       const { topic, participants, contextSnapshot } = req.body;
@@ -12178,7 +12185,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/collaboration/sessions', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/collaboration/sessions', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { collaborationManager } = await import('./services/collaboration-manager');
       
@@ -12191,7 +12198,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/collaboration/sessions/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/collaboration/sessions/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { collaborationManager } = await import('./services/collaboration-manager');
       const { sessionId } = req.params;
@@ -12209,7 +12216,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/collaboration/sessions/:sessionId/end', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/collaboration/sessions/:sessionId/end', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { collaborationManager } = await import('./services/collaboration-manager');
       const { sessionId } = req.params;
@@ -12224,7 +12231,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/collaboration/sessions/:sessionId/messages', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/collaboration/sessions/:sessionId/messages', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { collaborationManager } = await import('./services/collaboration-manager');
       const { sessionId } = req.params;
@@ -12238,7 +12245,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/collaboration/sessions/:sessionId/messages', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/collaboration/sessions/:sessionId/messages', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { collaborationManager } = await import('./services/collaboration-manager');
       const { sessionId } = req.params;
@@ -12262,7 +12269,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/collaboration/stats', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/collaboration/stats', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { collaborationManager } = await import('./services/collaboration-manager');
       
@@ -12275,7 +12282,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/collaboration/consensus/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/collaboration/consensus/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { consensusEngine } = await import('./services/consensus-engine');
       const { sessionId } = req.params;
@@ -12289,7 +12296,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/collaboration/consensus/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/collaboration/consensus/evaluate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { consensusEngine } = await import('./services/consensus-engine');
       const { collaborationManager } = await import('./services/collaboration-manager');
@@ -12312,7 +12319,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/collaboration/agents', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/collaboration/agents', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { reasoningBus } = await import('./services/reasoning-bus');
       
@@ -12327,7 +12334,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 9.7: Learning Feedback Routes ====================
 
-  app.get('/api/learning/stats', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/stats', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { learningBridge } = await import('./services/learning-bridge');
       
@@ -12340,7 +12347,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/learning/trends/:agentName', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/trends/:agentName', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { learningBridge } = await import('./services/learning-bridge');
       const { agentName } = req.params;
@@ -12358,7 +12365,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/learning/record', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/learning/record', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { learningBridge } = await import('./services/learning-bridge');
       const { agentName, domain, sessionId, accuracyScore, consensusAlignment, improvementNotes, feedbackSource } = req.body;
@@ -12384,7 +12391,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/learning/session/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/learning/session/:sessionId', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { learningBridge } = await import('./services/learning-bridge');
       const { sessionId } = req.params;
@@ -12400,7 +12407,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 9.8: Meta-Cognitive Oversight Routes ====================
 
-  app.get('/api/oversight/logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/oversight/logs', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const metaOversightService = (await import('./services/meta-oversight')).default;
       const { limit = 50, flagType, severity } = req.query;
@@ -12418,7 +12425,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/oversight/summary', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/oversight/summary', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const metaOversightService = (await import('./services/meta-oversight')).default;
       
@@ -12431,7 +12438,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/oversight/resolve', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/oversight/resolve', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const metaOversightService = (await import('./services/meta-oversight')).default;
       const { logId, resolution } = req.body;
@@ -12451,7 +12458,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 9.9: Strategic Memory & Model Calibration Routes ====================
 
-  app.get('/api/memory/archives', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/memory/archives', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const longtermMemoryService = (await import('./services/longterm-memory')).default;
       const { limit = 50, scope, agentName } = req.query;
@@ -12469,7 +12476,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/memory/calibration', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/memory/calibration', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const longtermMemoryService = (await import('./services/longterm-memory')).default;
       const { limit = 50, agentName, parameter } = req.query;
@@ -12487,7 +12494,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/memory/archive', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/memory/archive', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const longtermMemoryService = (await import('./services/longterm-memory')).default;
       const { agentName, memoryScope, summary, insights, performanceDelta } = req.body;
@@ -12515,7 +12522,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 10.0: Unified Cognitive Core Routes ====================
 
-  app.get('/api/core/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/core/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { unifiedCore } = await import('./services/unified-core');
       const status = await unifiedCore.getCoreStatus();
@@ -12527,7 +12534,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/core/agents', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/core/agents', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { unifiedCore } = await import('./services/unified-core');
       const { state } = req.query;
@@ -12541,7 +12548,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/core/optimize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/core/optimize', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { unifiedCore } = await import('./services/unified-core');
       
@@ -12556,7 +12563,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 11.0: Safety Guardrails Routes ====================
 
-  app.get('/api/safety/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/safety/status', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { safetyGuardrails } = await import('./services/safety-guardrails');
       
@@ -12577,7 +12584,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/safety/policies/apply', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/safety/policies/apply', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { safetyGuardrails } = await import('./services/safety-guardrails');
       
@@ -12601,7 +12608,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/safety/kill-switch', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/safety/kill-switch', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { safetyGuardrails } = await import('./services/safety-guardrails');
       
@@ -12624,7 +12631,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 13.0: Ethical Alignment Framework Routes ====================
 
-  app.get('/api/ethics/principles', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ethics/principles', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const principles = await db.select().from(ethicalPrinciple).orderBy(ethicalPrinciple.priority);
       
@@ -12635,7 +12642,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/ethics/principles', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ethics/principles', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { name, type, description, priority, enabled, constraints } = req.body;
       
@@ -12693,7 +12700,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/ethics/violations', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ethics/violations', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { limit = '50', severity } = req.query;
       
@@ -12712,7 +12719,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/ethics/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ethics/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { ethicalReasoner } = await import('./services/ethical-reasoner');
       
@@ -12734,7 +12741,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 15.0: Cognitive Introspection & Bias Mitigation Routes ====================
 
-  app.get('/api/introspection/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/introspection/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { introspectionEngine } = await import('./services/introspection-engine');
       const summary = await introspectionEngine.getLatestSummary(req.user!.id);
@@ -12752,7 +12759,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/introspection/biases', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/introspection/biases', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { introspectionEngine } = await import('./services/introspection-engine');
       const hours = parseInt(req.query.hours as string) || 24;
@@ -12773,7 +12780,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/introspection/drift', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/introspection/drift', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { introspectionEngine } = await import('./services/introspection-engine');
       const hours = parseInt(req.query.hours as string) || 48;
@@ -12794,7 +12801,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/introspection/mitigate', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/introspection/mitigate', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { biasMitigation } = await import('./services/bias-mitigation');
       const result = await biasMitigation.runMitigationCycle(req.user!.id);
@@ -12816,7 +12823,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 16.0: Knowledge Retrieval & Web Intelligence Routes ====================
 
-  app.get('/api/knowledge/query', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/knowledge/query', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { knowledgeRetrievalService } = await import('./services/knowledge-retrieval');
       const { query, limit } = req.query;
@@ -12846,7 +12853,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/knowledge/trust', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/knowledge/trust', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { knowledgeRetrievalService } = await import('./services/knowledge-retrieval');
       const trustRecords = await knowledgeRetrievalService.getTrustedSources(req.user!.id);
@@ -12865,7 +12872,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/knowledge/refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/knowledge/refresh', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { knowledgeRetrievalService } = await import('./services/knowledge-retrieval');
       const removedCount = await knowledgeRetrievalService.refreshCache();
@@ -12886,7 +12893,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 14.0: Federated Ethics & Multi-Agent Consensus Routes ====================
 
-  app.get('/api/federation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/federation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { federatedEthicsHub } = await import('./services/federated-ethics-hub');
       const { policyPropagationService } = await import('./services/policy-propagation');
@@ -12908,7 +12915,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/federation/propagate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/federation/propagate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { policyPropagationService } = await import('./services/policy-propagation');
       const { updates } = req.body;
@@ -12932,7 +12939,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/ethics/collab/consensus', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ethics/collab/consensus', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { ethicsConsensusOrchestrator } = await import('./services/ethics-consensus-orchestrator');
       const { action, agentRecommendations } = req.body;
@@ -12953,7 +12960,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/ethics/collab/conflicts', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ethics/collab/conflicts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { ethicsConsensusOrchestrator } = await import('./services/ethics-consensus-orchestrator');
       const status = (req.query.status as any) || 'all';
@@ -12970,7 +12977,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/ethics/collab/conflicts/:id/resolve', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ethics/collab/conflicts/:id/resolve', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { ethicsConsensusOrchestrator } = await import('./services/ethics-consensus-orchestrator');
       const { id } = req.params;
@@ -12992,7 +12999,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/ethics/collab/sessions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/ethics/collab/sessions', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { limit = '20' } = req.query;
       
@@ -13012,7 +13019,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.post('/api/ethics/collab/mediate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/ethics/collab/mediate', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { ethicsConsensusOrchestrator } = await import('./services/ethics-consensus-orchestrator');
       const { contextBridge } = await import('./services/context-bridge');
@@ -13063,7 +13070,7 @@ Important: Extract the exact field names and numeric values from the user's requ
 
   // ==================== Phase 12.0: Performance & Autoscaling Routes ====================
 
-  app.get('/api/system/performance', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/performance', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { performanceMonitor } = await import('./services/performance-monitor');
       
@@ -13076,7 +13083,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  app.get('/api/system/autoscale/hints', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/system/autoscale/hints', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { performanceMonitor } = await import('./services/performance-monitor');
       
@@ -13135,7 +13142,7 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
-  return httpServer;
+  return { httpServer, apiRouter };
 }
 
 // WebSocket message handler
