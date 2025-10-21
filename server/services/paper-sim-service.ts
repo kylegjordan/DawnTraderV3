@@ -8,6 +8,7 @@
 import { nanoid } from 'nanoid';
 import { storage } from '../storage.js';
 import type { InsertPaperSimSession } from '../../shared/schema.js';
+import { tradingStateSync } from './trading-state-sync.js';
 
 export interface PaperSimResult {
   success: boolean;
@@ -130,16 +131,77 @@ export async function startPaperSimulation(
           userId,
           mode: 'paper',
           status: 'running',
-          startedAt,
           startingBalance: options?.startingBalance?.toString() || '10000',
           runForMs: options?.runForMs || null,
-          endsAt: endsAt?.toISOString() || null,
+          endsAt: endsAt || null,
           startedBy: options?.startedBy || 'manual',
           metadata: options?.metadata || null,
         };
 
         const dbSession = await storage.createPaperSimSession(sessionData);
         console.log(`[PaperSimService] Created new session in database: ${sessionId}`);
+
+        // Phase 27.F.17: Auto-Configuration - Ensure minimum viable configuration
+        console.log('[PaperSimService][Phase-27.F.17] Checking auto-configuration...');
+        
+        // 1. Check watchlist and add default pairs if empty
+        const watchlist = await storage.getWatchlist({ userId, mode: 'paper' });
+        if (!watchlist || watchlist.length === 0) {
+          console.log('[PaperSimService][Phase-27.F.17] Empty watchlist detected - adding default pairs');
+          
+          const defaultPairs = [
+            { symbol: 'BTCUSD', base: 'BTC', quote: 'USD' },
+            { symbol: 'ETHUSD', base: 'ETH', quote: 'USD' }
+          ];
+          
+          for (const pair of defaultPairs) {
+            try {
+              await storage.addWatchlistPair({
+                userId,
+                mode: 'paper',
+                symbol: pair.symbol,
+                baseCurrency: pair.base,
+                quoteCurrency: pair.quote,
+              });
+              console.log(`[PaperSimService][Phase-27.F.17] Added ${pair.symbol} to watchlist`);
+            } catch (error) {
+              console.warn(`[PaperSimService][Phase-27.F.17] Failed to add ${pair.symbol}:`, error);
+            }
+          }
+        } else {
+          console.log(`[PaperSimService][Phase-27.F.17] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
+        }
+        
+        // 2. Set default minVolume to 5,000,000 in screener filters
+        try {
+          const filters = await storage.getScreenerFilters({ userId, mode: 'paper' });
+          const currentMinVolume = filters?.minVolume ? parseFloat(filters.minVolume) : null;
+          
+          if (!currentMinVolume || currentMinVolume > 5000000) {
+            console.log(`[PaperSimService][Phase-27.F.17] Setting default minVolume to 5,000,000`);
+            await storage.upsertScreenerFilters({
+              userId,
+              mode: 'paper',
+              minVolume: '5000000'
+            });
+          } else {
+            console.log(`[PaperSimService][Phase-27.F.17] MinVolume already set to ${currentMinVolume} - keeping existing value`);
+          }
+        } catch (error) {
+          console.warn('[PaperSimService][Phase-27.F.17] Failed to set minVolume:', error);
+        }
+        
+        // Phase 27.F.17: State Integrity Fix - Explicitly set engine active and verify
+        console.log('[PaperSimService][Phase-27.F.17] Setting engine active state...');
+        await tradingStateSync.setEngineActive(userId, true);
+        
+        // Verify system_context status
+        const context = await storage.getSystemContext(userId);
+        if (context && context.isEngineActive) {
+          console.log('[PaperSimService][Phase-27.F.17] ✅ Verified system_context.isEngineActive = true');
+        } else {
+          console.warn('[PaperSimService][Phase-27.F.17] ⚠️ Failed to verify engine active state');
+        }
 
         // Phase 27.F.9: Create and register manager atomically (both local and global)
         const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
@@ -152,18 +214,13 @@ export async function startPaperSimulation(
         
         // Emit cluster bus event for distributed awareness
         try {
-          const { ClusterBus } = await import('./cluster-bus.js');
-          const clusterBus = ClusterBus.getInstance();
-          await clusterBus.emit({
-            eventType: 'paper_sim_started',
-            topic: 'trading',
-            metadata: {
-              sessionId,
-              userId,
-              startedAt: startedAt.toISOString(),
-              startedBy: options?.startedBy || 'manual',
-              mode: 'paper',
-            },
+          const { clusterBus } = await import('./cluster-bus.js');
+          clusterBus.emit('paper_sim_started', {
+            sessionId,
+            userId,
+            startedAt: startedAt.toISOString(),
+            startedBy: options?.startedBy || 'manual',
+            mode: 'paper',
           });
         } catch (busError) {
           console.warn('[PaperSimService] Failed to emit cluster bus event:', busError);
@@ -268,7 +325,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         // Update session in database (end DB session)
         await storage.updatePaperSimSession(existingSession.id, {
           status: 'stopped',
-          stoppedAt: stoppedAt.toISOString(),
+          stoppedAt: stoppedAt,
           runForMs: runDuration,
         });
 
@@ -277,18 +334,13 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
 
         // Emit cluster bus event for distributed awareness
         try {
-          const { ClusterBus } = await import('./cluster-bus.js');
-          const clusterBus = ClusterBus.getInstance();
-          await clusterBus.emit({
-            eventType: 'paper_sim_stopped',
-            topic: 'trading',
-            metadata: {
-              sessionId: existingSession.sessionId,
-              userId,
-              stoppedAt: stoppedAt.toISOString(),
-              runDurationMs: runDuration,
-              mode: 'paper',
-            },
+          const { clusterBus } = await import('./cluster-bus.js');
+          clusterBus.emit('paper_sim_stopped', {
+            sessionId: existingSession.sessionId,
+            userId,
+            stoppedAt: stoppedAt.toISOString(),
+            runDurationMs: runDuration,
+            mode: 'paper',
           });
         } catch (busError) {
           console.warn('[PaperSimService] Failed to emit cluster bus event:', busError);
