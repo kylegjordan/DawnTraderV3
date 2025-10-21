@@ -68,6 +68,16 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // ✅ Ensure all backend routes are namespaced under /api
+  app._router.stack.forEach((middleware: any) => {
+    if (middleware.route) {
+      const routePath = middleware.route.path;
+      app.use(`/api${routePath}`, middleware.handle);
+    }
+  });
+
+  console.log("✅ API routes are now mounted under /api");
+
   // Phase 27.F.8: Reset PaperSim service state FIRST (before any other services)
   try {
     const { resetPaperSimService } = await import('./services/paper-sim-service');
