@@ -22,6 +22,8 @@ export type Permission =
   // Approval permissions
   | 'approve_actions'
   | 'bypass_approval'
+  | 'approve_walter_action_live'
+  | 'approve_walter_action_paper'
   
   // System permissions
   | 'view_reports'
@@ -66,6 +68,8 @@ export const PERMISSION_MATRIX: Record<UserRole, RolePermissions> = {
       // All approval permissions
       'approve_actions',
       'bypass_approval',
+      'approve_walter_action_live',
+      'approve_walter_action_paper',
       
       // All system permissions
       'view_reports',
@@ -102,6 +106,8 @@ export const PERMISSION_MATRIX: Record<UserRole, RolePermissions> = {
       // All approval permissions
       'approve_actions',
       'bypass_approval',
+      'approve_walter_action_live',
+      'approve_walter_action_paper',
       
       // All system permissions
       'view_reports',
@@ -134,6 +140,7 @@ export const PERMISSION_MATRIX: Record<UserRole, RolePermissions> = {
       
       // Approval permissions
       'approve_actions',
+      'approve_walter_action_paper',
       
       // System viewing
       'view_reports',

@@ -14,6 +14,7 @@ import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
 import { formulaAuditService } from "./services/formula-audit";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent } from "@shared/schema";
+import { z } from 'zod';
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -5310,6 +5311,21 @@ Provide specific, actionable recommendations.`,
   // Walter Autonomous Maintenance Actions
   // ============================================
   
+  // Zod schemas for Walter action request validation
+  const walterActionModeSchema = z.object({
+    mode: z.enum(['live', 'paper'])
+  });
+  
+  const walterActionRejectSchema = z.object({
+    mode: z.enum(['live', 'paper']),
+    reason: z.string().optional()
+  });
+  
+  // Helper function to determine required permission based on mode
+  function getWalterActionPermission(mode: 'live' | 'paper'): Permission {
+    return mode === 'live' ? 'approve_walter_action_live' : 'approve_walter_action_paper';
+  }
+  
   // Get Walter actions with filtering
   app.get('/api/walter/actions', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
@@ -5335,14 +5351,37 @@ Provide specific, actionable recommendations.`,
     }
   });
   
-  // Approve a pending Walter action
+  // Approve a pending Walter action (RBAC + validation)
   app.post('/api/walter/actions/:id/approve', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const actionId = req.params.id;
       const userId = req.user!.id;
-      const mode = (req.body.mode as 'live' | 'paper') || 'live';
       
-      console.log(`[WALTER-ACTIONS] User ${userId} approving action ${actionId} (mode: ${mode})`);
+      // Validate request body
+      const validation = walterActionModeSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          error: 'Invalid request body',
+          details: validation.error.errors
+        });
+      }
+      
+      const { mode } = validation.data;
+      
+      // RBAC: Check permission based on mode
+      const requiredPermission = getWalterActionPermission(mode);
+      const userPermissions = req.user?.permissions || [];
+      
+      if (!userPermissions.includes(requiredPermission)) {
+        return res.status(403).json({ 
+          error: 'Permission denied',
+          message: `Approving Walter actions in ${mode} mode requires the "${requiredPermission}" permission`,
+          requiredPermission,
+          userRole: req.user?.role
+        });
+      }
+      
+      console.log(`[WALTER-ACTIONS] User ${userId} (${req.user?.role}) approving action ${actionId} (mode: ${mode})`);
       
       const { WalterOpsEngine } = await import('./services/walter-ops-engine');
       const result = await WalterOpsEngine.approveAction(actionId, userId, mode);
@@ -5362,15 +5401,37 @@ Provide specific, actionable recommendations.`,
     }
   });
   
-  // Reject a pending Walter action
+  // Reject a pending Walter action (RBAC + validation)
   app.post('/api/walter/actions/:id/reject', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const actionId = req.params.id;
       const userId = req.user!.id;
-      const mode = (req.body.mode as 'live' | 'paper') || 'live';
-      const reason = req.body.reason as string | undefined;
       
-      console.log(`[WALTER-ACTIONS] User ${userId} rejecting action ${actionId} (mode: ${mode})`);
+      // Validate request body
+      const validation = walterActionRejectSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          error: 'Invalid request body',
+          details: validation.error.errors
+        });
+      }
+      
+      const { mode, reason } = validation.data;
+      
+      // RBAC: Check permission based on mode
+      const requiredPermission = getWalterActionPermission(mode);
+      const userPermissions = req.user?.permissions || [];
+      
+      if (!userPermissions.includes(requiredPermission)) {
+        return res.status(403).json({ 
+          error: 'Permission denied',
+          message: `Rejecting Walter actions in ${mode} mode requires the "${requiredPermission}" permission`,
+          requiredPermission,
+          userRole: req.user?.role
+        });
+      }
+      
+      console.log(`[WALTER-ACTIONS] User ${userId} (${req.user?.role}) rejecting action ${actionId} (mode: ${mode})`);
       
       const { WalterOpsEngine } = await import('./services/walter-ops-engine');
       const result = await WalterOpsEngine.rejectAction(actionId, userId, mode, reason);
@@ -5390,14 +5451,37 @@ Provide specific, actionable recommendations.`,
     }
   });
   
-  // Acknowledge a completed Walter action
+  // Acknowledge a completed Walter action (RBAC + validation)
   app.post('/api/walter/actions/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const actionId = req.params.id;
       const userId = req.user!.id;
-      const mode = (req.body.mode as 'live' | 'paper') || 'live';
       
-      console.log(`[WALTER-ACTIONS] User ${userId} acknowledging action ${actionId} (mode: ${mode})`);
+      // Validate request body
+      const validation = walterActionModeSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          error: 'Invalid request body',
+          details: validation.error.errors
+        });
+      }
+      
+      const { mode } = validation.data;
+      
+      // RBAC: Check permission based on mode
+      const requiredPermission = getWalterActionPermission(mode);
+      const userPermissions = req.user?.permissions || [];
+      
+      if (!userPermissions.includes(requiredPermission)) {
+        return res.status(403).json({ 
+          error: 'Permission denied',
+          message: `Acknowledging Walter actions in ${mode} mode requires the "${requiredPermission}" permission`,
+          requiredPermission,
+          userRole: req.user?.role
+        });
+      }
+      
+      console.log(`[WALTER-ACTIONS] User ${userId} (${req.user?.role}) acknowledging action ${actionId} (mode: ${mode})`);
       
       const { WalterOpsEngine } = await import('./services/walter-ops-engine');
       const result = await WalterOpsEngine.acknowledgeAction(actionId, userId, mode);
