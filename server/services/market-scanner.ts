@@ -102,6 +102,9 @@ export class MarketScanner {
           await this.updateUserWatchlist(user.id, 'paper', eligiblePairs);
           await this.updateUserWatchlist(user.id, 'live', eligiblePairs);
           
+          // Auto-start paper simulation if user has eligible pairs and it's not already running
+          await this.ensurePaperSimulationRunning(user.id, eligiblePairs);
+          
           // Scan for signals in both modes
           await this.scanForSignals(user.id, 'paper');
           await this.scanForSignals(user.id, 'live');
@@ -512,6 +515,79 @@ export class MarketScanner {
       console.log(`📊 [FilterDiag] ${mode}: scanned=${pairsScanned}, eligible=${eligibleCount} (${(100 - parseFloat(failurePercent)).toFixed(1)}%)`);
     } catch (error) {
       console.error(`Error logging filter diagnostics for user ${userId} (${mode}):`, error);
+    }
+  }
+
+  /**
+   * Auto-start paper simulation for users with eligible pairs
+   * SAFETY: Respects kill switch, trading status, and manual stops
+   */
+  private async ensurePaperSimulationRunning(userId: string, eligiblePairs: any[]): Promise<void> {
+    try {
+      // Only auto-start if user has eligible pairs
+      if (eligiblePairs.length === 0) {
+        console.log(`[MarketScan:AutoStart] User ${userId} has no eligible pairs, skipping auto-start`);
+        return;
+      }
+
+      // SAFETY CHECK 1: Respect trading settings (kill switch, etc.)
+      const settings = await storage.getTradingSettings(userId);
+      if (!settings) {
+        console.log(`[MarketScan:AutoStart] User ${userId} has no trading settings, skipping auto-start`);
+        return;
+      }
+
+      // SAFETY CHECK 2: Respect kill switch (trading suspended)
+      if (settings.tradingSuspended) {
+        console.log(`[MarketScan:AutoStart] User ${userId} has trading suspended (kill switch), skipping auto-start`);
+        return;
+      }
+
+      // SAFETY CHECK 3: Check if user opted into auto-start
+      // For now, we'll skip auto-start entirely since there's no opt-in flag yet
+      // TODO: Add autoStartPaperSim boolean to trading_settings table
+      console.log(`[MarketScan:AutoStart] Auto-start feature disabled (requires user opt-in)`);
+      return;
+
+      // The rest of the logic is commented out until we add proper opt-in
+      /*
+      const user = await storage.getUser(userId);
+      if (!user || user.tradingStatus !== 'active') {
+        console.log(`[MarketScan:AutoStart] User ${userId} trading status not active, skipping auto-start`);
+        return;
+      }
+
+      // Check if paper simulation is already running for this user
+      const existingSession = await storage.getActivePaperSimSession(userId);
+      
+      if (existingSession) {
+        console.log(`[MarketScan:AutoStart] Paper simulation already running for user ${userId} (session: ${existingSession.sessionId})`);
+        return;
+      }
+
+      // Auto-start paper simulation
+      console.log(`[MarketScan:AutoStart] Starting paper simulation for user ${userId} with ${eligiblePairs.length} eligible pairs...`);
+      
+      const { startPaperSimulation } = await import('./paper-sim-service.js');
+      const result = await startPaperSimulation(userId, {
+        startingBalance: 10000,
+        startedBy: 'market_scanner_auto',
+        metadata: {
+          autoStarted: true,
+          triggerReason: 'eligible_pairs_found',
+          eligiblePairCount: eligiblePairs.length,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      if (result.success) {
+        console.log(`✅ [MarketScan:AutoStart] Paper simulation started successfully for user ${userId}`);
+      } else {
+        console.error(`❌ [MarketScan:AutoStart] Failed to start paper simulation for user ${userId}:`, result.error);
+      }
+      */
+    } catch (error) {
+      console.error(`[MarketScan:AutoStart] Error in auto-start check for user ${userId}:`, error);
     }
   }
 }

@@ -1,0 +1,61 @@
+The paper trading engine is now starting, scanning markets, and refreshing watchlist data successfully.
+However, the trading pipeline is still incomplete — data isn’t flowing through to the dashboard tabs.
+
+Symptoms:
+
+“Universe Overview” and “Filter Breakdown” numbers in Filter Insights haven’t changed in days — they appear cached.
+
+Filtered Pairs tab always shows 0 scanned / 0 eligible.
+
+Ready to Buy now displays prices but never generates buy signals or simulated trades.
+
+Open Trades remains empty — no trades are executed despite active scanning.
+
+The countdown timers work and refresh cycles run, but no new data is being written to the paper portfolio or trading tables.
+
+What we already know:
+
+MarketScanner now runs every 10 minutes and logs 3 users with trading settings.
+
+PaperExecutionEngine and PaperPortfolioManager are active.
+
+Filter Insights and Diagnostics endpoints are functional but reading static data.
+
+The VWAP and strategy modules are loaded, but appear idle (no signal generation logs).
+
+PaperSimDiagnosticService now uses the correct screener_filters table.
+
+Request:
+Please trace the end-to-end data flow in the paper trading system:
+
+From MarketScanner results → PaperExecutionEngine → StrategyProcessor → PaperPortfolioManager
+
+Identify where the pipeline stops — for example:
+
+MarketScanner results not being passed to the execution engine
+
+StrategyProcessor not evaluating any pairs
+
+Simulated trades not being created in storage
+
+PaperPortfolioManager not receiving updates
+
+Once identified, re-enable or fix the missing link so:
+
+Filter Insights and Filtered Pairs update with real scan results
+
+Strategy engine evaluates eligible pairs and generates buy/sell signals
+
+Paper execution simulation creates trades visible in the dashboard
+
+Deliverables:
+
+Brief explanation of the root cause and how the data flow was restored.
+
+Confirmation that Filter Insights and Filtered Pairs update dynamically (not cached).
+
+Confirmation that simulated trades appear in the “Ready to Buy” and “Open Trades” tabs.
+
+Confirmation that scan intervals and refresh timers are running on the correct schedule (30-minute diagnostics, 10-minute scans, 30-second watchlist refresh).
+
+Focus on activating the strategy pipeline and trade simulation while keeping the current watchlist, market scanner, and diagnostic fixes intact. Avoid UI code changes; this is purely a backend and data propagation issue.
