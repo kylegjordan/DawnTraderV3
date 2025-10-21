@@ -25,16 +25,6 @@ export default function SystemHealthSummary() {
   }
 
   const { summary } = data;
-  const hasAnyActivity =
-    summary.feedHealthIssuesDetected > 0 ||
-    summary.feedHealthIssuesResolved > 0 ||
-    summary.formulaHealthIssuesDetected > 0 ||
-    summary.formulaHealthIssuesResolved > 0;
-
-  // Only show widget if there's activity today
-  if (!hasAnyActivity) {
-    return null;
-  }
 
   return (
     <div 
