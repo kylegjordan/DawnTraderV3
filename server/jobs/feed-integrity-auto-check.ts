@@ -187,74 +187,107 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
           severity,
         };
         
-        // PHASE 27.F.21: Create alerts with dormant suppression
-        // Dormant alerts use 'informational' category (not shown in dashboard critical banner)
-        const alertCategory = isDormantMode ? 'informational' : (severity === 'critical' ? 'critical' : 'actionable');
-        
-        for (const admin of adminUsers) {
-          await AlertsService.createAlert({
-            userId: admin.id,
-            mode: 'live',
-            alertType: 'feed_health',
-            severity,
-            category: alertCategory,
-            message,
-            metadata: {
-              grade: overallGrade,
-              latencyMs: metrics.latencyMs,
-              uptimePercent: metrics.uptimePercent,
-              reconnectCount: metrics.reconnectCount,
-              tickAgeSec: metrics.tickAgeSec,
-              feedType: metrics.feedType,
-              trigger,
-              dormant: isDormantMode,
-              suppressReason: isDormantMode ? 'Trading inactive - no active stream to monitor' : undefined,
-            },
-          });
+        // PHASE 27.F.21: Dormant Mode Handling
+        // In dormant mode: Skip user-facing alerts but still log to Walter's action system
+        if (isDormantMode) {
+          console.log(`[FeedIntegrity-Alert] Dormant mode: Suppressing user-facing alerts, logging to Walter only`);
           
-          await AlertsService.createAlert({
-            userId: admin.id,
-            mode: 'paper',
-            alertType: 'feed_health',
-            severity,
-            category: alertCategory,
-            message,
-            metadata: {
-              grade: overallGrade,
-              latencyMs: metrics.latencyMs,
-              uptimePercent: metrics.uptimePercent,
-              reconnectCount: metrics.reconnectCount,
-              tickAgeSec: metrics.tickAgeSec,
-              feedType: metrics.feedType,
-              trigger,
-              dormant: isDormantMode,
-              suppressReason: isDormantMode ? 'Trading inactive - no active stream to monitor' : undefined,
-            },
-          });
-        }
-        
-        // PHASE 27.F.21: Trigger Walter autonomous maintenance ONLY if not dormant
-        // Skip Walter actions in dormant mode (trading inactive, no stream to fix)
-        if (adminUsers.length > 0 && !isDormantMode) {
-          const primaryAdmin = adminUsers[0];
+          // Log to Walter's action system for both modes (silent logging)
+          if (adminUsers.length > 0) {
+            const primaryAdmin = adminUsers[0];
+            
+            // Tag anomaly with dormant flag
+            const dormantAnomaly = {
+              ...anomaly,
+              metadata: {
+                ...anomaly.metadata,
+                isDormant: true,
+                suppressReason: 'Trading inactive - no active stream to monitor',
+              }
+            };
+            
+            try {
+              console.log(`[WalterOps-FeedIntegrity] Dormant mode: Logging to Walter (live) without user alert`);
+              const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', dormantAnomaly);
+              console.log(`[WalterOps-FeedIntegrity] Live action logged: ${liveAction.actionType} - ${liveAction.status}`);
+            } catch (walterError) {
+              console.error(`[WalterOps-FeedIntegrity] Failed to log dormant live anomaly:`, walterError);
+            }
+            
+            try {
+              console.log(`[WalterOps-FeedIntegrity] Dormant mode: Logging to Walter (paper) without user alert`);
+              const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', dormantAnomaly);
+              console.log(`[WalterOps-FeedIntegrity] Paper action logged: ${paperAction.actionType} - ${paperAction.status}`);
+            } catch (walterError) {
+              console.error(`[WalterOps-FeedIntegrity] Failed to log dormant paper anomaly:`, walterError);
+            }
+          }
+        } else {
+          // Active Mode: Create user-facing alerts AND process via Walter
+          console.log(`[FeedIntegrity-Alert] Active mode: Creating user-facing alerts + Walter actions`);
           
-          try {
-            console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (live mode)`);
-            const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', anomaly);
-            console.log(`[WalterOps-FeedIntegrity] Live action result: ${liveAction.actionType} - ${liveAction.status}`);
-          } catch (walterError) {
-            console.error(`[WalterOps-FeedIntegrity] Failed to process live anomaly:`, walterError);
+          const alertCategory = severity === 'critical' ? 'critical' : 'actionable';
+          
+          for (const admin of adminUsers) {
+            await AlertsService.createAlert({
+              userId: admin.id,
+              mode: 'live',
+              alertType: 'feed_health',
+              severity,
+              category: alertCategory,
+              message,
+              metadata: {
+                grade: overallGrade,
+                latencyMs: metrics.latencyMs,
+                uptimePercent: metrics.uptimePercent,
+                reconnectCount: metrics.reconnectCount,
+                tickAgeSec: metrics.tickAgeSec,
+                feedType: metrics.feedType,
+                trigger,
+                dormant: false,
+              },
+            });
+            
+            await AlertsService.createAlert({
+              userId: admin.id,
+              mode: 'paper',
+              alertType: 'feed_health',
+              severity,
+              category: alertCategory,
+              message,
+              metadata: {
+                grade: overallGrade,
+                latencyMs: metrics.latencyMs,
+                uptimePercent: metrics.uptimePercent,
+                reconnectCount: metrics.reconnectCount,
+                tickAgeSec: metrics.tickAgeSec,
+                feedType: metrics.feedType,
+                trigger,
+                dormant: false,
+              },
+            });
           }
           
-          try {
-            console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (paper mode)`);
-            const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', anomaly);
-            console.log(`[WalterOps-FeedIntegrity] Paper action result: ${paperAction.actionType} - ${paperAction.status}`);
-          } catch (walterError) {
-            console.error(`[WalterOps-FeedIntegrity] Failed to process paper anomaly:`, walterError);
+          // Trigger Walter autonomous maintenance for active mode
+          if (adminUsers.length > 0) {
+            const primaryAdmin = adminUsers[0];
+            
+            try {
+              console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (live mode)`);
+              const liveAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'live', anomaly);
+              console.log(`[WalterOps-FeedIntegrity] Live action result: ${liveAction.actionType} - ${liveAction.status}`);
+            } catch (walterError) {
+              console.error(`[WalterOps-FeedIntegrity] Failed to process live anomaly:`, walterError);
+            }
+            
+            try {
+              console.log(`[WalterOps-FeedIntegrity] Processing global feed anomaly (paper mode)`);
+              const paperAction = await WalterOpsEngine.processAnomaly(primaryAdmin.id, 'paper', anomaly);
+              console.log(`[WalterOps-FeedIntegrity] Paper action result: ${paperAction.actionType} - ${paperAction.status}`);
+            } catch (walterError) {
+              console.error(`[WalterOps-FeedIntegrity] Failed to process paper anomaly:`, walterError);
+            }
           }
-        } else if (isDormantMode) {
-          console.log(`[WalterOps-FeedIntegrity] Skipping Walter actions (dormant mode - trading inactive)`);
         }
         
         monitor.updateAlertState(metrics.status, overallGrade, null);

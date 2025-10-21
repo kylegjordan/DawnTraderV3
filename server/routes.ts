@@ -5307,6 +5307,26 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // PHASE 27.F.21: Feed Health - Clear Alerts (Admin Only, for testing)
+  app.post('/api/system/feed-health/clear-alerts', authenticateToken, requirePermission('manage_system'), async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      console.log(`[FEED-HEALTH] Manual alert clear triggered by user: ${req.user!.username}`);
+      
+      const { clearFeedHealthAlertsOnStop } = await import('./jobs/feed-integrity-auto-check');
+      await clearFeedHealthAlertsOnStop(userId);
+      
+      res.json({ 
+        ok: true,
+        message: 'Feed-health alerts cleared successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[FEED-HEALTH] Clear alerts error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ============================================
   // Walter Autonomous Maintenance Actions
   // ============================================
