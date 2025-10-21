@@ -173,6 +173,48 @@ export class AlertsService {
 
     return result.length;
   }
+
+  /**
+   * Phase 27.F.21.FINAL: Acknowledge all feed-health alerts for a user
+   * Used during auto-clear on trading stop
+   */
+  static async acknowledgeFeedHealthAlerts(userId: string) {
+    const result = await db
+      .update(systemAlerts)
+      .set({ acknowledged: true })
+      .where(
+        and(
+          eq(systemAlerts.userId, userId),
+          sql`${systemAlerts.alertType} LIKE '%feed%'`,
+          eq(systemAlerts.acknowledged, false)
+        )
+      )
+      .returning();
+
+    return result;
+  }
+
+  /**
+   * Phase 27.F.21.FINAL: Cleanup old feed-health alerts
+   * Deletes feed-health alerts older than specified minutes
+   * @param minutesOld - Age threshold in minutes (default: 30)
+   */
+  static async cleanupOldFeedAlerts(minutesOld = 30) {
+    const cutoffDate = new Date();
+    cutoffDate.setMinutes(cutoffDate.getMinutes() - minutesOld);
+
+    const result = await db
+      .delete(systemAlerts)
+      .where(
+        and(
+          sql`${systemAlerts.alertType} LIKE '%feed%'`,
+          sql`${systemAlerts.timestamp} < ${cutoffDate.toISOString()}`
+        )
+      )
+      .returning();
+
+    return result;
+  }
 }
 
 export default AlertsService;

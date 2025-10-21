@@ -1,12 +1,24 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Info, XCircle, Bell } from 'lucide-react';
+import { AlertTriangle, Info, XCircle, Bell, X } from 'lucide-react';
 import { SystemAlert, categorizeAlert, shouldShowAlert, getAlertStyle } from '@/lib/alert-utils';
 import { NotificationsPanel } from './notifications-panel';
 import { ActionableAlertModal } from './actionable-alert-modal';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 
 interface AlertsResponse {
   ok: boolean;
@@ -15,7 +27,9 @@ interface AlertsResponse {
 
 export default function AlertBanner() {
   const [selectedAlert, setSelectedAlert] = useState<SystemAlert | null>(null);
+  const [showClearAllDialog, setShowClearAllDialog] = useState(false);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const { toast } = useToast();
 
   // Fetch unacknowledged alerts
   const { data, isLoading } = useQuery<AlertsResponse>({
@@ -27,6 +41,49 @@ export default function AlertBanner() {
   const { data: settings } = useQuery<{ showSystemAlerts?: boolean }>({
     queryKey: ['/api/settings'],
     staleTime: 60000,
+  });
+
+  // Mutation to dismiss a single alert
+  const dismissAlertMutation = useMutation({
+    mutationFn: async (alertId: string) => {
+      return await apiRequest(`/api/alerts/${alertId}/acknowledge`, 'POST');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });
+      toast({
+        title: 'Alert dismissed',
+        description: 'The alert has been removed from your dashboard.',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to dismiss alert. Please try again.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Mutation to clear all visible alerts
+  const clearAllAlertsMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/alerts/acknowledge-all', 'POST');
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });
+      toast({
+        title: 'All alerts cleared',
+        description: `${data.count || 0} alerts have been dismissed.`,
+      });
+      setShowClearAllDialog(false);
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to clear alerts. Please try again.',
+        variant: 'destructive',
+      });
+    },
   });
 
   const alerts = data?.alerts || [];
@@ -64,16 +121,29 @@ export default function AlertBanner() {
               <Bell className="h-5 w-5" />
               Alerts
               {categorizedAlerts.critical.length > 0 && (
-                <Badge variant="destructive">
+                <Badge variant="destructive" data-testid="badge-critical-count">
                   {categorizedAlerts.critical.length} Critical
                 </Badge>
               )}
               {categorizedAlerts.actionable.length > 0 && (
-                <Badge variant="secondary">
+                <Badge variant="secondary" data-testid="badge-actionable-count">
                   {categorizedAlerts.actionable.length} Action Required
                 </Badge>
               )}
             </h3>
+            
+            {/* Clear All Button */}
+            {bannerAlerts.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowClearAllDialog(true)}
+                disabled={clearAllAlertsMutation.isPending}
+                data-testid="button-clear-all-alerts"
+              >
+                Clear All
+              </Button>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -85,10 +155,7 @@ export default function AlertBanner() {
               return (
                 <div
                   key={alert.id}
-                  className={`p-3 rounded-lg border ${style.bg} ${style.border} ${
-                    isActionable ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
-                  }`}
-                  onClick={() => isActionable && setSelectedAlert(alert)}
+                  className={`p-3 rounded-lg border ${style.bg} ${style.border} relative`}
                   data-testid={`alert-${alert.severity}-${alert.id}`}
                 >
                   <div className="flex items-start gap-3">
@@ -101,8 +168,11 @@ export default function AlertBanner() {
                         <Info className="h-5 w-5" />
                       )}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between">
+                    <div
+                      className={`flex-1 ${isActionable ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                      onClick={() => isActionable && setSelectedAlert(alert)}
+                    >
+                      <div className="flex items-start justify-between pr-8">
                         <div>
                           <div className="flex items-center gap-2">
                             <p className={`font-medium ${style.text}`}>
@@ -123,6 +193,21 @@ export default function AlertBanner() {
                         </div>
                       </div>
                     </div>
+                    
+                    {/* Dismiss button */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-6 w-6 opacity-70 hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        dismissAlertMutation.mutate(alert.id);
+                      }}
+                      disabled={dismissAlertMutation.isPending}
+                      data-testid={`button-dismiss-alert-${alert.id}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               );
@@ -140,6 +225,31 @@ export default function AlertBanner() {
         isOpen={!!selectedAlert}
         onClose={() => setSelectedAlert(null)}
       />
+      
+      {/* Clear All Confirmation Dialog */}
+      <AlertDialog open={showClearAllDialog} onOpenChange={setShowClearAllDialog}>
+        <AlertDialogContent data-testid="dialog-clear-all-alerts">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear all reviewed alerts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will dismiss all {bannerAlerts.length} visible alert{bannerAlerts.length !== 1 ? 's' : ''} from your dashboard.
+              You can still view them in the AI Transparency section for audit purposes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-clear-all">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => clearAllAlertsMutation.mutate()}
+              disabled={clearAllAlertsMutation.isPending}
+              data-testid="button-confirm-clear-all"
+            >
+              {clearAllAlertsMutation.isPending ? 'Clearing...' : 'Clear All'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

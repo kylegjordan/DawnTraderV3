@@ -1,0 +1,69 @@
+🧭 Implementation Request: Feed Alert Cleanup & Manual Management Enhancements
+
+The dormant-mode suppression logic is now working correctly — no new feed-health alerts are being generated when trading is stopped.
+However, the existing alerts remain in the dashboard and there is currently no way to manually clear or dismiss alerts once reviewed.
+Please implement the following final updates to complete the cleanup and improve usability:
+
+1. One-Time Database Cleanup
+
+Run a one-time cleanup job to:
+
+Delete or mark as resolved all feed-health alerts (category='feed') older than 30 minutes, regardless of mode.
+
+Remove any alerts created during stale isEngineActive states.
+
+Log the cleanup operation to Walter’s system log for transparency:
+
+System Maintenance: Cleared residual feed-health alerts (inactive state).
+
+2. Persistent Auto-Clear on Trading Stop
+
+Ensure that on every state change to STOPPED, the system automatically:
+
+Acknowledges and hides all feed-health alerts from the dashboard.
+
+Adds a WalterOps action log entry:
+"All feed-health alerts cleared upon trading stop (system dormant)."
+
+Verify that this executes even if system_context.is_engine_active was stale on startup — by checking the active state in memory, not just the DB.
+
+3. Manual Alert Dismissal in UI
+
+Add a “Dismiss” or “Clear” button on each dashboard alert card (right side, near timestamp).
+
+On click, mark that alert as acknowledged/resolved in the DB.
+
+Immediately remove it from the dashboard view.
+
+Add an optional “Clear All Visible Alerts” button at the top of the Alert panel.
+
+Confirmation modal: “Clear all reviewed alerts from dashboard?”
+
+Action: Mark all currently displayed alerts as acknowledged.
+
+4. Refresh & Feedback
+
+After any manual dismissal or auto-clear:
+
+Refresh the alert count in the header (Alerts: X Critical) to reflect the new count.
+
+If count = 0, collapse or hide the alert banner automatically.
+
+5. Testing & Verification
+
+Run tests to confirm:
+
+✅ No new alerts appear when trading is stopped.
+
+✅ Old feed-health alerts are cleared on trading stop.
+
+✅ Manual dismissal removes alerts instantly without page reload.
+
+✅ Feed Health grade recalculates excluding dormant/incidental alerts.
+
+✅ Walter’s system log records both auto-clears and manual dismissals for traceability.
+
+Goal
+
+Keep the dashboard clean and actionable — only current, critical alerts should ever be visible.
+Walter should still log everything under AI Transparency → Feed Health for audit and diagnostics, but the user-facing dashboard should stay uncluttered.

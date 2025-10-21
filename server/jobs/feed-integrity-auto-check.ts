@@ -203,14 +203,10 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
           if (adminUsers.length > 0) {
             const primaryAdmin = adminUsers[0];
             
-            // Tag anomaly with dormant flag
-            const dormantAnomaly = {
+            // Tag anomaly with dormant flag in description
+            const dormantAnomaly: AnomalyInput = {
               ...anomaly,
-              metadata: {
-                ...anomaly.metadata,
-                isDormant: true,
-                suppressReason: 'Trading inactive - no active stream to monitor',
-              }
+              anomaly: `${anomaly.anomaly} (Dormant: Trading inactive - no active stream to monitor)`,
             };
             
             try {
@@ -463,54 +459,48 @@ export async function clearFeedHealthAlertsOnStop(userId: string): Promise<void>
   try {
     console.log(`[FeedIntegrity] 🔇 Auto-clearing feed-health alerts for user ${userId} (trading stopped)`);
     
-    // Get all unacknowledged feed-health alerts for this user
-    const liveAlerts = await AlertsService.getUnacknowledgedAlerts(userId, 'live');
-    const paperAlerts = await AlertsService.getUnacknowledgedAlerts(userId, 'paper');
-    
-    // Filter to feed-health alerts only
-    const liveFeedAlerts = liveAlerts.filter(a => a.alertType === 'feed_health');
-    const paperFeedAlerts = paperAlerts.filter(a => a.alertType === 'feed_health');
-    
-    let totalCleared = 0;
-    
-    // Acknowledge live mode feed alerts
-    for (const alert of liveFeedAlerts) {
-      await AlertsService.acknowledgeAlert(alert.id, userId);
-      totalCleared++;
-    }
-    
-    // Acknowledge paper mode feed alerts
-    for (const alert of paperFeedAlerts) {
-      await AlertsService.acknowledgeAlert(alert.id, userId);
-      totalCleared++;
-    }
+    // Use efficient service method to acknowledge all feed-health alerts at once
+    const clearedAlerts = await AlertsService.acknowledgeFeedHealthAlerts(userId);
+    const totalCleared = clearedAlerts.length;
     
     if (totalCleared > 0) {
+      // Count by mode
+      const liveFeedAlerts = clearedAlerts.filter(a => a.mode === 'live');
+      const paperFeedAlerts = clearedAlerts.filter(a => a.mode === 'paper');
+      
       console.log(`[FeedIntegrity] ✅ Cleared ${totalCleared} feed-health alerts (${liveFeedAlerts.length} live, ${paperFeedAlerts.length} paper)`);
       
       // Create Walter action log entry for transparency (both modes)
       try {
-        const logMessage = `Feed alerts cleared automatically on trading stop (${totalCleared} alerts cleared)`;
+        const logMessage = `Feed alerts cleared automatically on trading stop (${totalCleared} total: ${liveFeedAlerts.length} live, ${paperFeedAlerts.length} paper). Trading inactive - no active stream to monitor.`;
         
         await WalterOpsEngine.processAnomaly(userId, 'live', {
           source: 'feed',
           component: 'Feed Monitor',
           anomaly: logMessage,
-          metrics: {
-            alerts_cleared: totalCleared,
-            live_alerts: liveFeedAlerts.length,
-            paper_alerts: paperFeedAlerts.length,
-          },
-          severity: 'info',
-          metadata: {
-            action: 'auto_clear_on_stop',
-            reason: 'Trading inactive - no active stream to monitor',
-          }
+          severity: 'info'
         });
         
         console.log(`[FeedIntegrity] ✅ Walter action logged (live mode)`);
       } catch (walterError) {
         console.error(`[FeedIntegrity] Failed to log Walter action:`, walterError);
+      }
+      
+      // Broadcast state update to refresh UI
+      try {
+        const { contextBridge } = await import('../services/context-bridge');
+        await contextBridge.broadcast({
+          type: 'state_update',
+          payload: { 
+            alerts_cleared: totalCleared, 
+            reason: 'trading_stopped',
+            timestamp: new Date().toISOString()
+          },
+          userId
+        });
+        console.log(`[FeedIntegrity] ✅ Alerts cleared event broadcast to UI`);
+      } catch (broadcastError) {
+        console.error(`[FeedIntegrity] Failed to broadcast alerts cleared event:`, broadcastError);
       }
     } else {
       console.log(`[FeedIntegrity] No feed-health alerts to clear for user ${userId}`);
