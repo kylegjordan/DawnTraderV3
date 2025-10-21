@@ -69,26 +69,26 @@ interface FilterDiagnosticsResponse {
 
 export function FilterInsights() {
   const [lastManualRefresh, setLastManualRefresh] = useState<number>(Date.now());
-  const [nextAutoRefresh, setNextAutoRefresh] = useState<number>(Date.now() + 30 * 60 * 1000);
+  const [nextAutoRefresh, setNextAutoRefresh] = useState<number>(Date.now() + 10 * 1000); // Phase 27.F.19: 10-second refresh
 
-  // Query with 30-minute stale time (breakdown data)
+  // Phase 27.F.19: Query with 10-second stale time for real-time insights
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
     queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'],
-    staleTime: 30 * 60 * 1000, // 30 minutes
-    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
+    staleTime: 10 * 1000, // 10 seconds
+    refetchInterval: 10 * 1000, // Phase 27.F.19: Auto-refresh every 10 seconds
   });
 
-  // Phase 27.F.15.B: Query for threshold values
+  // Phase 27.F.15.B + 27.F.19: Query for threshold values with 10-second refresh
   const { data: diagnosticsData } = useQuery<FilterDiagnosticsResponse>({
     queryKey: ['/api/filters/diagnostics'],
-    staleTime: 30 * 60 * 1000, // 30 minutes
-    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
+    staleTime: 10 * 1000, // 10 seconds
+    refetchInterval: 10 * 1000, // Phase 27.F.19: Auto-refresh every 10 seconds
   });
 
-  // Handle manual refresh
+  // Handle manual refresh - Phase 27.F.19: 10-second interval
   const handleManualRefresh = () => {
     setLastManualRefresh(Date.now());
-    setNextAutoRefresh(Date.now() + 30 * 60 * 1000);
+    setNextAutoRefresh(Date.now() + 10 * 1000);
     queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'] });
     queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
     refetch();
@@ -121,19 +121,18 @@ export function FilterInsights() {
     return map[filterKey] || null;
   };
 
-  // Update next auto-refresh time
+  // Update next auto-refresh time - Phase 27.F.19: 10-second interval
   useEffect(() => {
     const interval = setInterval(() => {
-      setNextAutoRefresh(lastManualRefresh + 30 * 60 * 1000);
+      setNextAutoRefresh(lastManualRefresh + 10 * 1000);
     }, 1000);
 
     return () => clearInterval(interval);
   }, [lastManualRefresh]);
 
-  // Calculate time until next refresh
+  // Calculate time until next refresh - Phase 27.F.19: Show seconds for 10-second refresh
   const timeUntilRefresh = Math.max(0, nextAutoRefresh - Date.now());
-  const minutesUntilRefresh = Math.floor(timeUntilRefresh / 60000);
-  const secondsUntilRefresh = Math.floor((timeUntilRefresh % 60000) / 1000);
+  const secondsUntilRefresh = Math.floor(timeUntilRefresh / 1000);
 
   if (isLoading) {
     return (
@@ -207,7 +206,7 @@ export function FilterInsights() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
-              Next refresh in {minutesUntilRefresh}m {secondsUntilRefresh}s
+              Next refresh in {secondsUntilRefresh}s
             </span>
             <Button
               onClick={handleManualRefresh}
