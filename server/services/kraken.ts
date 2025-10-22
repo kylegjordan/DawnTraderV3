@@ -652,14 +652,14 @@ export class KrakenService {
     const candidatePairs: any[] = [];
     const exclusionReasons: Record<string, string> = {};
 
-    // Parse settings with defaults
-    const minVolume = parseFloat(settings.minVolume || '30000000');
-    const minDailyRange = parseFloat(settings.minDailyRange || '6.5');
+    // Parse settings (NO HARDCODED FALLBACKS - require database values)
+    const minVolume = parseFloat(settings.minVolume);
+    const minDailyRange = parseFloat(settings.minDailyRange);
     const minPrice = parseFloat(settings.minPrice || '0.01');
     const maxPrice = settings.maxPrice ? parseFloat(settings.maxPrice) : undefined;
-    const maxBidAskSpread = parseFloat(settings.maxBidAskSpread || '1.00');
+    const maxBidAskSpread = parseFloat(settings.maxBidAskSpread);
     const excludeStablecoins = settings.excludeStablecoins ?? true;
-    // Phase 27.F.13.B: Quote currency filter disabled - accept all currencies
+    // Phase 27.F.13.B: Quote currency filter disabled - accept all currencies per user requirement
     const allowedQuotes = settings.allowedTradingPairs || [];
     const blacklist = normalizeSymbolArray(settings.blacklistedSymbols);
     const whitelist = normalizeSymbolArray(settings.whitelistedSymbols);

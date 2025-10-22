@@ -153,9 +153,16 @@ export async function startPaperSimulation(
           try {
             // Get current screener filter settings from database (NO HARDCODED DEFAULTS)
             const filters = await storage.getScreenerFilters({ userId, mode: 'paper' });
+            const tradingSettings = await storage.getTradingSettings(userId);
             
             if (!filters) {
               console.error('[PaperSimService][AutoWatchlist] ❌ No screener filters found in database for user');
+              console.log('[PaperSimService][AutoWatchlist] Engine will start with empty watchlist');
+              return;
+            }
+            
+            if (!tradingSettings) {
+              console.error('[PaperSimService][AutoWatchlist] ❌ No trading settings found in database for user');
               console.log('[PaperSimService][AutoWatchlist] Engine will start with empty watchlist');
               return;
             }
@@ -167,22 +174,35 @@ export async function startPaperSimulation(
             console.log(`  maxBidAskSpread=${filters.maxBidAskSpread}%`);
             console.log(`  minPrice=$${filters.minPrice}`);
             console.log(`  maxPrice=$${filters.maxPrice || 'unlimited'}`);
+            console.log(`  volatilityMin=${filters.volatilityMin || 'none'}%`);
+            console.log(`  volatilityMax=${filters.volatilityMax || 'none'}%`);
+            console.log(`  rsiMin=${filters.rsiMin || 'none'}`);
+            console.log(`  rsiMax=${filters.rsiMax || 'none'}`);
+            console.log(`  excludeStablecoins=${filters.excludeStablecoins}`);
+            
+            console.log(`[AutoWatchlist] Loaded trading settings from database for user ${userId}:`);
+            console.log(`  minDailyRange=${tradingSettings.minDailyRange}%`);
+            console.log(`  blacklistedSymbols=${tradingSettings.blacklistedSymbols?.length || 0} symbols`);
+            console.log(`  whitelistedSymbols=${tradingSettings.whitelistedSymbols?.length || 0} symbols`);
+            console.log(`  minHistoryDays=${tradingSettings.minDataHistoryDays} days`);
             
             // Initialize KrakenService
             const krakenService = new KrakenService();
             
-            // Query eligible pairs using ONLY database values (no fallbacks)
+            // Query eligible pairs using ONLY database values (NO HARDCODED FALLBACKS)
             const eligiblePairs = await krakenService.getEligiblePairs({
               minVolume: filters.minVolume,
-              minDailyRange: '6.5', // Hardcoded: Not in screener_filters schema
+              minDailyRange: tradingSettings.minDailyRange,
               minPrice: filters.minPrice,
               maxPrice: filters.maxPrice || undefined,
               maxBidAskSpread: filters.maxBidAskSpread,
               excludeStablecoins: filters.excludeStablecoins ?? true,
-              allowedTradingPairs: [], // No currency restrictions per user request
-              blacklistedSymbols: [], // Hardcoded: Not in screener_filters schema
-              whitelistedSymbols: [], // Hardcoded: Not in screener_filters schema
-              minHistoryDays: 90, // Hardcoded: Not in screener_filters schema
+              allowedTradingPairs: [], // User explicitly requires NO currency-based filtering
+              blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
+              whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
+              minHistoryDays: tradingSettings.minDataHistoryDays,
+              rsiMin: filters.rsiMin || undefined,
+              rsiMax: filters.rsiMax || undefined,
               volatilityMin: filters.volatilityMin || undefined,
               volatilityMax: filters.volatilityMax || undefined,
             });

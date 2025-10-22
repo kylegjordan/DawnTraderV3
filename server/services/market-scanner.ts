@@ -72,26 +72,25 @@ export class MarketScanner {
 
           console.log(`\n👤 Processing user ${user.id} with custom screener filters...`);
           
-          // Apply user-specific screener filters (handle null values)
+          // Apply user-specific screener filters (NO HARDCODED FALLBACKS - use database values ONLY)
           const eligiblePairs = await this.kraken.getEligiblePairs({
-            minVolume: screenerSettings.minVolume || '1000000',
-            minDailyRange: tradingSettings.minDailyRange || '6.5',
+            minVolume: screenerSettings.minVolume,
+            minDailyRange: tradingSettings.minDailyRange,
             minPrice: screenerSettings.minPrice || undefined,
             maxPrice: screenerSettings.maxPrice || undefined,
-            maxBidAskSpread: screenerSettings.maxBidAskSpread || undefined,
-            excludeStablecoins: screenerSettings.excludeStablecoins ?? undefined,
-            allowedTradingPairs: tradingSettings.allowedTradingPairs || undefined,
-            blacklistedSymbols: tradingSettings.blacklistedSymbols || undefined,
-            whitelistedSymbols: tradingSettings.whitelistedSymbols || undefined,
-            minHistoryDays: tradingSettings.minDataHistoryDays || 90,
-            // Phase 27.F.15.B: Add missing filters
+            maxBidAskSpread: screenerSettings.maxBidAskSpread,
+            excludeStablecoins: screenerSettings.excludeStablecoins ?? true,
+            allowedTradingPairs: [], // User explicitly requires NO currency-based filtering
+            blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
+            whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
+            minHistoryDays: tradingSettings.minDataHistoryDays,
             rsiMin: screenerSettings.rsiMin || undefined,
             rsiMax: screenerSettings.rsiMax || undefined,
             volatilityMin: screenerSettings.volatilityMin || undefined,
             volatilityMax: screenerSettings.volatilityMax || undefined,
             minLiquidity: screenerSettings.minLiquidity || undefined,
             minMarketCap: screenerSettings.minMarketCap || undefined,
-            allowRegulatedOnly: screenerSettings.allowRegulatedOnly ?? undefined
+            allowRegulatedOnly: screenerSettings.allowRegulatedOnly ?? false
           });
           
           // Phase 27.F.15.A: Log filter diagnostics for both modes

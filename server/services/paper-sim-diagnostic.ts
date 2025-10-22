@@ -101,11 +101,11 @@ export class PaperSimDiagnosticService {
     const evaluated = Math.min(limit, universeCount);
     console.log(`[UniverseLoad] kraken_pairs=${universeCount} evaluated=${evaluated}`);
 
-    // Parse settings from screener_filters (aligned with MarketScanner)
-    const minVolume = parseFloat(screenerSettings.minVolume || '1000000');
-    const minDailyRange = parseFloat(tradingSettings.minDailyRange || '6.5');
+    // Parse settings from database (NO HARDCODED FALLBACKS - Goals Engine is single source of truth)
+    const minVolume = parseFloat(screenerSettings.minVolume);
+    const minDailyRange = parseFloat(tradingSettings.minDailyRange);
     const minPrice = screenerSettings.minPrice ? parseFloat(screenerSettings.minPrice) : 0.01;
-    const maxBidAskSpread = screenerSettings.maxBidAskSpread ? parseFloat(screenerSettings.maxBidAskSpread) : 1.00;
+    const maxBidAskSpread = parseFloat(screenerSettings.maxBidAskSpread);
     const excludeStablecoins = screenerSettings.excludeStablecoins ?? true;
     // Phase 27.F.13.B: No currency restrictions per user request
     const allowedQuotes = tradingSettings.allowedTradingPairs || [];
@@ -346,13 +346,13 @@ export class PaperSimDiagnosticService {
     const dailyRange = ((high24h - low24h) / low24h) * 100;
     const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 10000; // in basis points
 
-    // Check spread
-    if (bidAskSpread <= parseFloat(settings.maxBidAskSpread || '1.00') * 100) {
+    // Check spread (NO FALLBACKS - use database value)
+    if (bidAskSpread <= parseFloat(settings.maxBidAskSpread) * 100) {
       reasons.push('passes_spread');
     }
 
-    // Check volume
-    if (volume24h >= parseFloat(settings.minVolume || '30000000')) {
+    // Check volume (NO FALLBACKS - use database value)
+    if (volume24h >= parseFloat(settings.minVolume)) {
       reasons.push('passes_volume');
     }
 

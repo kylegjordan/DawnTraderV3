@@ -4655,20 +4655,42 @@ Provide specific, actionable recommendations.`,
   // Screener test endpoint for demonstrating different filter configurations
   apiRouter.post('/screener/test', async (req: AuthenticatedRequest, res) => {
     try {
+      const userId = req.user?.id;
       const kraken = new KrakenService();
-      const testSettings = req.body || {
-        minVolume: '10000000',
-        minDailyRange: '3.0',
-        minPrice: '0.01',
-        maxBidAskSpread: '1.00',
-        excludeStablecoins: true,
-        allowedTradingPairs: ['USD', 'USDT'],
-        blacklistedSymbols: [],
-        whitelistedSymbols: [],
-        minHistoryDays: 90
-      };
+      
+      // Use request body if provided, otherwise load from database (NO HARDCODED DEFAULTS)
+      let testSettings = req.body;
+      
+      if (!testSettings && userId) {
+        // Load user's actual filter settings from Goals Engine
+        const screenerSettings = await storage.getScreenerFilters({ userId, mode: 'paper' });
+        const tradingSettings = await storage.getTradingSettings(userId);
+        
+        if (screenerSettings && tradingSettings) {
+          testSettings = {
+            minVolume: screenerSettings.minVolume,
+            minDailyRange: tradingSettings.minDailyRange,
+            minPrice: screenerSettings.minPrice,
+            maxPrice: screenerSettings.maxPrice,
+            maxBidAskSpread: screenerSettings.maxBidAskSpread,
+            excludeStablecoins: screenerSettings.excludeStablecoins,
+            allowedTradingPairs: [],
+            blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
+            whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
+            minHistoryDays: tradingSettings.minDataHistoryDays,
+            rsiMin: screenerSettings.rsiMin,
+            rsiMax: screenerSettings.rsiMax,
+            volatilityMin: screenerSettings.volatilityMin,
+            volatilityMax: screenerSettings.volatilityMax
+          };
+        }
+      }
+      
+      if (!testSettings) {
+        return res.status(400).json({ error: 'No test settings provided and user has no saved filters' });
+      }
 
-      console.log('\n🧪 Screener Test with custom settings:', testSettings);
+      console.log('\n🧪 Screener Test with settings:', testSettings);
       const eligiblePairs = await kraken.getEligiblePairs(testSettings);
       
       res.json({
