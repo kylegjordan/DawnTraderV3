@@ -3179,6 +3179,58 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 27.F.13.C: Reset paper simulation
+  apiRouter.post('/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const userId = req.user!.id;
+    const { newBalance } = req.body;
+    
+    try {
+      const balance = parseFloat(newBalance) || 800; // Default to $800 if not provided
+      
+      console.log(`[PaperSim] Resetting simulation for user ${userId} with balance $${balance}`);
+      
+      // Stop paper simulation if running
+      const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
+      await stopPaperSimulation(userId);
+      
+      // Delete all paper sim data
+      await storage.deleteAllPaperSimTrades(userId);
+      await storage.deleteAllPaperSimOpenPositions(userId);
+      await storage.deleteAllPaperSimTradeLogs(userId);
+      
+      // Reset portfolio state for paper mode
+      const contextId = await storage.getGlobalContextId();
+      await storage.upsertPortfolioState({
+        globalContextId: contextId,
+        mode: 'paper',
+        totalValue: balance.toString(),
+        unrealizedPnl: '0',
+        realizedPnl: '0',
+        cash: balance.toString(),
+        cryptoValue: '0',
+        lastUpdated: new Date()
+      });
+      
+      // Invalidate Bob Core cache
+      bobCore.invalidate('metrics:paperSimStatus');
+      bobCore.invalidate('metrics:portfolioOverview');
+      
+      console.log(`[PaperSim] Reset complete - new balance: $${balance}`);
+      
+      res.json({
+        success: true,
+        message: 'PaperSim reset complete.',
+        newBalance: balance
+      });
+    } catch (error: any) {
+      console.error('[PaperSim] Error resetting simulation:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to reset paper simulation'
+      });
+    }
+  });
+
   // Phase 7.2: Paper trading status with Bob Core caching
   apiRouter.get('/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     // Phase 7.2: Try Bob Core first if enabled

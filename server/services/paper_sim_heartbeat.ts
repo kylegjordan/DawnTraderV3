@@ -77,8 +77,12 @@ class PaperSimHeartbeatService {
         return;
       }
 
-      // Check each session
+      // Check each session (Phase 27.F.13.C.D: Added null-safety guards)
       for (const session of activeSessions) {
+        if (!session) {
+          console.warn('[PaperSimHeartbeat] Session undefined — skipping check');
+          continue;
+        }
         await this.checkSession(session);
       }
 
@@ -109,11 +113,23 @@ class PaperSimHeartbeatService {
   /**
    * Check individual session health and expiration
    * Phase 27.4.2: Added cross-verification with system_context
+   * Phase 27.F.13.C.D: Added null-safety guards
    */
   private async checkSession(session: any): Promise<void> {
     try {
+      // Phase 27.F.13.C.D: Null-safety guard
+      if (!session) {
+        console.warn('[PaperSimHeartbeat] Session undefined — skipping check');
+        return;
+      }
+      
       const sessionId = session.id;
       const userId = session.userId;
+      
+      if (!sessionId || !userId) {
+        console.warn('[PaperSimHeartbeat] Session missing required fields — skipping check');
+        return;
+      }
       
       console.log(`[PaperSimHeartbeat] Checking session ${sessionId} for user ${userId}`);
 
@@ -151,6 +167,12 @@ class PaperSimHeartbeatService {
       // Verify in-memory manager exists and check consistency
       const { getPaperSimulationStatus } = await import('./paper-sim-service');
       const status = await getPaperSimulationStatus(userId);
+      
+      // Phase 27.F.13.C.D: Null-safety guard for reconciliation
+      if (!status || !status.reconciliation) {
+        console.warn(`[PaperSimHeartbeat] Session ${sessionId} status incomplete — skipping consistency check`);
+        return;
+      }
       
       if (!status.reconciliation.isConsistent) {
         console.warn(`[PaperSimHeartbeat] ⚠️ Session ${sessionId} is in inconsistent state:`, status.reconciliation);
@@ -191,6 +213,11 @@ class PaperSimHeartbeatService {
       console.log(`[PaperSimHeartbeat] Found ${sessions.length} session(s) to recover`);
 
       for (const session of sessions) {
+        // Phase 27.F.13.C.D: Null-safety guard
+        if (!session) {
+          console.warn('[PaperSimHeartbeat] Session undefined — skipping recovery');
+          continue;
+        }
         await this.recoverSession(session, autoResume);
       }
 
@@ -203,11 +230,24 @@ class PaperSimHeartbeatService {
 
   /**
    * Recover individual session
+   * Phase 27.F.13.C.D: Added null-safety guards
    */
   private async recoverSession(session: any, autoResume: boolean): Promise<void> {
     try {
+      // Phase 27.F.13.C.D: Null-safety guard
+      if (!session) {
+        console.warn('[PaperSimHeartbeat] Session undefined — skipping recovery');
+        return;
+      }
+      
       const sessionId = session.id;
       const userId = session.userId;
+      
+      if (!sessionId || !userId) {
+        console.warn('[PaperSimHeartbeat] Session missing required fields — skipping recovery');
+        return;
+      }
+      
       const startedAt = new Date(session.startedAt);
       
       console.log(`[PaperSimHeartbeat] Recovering session ${sessionId} (user: ${userId}, started: ${startedAt.toISOString()})`);

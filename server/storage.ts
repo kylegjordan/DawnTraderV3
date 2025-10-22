@@ -477,10 +477,13 @@ export interface IStorage {
   getPaperSimOpenPositionBySymbol(userId: string, symbol: string): Promise<PaperSimOpenPosition | undefined>;
   getPaperSimOpenPositions(userId: string): Promise<PaperSimOpenPosition[]>;
   deletePaperSimOpenPosition(id: string): Promise<void>;
+  deleteAllPaperSimOpenPositions(userId: string): Promise<void>; // Phase 27.F.13.C: Reset simulation
   
   // Trade logs
   createPaperSimTradeLog(log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog>;
   getPaperSimTradeLogs(userId: string, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]>;
+  deleteAllPaperSimTradeLogs(userId: string): Promise<void>; // Phase 27.F.13.C: Reset simulation
+  deleteAllPaperSimTrades(userId: string): Promise<void>; // Phase 27.F.13.C: Reset simulation
   
   // Stats
   getPaperSimStats(userId: string): Promise<{
@@ -2640,6 +2643,19 @@ export class DatabaseStorage implements IStorage {
 
   async deletePaperSimOpenPosition(id: string): Promise<void> {
     await db.delete(paperSimOpenPositions).where(eq(paperSimOpenPositions.id, id));
+  }
+
+  // Phase 27.F.13.C: Reset simulation methods
+  async deleteAllPaperSimOpenPositions(userId: string): Promise<void> {
+    await db.delete(paperSimOpenPositions).where(eq(paperSimOpenPositions.userId, userId));
+  }
+
+  async deleteAllPaperSimTradeLogs(userId: string): Promise<void> {
+    await db.delete(paperSimTradeLogs).where(eq(paperSimTradeLogs.userId, userId));
+  }
+
+  async deleteAllPaperSimTrades(userId: string): Promise<void> {
+    await db.delete(paperSimTrades).where(eq(paperSimTrades.userId, userId));
   }
 
   async createPaperSimTradeLog(log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog> {

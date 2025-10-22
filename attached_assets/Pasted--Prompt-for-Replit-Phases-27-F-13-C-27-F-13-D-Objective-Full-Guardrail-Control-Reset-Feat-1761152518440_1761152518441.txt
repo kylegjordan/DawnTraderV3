@@ -1,0 +1,189 @@
+🧠 Prompt for Replit — Phases 27.F.13.C + 27.F.13.D
+🎯 Objective: Full Guardrail Control, Reset Feature, and UI Enhancements
+1️⃣ Phase 27.F.13.C — Reset Simulation + Guardrail Inputs + Formatting
+A. Add “Reset Paper Simulation” Feature
+
+Backend:
+
+Create endpoint POST /api/paper-sim/reset
+
+When called:
+
+Delete all user records from:
+
+paper_sim_trades
+
+paper_sim_open_positions
+
+paper_sim_trade_logs
+
+Reset portfolio_state for the user to a new balance (provided in request body or default $800)
+
+Reset PaperSim session state (hasDbSession=false, isRunning=false)
+
+Response format:
+
+{
+  "success": true,
+  "message": "PaperSim reset complete.",
+  "newBalance": 800
+}
+
+
+Frontend:
+
+Add a “Reset Simulation” button in the Trading Panel (Paper Mode).
+
+When clicked:
+
+Prompt user: “Enter new starting balance” (default $800).
+
+Call /api/paper-sim/reset with { newBalance }.
+
+Auto-restart PaperSim with new balance after success message.
+
+B. Add Two New Guardrail Inputs (Frontend + Backend Integration)
+
+The backend schema already includes:
+
+maxRequiredCapital (decimal)
+
+maxRiskPerTradeLimit (decimal)
+
+Add both fields to the Guardrails tab under “Mode-Specific Risk Parameters (Paper Mode)” and “Mode-Specific Risk Parameters (Live Mode)” sections.
+
+Field	Label	Description	Default	Units
+maxRequiredCapital	Max Required Capital ($)	Maximum total position capital allowed per trade	100,000	USD
+maxRiskPerTradeLimit	Max Risk Per Trade ($)	Maximum dollar risk allowed on a single trade	1,000	USD
+
+Implementation Notes:
+
+Display both fields only if “Advanced Settings” toggle (if exists) is on.
+
+Save values to the guardrails table for the corresponding user and mode.
+
+Ensure PaperSim and Live engines use these dynamically during trade checks (they already load guardrail data).
+
+C. Add Comma Formatting for Numeric Inputs
+
+Apply automatic comma separation formatting to all numeric fields across:
+
+Guardrails tab
+
+Screeners tab
+
+Strategies tab
+
+Use:
+
+Intl.NumberFormat('en-US').format(value)
+
+
+to format values as the user types, while maintaining unformatted numeric values in the DB.
+
+Example:
+Typing “5000000” → displays as “5,000,000”
+Typing “1500.25” → displays as “1,500.25”
+
+D. Fix Heartbeat Null-Safety
+
+In server/services/paper-sim-heartbeat.ts, wrap session checks with safe guards:
+
+if (!session) {
+  logger.warn('[Heartbeat] Session undefined — skipping check');
+  return;
+}
+if (!session.isConsistent) {
+  logger.warn('[Heartbeat] Session inconsistent — skipping check');
+  return;
+}
+
+
+Confirm 10+ minutes of runtime without [PaperSimHeartbeat] TypeError.
+
+Deliverables for Phase 27.F.13.C
+Check	Status Criteria
+Reset endpoint working	POST /api/paper-sim/reset clears all data and restarts sim
+New guardrail inputs visible	“Max Required Capital” and “Max Risk Per Trade ($)” editable in Goals Engine
+Number formatting applied	Commas appear dynamically in all numeric fields
+Heartbeat clean	No null reference errors after 10+ minutes
+2️⃣ Phase 27.F.13.D — Ready-to-Buy Table + Filtered Pairs Enhancements
+A. Ready-to-Buy Table Layout
+
+Convert “Ready to Buy” list into a data table.
+Each row = one symbol ready to trade.
+
+Column	Data Source	Notes
+Symbol	symbol	e.g., “ADAEUR”
+Name	asset_name	e.g., “Cardano / Euro”
+24h Volume	volume_24h	Format with commas
+Price	price	Current last trade price
+VWAP	vwap	From MarketScanner
+Range (%)	daily_range	Calculated daily % range
+Strategy	strategy_name	Strategy that triggered the buy signal
+Entry Price	entry_price	Proposed buy price
+Target Price	target_price	Planned sell target
+Stop Loss	stop_price	Stop loss level
+
+UI Behavior:
+
+Auto-refresh every 10 minutes (after each MarketScanner cycle).
+
+Sortable columns (click header to sort ascending/descending).
+
+Filter/search box for quick lookup by symbol.
+
+B. Filtered Pairs & Filter Insights Consistency
+
+Fix data mismatch:
+
+Filtered Pairs tab shows “60 eligible” but lists only ~15–20.
+
+Filter Insights tab shows “43 eligible.”
+
+Goal:
+
+Both should pull from the same diagnostics source.
+
+Filtered Pairs table should list all eligible pairs, not just the top 10–15.
+
+Add pagination or “Show All” toggle to handle large lists gracefully.
+
+API Adjustments:
+
+/api/paper-sim/filtered-pairs should return the full eligible set.
+
+Add pagination support: ?limit=50&offset=0
+
+Return total count (totalEligible) in response.
+
+Deliverables for Phase 27.F.13.D
+Feature	Expected Behavior
+Ready-to-Buy table	Shows full structured table with 10+ columns, sortable and refreshes every 10 min
+Filtered Pairs list	Displays all eligible pairs (pagination if >50)
+Filter Insights	Count matches Filtered Pairs totalEligible
+Backend	Unified diagnostics data source feeding both endpoints
+Final Output
+
+Provide a Markdown summary report showing:
+
+Updated files and new UI elements
+
+Screenshots or console output verifying:
+
+Reset simulation success
+
+Guardrail inputs visible and saved
+
+Clean heartbeat log (no nulls)
+
+Ready-to-Buy table and Filtered Pairs alignment
+
+Outcome
+
+After completing Phases 27.F.13.C + 27.F.13.D, the Dawn Trader system will have:
+✅ Complete user control over all guardrail values
+✅ A clear and resettable paper trading environment
+✅ Polished, data-rich UI for filtered and ready-to-buy pairs
+✅ Error-free, dynamic heartbeat stability
+✅ Full readiness for Walter’s next evolution: Adaptive Risk Management (Phase 27.F.14)
