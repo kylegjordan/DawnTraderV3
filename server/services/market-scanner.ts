@@ -74,16 +74,16 @@ export class MarketScanner {
           
           // Apply user-specific screener filters (NO HARDCODED FALLBACKS - use database values ONLY)
           const eligiblePairs = await this.kraken.getEligiblePairs({
-            minVolume: screenerSettings.minVolume,
-            minDailyRange: tradingSettings.minDailyRange,
+            minVolume: screenerSettings.minVolume || undefined,
+            minDailyRange: tradingSettings.minDailyRange || undefined,
             minPrice: screenerSettings.minPrice || undefined,
             maxPrice: screenerSettings.maxPrice || undefined,
-            maxBidAskSpread: screenerSettings.maxBidAskSpread,
+            maxBidAskSpread: screenerSettings.maxBidAskSpread || undefined,
             excludeStablecoins: screenerSettings.excludeStablecoins ?? true,
             allowedTradingPairs: [], // User explicitly requires NO currency-based filtering
             blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
             whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
-            minHistoryDays: tradingSettings.minDataHistoryDays,
+            minHistoryDays: tradingSettings.minDataHistoryDays || undefined,
             rsiMin: screenerSettings.rsiMin || undefined,
             rsiMax: screenerSettings.rsiMax || undefined,
             volatilityMin: screenerSettings.volatilityMin || undefined,

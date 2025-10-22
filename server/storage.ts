@@ -245,6 +245,7 @@ export interface IStorage {
   getTradingSignals(params: { userId: string; mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]>;
   updateSignalStatus(id: string, status: string, executedAt?: Date): Promise<TradingSignal>;
   expireOldSignals(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
+  expireAllExpiredSignals(): Promise<number>;
 
   // Trade methods
   getTrades(userId: string, filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }): Promise<Trade[]>;
@@ -992,8 +993,21 @@ export class DatabaseStorage implements IStorage {
         eq(tradingSignals.userId, params.userId),
         eq(tradingSignals.mode, params.mode),
         eq(tradingSignals.status, 'active'),
-        lte(tradingSignals.detectedAt, params.beforeDate)
+        lte(tradingSignals.expiresAt, params.beforeDate) // FIX: Check expiresAt, not detectedAt!
       ));
+  }
+  
+  // NEW: Expire ALL signals past their expiration time (across all users/modes)
+  async expireAllExpiredSignals(): Promise<number> {
+    const result = await db
+      .update(tradingSignals)
+      .set({ status: 'expired' })
+      .where(and(
+        eq(tradingSignals.status, 'active'),
+        lte(tradingSignals.expiresAt, new Date())
+      ))
+      .returning();
+    return result.length;
   }
 
   // Trade methods
