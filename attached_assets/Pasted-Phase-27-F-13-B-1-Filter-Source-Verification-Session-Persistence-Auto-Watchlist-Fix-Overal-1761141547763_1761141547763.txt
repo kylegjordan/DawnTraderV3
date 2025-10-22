@@ -1,0 +1,96 @@
+Phase 27.F.13.B.1 — Filter Source Verification + Session Persistence + Auto-Watchlist Fix
+
+🎯 Overall Goal
+
+Ensure that PaperSim:
+
+Dynamically loads all screener thresholds (minVolume, minLiquidity, etc.) from the same database and API the Goals Engine → Screeners tab uses.
+
+Creates and maintains a consistent database session record (paper_sim_sessions) every time PaperSim starts.
+
+Auto-populates the watchlist based on those live screener values.
+
+Executes trades normally once the watchlist is built, without desyncs, null errors, or server restarts.
+
+🧩 A) Verify Filter Source Integrity
+
+In server/services/paper-sim-service.ts (and related diagnostic or watchlist logic), locate where filter thresholds are loaded.
+
+Confirm that the service calls something like:
+
+const filters = await getUserScreenerFilters(userId, mode);
+
+
+or queries the screener_filters table dynamically for the current user and mode (paper).
+
+Remove or comment out any hard-coded defaults such as:
+
+const minVolume = 5000000; // ❌ should be dynamic
+
+
+Ensure values now come from the same table and API that /api/screeners uses (the Goals Engine Screeners tab source).
+
+Add a startup log confirming that the filters were pulled from the DB:
+
+[AutoWatchlist] Loaded screener filters from database for user <id>:
+minVolume=$500 000, minLiquidity=$100 000, maxSpread=5%
+
+
+Verify in the logs that these values match what appears in the UI.
+
+🧩 B) Fix PaperSim Session Persistence
+
+When /api/trading/start runs with mode: "paper":
+
+Always create a session record in paper_sim_sessions.
+
+Register that ID in memory (global.paperSimSession or equivalent).
+
+Initialize watchlist, diagnostics, and managers tied to that session.
+
+Implement continuous state sync:
+
+Heartbeat writes session status (isRunning, balance, openPositionsCount) to the database every 10 seconds.
+
+On restart, if a session exists, re-attach instead of creating a new one.
+
+Add robust null-checks for any session.isConsistent or session.state calls to prevent restarts.
+
+🧩 C) Verify Auto-Watchlist + Trade Execution
+
+After confirming filters load dynamically:
+
+Start PaperSim with an empty watchlist.
+
+Expect logs such as:
+
+[AutoWatchlist] Using screener filters for user <id>
+minVolume=$500 000, spread=5 %
+[AutoWatchlist] Added n pairs to watchlist.
+
+
+Confirm that /api/watchlist?mode=paper returns > 0 pairs.
+
+Observe [PaperExecution] Simulated BUY/SELL logs within the first scan cycle.
+
+Verify /api/paper/trades/active shows ≥ 1 simulated trade.
+
+🧩 D) Deliverables
+
+Provide a concise Markdown report showing:
+
+Check	Expected Result
+Filter Source	Log proof that PaperSim loads thresholds from the DB (no hard-coded defaults)
+Session Persistence	DB session created, heartbeat stable ≥ 5 min, re-attach works on restart
+Auto-Watchlist	Populated ≥ 10 pairs using dynamic screener filters
+Trade Execution	At least 1 Simulated BUY/SELL occurs without errors
+Warnings	Note any remaining heartbeat or null-check issues
+✅ Expected Outcome
+
+PaperSim starts, persists, and re-attaches cleanly.
+
+Filter thresholds match exactly what’s set in the Goals Engine Screeners tab.
+
+Auto-watchlist and simulated trades work reliably.
+
+No “state desync” or “no session record” messages appear.

@@ -151,28 +151,40 @@ export async function startPaperSimulation(
           console.log('[PaperSimService][AutoWatchlist] Empty watchlist detected - querying screener for eligible pairs');
           
           try {
-            // Get current screener filter settings
+            // Get current screener filter settings from database (NO HARDCODED DEFAULTS)
             const filters = await storage.getScreenerFilters({ userId, mode: 'paper' });
-            console.log('[PaperSimService][AutoWatchlist] Retrieved screener filters:', filters ? 'configured' : 'using defaults');
+            
+            if (!filters) {
+              console.error('[PaperSimService][AutoWatchlist] ❌ No screener filters found in database for user');
+              console.log('[PaperSimService][AutoWatchlist] Engine will start with empty watchlist');
+              return;
+            }
+            
+            // Phase 27.F.13.B.1: Log actual filter values loaded from database
+            console.log(`[AutoWatchlist] Loaded screener filters from database for user ${userId}:`);
+            console.log(`  minVolume=$${parseFloat(filters.minVolume).toLocaleString()}`);
+            console.log(`  minLiquidity=$${parseFloat(filters.minLiquidity || '0').toLocaleString()}`);
+            console.log(`  maxBidAskSpread=${filters.maxBidAskSpread}%`);
+            console.log(`  minPrice=$${filters.minPrice}`);
+            console.log(`  maxPrice=$${filters.maxPrice || 'unlimited'}`);
             
             // Initialize KrakenService
             const krakenService = new KrakenService();
             
-            // Query eligible pairs based on current filter settings
-            // Note: Some parameters use hardcoded defaults as they're not in screener_filters table
+            // Query eligible pairs using ONLY database values (no fallbacks)
             const eligiblePairs = await krakenService.getEligiblePairs({
-              minVolume: filters?.minVolume || '5000000',
+              minVolume: filters.minVolume,
               minDailyRange: '6.5', // Hardcoded: Not in screener_filters schema
-              minPrice: filters?.minPrice || '0.01',
-              maxPrice: filters?.maxPrice || undefined,
-              maxBidAskSpread: filters?.maxBidAskSpread || '1.00',
-              excludeStablecoins: filters?.excludeStablecoins ?? true,
+              minPrice: filters.minPrice,
+              maxPrice: filters.maxPrice || undefined,
+              maxBidAskSpread: filters.maxBidAskSpread,
+              excludeStablecoins: filters.excludeStablecoins ?? true,
               allowedTradingPairs: [], // No currency restrictions per user request
               blacklistedSymbols: [], // Hardcoded: Not in screener_filters schema
               whitelistedSymbols: [], // Hardcoded: Not in screener_filters schema
               minHistoryDays: 90, // Hardcoded: Not in screener_filters schema
-              volatilityMin: filters?.volatilityMin || undefined,
-              volatilityMax: filters?.volatilityMax || undefined,
+              volatilityMin: filters.volatilityMin || undefined,
+              volatilityMax: filters.volatilityMax || undefined,
             });
             
             if (eligiblePairs.length === 0) {
@@ -210,25 +222,6 @@ export async function startPaperSimulation(
           }
         } else {
           console.log(`[PaperSimService][AutoWatchlist] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
-        }
-        
-        // 2. Set default minVolume to 5,000,000 in screener filters
-        try {
-          const filters = await storage.getScreenerFilters({ userId, mode: 'paper' });
-          const currentMinVolume = filters?.minVolume ? parseFloat(filters.minVolume) : null;
-          
-          if (!currentMinVolume || currentMinVolume > 5000000) {
-            console.log(`[PaperSimService][Phase-27.F.17] Setting default minVolume to 5,000,000`);
-            await storage.upsertScreenerFilters({
-              userId,
-              mode: 'paper',
-              minVolume: '5000000'
-            });
-          } else {
-            console.log(`[PaperSimService][Phase-27.F.17] MinVolume already set to ${currentMinVolume} - keeping existing value`);
-          }
-        } catch (error) {
-          console.warn('[PaperSimService][Phase-27.F.17] Failed to set minVolume:', error);
         }
         
         // Phase 27.F.17b: State Persistence and Broadcast Verification
