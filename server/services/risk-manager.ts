@@ -369,7 +369,7 @@ export class RiskManager {
     
     const normalizedSymbol = normalizeSymbol(signal.symbol);
     
-    const existingPosition = activeTrades.find(trade => {
+    const existingPosition = activePositions.find(trade => {
       const tradeSymbol = normalizeSymbol(trade.symbol);
       return tradeSymbol === normalizedSymbol;
     });
