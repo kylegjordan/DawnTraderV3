@@ -183,7 +183,7 @@ export class RiskManager {
     }
 
     // Check 4: Risk per trade
-    const riskCheck = await this.checkRiskPerTrade(signal, settings);
+    const riskCheck = await this.checkRiskPerTrade(userId, signal, settings);
     if (!riskCheck.approved) {
       return riskCheck;
     }
@@ -228,12 +228,19 @@ export class RiskManager {
       const positionSize = riskAmount / stopDistance;
       const requiredCapital = positionSize * signal.entryPrice;
 
-      // In a real implementation, we'd get actual balance from Kraken
-      // For now, we'll assume sufficient balance if risk amount is reasonable
-      if (requiredCapital > 100000) { // Arbitrary large position check
+      // Phase 27.F.13.B: Load max capital requirement from guardrails instead of hardcoded value
+      const systemContext = await storage.getSystemContext(userId);
+      const mode = systemContext?.tradingMode || 'live'; // Default to live for this check
+      const guardrailsData = await storage.getGuardrails({ userId, mode });
+      
+      const maxCapital = guardrailsData?.maxRequiredCapital 
+        ? parseFloat(guardrailsData.maxRequiredCapital.toString())
+        : 100000; // Fallback only if guardrails not configured
+
+      if (requiredCapital > maxCapital) {
         return {
           approved: false,
-          reason: 'Position size too large for available balance'
+          reason: `Required capital ($${requiredCapital.toFixed(2)}) exceeds maximum allowed ($${maxCapital.toFixed(2)})`
         };
       }
 
@@ -247,6 +254,7 @@ export class RiskManager {
   }
 
   private async checkRiskPerTrade(
+    userId: string,
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
@@ -259,10 +267,19 @@ export class RiskManager {
       };
     }
 
-    if (riskAmount > 1000) { // Arbitrary upper limit
+    // Phase 27.F.13.B: Load max risk limit from guardrails instead of hardcoded value
+    const systemContext = await storage.getSystemContext(userId);
+    const mode = systemContext?.tradingMode || 'paper';
+    const guardrailsData = await storage.getGuardrails({ userId, mode });
+    
+    const maxRiskLimit = guardrailsData?.maxRiskPerTradeLimit 
+      ? parseFloat(guardrailsData.maxRiskPerTradeLimit.toString())
+      : 1000; // Fallback only if guardrails not configured
+
+    if (riskAmount > maxRiskLimit) {
       return {
         approved: false,
-        reason: 'Risk per trade exceeds maximum allowed'
+        reason: `Risk per trade ($${riskAmount.toFixed(2)}) exceeds maximum allowed ($${maxRiskLimit.toFixed(2)})`
       };
     }
 
