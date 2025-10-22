@@ -80,6 +80,25 @@ const PARAM_LABELS: Record<string, string> = {
   volumeRatio: "Volume Ratio (x)",
 };
 
+// Parameters that are percentages in the UI but decimal fractions in the backend
+const PERCENTAGE_PARAMS = new Set([
+  'riskPerTrade',
+  'pullbackPct',
+  'cPullbackPctMax',
+  'dBreakoutBufferPct',
+  'maxRangeWidth',
+  'breakoutBuffer',
+  'deviationThreshold',
+  'partialExitPercent',
+  'stopLossBuffer',
+  'minRangeWidth',
+  'entryZoneWidth',
+  'stopLossBeyond',
+  'vwapProximity',
+  'minVWAPSlope',
+  'maxTrapExtension',
+]);
+
 const PARAM_DESCRIPTIONS: Record<string, string> = {
   // Base common
   maxConcurrentPositions: "Maximum number of concurrent positions for this strategy (0-20)",
@@ -257,7 +276,15 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
 
   const handleEdit = () => {
     // Use existing settings or keep the auto-loaded Balanced preset
-    setFormData(settings?.params || formData);
+    const params = settings?.params || formData;
+    // Convert decimal fractions to percentages for UI display
+    const uiParams = { ...params };
+    Object.keys(uiParams).forEach(key => {
+      if (PERCENTAGE_PARAMS.has(key) && typeof uiParams[key] === 'number') {
+        uiParams[key] = uiParams[key] * 100;
+      }
+    });
+    setFormData(uiParams);
     setEditing(true);
     setValidationErrors({});
   };
@@ -269,11 +296,25 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   };
 
   const handleValidate = () => {
-    validateMutation.mutate(formData);
+    // Convert percentages to decimal fractions for validation
+    const backendParams = { ...formData };
+    Object.keys(backendParams).forEach(key => {
+      if (PERCENTAGE_PARAMS.has(key) && typeof backendParams[key] === 'number') {
+        backendParams[key] = backendParams[key] / 100;
+      }
+    });
+    validateMutation.mutate(backendParams);
   };
 
   const handleSave = () => {
-    saveMutation.mutate(formData);
+    // Convert percentages to decimal fractions for backend
+    const backendParams = { ...formData };
+    Object.keys(backendParams).forEach(key => {
+      if (PERCENTAGE_PARAMS.has(key) && typeof backendParams[key] === 'number') {
+        backendParams[key] = backendParams[key] / 100;
+      }
+    });
+    saveMutation.mutate(backendParams);
   };
 
   const handleReset = () => {
@@ -294,7 +335,14 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
       });
       return;
     }
-    setFormData(presets[selectedPreset]);
+    // Convert decimal fractions to percentages for UI display
+    const preset = { ...presets[selectedPreset] };
+    Object.keys(preset).forEach(key => {
+      if (PERCENTAGE_PARAMS.has(key) && typeof preset[key] === 'number') {
+        preset[key] = preset[key] * 100;
+      }
+    });
+    setFormData(preset);
     toast({
       title: "Preset Loaded",
       description: `${selectedPreset} preset loaded for ${strategy.name}. Click Save to apply.`,
@@ -366,8 +414,20 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     }
   };
 
+  // Helper function to convert params for UI display (decimal fractions -> percentages)
+  const convertParamsForDisplay = (params: Record<string, any>) => {
+    const displayParams = { ...params };
+    Object.keys(displayParams).forEach(key => {
+      if (PERCENTAGE_PARAMS.has(key) && typeof displayParams[key] === 'number') {
+        displayParams[key] = displayParams[key] * 100;
+      }
+    });
+    return displayParams;
+  };
+
   // Use Balanced preset values as fallback if no saved settings
-  const currentParams = editing ? formData : (settings?.params || formData || {});
+  const rawParams = editing ? formData : (settings?.params || formData || {});
+  const currentParams = editing ? rawParams : convertParamsForDisplay(rawParams);
   const paramKeys = Object.keys(currentParams);
 
   if (isLoading && !settings) {
