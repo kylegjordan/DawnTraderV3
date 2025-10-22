@@ -13129,6 +13129,39 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Kraken API Data Documentation Endpoint
+  apiRouter.get('/diagnostics/kraken-documentation', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { KrakenDataDocumenter } = await import('./services/kraken-data-documenter.js');
+      const documenter = new KrakenDataDocumenter();
+      
+      console.log('\n📊 Generating Kraken API Documentation...');
+      const report = await documenter.generateReport();
+      
+      // Append to replit.md
+      const fs = await import('fs');
+      const path = await import('path');
+      const replitMdPath = path.join(process.cwd(), 'replit.md');
+      
+      const timestamp = new Date().toISOString();
+      const section = `\n\n---\n\n# Kraken API & Filter Documentation\n*Generated: ${timestamp}*\n\n${report}\n`;
+      
+      fs.appendFileSync(replitMdPath, section);
+      
+      console.log('✅ Documentation appended to replit.md');
+      
+      res.json({
+        ok: true,
+        message: 'Kraken documentation generated and appended to replit.md',
+        reportLength: report.length,
+        timestamp
+      });
+    } catch (error: any) {
+      console.error('[Diagnostics] Kraken documentation generation failed:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

@@ -1,0 +1,85 @@
+🔧 Prompt for Replit AI
+
+The system is now stable, and the toggle, watchlist, and trading engine synchronization are working correctly.
+
+Next, I need three updates to complete the paper trading pipeline and ensure long-term autonomous operation.
+
+(1) Filter Insights Timing Update
+
+Make the Filter Insights refresh interval dependent on the MarketScanner cycle rather than a fixed timer.
+
+The MarketScanner runs every 10 minutes, so Filter Insights should update immediately after each scan completes.
+
+Update the countdown or “Next Scan” timer in the UI to display minutes/seconds (e.g., “Next Scan in 9 m 45 s”).
+
+Ensure the backend endpoints and frontend panel both use this shared schedule.
+
+(2) Data & Filter Documentation Task
+Please output to the console and append to replit.md a structured report that includes:
+
+A. All data collected from the Kraken API
+
+For every field, list the name, type (string / number / array / object), and description.
+
+Confirm whether we are receiving or deriving:
+
+open, high, low, close (OHLC)
+
+volume, VWAP, bid, ask, spread
+
+any computed indicators (RSI, volatility, ATR, etc.)
+
+Identify the Kraken endpoints in use (Ticker, OHLC, Assets, Trades, etc.).
+
+Clarify how market cap is handled — is it pulled directly, derived (price × supply), or currently unavailable?
+
+B. All active screener filters (from screener_filters table)
+
+List each filter, its logic, and the Kraken field(s) or derived metric(s) it depends on.
+
+Example:
+
+Min Volume ($) → uses v[1] from Ticker
+
+Max Bid-Ask Spread (%) → calculated from ask[0] and bid[0]
+
+Min Market Cap ($) → confirm if derived or static
+
+Mark which filters are active, inactive, or placeholders.
+
+Also, please print (or export to JSON) a short sample of the raw Kraken data for 3–5 pairs (BTCUSD, ETHUSD, ADAUSD, SOLUSD, XRPUSD) so we can verify field names and structures directly.
+
+(3) Safe Auto-Start Paper Trading Feature
+
+Implement an auto-start mechanism so the Paper Portfolio Manager and Paper Execution Engine start automatically when:
+
+The server boots or restarts AND
+
+The user has active trading settings with paper mode enabled AND
+
+The global kill-switch is not engaged.
+
+The engine should also auto-start if the MarketScanner finds eligible pairs > 0 and no simulation is currently running.
+
+Respect all safety conditions:
+
+If the kill switch is active → do not auto-start.
+
+If trading was manually stopped → do not restart automatically until the next manual toggle.
+
+Log every auto-start event clearly, e.g. [AutoStart] Paper Trading Engine activated for 3 users with eligible pairs.
+
+Include the corresponding auto-stop logic if the kill switch triggers or a critical error occurs.
+
+Deliverables
+
+Filter Insights refresh now synchronized to the 10-minute MarketScanner cycle.
+
+Complete structured table in console + replit.md showing:
+• All Kraken fields and types
+• Which filters use which fields
+• Derived vs direct metrics and market cap status
+
+Safe auto-start and auto-stop logic implemented for paper trading, respecting user toggles and kill switches.
+
+Confirm that the system will continue its 10-minute scanner / 10-second execution cycle indefinitely until manually stopped or the kill switch activates.

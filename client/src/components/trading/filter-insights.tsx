@@ -75,18 +75,18 @@ export function FilterInsights() {
   const [nextAutoRefresh, setNextAutoRefresh] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(Date.now()); // Phase 27.F.19: Ticking state for countdown
 
-  // Query filter insights with 30-minute refresh interval
+  // Query filter insights synchronized to MarketScanner 10-minute cycle
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
     queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'],
-    staleTime: 30 * 60 * 1000, // 30 minutes
-    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes - matches MarketScanner cycle
+    refetchInterval: 10 * 60 * 1000, // Auto-refresh every 10 minutes
   });
 
-  // Query for threshold values with 30-minute refresh
+  // Query for threshold values synchronized to 10-minute cycle
   const { data: diagnosticsData } = useQuery<FilterDiagnosticsResponse>({
     queryKey: ['/api/filters/diagnostics'],
-    staleTime: 30 * 60 * 1000, // 30 minutes
-    refetchInterval: 30 * 60 * 1000, // Auto-refresh every 30 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes - matches MarketScanner cycle
+    refetchInterval: 10 * 60 * 1000, // Auto-refresh every 10 minutes
   });
 
   // Phase 27.F.19: Listen for scan_complete WebSocket events

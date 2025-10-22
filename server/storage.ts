@@ -179,7 +179,10 @@ import {
   walterActions,
   type ExecutionConfig,
   type InsertExecutionConfig,
-  executionConfig
+  executionConfig,
+  type SystemAlert,
+  type InsertSystemAlert,
+  systemAlerts
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -572,6 +575,9 @@ export interface IStorage {
   getExecutionConfig(userId: string, mode: 'live' | 'paper', actionType: string): Promise<ExecutionConfig | undefined>;
   upsertExecutionConfig(config: InsertExecutionConfig): Promise<ExecutionConfig>;
   deleteExecutionConfig(id: string): Promise<void>;
+  
+  // System Alert methods (OpenAI Rate Limiter)
+  createSystemAlert(alert: InsertSystemAlert): Promise<SystemAlert>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -3331,6 +3337,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(executionConfig.id, id));
     
     console.log(`[ExecutionConfig] Deleted config ${id}`);
+  }
+  
+  // System Alert methods (OpenAI Rate Limiter)
+  async createSystemAlert(alert: InsertSystemAlert): Promise<SystemAlert> {
+    const [created] = await db
+      .insert(systemAlerts)
+      .values(alert)
+      .returning();
+    
+    console.log(`[SystemAlert] Created ${alert.severity} alert for user ${alert.userId}: ${alert.alertType}`);
+    return created;
   }
 }
 
