@@ -62,6 +62,7 @@ export default function ScreenerFiltersTab() {
   const [filters, setFilters] = useState<Partial<ScreenerFilters>>(DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const initialized = useRef(false);
   const lastMode = useRef(mode);
 
@@ -149,16 +150,28 @@ export default function ScreenerFiltersTab() {
   });
 
   const handleChange = (field: string, value: string | number | boolean) => {
-    let processedValue: number | boolean;
     if (typeof value === 'boolean') {
-      processedValue = value;
+      setFilters(prev => ({ ...prev, [field]: value }));
     } else if (typeof value === 'string') {
-      processedValue = parseCommaFormattedNumber(value);
-    } else {
-      processedValue = value;
+      // Store raw string value while editing
+      setRawInputValues(prev => ({ ...prev, [field]: value }));
     }
-    setFilters(prev => ({ ...prev, [field]: processedValue }));
     setHasChanges(true);
+  };
+
+  const handleBlur = (field: string) => {
+    const rawValue = rawInputValues[field];
+    if (rawValue !== undefined) {
+      const numValue = parseCommaFormattedNumber(rawValue);
+      setFilters(prev => ({ ...prev, [field]: numValue }));
+      // Clear raw value after parsing
+      setRawInputValues(prev => {
+        const newValues = { ...prev };
+        delete newValues[field];
+        return newValues;
+      });
+    }
+    setFocusedField(null);
   };
 
   const handleSave = () => {
