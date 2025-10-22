@@ -149,6 +149,7 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
   const [presets, setPresets] = useState<Record<string, any>>({});
   const [selectedPreset, setSelectedPreset] = useState<string>("");
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Fetch strategy settings - enable refetch on window focus for fresh state
   const { data: settings, isLoading } = useQuery<StrategySettings>({
@@ -468,8 +469,10 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
                   <Input
                     id={`${strategy.id}-${key}`}
                     type="text"
-                    value={formatNumberWithCommas(currentParams[key] ?? '')}
+                    value={focusedField === `${strategy.id}-${key}` ? (currentParams[key] ?? '') : formatNumberWithCommas(currentParams[key] ?? '')}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
+                    onFocus={() => setFocusedField(`${strategy.id}-${key}`)}
+                    onBlur={() => setFocusedField(null)}
                     className={validationErrors[key] ? "border-red-500" : ""}
                     data-testid={`input-${strategy.id}-${key}`}
                   />
