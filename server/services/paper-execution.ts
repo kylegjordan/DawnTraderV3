@@ -196,6 +196,7 @@ export class PaperExecutionService {
       // Update trade
       const updatedTrade = await storage.updatePaperTrade(tradeId, {
         status: 'closed',
+        exitTime: new Date(),
         exitPrice: actualExitPrice.toString(),
         exitFee: exitFee.toString(),
         exitSlippage: exitSlippagePercent.toString(),
@@ -205,7 +206,6 @@ export class PaperExecutionService {
         metadata: {
           ...(trade.metadata as Record<string, any> || {}),
           closeReason: reason,
-          closedAt: new Date().toISOString(),
           actualExitPrice,
           exitSlippageApplied: exitSlippagePercent,
         }
