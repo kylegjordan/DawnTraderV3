@@ -1740,6 +1740,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Trading Signals (Ready-to-Buy opportunities)
+  apiRouter.get('/trading-signals', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.mode!;
+      const { status } = req.query;
+      
+      const signals = await storage.getTradingSignals({ 
+        userId, 
+        mode, 
+        status: status as string | undefined 
+      });
+      
+      res.json(signals);
+    } catch (error) {
+      console.error('Error fetching trading signals:', error);
+      res.status(500).json({ error: 'Failed to fetch trading signals' });
+    }
+  });
+
   // Market Data
   apiRouter.get('/market/overview', async (req: AuthenticatedRequest, res) => {
     try {
