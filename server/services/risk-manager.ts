@@ -354,6 +354,8 @@ export class RiskManager {
   /**
    * Task 8 Safety Guardrail: Position size cap
    * Prevents oversized positions (max 10% of portfolio per position)
+   * 
+   * Phase 27.F.13.A: Fixed to use actual paper balance from portfolio_state instead of settings.portfolioValue
    */
   private async checkPositionSizeCap(
     userId: string,
@@ -370,12 +372,30 @@ export class RiskManager {
     const positionSize = riskAmount / stopDistance;
     const positionValue = positionSize * signal.entryPrice;
 
-    // Get portfolio value - prefer settings.portfolioValue, fallback to metrics
-    let portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 0;
+    // Phase 27.F.13.A FIX: Get actual portfolio value from portfolio_state table
+    // For paper trading, this will be the real balance (e.g., $800), not the settings value ($50k)
+    let portfolioValue = 0;
     
+    // Try to get current trading mode from system_context
+    const systemContext = await storage.getSystemContext({ userId });
+    const mode = systemContext?.tradingMode || 'paper';
+    
+    // Get actual balance from portfolio_state table
+    const portfolioState = await storage.getPortfolioState({ userId, mode });
+    if (portfolioState?.balance) {
+      portfolioValue = parseFloat(portfolioState.balance as string);
+      console.log(`[Position Size Cap] Using actual ${mode} balance from portfolio_state: $${portfolioValue.toFixed(2)}`);
+    } else {
+      // Fallback to settings.portfolioValue if portfolio_state not available
+      portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 0;
+      console.log(`[Position Size Cap] Fallback to settings.portfolioValue: $${portfolioValue.toFixed(2)}`);
+    }
+    
+    // Final fallback if still zero
     if (portfolioValue === 0) {
       const metrics = await this.getPortfolioMetrics(userId);
       portfolioValue = metrics.totalValue || 50000;
+      console.log(`[Position Size Cap] Final fallback to metrics: $${portfolioValue.toFixed(2)}`);
     }
     
     // Maximum single position: dynamically configured (default 10% of portfolio)
@@ -383,7 +403,7 @@ export class RiskManager {
     const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
     const positionPercent = (positionValue / portfolioValue) * 100;
 
-    console.log(`[Position Size Cap] Risk=${riskAmount}, Stop=${stopDistance}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
+    console.log(`[Position Size Cap] Mode=${mode}, Risk=${riskAmount}, Stop=${stopDistance}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
 
     if (positionPercent > maxPositionPercent) {
       return {
