@@ -1,6 +1,6 @@
 import { storage } from '../storage';
 import { RiskManager } from './risk-manager';
-import { PaperTrade, TradingSettings, InsertPaperTrade } from '@shared/schema';
+import { PaperSimTrade, PaperSimOpenPosition, TradingSettings, InsertPaperSimTrade, InsertPaperSimOpenPosition, InsertPaperSimTradeLog } from '@shared/schema';
 import { nanoid } from 'nanoid';
 
 export interface TradeSignal {
@@ -45,7 +45,7 @@ export class PaperExecutionService {
     console.log(`[PaperExecution:${this.userId}] Service stopped`);
   }
 
-  async processSignal(signal: TradeSignal): Promise<PaperTrade | null> {
+  async processSignal(signal: TradeSignal): Promise<PaperSimTrade | null> {
     if (!this.isRunning) {
       console.log('[PaperExecution] Service is stopped, ignoring signal');
       return null;
@@ -60,7 +60,7 @@ export class PaperExecutionService {
         throw new Error('Trading settings not found');
       }
 
-      // Pre-trade risk checks
+      // Pre-trade risk checks (Phase 27.F.13.A: Now uses actual balance from portfolio_state)
       const riskCheck = await this.riskManager.checkPreTradeRisk(
         this.userId,
         signal,
@@ -69,6 +69,23 @@ export class PaperExecutionService {
 
       if (!riskCheck.approved) {
         console.log(`[PaperExecution] Trade rejected: ${riskCheck.reason}`);
+        
+        // Log rejection to paper_sim_trade_logs
+        await storage.createPaperSimTradeLog({
+          userId: this.userId,
+          tradeId: null,
+          positionId: null,
+          eventType: 'risk_rejected',
+          message: `Signal rejected: ${riskCheck.reason}`,
+          metadata: {
+            symbol: signal.symbol,
+            strategy: signal.strategy,
+            entryPrice: signal.entryPrice,
+            stopPrice: signal.stopPrice,
+            confidence: signal.confidence,
+          }
+        });
+        
         return null;
       }
 
@@ -77,13 +94,28 @@ export class PaperExecutionService {
       const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
       const quantity = riskAmount / stopDistance;
 
-      // Simulate trade execution
+      // Simulate trade execution (Milestone 18: Now writes to paper_sim_trades + paper_sim_open_positions)
       const trade = await this.simulateExecution(signal, quantity, riskAmount, settings);
       
       console.log(`[PaperExecution] Simulated trade created: ${trade.id} for ${signal.symbol}`);
       return trade;
     } catch (error) {
       console.error('[PaperExecution] Error processing trade signal:', error);
+      
+      // Log error
+      await storage.createPaperSimTradeLog({
+        userId: this.userId,
+        tradeId: null,
+        positionId: null,
+        eventType: 'error',
+        message: `Error processing signal: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        metadata: {
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          error: error instanceof Error ? error.stack : String(error),
+        }
+      });
+      
       return null;
     }
   }
@@ -93,7 +125,7 @@ export class PaperExecutionService {
     quantity: number,
     riskAmount: number,
     settings: TradingSettings
-  ): Promise<PaperTrade> {
+  ): Promise<PaperSimTrade> {
     // Simulate latency
     if (this.config.latencyMs > 0) {
       await new Promise(resolve => setTimeout(resolve, this.config.latencyMs));
@@ -107,29 +139,32 @@ export class PaperExecutionService {
     // Calculate entry fee
     const entryNotional = actualEntryPrice * quantity;
     const entryFee = (entryNotional * this.config.feeRate) / 100;
+    const slippageAmount = (actualEntryPrice - signal.entryPrice) * quantity;
 
     // Adjust stop and target prices for slippage
     const adjustedStopPrice = signal.stopPrice * slippageMultiplier;
     const adjustedTargetPrice = signal.targetPrice * slippageMultiplier;
 
-    // Generate simulated order ID
-    const simulatedOrderId = `SIM-${nanoid(12)}`;
-
-    // Create paper trade record
-    const paperTradeData: InsertPaperTrade = {
+    // Phase 27.F.13.A: Migrate to Milestone 18 paper_sim_trades table
+    // Create paper_sim_trades record (historical ledger - will be closed later)
+    const paperSimTradeData: InsertPaperSimTrade = {
       userId: this.userId,
       symbol: signal.symbol,
-      strategy: signal.strategy,
-      status: 'open',
-      entryPrice: actualEntryPrice.toString(),
+      strategyName: signal.strategy,
+      side: 'buy', // Long-only trading
       quantity: quantity.toString(),
-      stopPrice: adjustedStopPrice.toString(),
-      targetPrice: adjustedTargetPrice.toString(),
-      simulatedOrderId,
-      entryFee: entryFee.toString(),
-      entrySlippage: slippagePercent.toString(),
-      simulatedLatencyMs: this.config.latencyMs,
-      riskAmount: riskAmount.toString(),
+      entryPrice: actualEntryPrice.toString(),
+      exitPrice: null, // Will be set when position closes
+      stopLoss: adjustedStopPrice.toString(),
+      takeProfit: adjustedTargetPrice.toString(),
+      pnl: null, // Will be calculated on close
+      pnlPercent: null,
+      fees: entryFee.toString(),
+      slippage: slippageAmount.toString(),
+      openedAt: new Date(),
+      closedAt: null, // Open position
+      closeReason: null,
+      confidence: signal.confidence ? signal.confidence.toString() : null,
       metadata: {
         ...(signal.metadata || {}),
         simulation: {
@@ -139,14 +174,60 @@ export class PaperExecutionService {
           appliedSlippageBps: this.config.slippageBps,
           appliedLatencyMs: this.config.latencyMs,
           simulationTimestamp: new Date().toISOString(),
+          riskAmount,
         }
       }
     };
 
-    // Store in paper_trades table
-    const trade = await storage.createPaperTrade(paperTradeData);
+    // Store in paper_sim_trades table
+    const trade = await storage.createPaperSimTrade(paperSimTradeData);
     
-    console.log(`[PaperExecution] Simulated fill: ${quantity} ${signal.symbol} @ ${actualEntryPrice} (slippage: ${slippagePercent.toFixed(4)}%)`);
+    // Also create entry in paper_sim_open_positions for active tracking
+    const openPositionData: InsertPaperSimOpenPosition = {
+      userId: this.userId,
+      symbol: signal.symbol,
+      strategyName: signal.strategy,
+      side: 'buy',
+      quantity: quantity.toString(),
+      avgPrice: actualEntryPrice.toString(),
+      currentPrice: actualEntryPrice.toString(),
+      stopLoss: adjustedStopPrice.toString(),
+      takeProfit: adjustedTargetPrice.toString(),
+      unrealizedPnl: (-entryFee).toString(), // Start with negative due to entry fees
+      unrealizedPnlPercent: ((-entryFee / entryNotional) * 100).toString(),
+      confidence: signal.confidence ? signal.confidence.toString() : null,
+      metadata: {
+        tradeId: trade.id, // Link to paper_sim_trades record
+        entryFee,
+        slippageAmount,
+        riskAmount,
+      }
+    };
+
+    const position = await storage.createPaperSimOpenPosition(openPositionData);
+
+    // Log the position opening
+    await storage.createPaperSimTradeLog({
+      userId: this.userId,
+      tradeId: trade.id,
+      positionId: position.id,
+      eventType: 'position_opened',
+      message: `Opened ${signal.strategy} position: ${quantity.toFixed(4)} ${signal.symbol} @ $${actualEntryPrice.toFixed(2)}`,
+      metadata: {
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        quantity,
+        entryPrice: actualEntryPrice,
+        stopLoss: adjustedStopPrice,
+        takeProfit: adjustedTargetPrice,
+        confidence: signal.confidence,
+        entryFee,
+        slippagePercent,
+        slippageAmount,
+      }
+    });
+    
+    console.log(`[PaperExecution] Simulated fill: ${quantity.toFixed(4)} ${signal.symbol} @ ${actualEntryPrice.toFixed(2)} (slippage: ${slippagePercent.toFixed(4)}%, fee: $${entryFee.toFixed(2)})`);
 
     return trade;
   }
@@ -155,16 +236,16 @@ export class PaperExecutionService {
     tradeId: string, 
     exitPrice: number, 
     reason: 'stop' | 'target' | 'manual'
-  ): Promise<PaperTrade | null> {
+  ): Promise<PaperSimTrade | null> {
     try {
-      const trade = await storage.getPaperTradeById(tradeId);
+      const trade = await storage.getPaperSimTrade(tradeId);
       if (!trade) {
         console.error(`[PaperExecution] Trade ${tradeId} not found`);
         return null;
       }
 
-      if (trade.status !== 'open') {
-        console.error(`[PaperExecution] Trade ${tradeId} is already ${trade.status}`);
+      if (trade.closedAt) {
+        console.error(`[PaperExecution] Trade ${tradeId} is already closed`);
         return null;
       }
 
@@ -184,48 +265,104 @@ export class PaperExecutionService {
       // Calculate exit fee
       const exitNotional = actualExitPrice * parseFloat(trade.quantity);
       const exitFee = (exitNotional * this.config.feeRate) / 100;
+      const exitSlippageAmount = (actualExitPrice - exitPrice) * parseFloat(trade.quantity);
 
       // Calculate P&L
       const entryNotional = parseFloat(trade.entryPrice) * parseFloat(trade.quantity);
       const grossPL = exitNotional - entryNotional;
-      const totalFees = parseFloat(trade.entryFee || '0') + exitFee;
+      const entryFees = parseFloat(trade.fees || '0');
+      const totalFees = entryFees + exitFee;
       const realizedPL = grossPL - totalFees;
       const realizedPLPercent = (realizedPL / entryNotional) * 100;
-      const realizedPLR = realizedPL / parseFloat(trade.riskAmount || '0');
 
-      // Update trade
-      const updatedTrade = await storage.updatePaperTrade(tradeId, {
-        status: 'closed',
-        exitTime: new Date(),
+      // Map reason to closeReason
+      const closeReasonMap = {
+        'stop': 'stop_hit',
+        'target': 'target_hit',
+        'manual': 'manual'
+      };
+
+      // Update trade in paper_sim_trades
+      const updatedTrade = await storage.updatePaperSimTrade(tradeId, {
         exitPrice: actualExitPrice.toString(),
-        exitFee: exitFee.toString(),
-        exitSlippage: exitSlippagePercent.toString(),
-        realizedPL: realizedPL.toString(),
-        realizedPLPercent: realizedPLPercent.toString(),
-        realizedPLR: realizedPLR.toString(),
+        closedAt: new Date(),
+        closeReason: closeReasonMap[reason],
+        pnl: realizedPL.toString(),
+        pnlPercent: realizedPLPercent.toString(),
+        fees: totalFees.toString(),
+        slippage: (parseFloat(trade.slippage || '0') + exitSlippageAmount).toString(),
         metadata: {
           ...(trade.metadata as Record<string, any> || {}),
-          closeReason: reason,
-          actualExitPrice,
-          exitSlippageApplied: exitSlippagePercent,
+          exit: {
+            exitFee,
+            exitSlippagePercent,
+            exitSlippageAmount,
+            actualExitPrice,
+            closedTimestamp: new Date().toISOString(),
+          }
         }
       });
 
-      console.log(`[PaperExecution] Closed trade ${tradeId}: ${trade.symbol} @ ${actualExitPrice} (P&L: $${realizedPL.toFixed(2)}, ${realizedPLR.toFixed(2)}R)`);
+      // Find and delete the corresponding open position
+      const openPositions = await storage.getPaperSimOpenPositions(this.userId);
+      const matchingPosition = openPositions.find(p => 
+        (p.metadata as any)?.tradeId === tradeId
+      );
+
+      if (matchingPosition) {
+        await storage.deletePaperSimOpenPosition(matchingPosition.id);
+      }
+
+      // Log the position closing
+      await storage.createPaperSimTradeLog({
+        userId: this.userId,
+        tradeId,
+        positionId: matchingPosition?.id || null,
+        eventType: 'position_closed',
+        message: `Closed ${trade.strategyName} position: ${trade.symbol} @ $${actualExitPrice.toFixed(2)} (${reason}) - P&L: $${realizedPL.toFixed(2)} (${realizedPLPercent > 0 ? '+' : ''}${realizedPLPercent.toFixed(2)}%)`,
+        metadata: {
+          symbol: trade.symbol,
+          strategy: trade.strategyName,
+          quantity: parseFloat(trade.quantity),
+          entryPrice: parseFloat(trade.entryPrice),
+          exitPrice: actualExitPrice,
+          pnl: realizedPL,
+          pnlPercent: realizedPLPercent,
+          reason,
+          exitFee,
+          exitSlippagePercent,
+          totalFees,
+        }
+      });
+
+      console.log(`[PaperExecution] Closed trade ${tradeId}: ${trade.symbol} @ ${actualExitPrice.toFixed(2)} (P&L: $${realizedPL.toFixed(2)}, ${realizedPLPercent > 0 ? '+' : ''}${realizedPLPercent.toFixed(2)}%)`);
 
       return updatedTrade;
     } catch (error) {
       console.error(`[PaperExecution] Error closing trade ${tradeId}:`, error);
+      
+      // Log error
+      await storage.createPaperSimTradeLog({
+        userId: this.userId,
+        tradeId,
+        positionId: null,
+        eventType: 'error',
+        message: `Error closing trade: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        metadata: {
+          error: error instanceof Error ? error.stack : String(error),
+        }
+      });
+      
       return null;
     }
   }
 
-  async getAllOpenTrades(): Promise<PaperTrade[]> {
-    return storage.getOpenPaperTrades(this.userId);
+  async getAllOpenTrades(): Promise<PaperSimOpenPosition[]> {
+    return storage.getPaperSimOpenPositions(this.userId);
   }
 
-  async getAllTrades(): Promise<PaperTrade[]> {
-    return storage.getAllPaperTrades(this.userId);
+  async getAllTrades(): Promise<PaperSimTrade[]> {
+    return storage.getPaperSimTrades(this.userId);
   }
 
   updateConfig(config: Partial<PaperConfig>): void {

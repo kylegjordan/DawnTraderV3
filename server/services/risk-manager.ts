@@ -1,5 +1,5 @@
 import { storage } from '../storage';
-import { TradingSettings } from '@shared/schema';
+import { TradingSettings, PaperSimOpenPosition } from '@shared/schema';
 import { TradeSignal } from './trading-engine';
 import { KrakenService } from './kraken';
 import { marketDataService } from './market-data';
@@ -19,6 +19,14 @@ interface BalanceCache {
   error?: string;
 }
 
+// Helper interface to unify live trades and paper positions
+interface ActivePosition {
+  symbol: string;
+  quantity: string;
+  entryPrice: string;
+  avgPrice?: string;
+}
+
 export class RiskManager {
   private krakenService: KrakenService;
   private assetCapabilitiesService: AssetCapabilitiesService;
@@ -28,6 +36,36 @@ export class RiskManager {
   constructor() {
     this.krakenService = new KrakenService();
     this.assetCapabilitiesService = new AssetCapabilitiesService();
+  }
+
+  /**
+   * Phase 27.F.13.A: Get active positions from correct table based on trading mode
+   * Live mode: reads from trades table
+   * Paper mode: reads from paper_sim_open_positions table
+   */
+  private async getActivePositions(userId: string): Promise<ActivePosition[]> {
+    // Get current trading mode from system_context
+    const systemContext = await storage.getSystemContext(userId);
+    const mode = systemContext?.tradingMode || 'paper';
+
+    if (mode === 'paper') {
+      // Milestone 18: Use paper_sim_open_positions for paper trading
+      const paperPositions = await storage.getPaperSimOpenPositions(userId);
+      return paperPositions.map(p => ({
+        symbol: p.symbol,
+        quantity: p.quantity,
+        entryPrice: p.avgPrice, // Use avgPrice for paper positions
+        avgPrice: p.avgPrice,
+      }));
+    } else {
+      // Live mode: Use legacy trades table
+      const activeTrades = await storage.getActiveTrades(userId);
+      return activeTrades.map(t => ({
+        symbol: t.symbol,
+        quantity: t.quantity,
+        entryPrice: t.entryPrice,
+      }));
+    }
   }
 
   /**
@@ -236,12 +274,12 @@ export class RiskManager {
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
-    const activeTrades = await storage.getActiveTrades(userId);
+    const activePositions = await this.getActivePositions(userId);
     const maxExposurePercent = parseFloat(settings.maxExposurePercent || '0');
 
     // Calculate current exposure
     let currentExposure = 0;
-    for (const trade of activeTrades) {
+    for (const trade of activePositions) {
       const tradeValue = parseFloat(trade.entryPrice) * parseFloat(trade.quantity);
       currentExposure += tradeValue;
     }
@@ -252,15 +290,33 @@ export class RiskManager {
     const positionSize = riskAmount / stopDistance;
     const newTradeValue = positionSize * signal.entryPrice;
 
-    // Assume a portfolio value (in a real system, this would be actual balance)
-    const assumedPortfolioValue = 50000; // This should come from actual balance
+    // Phase 27.F.13.A FIX: Get actual portfolio value from portfolio_state table
+    let portfolioValue = 0;
+    
+    // Get current trading mode from system_context
+    const systemContext = await storage.getSystemContext(userId);
+    const mode = systemContext?.tradingMode || 'paper';
+    
+    // Get actual balance from portfolio_state table
+    const portfolioState = await storage.getPortfolioState({ userId, mode });
+    if (portfolioState?.balance) {
+      portfolioValue = parseFloat(portfolioState.balance as string);
+      console.log(`[MaxExposure] Using actual ${mode} balance from portfolio_state: $${portfolioValue.toFixed(2)}`);
+    } else {
+      // Fallback to settings.portfolioValue if portfolio_state not available
+      portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 50000;
+      console.log(`[MaxExposure] Fallback to settings: $${portfolioValue.toFixed(2)}`);
+    }
+    
     const totalExposure = currentExposure + newTradeValue;
-    const exposurePercent = (totalExposure / assumedPortfolioValue) * 100;
+    const exposurePercent = (totalExposure / portfolioValue) * 100;
+
+    console.log(`[MaxExposure] Mode=${mode}, Current=$${currentExposure.toFixed(0)}, New=$${newTradeValue.toFixed(0)}, Total=$${totalExposure.toFixed(0)} (${exposurePercent.toFixed(1)}% of $${portfolioValue.toFixed(0)}), Max=${maxExposurePercent}%`);
 
     if (exposurePercent > maxExposurePercent) {
       return {
         approved: false,
-        reason: `Total exposure (${exposurePercent.toFixed(1)}%) would exceed maximum allowed (${maxExposurePercent}%)`
+        reason: `Total exposure (${exposurePercent.toFixed(1)}% = $${totalExposure.toFixed(2)}) would exceed maximum allowed (${maxExposurePercent}% = $${(portfolioValue * maxExposurePercent / 100).toFixed(2)})`
       };
     }
 
@@ -271,10 +327,10 @@ export class RiskManager {
     userId: string,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
-    const activeTrades = await storage.getActiveTrades(userId);
+    const activePositions = await this.getActivePositions(userId);
     const maxOpenTrades = settings.maxOpenTrades || 0;
 
-    if (activeTrades.length >= maxOpenTrades) {
+    if (activePositions.length >= maxOpenTrades) {
       return {
         approved: false,
         reason: `Maximum open trades limit reached (${maxOpenTrades})`
@@ -292,7 +348,7 @@ export class RiskManager {
     userId: string,
     signal: TradeSignal
   ): Promise<RiskCheckResult> {
-    const activeTrades = await storage.getActiveTrades(userId);
+    const activePositions = await this.getActivePositions(userId);
     
     // Extract base asset from symbol - handles all Kraken variants
     // Kraken uses: XXBTZUSD (double prefix), XBTUSD, XBT/USD, BTC/USD
@@ -377,7 +433,7 @@ export class RiskManager {
     let portfolioValue = 0;
     
     // Try to get current trading mode from system_context
-    const systemContext = await storage.getSystemContext({ userId });
+    const systemContext = await storage.getSystemContext(userId);
     const mode = systemContext?.tradingMode || 'paper';
     
     // Get actual balance from portfolio_state table
@@ -616,12 +672,12 @@ export class RiskManager {
       sum + parseFloat(trade.realizedPL || '0'), 0
     );
     
-    // Get active trades
-    const activeTrades = await storage.getActiveTrades(userId);
+    // Get active positions (Phase 27.F.13.A: Mode-aware)
+    const activePositions = await this.getActivePositions(userId);
     
     // Calculate unrealized P/L (simplified - in reality would need current market prices)
     let unrealizedPL = 0;
-    // TODO: Fetch current market prices and calculate unrealized P/L for active trades
+    // TODO: Fetch current market prices and calculate unrealized P/L for active positions
     
     const totalPL = realizedPL + unrealizedPL;
     
@@ -738,31 +794,66 @@ export class RiskManager {
 
   /**
    * Close all open trades (called when kill switch triggers)
+   * Phase 27.F.13.A: Mode-aware - closes positions from correct table
    */
   private async closeAllTrades(userId: string): Promise<any[]> {
-    const activeTrades = await storage.getActiveTrades(userId);
+    // Get current trading mode
+    const systemContext = await storage.getSystemContext(userId);
+    const mode = systemContext?.tradingMode || 'paper';
+    
     const closedTrades = [];
     
-    console.log(`   Closing ${activeTrades.length} open trades...`);
-    
-    for (const trade of activeTrades) {
-      try {
-        // Get current market price (simplified - would need real-time price)
-        const exitPrice = parseFloat(trade.entryPrice) * 0.99; // Simulate 1% loss
-        
-        // Close the trade
-        const closed = await storage.closeTrade(trade.id, exitPrice, 0, 0);
-        closedTrades.push({
-          symbol: trade.symbol,
-          strategy: trade.strategy,
-          entryPrice: trade.entryPrice,
-          exitPrice: exitPrice.toString(),
-          pnl: closed.realizedPL
-        });
-        
-        console.log(`   ✓ Closed ${trade.symbol}: ${closed.realizedPL}`);
-      } catch (error) {
-        console.error(`   ✗ Failed to close ${trade.symbol}:`, error);
+    if (mode === 'paper') {
+      // Close paper positions
+      const paperPositions = await storage.getPaperSimOpenPositions(userId);
+      console.log(`   Closing ${paperPositions.length} open paper positions...`);
+      
+      for (const position of paperPositions) {
+        try {
+          // Get current market price (simplified - would need real-time price)
+          const exitPrice = parseFloat(position.currentPrice || position.avgPrice) * 0.99; // Simulate 1% loss
+          
+          // For paper mode, we'd need to call paper trading close logic
+          // For now, just delete the position (simplified)
+          await storage.deletePaperSimOpenPosition(position.id);
+          
+          closedTrades.push({
+            symbol: position.symbol,
+            strategy: position.strategyName,
+            entryPrice: position.avgPrice,
+            exitPrice: exitPrice.toString(),
+            pnl: '-' // Would need to calculate
+          });
+          
+          console.log(`   ✓ Closed paper position ${position.symbol}`);
+        } catch (error) {
+          console.error(`   ✗ Failed to close ${position.symbol}:`, error);
+        }
+      }
+    } else {
+      // Close live trades
+      const activeTrades = await storage.getActiveTrades(userId);
+      console.log(`   Closing ${activeTrades.length} open live trades...`);
+      
+      for (const trade of activeTrades) {
+        try {
+          // Get current market price (simplified - would need real-time price)
+          const exitPrice = parseFloat(trade.entryPrice) * 0.99; // Simulate 1% loss
+          
+          // Close the trade
+          const closed = await storage.closeTrade(trade.id, exitPrice, 0, 0);
+          closedTrades.push({
+            symbol: trade.symbol,
+            strategy: trade.strategy,
+            entryPrice: trade.entryPrice,
+            exitPrice: exitPrice.toString(),
+            pnl: closed.realizedPL
+          });
+          
+          console.log(`   ✓ Closed ${trade.symbol}: ${closed.realizedPL}`);
+        } catch (error) {
+          console.error(`   ✗ Failed to close ${trade.symbol}:`, error);
+        }
       }
     }
     
@@ -895,11 +986,11 @@ export class RiskManager {
     cashPercent: number;
     cryptoPercent: number;
   }> {
-    const activeTrades = await storage.getActiveTrades(userId);
+    const activePositions = await this.getActivePositions(userId);
     const metrics = await this.getPortfolioMetrics(userId);
     
-    const cryptoValue = activeTrades.reduce((sum, trade) => {
-      return sum + (parseFloat(trade.entryPrice) * parseFloat(trade.quantity));
+    const cryptoValue = activePositions.reduce((sum, position) => {
+      return sum + (parseFloat(position.entryPrice) * parseFloat(position.quantity));
     }, 0);
     
     const totalValue = metrics.totalValue || 50000;
