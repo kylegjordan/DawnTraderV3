@@ -107,7 +107,8 @@ export class PaperSimDiagnosticService {
     const minPrice = screenerSettings.minPrice ? parseFloat(screenerSettings.minPrice) : 0.01;
     const maxBidAskSpread = screenerSettings.maxBidAskSpread ? parseFloat(screenerSettings.maxBidAskSpread) : 1.00;
     const excludeStablecoins = screenerSettings.excludeStablecoins ?? true;
-    const allowedQuotes = tradingSettings.allowedTradingPairs || ['USD', 'USDT'];
+    // Phase 27.F.13.B: No currency restrictions per user request
+    const allowedQuotes = tradingSettings.allowedTradingPairs || [];
     const blacklist = normalizeSymbolArray(tradingSettings.blacklistedSymbols);
     const whitelist = normalizeSymbolArray(tradingSettings.whitelistedSymbols);
     const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'GUSD', 'USDD', 'FRAX', 'LUSD'];
@@ -171,8 +172,8 @@ export class PaperSimDiagnosticService {
         rejectReason = 'failed_blacklist';
       }
 
-      // Filter 3: Quote currency (use normalized quote)
-      if (!rejected && !allowedQuotes.includes(normalizedQuote)) {
+      // Filter 3: Quote currency (use normalized quote) - Phase 27.F.13.B: Empty array means no restrictions
+      if (!rejected && allowedQuotes.length > 0 && !allowedQuotes.includes(normalizedQuote)) {
         breakdown.failed_quote_currency++;
         rejected = true;
         rejectReason = 'failed_quote_currency';

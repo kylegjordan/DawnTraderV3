@@ -659,8 +659,8 @@ export class KrakenService {
     const maxPrice = settings.maxPrice ? parseFloat(settings.maxPrice) : undefined;
     const maxBidAskSpread = parseFloat(settings.maxBidAskSpread || '1.00');
     const excludeStablecoins = settings.excludeStablecoins ?? true;
-    // Phase 27.F.13.B: Allow Kraken's quote currencies (ZUSD, ZEUR) and standard formats
-    const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT', 'ZUSD', 'ZEUR'];
+    // Phase 27.F.13.B: Quote currency filter disabled - accept all currencies
+    const allowedQuotes = settings.allowedTradingPairs || [];
     const blacklist = normalizeSymbolArray(settings.blacklistedSymbols);
     const whitelist = normalizeSymbolArray(settings.whitelistedSymbols);
     const minHistoryDays = settings.minHistoryDays || 90;
@@ -712,11 +712,7 @@ export class KrakenService {
         return;
       }
 
-      // Filter 3: Allowed quote assets (must be USD, USDT, etc.)
-      if (!allowedQuotes.includes(pairInfo.quote)) {
-        exclusionReasons[pairName] = `Quote currency ${pairInfo.quote} not in allowed list: ${allowedQuotes.join(', ')}`;
-        return;
-      }
+      // Filter 3: Quote currency check removed per user request - no currency restrictions
 
       // Filter 4: Stablecoin exclusion
       if (excludeStablecoins && stablecoinPatterns.some(pattern => pairInfo.base.includes(pattern))) {
