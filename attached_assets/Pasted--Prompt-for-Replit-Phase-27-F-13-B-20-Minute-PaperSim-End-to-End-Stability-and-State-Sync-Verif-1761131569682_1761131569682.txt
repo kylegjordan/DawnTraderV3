@@ -1,0 +1,113 @@
+🧠 Prompt for Replit
+
+Phase 27.F.13.B — 20-Minute PaperSim End-to-End Stability and State-Sync Verification
+
+Goal:
+Run PaperSim for ≈ 20 minutes (two full 10-minute MarketScanner cycles) to confirm that:
+
+Trades open/close normally using the new paper_sim_* tables
+
+No runtime TypeErrors or undefined exceptions occur
+
+Risk Manager and Portfolio balance logic stay correct ($800)
+
+UI toggles (isEngineActivePaper / isEngineActiveLive) remain perfectly synchronized
+
+Charts and metrics update continuously without crashes
+
+Test Plan
+
+1. Reset Environment
+
+await stopPaperSimulation('admin');
+
+
+Confirm:
+
+/api/trading/status → "isEngineActivePaper": false
+
+
+Clear logs + cache.
+
+2. Start PaperSim
+
+await startPaperSimulation('admin');
+
+
+Confirm:
+
+/api/trading/status → "isEngineActivePaper": true
+
+
+Expect log lines:
+
+[MarketScanner] Starting 10-minute scan
+[PaperExecutionEngine] Running cycle
+[RiskManager] Position size checks
+
+
+3. Run 20-Minute Simulation
+Let it operate for 20 minutes (two full scans).
+During run, capture logs:
+
+grep -E "MarketScanner|PaperExecutionEngine|RiskManager|Trade|Simulated|TypeError|undefined|exitTime" \
+$(ls -t /tmp/logs/Start_application_*.log | head -1) | tail -150
+
+
+Collect the 50 log lines surrounding the second
+[MarketScanner] Starting 10-minute scan.
+
+Watch that:
+
+Trades are executed ([PaperExecution] Simulated BUY/SELL…)
+
+Positions close cleanly (no errors)
+
+P&L and charts update normally
+
+4. Toggle PaperSim OFF → ON
+
+Stop PaperSim:
+
+await stopPaperSimulation('admin');
+
+
+Confirm backend/UI show:
+
+"isEngineActivePaper": false
+
+
+Start again:
+
+await startPaperSimulation('admin');
+
+
+Confirm:
+
+"isEngineActivePaper": true, "isEngineActiveLive": false
+
+
+Ensure no desync (no ghost sessions, no mismatched DB state).
+
+5. Deliverables
+Provide a concise Markdown report including:
+
+✅ Confirmation both MarketScanner cycles completed without errors
+
+✅ Number of trades opened/closed and P&L sample output
+
+✅ Toggle state remained accurate (front and backend)
+
+✅ Final 50 log lines from the second cycle
+
+⚠️ Any warnings (TypeError, undefined, null session, etc.) if seen
+
+Expected Result
+
+Stable runtime (0 exceptions, no crash).
+
+Trades executed and closed normally.
+
+Charts update live.
+
+State flags accurate before/after toggle.
