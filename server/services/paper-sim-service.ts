@@ -167,7 +167,8 @@ export async function startPaperSimulation(
               maxPrice: filters?.maxPrice || undefined,
               maxBidAskSpread: filters?.maxBidAskSpread || '1.00',
               excludeStablecoins: filters?.excludeStablecoins ?? true,
-              allowedTradingPairs: ['USD', 'USDT'], // Hardcoded: Not in screener_filters schema
+              // Phase 27.F.13.B: Include Kraken's quote currencies (ZUSD, ZEUR) and standard formats
+              allowedTradingPairs: ['USD', 'USDT', 'ZUSD', 'ZEUR'],
               blacklistedSymbols: [], // Hardcoded: Not in screener_filters schema
               whitelistedSymbols: [], // Hardcoded: Not in screener_filters schema
               minHistoryDays: 90, // Hardcoded: Not in screener_filters schema

@@ -659,7 +659,8 @@ export class KrakenService {
     const maxPrice = settings.maxPrice ? parseFloat(settings.maxPrice) : undefined;
     const maxBidAskSpread = parseFloat(settings.maxBidAskSpread || '1.00');
     const excludeStablecoins = settings.excludeStablecoins ?? true;
-    const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT'];
+    // Phase 27.F.13.B: Allow Kraken's quote currencies (ZUSD, ZEUR) and standard formats
+    const allowedQuotes = settings.allowedTradingPairs || ['USD', 'USDT', 'ZUSD', 'ZEUR'];
     const blacklist = normalizeSymbolArray(settings.blacklistedSymbols);
     const whitelist = normalizeSymbolArray(settings.whitelistedSymbols);
     const minHistoryDays = settings.minHistoryDays || 90;
