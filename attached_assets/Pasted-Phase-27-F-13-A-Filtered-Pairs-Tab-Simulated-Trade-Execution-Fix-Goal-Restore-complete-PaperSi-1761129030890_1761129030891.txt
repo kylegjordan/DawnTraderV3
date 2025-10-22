@@ -1,0 +1,80 @@
+Phase 27.F.13.A — Filtered Pairs Tab + Simulated Trade Execution Fix
+
+Goal
+
+Restore complete PaperSim functionality so the full trading pipeline works correctly:
+
+MarketScanner → Filtered Pairs → Ready-to-Buy → PaperExecutionEngine → Simulated Trades → Charts/P&L.
+
+When finished, the 20-minute stability test will exercise the real system, not just idle scanning.
+
+Tasks
+A) Implement Filtered Pairs Tab
+
+Backend
+ • Expose a reliable endpoint returning the latest eligible pairs:
+  GET /api/paper-sim/filtered-pairs
+ • Source data from the diagnostic or MarketScanner cache used in PaperSim:
+  - Include: symbol, price, VWAP, spread bps, 24h volume, primary filter reasons, timestamp.
+ • Return 10-minute-fresh data (or on-demand refresh).
+
+Frontend
+ • Connect the Filtered Pairs tab to this endpoint (use useQuery or similar).
+ • Render a data table with the columns above and an auto-refresh every 10 minutes.
+ • Show a manual Refresh button and a “Last Updated” timestamp.
+ • Ensure this component only loads when mode = “paper”.
+
+Verification
+ • Start PaperSim → Filter Insights shows eligible pairs → Filtered Pairs tab populates matching data.
+ • Logs show: [FilteredPairs] fetched n eligible pairs.
+
+B) Fix Simulated Trade Execution Flow
+
+Backend (PaperExecutionEngine / RiskManager)
+ • Confirm that after eligible pairs are marked Ready-to-Buy, the engine actually calls executeSimulatedTrade().
+ • Use the correct balance source: paper_sim_sessions.currentBalance or portfolio_state, not a hard-coded 50 000.
+ • Verify that valid signals now pass risk checks and insert trades into paper_sim_trades and paper_sim_open_positions.
+ • Emit logs like:
+  [PaperExecution] Simulated BUY executed BTC/USD qty=… entry=…
+  [PaperPortfolio] Added open position BTC/USD → paper_sim_open_positions.
+
+Frontend (Active Trades Tab)
+ • Ensure /api/paper/trades/active populates the Active Trades table with the newly simulated positions.
+ • Update P&L and chart components live as positions open/close.
+
+Quick Functional Test (Short Run)
+ • Start PaperSim for ≈ 5 minutes.
+ • Confirm:
+  ✅ Filtered Pairs tab shows eligible pairs.
+  ✅ Ready-to-Buy lists subset of those pairs.
+  ✅ At least one trade is executed (simulated).
+  ✅ Active Trades tab shows positions with realistic prices.
+  ✅ No errors in logs (TypeError, undefined, RiskManager, null session, etc.).
+ • Collect these log lines for confirmation:
+  grep -E "FilteredPairs|PaperExecution|Simulated BUY|RiskManager|PaperPortfolio" $(ls -t /tmp/logs/Start_application_*.log | head -1) | tail -80
+
+Deliverables
+
+Produce a short report including:
+
+✅ Filtered Pairs endpoint and UI working (log proof + screenshot if available).
+
+✅ Simulated trade executed and recorded in paper_sim_trades.
+
+✅ Charts and Active Trades tab display live data without errors.
+
+✅ Risk Manager shows correct portfolio value usage.
+
+✅ No state-sync or toggle issues after starting/stopping PaperSim.
+
+Expected Result
+
+After this phase:
+
+Filtered Pairs tab displays real eligible pairs.
+
+PaperSim executes simulated trades automatically when ready-to-buy conditions hit.
+
+Charts update continuously with open/closed positions.
+
+System state (sync flags, UI toggle, DB session) remains consistent.

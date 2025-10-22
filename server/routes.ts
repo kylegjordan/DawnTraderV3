@@ -3327,6 +3327,48 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 27.F.13.A: Filtered Pairs endpoint for UI (user-accessible)
+  apiRouter.get('/paper-sim/filtered-pairs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+      
+      const scanResult = await paperSimDiagnosticService.performUniverseScan({
+        userId,
+        mode: 'paper',
+        limit: 500,
+        trace: false,
+        strategies: false // Don't need strategy evaluation for simple filtering
+      });
+      
+      // Return only the eligible candidates with simplified structure
+      const filteredPairs = scanResult.top_candidates.map(candidate => ({
+        symbol: candidate.symbol,
+        price: candidate.snapshot.price,
+        vwap: null, // Will be added if available
+        spreadBps: candidate.snapshot.spread_bps,
+        volume24h: candidate.snapshot.vol_24h,
+        dailyRange: candidate.snapshot.daily_range,
+        filterReasons: candidate.reasons,
+        timestamp: scanResult.ts
+      }));
+
+      console.log(`[FilteredPairs] Returning ${filteredPairs.length} eligible pairs for user ${userId}`);
+      
+      res.json({
+        pairs: filteredPairs,
+        totalEligible: scanResult.eligible_count,
+        totalEvaluated: scanResult.evaluated,
+        timestamp: scanResult.ts,
+        nextScanAt: scanResult.nextScanAt
+      });
+    } catch (error) {
+      console.error('Error fetching filtered pairs:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to fetch filtered pairs' });
+    }
+  });
+
   // Phase 27.F.12: Universe Scan & Filter Trace (read-only diagnostic, admin/owner only)
   apiRouter.get('/paper-sim/diagnostics/scan', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
