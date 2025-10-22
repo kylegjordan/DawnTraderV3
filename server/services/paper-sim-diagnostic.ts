@@ -277,6 +277,26 @@ export class PaperSimDiagnosticService {
       });
 
       console.log(`[StrategyProbe] candidates=${topCandidates.length} sample=[${topCandidates.slice(0, 5).map(c => c.symbol).join(',')}]`);
+    } else {
+      // Phase 27.F.13.B: When strategies=false, populate candidates from eligible pairs for Filtered Pairs display
+      console.log(`[FilteredPairs] Populating ${eligiblePairs.length} eligible pairs (no strategy check)`);
+      
+      for (const pair of eligiblePairs) {
+        const spreadBps = pair.currentPrice > 0 ? ((pair.currentPrice * 0.001) / pair.currentPrice) * 10000 : 0; // Rough estimate
+        
+        topCandidates.push({
+          symbol: pair.symbol,
+          reasons: ['passed_filters'],
+          snapshot: {
+            price: pair.currentPrice,
+            spread_bps: spreadBps,
+            vol_24h: pair.volume24h,
+            daily_range: pair.dailyRange
+          }
+        });
+      }
+      
+      console.log(`[FilteredPairs] Generated ${topCandidates.length} candidates from eligible pairs`);
     }
 
     const ineligibleCount = evaluated - eligiblePairs.length;

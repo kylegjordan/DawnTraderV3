@@ -1005,10 +1005,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 27.F.2: Trading Engine Control - Start with deterministic state broadcasting
+  // Phase 27.F.13.B: Fixed to properly start correct engine based on mode
   apiRouter.post('/trading/start', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { mode } = req.body; // 'live' or 'paper'
+      
+      // Validate mode
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ 
+          error: 'Invalid mode',
+          message: 'Mode must be either "live" or "paper"'
+        });
+      }
       
       console.log(`[TradingStart] User ${userId} requesting start in ${mode} mode`);
       
@@ -1024,13 +1033,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       }
       
-      let engine = tradingEngines.get(userId);
-      if (!engine) {
-        engine = new TradingEngine(userId, apiKey, apiSecret);
-        tradingEngines.set(userId, engine);
+      // Phase 27.F.13.B: Start the correct engine based on mode
+      if (mode === 'paper') {
+        // Start paper trading simulation
+        const { startPaperSimulation } = await import('./services/paper-sim-service.js');
+        await startPaperSimulation(userId);
+        console.log(`[TradingStart] Paper simulation started for user ${userId}`);
+      } else {
+        // Start live trading engine
+        let engine = tradingEngines.get(userId);
+        if (!engine) {
+          engine = new TradingEngine(userId, apiKey, apiSecret);
+          tradingEngines.set(userId, engine);
+        }
+        await engine.start();
+        console.log(`[TradingStart] Live trading engine started for user ${userId}`);
       }
       
-      await engine.start();
       await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
       
       // Phase 27.F.2: Update system_context and broadcast state
@@ -1050,7 +1069,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           action: 'start',
           mode: mode || 'live',
           triggeredBy: 'manual',
-          metadata: { engineStatus: 'started' }
+          metadata: { engineStatus: 'started', engineType: mode }
         });
       } catch (auditError) {
         console.error('[TradingAudit] Failed to log start action:', auditError);
@@ -1069,15 +1088,30 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 27.F.2: Trading Engine Control - Stop with deterministic state broadcasting
+  // Phase 27.F.13.B: Fixed to properly stop correct engine based on current mode
   apiRouter.post('/trading/stop', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
       console.log(`[TradingStop] User ${userId} requesting stop`);
       
-      const engine = tradingEngines.get(userId);
-      if (engine) {
-        await engine.stop();
+      // Get current mode from system context
+      const context = await storage.getSystemContext(userId);
+      const currentMode = context?.tradingMode || 'paper';
+      
+      // Phase 27.F.13.B: Stop the correct engine based on current mode
+      if (currentMode === 'paper') {
+        // Stop paper trading simulation
+        const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
+        await stopPaperSimulation(userId);
+        console.log(`[TradingStop] Paper simulation stopped for user ${userId}`);
+      } else {
+        // Stop live trading engine
+        const engine = tradingEngines.get(userId);
+        if (engine) {
+          await engine.stop();
+          console.log(`[TradingStop] Live trading engine stopped for user ${userId}`);
+        }
       }
       
       await storage.updateUser(userId, { tradingStatus: 'stopped' });
@@ -1087,10 +1121,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       await tradingStateSync.setEngineActive(userId, false);
       await tradingStateSync.broadcastUserUpdate(userId);
       
-      // Get current context for deterministic response
-      const context = await storage.getSystemContext(userId);
-      
-      console.log(`[TradingStop] Completed stop for user ${userId} mode=${context?.tradingMode} active=false`);
+      console.log(`[TradingStop] Completed stop for user ${userId} mode=${currentMode} active=false`);
       
       // Phase 27.F.6: Log to trading_audit_log
       try {
