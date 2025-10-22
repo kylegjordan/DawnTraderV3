@@ -58,6 +58,7 @@ export default function GuardrailsTab() {
   const [globalSettings, setGlobalSettings] = useState<Partial<TradingSettings>>(GLOBAL_DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const initialized = useRef(false);
   const lastMode = useRef(mode);
 
@@ -161,16 +162,35 @@ export default function GuardrailsTab() {
     if (typeof value === 'boolean') {
       setSettings(prev => ({ ...prev, [field]: value }));
     } else {
-      const numValue = parseCommaFormattedNumber(value);
-      setSettings(prev => ({ ...prev, [field]: numValue }));
+      // Store raw string value while editing
+      setRawInputValues(prev => ({ ...prev, [field]: value }));
     }
     setHasChanges(true);
   };
 
   const handleGlobalChange = (field: keyof TradingSettings, value: string) => {
-    const numValue = parseCommaFormattedNumber(value);
-    setGlobalSettings(prev => ({ ...prev, [field]: numValue }));
+    // Store raw string value while editing
+    setRawInputValues(prev => ({ ...prev, [field]: value }));
     setHasChanges(true);
+  };
+
+  const handleBlur = (field: string, isGlobal: boolean = false) => {
+    const rawValue = rawInputValues[field];
+    if (rawValue !== undefined) {
+      const numValue = parseCommaFormattedNumber(rawValue);
+      if (isGlobal) {
+        setGlobalSettings(prev => ({ ...prev, [field]: numValue }));
+      } else {
+        setSettings(prev => ({ ...prev, [field]: numValue }));
+      }
+      // Clear raw value after parsing
+      setRawInputValues(prev => {
+        const newValues = { ...prev };
+        delete newValues[field];
+        return newValues;
+      });
+    }
+    setFocusedField(null);
   };
 
   const handleSave = async () => {
@@ -263,10 +283,10 @@ export default function GuardrailsTab() {
                     <Input
                       id="dailyLossKillSwitch"
                       type="text"
-                      value={focusedField === 'dailyLossKillSwitch' ? (globalSettings.dailyLossKillSwitch || '') : formatNumberWithCommas(globalSettings.dailyLossKillSwitch || '')}
+                      value={focusedField === 'dailyLossKillSwitch' ? (rawInputValues['dailyLossKillSwitch'] ?? globalSettings.dailyLossKillSwitch ?? '') : formatNumberWithCommas(globalSettings.dailyLossKillSwitch || '')}
                       onChange={(e) => handleGlobalChange('dailyLossKillSwitch', e.target.value)}
                       onFocus={() => setFocusedField('dailyLossKillSwitch')}
-                      onBlur={() => setFocusedField(null)}
+                      onBlur={() => handleBlur('dailyLossKillSwitch', true)}
                       data-testid="input-daily-loss-kill-switch"
                       className="bg-white dark:bg-slate-950"
                     />
@@ -289,10 +309,10 @@ export default function GuardrailsTab() {
                     <Input
                       id="maxPositionPercent"
                       type="text"
-                      value={focusedField === 'maxPositionPercent' ? (globalSettings.maxPositionPercent || '') : formatNumberWithCommas(globalSettings.maxPositionPercent || '')}
+                      value={focusedField === 'maxPositionPercent' ? (rawInputValues['maxPositionPercent'] ?? globalSettings.maxPositionPercent ?? '') : formatNumberWithCommas(globalSettings.maxPositionPercent || '')}
                       onChange={(e) => handleGlobalChange('maxPositionPercent', e.target.value)}
                       onFocus={() => setFocusedField('maxPositionPercent')}
-                      onBlur={() => setFocusedField(null)}
+                      onBlur={() => handleBlur('maxPositionPercent', true)}
                       data-testid="input-max-position-percent"
                       className="bg-white dark:bg-slate-950"
                     />
@@ -321,10 +341,10 @@ export default function GuardrailsTab() {
             <Input
               id="maxDailyLoss"
               type="text"
-              value={focusedField === 'maxDailyLoss' ? (settings.maxDailyLoss || '') : formatNumberWithCommas(settings.maxDailyLoss || '')}
+              value={focusedField === 'maxDailyLoss' ? (rawInputValues['maxDailyLoss'] ?? settings.maxDailyLoss ?? '') : formatNumberWithCommas(settings.maxDailyLoss || '')}
               onChange={(e) => handleChange('maxDailyLoss', e.target.value)}
               onFocus={() => setFocusedField('maxDailyLoss')}
-              onBlur={() => setFocusedField(null)}
+              onBlur={() => handleBlur('maxDailyLoss', false)}
               data-testid="input-max-daily-loss"
             />
             <p className="text-xs text-muted-foreground">
@@ -337,10 +357,10 @@ export default function GuardrailsTab() {
             <Input
               id="maxDrawdown"
               type="text"
-              value={focusedField === 'maxDrawdown' ? (settings.maxDrawdown || '') : formatNumberWithCommas(settings.maxDrawdown || '')}
+              value={focusedField === 'maxDrawdown' ? (rawInputValues['maxDrawdown'] ?? settings.maxDrawdown ?? '') : formatNumberWithCommas(settings.maxDrawdown || '')}
               onChange={(e) => handleChange('maxDrawdown', e.target.value)}
               onFocus={() => setFocusedField('maxDrawdown')}
-              onBlur={() => setFocusedField(null)}
+              onBlur={() => handleBlur('maxDrawdown', false)}
               data-testid="input-max-drawdown"
             />
             <p className="text-xs text-muted-foreground">
