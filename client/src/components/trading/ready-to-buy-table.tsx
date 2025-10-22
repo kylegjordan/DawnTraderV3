@@ -14,8 +14,8 @@ interface TradingSignal {
   confidence: number;
   entryPrice: number;
   currentPrice: number;
-  stopLoss: number;
-  target: number;
+  stopPrice: number;
+  targetPrice: number;
   vwap: number | null;
   volume24h: number | null;
   dailyRange: number | null;
@@ -95,12 +95,12 @@ export default function ReadyToBuyTable() {
         bValue = b.entryPrice;
         break;
       case 'target':
-        aValue = a.target;
-        bValue = b.target;
+        aValue = a.targetPrice;
+        bValue = b.targetPrice;
         break;
       case 'stop':
-        aValue = a.stopLoss;
-        bValue = b.stopLoss;
+        aValue = a.stopPrice;
+        bValue = b.stopPrice;
         break;
       case 'confidence':
         aValue = a.confidence;
@@ -217,8 +217,8 @@ export default function ReadyToBuyTable() {
               </thead>
               <tbody>
                 {sortedSignals.map((signal, index) => {
-                  const profitPotential = ((signal.target - signal.entryPrice) / signal.entryPrice) * 100;
-                  const riskPercent = ((signal.entryPrice - signal.stopLoss) / signal.entryPrice) * 100;
+                  const profitPotential = ((signal.targetPrice - signal.entryPrice) / signal.entryPrice) * 100;
+                  const riskPercent = ((signal.entryPrice - signal.stopPrice) / signal.entryPrice) * 100;
 
                   return (
                     <tr 
@@ -263,13 +263,13 @@ export default function ReadyToBuyTable() {
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-target-${index}`}>
                         <div className="flex flex-col items-end">
-                          <span className="font-mono">${signal.target.toFixed(signal.target < 1 ? 4 : 2)}</span>
+                          <span className="font-mono">${signal.targetPrice.toFixed(signal.targetPrice < 1 ? 4 : 2)}</span>
                           <span className="text-xs text-success">+{profitPotential.toFixed(1)}%</span>
                         </div>
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-stop-${index}`}>
                         <div className="flex flex-col items-end">
-                          <span className="font-mono">${signal.stopLoss.toFixed(signal.stopLoss < 1 ? 4 : 2)}</span>
+                          <span className="font-mono">${signal.stopPrice.toFixed(signal.stopPrice < 1 ? 4 : 2)}</span>
                           <span className="text-xs text-destructive">-{riskPercent.toFixed(1)}%</span>
                         </div>
                       </td>
