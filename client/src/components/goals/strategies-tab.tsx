@@ -297,24 +297,12 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
 
   const handleValidate = () => {
     // Convert percentages to decimal fractions for validation
-    const backendParams = { ...formData };
-    Object.keys(backendParams).forEach(key => {
-      if (PERCENTAGE_PARAMS.has(key) && typeof backendParams[key] === 'number') {
-        backendParams[key] = backendParams[key] / 100;
-      }
-    });
-    validateMutation.mutate(backendParams);
+    validateMutation.mutate(convertParamsToBackend(formData));
   };
 
   const handleSave = () => {
     // Convert percentages to decimal fractions for backend
-    const backendParams = { ...formData };
-    Object.keys(backendParams).forEach(key => {
-      if (PERCENTAGE_PARAMS.has(key) && typeof backendParams[key] === 'number') {
-        backendParams[key] = backendParams[key] / 100;
-      }
-    });
-    saveMutation.mutate(backendParams);
+    saveMutation.mutate(convertParamsToBackend(formData));
   };
 
   const handleReset = () => {
@@ -380,12 +368,16 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     setIsSavingToggle(true);
     
     try {
+      // Get current params and convert to backend format if they're from formData (UI percentages)
+      const currentParams = settings?.params || formData || {};
+      const backendParams = editing ? convertParamsToBackend(currentParams) : currentParams;
+      
       // Wait for backend confirmation before updating UI
       await apiRequest('PUT', '/api/strategies/settings', {
         strategy: strategy.id,
         mode,
         enabled,
-        params: settings?.params || formData || {},
+        params: backendParams,
         reason: `strategy ${enabled ? 'enabled' : 'disabled'}`,
       });
       
@@ -414,7 +406,18 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
     }
   };
 
-  // Helper function to convert params for UI display (decimal fractions -> percentages)
+  // Helper: Convert UI params (percentages) to backend params (decimal fractions)
+  const convertParamsToBackend = (params: Record<string, any>) => {
+    const backendParams = { ...params };
+    Object.keys(backendParams).forEach(key => {
+      if (PERCENTAGE_PARAMS.has(key) && typeof backendParams[key] === 'number') {
+        backendParams[key] = backendParams[key] / 100;
+      }
+    });
+    return backendParams;
+  };
+
+  // Helper: Convert backend params (decimal fractions) to UI params (percentages)
   const convertParamsForDisplay = (params: Record<string, any>) => {
     const displayParams = { ...params };
     Object.keys(displayParams).forEach(key => {
