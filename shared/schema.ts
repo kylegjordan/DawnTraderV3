@@ -208,6 +208,9 @@ export const tradingSettings = pgTable("trading_settings", {
   portfolioValue: decimal("portfolio_value", { precision: 15, scale: 2 }).default("50000.00"), // Base portfolio value for calculations
   tradingSuspended: boolean("trading_suspended").default(false), // System-controlled flag
   
+  // Auto-Start Paper Trading
+  autoStartPaperTrading: boolean("auto_start_paper_trading").default(false), // Auto-start paper trading when eligible pairs found
+  
   // Phase 2: Partial Fill Recovery
   partialFillThreshold: decimal("partial_fill_threshold", { precision: 5, scale: 2 }).default("90.00"), // % threshold
   partialFillAction: varchar("partial_fill_action", { length: 20 }).default("scale"), // 'scale' or 'catchup'

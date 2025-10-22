@@ -544,32 +544,41 @@ export class MarketScanner {
       }
 
       // SAFETY CHECK 3: Check if user opted into auto-start
-      // For now, we'll skip auto-start entirely since there's no opt-in flag yet
-      // TODO: Add autoStartPaperSim boolean to trading_settings table
-      console.log(`[MarketScan:AutoStart] Auto-start feature disabled (requires user opt-in)`);
-      return;
+      if (!settings.autoStartPaperTrading) {
+        console.log(`[AutoStart] User ${userId} has not enabled auto-start (autoStartPaperTrading=false)`);
+        return;
+      }
 
-      // The rest of the logic is commented out until we add proper opt-in
-      /*
+      // SAFETY CHECK 4: Check user trading status
       const user = await storage.getUser(userId);
-      if (!user || user.tradingStatus !== 'active') {
-        console.log(`[MarketScan:AutoStart] User ${userId} trading status not active, skipping auto-start`);
+      if (!user) {
+        console.log(`[AutoStart] User ${userId} not found, skipping auto-start`);
+        return;
+      }
+
+      // SAFETY CHECK 5: Respect manual stops - check if user manually stopped trading
+      if (user.tradingStatus === 'stopped') {
+        console.log(`[AutoStart] User ${userId} manually stopped trading, skipping auto-start`);
         return;
       }
 
       // Check if paper simulation is already running for this user
-      const existingSession = await storage.getActivePaperSimSession(userId);
+      // We do this by attempting to import the paper sim service and checking the global managers map
+      const paperSimModule = await import('./paper-sim-service.js');
       
-      if (existingSession) {
-        console.log(`[MarketScan:AutoStart] Paper simulation already running for user ${userId} (session: ${existingSession.sessionId})`);
-        return;
-      }
-
-      // Auto-start paper simulation
-      console.log(`[MarketScan:AutoStart] Starting paper simulation for user ${userId} with ${eligiblePairs.length} eligible pairs...`);
+      // The paper-sim-service maintains a Map of active sessions
+      // We can call startPaperSimulation - it has its own guard clause for already-running sessions
       
-      const { startPaperSimulation } = await import('./paper-sim-service.js');
-      const result = await startPaperSimulation(userId, {
+      // All safety checks passed - attempt to start paper simulation
+      console.log(`\n🚀 [AutoStart] ============================================`);
+      console.log(`[AutoStart] Attempting to start paper trading for user ${userId}`);
+      console.log(`[AutoStart] Eligible pairs: ${eligiblePairs.length}`);
+      console.log(`[AutoStart] Trigger: Market scan found eligible pairs`);
+      console.log(`[AutoStart] Kill switch: OFF`);
+      console.log(`[AutoStart] Manual stop: NO`);
+      console.log(`[AutoStart] ============================================\n`);
+      
+      const result = await paperSimModule.startPaperSimulation(userId, {
         startingBalance: 10000,
         startedBy: 'market_scanner_auto',
         metadata: {
@@ -581,11 +590,15 @@ export class MarketScanner {
       });
 
       if (result.success) {
-        console.log(`✅ [MarketScan:AutoStart] Paper simulation started successfully for user ${userId}`);
+        console.log(`✅ [AutoStart] Paper trading started successfully for user ${userId}`);
       } else {
-        console.error(`❌ [MarketScan:AutoStart] Failed to start paper simulation for user ${userId}:`, result.error);
+        // Could be already running, which is fine
+        if (result.error && result.error.includes('already running')) {
+          console.log(`[AutoStart] Paper trading already running for user ${userId} - no action needed`);
+        } else {
+          console.error(`❌ [AutoStart] Failed to start paper trading for user ${userId}:`, result.error);
+        }
       }
-      */
     } catch (error) {
       console.error(`[MarketScan:AutoStart] Error in auto-start check for user ${userId}:`, error);
     }
