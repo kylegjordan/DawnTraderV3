@@ -325,6 +325,34 @@ export const watchlistPairs = pgTable("watchlist_pairs", {
   uniqueUserModeSymbol: uniqueIndex("watchlist_pairs_user_mode_symbol_idx").on(table.userId, table.mode, table.symbol),
 }));
 
+// Trading Signals - Active trading opportunities waiting to be executed
+export const tradingSignals = pgTable("trading_signals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  mode: tradingModeEnum("mode").notNull().default("paper"),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
+  quoteCurrency: varchar("quote_currency", { length: 10 }).notNull(),
+  strategy: strategyTypeEnum("strategy").notNull(),
+  confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(), // 0.0000-1.0000
+  entryPrice: decimal("entry_price", { precision: 20, scale: 8 }).notNull(),
+  stopPrice: decimal("stop_price", { precision: 20, scale: 8 }).notNull(),
+  targetPrice: decimal("target_price", { precision: 20, scale: 8 }).notNull(),
+  currentPrice: decimal("current_price", { precision: 20, scale: 8 }).notNull(),
+  vwap: decimal("vwap", { precision: 20, scale: 8 }),
+  volume24h: decimal("volume_24h", { precision: 20, scale: 2 }),
+  dailyRange: decimal("daily_range", { precision: 5, scale: 2 }), // Percentage
+  status: varchar("status", { length: 20 }).notNull().default("active"), // 'active', 'executed', 'expired', 'dismissed'
+  detectedAt: timestamp("detected_at", { withTimezone: true }).defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }), // Signals expire after certain time
+  executedAt: timestamp("executed_at", { withTimezone: true }),
+  metadata: jsonb("metadata"), // Additional signal context (technical indicators, etc.)
+}, (table) => ({
+  userModeStatusIdx: index("trading_signals_user_mode_status_idx").on(table.userId, table.mode, table.status),
+  symbolStrategyIdx: index("trading_signals_symbol_strategy_idx").on(table.symbol, table.strategy),
+  detectedAtIdx: index("trading_signals_detected_at_idx").on(table.detectedAt),
+}));
+
 // Trades
 export const trades = pgTable("trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1518,6 +1546,13 @@ export const watchlistPairsRelations = relations(watchlistPairs, ({ one }) => ({
   }),
 }));
 
+export const tradingSignalsRelations = relations(tradingSignals, ({ one }) => ({
+  user: one(users, {
+    fields: [tradingSignals.userId],
+    references: [users.id],
+  }),
+}));
+
 export const tradesRelations = relations(trades, ({ one }) => ({
   user: one(users, {
     fields: [trades.userId],
@@ -1734,6 +1769,11 @@ export const insertStrategySettingsAuditSchema = createInsertSchema(strategySett
 export const insertWatchlistPairSchema = createInsertSchema(watchlistPairs).omit({
   id: true,
   addedAt: true,
+});
+
+export const insertTradingSignalSchema = createInsertSchema(tradingSignals).omit({
+  id: true,
+  detectedAt: true,
 });
 
 export const insertTradeSchema = createInsertSchema(trades).omit({
@@ -2075,6 +2115,9 @@ export type StrategySettingsAudit = typeof strategySettingsAudit.$inferSelect;
 
 export type InsertWatchlistPair = z.infer<typeof insertWatchlistPairSchema>;
 export type WatchlistPair = typeof watchlistPairs.$inferSelect;
+
+export type InsertTradingSignal = z.infer<typeof insertTradingSignalSchema>;
+export type TradingSignal = typeof tradingSignals.$inferSelect;
 
 export type InsertTrade = z.infer<typeof insertTradeSchema>;
 export type Trade = typeof trades.$inferSelect;
