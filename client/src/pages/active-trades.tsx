@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ActiveTrades from "@/components/trading/active-trades";
 import Watchlist from "@/components/trading/watchlist";
+import ReadyToBuyTable from "@/components/trading/ready-to-buy-table";
 import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import ModeBanner from "@/components/mode-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -200,7 +201,7 @@ export default function TradingPage() {
         </TabsContent>
 
         <TabsContent value="ready" className="mt-6">
-          <Watchlist />
+          <ReadyToBuyTable />
         </TabsContent>
 
         <TabsContent value="filtered" className="mt-6">
