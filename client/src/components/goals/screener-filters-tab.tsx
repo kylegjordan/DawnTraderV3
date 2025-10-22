@@ -61,6 +61,7 @@ export default function ScreenerFiltersTab() {
   const { mode } = useTradingMode();
   const [filters, setFilters] = useState<Partial<ScreenerFilters>>(DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const initialized = useRef(false);
   const lastMode = useRef(mode);
 
@@ -267,8 +268,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="minVolume"
                   type="text"
-                  value={formatNumberWithCommas(filters.minVolume || '')}
+                  value={focusedField === 'minVolume' ? (filters.minVolume || '') : formatNumberWithCommas(filters.minVolume || '')}
                   onChange={(e) => handleChange('minVolume', e.target.value)}
+                  onFocus={() => setFocusedField('minVolume')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-min-volume"
                 />
               </div>
@@ -277,8 +280,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="minLiquidity"
                   type="text"
-                  value={formatNumberWithCommas(filters.minLiquidity || '')}
+                  value={focusedField === 'minLiquidity' ? (filters.minLiquidity || '') : formatNumberWithCommas(filters.minLiquidity || '')}
                   onChange={(e) => handleChange('minLiquidity', e.target.value)}
+                  onFocus={() => setFocusedField('minLiquidity')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-min-liquidity"
                 />
               </div>
@@ -295,8 +300,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="minPrice"
                   type="text"
-                  value={formatNumberWithCommas(filters.minPrice || '')}
+                  value={focusedField === 'minPrice' ? (filters.minPrice || '') : formatNumberWithCommas(filters.minPrice || '')}
                   onChange={(e) => handleChange('minPrice', e.target.value)}
+                  onFocus={() => setFocusedField('minPrice')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-min-price"
                 />
               </div>
@@ -305,8 +312,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="maxPrice"
                   type="text"
-                  value={formatNumberWithCommas(filters.maxPrice || '')}
+                  value={focusedField === 'maxPrice' ? (filters.maxPrice || '') : formatNumberWithCommas(filters.maxPrice || '')}
                   onChange={(e) => handleChange('maxPrice', e.target.value)}
+                  onFocus={() => setFocusedField('maxPrice')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-max-price"
                 />
               </div>
@@ -323,8 +332,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="minMarketCap"
                   type="text"
-                  value={formatNumberWithCommas(filters.minMarketCap || '')}
+                  value={focusedField === 'minMarketCap' ? (filters.minMarketCap || '') : formatNumberWithCommas(filters.minMarketCap || '')}
                   onChange={(e) => handleChange('minMarketCap', e.target.value)}
+                  onFocus={() => setFocusedField('minMarketCap')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-min-market-cap"
                 />
               </div>
@@ -333,8 +344,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="maxBidAskSpread"
                   type="text"
-                  value={formatNumberWithCommas(filters.maxBidAskSpread || '')}
+                  value={focusedField === 'maxBidAskSpread' ? (filters.maxBidAskSpread || '') : formatNumberWithCommas(filters.maxBidAskSpread || '')}
                   onChange={(e) => handleChange('maxBidAskSpread', e.target.value)}
+                  onFocus={() => setFocusedField('maxBidAskSpread')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-max-bid-ask-spread"
                 />
               </div>
@@ -351,8 +364,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="rsiMin"
                   type="text"
-                  value={formatNumberWithCommas(filters.rsiMin || '')}
+                  value={focusedField === 'rsiMin' ? (filters.rsiMin || '') : formatNumberWithCommas(filters.rsiMin || '')}
                   onChange={(e) => handleChange('rsiMin', e.target.value)}
+                  onFocus={() => setFocusedField('rsiMin')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-rsi-min"
                 />
               </div>
@@ -361,8 +376,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="rsiMax"
                   type="text"
-                  value={formatNumberWithCommas(filters.rsiMax || '')}
+                  value={focusedField === 'rsiMax' ? (filters.rsiMax || '') : formatNumberWithCommas(filters.rsiMax || '')}
                   onChange={(e) => handleChange('rsiMax', e.target.value)}
+                  onFocus={() => setFocusedField('rsiMax')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-rsi-max"
                 />
               </div>
@@ -379,8 +396,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="volatilityMin"
                   type="text"
-                  value={formatNumberWithCommas(filters.volatilityMin || '')}
+                  value={focusedField === 'volatilityMin' ? (filters.volatilityMin || '') : formatNumberWithCommas(filters.volatilityMin || '')}
                   onChange={(e) => handleChange('volatilityMin', e.target.value)}
+                  onFocus={() => setFocusedField('volatilityMin')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-volatility-min"
                 />
               </div>
@@ -389,8 +408,10 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="volatilityMax"
                   type="text"
-                  value={formatNumberWithCommas(filters.volatilityMax || '')}
+                  value={focusedField === 'volatilityMax' ? (filters.volatilityMax || '') : formatNumberWithCommas(filters.volatilityMax || '')}
                   onChange={(e) => handleChange('volatilityMax', e.target.value)}
+                  onFocus={() => setFocusedField('volatilityMax')}
+                  onBlur={() => setFocusedField(null)}
                   data-testid="input-volatility-max"
                 />
               </div>
