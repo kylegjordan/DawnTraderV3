@@ -1,0 +1,79 @@
+Goal: Identify the root causes of the 83 LSP/TypeScript errors and any runtime crash vectors triggered during the 10-minute market scanner cycle. Do not make code changes—return a structured report with findings and recommended fixes.
+
+Scope:
+
+Enumerate and group all LSP diagnostics by category and file:
+
+Run a full type check (tsc --noEmit) and group errors by:
+a) Schema/DB type drift (mismatched column/field names)
+b) API route response type drift (server ↔ client contracts)
+c) Global session/manager shape drift
+d) Missing imports/undefined symbols
+e) Strategy registry/union type drift
+
+For each group, list: file:line, the symbol/field in error, and the current canonical source of truth it should match.
+
+Schema Drift Audit (DB vs code):
+
+Identify every field referenced in server/routes.ts and services that is not present or is renamed in the DB types (Drizzle/Prisma schema).
+
+Call out specific mismatches already suspected: realizedPnl vs realizedPL, closedAt, paperInitialBalance, and any others.
+
+Show the authoritative table/column names and types for each mismatch (from the DB schema), and where the code still uses old names.
+
+API Contract Audit (server ↔ client):
+
+For key endpoints used by Trading pages (/api/trading/status, /api/paper-sim/status, /api/paper/trades/active, /api/filters/diagnostics, /api/paper-sim/diagnostics/scan, /api/watchlist):
+a) Dump the TypeScript return type the route handler declares/returns.
+b) Dump the client-side type expected by hooks/components (e.g., useTrading, FilteredPairsTab, FilterHealthWidget, Watchlist).
+c) Highlight field-level diffs (missing, renamed, optionality differences).
+
+Global State/Session Audit:
+
+Enumerate the exact shapes of getGlobalSession(), global.globalPaperPortfolioManager, and any “simulation session” types used in checks.
+
+List every place that reads those shapes and note mismatches (e.g., reading session.closedAt when shape provides endedAt).
+
+Strategy Registry Audit:
+
+List strategies actually used by PaperExecutionEngine.
+
+List the strategy union type exported by the strategy types module.
+
+Highlight items present in one and not the other.
+
+10-Minute Cycle Crash Vector Check:
+
+Start paper trading, let the system run past the first MarketScanner cycle.
+
+Capture logs around the cycle boundary.
+
+Identify any uncaught exceptions, null/undefined property accesses, or memory spikes.
+
+If exceptions tie back to type drift (e.g., field absent), reference the LSP item that maps to it.
+
+OpenAI/Rate Limiter Check (non-blocking):
+
+Confirm whether any 429s during the cycle coincide with crashes (they shouldn’t).
+
+Note whether OpenAI failures are logged and swallowed safely (no unhandled promise rejections).
+
+Verify whether the OpenAIRateLimiter wrapper is (a) present, (b) imported, and (c) actually used by AI services.
+
+Deliverables (markdown report):
+
+Error Heatmap: table of error counts by file and category.
+
+Top 10 Mismatches with exact code locations and the authoritative replacement names/types.
+
+Endpoint Contract Matrix (server type vs client expectation) with red/yellow/green status per endpoint.
+
+Global Session Shape Diagram with mismatches.
+
+Crash Vector Timeline across a 10-minute cycle (what ran, what failed, where).
+
+Actionable Fix Plan: a prioritized list of code changes with exact files/lines to touch (no code yet), starting with items that unblock stability.
+
+Rate Limiter Status: whether it’s wired, and any shortcomings that could cause noise (but not LSP errors).
+
+Important: don’t make code edits—deliver a root-cause report first so we can approve the exact fixes.
