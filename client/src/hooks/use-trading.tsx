@@ -115,6 +115,20 @@ export function useTrading() {
     }
   });
 
+  // Phase 27.F.13.C: Reset paper simulation
+  const resetPaperSimMutation = useMutation({
+    mutationFn: async (newBalance: number) => {
+      return await apiRequest('POST', '/api/paper-sim/reset', { newBalance });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trades/active'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
+    }
+  });
+
   // Portfolio data
   const { data: portfolioMetrics, isLoading: portfolioLoading } = useQuery<PortfolioMetrics>({
     queryKey: ['/api/portfolio/overview'],
@@ -203,6 +217,8 @@ export function useTrading() {
     stopTrading: stopTradingMutation.mutateAsync,
     isStarting: startTradingMutation.isPending,
     isStopping: stopTradingMutation.isPending,
+    resetPaperSim: resetPaperSimMutation.mutateAsync,
+    isResettingPaperSim: resetPaperSimMutation.isPending,
 
     // Portfolio
     portfolioMetrics,

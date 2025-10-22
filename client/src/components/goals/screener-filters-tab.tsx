@@ -12,6 +12,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { ensureValidToken } from "@/lib/auth";
+import { formatNumberWithCommas, parseCommaFormattedNumber } from "@/lib/utils";
 
 const DEFAULTS = {
   minVolume: 1000000,
@@ -146,8 +147,16 @@ export default function ScreenerFiltersTab() {
     },
   });
 
-  const handleChange = (field: string, value: number | boolean) => {
-    setFilters(prev => ({ ...prev, [field]: value }));
+  const handleChange = (field: string, value: string | number | boolean) => {
+    let processedValue: number | boolean;
+    if (typeof value === 'boolean') {
+      processedValue = value;
+    } else if (typeof value === 'string') {
+      processedValue = parseCommaFormattedNumber(value);
+    } else {
+      processedValue = value;
+    }
+    setFilters(prev => ({ ...prev, [field]: processedValue }));
     setHasChanges(true);
   };
 
@@ -257,10 +266,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="minVolume" className="text-xs">Min Volume ($)</Label>
                 <Input
                   id="minVolume"
-                  type="number"
-                  step="100000"
-                  value={filters.minVolume}
-                  onChange={(e) => handleChange('minVolume', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.minVolume || '')}
+                  onChange={(e) => handleChange('minVolume', e.target.value)}
                   data-testid="input-min-volume"
                 />
               </div>
@@ -268,10 +276,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="minLiquidity" className="text-xs">Min Liquidity ($)</Label>
                 <Input
                   id="minLiquidity"
-                  type="number"
-                  step="10000"
-                  value={filters.minLiquidity}
-                  onChange={(e) => handleChange('minLiquidity', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.minLiquidity || '')}
+                  onChange={(e) => handleChange('minLiquidity', e.target.value)}
                   data-testid="input-min-liquidity"
                 />
               </div>
@@ -287,10 +294,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="minPrice" className="text-xs">Min Price ($)</Label>
                 <Input
                   id="minPrice"
-                  type="number"
-                  step="0.01"
-                  value={filters.minPrice}
-                  onChange={(e) => handleChange('minPrice', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.minPrice || '')}
+                  onChange={(e) => handleChange('minPrice', e.target.value)}
                   data-testid="input-min-price"
                 />
               </div>
@@ -298,10 +304,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="maxPrice" className="text-xs">Max Price ($)</Label>
                 <Input
                   id="maxPrice"
-                  type="number"
-                  step="1000"
-                  value={filters.maxPrice}
-                  onChange={(e) => handleChange('maxPrice', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.maxPrice || '')}
+                  onChange={(e) => handleChange('maxPrice', e.target.value)}
                   data-testid="input-max-price"
                 />
               </div>
@@ -317,10 +322,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="minMarketCap" className="text-xs">Min Market Cap ($)</Label>
                 <Input
                   id="minMarketCap"
-                  type="number"
-                  step="10000000"
-                  value={filters.minMarketCap}
-                  onChange={(e) => handleChange('minMarketCap', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.minMarketCap || '')}
+                  onChange={(e) => handleChange('minMarketCap', e.target.value)}
                   data-testid="input-min-market-cap"
                 />
               </div>
@@ -328,10 +332,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="maxBidAskSpread" className="text-xs">Max Bid-Ask Spread (%)</Label>
                 <Input
                   id="maxBidAskSpread"
-                  type="number"
-                  step="0.1"
-                  value={filters.maxBidAskSpread}
-                  onChange={(e) => handleChange('maxBidAskSpread', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.maxBidAskSpread || '')}
+                  onChange={(e) => handleChange('maxBidAskSpread', e.target.value)}
                   data-testid="input-max-bid-ask-spread"
                 />
               </div>
@@ -347,11 +350,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="rsiMin" className="text-xs">RSI Min</Label>
                 <Input
                   id="rsiMin"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={filters.rsiMin}
-                  onChange={(e) => handleChange('rsiMin', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.rsiMin || '')}
+                  onChange={(e) => handleChange('rsiMin', e.target.value)}
                   data-testid="input-rsi-min"
                 />
               </div>
@@ -359,11 +360,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="rsiMax" className="text-xs">RSI Max</Label>
                 <Input
                   id="rsiMax"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={filters.rsiMax}
-                  onChange={(e) => handleChange('rsiMax', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.rsiMax || '')}
+                  onChange={(e) => handleChange('rsiMax', e.target.value)}
                   data-testid="input-rsi-max"
                 />
               </div>
@@ -379,10 +378,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="volatilityMin" className="text-xs">Min Volatility (%)</Label>
                 <Input
                   id="volatilityMin"
-                  type="number"
-                  step="0.1"
-                  value={filters.volatilityMin}
-                  onChange={(e) => handleChange('volatilityMin', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.volatilityMin || '')}
+                  onChange={(e) => handleChange('volatilityMin', e.target.value)}
                   data-testid="input-volatility-min"
                 />
               </div>
@@ -390,10 +388,9 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="volatilityMax" className="text-xs">Max Volatility (%)</Label>
                 <Input
                   id="volatilityMax"
-                  type="number"
-                  step="0.1"
-                  value={filters.volatilityMax}
-                  onChange={(e) => handleChange('volatilityMax', parseFloat(e.target.value))}
+                  type="text"
+                  value={formatNumberWithCommas(filters.volatilityMax || '')}
+                  onChange={(e) => handleChange('volatilityMax', e.target.value)}
                   data-testid="input-volatility-max"
                 />
               </div>

@@ -14,6 +14,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Layers, Save, RotateCcw, Check, X, Download, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatNumberWithCommas, parseCommaFormattedNumber } from "@/lib/utils";
 
 const STRATEGIES = [
   { id: 'vwap_pullback', name: 'VWAP Pullback', description: 'Entry when price pulls back to VWAP with momentum confirmation' },
@@ -299,8 +300,8 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   };
 
   const handleFieldChange = (field: string, value: string) => {
-    const numValue = parseFloat(value);
-    setFormData({ ...formData, [field]: isNaN(numValue) ? value : numValue });
+    const numValue = parseCommaFormattedNumber(value);
+    setFormData({ ...formData, [field]: numValue });
     // Clear validation error for this field
     if (validationErrors[field]) {
       const newErrors = { ...validationErrors };
@@ -466,9 +467,8 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
                 <div>
                   <Input
                     id={`${strategy.id}-${key}`}
-                    type="number"
-                    step="any"
-                    value={currentParams[key] ?? ''}
+                    type="text"
+                    value={formatNumberWithCommas(currentParams[key] ?? '')}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
                     className={validationErrors[key] ? "border-red-500" : ""}
                     data-testid={`input-${strategy.id}-${key}`}

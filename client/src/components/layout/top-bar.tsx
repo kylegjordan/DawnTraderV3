@@ -1,4 +1,4 @@
-import { Menu, Bell, Clock, Globe, AlertTriangle } from "lucide-react";
+import { Menu, Bell, Clock, Globe, AlertTriangle, MoreVertical, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -47,7 +49,9 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     startTrading, 
     stopTrading, 
     isStarting, 
-    isStopping 
+    isStopping,
+    resetPaperSim,
+    isResettingPaperSim
   } = useTrading();
   const { toast } = useToast();
   const { canEdit, role, can } = useUserRole();
@@ -57,8 +61,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
   const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
   const [showStopConfirmation, setShowStopConfirmation] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetBalance, setResetBalance] = useState("800");
   const [, setLocation] = useLocation();
-  const { messages: wsMessages } = useWebSocket();
+  const { messages: wsMessages} = useWebSocket();
 
   // Fetch user settings for timezone and time format
   const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
@@ -282,6 +288,60 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   };
 
+  // Phase 27.F.13.C: Reset paper simulation
+  const handleResetPaperSim = async () => {
+    console.log('[Phase-27.F.13.C] Resetting paper simulation with balance:', resetBalance);
+    
+    try {
+      const balance = parseFloat(resetBalance);
+      if (isNaN(balance) || balance <= 0) {
+        toast({
+          title: "Invalid Balance",
+          description: "Please enter a valid positive number for the balance",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      await resetPaperSim(balance);
+      
+      toast({
+        title: "Simulation Reset",
+        description: `Paper trading simulation has been reset with balance $${balance.toFixed(2)}`,
+      });
+      
+      setShowResetDialog(false);
+      setResetBalance("800"); // Reset to default
+      
+      // Refresh all trading-related queries
+      await queryClient.refetchQueries({ queryKey: ['/api/paper-sim/status'] });
+      await queryClient.refetchQueries({ queryKey: ['/api/portfolio/overview'] });
+    } catch (error: any) {
+      let errorMessage = "Failed to reset paper simulation";
+      
+      if (error?.message) {
+        try {
+          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
+          if (jsonMatch) {
+            const errorData = JSON.parse(jsonMatch[1]);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            errorMessage = error.message;
+          }
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
+      console.error('[Phase-27.F.13.C] Paper sim reset error:', errorMessage);
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleModeChange = async (newMode: 'live' | 'paper') => {
     // Phase 27.F.1: Don't switch if already in that mode
     if (newMode === currentMode) {
@@ -416,6 +476,21 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               >
                 PAPER
               </Button>
+              
+              {/* Phase 27.F.13.C: Reset Paper Simulation Button - only shown in paper mode */}
+              {currentMode === 'paper' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowResetDialog(true)}
+                  disabled={!canEdit || isResettingPaperSim}
+                  className="px-2 py-1 text-xs hover:bg-destructive/10"
+                  title={!canEdit ? `Viewers cannot reset simulation (Role: ${role})` : 'Reset Paper Simulation'}
+                  data-testid="button-reset-paper-sim"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -528,6 +603,51 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         onOpenChange={setShowStopConfirmation}
         onConfirm={handleConfirmStopLiveTrading}
       />
+      
+      {/* Phase 27.F.13.C: Reset Paper Simulation Dialog */}
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent data-testid="dialog-reset-paper-sim">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Paper Trading Simulation</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will clear all paper trading data (trades, positions, logs) and reset your balance.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <Label htmlFor="reset-balance" className="text-sm font-medium">
+              New Balance (USD)
+            </Label>
+            <Input
+              id="reset-balance"
+              type="number"
+              min="0"
+              step="0.01"
+              value={resetBalance}
+              onChange={(e) => setResetBalance(e.target.value)}
+              placeholder="800.00"
+              className="mt-2"
+              data-testid="input-reset-balance"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isResettingPaperSim} data-testid="button-cancel-reset">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleResetPaperSim();
+              }}
+              disabled={isResettingPaperSim}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-confirm-reset"
+            >
+              {isResettingPaperSim ? 'Resetting...' : 'Reset Simulation'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 }

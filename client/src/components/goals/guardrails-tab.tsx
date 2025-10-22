@@ -11,6 +11,7 @@ import { Shield, Save, RotateCcw, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { formatNumberWithCommas, parseCommaFormattedNumber } from "@/lib/utils";
 import { 
   Tooltip,
   TooltipContent,
@@ -25,6 +26,8 @@ const DEFAULTS = {
   maxOpenPositions: 5,
   riskPerTrade: 1.5,
   aiCanAdjust: false,
+  maxRequiredCapital: 100000,
+  maxRiskPerTradeLimit: 1000,
 };
 
 const GLOBAL_DEFAULTS = {
@@ -39,6 +42,8 @@ interface Guardrails {
   maxDrawdown: number;
   riskPerTrade: number;
   aiCanAdjust: boolean;
+  maxRequiredCapital: number;
+  maxRiskPerTradeLimit: number;
 }
 
 interface TradingSettings {
@@ -52,6 +57,7 @@ export default function GuardrailsTab() {
   const [settings, setSettings] = useState<Partial<Guardrails>>(DEFAULTS);
   const [globalSettings, setGlobalSettings] = useState<Partial<TradingSettings>>(GLOBAL_DEFAULTS);
   const [hasChanges, setHasChanges] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const initialized = useRef(false);
   const lastMode = useRef(mode);
 
@@ -84,6 +90,8 @@ export default function GuardrailsTab() {
         maxDrawdown: currentSettings.maxDrawdown ?? DEFAULTS.maxDrawdown,
         riskPerTrade: currentSettings.riskPerTrade ?? DEFAULTS.riskPerTrade,
         aiCanAdjust: currentSettings.aiCanAdjust ?? DEFAULTS.aiCanAdjust,
+        maxRequiredCapital: currentSettings.maxRequiredCapital ?? DEFAULTS.maxRequiredCapital,
+        maxRiskPerTradeLimit: currentSettings.maxRiskPerTradeLimit ?? DEFAULTS.maxRiskPerTradeLimit,
       });
       setHasChanges(false);
     }
@@ -153,14 +161,14 @@ export default function GuardrailsTab() {
     if (typeof value === 'boolean') {
       setSettings(prev => ({ ...prev, [field]: value }));
     } else {
-      const numValue = parseFloat(value) || 0;
+      const numValue = parseCommaFormattedNumber(value);
       setSettings(prev => ({ ...prev, [field]: numValue }));
     }
     setHasChanges(true);
   };
 
   const handleGlobalChange = (field: keyof TradingSettings, value: string) => {
-    const numValue = parseFloat(value) || 0;
+    const numValue = parseCommaFormattedNumber(value);
     setGlobalSettings(prev => ({ ...prev, [field]: numValue }));
     setHasChanges(true);
   };
@@ -254,12 +262,11 @@ export default function GuardrailsTab() {
                     <Label htmlFor="dailyLossKillSwitch">Daily Loss Kill Switch (%)</Label>
                     <Input
                       id="dailyLossKillSwitch"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
-                      value={globalSettings.dailyLossKillSwitch || ''}
+                      type="text"
+                      value={focusedField === 'dailyLossKillSwitch' ? (globalSettings.dailyLossKillSwitch || '') : formatNumberWithCommas(globalSettings.dailyLossKillSwitch || '')}
                       onChange={(e) => handleGlobalChange('dailyLossKillSwitch', e.target.value)}
+                      onFocus={() => setFocusedField('dailyLossKillSwitch')}
+                      onBlur={() => setFocusedField(null)}
                       data-testid="input-daily-loss-kill-switch"
                       className="bg-white dark:bg-slate-950"
                     />
@@ -281,11 +288,8 @@ export default function GuardrailsTab() {
                     <Label htmlFor="maxPositionPercent">Max Position Size Cap (%)</Label>
                     <Input
                       id="maxPositionPercent"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
-                      value={globalSettings.maxPositionPercent || ''}
+                      type="text"
+                      value={formatNumberWithCommas(globalSettings.maxPositionPercent || '')}
                       onChange={(e) => handleGlobalChange('maxPositionPercent', e.target.value)}
                       data-testid="input-max-position-percent"
                       className="bg-white dark:bg-slate-950"
@@ -314,9 +318,8 @@ export default function GuardrailsTab() {
             <Label htmlFor="maxDailyLoss">Max Daily Loss ($)</Label>
             <Input
               id="maxDailyLoss"
-              type="number"
-              step="0.01"
-              value={settings.maxDailyLoss || ''}
+              type="text"
+              value={formatNumberWithCommas(settings.maxDailyLoss || '')}
               onChange={(e) => handleChange('maxDailyLoss', e.target.value)}
               data-testid="input-max-daily-loss"
             />
@@ -329,9 +332,8 @@ export default function GuardrailsTab() {
             <Label htmlFor="maxDrawdown">Max Drawdown (%)</Label>
             <Input
               id="maxDrawdown"
-              type="number"
-              step="0.1"
-              value={settings.maxDrawdown || ''}
+              type="text"
+              value={formatNumberWithCommas(settings.maxDrawdown || '')}
               onChange={(e) => handleChange('maxDrawdown', e.target.value)}
               data-testid="input-max-drawdown"
             />
@@ -344,9 +346,8 @@ export default function GuardrailsTab() {
             <Label htmlFor="maxPositionSize">Max Position Size ($)</Label>
             <Input
               id="maxPositionSize"
-              type="number"
-              step="0.01"
-              value={settings.maxPositionSize || ''}
+              type="text"
+              value={formatNumberWithCommas(settings.maxPositionSize || '')}
               onChange={(e) => handleChange('maxPositionSize', e.target.value)}
               data-testid="input-max-position-size"
             />
@@ -359,8 +360,8 @@ export default function GuardrailsTab() {
             <Label htmlFor="maxOpenPositions">Max Open Positions</Label>
             <Input
               id="maxOpenPositions"
-              type="number"
-              value={settings.maxOpenPositions || ''}
+              type="text"
+              value={formatNumberWithCommas(settings.maxOpenPositions || '')}
               onChange={(e) => handleChange('maxOpenPositions', e.target.value)}
               data-testid="input-max-open-positions"
             />
@@ -373,14 +374,41 @@ export default function GuardrailsTab() {
             <Label htmlFor="riskPerTrade">Risk Per Trade (%)</Label>
             <Input
               id="riskPerTrade"
-              type="number"
-              step="0.1"
-              value={settings.riskPerTrade || ''}
+              type="text"
+              value={formatNumberWithCommas(settings.riskPerTrade || '')}
               onChange={(e) => handleChange('riskPerTrade', e.target.value)}
               data-testid="input-risk-per-trade"
             />
             <p className="text-xs text-muted-foreground">
               Percentage of portfolio to risk on each trade
+            </p>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="maxRequiredCapital">Max Required Capital ($)</Label>
+            <Input
+              id="maxRequiredCapital"
+              type="text"
+              value={formatNumberWithCommas(settings.maxRequiredCapital || '')}
+              onChange={(e) => handleChange('maxRequiredCapital', e.target.value)}
+              data-testid="input-max-required-capital"
+            />
+            <p className="text-xs text-muted-foreground">
+              Maximum capital that can be required for a trade before rejection
+            </p>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="maxRiskPerTradeLimit">Max Risk Per Trade Limit ($)</Label>
+            <Input
+              id="maxRiskPerTradeLimit"
+              type="text"
+              value={formatNumberWithCommas(settings.maxRiskPerTradeLimit || '')}
+              onChange={(e) => handleChange('maxRiskPerTradeLimit', e.target.value)}
+              data-testid="input-max-risk-per-trade-limit"
+            />
+            <p className="text-xs text-muted-foreground">
+              Maximum dollar amount at risk (stop-loss distance) allowed per trade
             </p>
           </div>
         </div>
