@@ -1,0 +1,88 @@
+Please perform a comprehensive investigation to determine why, during active paper trading, eligible pairs shown in Filter Insights are not appearing in the Filtered Pairs tab, and why simulated trades are not being executed even though the Ready-to-Buy tab is displaying pairs.
+
+Use the attached screenshots as reference for the current system state:
+
+Filter Insights correctly shows 1,443 total pairs, 300 evaluated, and 30 eligible.
+
+Filtered Pairs tab remains empty (0 eligible pairs shown).
+
+Ready-to-Buy tab shows 2 pairs with valid price, VWAP, and range values.
+
+Active Trades tab shows none (no simulated trades being executed).
+
+The goal is to trace the data flow and execution pipeline from the point where eligible pairs are found to where trades should be simulated.
+
+Please investigate and report on the following areas — but do not make code edits yet:
+
+1. Filtered Pairs Display Path
+
+Trace how eligible pairs are passed from the MarketScanner or diagnostics service into the data source used by the FilteredPairs component in the frontend.
+
+Identify whether /api/paper-sim/diagnostics/scan or /api/paper-sim/filtered-pairs (if it exists) is returning empty or mismatched data.
+
+Determine if eligible pairs are being written correctly to the in-memory store, cache, or database table that the FilteredPairs component queries.
+
+Verify if there’s a stale or unrefreshed cache entry preventing new data from appearing.
+
+2. Trade Execution Flow
+
+Trace how pairs in the Ready-to-Buy list are passed to the PaperExecutionEngine for signal evaluation and simulated trade creation.
+
+Confirm whether the PaperExecutionEngine is running its 10-second scan loop and calling checkSymbolForSignal() or equivalent strategy functions.
+
+Determine if the strategy layer is generating valid trade signals (BUY, SELL, etc.) and if the portfolio manager is correctly receiving them.
+
+Identify if simulated trades are being created but not persisted (e.g., trades not being saved to the paper_trades table).
+
+Check if any filters or position limits (like maxOpenPositions) are incorrectly blocking execution.
+
+3. Endpoints and Data Verification
+
+Review the following endpoints for live activity and correctness:
+
+/api/paper-sim/diagnostics/scan
+
+/api/paper-sim/filtered-pairs (if present)
+
+/api/watchlist
+
+/api/paper/trades/active
+
+Confirm whether these endpoints return consistent data (e.g., the same eligible pairs found in diagnostics).
+
+Check if /api/paper/trades/active ever logs any trade creation events.
+
+4. Frontend Synchronization
+
+Investigate whether the FilteredPairs component or the ReadyToBuy component uses a stale queryClient cache or outdated hook (e.g., useTrading() or useDiagnostics()), causing new eligible pairs not to display.
+
+Check whether the Refresh/Next Scan timer is correctly triggering re-fetching of data for the FilteredPairs tab.
+
+Verify that any relevant WebSocket events (e.g., trading_state_changed, pairs_updated, or signals_generated) are firing and updating the client state.
+
+5. Execution Engine & Strategy Health
+
+Confirm that the PaperExecutionEngine is initialized properly when paper trading is active and that it subscribes to the correct watchlist.
+
+Verify that at least one strategy is enabled (e.g., VWAP or Momentum) and receiving market data.
+
+Check if trades are being rejected due to volume, spread, or risk constraints even after being marked as “ready to buy.”
+
+Review the logs for messages like [PaperExecution] Executing trade or [PaperPortfolio] Added new simulated trade — if missing, identify why.
+
+6. Deliverable
+
+Return a detailed report covering:
+
+The root cause of why eligible pairs aren’t appearing in the Filtered Pairs tab.
+
+Why the system is stopping short of simulated trade execution despite showing Ready-to-Buy pairs.
+
+A breakdown of which services or endpoints are functioning and which are not updating correctly.
+
+Clear recommendations for fixes — but no code changes yet.
+
+Focus your investigation on the flow:
+MarketScanner → Filtered Pairs → Ready to Buy → PaperExecutionEngine → PaperTrades (active)
+
+Provide findings in structured sections for clarity.
