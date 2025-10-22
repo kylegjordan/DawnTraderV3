@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid';
 
 export interface TradeSignal {
   symbol: string;
-  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride';
+  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap';
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;

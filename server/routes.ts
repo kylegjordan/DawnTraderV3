@@ -14,6 +14,7 @@ import { RiskManager } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
 import { formulaAuditService } from "./services/formula-audit";
+import { AlertsService } from "./services/alerts-service";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent } from "@shared/schema";
 import { z } from 'zod';
 import { databaseMonitor } from "./services/database-monitor";
@@ -1983,12 +1984,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const earningsByDate = new Map<string, number>();
       
       for (const trade of trades) {
-        if (trade.status === 'closed' && trade.closedAt) {
-          const closeDate = new Date(trade.closedAt);
+        if (trade.status === 'closed' && trade.exitTime) {
+          const closeDate = new Date(trade.exitTime);
           if (closeDate >= startDate && closeDate <= endDate) {
             const dateKey = closeDate.toISOString().split('T')[0];
             const currentEarnings = earningsByDate.get(dateKey) || 0;
-            earningsByDate.set(dateKey, currentEarnings + (trade.realizedPnl || 0));
+            earningsByDate.set(dateKey, currentEarnings + (parseFloat(trade.realizedPL as any) || 0));
           }
         }
       }
@@ -2018,20 +2019,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       startDate.setDate(startDate.getDate() - days);
       
       const trades = await storage.getAllPaperTrades(userId);
-      const settings = await storage.getTradingSettings(userId);
-      const initialBalance = settings?.paperInitialBalance || 10000;
+      
+      // Get initial balance from portfolio_state
+      const portfolioState = await storage.getPortfolioState({ userId, mode: 'paper' });
+      const initialBalance = portfolioState?.balance ? parseFloat(portfolioState.balance as any) : 10000;
       
       // Calculate running balance over time
       const historyByDate = new Map<string, number>();
       let runningBalance = initialBalance;
       
       for (const trade of trades.sort((a, b) => 
-        new Date(a.closedAt || a.createdAt).getTime() - new Date(b.closedAt || b.createdAt).getTime()
+        new Date(a.exitTime || a.entryTime).getTime() - new Date(b.exitTime || b.entryTime).getTime()
       )) {
-        if (trade.status === 'closed' && trade.closedAt) {
-          const closeDate = new Date(trade.closedAt);
+        if (trade.status === 'closed' && trade.exitTime) {
+          const closeDate = new Date(trade.exitTime);
           if (closeDate >= startDate && closeDate <= endDate) {
-            runningBalance += (trade.realizedPnl || 0);
+            runningBalance += (parseFloat(trade.realizedPL as any) || 0);
             const dateKey = closeDate.toISOString().split('T')[0];
             historyByDate.set(dateKey, runningBalance);
           }
