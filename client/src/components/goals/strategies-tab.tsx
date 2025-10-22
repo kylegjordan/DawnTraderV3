@@ -150,6 +150,7 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   const [presets, setPresets] = useState<Record<string, any>>({});
   const [selectedPreset, setSelectedPreset] = useState<string>("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
 
   // Fetch strategy settings - enable refetch on window focus for fresh state
   const { data: settings, isLoading } = useQuery<StrategySettings>({
@@ -301,14 +302,29 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
   };
 
   const handleFieldChange = (field: string, value: string) => {
-    const numValue = parseCommaFormattedNumber(value);
-    setFormData({ ...formData, [field]: numValue });
+    // Store raw string value while editing
+    setRawInputValues(prev => ({ ...prev, [field]: value }));
     // Clear validation error for this field
     if (validationErrors[field]) {
       const newErrors = { ...validationErrors };
       delete newErrors[field];
       setValidationErrors(newErrors);
     }
+  };
+
+  const handleFieldBlur = (field: string) => {
+    const rawValue = rawInputValues[field];
+    if (rawValue !== undefined) {
+      const numValue = parseCommaFormattedNumber(rawValue);
+      setFormData({ ...formData, [field]: numValue });
+      // Clear raw value after parsing
+      setRawInputValues(prev => {
+        const newValues = { ...prev };
+        delete newValues[field];
+        return newValues;
+      });
+    }
+    setFocusedField(null);
   };
 
   const handleToggleEnabled = async (enabled: boolean) => {
@@ -469,10 +485,10 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
                   <Input
                     id={`${strategy.id}-${key}`}
                     type="text"
-                    value={focusedField === `${strategy.id}-${key}` ? (currentParams[key] ?? '') : formatNumberWithCommas(currentParams[key] ?? '')}
+                    value={focusedField === `${strategy.id}-${key}` ? (rawInputValues[key] ?? currentParams[key] ?? '') : formatNumberWithCommas(currentParams[key] ?? '')}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
                     onFocus={() => setFocusedField(`${strategy.id}-${key}`)}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => handleFieldBlur(key)}
                     className={validationErrors[key] ? "border-red-500" : ""}
                     data-testid={`input-${strategy.id}-${key}`}
                   />
