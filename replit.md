@@ -49,6 +49,8 @@ The system completes the migration from legacy `paper_trades` to a new architect
 
 Quote Currency Filter Removal implements complete removal of currency-based filtering, allowing all trading pairs regardless of quote currency (USD, EUR, USDT, GBP, etc.). All filter sources are dynamically loaded exclusively from the `screener_filters` database table without hardcoded defaults, ensuring a single source of truth for all filter values.
 
+**Phase 27.F.13.B: Complete Database-Driven Guardrails** eliminates all remaining hardcoded risk limits and guardrail values from the backend. Two new fields were added to the `guardrails` table: `maxRequiredCapital` (default 100000.00) and `maxRiskPerTradeLimit` (default 1000.00). The `RiskManager` was updated to fetch these values dynamically from the database instead of using hardcoded checks. All hardcoded fallbacks (100000, 1000, 150) were removed to enforce database-first configuration. The system now rejects trades if guardrails are not properly configured, ensuring users must set risk parameters through the Settings UI. All configuration (filters, guardrails, risk parameters, strategy settings) now loads exclusively from database tables (`screener_filters`, `guardrails`, `trading_settings`), achieving 100% database-driven configuration with zero hardcoded values.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
