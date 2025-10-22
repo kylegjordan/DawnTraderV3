@@ -58,6 +58,9 @@ import {
   type InsertStrategySettingsAudit,
   type WatchlistPair,
   type InsertWatchlistPair,
+  tradingSignals,
+  type TradingSignal,
+  type InsertTradingSignal,
   type Trade,
   type InsertTrade,
   type AIReport,
@@ -236,6 +239,12 @@ export interface IStorage {
   addWatchlistPair(pair: InsertWatchlistPair): Promise<WatchlistPair>;
   updateWatchlistPair(id: string, updates: Partial<WatchlistPair>): Promise<WatchlistPair>;
   removeWatchlistPair(id: string): Promise<void>;
+
+  // Trading signals methods
+  saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal>;
+  getTradingSignals(params: { userId: string; mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]>;
+  updateSignalStatus(id: string, status: string, executedAt?: Date): Promise<TradingSignal>;
+  expireOldSignals(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
 
   // Trade methods
   getTrades(userId: string, filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }): Promise<Trade[]>;
@@ -936,6 +945,55 @@ export class DatabaseStorage implements IStorage {
     await db.update(watchlistPairs)
       .set({ isActive: false })
       .where(eq(watchlistPairs.id, id));
+  }
+
+  // Trading signals methods
+  async saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal> {
+    const [result] = await db.insert(tradingSignals).values(signal).returning();
+    return result;
+  }
+
+  async getTradingSignals(params: { userId: string; mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]> {
+    const conditions = [
+      eq(tradingSignals.userId, params.userId),
+      eq(tradingSignals.mode, params.mode),
+    ];
+    
+    if (params.status) {
+      conditions.push(eq(tradingSignals.status, params.status));
+    }
+    
+    return await db
+      .select()
+      .from(tradingSignals)
+      .where(and(...conditions))
+      .orderBy(desc(tradingSignals.detectedAt));
+  }
+
+  async updateSignalStatus(id: string, status: string, executedAt?: Date): Promise<TradingSignal> {
+    const updates: Partial<TradingSignal> = { status };
+    if (executedAt) {
+      updates.executedAt = executedAt;
+    }
+    
+    const [result] = await db
+      .update(tradingSignals)
+      .set(updates)
+      .where(eq(tradingSignals.id, id))
+      .returning();
+    return result;
+  }
+
+  async expireOldSignals(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void> {
+    await db
+      .update(tradingSignals)
+      .set({ status: 'expired' })
+      .where(and(
+        eq(tradingSignals.userId, params.userId),
+        eq(tradingSignals.mode, params.mode),
+        eq(tradingSignals.status, 'active'),
+        lte(tradingSignals.detectedAt, params.beforeDate)
+      ));
   }
 
   // Trade methods

@@ -341,7 +341,7 @@ export class MarketScanner {
       for (const signal of resolvedSignals) {
         if (signal) {
           signal.symbol = pair.symbol;
-          await this.processSignal(userId, signal);
+          await this.processSignal(userId, mode, signal, pair, indicators);
         }
       }
 
@@ -395,13 +395,13 @@ export class MarketScanner {
     return [bestSignal];
   }
 
-  private async processSignal(userId: string, signal: any): Promise<void> {
-    // In a real implementation, this would:
-    // 1. Check if signal meets minimum confidence threshold
-    // 2. Perform additional risk checks
-    // 3. Send to trading engine for execution
-    // 4. Log signal for analysis
-    
+  private async processSignal(
+    userId: string, 
+    mode: 'live' | 'paper',
+    signal: any, 
+    pair: WatchlistPair,
+    indicators: any
+  ): Promise<void> {
     console.log(`Signal detected for user ${userId}:`, {
       symbol: signal.symbol,
       strategy: signal.strategy,
@@ -411,8 +411,49 @@ export class MarketScanner {
       target: signal.targetPrice
     });
 
-    // For now, we'll just log it
-    // In production, this would integrate with the TradingEngine
+    try {
+      // Parse symbol to extract base and quote currencies (e.g., "BTCUSD" -> "BTC", "USD")
+      const symbolParts = signal.symbol.match(/^([A-Z]+)(USD|USDT|EUR|GBP)$/);
+      const baseCurrency = symbolParts ? symbolParts[1] : signal.symbol.slice(0, -3);
+      const quoteCurrency = symbolParts ? symbolParts[2] : signal.symbol.slice(-3);
+
+      // Save signal to database with 24-hour expiration
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+
+      await storage.saveTradingSignal({
+        userId,
+        mode,
+        symbol: signal.symbol,
+        baseCurrency,
+        quoteCurrency,
+        strategy: signal.strategy,
+        confidence: signal.confidence.toString(),
+        entryPrice: signal.entryPrice.toString(),
+        stopPrice: signal.stopPrice.toString(),
+        targetPrice: signal.targetPrice.toString(),
+        currentPrice: (pair.currentPrice || indicators.currentPrice.toString()),
+        vwap: indicators.vwap?.toString() || pair.vwap,
+        volume24h: pair.volume24h,
+        dailyRange: pair.dailyRange,
+        status: 'active',
+        expiresAt,
+        metadata: {
+          detectedBy: 'market_scanner',
+          scanCycle: new Date().toISOString()
+        }
+      });
+
+      console.log(`✅ Trading signal saved to database for ${signal.symbol}`);
+      
+      // Clean up expired signals for this user/mode (older than 24 hours)
+      const expirationCutoff = new Date();
+      expirationCutoff.setHours(expirationCutoff.getHours() - 24);
+      await storage.expireOldSignals({ userId, mode, beforeDate: expirationCutoff });
+      
+    } catch (error) {
+      console.error(`Error saving trading signal for ${signal.symbol}:`, error);
+    }
   }
 
   async getMarketOverview(): Promise<{
