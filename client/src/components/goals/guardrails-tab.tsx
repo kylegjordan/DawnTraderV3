@@ -289,8 +289,10 @@ export default function GuardrailsTab() {
                     <Input
                       id="maxPositionPercent"
                       type="text"
-                      value={formatNumberWithCommas(globalSettings.maxPositionPercent || '')}
+                      value={focusedField === 'maxPositionPercent' ? (globalSettings.maxPositionPercent || '') : formatNumberWithCommas(globalSettings.maxPositionPercent || '')}
                       onChange={(e) => handleGlobalChange('maxPositionPercent', e.target.value)}
+                      onFocus={() => setFocusedField('maxPositionPercent')}
+                      onBlur={() => setFocusedField(null)}
                       data-testid="input-max-position-percent"
                       className="bg-white dark:bg-slate-950"
                     />
@@ -319,8 +321,10 @@ export default function GuardrailsTab() {
             <Input
               id="maxDailyLoss"
               type="text"
-              value={formatNumberWithCommas(settings.maxDailyLoss || '')}
+              value={focusedField === 'maxDailyLoss' ? (settings.maxDailyLoss || '') : formatNumberWithCommas(settings.maxDailyLoss || '')}
               onChange={(e) => handleChange('maxDailyLoss', e.target.value)}
+              onFocus={() => setFocusedField('maxDailyLoss')}
+              onBlur={() => setFocusedField(null)}
               data-testid="input-max-daily-loss"
             />
             <p className="text-xs text-muted-foreground">
@@ -333,8 +337,10 @@ export default function GuardrailsTab() {
             <Input
               id="maxDrawdown"
               type="text"
-              value={formatNumberWithCommas(settings.maxDrawdown || '')}
+              value={focusedField === 'maxDrawdown' ? (settings.maxDrawdown || '') : formatNumberWithCommas(settings.maxDrawdown || '')}
               onChange={(e) => handleChange('maxDrawdown', e.target.value)}
+              onFocus={() => setFocusedField('maxDrawdown')}
+              onBlur={() => setFocusedField(null)}
               data-testid="input-max-drawdown"
             />
             <p className="text-xs text-muted-foreground">
@@ -347,8 +353,10 @@ export default function GuardrailsTab() {
             <Input
               id="maxPositionSize"
               type="text"
-              value={formatNumberWithCommas(settings.maxPositionSize || '')}
+              value={focusedField === 'maxPositionSize' ? (settings.maxPositionSize || '') : formatNumberWithCommas(settings.maxPositionSize || '')}
               onChange={(e) => handleChange('maxPositionSize', e.target.value)}
+              onFocus={() => setFocusedField('maxPositionSize')}
+              onBlur={() => setFocusedField(null)}
               data-testid="input-max-position-size"
             />
             <p className="text-xs text-muted-foreground">
@@ -361,8 +369,10 @@ export default function GuardrailsTab() {
             <Input
               id="maxOpenPositions"
               type="text"
-              value={formatNumberWithCommas(settings.maxOpenPositions || '')}
+              value={focusedField === 'maxOpenPositions' ? (settings.maxOpenPositions || '') : formatNumberWithCommas(settings.maxOpenPositions || '')}
               onChange={(e) => handleChange('maxOpenPositions', e.target.value)}
+              onFocus={() => setFocusedField('maxOpenPositions')}
+              onBlur={() => setFocusedField(null)}
               data-testid="input-max-open-positions"
             />
             <p className="text-xs text-muted-foreground">
@@ -375,8 +385,10 @@ export default function GuardrailsTab() {
             <Input
               id="riskPerTrade"
               type="text"
-              value={formatNumberWithCommas(settings.riskPerTrade || '')}
+              value={focusedField === 'riskPerTrade' ? (settings.riskPerTrade || '') : formatNumberWithCommas(settings.riskPerTrade || '')}
               onChange={(e) => handleChange('riskPerTrade', e.target.value)}
+              onFocus={() => setFocusedField('riskPerTrade')}
+              onBlur={() => setFocusedField(null)}
               data-testid="input-risk-per-trade"
             />
             <p className="text-xs text-muted-foreground">
@@ -389,8 +401,10 @@ export default function GuardrailsTab() {
             <Input
               id="maxRequiredCapital"
               type="text"
-              value={formatNumberWithCommas(settings.maxRequiredCapital || '')}
+              value={focusedField === 'maxRequiredCapital' ? (settings.maxRequiredCapital || '') : formatNumberWithCommas(settings.maxRequiredCapital || '')}
               onChange={(e) => handleChange('maxRequiredCapital', e.target.value)}
+              onFocus={() => setFocusedField('maxRequiredCapital')}
+              onBlur={() => setFocusedField(null)}
               data-testid="input-max-required-capital"
             />
             <p className="text-xs text-muted-foreground">
@@ -403,8 +417,10 @@ export default function GuardrailsTab() {
             <Input
               id="maxRiskPerTradeLimit"
               type="text"
-              value={formatNumberWithCommas(settings.maxRiskPerTradeLimit || '')}
+              value={focusedField === 'maxRiskPerTradeLimit' ? (settings.maxRiskPerTradeLimit || '') : formatNumberWithCommas(settings.maxRiskPerTradeLimit || '')}
               onChange={(e) => handleChange('maxRiskPerTradeLimit', e.target.value)}
+              onFocus={() => setFocusedField('maxRiskPerTradeLimit')}
+              onBlur={() => setFocusedField(null)}
               data-testid="input-max-risk-per-trade-limit"
             />
             <p className="text-xs text-muted-foreground">

@@ -1,0 +1,51 @@
+Please complete Phases 27.F.13.C and 27.F.13.D with the goal of finalizing all risk, guardrail, and UI functionality across Paper Mode and Live Mode.
+
+🎯 Core Objectives
+
+1. Paper Sim Reset & Session Control
+
+Add the ability to fully reset Paper Sim trading sessions, clearing historical data and allowing a custom restart balance.
+
+Ensure the reset action is accessible in the UI and functions reliably without requiring manual refreshes.
+
+2. Guardrail Completion
+
+Expose the new guardrail fields — Max Required Capital and Max Risk Per Trade ($) — in the Goals Engine → Guardrails tab.
+
+Confirm all guardrail values (including these new ones) save to and load dynamically from the database.
+
+Validate that the trading engines reference these values correctly for both Paper and Live modes.
+
+3. Numeric Input Experience
+
+Ensure all numeric fields across Goals Engine tabs (Guardrails, Screeners, Strategies) support clean number entry, proper formatting, and decimal precision without user frustration.
+
+4. UI and Data Polish
+
+Convert the “Ready to Buy” list into a clear, sortable table displaying key trading data (symbol, volume, price, strategy, targets, etc.).
+
+Align the counts and datasets between “Filtered Pairs” and “Filter Insights,” showing all eligible pairs with pagination or “Show All.”
+
+Confirm consistent behavior and data refresh after each Market Scanner cycle.
+
+5. Stability & Verification
+
+Verify that heartbeat monitoring runs cleanly and no longer throws null or undefined session errors.
+
+Validate the overall Paper Mode workflow — start → scan → ready to buy → risk checks → reset — operates smoothly with no desyncs.
+
+🧾 Expected Deliverables
+
+Fully functional Reset Simulation flow with adjustable starting balance.
+
+Guardrails tab showing and persisting all relevant risk parameters.
+
+All numeric fields accept decimals and display commas appropriately.
+
+Consistent, user-friendly “Ready to Buy” and “Filtered Pairs” views.
+
+Clean logs confirming stable Paper Sim and heartbeat behavior.
+
+A short Markdown summary report outlining what was completed and verified.
+
+The purpose of this phase is to finalize all user-facing trading controls and ensure the backend and Goals Engine operate in full sync across Paper and Live modes, paving the way for Phase 27.F.14 (Walter Integration and Adaptive Risk Management).
