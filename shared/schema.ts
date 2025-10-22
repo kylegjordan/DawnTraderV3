@@ -242,6 +242,8 @@ export const guardrails = pgTable("guardrails", {
   maxPositionSize: decimal("max_position_size", { precision: 10, scale: 2 }).default("5000.00"),
   maxOpenPositions: integer("max_open_positions").default(5),
   riskPerTrade: decimal("risk_per_trade", { precision: 5, scale: 2 }).default("1.5"),
+  maxRequiredCapital: decimal("max_required_capital", { precision: 12, scale: 2 }).default("100000.00"),
+  maxRiskPerTradeLimit: decimal("max_risk_per_trade_limit", { precision: 10, scale: 2 }).default("1000.00"),
   aiCanAdjust: boolean("ai_can_adjust").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
