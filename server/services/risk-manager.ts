@@ -228,14 +228,20 @@ export class RiskManager {
       const positionSize = riskAmount / stopDistance;
       const requiredCapital = positionSize * signal.entryPrice;
 
-      // Phase 27.F.13.B: Load max capital requirement from guardrails instead of hardcoded value
+      // Phase 27.F.13.B: Load max capital requirement from guardrails (database-driven, no hardcoded fallbacks)
       const systemContext = await storage.getSystemContext(userId);
       const mode = systemContext?.tradingMode || 'live'; // Default to live for this check
       const guardrailsData = await storage.getGuardrails({ userId, mode });
       
-      const maxCapital = guardrailsData?.maxRequiredCapital 
-        ? parseFloat(guardrailsData.maxRequiredCapital.toString())
-        : 100000; // Fallback only if guardrails not configured
+      if (!guardrailsData || !guardrailsData.maxRequiredCapital) {
+        console.warn(`[RiskManager] Guardrails not configured for user ${userId} mode ${mode}, rejecting trade for safety`);
+        return {
+          approved: false,
+          reason: 'Guardrails not configured - please configure risk limits in Settings'
+        };
+      }
+
+      const maxCapital = parseFloat(guardrailsData.maxRequiredCapital.toString());
 
       if (requiredCapital > maxCapital) {
         return {
@@ -267,14 +273,20 @@ export class RiskManager {
       };
     }
 
-    // Phase 27.F.13.B: Load max risk limit from guardrails instead of hardcoded value
+    // Phase 27.F.13.B: Load max risk limit from guardrails (database-driven, no hardcoded fallbacks)
     const systemContext = await storage.getSystemContext(userId);
     const mode = systemContext?.tradingMode || 'paper';
     const guardrailsData = await storage.getGuardrails({ userId, mode });
     
-    const maxRiskLimit = guardrailsData?.maxRiskPerTradeLimit 
-      ? parseFloat(guardrailsData.maxRiskPerTradeLimit.toString())
-      : 1000; // Fallback only if guardrails not configured
+    if (!guardrailsData || !guardrailsData.maxRiskPerTradeLimit) {
+      console.warn(`[RiskManager] Guardrails not configured for user ${userId} mode ${mode}, rejecting trade for safety`);
+      return {
+        approved: false,
+        reason: 'Guardrails not configured - please configure risk limits in Settings'
+      };
+    }
+
+    const maxRiskLimit = parseFloat(guardrailsData.maxRiskPerTradeLimit.toString());
 
     if (riskAmount > maxRiskLimit) {
       return {

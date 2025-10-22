@@ -89,8 +89,13 @@ export class PaperExecutionService {
         return null;
       }
 
-      // Calculate position size
-      const riskAmount = parseFloat(settings.riskPerTrade || '150');
+      // Phase 27.F.13.B: Calculate position size (database-driven, no hardcoded fallbacks)
+      if (!settings.riskPerTrade) {
+        console.error(`[PaperExecution] Trading settings missing riskPerTrade for user ${this.userId}`);
+        return null;
+      }
+      
+      const riskAmount = parseFloat(settings.riskPerTrade);
       const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
       const quantity = riskAmount / stopDistance;
 
