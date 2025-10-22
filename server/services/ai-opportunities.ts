@@ -4,10 +4,9 @@ import { storage } from '../storage';
 import { InsertAIOpportunity, InsertAIOpportunityRun, InsertAIAuditLog } from '@shared/schema';
 import { estimateMessagesTokens, calculateCost } from '../utils/token-counter';
 import { getWalterPurpose, createPurposePromptSection, logPurposeUsage } from './walter-purpose';
+import { OpenAIRateLimiter } from './openai-rate-limiter';
 
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || ""
-});
+const rateLimiter = OpenAIRateLimiter.getInstance();
 
 interface PairData {
   symbol: string;
@@ -311,7 +310,7 @@ Return ONLY a JSON array of opportunities, no other text. Maximum ${maxOpportuni
 
       console.log(`📡 Calling GPT-4o mini with ${inputTokensEst} estimated input tokens...`);
 
-      const completion = await openai.chat.completions.create({
+      const completion = await rateLimiter.createChatCompletion({
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: systemPrompt },
@@ -320,6 +319,9 @@ Return ONLY a JSON array of opportunities, no other text. Maximum ${maxOpportuni
         temperature: 0.7,
         max_tokens: 4000,
         response_format: { type: "json_object" }
+      }, {
+        cacheKey: `ai_opportunities_${userId}_${Date.now()}`,
+        cacheTTL: 60 * 60 * 1000 // 1 hour cache
       });
 
       const inputTokens = completion.usage?.prompt_tokens || inputTokensEst;

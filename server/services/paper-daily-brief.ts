@@ -2,10 +2,9 @@ import { storage } from '../storage.js';
 import { PaperMetricsService } from './paper-metrics.js';
 import OpenAI from "openai";
 import { estimateMessagesTokens, calculateCost } from '../utils/token-counter.js';
+import { OpenAIRateLimiter } from './openai-rate-limiter.js';
 
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || ""
-});
+const rateLimiter = OpenAIRateLimiter.getInstance();
 
 interface PaperBriefContent {
   headline: string;

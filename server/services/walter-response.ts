@@ -24,8 +24,9 @@ import { contextRefreshCoordinator } from './context-refresh-coordinator';
 import { cognitiveLayer } from './walter-cognitive-layer';
 import OpenAI from 'openai';
 import { storage } from '../storage';
+import { OpenAIRateLimiter } from './openai-rate-limiter';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const rateLimiter = OpenAIRateLimiter.getInstance();
 const expertContext = new ExpertContextService();
 
 // Phase 8.5 Addendum J: Listen for context updates and log rehydration

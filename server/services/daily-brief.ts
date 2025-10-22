@@ -2,10 +2,9 @@ import { storage } from '../storage';
 import { RiskManager } from './risk-manager';
 import OpenAI from "openai";
 import { estimateMessagesTokens, calculateCost } from '../utils/token-counter';
+import { OpenAIRateLimiter } from './openai-rate-limiter';
 
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || ""
-});
+const rateLimiter = OpenAIRateLimiter.getInstance();
 
 interface DailyBriefContent {
   headline: string;
@@ -330,7 +329,8 @@ Return JSON:
   ]
 }`;
 
-    const response = await openai.chat.completions.create({
+    const todayDate = new Date().toISOString().split('T')[0];
+    const response = await rateLimiter.createChatCompletion({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
@@ -338,6 +338,9 @@ Return JSON:
       ],
       temperature: 0.7,
       response_format: { type: 'json_object' }
+    }, {
+      cacheKey: `daily_brief_${userId}_${todayDate}`,
+      cacheTTL: 30 * 60 * 1000 // 30 minutes
     });
 
     const content = response.choices[0].message.content || '{}';

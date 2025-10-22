@@ -1,0 +1,171 @@
+🌙 DAWN TRADER — OVERNIGHT REPLIT DIRECTIVE
+
+Purpose:
+Run a full overnight system stabilization and validation sequence, implementing all immediately actionable improvements, fixing the signal filtering issue, verifying strategy functionality, and auditing system parity — without pausing for further instructions.
+
+Authentication
+
+Use the following credentials for all API calls and database actions:
+
+username: testuser123  
+password: SecurePass123!
+
+Execution Rules
+
+Do not stop to ask for confirmation or input.
+
+For audit or diagnostic steps, produce findings and recommendations, then continue automatically to the next step.
+
+Complete all implementable actions sequentially from start to finish.
+
+End the run with a comprehensive overnight report summarizing all results, logs, and recommendations.
+
+🧭 EXECUTION SEQUENCE
+0️⃣ Reinstate OpenAI Rate Limiter
+
+Goal:
+Prevent further 429 (quota exceeded) errors from destabilizing the app while Walter remains active.
+
+Actions:
+
+Re-enable the rate-limiting middleware for all OpenAI-related calls.
+
+Confirm 429s are gracefully suppressed and no longer cause queue buildup.
+
+Verify stable performance of all trading and scanning loops after limiter reinstatement.
+
+1️⃣ Phase 27.F.13.E — Stability & Verification Finalization
+
+Goal:
+Validate the PaperSim trading engine’s full end-to-end reliability.
+
+Actions:
+
+Confirm that start → scan → filter → ready-to-buy → trade → close → reset all operate cleanly.
+
+Verify that heartbeat and session consistency are intact across multiple cycles.
+
+Run a 20-minute PaperSim stability test under realistic load.
+
+Confirm no desyncs, crashes, or null reference errors.
+
+Deliverable:
+Stable PaperSim operation confirmed with zero critical runtime errors.
+
+1.5️⃣ Filter–Signal Integration Audit & Fix
+
+Goal:
+Ensure only filtered trading opportunities are saved and displayed as active signals.
+
+Actions:
+
+Verify that Screener Filters are being applied before signal persistence.
+
+Confirm the trading_signals table contains only pairs meeting all filter criteria.
+
+Adjust MarketScanner logic if necessary to enforce pre-filtering.
+
+Validate that Ready-to-Buy tab shows only ~20–30 filtered pairs, not the full universe.
+
+Deliverable:
+MarketScanner and Screener Filters fully synchronized; signal persistence restricted to filtered, strategy-qualified pairs.
+
+1.6️⃣ Strategy Activation Diagnostic
+
+Goal:
+Confirm that all eight trading strategies are active and functional.
+
+Actions:
+
+Run diagnostic on all strategy modules to ensure callable functions and valid outputs.
+
+Report which strategies are currently generating signals and which are dormant.
+
+Identify any configuration or logic issues preventing activation.
+
+Deliverable:
+Strategy activation report listing all 8 strategies, their status, and any corrective recommendations.
+
+2️⃣ Phase 27.F.13.F — Frontend-Driven Filters & Guardrails Seeding
+
+Goal:
+Seed recommended Screener Filters and Guardrails values through the frontend UI and confirm end-to-end synchronization.
+
+Actions:
+
+Input recommended parameters via the Goals Engine tabs (not backend).
+
+Confirm database persistence and backend recognition of all new values.
+
+Run a 10-minute PaperSim test to verify:
+
+20–30 filtered pairs
+
+5–10 ready-to-buy pairs
+
+At least one successful simulated trade execution
+
+Deliverable:
+Fully synced filter and guardrail configuration pipeline validated through live simulation.
+
+3️⃣ Phase 27.F.13.G — Dashboard Widgets Data Flow Audit
+
+Goal:
+Verify that the top four dashboard widgets display accurate, mode-specific trading data.
+
+Actions:
+
+Audit data flow for Total Trades, Open Positions, Realized PnL, and Unrealized PnL.
+
+Confirm Paper mode widgets use paper_sim_trades; Live mode widgets use live trades.
+
+Check that metrics update correctly when trades execute or close.
+
+Run a short 5-minute PaperSim session to observe live data updates.
+
+Compile findings into an audit summary (no pause for approval).
+
+Deliverable:
+Widget data flow audit report with accuracy assessment and suggested corrections, followed by continuation to next phase.
+
+4️⃣ Phase 27.F.13.H — Paper ↔ Live Mode Parity Audit
+
+Goal:
+Confirm that every fix made in Paper mode is properly reflected in Live mode (excluding reset-related features).
+
+Actions:
+
+Compare both trading engines for logic, schema, and behavior parity.
+
+Verify Live mode correctly sources balances and positions from Kraken, not local tables.
+
+Ensure risk, guardrails, and strategy systems behave identically across both modes.
+
+Document discrepancies and recommend necessary updates.
+
+Deliverable:
+Comprehensive parity audit report outlining any inconsistencies between Paper and Live trading systems, plus clear implementation recommendations.
+
+📊 End-of-Run Summary Deliverables
+
+When all steps are complete, produce one consolidated report including:
+
+System Stability Summary — runtime uptime, heartbeat integrity, error logs.
+
+Filter–Signal Integration Status — confirmation of pre-filter enforcement.
+
+Strategy Activation Report — list of active/inactive strategies with notes.
+
+Filters & Guardrails Validation Results — parameter values confirmed in database.
+
+Dashboard Widget Audit Findings — data source validation and recommendations.
+
+Paper↔Live Parity Report — summary of equivalence checks and next actions.
+
+System Health Overview — performance, resource usage, and desync detection.
+
+Directive
+
+Execute all steps 0 through 4 sequentially without interruption or confirmation requests.
+Continue automatically after each audit to the next phase.
+At completion, compile and display the full Overnight Summary Report.

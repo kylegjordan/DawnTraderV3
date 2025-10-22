@@ -5,8 +5,10 @@ import OpenAI from "openai";
 import { getMarketSnapshot } from "./market-snapshot";
 import { type InsertAiMarketAnalysis } from "@shared/schema";
 import { storage } from "../storage";
+import { OpenAIRateLimiter } from './openai-rate-limiter';
 
 const MODEL = process.env.OPENAI_MODEL_MARKET || "gpt-4o-mini"; // cost-aware default
+const rateLimiter = OpenAIRateLimiter.getInstance();
 
 export async function runAiMarketAnalysis(mode: 'live' | 'paper'): Promise<InsertAiMarketAnalysis> {
   const snapshot = await getMarketSnapshot();
@@ -23,15 +25,16 @@ Return ONLY valid JSON with keys: regime, confidence, summary, recommendations.
 SNAPSHOT:
 ${JSON.stringify(snapshot)}
 `;
-
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   
   try {
-    const res = await client.chat.completions.create({
+    const res = await rateLimiter.createChatCompletion({
       model: MODEL,
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       max_tokens: 600,
+    }, {
+      cacheKey: `market_analysis_${mode}_${new Date().toISOString().slice(0, 10)}`,
+      cacheTTL: 30 * 60 * 1000 // 30 minutes
     });
 
     // Defensive parse
