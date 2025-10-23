@@ -1,0 +1,223 @@
+🌅 DAWN TRADER — PHASE 27.F.13.H DIRECTIVE (FINAL REVISION)
+
+Title: Architecture Realignment, Engine Synchronization & Simplified Guardrail Control
+Objective: Ensure Dawn Trader operates with single-mode execution, accurate filtered-pair reporting, and clean start/stop synchronization — using only one defined kill-switch: the Daily Loss Kill Switch (%).
+
+🔐 Test User Credentials
+username: testuser123
+email: testuser@example.com
+password: TestUser!23
+
+⚙️ Implementation Objectives
+1️⃣ Engine Execution Integrity
+
+Only one engine (Paper or Live) may execute trades at any time.
+
+Switching between Paper and Live tabs never starts or stops trading.
+
+The only actions that alter engine state are:
+
+Clicking that mode’s Start / Stop button
+
+Hitting a guardrail kill switch (daily loss breach)
+
+Manually triggering the new Force Stop Engine option (admin reset).
+
+When one engine is active, the other remains idle but fully viewable.
+
+UI must reflect the exact backend state at all times.
+
+2️⃣ Global Configuration Model
+
+Maintain one shared configuration set visible to all users.
+
+Each major configuration table (Guardrails, Filters, Strategies) has two rows — one for each mode (paper, live).
+
+Editing Paper values does not modify Live values.
+
+UI auto-loads data for the active mode.
+
+No per-user overrides — all users share one global configuration set.
+
+Backend automatically persists updates to both database and cache.
+
+3️⃣ Mode-Specific Data Pipelines
+
+Each record in filtered_pairs, ready_to_buy, active_trades, and trading_signals must include a mode column.
+
+Paper and Live engines process and store their own data exclusively.
+
+No shared, hybrid, or cross-mode signals.
+
+Switching views between modes should never restart engines or trigger extra scans.
+
+4️⃣ Start/Stop Synchronization
+
+Implement strict state-machine logic for engine lifecycle:
+
+stopped → starting → running → stopping → stopped
+
+
+Backend should manage lock flags to prevent race conditions.
+
+Add heartbeat monitoring: if no update for >10 seconds, flag stale engine state.
+
+Frontend Start/Stop buttons should show real-time engine status.
+
+Add backend Force Stop Engine endpoint to terminate stuck cycles cleanly and reset to “stopped.”
+
+5️⃣ Filtered Pairs Consistency
+
+All filtered pair counts across:
+
+Filter Insights tab
+
+Filtered Pairs tab
+
+Filter Health widget
+…must pull from a single unified source.
+
+Use one shared service:
+FilteredPairsService.getValidPairs(mode)
+
+Define Valid & Unexpired Filtered Pair as:
+
+Passes all current filters for that mode
+
+Market data < 12 minutes old
+
+Not failed or blacklisted
+
+Not a duplicate symbol
+
+API, dashboard, and diagnostic endpoints must all reference this logic.
+
+Ensure identical pair counts across all displays.
+
+6️⃣ Numeric Normalization
+
+Convert all numeric database fields (including decimals, bigints, and numerics) into proper JS numbers before JSON serialization.
+
+Verify all endpoints output numeric types for prices, PnL, risk, volume, and volatility fields.
+
+This fixes .toFixed() type errors in the frontend.
+
+Confirm through API schema inspection that numeric types are consistent and validated.
+
+7️⃣ Automatic Mode Refresh
+
+Remove manual “Refresh” button.
+
+When user toggles modes:
+
+Automatically reload that mode’s data: portfolio balance, filtered pairs, signals, guardrails, and dashboard widgets.
+
+Do not interrupt an active trading engine while switching views.
+
+Keep hidden debug reload option accessible only to developers.
+
+8️⃣ Guardrail Kill-Switch (Simplified & Corrected)
+
+Only one true kill-switch: daily_loss_kill_switch_percent.
+
+This parameter defines the maximum allowable daily portfolio loss (%).
+
+Behavior:
+
+If portfolio drawdown ≥ threshold (based on day’s starting balance):
+
+Immediately stop trading for that mode.
+
+Update UI to “Stopped by Guardrail.”
+
+Log entry:
+
+[KILL_SWITCH_TRIGGERED] Mode: <mode>, Reason: DailyLossExceeded, Threshold: <x%>, Loss: <y%>
+
+
+All other guardrail parameters (max_drawdown, max_risk_per_trade, etc.) act only as pre-trade constraints — not kill triggers.
+
+Confirm this logic applies identically in Paper and Live modes.
+
+9️⃣ Mode-Safe Viewing
+
+Confirm that viewing the inactive mode’s configuration does not:
+
+Interrupt or pause the active engine
+
+Trigger any data reload for the running mode
+
+Cause websocket disconnects
+
+Alter backend engine state or cached data
+
+Each mode’s trading loop operates independently, and UI tab-switching must be non-destructive.
+
+🧪 Validation & Testing
+🔟 25-Minute PaperSim Stability Cycle
+
+After implementation, start Paper Mode and run continuously for 25 minutes.
+
+Record explicit timestamps in the log at start and stop:
+
+[STABILITY_TEST_START] 2025-10-24T09:30:00Z
+[STABILITY_TEST_END] 2025-10-24T09:55:00Z
+
+
+Confirm at least two full scan cycles occur during the run.
+
+Validate:
+
+Consistent filtered pairs counts across UI tabs
+
+Ready-to-Buy signals appear and expire correctly
+
+Engine Start/Stop states remain in sync
+
+No “previous cycle still running” warnings
+
+No signal duplication or expired data retained
+
+Summarize findings in the validation report.
+
+📄 Deliverables
+
+✅ PHASE_27.F.13.H_VALIDATION_REPORT.md including:
+
+Engine synchronization results
+
+Filtered Pairs verification
+
+Guardrail kill-switch test results (triggered vs non-triggered)
+
+PaperSim 25-min run timestamps
+
+Any observed discrepancies or API warnings
+
+✅ Updated replit.md documenting:
+
+Architecture realignment
+
+Simplified guardrail behavior
+
+Mode-specific execution flow
+
+✅ Log evidence confirming:
+
+Proper numeric normalization
+
+Consistent filtered-pair counts
+
+No desync or race conditions
+
+🚫 Execution Instructions
+
+Proceed automatically with no prompts or pauses for input.
+
+Use provided test user credentials.
+
+Paper Mode trading only — no live orders executed.
+
+Run the PaperSim test for a full 25 minutes and log timestamps.
+
+Generate all reports and logs automatically in /workspace/ directory upon completion.
