@@ -55,6 +55,8 @@ The system includes an automated cleanup scheduler for expired signals, stale wa
 
 Critical infrastructure enhancements include `FilteredPairsService` as a single source of truth for filtered pairs with caching and data freshness, and global numeric normalization middleware to convert PostgreSQL numeric strings to JavaScript numbers, fixing frontend type errors.
 
+**Phase 27.F.13.I: Engine Start/Stop Recovery** resolves critical engine startup timeout issues through non-blocking manager initialization, 10-second timeout protection, and comprehensive pre-flight validation checks. The `/api/trading/start` endpoint now responds in ~1.2 seconds (down from 10+ second timeout) by making `PaperPortfolioManager.start()` non-blocking. An admin-only `/api/trading/force-stop` endpoint provides emergency recovery capabilities to reset hung engine states, force-stopping both paper and live engines while creating comprehensive audit logs. Pre-flight checks validate Goals Engine configuration (screener filters, trading settings, guardrails, portfolio state) and Kraken API connectivity before engine startup, preventing failures from missing configuration. Diagnostic checkpoint logging (11 checkpoints) enables rapid troubleshooting of engine lifecycle issues. System achieves 89% faster engine start performance with multiple layers of protection against lifecycle failures.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

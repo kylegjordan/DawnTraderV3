@@ -1094,7 +1094,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         
         // 3. Quick Kraken API connectivity check (non-blocking)
         try {
-          const { KrakenService } = await import('./services/kraken-service.js');
+          const KrakenService = (await import('./services/kraken-service.ts')).KrakenService;
           const kraken = new KrakenService();
           const serverTime = await Promise.race([
             kraken.getServerTime(),
