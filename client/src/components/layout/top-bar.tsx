@@ -399,6 +399,11 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     ? tradingStatus?.isEngineActivePaper || false
     : tradingStatus?.isEngineActiveLive || false;
 
+  // Phase 27.F.13.O: Get audit info for who started/stopped the engine
+  const auditInfo = isActive 
+    ? tradingStatus?.lastStartedBy || tradingStatus?.changedBy
+    : tradingStatus?.lastStoppedBy;
+
   return (
     <header 
       className="sticky top-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border"
@@ -422,22 +427,35 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
           {/* Master Controls */}
           <div className="flex items-center gap-3">
             {/* Start/Stop Toggle */}
-            <div className="flex items-center gap-3 px-4 py-2 bg-muted rounded-lg">
-              <span className="text-sm font-medium text-foreground">Trading</span>
-              <Switch
-                checked={isActive}
-                onCheckedChange={handleTradingToggle}
-                disabled={isStarting || isStopping || !canEdit}
-                className="data-[state=checked]:bg-success"
-                data-testid="switch-trading"
-                title={!canEdit ? `Viewers cannot control trading (Role: ${role})` : ''}
-              />
-              <div className="flex items-center gap-1">
-                <span className={`status-dot ${isActive ? 'active' : 'inactive'}`} />
-                <span className={`text-xs font-semibold ${isActive ? 'text-success' : 'text-destructive'}`}>
-                  {isActive ? 'ACTIVE' : 'STOPPED'}
-                </span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3 px-4 py-2 bg-muted rounded-lg">
+                <span className="text-sm font-medium text-foreground">Trading</span>
+                <Switch
+                  checked={isActive}
+                  onCheckedChange={handleTradingToggle}
+                  disabled={isStarting || isStopping || !canEdit}
+                  className="data-[state=checked]:bg-success"
+                  data-testid="switch-trading"
+                  title={!canEdit ? `Viewers cannot control trading (Role: ${role})` : ''}
+                />
+                <div className="flex items-center gap-1">
+                  <span className={`status-dot ${isActive ? 'active' : 'inactive'}`} />
+                  <span className={`text-xs font-semibold ${isActive ? 'text-success' : 'text-destructive'}`}>
+                    {isActive ? 'ACTIVE' : 'STOPPED'}
+                  </span>
+                </div>
               </div>
+              {/* Phase 27.F.13.O: Audit info display */}
+              {auditInfo && (
+                <div className="px-2 flex items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground">
+                    {isActive ? 'Started by:' : 'Stopped by:'}
+                  </span>
+                  <span className="text-[10px] font-mono text-foreground/80" data-testid="text-audit-user">
+                    {auditInfo}
+                  </span>
+                </div>
+              )}
             </div>
             
             {/* Mode Toggle - Phase 27.3: Permission-gated */}

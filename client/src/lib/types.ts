@@ -144,6 +144,12 @@ export interface TradingStatus {
   readyToBuy: number;
   activeTrades: number;
   lastTickISO: string;
+  // Phase 27.F.13.O: Audit fields for global engine control
+  lastStartedBy?: string | null;
+  lastStoppedBy?: string | null;
+  lastHeartbeat?: string | null;
+  lastModeChange?: string | null;
+  changedBy?: string | null;
 }
 
 export interface MarketOverview {

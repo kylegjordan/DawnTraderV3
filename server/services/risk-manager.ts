@@ -40,13 +40,14 @@ export class RiskManager {
 
   /**
    * Phase 27.F.13.A: Get active positions from correct table based on trading mode
+   * Phase 27.F.13.O: Determine mode from user first, then query system_context
    * Live mode: reads from trades table
    * Paper mode: reads from paper_sim_open_positions table
    */
   private async getActivePositions(userId: string): Promise<ActivePosition[]> {
-    // Get current trading mode from system_context
-    const systemContext = await storage.getSystemContext(userId);
-    const mode = systemContext?.tradingMode || 'paper';
+    // Get user's current mode, then query global system_context for that mode
+    const user = await storage.getUser(userId);
+    const mode = user?.tradingMode || 'paper';
 
     if (mode === 'paper') {
       // Milestone 18: Use paper_sim_open_positions for paper trading
@@ -229,8 +230,8 @@ export class RiskManager {
       const requiredCapital = positionSize * signal.entryPrice;
 
       // Phase 27.F.13.M: Load max capital requirement from global guardrails (mode-only, no userId)
-      const systemContext = await storage.getSystemContext(userId);
-      const mode = systemContext?.tradingMode || 'live'; // Default to live for this check
+      // Phase 27.F.13.O: Get mode from user, not from system_context(userId)
+      const mode = user?.tradingMode || 'live'; // Default to live for this check
       const guardrailsData = await storage.getGuardrails({ mode });
       
       if (!guardrailsData || !guardrailsData.maxRequiredCapital) {
@@ -274,8 +275,9 @@ export class RiskManager {
     }
 
     // Phase 27.F.13.M: Load max risk limit from global guardrails (mode-only, no userId)
-    const systemContext = await storage.getSystemContext(userId);
-    const mode = systemContext?.tradingMode || 'paper';
+    // Phase 27.F.13.O: Get mode from user, not from system_context(userId)
+    const user = await storage.getUser(userId);
+    const mode = user?.tradingMode || 'paper';
     const guardrailsData = await storage.getGuardrails({ mode });
     
     if (!guardrailsData || !guardrailsData.maxRiskPerTradeLimit) {
@@ -322,9 +324,9 @@ export class RiskManager {
     // Phase 27.F.13.A FIX: Get actual portfolio value from portfolio_state table
     let portfolioValue = 0;
     
-    // Get current trading mode from system_context
-    const systemContext = await storage.getSystemContext(userId);
-    const mode = systemContext?.tradingMode || 'paper';
+    // Phase 27.F.13.O: Get mode from user, not from system_context(userId)
+    const user = await storage.getUser(userId);
+    const mode = user?.tradingMode || 'paper';
     
     // Get actual balance from portfolio_state table
     const portfolioState = await storage.getPortfolioState({ userId, mode });
@@ -461,9 +463,9 @@ export class RiskManager {
     // For paper trading, this will be the real balance (e.g., $800), not the settings value ($50k)
     let portfolioValue = 0;
     
-    // Try to get current trading mode from system_context
-    const systemContext = await storage.getSystemContext(userId);
-    const mode = systemContext?.tradingMode || 'paper';
+    // Phase 27.F.13.O: Get mode from user, not from system_context(userId)
+    const user = await storage.getUser(userId);
+    const mode = user?.tradingMode || 'paper';
     
     // Get actual balance from portfolio_state table
     const portfolioState = await storage.getPortfolioState({ userId, mode });
@@ -824,11 +826,12 @@ export class RiskManager {
   /**
    * Close all open trades (called when kill switch triggers)
    * Phase 27.F.13.A: Mode-aware - closes positions from correct table
+   * Phase 27.F.13.O: Get mode from user, not from system_context(userId)
    */
   private async closeAllTrades(userId: string): Promise<any[]> {
-    // Get current trading mode
-    const systemContext = await storage.getSystemContext(userId);
-    const mode = systemContext?.tradingMode || 'paper';
+    // Get mode from user, not from system_context(userId)
+    const user = await storage.getUser(userId);
+    const mode = user?.tradingMode || 'paper';
     
     const closedTrades = [];
     

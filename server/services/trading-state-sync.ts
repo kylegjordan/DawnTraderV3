@@ -145,9 +145,10 @@ export class TradingStateSync {
 
   /**
    * Get engine active state
+   * Phase 27.F.13.O: Refactored to use mode parameter
    */
-  async isEngineActive(userId: string): Promise<boolean> {
-    const context = await storage.getSystemContext(userId);
+  async isEngineActive(mode: 'live' | 'paper' = 'paper'): Promise<boolean> {
+    const context = await storage.getSystemContext(mode);
     return context?.isEngineActive || false;
   }
 
@@ -257,18 +258,25 @@ export class TradingStateSync {
         ? 'RUNNING' 
         : 'STOPPED';
       
+      // Phase 27.F.13.O: Get the appropriate context and audit fields
+      const context = (currentMode === 'paper' ? paperContext : liveContext);
+      const isActive = (currentMode === 'paper' ? isEngineActivePaper : isEngineActiveLive);
+      
       const payload = {
         userId, // Keep for audit trail
         mode: currentMode,
         status, // Phase 27.F.17b: Explicit RUNNING/STOPPED status
-        isEngineActive: (currentMode === 'paper' ? isEngineActivePaper : isEngineActiveLive),
-        active: (currentMode === 'paper' ? isEngineActivePaper : isEngineActiveLive), // Keep both for backwards compatibility
+        isEngineActive: isActive,
+        active: isActive, // Keep both for backwards compatibility
         // Phase 27.F.12: Add mode-specific status
         isEngineActivePaper,
         isEngineActiveLive,
         tradingModeLabel: currentMode.toUpperCase() + ' TRADING',
-        lastModeChange: (currentMode === 'paper' ? paperContext?.lastModeChange : liveContext?.lastModeChange),
-        changedBy: (currentMode === 'paper' ? paperContext?.lastStartedBy : liveContext?.lastStartedBy),
+        lastModeChange: context?.lastModeChange,
+        // Phase 27.F.13.O: Audit fields - show who started/stopped based on current state
+        lastStartedBy: context?.lastStartedBy,
+        lastStoppedBy: context?.lastStoppedBy,
+        changedBy: isActive ? context?.lastStartedBy : context?.lastStoppedBy,
         changeReason: 'Engine state changed',
         timestamp: new Date().toISOString()
       };

@@ -30,11 +30,12 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
   
   try {
     // PHASE 27.F.21.FINAL: Global Gating - Skip ALL checks if trading is inactive
-    // Check if any user has active trading (live or paper)
-    const users = await storage.getAllUsers();
-    const anyTradingActive = await Promise.all(
-      users.map(u => tradingStateSync.isEngineActive(u.id))
-    ).then(results => results.some(active => active));
+    // Phase 27.F.13.O: Check global engine state (paper and live) instead of per-user
+    const [paperActive, liveActive] = await Promise.all([
+      tradingStateSync.isEngineActive('paper'),
+      tradingStateSync.isEngineActive('live')
+    ]);
+    const anyTradingActive = paperActive || liveActive;
     
     if (!anyTradingActive) {
       const skipReason = trigger === 'auto' 
@@ -158,11 +159,13 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     if (shouldAlert) {
       if (metrics.status !== 'healthy') {
         // PHASE 27.F.21: Check if trading is inactive (dormant mode)
+        // Phase 27.F.13.O: Check global engine state (paper and live) instead of per-user
         const users = await storage.getAllUsers();
-        const tradingActiveStates = await Promise.all(
-          users.map(u => tradingStateSync.isEngineActive(u.id))
-        );
-        const anyTradingActive = tradingActiveStates.some(active => active);
+        const [paperActive, liveActive] = await Promise.all([
+          tradingStateSync.isEngineActive('paper'),
+          tradingStateSync.isEngineActive('live')
+        ]);
+        const anyTradingActive = paperActive || liveActive;
         const isDormantMode = !anyTradingActive;
         
         // Create new alert for all admin users (warning or critical)
