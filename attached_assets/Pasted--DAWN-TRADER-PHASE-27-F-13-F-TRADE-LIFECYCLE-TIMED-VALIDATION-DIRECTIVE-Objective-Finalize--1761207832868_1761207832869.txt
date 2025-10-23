@@ -1,0 +1,94 @@
+🌅 DAWN TRADER — PHASE 27.F.13.F: TRADE LIFECYCLE & TIMED VALIDATION DIRECTIVE
+
+Objective:
+Finalize all trade-lifecycle integrity fixes, extend cleanup automation to every relevant dataset, and perform a fully timed 25-minute PaperSim stability run to validate that the complete trading loop operates reliably over two full market-scan cycles.
+
+1️⃣ Trade Lifecycle Corrections
+
+Confirm that only executed trades appear in the Active Trades table.
+
+Ensure canceled signals remain only in trading_signals and never migrate into Active Trades or trade history.
+
+Update reporting and dashboard metrics so canceled signals are excluded from all trade counts and P&L.
+
+Verify that transitions follow the correct path: Ready-to-Buy → Active → Closed (no “Canceled” entries in Active Trades).
+
+2️⃣ Extended Cleanup Scheduler
+
+Expand the 10-minute cleanup cycle to include:
+
+Filtered Pairs: remove any pair not refreshed within 15 minutes.
+
+Active Paper Trades: archive closed, canceled, or stale records older than 24 hours.
+
+Active Live Trades: archive closed or canceled records older than 30 days.
+
+Maintain detailed log messages such as:
+
+[Cleanup] 8 expired signals removed  
+[Cleanup] 22 stale filtered pairs removed  
+[Cleanup] 3 closed paper trades archived
+
+3️⃣ Alert Center Functionality
+
+Ensure Dismiss (X) and Clear All buttons work fully via DELETE /api/alerts/:id and DELETE /api/alerts.
+
+Remove dismissed alerts from both the database and UI.
+
+Group identical repeating alerts (e.g., “OpenAI quota exhausted ×27”).
+
+Keep alerts persistent until the user clears them manually.
+
+4️⃣ Cleanup Verification
+
+Confirm the scheduler runs on every 10-minute market-scan cycle.
+
+Log start and finish timestamps plus counts of records cleaned to /tmp/logs/cleanup_activity.log.
+
+Verify that no active records are accidentally removed.
+
+5️⃣ Timed 25-Minute PaperSim Stability Run
+
+Start PaperSim in paper mode using the test credentials below.
+
+Log a clear start timestamp (e.g., PaperSim stability run started: 12:30 PM UTC).
+
+Keep the simulation active for exactly 25 minutes to cover two complete market-scan and cleanup cycles.
+
+Log an end timestamp and total runtime.
+
+Record any runtime errors, warnings, or desyncs.
+
+Verify post-run metrics:
+
+Filtered Pairs ≈ 20–30
+
+Ready-to-Buy ≈ 5–10
+
+Active Trades executing and closing normally
+
+Cleanup and Alert Center behavior confirmed.
+
+6️⃣ Test User Credentials
+username: testuser123  
+password: SecurePass123!
+
+Execution Notes
+
+Execute all phases sequentially without pausing for instructions.
+
+Proceed automatically to the timed stability test after lifecycle and cleanup updates.
+
+On completion, generate a full validation report titled
+PHASE_27.F.13.F_TRADE_LIFECYCLE_AND_TIMED_VALIDATION.md
+summarizing:
+
+Start and end timestamps
+
+Runtime duration
+
+Records cleaned per table
+
+Any alerts or exceptions observed
+
+Leave audit recommendations (if any) unimplemented for tomorrow’s review.
