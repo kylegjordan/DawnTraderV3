@@ -1166,14 +1166,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log('[ENGINE_DATABASE_UPDATE] Updating user status...');
       await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
       
-      // Phase 27.F.2: Update system_context and broadcast state
-      console.log('[ENGINE_DATABASE_UPDATE] Updating system context...');
+      // Phase 27.F.13.O: Update global system_context with audit trail
+      console.log('[ENGINE_DATABASE_UPDATE] Updating global system context...');
+      await storage.updateSystemContext(mode, {
+        isEngineActive: true,
+        lastStartedBy: userId,
+        lastHeartbeat: new Date(),
+        changedBy: req.user!.username || 'unknown',
+        changeReason: 'User-initiated start'
+      });
+      
+      // Phase 27.F.2: Broadcast state update (mode-scoped)
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
-      await tradingStateSync.setEngineActive(userId, true);
       await tradingStateSync.broadcastUserUpdate(userId);
       
-      // Get current context for deterministic response
-      const context = await storage.getSystemContext(userId);
+      // Get current global context for deterministic response
+      const context = await storage.getSystemContext(mode);
       
       console.log(`[TradingStart] Completed start for user ${userId} mode=${mode} active=true`);
       console.log('[ENGINE_DATABASE_OK]', { contextLoaded: !!context });
@@ -1196,7 +1204,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         mode: context?.tradingMode || mode,
         active: true,
         sessionId: result?.data?.sessionId || null,
-        startTimeMs: elapsed
+        startTimeMs: elapsed,
+        // Phase 27.F.13.O: Include audit fields
+        lastStartedBy: context?.lastStartedBy || userId,
+        lastHeartbeat: context?.lastHeartbeat?.toISOString() || new Date().toISOString()
       });
     } catch (error: any) {
       const elapsed = Date.now() - startTime;
@@ -1222,15 +1233,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 27.F.2: Trading Engine Control - Stop with deterministic state broadcasting
   // Phase 27.F.13.B: Fixed to properly stop correct engine based on current mode
+  // Phase 27.F.13.O: Refactored to use global mode-based context with audit trail
   apiRouter.post('/trading/stop', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const { mode } = req.body; // Get mode from request body
       
-      console.log(`[TradingStop] User ${userId} requesting stop`);
+      console.log(`[TradingStop] User ${userId} requesting stop for ${mode} mode`);
       
-      // Get current mode from system context
-      const context = await storage.getSystemContext(userId);
-      const currentMode = context?.tradingMode || 'paper';
+      // Validate mode
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ 
+          error: 'Invalid mode',
+          message: 'Mode must be either "live" or "paper"'
+        });
+      }
+      
+      // Get current global context for this mode
+      const context = await storage.getSystemContext(mode);
+      const currentMode = context?.tradingMode || mode;
       
       // Phase 27.F.13.B: Stop the correct engine based on current mode
       if (currentMode === 'paper') {
@@ -1249,9 +1270,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       await storage.updateUser(userId, { tradingStatus: 'stopped' });
       
-      // Phase 27.F.2: Update system_context.is_engine_active=false and broadcast
+      // Phase 27.F.13.O: Update global system_context with audit trail
+      await storage.updateSystemContext(mode, {
+        isEngineActive: false,
+        lastStoppedBy: userId,
+        changedBy: req.user!.username || 'unknown',
+        changeReason: 'User-initiated stop'
+      });
+      
+      // Phase 27.F.2: Broadcast state update (mode-scoped)
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
-      await tradingStateSync.setEngineActive(userId, false);
       await tradingStateSync.broadcastUserUpdate(userId);
       
       console.log(`[TradingStop] Completed stop for user ${userId} mode=${currentMode} active=false`);
@@ -1271,9 +1299,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       res.json({ 
         success: true,
-        mode: context?.tradingMode || 'paper',
+        mode: context?.tradingMode || mode,
         active: false,
-        sessionId: null
+        sessionId: null,
+        // Phase 27.F.13.O: Include audit fields
+        lastStoppedBy: context?.lastStoppedBy || userId,
+        lastStartedBy: context?.lastStartedBy || null
       });
     } catch (error) {
       console.error('[TradingStop] Error stopping trading:', error);
@@ -1282,72 +1313,91 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 27.F.13.I: Force Stop - Admin-only emergency recovery endpoint
+  // Phase 27.F.13.O: Refactored to use global mode-based context
   apiRouter.post('/trading/force-stop', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { targetUserId, reason } = req.body;
-      const stopUserId = targetUserId || userId;
+      const { mode, reason } = req.body; // Get mode from request (not userId)
       
-      console.log(`[ForceStop] Admin ${userId} forcing stop for user ${stopUserId}, reason: ${reason || 'none'}`);
-      
-      // Get current state
-      const context = await storage.getSystemContext(stopUserId);
-      const currentMode = context?.tradingMode || 'paper';
-      
-      // Force stop both engines regardless of current mode
-      try {
-        const { stopPaperSimulation, clearGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
-        await stopPaperSimulation(stopUserId);
-        clearGlobalPaperSimManager();
-        console.log(`[ForceStop] Paper simulation force-stopped`);
-      } catch (err) {
-        console.error(`[ForceStop] Error stopping paper sim:`, err);
+      // Validate mode
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ 
+          error: 'Invalid mode',
+          message: 'Mode must be either "live" or "paper"'
+        });
       }
       
-      try {
-        const engine = tradingEngines.get(stopUserId);
-        if (engine) {
-          await engine.stop();
-          tradingEngines.delete(stopUserId);
+      console.log(`[ForceStop] Admin ${userId} forcing stop for ${mode} mode, reason: ${reason || 'emergency_recovery'}`);
+      
+      // Get current global state for this mode
+      const context = await storage.getSystemContext(mode);
+      const currentMode = context?.tradingMode || mode;
+      
+      // Force stop the specified mode's engine
+      if (mode === 'paper') {
+        try {
+          const { stopPaperSimulation, clearGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
+          await stopPaperSimulation(userId); // Use current user for manager lookup
+          clearGlobalPaperSimManager();
+          console.log(`[ForceStop] Paper simulation force-stopped`);
+        } catch (err) {
+          console.error(`[ForceStop] Error stopping paper sim:`, err);
         }
-        console.log(`[ForceStop] Live trading engine force-stopped`);
-      } catch (err) {
-        console.error(`[ForceStop] Error stopping live engine:`, err);
+      } else {
+        try {
+          // Stop all live engines (cleanup all users)
+          for (const [engineUserId, engine] of tradingEngines.entries()) {
+            await engine.stop();
+            tradingEngines.delete(engineUserId);
+          }
+          console.log(`[ForceStop] Live trading engines force-stopped (all users)`);
+        } catch (err) {
+          console.error(`[ForceStop] Error stopping live engine:`, err);
+        }
       }
       
-      // Force reset database state
-      await storage.updateUser(stopUserId, { tradingStatus: 'stopped' });
+      // Update admin user status
+      await storage.updateUser(userId, { tradingStatus: 'stopped' });
       
-      // Force update system_context
+      // Phase 27.F.13.O: Update global system_context with admin audit trail
+      await storage.updateSystemContext(mode, {
+        isEngineActive: false,
+        lastStoppedBy: userId, // Admin user ID
+        changedBy: req.user!.username || 'admin',
+        changeReason: reason || 'Admin emergency force-stop'
+      });
+      
+      // Broadcast state update (mode-scoped)
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
-      await tradingStateSync.setEngineActive(stopUserId, false);
-      await tradingStateSync.broadcastUserUpdate(stopUserId);
+      await tradingStateSync.broadcastUserUpdate(userId);
       
       // Audit log
       try {
         await storage.createTradingAuditLog({
-          userId: stopUserId,
+          userId,
           action: 'force_stop',
           mode: currentMode,
           triggeredBy: 'admin',
           metadata: { 
             adminUserId: userId,
             reason: reason || 'emergency_recovery',
-            forcedBothEngines: true
+            modeTargeted: mode
           }
         });
       } catch (auditError) {
         console.error('[ForceStop] Failed to log audit:', auditError);
       }
       
-      console.log(`[ForceStop] Completed force-stop for user ${stopUserId}`);
+      console.log(`[ForceStop] Completed force-stop for ${mode} mode`);
       
       res.json({ 
         success: true,
-        message: 'Trading engines force-stopped',
-        userId: stopUserId,
-        stoppedEngines: ['paper', 'live'],
-        active: false
+        message: `Global ${mode} trading engine force-stopped by admin`,
+        mode: currentMode,
+        active: false,
+        // Phase 27.F.13.O: Include audit fields
+        lastStoppedBy: userId,
+        stoppedByAdmin: true
       });
     } catch (error: any) {
       console.error('[ForceStop] Error during force-stop:', error);
@@ -1475,19 +1525,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 8.5 Addendum K.4: Returns DUAL-MODE data (both live and paper) regardless of engine status
   // Phase 27.F.3: Enhanced to return unified trading state authority
+  // Phase 27.F.13.O: Refactored to use global mode-based context with audit fields
   apiRouter.get('/trading/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const globalContextId = 'default';
+      const requestedMode = (req.query.mode as 'live' | 'paper') || 'paper';
       
-      // Phase 27.F.13.L.1: Get canonical operator user ID
-      const operatorUserId = await storage.getPrimaryOperatorUserId() || userId;
-      const operatorUser = await storage.getUser(operatorUserId);
+      // Validate mode if provided
+      if (requestedMode && requestedMode !== 'live' && requestedMode !== 'paper') {
+        return res.status(400).json({ 
+          error: 'Invalid mode',
+          message: 'Mode query parameter must be either "live" or "paper"'
+        });
+      }
       
-      // Phase 27.F.3: Get trading state from system_context (single source of truth, always fresh from DB)
-      // Use CANONICAL OPERATOR's system context for engine state
-      const systemContext = await storage.getSystemContext(operatorUserId);
-      const currentMode = (systemContext?.tradingMode || 'paper') as 'live' | 'paper';
+      // Phase 27.F.13.O: Get global system_context for requested mode
+      const systemContext = await storage.getSystemContext(requestedMode);
+      const currentMode = (systemContext?.tradingMode || requestedMode) as 'live' | 'paper';
       const isEngineActive = systemContext?.isEngineActive || false;
       
       // Check paper simulation engine status (system-wide)
@@ -1549,6 +1604,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const lastTickISO = new Date().toISOString();
       
       // Phase 27.F.3: Unified Trading State Authority object
+      // Phase 27.F.13.O: Added audit fields
       const unifiedState = {
         mode: currentMode,
         active: isEngineActive,
@@ -1557,23 +1613,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         lastUserAction: isEngineActive ? 'start' : 'stop' as 'start' | 'stop' | null,
         lastModeChange: systemContext?.lastModeChange?.toISOString() || null,
         changedBy: systemContext?.changedBy || null,
-        changeReason: systemContext?.changeReason || null
+        changeReason: systemContext?.changeReason || null,
+        // Phase 27.F.13.O: Audit fields
+        lastStartedBy: systemContext?.lastStartedBy || null,
+        lastStoppedBy: systemContext?.lastStoppedBy || null,
+        lastHeartbeat: systemContext?.lastHeartbeat?.toISOString() || null
       };
       
       // Return dual-mode structure with unified state authority (Phase 27.F.3)
       // Phase 27.F.12: Added mode-specific engine status fields
-      // Phase 27.F.13.L.1: Added canonical engine operator info
+      // Phase 27.F.13.O: Global mode-based status with audit fields
       res.json({
         // Phase 27.F.3: Unified state at the top level for easy access
         ...unifiedState,
         currentMode,
         isEngineActive,
-        // Phase 27.F.13.L.1: Canonical Engine Operator
-        engineOperator: {
-          userId: operatorUserId,
-          username: operatorUser?.username || 'unknown'
-        },
-        runtimeNote: operatorUserId !== userId ? 'Runtime shown is canonical operator\'s engine' : undefined,
         // Phase 27.F.12: Mode-specific engine status
         isEngineActivePaper: isPaperSimRunning,
         isEngineActiveLive: isLiveEngineRunning,
