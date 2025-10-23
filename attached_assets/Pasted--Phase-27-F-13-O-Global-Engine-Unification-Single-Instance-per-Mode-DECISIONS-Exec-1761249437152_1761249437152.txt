@@ -1,0 +1,234 @@
+## Phase 27.F.13.O — Global Engine Unification (Single Instance per Mode)
+
+### DECISIONS
+- **Execution mode:** Phased (Option B) with explicit PASS/FAIL gates per stage.
+- **Data strategy:** Archive all *per-user* runtime data; initialize fresh *global-per-mode* state.
+- **Kill switch:** Only `daily_loss_kill_switch_percent` (from Guardrails) stops the engine. All other guardrail params are pre-trade constraints only.
+- **Tests:** Real 25-minute PaperSim run (no acceleration).
+
+---
+
+## O.a — Pre-migration audit & backup (PASS/FAIL Gate 0)
+
+**Do now:**
+1) Create full DB backup (provider-appropriate snapshot).
+2) Generate audit report of any lingering `user_id` dependencies in settings/runtime:
+   - Search codebase for calls that pass `userId` into guardrails/screener/strategy readers or writers.
+   - List tables that still have `user_id` columns used by business logic (not just audit).
+
+**Deliverables**
+- `/workspace/PHASE_27.F.13.O_AUDIT.md` with:
+  - Code paths identified
+  - Tables and columns involved
+  - Confirmation that settings already operate global-per-mode
+
+**PASS to continue** when report shows **no** settings code path depends on user_id (only audit). Otherwise, refactor before O.b.
+
+---
+
+## O.b — Schema migration to true global engine (PASS/FAIL Gate 1)
+
+**Goal:** One engine row per **mode** (paper/live), shared by all users.
+
+### 1) `system_context` → global-per-mode
+- Ensure table has **exactly** 2 rows (paper, live).
+- Add audit fields (if not present):
+  ```sql
+  ALTER TABLE system_context
+    ADD COLUMN IF NOT EXISTS last_started_by UUID,
+    ADD COLUMN IF NOT EXISTS last_stopped_by UUID,
+    ADD COLUMN IF NOT EXISTS last_updated_at TIMESTAMPTZ DEFAULT NOW();
+
+  -- Remove duplicates, keep most recent by mode
+  DELETE FROM system_context sc
+  USING (
+    SELECT mode, id
+    FROM (
+      SELECT id, mode,
+             ROW_NUMBER() OVER (PARTITION BY mode ORDER BY last_updated_at DESC NULLS LAST, updated_at DESC NULLS LAST, created_at DESC NULLS LAST) rn
+      FROM system_context
+    ) t WHERE t.rn > 1
+  ) d
+  WHERE sc.id = d.id;
+
+  -- Ensure exactly two canonical rows exist
+  INSERT INTO system_context (mode, is_engine_active, last_updated_at)
+  VALUES ('paper', FALSE, NOW())
+  ON CONFLICT (mode) DO NOTHING;
+
+  INSERT INTO system_context (mode, is_engine_active, last_updated_at)
+  VALUES ('live', FALSE, NOW())
+  ON CONFLICT (mode) DO NOTHING;
+  ```
+
+### 2) Archive per-user runtime state (do not merge)
+Create archive tables if not present; copy all *per-user* runtime rows, then continue to run new global rows fresh:
+```sql
+-- Trades
+CREATE TABLE IF NOT EXISTS trades_user_archive AS TABLE trades WITH NO DATA;
+INSERT INTO trades_user_archive SELECT * FROM trades;
+
+-- Positions
+CREATE TABLE IF NOT EXISTS positions_user_archive AS TABLE positions WITH NO DATA;
+INSERT INTO positions_user_archive SELECT * FROM positions;
+
+-- Portfolio state (per-user)
+CREATE TABLE IF NOT EXISTS portfolio_state_user_archive AS TABLE portfolio_state WITH NO DATA;
+INSERT INTO portfolio_state_user_archive SELECT * FROM portfolio_state;
+```
+> Do **not** delete runtime tables; leave existing rows intact for now—Stage O.c code will stop reading any user-specific runtime in favor of global-per-mode. (We’ll optionally clean later.)
+
+### 3) Global settings sanity checks
+- `guardrails`: exactly 1 row per mode
+- `screener_filters`: exactly 1 row per mode
+- `strategy_settings`: shared/global, addressable by `mode` (and existing `global_context_id` if used)
+
+**Deliverable**
+- `/workspace/PHASE_27.F.13.O_DB_AUDIT.md` with row counts per table and explicit confirmation:
+  - `system_context` = 2 rows
+  - Settings (guardrails, screeners) = 1 row per mode
+
+**PASS to continue** when counts match and archive tables exist.
+
+---
+
+## O.c — Backend refactor: single global engine instance per mode (PASS/FAIL Gate 2)
+
+### 1) Engine managers & registry
+- Replace per-user engine keys with **mode-only** keys:
+  - Global `PaperEngineManager` keyed by `"paper"`
+  - Global `LiveEngineManager` keyed by `"live"`
+- Start/stop transitions use a state machine:
+  ```
+  stopped → starting → running → stopping → stopped
+  ```
+- Add mutex/lock to prevent concurrent start/stop races.
+- Heartbeat updates `system_context.last_heartbeat` (one per mode).
+
+### 2) API routes (mode-only, no user branching)
+- `/api/trading/start` (POST): `{ "mode": "paper" | "live" }`
+  - Pre-flight checks:
+    - guardrails (global, for `mode`)
+    - screener filters (global, for `mode`)
+    - strategies enabled for `mode`
+    - portfolio_state global (for `mode`) exists or is created
+  - On success, set:
+    - `system_context.is_engine_active = TRUE`
+    - `system_context.last_started_by = req.user.id`
+    - `system_context.last_updated_at = now()`
+  - Return `{ success:true, mode, sessionId, startedAt }`
+
+- `/api/trading/stop` (POST): `{ "mode": "paper" | "live" }`
+  - Stop engine for `mode`, then set:
+    - `system_context.is_engine_active = FALSE`
+    - `system_context.last_stopped_by = req.user.id`
+    - `system_context.last_updated_at = now()`
+  - Return `{ success:true, mode, stoppedAt }`
+
+- `/api/trading/status` (GET):
+  - Return **single** status per requested mode:
+    ```json
+    {
+      "mode": "paper",
+      "isEngineActive": true,
+      "state": "running|starting|stopping|stopped",
+      "lastHeartbeat": "...",
+      "startedBy": "uuid",
+      "killSwitch": { "dailyLossPercent": 7, "active": false }
+    }
+    ```
+
+- `/api/trading/force-stop` (POST admin): `{ "mode": "paper" | "live" }`
+  - Force terminate stuck engine and reset state machine to `stopped`.
+
+**Note:** Numeric normalization middleware stays enabled (solved `.toFixed()` issues).
+
+### 3) WebSocket channels (mode-scoped)
+- Emit updates by `mode` only:
+  - `engine:update:{mode}`
+  - `scan:update:{mode}`
+  - `signals:update:{mode}`
+  - `trades:update:{mode}`
+
+**Deliverables**
+- `/workspace/PHASE_27.F.13.O_BACKEND_REFactor.md` summarizing:
+  - Registry keys changed
+  - Route diffs
+  - State machine & locking
+  - WebSocket topics
+
+**PASS to continue** when:
+- A single engine per mode is startable/stoppable from any user.
+- `/api/trading/status?mode=paper|live` reports the **same** state for all users.
+
+---
+
+## O.d — Frontend & observer alignment (PASS/FAIL Gate 3)
+
+### 1) UI wiring
+- Mode toggle **does not** start/stop engines; it only switches the *view*.
+- Start/Stop buttons call the new mode-only endpoints.
+- Subscribe to `engine:update:{mode}` and redraw:
+  - Filter Insights
+  - Filtered Pairs
+  - Ready-to-Buy
+  - Active Trades
+  - Dashboard widgets
+
+### 2) Observer endpoint
+- Use `GET /api/trading/observer?mode=paper|live` to hydrate all panels from one call at load; live updates via WS.
+
+### 3) Guardrails/Screener UI
+- Continue reading/writing global-per-mode rows (already implemented).
+- Zero-value handling already fixed (`?? ''` logic).
+
+**Deliverables**
+- `/workspace/PHASE_27.F.13.O_FE_VERIFICATION.md` with:
+  - Two-browser test: Device A starts engine; Device B sees immediate running state and live updates.
+  - Screens (or logs) proving all tabs update live in both sessions.
+
+**PASS to continue** when both devices stay in sync and show identical values.
+
+---
+
+## O.e — 25-minute PaperSim stability & kill-switch validation (FINAL Gate)
+
+**Setup**
+- Mode: `paper`
+- Confirm `daily_loss_kill_switch_percent` present (e.g., 7%).
+- Engine: stopped → start via `/api/trading/start` (paper).
+
+**Run**
+- **Duration:** 25 minutes (real time).
+- Record a timestamped checkpoint every 5 minutes:
+  - `/api/trading/status?mode=paper`
+  - `/api/paper-sim/filtered-pairs`
+  - `/api/trading-signals?status=active`
+  - `/api/paper-sim/open-positions`
+  - Any executed trades (if applicable)
+- Confirm front-end tabs update on two devices in parallel during the run.
+
+**Kill-switch validation**
+- If cumulative paper PnL drops past the configured daily loss %, engine must **auto-stop** and set `is_engine_active=false`.  
+- Log audit entry with reason `DAILY_LOSS_KILL_SWITCH_TRIGGERED`.
+
+**Deliverables**
+- `/workspace/PHASE_27.F.13.O_25MIN_REPORT.md` including:
+  - Start/End timestamps (UTC)
+  - 5-minute checkpoints (JSON excerpts)
+  - Engine state transitions
+  - Any kill-switch trigger evidence
+  - PASS/FAIL verdict
+
+**FINAL PASS** when:
+- Exactly one global engine is observed for `paper`.
+- All clients show synchronized, live-updating tabs for the full 25 minutes.
+- Guardrails kill switch is honored if thresholds breached.
+
+---
+
+## Rollback plan (safety net)
+- Keep `_user_archive` tables for trades, positions, portfolio_state.
+- If needed, re-enable per-user engine by flipping registry keys back (documented in BACKEND_REFactor.md).
+- Keep `user_id` as audit-only columns; do not use in business logic.
+
