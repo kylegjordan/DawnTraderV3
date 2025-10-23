@@ -59,7 +59,6 @@ export default function GuardrailsTab() {
   const [hasChanges, setHasChanges] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
-  const initialized = useRef(false);
   const lastMode = useRef(mode);
 
   const { data: currentSettings, isLoading } = useQuery<Guardrails>({
@@ -81,9 +80,13 @@ export default function GuardrailsTab() {
   });
 
   useEffect(() => {
-    if (currentSettings && (!initialized.current || lastMode.current !== mode)) {
-      initialized.current = true;
-      lastMode.current = mode;
+    if (currentSettings) {
+      // Update mode tracking
+      if (lastMode.current !== mode) {
+        lastMode.current = mode;
+      }
+      
+      // Always update settings when currentSettings changes (including on navigation back)
       setSettings({
         maxDailyLoss: currentSettings.maxDailyLoss ?? DEFAULTS.maxDailyLoss,
         maxPositionSize: currentSettings.maxPositionSize ?? DEFAULTS.maxPositionSize,
