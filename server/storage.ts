@@ -669,7 +669,6 @@ export class DatabaseStorage implements IStorage {
     
     const updateData = {
       ...data,
-      userId: null,
       updatedAt: new Date()
     };
     
@@ -681,7 +680,8 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result;
     } else {
-      const [result] = await db.insert(guardrails).values(updateData).returning();
+      const insertData = { ...updateData, userId: undefined };
+      const [result] = await db.insert(guardrails).values(insertData).returning();
       return result;
     }
   }
@@ -700,7 +700,6 @@ export class DatabaseStorage implements IStorage {
     
     const updateData = {
       ...data,
-      userId: null,
       updatedAt: new Date()
     };
     
@@ -712,7 +711,8 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result;
     } else {
-      const [result] = await db.insert(screenerFilters).values(updateData).returning();
+      const insertData = { ...updateData, userId: undefined };
+      const [result] = await db.insert(screenerFilters).values(insertData).returning();
       return result;
     }
   }

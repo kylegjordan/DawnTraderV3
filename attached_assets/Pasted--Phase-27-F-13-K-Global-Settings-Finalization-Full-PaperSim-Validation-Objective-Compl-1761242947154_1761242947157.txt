@@ -1,0 +1,141 @@
+# Phase 27.F.13.K — Global Settings Finalization & Full PaperSim Validation
+**Objective:**  
+Complete the global configuration migration by removing all user-scoped logic from API routes and service files (≈82 call sites), then run a **full 25-minute PaperSim stability and kill-switch test** using the finalized global architecture.
+
+---
+
+## 🧩 Part 1 — Global Settings Finalization
+### ✅ Goal
+All configuration entities (`guardrails`, `screener_filters`, `strategy_settings`) must be **global per mode**, not user-specific.  
+Values are shared between all users but isolated between `live` and `paper`.
+
+### 1. Refactor Storage Layer
+- Remove all `userId` and `globalContextId` parameters from these methods:
+  - `getGuardrails`, `upsertGuardrails`
+  - `getScreenerFilters`, `upsertScreenerFilters`
+  - `getStrategySettings`, `upsertStrategySettings`
+- New function signatures:
+  ```ts
+  getGuardrails(mode: 'live' | 'paper'): Promise<GuardrailConfig>;
+  upsertGuardrails(mode: 'live' | 'paper', data: GuardrailConfig, lastUpdatedBy: string): Promise<void>;
+  ```
+- All lookups should use only:
+  ```sql
+  SELECT * FROM guardrails WHERE mode = $1 LIMIT 1;
+  ```
+
+### 2. Update API Routes & Services (82 Call Sites)
+- Replace all calls passing `userId` or `globalContextId` with mode-based calls.
+- Add `lastUpdatedBy` (from auth context) only for audit logging.
+- Affected files include:
+  - `/server/routes.ts`
+  - `/server/storage.ts`
+  - `/server/services/paper-sim-service.ts`
+  - `/server/services/market-scanner.ts`
+  - `/server/services/trading-engine.ts`
+  - `/client/src/components/goals/*.tsx` (for fetch & save calls)
+- Verify LSP (TypeScript) shows zero errors post-refactor.
+
+### 3. Database Validation
+Run SQL queries to confirm migration:
+```sql
+SELECT mode, COUNT(*) FROM guardrails GROUP BY mode;
+SELECT mode, COUNT(*) FROM screener_filters GROUP BY mode;
+SELECT mode, COUNT(*) FROM strategy_settings GROUP BY mode;
+```
+Expected:  
+Each table → exactly 2 rows (one `live`, one `paper`).
+
+### 4. Confirm Front-End Behavior
+- Edit Paper values → save → navigate → return → values persist.
+- Switch to Live → different values persist independently.
+- Log out/in → same values remain (global).
+- No `user_id` appears in network payloads or database logs.
+
+---
+
+## 🧩 Part 2 — Full 25-Minute PaperSim Stability Test
+After confirming global settings are fully functional, perform a **true real-time stability test**.
+
+### 1. Authentication
+```
+username=testuser123
+password=SecurePass123!
+```
+
+### 2. Baseline Snapshot
+Log to `/tmp/papersim_27f13k_baseline.log`:
+- System health: guardrails, screeners, strategies, status
+- Eligible pairs, engine state, next scan time
+
+### 3. Start Engine
+POST `/api/trading/start` with `{"mode":"paper"}`  
+Expect HTTP 200 within ≤ 2 s.  
+Record `sessionId` and start time.
+
+### 4. Continuous 25-Minute Monitoring
+Run for **exactly 25 minutes** (1 500 seconds).  
+Log every 5 minutes to `/tmp/papersim_27f13k_monitor.log`:
+
+| Metric | Endpoint | Expected Behavior |
+|---------|-----------|------------------|
+| Engine Status | `/api/trading/status` | `isEngineActive=true` throughout |
+| Filtered Pairs | `/api/paper-sim/filtered-pairs` | Stable ± 2 pairs |
+| Active Signals | `/api/trading-signals?status=active` | Generate/expire normally |
+| Open Positions | `/api/paper-sim/open-positions` | At least one open/close cycle |
+| API Latency | measured | ≤ 1 s average |
+
+No acceleration allowed — run full 25 minutes.
+
+### 5. Kill-Switch Trigger (Minute 24)
+- Simulate ≥ 7 % daily portfolio loss to activate the **daily_loss_kill_switch_percent**.
+- Expect log entry:
+  ```
+  [KILL_SWITCH_TRIGGERED] Mode: paper Reason: DailyLossExceeded
+  ```
+- Engine should auto-stop; verify via `/api/trading/status`.
+
+### 6. Shutdown & Verification
+After engine stops:
+- Confirm all open positions closed or archived.
+- Filtered-pair counts consistent across endpoints.
+- Write `[STABILITY_TEST_END]` timestamp to logs.
+
+---
+
+## 📄 Part 3 — Validation Report
+Generate `/workspace/PHASE_27.F.13.K_VALIDATION_REPORT.md` containing:
+
+| Metric | Expected | Observed |
+|---------|-----------|-----------|
+| Engine Start Time | ≤ 2 s |  |
+| Run Duration | 25 min ± 2 min |  |
+| Filtered Pairs Δ | ≤ ± 2 |  |
+| API Error Rate | 0 % |  |
+| Kill-Switch Triggered | Yes |  |
+| Data Isolation | Global ✓ / Per-Mode ✓ |  |
+
+Update `replit.md` → append entry **“Phase 27.F.13.K — Global Settings Finalization Complete”**
+
+---
+
+## 🧠 Execution Rules
+- Fully autonomous run.  
+- **Paper mode only** (no live trades).  
+- Abort only on fatal errors (HTTP ≥ 500).  
+- Log everything under `/tmp/` and `/workspace/`.  
+- Time limit ≈ 26–27 minutes.
+
+---
+
+### ✅ Expected Outcome
+1. All redundant `userId` and `globalContextId` references removed.  
+2. Guardrails, Screeners, and Strategies truly global by mode.  
+3. 25-minute PaperSim test runs stably with no data loss.  
+4. Kill-switch correctly stops the engine at the 7 % loss threshold.  
+5. Validation report generated and appended to `replit.md`.
+
+---
+
+**Begin Phase 27.F.13.K now.**  
+Proceed sequentially through refactor → verification → full 25-minute PaperSim run → report generation.

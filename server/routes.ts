@@ -786,7 +786,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
       }
 
-      let guardrailsData = await storage.getGuardrails({ userId, mode });
+      let guardrailsData = await storage.getGuardrails({ mode });
 
       if (!guardrailsData) {
         // Return defaults if not found
@@ -821,8 +821,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
-      const validatedData = insertGuardrailsSchema.parse({ ...req.body, userId, mode });
-      const guardrailsData = await storage.upsertGuardrails(validatedData);
+      const guardrailsPayload = { ...req.body, mode, lastUpdatedBy: userId };
+      const guardrailsData = await storage.upsertGuardrails(guardrailsPayload);
 
       console.info(`[Guardrails] User ${userId} updated guardrails for ${mode} mode`);
 
@@ -864,7 +864,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       });
 
       // Phase 27.F.15.B: Get screener filter thresholds
-      const screenerSettings = await storage.getScreenerFilters({ userId, mode });
+      const screenerSettings = await storage.getScreenerFilters({ mode });
       const tradingSettings = await storage.getTradingSettings(userId);
 
       // Calculate top failure reason from breakdown
@@ -959,7 +959,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
       }
 
-      let screenerData = await storage.getScreenerFilters({ userId, mode });
+      let screenerData = await storage.getScreenerFilters({ mode });
 
       if (!screenerData) {
         // Return defaults if not found
@@ -996,8 +996,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const mode = req.mode!;
 
-      const validatedData = insertScreenerFiltersSchema.parse({ ...req.body, userId, mode });
-      const screenerData = await storage.upsertScreenerFilters(validatedData);
+      const screenerPayload = { ...req.body, mode, lastUpdatedBy: userId };
+      const screenerData = await storage.upsertScreenerFilters(screenerPayload);
 
       console.info(`[Screeners] User ${userId} updated screener filters for ${mode} mode`);
 
@@ -4946,7 +4946,7 @@ Provide specific, actionable recommendations.`,
       
       if (!testSettings && userId) {
         // Load user's actual filter settings from Goals Engine
-        const screenerSettings = await storage.getScreenerFilters({ userId, mode: 'paper' });
+        const screenerSettings = await storage.getScreenerFilters({ mode: 'paper' });
         const tradingSettings = await storage.getTradingSettings(userId);
         
         if (screenerSettings && tradingSettings) {
@@ -10615,7 +10615,7 @@ Summary:`;
       // Only execute if approved
       if (validated.approved) {
         // Get current guardrails
-        const currentGuardrails = await storage.getGuardrails({ userId, mode: validated.mode });
+        const currentGuardrails = await storage.getGuardrails({ mode: validated.mode });
         
         if (!currentGuardrails) {
           return res.status(404).json({ error: 'Guardrails not found. Please initialize guardrails first.' });
@@ -10625,8 +10625,8 @@ Summary:`;
         const updateData = {
           ...currentGuardrails,
           [validated.field]: validated.value,
-          userId,
-          mode: validated.mode
+          mode: validated.mode,
+          lastUpdatedBy: userId
         };
 
         const result = await storage.upsertGuardrails(updateData);
@@ -10967,13 +10967,13 @@ Important: Extract the exact field names and numeric values from the user's requ
             case 'risk':
               // Update guardrails or risk parameters
               if (interpretation.actionDetails?.field && interpretation.actionDetails?.value !== undefined) {
-                const currentGuardrails = await storage.getGuardrails({ userId, mode });
+                const currentGuardrails = await storage.getGuardrails({ mode });
                 if (currentGuardrails) {
                   const updateData = {
                     ...currentGuardrails,
                     [interpretation.actionDetails.field]: interpretation.actionDetails.value,
-                    userId,
-                    mode
+                    mode,
+                    lastUpdatedBy: userId
                   };
                   await storage.upsertGuardrails(updateData);
                   console.info(`[Walter] Updated ${interpretation.actionType === 'risk' ? 'risk parameter' : 'guardrail'} ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
@@ -10993,13 +10993,13 @@ Important: Extract the exact field names and numeric values from the user's requ
             case 'filters':
               // Update screener filters
               if (interpretation.actionDetails?.field && interpretation.actionDetails?.value !== undefined) {
-                const currentFilters = await storage.getScreenerFilters({ userId, mode });
+                const currentFilters = await storage.getScreenerFilters({ mode });
                 if (currentFilters) {
                   const updateData = {
                     ...currentFilters,
                     [interpretation.actionDetails.field]: interpretation.actionDetails.value,
-                    userId,
-                    mode
+                    mode,
+                    lastUpdatedBy: userId
                   };
                   await storage.upsertScreenerFilters(updateData);
                   console.info(`[Walter] Updated filter ${interpretation.actionDetails.field} to ${interpretation.actionDetails.value} (${mode} mode)`);
