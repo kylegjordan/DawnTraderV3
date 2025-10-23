@@ -837,55 +837,59 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Filter diagnostics endpoint - fetches latest 24h metrics
-  // Phase 27.F.15.B: Enhanced to include threshold values alongside failure counts
+  // Filter diagnostics endpoint - fetches LIVE metrics from diagnostic service
+  // Phase 27.F.21: Migrated from legacy filter_diagnostics table to live diagnostic service
+  // This ensures FilterHealthWidget shows same data as Filter Insights tab
   apiRouter.get('/filters/diagnostics', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
 
-      // Get diagnostics from last 24 hours
-      const diagnostics = await storage.getFilterDiagnostics({ userId, mode, hours: 24 });
+      // Import diagnostic service
+      const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+      
+      // Get live scan results from diagnostic service (same source as Filter Insights)
+      const scanResult = await paperSimDiagnosticService.performUniverseScan({
+        userId,
+        mode,
+        limit: 500,
+        trace: false,
+        strategies: false
+      });
 
       // Phase 27.F.15.B: Get screener filter thresholds
       const screenerSettings = await storage.getScreenerFilters({ userId, mode });
       const tradingSettings = await storage.getTradingSettings(userId);
 
-      if (!diagnostics || diagnostics.length === 0) {
-        return res.json({
-          pairsScanned: 0,
-          eligiblePairs: 0,
-          topFailureReason: 'No data',
-          failurePercent: 0,
-          thresholds: screenerSettings ? {
-            minVolume: screenerSettings.minVolume,
-            minPrice: screenerSettings.minPrice,
-            maxPrice: screenerSettings.maxPrice,
-            minMarketCap: screenerSettings.minMarketCap,
-            maxBidAskSpread: screenerSettings.maxBidAskSpread,
-            rsiMin: screenerSettings.rsiMin,
-            rsiMax: screenerSettings.rsiMax,
-            volatilityMin: screenerSettings.volatilityMin,
-            volatilityMax: screenerSettings.volatilityMax,
-            minLiquidity: screenerSettings.minLiquidity,
-            excludeStablecoins: screenerSettings.excludeStablecoins,
-            allowRegulatedOnly: screenerSettings.allowRegulatedOnly,
-            minDailyRange: tradingSettings?.minDailyRange,
-            allowedTradingPairs: tradingSettings?.allowedTradingPairs,
-            minDataHistoryDays: tradingSettings?.minDataHistoryDays
-          } : null
-        });
-      }
+      // Calculate top failure reason from breakdown
+      const breakdown = scanResult.breakdown;
+      const failureReasons = [
+        { reason: 'Min Volume', count: breakdown.failed_min_volume },
+        { reason: 'Spread Too High', count: breakdown.failed_spread },
+        { reason: 'Daily Range', count: breakdown.failed_daily_range },
+        { reason: 'Min Price', count: breakdown.failed_min_price },
+        { reason: 'Stablecoin', count: breakdown.failed_stablecoin },
+        { reason: 'Blacklist', count: breakdown.failed_blacklist },
+        { reason: 'Whitelist', count: breakdown.failed_whitelist },
+        { reason: 'History', count: breakdown.failed_history },
+        { reason: 'Risk Too High', count: breakdown.failed_guardrail_risk },
+        { reason: 'No Strategy Match', count: breakdown.strategy_none_triggered }
+      ];
 
-      // Get most recent diagnostic
-      const latest = diagnostics[0];
+      const topFailure = failureReasons.reduce((max, curr) => 
+        curr.count > max.count ? curr : max
+      , { reason: 'No failures', count: 0 });
+
+      const failurePercent = scanResult.universe_count > 0
+        ? ((scanResult.ineligible_count / scanResult.universe_count) * 100)
+        : 0;
 
       res.json({
-        pairsScanned: latest.pairsScanned,
-        eligiblePairs: latest.eligiblePairs,
-        topFailureReason: latest.topFailureReason || 'Unknown',
-        failurePercent: parseFloat(latest.failurePercent || '0'),
-        timestamp: latest.timestamp,
+        pairsScanned: scanResult.universe_count,
+        eligiblePairs: scanResult.eligible_count,
+        topFailureReason: topFailure.reason,
+        failurePercent: failurePercent,
+        timestamp: scanResult.ts,
         // Phase 27.F.15.B: Include active threshold values
         thresholds: screenerSettings ? {
           minVolume: screenerSettings.minVolume,
@@ -3433,7 +3437,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 27.F.13.A: Filtered Pairs endpoint for UI (user-accessible)
+  // Phase 27.F.13.A + 27.F.21: Filtered Pairs endpoint for UI (user-accessible)
+  // Returns ALL eligible pairs (no artificial limit)
   apiRouter.get('/paper-sim/filtered-pairs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -3443,12 +3448,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const scanResult = await paperSimDiagnosticService.performUniverseScan({
         userId,
         mode: 'paper',
-        limit: 500,
+        limit: 9999, // Return ALL eligible pairs (no artificial limit)
         trace: false,
         strategies: false // Don't need strategy evaluation for simple filtering
       });
       
-      // Return only the eligible candidates with simplified structure
+      // Return ALL eligible candidates with simplified structure
       const filteredPairs = scanResult.top_candidates.map(candidate => ({
         symbol: candidate.symbol,
         price: candidate.snapshot.price,
@@ -3460,7 +3465,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         timestamp: scanResult.ts
       }));
 
-      console.log(`[FilteredPairs] Returning ${filteredPairs.length} eligible pairs for user ${userId}`);
+      console.log(`[FilteredPairs] Returning ${filteredPairs.length}/${scanResult.eligible_count} eligible pairs for user ${userId}`);
       
       res.json({
         pairs: filteredPairs,
