@@ -1054,6 +1054,76 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       console.log('[ENGINE_VALIDATED_CONFIG] Kraken credentials present');
       
+      // Phase 27.F.13.I: Pre-flight checks before engine startup
+      console.log('[PREFLIGHT] Running pre-flight validation checks...');
+      const preflightErrors: string[] = [];
+      
+      try {
+        // 1. Validate Goals Engine configuration exists
+        const [filters, settings, guardrails] = await Promise.all([
+          storage.getScreenerFilters({ userId, mode }),
+          storage.getTradingSettings(userId),
+          storage.getGuardrails({ globalContextId: 'default', mode })
+        ]);
+        
+        if (!filters) {
+          preflightErrors.push('Screener filters not configured - please configure filters before starting');
+        } else {
+          console.log('[PREFLIGHT] ✅ Screener filters loaded');
+        }
+        
+        if (!settings) {
+          preflightErrors.push('Trading settings not configured - please configure settings before starting');
+        } else {
+          console.log('[PREFLIGHT] ✅ Trading settings loaded');
+        }
+        
+        if (!guardrails) {
+          preflightErrors.push('Guardrails not configured - please configure risk limits before starting');
+        } else {
+          console.log('[PREFLIGHT] ✅ Guardrails loaded');
+        }
+        
+        // 2. Validate database portfolio state exists
+        const portfolioState = await storage.getPortfolioState({ globalContextId: 'default', mode });
+        if (!portfolioState) {
+          preflightErrors.push('Portfolio state not initialized - please initialize portfolio before starting');
+        } else {
+          console.log('[PREFLIGHT] ✅ Portfolio state exists (balance: $' + portfolioState.balance + ')');
+        }
+        
+        // 3. Quick Kraken API connectivity check (non-blocking)
+        try {
+          const { KrakenService } = await import('./services/kraken-service.js');
+          const kraken = new KrakenService();
+          const serverTime = await Promise.race([
+            kraken.getServerTime(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+          ]);
+          console.log('[PREFLIGHT] ✅ Kraken API reachable');
+        } catch (apiError: any) {
+          console.warn('[PREFLIGHT] ⚠️  Kraken API check failed (non-blocking):', apiError.message);
+          // Don't fail startup for API connectivity issues - let the engine handle it
+        }
+        
+        if (preflightErrors.length > 0) {
+          console.log('[PREFLIGHT] ❌ Pre-flight checks failed:', preflightErrors);
+          return res.status(400).json({
+            error: 'Pre-flight validation failed',
+            message: 'Engine cannot start due to missing configuration',
+            issues: preflightErrors
+          });
+        }
+        
+        console.log('[PREFLIGHT] ✅ All pre-flight checks passed');
+      } catch (preflightError: any) {
+        console.error('[PREFLIGHT] ❌ Pre-flight check error:', preflightError);
+        return res.status(500).json({
+          error: 'Pre-flight check failed',
+          message: preflightError.message
+        });
+      }
+      
       // Phase 27.F.13.I: Wrap engine start in 10-second timeout
       const ENGINE_START_TIMEOUT = 10000; // 10 seconds
       
