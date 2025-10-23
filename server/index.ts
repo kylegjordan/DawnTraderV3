@@ -192,11 +192,32 @@ app.use((req, res, next) => {
   });
 
   // Start Walter Health Monitor (async, non-blocking) - Phase 7.4: Re-enabled
-  import('./services/walter-health-monitor').then(({ walterHealthMonitor }) => {
-    walterHealthMonitor.start().catch((error) => {
-      console.error('[Server] Failed to start Walter Health Monitor:', error);
+  // Phase 27.F.14: Conditionally disable Walter if WALTER_ENABLED=false
+  const WALTER_ENABLED = process.env.WALTER_ENABLED !== 'false';
+  if (WALTER_ENABLED) {
+    import('./services/walter-health-monitor').then(({ walterHealthMonitor }) => {
+      walterHealthMonitor.start().catch((error) => {
+        console.error('[Server] Failed to start Walter Health Monitor:', error);
+      });
     });
-  });
+    console.log('[Server] ✅ Walter Health Monitor enabled');
+  } else {
+    console.log('[Server] ⚠️  Walter Health Monitor DISABLED (WALTER_ENABLED=false)');
+  }
+
+  // Phase 27.F.14: Start Local Heuristic Trader Service (Walter Stand-In)
+  const LHTS_ENABLED = process.env.LHTS_ENABLED !== 'false'; // Enabled by default
+  const LHTS_MODE = (process.env.LHTS_MODE || 'paper') as 'paper' | 'live';
+  if (LHTS_ENABLED) {
+    import('./services/heuristic-trader').then(({ heuristicTrader }) => {
+      heuristicTrader.start(LHTS_MODE).catch((error) => {
+        console.error('[Server] Failed to start Local Heuristic Trader Service:', error);
+      });
+      console.log(`[Server] ✅ Local Heuristic Trader Service started in ${LHTS_MODE} mode`);
+    });
+  } else {
+    console.log('[Server] ⚠️  Local Heuristic Trader Service DISABLED (LHTS_ENABLED=false)');
+  }
 
   // Phase 8.8.2: Initialize Memory Lifecycle Manager (async, non-blocking)
   import('./services/memory-lifecycle').then(({ memoryLifecycle }) => {
