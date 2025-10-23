@@ -121,15 +121,18 @@ export class TradingStateSync {
 
   /**
    * Phase 27.F.3: Update engine active state with full state broadcast
+   * Phase 27.F.13.O: Refactored to use mode-based global context
    */
-  async setEngineActive(userId: string, isActive: boolean): Promise<void> {
-    await storage.updateSystemContext(userId, {
+  async setEngineActive(userId: string, isActive: boolean, mode: 'live' | 'paper' = 'paper'): Promise<void> {
+    // Phase 27.F.13.O: Update global system_context by mode
+    await storage.updateSystemContext(mode, {
       isEngineActive: isActive,
       updatedAt: new Date()
     });
     
     clusterBus.emit('engine_state_changed', {
       userId,
+      mode, // Phase 27.F.13.O: Include mode in event
       isActive,
       timestamp: new Date()
     });
@@ -137,7 +140,7 @@ export class TradingStateSync {
     // Phase 27.F.3: Broadcast complete state snapshot via broadcastUserUpdate
     await this.broadcastUserUpdate(userId);
     
-    console.log(`[SYNC][Phase-27.F.3] Engine state updated for user ${userId}: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
+    console.log(`[SYNC][Phase-27.F.3] Engine state updated for ${mode} mode: ${isActive ? 'ACTIVE' : 'INACTIVE'} (userId: ${userId})`);
   }
 
   /**

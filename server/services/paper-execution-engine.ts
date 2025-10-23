@@ -11,7 +11,8 @@ interface ExitCondition {
 }
 
 export class PaperExecutionEngine {
-  private userId: string;
+  private mode: 'live' | 'paper'; // Phase 27.F.13.O: Mode-based (not per-user)
+  private userId: string; // Phase 27.F.13.O: Kept for audit/logging only
   private isRunning: boolean = false;
   private isCycleRunning: boolean = false; // Re-entrancy guard
   private krakenService: KrakenService;
@@ -26,8 +27,9 @@ export class PaperExecutionEngine {
   private readonly MONITOR_INTERVAL_MS = 10000; // Check every 10 seconds
   private readonly MAX_PRICE_HISTORY = 100; // Keep last 100 candles per symbol
 
-  constructor(userId: string) {
-    this.userId = userId;
+  constructor(mode: 'live' | 'paper', userId?: string) {
+    this.mode = mode;
+    this.userId = userId || 'system'; // Fallback for backward compatibility
     this.krakenService = new KrakenService();
     this.strategyEngine = new StrategyEngine();
     this.riskManager = new RiskManager();

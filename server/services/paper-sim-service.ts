@@ -94,7 +94,8 @@ export async function startPaperSimulation(
           // Reconcile: DB session exists but manager was lost (e.g., server restart)
           console.log('[PaperSimService] Reconciling manager from database session');
           const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
-          const manager = new PaperPortfolioManager(userId);
+          const mode = 'paper'; // Phase 27.F.13.O: Use mode instead of userId
+          const manager = new PaperPortfolioManager(mode, userId);
           setGlobalPaperSimManager(manager);
           await manager.start();
           
@@ -253,13 +254,15 @@ export async function startPaperSimulation(
         }
         
         // Phase 27.F.17b: State Persistence and Broadcast Verification
+        // Phase 27.F.13.O: Mode-based global context
+        const mode = 'paper';
         console.log('[ENGINE_CHECKPOINT_4] Setting engine active state...');
-        await tradingStateSync.setEngineActive(userId, true);
+        await tradingStateSync.setEngineActive(userId, true, mode);
         console.log('[ENGINE_CHECKPOINT_5] Engine active state set successfully');
         
         // Verify system_context status and log with [StateSync] prefix
         console.log('[ENGINE_CHECKPOINT_6] Verifying system context...');
-        const context = await storage.getSystemContext(userId);
+        const context = await storage.getSystemContext(mode);
         console.log('[ENGINE_CHECKPOINT_7] System context retrieved');
         if (context && context.isEngineActive) {
           console.log('[StateSync] paper_engine_status = RUNNING confirmed');
@@ -269,10 +272,11 @@ export async function startPaperSimulation(
         }
 
         // Phase 27.F.9: Create and register manager atomically (both local and global)
+        // Phase 27.F.13.O: Use mode-based constructor
         console.log('[ENGINE_CHECKPOINT_8] Importing PaperPortfolioManager...');
         const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
         console.log('[ENGINE_CHECKPOINT_9] Creating manager instance...');
-        const manager = new PaperPortfolioManager(userId);
+        const manager = new PaperPortfolioManager(mode, userId);
         
         console.log('[ENGINE_CHECKPOINT_10] Registering manager globally...');
         setGlobalPaperSimManager(manager);
@@ -425,11 +429,13 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         console.log('[PaperSimService] Manager cleared (service + global), DB session ended');
 
         // Phase 27.F.17b: State Persistence and Broadcast Verification
+        // Phase 27.F.13.O: Mode-based global context
+        const mode = 'paper';
         console.log('[PaperSimService][Phase-27.F.17b] Setting engine inactive state...');
-        await tradingStateSync.setEngineActive(userId, false);
+        await tradingStateSync.setEngineActive(userId, false, mode);
         
         // Verify system_context status and log with [StateSync] prefix
-        const stoppedContext = await storage.getSystemContext(userId);
+        const stoppedContext = await storage.getSystemContext(mode);
         if (stoppedContext && !stoppedContext.isEngineActive) {
           console.log('[StateSync] paper_engine_status = STOPPED confirmed');
           console.log('[PaperSimService][Phase-27.F.17b] ✅ Verified system_context.isEngineActive = false');

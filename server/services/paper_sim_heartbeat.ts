@@ -134,7 +134,9 @@ class PaperSimHeartbeatService {
       console.log(`[PaperSimHeartbeat] Checking session ${sessionId} for user ${userId}`);
 
       // Phase 27.4.2: Cross-verify against system_context (single source of truth)
-      const systemContext = await storage.getSystemContext(userId);
+      // Phase 27.F.13.O: Use mode for global context
+      const mode = 'paper';
+      const systemContext = await storage.getSystemContext(mode);
       
       if (systemContext) {
         // Check if trading mode is set to paper

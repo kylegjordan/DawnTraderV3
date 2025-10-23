@@ -34,7 +34,8 @@ interface PortfolioHealth {
 }
 
 export class PaperPortfolioManager {
-  private userId: string;
+  private mode: 'live' | 'paper'; // Phase 27.F.13.O: Mode-based (not per-user)
+  private userId: string; // Phase 27.F.13.O: Kept for audit/logging only
   private executionEngine: PaperExecutionEngine;
   private kraken: KrakenService;
   private isRunning: boolean = false;
@@ -46,9 +47,10 @@ export class PaperPortfolioManager {
   private readonly MAX_PORTFOLIO_EXPOSURE_PERCENT = 80; // Max 80% capital deployed
   private readonly WATCHLIST_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 
-  constructor(userId: string) {
-    this.userId = userId;
-    this.executionEngine = new PaperExecutionEngine(userId);
+  constructor(mode: 'live' | 'paper', userId?: string) {
+    this.mode = mode;
+    this.userId = userId || 'system'; // Fallback for backward compatibility
+    this.executionEngine = new PaperExecutionEngine(mode, userId);
     this.kraken = new KrakenService();
   }
 
