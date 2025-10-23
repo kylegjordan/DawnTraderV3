@@ -46,7 +46,7 @@ export default function AlertBanner() {
   // Mutation to dismiss a single alert
   const dismissAlertMutation = useMutation({
     mutationFn: async (alertId: string) => {
-      return await apiRequest(`/api/alerts/${alertId}/acknowledge`, 'POST');
+      return await apiRequest('POST', `/api/alerts/${alertId}/acknowledge`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });
@@ -67,7 +67,7 @@ export default function AlertBanner() {
   // Mutation to clear all visible alerts
   const clearAllAlertsMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/alerts/acknowledge-all', 'POST');
+      return await apiRequest('POST', '/api/alerts/acknowledge-all');
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });

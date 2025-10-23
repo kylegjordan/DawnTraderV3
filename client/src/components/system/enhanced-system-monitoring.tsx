@@ -166,7 +166,7 @@ export default function EnhancedSystemMonitoring() {
   // Acknowledge alert mutation
   const acknowledgeMutation = useMutation({
     mutationFn: async (alertId: string) => {
-      return await apiRequest('/api/diagnostics/acknowledge-alert', 'POST', { alertId });
+      return await apiRequest('POST', '/api/diagnostics/acknowledge-alert', { alertId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/system/error-logs'] });
@@ -187,7 +187,7 @@ export default function EnhancedSystemMonitoring() {
   // Run diagnostic analysis mutation
   const runAnalysisMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/diagnostics/analyze', 'POST', {});
+      return await apiRequest('POST', '/api/diagnostics/analyze', {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/diagnostics/analysis-history'] });

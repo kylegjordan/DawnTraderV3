@@ -86,7 +86,7 @@ export default function ClusterTab() {
 
   const rebalanceMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/cluster/rebalance', 'POST', {});
+      return await apiRequest('POST', '/api/cluster/rebalance', {});
     },
     onSuccess: (data: any) => {
       toast({
