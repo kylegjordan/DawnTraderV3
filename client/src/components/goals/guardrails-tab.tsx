@@ -283,7 +283,7 @@ export default function GuardrailsTab() {
                     <Input
                       id="dailyLossKillSwitch"
                       type="text"
-                      value={focusedField === 'dailyLossKillSwitch' ? (rawInputValues['dailyLossKillSwitch'] ?? globalSettings.dailyLossKillSwitch ?? '') : formatNumberWithCommas(globalSettings.dailyLossKillSwitch || '')}
+                      value={focusedField === 'dailyLossKillSwitch' ? (rawInputValues['dailyLossKillSwitch'] ?? globalSettings.dailyLossKillSwitch ?? '') : formatNumberWithCommas(globalSettings.dailyLossKillSwitch ?? '')}
                       onChange={(e) => handleGlobalChange('dailyLossKillSwitch', e.target.value)}
                       onFocus={() => setFocusedField('dailyLossKillSwitch')}
                       onBlur={() => handleBlur('dailyLossKillSwitch', true)}
@@ -309,7 +309,7 @@ export default function GuardrailsTab() {
                     <Input
                       id="maxPositionPercent"
                       type="text"
-                      value={focusedField === 'maxPositionPercent' ? (rawInputValues['maxPositionPercent'] ?? globalSettings.maxPositionPercent ?? '') : formatNumberWithCommas(globalSettings.maxPositionPercent || '')}
+                      value={focusedField === 'maxPositionPercent' ? (rawInputValues['maxPositionPercent'] ?? globalSettings.maxPositionPercent ?? '') : formatNumberWithCommas(globalSettings.maxPositionPercent ?? '')}
                       onChange={(e) => handleGlobalChange('maxPositionPercent', e.target.value)}
                       onFocus={() => setFocusedField('maxPositionPercent')}
                       onBlur={() => handleBlur('maxPositionPercent', true)}
@@ -341,7 +341,7 @@ export default function GuardrailsTab() {
             <Input
               id="maxDailyLoss"
               type="text"
-              value={focusedField === 'maxDailyLoss' ? (rawInputValues['maxDailyLoss'] ?? settings.maxDailyLoss ?? '') : formatNumberWithCommas(settings.maxDailyLoss || '')}
+              value={focusedField === 'maxDailyLoss' ? (rawInputValues['maxDailyLoss'] ?? settings.maxDailyLoss ?? '') : formatNumberWithCommas(settings.maxDailyLoss ?? '')}
               onChange={(e) => handleChange('maxDailyLoss', e.target.value)}
               onFocus={() => setFocusedField('maxDailyLoss')}
               onBlur={() => handleBlur('maxDailyLoss', false)}
@@ -357,7 +357,7 @@ export default function GuardrailsTab() {
             <Input
               id="maxDrawdown"
               type="text"
-              value={focusedField === 'maxDrawdown' ? (rawInputValues['maxDrawdown'] ?? settings.maxDrawdown ?? '') : formatNumberWithCommas(settings.maxDrawdown || '')}
+              value={focusedField === 'maxDrawdown' ? (rawInputValues['maxDrawdown'] ?? settings.maxDrawdown ?? '') : formatNumberWithCommas(settings.maxDrawdown ?? '')}
               onChange={(e) => handleChange('maxDrawdown', e.target.value)}
               onFocus={() => setFocusedField('maxDrawdown')}
               onBlur={() => handleBlur('maxDrawdown', false)}
@@ -373,7 +373,7 @@ export default function GuardrailsTab() {
             <Input
               id="maxPositionSize"
               type="text"
-              value={focusedField === 'maxPositionSize' ? (rawInputValues['maxPositionSize'] ?? settings.maxPositionSize ?? '') : formatNumberWithCommas(settings.maxPositionSize || '')}
+              value={focusedField === 'maxPositionSize' ? (rawInputValues['maxPositionSize'] ?? settings.maxPositionSize ?? '') : formatNumberWithCommas(settings.maxPositionSize ?? '')}
               onChange={(e) => handleChange('maxPositionSize', e.target.value)}
               onFocus={() => setFocusedField('maxPositionSize')}
               onBlur={() => handleBlur('maxPositionSize', false)}
@@ -389,7 +389,7 @@ export default function GuardrailsTab() {
             <Input
               id="maxOpenPositions"
               type="text"
-              value={focusedField === 'maxOpenPositions' ? (rawInputValues['maxOpenPositions'] ?? settings.maxOpenPositions ?? '') : formatNumberWithCommas(settings.maxOpenPositions || '')}
+              value={focusedField === 'maxOpenPositions' ? (rawInputValues['maxOpenPositions'] ?? settings.maxOpenPositions ?? '') : formatNumberWithCommas(settings.maxOpenPositions ?? '')}
               onChange={(e) => handleChange('maxOpenPositions', e.target.value)}
               onFocus={() => setFocusedField('maxOpenPositions')}
               onBlur={() => handleBlur('maxOpenPositions', false)}
@@ -405,7 +405,7 @@ export default function GuardrailsTab() {
             <Input
               id="riskPerTrade"
               type="text"
-              value={focusedField === 'riskPerTrade' ? (rawInputValues['riskPerTrade'] ?? settings.riskPerTrade ?? '') : formatNumberWithCommas(settings.riskPerTrade || '')}
+              value={focusedField === 'riskPerTrade' ? (rawInputValues['riskPerTrade'] ?? settings.riskPerTrade ?? '') : formatNumberWithCommas(settings.riskPerTrade ?? '')}
               onChange={(e) => handleChange('riskPerTrade', e.target.value)}
               onFocus={() => setFocusedField('riskPerTrade')}
               onBlur={() => handleBlur('riskPerTrade', false)}
@@ -421,7 +421,7 @@ export default function GuardrailsTab() {
             <Input
               id="maxRequiredCapital"
               type="text"
-              value={focusedField === 'maxRequiredCapital' ? (rawInputValues['maxRequiredCapital'] ?? settings.maxRequiredCapital ?? '') : formatNumberWithCommas(settings.maxRequiredCapital || '')}
+              value={focusedField === 'maxRequiredCapital' ? (rawInputValues['maxRequiredCapital'] ?? settings.maxRequiredCapital ?? '') : formatNumberWithCommas(settings.maxRequiredCapital ?? '')}
               onChange={(e) => handleChange('maxRequiredCapital', e.target.value)}
               onFocus={() => setFocusedField('maxRequiredCapital')}
               onBlur={() => handleBlur('maxRequiredCapital', false)}
@@ -437,7 +437,7 @@ export default function GuardrailsTab() {
             <Input
               id="maxRiskPerTradeLimit"
               type="text"
-              value={focusedField === 'maxRiskPerTradeLimit' ? (rawInputValues['maxRiskPerTradeLimit'] ?? settings.maxRiskPerTradeLimit ?? '') : formatNumberWithCommas(settings.maxRiskPerTradeLimit || '')}
+              value={focusedField === 'maxRiskPerTradeLimit' ? (rawInputValues['maxRiskPerTradeLimit'] ?? settings.maxRiskPerTradeLimit ?? '') : formatNumberWithCommas(settings.maxRiskPerTradeLimit ?? '')}
               onChange={(e) => handleChange('maxRiskPerTradeLimit', e.target.value)}
               onFocus={() => setFocusedField('maxRiskPerTradeLimit')}
               onBlur={() => handleBlur('maxRiskPerTradeLimit', false)}

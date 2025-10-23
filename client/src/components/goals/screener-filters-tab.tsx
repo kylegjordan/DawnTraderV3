@@ -281,7 +281,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="minVolume"
                   type="text"
-                  value={focusedField === 'minVolume' ? (rawInputValues['minVolume'] ?? filters.minVolume ?? '') : formatNumberWithCommas(filters.minVolume || '')}
+                  value={focusedField === 'minVolume' ? (rawInputValues['minVolume'] ?? filters.minVolume ?? '') : formatNumberWithCommas(filters.minVolume ?? '')}
                   onChange={(e) => handleChange('minVolume', e.target.value)}
                   onFocus={() => setFocusedField('minVolume')}
                   onBlur={() => handleBlur('minVolume')}
@@ -293,7 +293,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="minLiquidity"
                   type="text"
-                  value={focusedField === 'minLiquidity' ? (rawInputValues['minLiquidity'] ?? filters.minLiquidity ?? '') : formatNumberWithCommas(filters.minLiquidity || '')}
+                  value={focusedField === 'minLiquidity' ? (rawInputValues['minLiquidity'] ?? filters.minLiquidity ?? '') : formatNumberWithCommas(filters.minLiquidity ?? '')}
                   onChange={(e) => handleChange('minLiquidity', e.target.value)}
                   onFocus={() => setFocusedField('minLiquidity')}
                   onBlur={() => handleBlur('minLiquidity')}
@@ -313,7 +313,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="minPrice"
                   type="text"
-                  value={focusedField === 'minPrice' ? (rawInputValues['minPrice'] ?? filters.minPrice ?? '') : formatNumberWithCommas(filters.minPrice || '')}
+                  value={focusedField === 'minPrice' ? (rawInputValues['minPrice'] ?? filters.minPrice ?? '') : formatNumberWithCommas(filters.minPrice ?? '')}
                   onChange={(e) => handleChange('minPrice', e.target.value)}
                   onFocus={() => setFocusedField('minPrice')}
                   onBlur={() => handleBlur('minPrice')}
@@ -325,7 +325,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="maxPrice"
                   type="text"
-                  value={focusedField === 'maxPrice' ? (rawInputValues['maxPrice'] ?? filters.maxPrice ?? '') : formatNumberWithCommas(filters.maxPrice || '')}
+                  value={focusedField === 'maxPrice' ? (rawInputValues['maxPrice'] ?? filters.maxPrice ?? '') : formatNumberWithCommas(filters.maxPrice ?? '')}
                   onChange={(e) => handleChange('maxPrice', e.target.value)}
                   onFocus={() => setFocusedField('maxPrice')}
                   onBlur={() => handleBlur('maxPrice')}
@@ -345,7 +345,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="minMarketCap"
                   type="text"
-                  value={focusedField === 'minMarketCap' ? (rawInputValues['minMarketCap'] ?? filters.minMarketCap ?? '') : formatNumberWithCommas(filters.minMarketCap || '')}
+                  value={focusedField === 'minMarketCap' ? (rawInputValues['minMarketCap'] ?? filters.minMarketCap ?? '') : formatNumberWithCommas(filters.minMarketCap ?? '')}
                   onChange={(e) => handleChange('minMarketCap', e.target.value)}
                   onFocus={() => setFocusedField('minMarketCap')}
                   onBlur={() => handleBlur('minMarketCap')}
@@ -357,7 +357,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="maxBidAskSpread"
                   type="text"
-                  value={focusedField === 'maxBidAskSpread' ? (rawInputValues['maxBidAskSpread'] ?? filters.maxBidAskSpread ?? '') : formatNumberWithCommas(filters.maxBidAskSpread || '')}
+                  value={focusedField === 'maxBidAskSpread' ? (rawInputValues['maxBidAskSpread'] ?? filters.maxBidAskSpread ?? '') : formatNumberWithCommas(filters.maxBidAskSpread ?? '')}
                   onChange={(e) => handleChange('maxBidAskSpread', e.target.value)}
                   onFocus={() => setFocusedField('maxBidAskSpread')}
                   onBlur={() => handleBlur('maxBidAskSpread')}
@@ -377,7 +377,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="rsiMin"
                   type="text"
-                  value={focusedField === 'rsiMin' ? (rawInputValues['rsiMin'] ?? filters.rsiMin ?? '') : formatNumberWithCommas(filters.rsiMin || '')}
+                  value={focusedField === 'rsiMin' ? (rawInputValues['rsiMin'] ?? filters.rsiMin ?? '') : formatNumberWithCommas(filters.rsiMin ?? '')}
                   onChange={(e) => handleChange('rsiMin', e.target.value)}
                   onFocus={() => setFocusedField('rsiMin')}
                   onBlur={() => handleBlur('rsiMin')}
@@ -389,7 +389,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="rsiMax"
                   type="text"
-                  value={focusedField === 'rsiMax' ? (rawInputValues['rsiMax'] ?? filters.rsiMax ?? '') : formatNumberWithCommas(filters.rsiMax || '')}
+                  value={focusedField === 'rsiMax' ? (rawInputValues['rsiMax'] ?? filters.rsiMax ?? '') : formatNumberWithCommas(filters.rsiMax ?? '')}
                   onChange={(e) => handleChange('rsiMax', e.target.value)}
                   onFocus={() => setFocusedField('rsiMax')}
                   onBlur={() => handleBlur('rsiMax')}
@@ -409,7 +409,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="volatilityMin"
                   type="text"
-                  value={focusedField === 'volatilityMin' ? (rawInputValues['volatilityMin'] ?? filters.volatilityMin ?? '') : formatNumberWithCommas(filters.volatilityMin || '')}
+                  value={focusedField === 'volatilityMin' ? (rawInputValues['volatilityMin'] ?? filters.volatilityMin ?? '') : formatNumberWithCommas(filters.volatilityMin ?? '')}
                   onChange={(e) => handleChange('volatilityMin', e.target.value)}
                   onFocus={() => setFocusedField('volatilityMin')}
                   onBlur={() => handleBlur('volatilityMin')}
@@ -421,7 +421,7 @@ export default function ScreenerFiltersTab() {
                 <Input
                   id="volatilityMax"
                   type="text"
-                  value={focusedField === 'volatilityMax' ? (rawInputValues['volatilityMax'] ?? filters.volatilityMax ?? '') : formatNumberWithCommas(filters.volatilityMax || '')}
+                  value={focusedField === 'volatilityMax' ? (rawInputValues['volatilityMax'] ?? filters.volatilityMax ?? '') : formatNumberWithCommas(filters.volatilityMax ?? '')}
                   onChange={(e) => handleChange('volatilityMax', e.target.value)}
                   onFocus={() => setFocusedField('volatilityMax')}
                   onBlur={() => handleBlur('volatilityMax')}
