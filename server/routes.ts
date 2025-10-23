@@ -1480,8 +1480,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const globalContextId = 'default';
       
+      // Phase 27.F.13.L.1: Get canonical operator user ID
+      const operatorUserId = await storage.getPrimaryOperatorUserId() || userId;
+      const operatorUser = await storage.getUser(operatorUserId);
+      
       // Phase 27.F.3: Get trading state from system_context (single source of truth, always fresh from DB)
-      const systemContext = await storage.getSystemContext(userId);
+      // Use CANONICAL OPERATOR's system context for engine state
+      const systemContext = await storage.getSystemContext(operatorUserId);
       const currentMode = (systemContext?.tradingMode || 'paper') as 'live' | 'paper';
       const isEngineActive = systemContext?.isEngineActive || false;
       
@@ -1557,11 +1562,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Return dual-mode structure with unified state authority (Phase 27.F.3)
       // Phase 27.F.12: Added mode-specific engine status fields
+      // Phase 27.F.13.L.1: Added canonical engine operator info
       res.json({
         // Phase 27.F.3: Unified state at the top level for easy access
         ...unifiedState,
         currentMode,
         isEngineActive,
+        // Phase 27.F.13.L.1: Canonical Engine Operator
+        engineOperator: {
+          userId: operatorUserId,
+          username: operatorUser?.username || 'unknown'
+        },
+        runtimeNote: operatorUserId !== userId ? 'Runtime shown is canonical operator\'s engine' : undefined,
         // Phase 27.F.12: Mode-specific engine status
         isEngineActivePaper: isPaperSimRunning,
         isEngineActiveLive: isLiveEngineRunning,

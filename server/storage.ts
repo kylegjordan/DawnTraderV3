@@ -40,6 +40,7 @@ import {
   goalAuditLog,
   contextChats,
   aiOrchestratorLogs,
+  systemSettings,
   type User, 
   type InsertUser,
   type TradingSettings,
@@ -73,6 +74,8 @@ import {
   type InsertAiMarketAnalysis,
   type PriceData,
   type InsertPriceData,
+  type SystemSettings,
+  type InsertSystemSettings,
   type DatabaseSizeLog,
   type InsertDatabaseSizeLog,
   type AIAuditLog,
@@ -715,6 +718,29 @@ export class DatabaseStorage implements IStorage {
       const [result] = await db.insert(screenerFilters).values(insertData).returning();
       return result;
     }
+  }
+
+  // Phase 27.F.13.L.1: System Settings methods
+  async getSystemSetting(key: string): Promise<string | null> {
+    const [result] = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.key, key));
+    return result?.value || null;
+  }
+
+  async setSystemSetting(key: string, value: string, updatedBy?: string): Promise<void> {
+    await db
+      .insert(systemSettings)
+      .values({ key, value, updatedBy })
+      .onConflictDoUpdate({
+        target: systemSettings.key,
+        set: { value, updatedAt: new Date(), updatedBy }
+      });
+  }
+
+  async getPrimaryOperatorUserId(): Promise<string | null> {
+    return this.getSystemSetting('PRIMARY_OPERATOR_USER_ID');
   }
 
   // Filter diagnostics methods

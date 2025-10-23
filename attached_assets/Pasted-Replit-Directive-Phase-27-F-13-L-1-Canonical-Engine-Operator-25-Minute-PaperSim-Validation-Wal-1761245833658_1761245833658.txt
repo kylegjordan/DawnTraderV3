@@ -1,0 +1,188 @@
+Replit Directive — Phase 27.F.13.L.1
+“Canonical Engine Operator + 25-Minute PaperSim Validation (Wall-Clock)”
+Goal
+
+Make the system show one canonical engine state to every user (so what you see matches what the engine is actually doing), while keeping portfolios and trades scoped to that canonical operator account.
+
+Finish the run as a full 25-minute wall-clock PaperSim session (no accelerated timing), with full logs and a pass/fail report.
+
+Part A — Canonical Engine Operator (Global Runtime View)
+
+Config
+
+Add PRIMARY_OPERATOR_USER_ID to server config. Persist it in a small system_settings table:
+
+key: primary_operator_user_id
+
+value: <uuid>
+
+updated_at, updated_by
+
+Initialize it to the UUID for testuser123 (the credentials we’re using for automation):
+
+username: testuser123
+
+password: SecurePass123!
+
+Status Endpoints
+
+Update /api/trading/status, /api/trading/state, and the Trading Panel status widget to read engine state from PRIMARY_OPERATOR_USER_ID, not the caller’s userId.
+
+Include in the payload:
+
+engineOperator: { userId, username }
+
+engineStatusPaper, engineStatusLive
+
+note: "Runtime shown is canonical operator’s engine" (UI can render a small info icon)
+
+Start/Stop Semantics (No new toggle)
+
+Keep Start/Stop buttons functioning exactly as today for the active mode only.
+
+When invoked from any login, the server acts on the PRIMARY_OPERATOR_USER_ID so there’s only one engine instance per mode.
+
+Safety
+
+If an engine is running under any other user, force-stop those sessions and log:
+
+[RUNTIME_GUARD] Non-canonical engine detected and stopped: userId=<uuid>
+
+Deliverables
+
+Code changes
+
+system_settings row written
+
+One-liner in UI Trading header: “Engine operator: testuser123 (canonical)”
+
+Part B — Finish Global Settings Migration (No regressions)
+
+Confirm all routes/services now call global getters/upserts (no userId parameter):
+
+getGuardrails({mode}), upsertGuardrails({mode, ...})
+
+getScreenerFilters({mode}), upsertScreenerFilters({mode, ...})
+
+listStrategySettings({mode}), upsertStrategySettings({mode, ...})
+
+Remove any remaining userId arguments for these settings (finish the tail 80+ call sites).
+
+Keep portfolios, open positions, trades per user (the canonical operator).
+
+Validation: grep for getGuardrails(, getScreenerFilters(, upsertGuardrails(, upsertScreenerFilters( across server to ensure no userId param remains.
+
+Part C — 25-Minute PaperSim (Wall-Clock) Validation
+
+Credentials
+
+username = testuser123
+password = SecurePass123!
+
+
+Mode
+Paper only. No live orders.
+
+0) Baseline snapshot → /tmp/papersim_L1_baseline.log
+
+/api/guardrails?mode=paper (confirm values load)
+
+/api/screeners?mode=paper (confirm filters load)
+
+/api/strategy-settings?mode=paper (confirm enabled strategies)
+
+/api/trading/status (expect isEngineActive=false)
+
+/api/paper-sim/filtered-pairs (log total eligible and nextScanAt)
+
+1) Start engine (canonical operator)
+POST /api/trading/start {"mode":"paper"}
+Expect HTTP 200 in ≤2s. Log:
+
+[ENGINE_START] operator=<PRIMARY_OPERATOR_USER_ID> sessionId=<id> t_start=<UTC>
+
+
+2) Monitoring — wall clock 25 minutes, 5-min checkpoints
+Script: /tmp/monitor_papersim_L1.sh (sleep 300 between checkpoints)
+
+At each checkpoint log to /tmp/papersim_L1_monitor.log:
+
+Timestamp (UTC)
+
+/api/trading/status → isEngineActive=true, engineOperator.username
+
+/api/paper-sim/filtered-pairs → totalEligible (expect ±2 stability)
+
+/api/trading-signals?status=active → count
+
+/api/paper-sim/open-positions → length
+
+Optional system load snapshot
+
+3) Kill-switch test (minute ~24)
+
+Simulate daily PnL breach ≥ configured daily_loss_kill_switch_percent for Paper.
+
+Expect:
+
+[KILL_SWITCH_TRIGGERED] reason=DailyLossExceeded
+
+/api/trading/status → isEngineActive=false
+
+4) Post-run checks
+
+Cleanup logs contain:
+
+🧹 Running comprehensive cleanup…
+✅ Cleanup complete: <n> records removed
+
+
+Filtered-pairs counts are consistent across:
+
+/api/paper-sim/filtered-pairs
+
+/api/filters/diagnostics
+
+/api/trading/status (if it surfaces the count)
+
+All logs saved:
+
+/tmp/papersim_L1_baseline.log
+
+/tmp/papersim_L1_monitor.log
+
+/tmp/papersim_L1_summary.log
+
+5) Report → /workspace/PHASE_27.F.13.L1_VALIDATION_REPORT.md
+
+Start/End timestamps (UTC)
+
+Engine operator user
+
+Engine start time (ms)
+
+Filtered pairs baseline / max delta
+
+Active signals (min/avg/max per checkpoint)
+
+Trades: opened, closed
+
+Kill-switch: triggered (Yes/No) + timestamp
+
+Cleanup cycles observed (≥2 expected)
+
+API error rate (target 0%)
+
+Statement confirming global settings + canonical runtime view behave as designed
+
+Hard Rule: This run must be wall-clock 25 minutes (no acceleration/compression).
+
+Success Criteria
+
+Any user who logs in sees the same engine state (operator + running/stopped) in the Trading header and status widget.
+
+PaperSim runs 25 minutes with stable telemetry and at least two cleanup cycles.
+
+Kill-switch triggers cleanly when simulated threshold breached.
+
+Final report produced and replit.md updated.

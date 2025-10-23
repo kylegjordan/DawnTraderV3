@@ -3937,3 +3937,18 @@ export type ExecutionConfig = typeof executionConfig.$inferSelect;
 export type WalterActionType = typeof walterActionTypeEnum.enumValues[number];
 export type WalterActionStatus = typeof walterActionStatusEnum.enumValues[number];
 export type WalterActionCategory = typeof walterActionCategoryEnum.enumValues[number];
+
+// Phase 27.F.13.L.1: System Settings for Canonical Engine Operator
+export const systemSettings = pgTable("system_settings", {
+  key: varchar("key", { length: 100 }).primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+});
+
+export const insertSystemSettingsSchema = createInsertSchema(systemSettings).omit({ 
+  updatedAt: true 
+});
+
+export type InsertSystemSettings = z.infer<typeof insertSystemSettingsSchema>;
+export type SystemSettings = typeof systemSettings.$inferSelect;
