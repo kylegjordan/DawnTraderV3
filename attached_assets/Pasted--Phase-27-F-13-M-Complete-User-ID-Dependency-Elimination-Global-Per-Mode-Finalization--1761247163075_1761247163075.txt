@@ -1,0 +1,125 @@
+# Phase 27.F.13.M — Complete User-ID Dependency Elimination & Global-Per-Mode Finalization  
+
+### Objective  
+Eliminate **all** residual `userId`/`user_id` dependencies outside of authentication and audit logging, finalize the **global-per-mode architecture**, and prove via automated scripts that no user-scoped code or data paths remain.
+
+---
+
+## 🧩 Part A – Audit & Refactor
+*(Identical to the prior Phase 27.F.13.M directive: Parts 1–9)*  
+
+Replit must perform all nine steps previously specified:
+1. Full-code grep audit  
+2. Schema & data migration  
+3. Storage layer refactor  
+4. API layer update  
+5. Services refactor  
+6. Frontend cleanup  
+7. Background jobs conversion  
+8. Two-user validation  
+9. Reporting & sign-off  
+
+---
+
+## 🧩 Part B – Post-Migration Verification Script  
+
+After all refactoring is complete and the app restarts successfully, execute the following automated verification commands to **prove the system is globally scoped**.
+
+### 1️⃣ SQL Schema Inspection
+```bash
+# List every table still containing a user_id column
+psql $DATABASE_URL -t -c "
+SELECT table_name, column_name
+FROM information_schema.columns
+WHERE column_name ILIKE '%user_id%'
+  AND table_schema='public'
+ORDER BY table_name;"
+```
+✅ Expected Result:  
+Zero rows returned except for the `users` table and `audit_logs`.
+
+---
+
+### 2️⃣ Database Data Consistency Check
+```bash
+# Verify one global row per mode for key configuration tables
+psql $DATABASE_URL -t -c "
+SELECT 'guardrails' AS tbl, mode, COUNT(*) FROM guardrails GROUP BY mode
+UNION ALL
+SELECT 'screener_filters', mode, COUNT(*) FROM screener_filters GROUP BY mode
+UNION ALL
+SELECT 'system_context', mode, COUNT(*) FROM system_context GROUP BY mode
+UNION ALL
+SELECT 'portfolio_state', mode, COUNT(*) FROM portfolio_state GROUP BY mode
+ORDER BY tbl, mode;"
+```
+✅ Expected: Each table shows exactly one row per mode (`paper`, `live`).
+
+---
+
+### 3️⃣ API Response Audit
+```bash
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' | \
+  grep -o '"token":"[^"]*' | cut -d'"' -f4)
+
+# Aggregate all JSON responses and scan for userId fields
+for EP in trading/status trading/state paper-sim/filtered-pairs \
+          filters/diagnostics guardrails screeners portfolio/state; do
+  echo "=== Checking /api/$EP ==="
+  curl -s -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/$EP | jq '.' > /tmp/api_$EP.json
+  grep -R "\"userId\"" /tmp/api_$EP.json && echo "⚠️ userId found in /api/$EP" || echo "✅ no userId in /api/$EP"
+done
+```
+✅ Expected: All endpoints return “✅ no userId in /api/…”.
+
+---
+
+### 4️⃣ Codebase Sanity Re-Check
+```bash
+# Search code for userId references that slipped through
+grep -RIn "userId" server/ client/src/ | grep -v "auth" | grep -v "audit" | tee /tmp/residual_userid_refs.txt
+```
+✅ Expected: No lines found.  
+If any lines appear, Replit must refactor or justify each one in the validation report.
+
+---
+
+### 5️⃣ Runtime Confirmation
+```bash
+# Confirm canonical engine visible to all users
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/trading/status | jq '{mode, engineActive, engineOperator}'
+```
+✅ Expected:  
+- `engineOperator.username = "testuser123"`  
+- `engineActive` reflects identical status for every logged-in user.
+
+---
+
+### 6️⃣ Automated Verification Summary
+Replit must create `/workspace/PHASE_27.F.13.M_VERIFICATION_REPORT.md` including:
+
+| Check | Expected | Result | Status |
+|--------|-----------|---------|---------|
+| SQL schema scan | 0 extra user_id columns |  | |
+| Config tables | 1 row per mode |  | |
+| API responses | No userId field |  | |
+| Code search | No userId refs outside auth/audit |  | |
+| Engine visibility | Same status for all logins |  | |
+
+All rows must read ✅ PASS for phase completion.
+
+---
+
+### ✅ Completion Criteria
+- **No `userId`/`user_id` columns** remain outside `users` & `audit_logs`.  
+- **No API responses** contain `userId`.  
+- **All configuration and runtime state** are keyed by `mode`.  
+- **Engine state identical for all logins.**  
+- Verification report and `replit.md` updated with “Phase 27.F.13.M — User-ID Dependency Purge Complete”.
+
+---
+
+**Begin Phase 27.F.13.M immediately upon approval.**  
+Once this verification passes, *The Dawn Trader* will be permanently sealed against user-scoped configuration drift.  

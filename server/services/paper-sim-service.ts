@@ -158,8 +158,8 @@ export async function startPaperSimulation(
             console.log('[PaperSimService][AutoWatchlist] Empty watchlist detected - querying screener for eligible pairs');
           
           try {
-            // Get current screener filter settings from database (NO HARDCODED DEFAULTS)
-            const filters = await storage.getScreenerFilters({ userId, mode: 'paper' });
+            // Phase 27.F.13.M: Get global screener filter settings (mode-only, no userId)
+            const filters = await storage.getScreenerFilters({ mode: 'paper' });
             const tradingSettings = await storage.getTradingSettings(userId);
             
             if (!filters) {

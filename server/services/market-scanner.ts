@@ -61,8 +61,8 @@ export class MarketScanner {
       } else {
         // Process each user with their own settings
         for (const user of users) {
-          // Phase 27.F.15.B: Use screener_filters for comprehensive filtering
-          const screenerSettings = await storage.getScreenerFilters({ userId: user.id, mode: 'paper' });
+          // Phase 27.F.13.M: Use global screener_filters (mode-only, no userId)
+          const screenerSettings = await storage.getScreenerFilters({ mode: 'paper' });
           const tradingSettings = await storage.getTradingSettings(user.id);
           
           if (!screenerSettings || !tradingSettings) {

@@ -228,10 +228,10 @@ export class RiskManager {
       const positionSize = riskAmount / stopDistance;
       const requiredCapital = positionSize * signal.entryPrice;
 
-      // Phase 27.F.13.B: Load max capital requirement from guardrails (database-driven, no hardcoded fallbacks)
+      // Phase 27.F.13.M: Load max capital requirement from global guardrails (mode-only, no userId)
       const systemContext = await storage.getSystemContext(userId);
       const mode = systemContext?.tradingMode || 'live'; // Default to live for this check
-      const guardrailsData = await storage.getGuardrails({ userId, mode });
+      const guardrailsData = await storage.getGuardrails({ mode });
       
       if (!guardrailsData || !guardrailsData.maxRequiredCapital) {
         console.warn(`[RiskManager] Guardrails not configured for user ${userId} mode ${mode}, rejecting trade for safety`);
@@ -273,10 +273,10 @@ export class RiskManager {
       };
     }
 
-    // Phase 27.F.13.B: Load max risk limit from guardrails (database-driven, no hardcoded fallbacks)
+    // Phase 27.F.13.M: Load max risk limit from global guardrails (mode-only, no userId)
     const systemContext = await storage.getSystemContext(userId);
     const mode = systemContext?.tradingMode || 'paper';
-    const guardrailsData = await storage.getGuardrails({ userId, mode });
+    const guardrailsData = await storage.getGuardrails({ mode });
     
     if (!guardrailsData || !guardrailsData.maxRiskPerTradeLimit) {
       console.warn(`[RiskManager] Guardrails not configured for user ${userId} mode ${mode}, rejecting trade for safety`);

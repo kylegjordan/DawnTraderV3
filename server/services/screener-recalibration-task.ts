@@ -55,8 +55,8 @@ export class ScreenerRecalibrationTask implements Omit<ScheduledTask, 'lastRun' 
       const winRate = this.calculateWinRate(paperTrades);
       const avgProfit = this.calculateAvgProfit(paperTrades);
 
-      // Get current screener filters
-      const currentFilters = await storage.getScreenerFilters({ userId, mode: 'paper' });
+      // Phase 27.F.13.M: Get global screener filters (mode-only, no userId)
+      const currentFilters = await storage.getScreenerFilters({ mode: 'paper' });
       
       if (!currentFilters) {
         console.log(`[ScreenerRecalibration] No screener filters for user ${userId}, skipping`);

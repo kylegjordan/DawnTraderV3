@@ -452,13 +452,15 @@ class ConfigBobModule {
 
   /**
    * Get guardrails settings with caching
+   * Phase 27.F.13.M: userId kept for signature compatibility but settings are global
    */
   async getGuardrails(
     userId: string,
     mode: 'live' | 'paper' = 'live',
     ttl?: number
   ): Promise<any> {
-    const key = `config:guardrails:${mode}:${userId}`;
+    // Phase 27.F.13.M: Cache key is mode-only (no userId)
+    const key = `config:guardrails:${mode}`;
     const traceId = `trace_${nanoid(16)}`;
     const context: FetchContext = { mode, userId, traceId };
 
@@ -473,13 +475,15 @@ class ConfigBobModule {
 
   /**
    * Get screeners settings with caching
+   * Phase 27.F.13.M: userId kept for signature compatibility but settings are global
    */
   async getScreeners(
     userId: string,
     mode: 'live' | 'paper' = 'live',
     ttl?: number
   ): Promise<any> {
-    const key = `config:screeners:${mode}:${userId}`;
+    // Phase 27.F.13.M: Cache key is mode-only (no userId)
+    const key = `config:screeners:${mode}`;
     const traceId = `trace_${nanoid(16)}`;
     const context: FetchContext = { mode, userId, traceId };
 

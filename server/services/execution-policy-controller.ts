@@ -284,8 +284,8 @@ export class ExecutionPolicyController {
     
     // Live mode: calculate based on proposed changes
     if (mode === 'live') {
-      // Get current guardrails
-      const guardrails = await this.storage.getGuardrails({ userId, mode });
+      // Phase 27.F.13.M: Get global guardrails (mode-only, no userId)
+      const guardrails = await this.storage.getGuardrails({ mode });
       
       if (actionType === 'update_risk_per_trade' && proposedChanges?.proposedValue) {
         const newRiskPerTrade = parseFloat(proposedChanges.proposedValue as string);

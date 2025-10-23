@@ -82,8 +82,8 @@ export class PaperSimDiagnosticService {
 
     console.log(`[UniverseScan] Starting diagnostic scan (mode=${mode}, limit=${limit}, trace=${trace}, strategies=${strategies})`);
 
-    // Get user's screener filters and trading settings
-    const screenerSettings = await storage.getScreenerFilters({ userId, mode });
+    // Phase 27.F.13.M: Get global screener filters (mode-only, no userId)
+    const screenerSettings = await storage.getScreenerFilters({ mode });
     const tradingSettings = await storage.getTradingSettings(userId);
     
     if (!screenerSettings || !tradingSettings) {

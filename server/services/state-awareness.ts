@@ -251,13 +251,12 @@ class StateAwarenessService {
 
   /**
    * Get guardrails settings for a specific mode
+   * Phase 27.F.13.M: userId kept for signature compatibility but settings are global
    */
   private async getGuardrails(userId: string, mode: 'live' | 'paper', traceId: string): Promise<any> {
+    // Phase 27.F.13.M: Query by mode only (global settings)
     const result = await db.query.guardrails.findFirst({
-      where: and(
-        eq(guardrails.userId, userId),
-        eq(guardrails.mode, mode)
-      ),
+      where: eq(guardrails.mode, mode),
     });
 
     return result ? {
@@ -272,13 +271,12 @@ class StateAwarenessService {
 
   /**
    * Get screener filters for a specific mode
+   * Phase 27.F.13.M: userId kept for signature compatibility but settings are global
    */
   private async getScreeners(userId: string, mode: 'live' | 'paper', traceId: string): Promise<any> {
+    // Phase 27.F.13.M: Query by mode only (global settings)
     const result = await db.query.screenerFilters.findFirst({
-      where: and(
-        eq(screenerFilters.userId, userId),
-        eq(screenerFilters.mode, mode)
-      ),
+      where: eq(screenerFilters.mode, mode),
     });
 
     return result ? {

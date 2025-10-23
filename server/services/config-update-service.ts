@@ -27,8 +27,8 @@ export async function updateGuardrails(
   try {
     console.log(`[ConfigUpdateService] Updating guardrails for user ${userId}, mode: ${mode}`, updates);
     
-    // Fetch existing guardrails to merge with updates
-    const existing = await storage.getGuardrails({ userId, mode });
+    // Phase 27.F.13.M: Fetch global guardrails (mode-only, no userId)
+    const existing = await storage.getGuardrails({ mode });
     
     // Merge existing data with updates to ensure all required fields are present
     const mergedData = {
@@ -148,8 +148,8 @@ export async function updateScreeners(
   try {
     console.log(`[ConfigUpdateService] Updating screener filters for user ${userId}, mode: ${mode}`, updates);
     
-    // Fetch existing screener filters to merge with updates
-    const existing = await storage.getScreenerFilters({ userId, mode });
+    // Phase 27.F.13.M: Fetch global screener filters (mode-only, no userId)
+    const existing = await storage.getScreenerFilters({ mode });
     
     // Merge existing data with updates to ensure all required fields are present
     const mergedData = {
@@ -207,7 +207,8 @@ export async function updateScreeners(
  */
 export async function getGuardrails(userId: string, mode: 'live' | 'paper') {
   try {
-    const guardrailsData = await storage.getGuardrails({ userId, mode });
+    // Phase 27.F.13.M: Get global guardrails (mode-only, no userId)
+    const guardrailsData = await storage.getGuardrails({ mode });
     return guardrailsData;
   } catch (error: any) {
     console.error('[ConfigUpdateService] Error fetching guardrails:', error);
@@ -235,7 +236,8 @@ export async function getGoals(userId: string, mode: 'live' | 'paper') {
  */
 export async function getScreeners(userId: string, mode: 'live' | 'paper') {
   try {
-    const screenerData = await storage.getScreenerFilters({ userId, mode });
+    // Phase 27.F.13.M: Get global screener filters (mode-only, no userId)
+    const screenerData = await storage.getScreenerFilters({ mode });
     return screenerData;
   } catch (error: any) {
     console.error('[ConfigUpdateService] Error fetching screener filters:', error);
