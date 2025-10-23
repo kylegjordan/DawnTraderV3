@@ -110,10 +110,26 @@ export class MarketScanner {
         }
       }
       
-      // Dawn Trader Phase 2: Automatic signal cleanup (runs every 10 minutes with scan)
-      console.log('\n🧹 Running signal cleanup...');
-      const expiredCount = await storage.expireAllExpiredSignals();
-      console.log(`✅ Signal cleanup complete: ${expiredCount} expired signals removed`);
+      // Dawn Trader Phase 27.F.13.F: Enhanced automatic cleanup (runs every 10 minutes with scan)
+      console.log('\n🧹 Running comprehensive cleanup...');
+      
+      // 1. Expire old trading signals
+      const expiredSignals = await storage.expireAllExpiredSignals();
+      console.log(`[Cleanup] ${expiredSignals} expired signals removed`);
+      
+      // 2. Clean stale filtered pairs (not refreshed in 15 minutes)
+      const stalePairs = await storage.cleanStaleWatchlistPairs(15);
+      console.log(`[Cleanup] ${stalePairs} stale filtered pairs removed`);
+      
+      // 3. Clean old closed paper trades (older than 24 hours)
+      const oldPaperTrades = await storage.cleanOldPaperSimTrades(24);
+      console.log(`[Cleanup] ${oldPaperTrades} closed paper trades archived`);
+      
+      // 4. Clean old closed live trades (older than 30 days)
+      const oldLiveTrades = await storage.cleanOldLiveTrades(30);
+      console.log(`[Cleanup] ${oldLiveTrades} closed live trades archived`);
+      
+      console.log(`✅ Cleanup complete: ${expiredSignals + stalePairs + oldPaperTrades + oldLiveTrades} total records cleaned`);
 
     } catch (error) {
       console.error('Error during market scan:', error);

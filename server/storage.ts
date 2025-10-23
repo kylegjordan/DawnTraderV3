@@ -188,7 +188,7 @@ import {
   systemAlerts
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -239,6 +239,7 @@ export interface IStorage {
   addWatchlistPair(pair: InsertWatchlistPair): Promise<WatchlistPair>;
   updateWatchlistPair(id: string, updates: Partial<WatchlistPair>): Promise<WatchlistPair>;
   removeWatchlistPair(id: string): Promise<void>;
+  cleanStaleWatchlistPairs(minutesOld: number): Promise<number>;
 
   // Trading signals methods
   saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal>;
@@ -253,6 +254,7 @@ export interface IStorage {
   createTrade(trade: InsertTrade): Promise<Trade>;
   updateTrade(id: string, updates: Partial<Trade>): Promise<Trade>;
   closeTrade(id: string, exitPrice: number, exitFee: number, exitSlippage: number): Promise<Trade>;
+  cleanOldLiveTrades(daysOld: number): Promise<number>;
 
   // AI methods
   getAIReports(userId: string, type?: string, limit?: number): Promise<AIReport[]>;
@@ -494,6 +496,7 @@ export interface IStorage {
   getPaperSimTradeLogs(userId: string, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]>;
   deleteAllPaperSimTradeLogs(userId: string): Promise<void>; // Phase 27.F.13.C: Reset simulation
   deleteAllPaperSimTrades(userId: string): Promise<void>; // Phase 27.F.13.C: Reset simulation
+  cleanOldPaperSimTrades(hoursOld: number): Promise<number>; // Phase 27.F.13.F: Cleanup old closed trades
   
   // Stats
   getPaperSimStats(userId: string): Promise<{
@@ -1144,6 +1147,38 @@ export class DatabaseStorage implements IStorage {
     }
 
     return result;
+  }
+
+  // Phase 27.F.13.F: Cleanup method for old closed live trades
+  async cleanOldLiveTrades(daysOld: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+    
+    const result = await db
+      .delete(trades)
+      .where(and(
+        eq(trades.status, 'closed'),
+        lte(trades.exitTime, cutoffDate)
+      ))
+      .returning();
+    
+    return result.length;
+  }
+
+  // Phase 27.F.13.F: Cleanup method for stale watchlist pairs
+  async cleanStaleWatchlistPairs(minutesOld: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setMinutes(cutoffDate.getMinutes() - minutesOld);
+    
+    const result = await db
+      .delete(watchlistPairs)
+      .where(and(
+        lte(watchlistPairs.lastScanned, cutoffDate),
+        eq(watchlistPairs.isActive, true)
+      ))
+      .returning();
+    
+    return result.length;
   }
 
   // AI methods
@@ -2740,6 +2775,22 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAllPaperSimTrades(userId: string): Promise<void> {
     await db.delete(paperSimTrades).where(eq(paperSimTrades.userId, userId));
+  }
+
+  // Phase 27.F.13.F: Cleanup method for old closed paper sim trades
+  async cleanOldPaperSimTrades(hoursOld: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - hoursOld);
+    
+    const result = await db
+      .delete(paperSimTrades)
+      .where(and(
+        isNotNull(paperSimTrades.closedAt),
+        lte(paperSimTrades.closedAt, cutoffDate)
+      ))
+      .returning();
+    
+    return result.length;
   }
 
   async createPaperSimTradeLog(log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog> {
