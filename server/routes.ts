@@ -323,7 +323,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Start market scanner after WebSocket is initialized (runs every 10 minutes)
-  await marketScanner.startHourlyScanning();
+  // Run asynchronously to not block server startup
+  marketScanner.startHourlyScanning().catch((error) => {
+    console.error('[MarketScanner] Failed to start:', error);
+  });
 
   // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
   apiRouter.use(diagnosticTraceMiddleware);
