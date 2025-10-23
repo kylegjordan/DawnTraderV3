@@ -55,6 +55,7 @@ import { getPermissionsForRole, Permission } from './config/permissions.js';
 import type { UserRole } from './config/permissions.js';
 import { randomUUID } from 'crypto';
 import { getPaperSimulationStatus } from './services/paper-sim-service';
+import { numericNormalizationMiddleware } from './utils/numeric-normalizer.js';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -293,6 +294,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Create dedicated Express Router for all API routes
   // This router will be mounted at /api in server/index.ts BEFORE Vite middleware
   const apiRouter = express.Router();
+  
+  // Phase 27.F.13.H: Add numeric normalization middleware to convert PostgreSQL decimal/numeric strings to JS numbers
+  apiRouter.use(numericNormalizationMiddleware);
+  console.log('[Server] Numeric normalization middleware applied to API router');
   
   // Phase 8.7.4: Import Context Bridge
   const { contextBridge } = await import('./services/context-bridge');
