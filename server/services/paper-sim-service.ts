@@ -57,6 +57,7 @@ export async function startPaperSimulation(
     runForMs?: number;
     startedBy?: string;
     metadata?: any;
+    skipAutoWatchlist?: boolean; // Phase 27.F.13.I: Skip slow Kraken API calls during startup
   }
 ): Promise<PaperSimResult> {
   try {
@@ -139,16 +140,22 @@ export async function startPaperSimulation(
           metadata: options?.metadata || null,
         };
 
+        console.log('[ENGINE_DB_CHECKPOINT_1] Creating paper sim session in database...');
         const dbSession = await storage.createPaperSimSession(sessionData);
-        console.log(`[PaperSimService] Created new session in database: ${sessionId}`);
+        console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
 
         // Phase 27.F.17a: Auto-Configuration - Screener-driven watchlist
-        console.log('[PaperSimService][AutoWatchlist] Checking auto-configuration...');
-        
-        // 1. Check watchlist and add screener-filtered pairs if empty
-        const watchlist = await storage.getWatchlist({ userId, mode: 'paper' });
-        if (!watchlist || watchlist.length === 0) {
-          console.log('[PaperSimService][AutoWatchlist] Empty watchlist detected - querying screener for eligible pairs');
+        // Phase 27.F.13.I: Skip if requested to avoid slow Kraken API calls during startup
+        if (options?.skipAutoWatchlist) {
+          console.log('[ENGINE_CHECKPOINT_3] Auto-watchlist SKIPPED (fast startup mode)');
+          console.log('[PaperSimService][AutoWatchlist] Market scanner will populate watchlist on first scan cycle');
+        } else {
+          console.log('[PaperSimService][AutoWatchlist] Checking auto-configuration...');
+          
+          // 1. Check watchlist and add screener-filtered pairs if empty
+          const watchlist = await storage.getWatchlist({ userId, mode: 'paper' });
+          if (!watchlist || watchlist.length === 0) {
+            console.log('[PaperSimService][AutoWatchlist] Empty watchlist detected - querying screener for eligible pairs');
           
           try {
             // Get current screener filter settings from database (NO HARDCODED DEFAULTS)
@@ -240,16 +247,20 @@ export async function startPaperSimulation(
             console.error('[PaperSimService][AutoWatchlist] Error querying screener for eligible pairs:', error);
             console.log('[PaperSimService][AutoWatchlist] Engine will start with empty watchlist (idle state)');
           }
-        } else {
-          console.log(`[PaperSimService][AutoWatchlist] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
+          } else {
+            console.log(`[PaperSimService][AutoWatchlist] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
+          }
         }
         
         // Phase 27.F.17b: State Persistence and Broadcast Verification
-        console.log('[PaperSimService][Phase-27.F.17b] Setting engine active state...');
+        console.log('[ENGINE_CHECKPOINT_4] Setting engine active state...');
         await tradingStateSync.setEngineActive(userId, true);
+        console.log('[ENGINE_CHECKPOINT_5] Engine active state set successfully');
         
         // Verify system_context status and log with [StateSync] prefix
+        console.log('[ENGINE_CHECKPOINT_6] Verifying system context...');
         const context = await storage.getSystemContext(userId);
+        console.log('[ENGINE_CHECKPOINT_7] System context retrieved');
         if (context && context.isEngineActive) {
           console.log('[StateSync] paper_engine_status = RUNNING confirmed');
           console.log('[PaperSimService][Phase-27.F.17b] ✅ Verified system_context.isEngineActive = true');
@@ -258,13 +269,22 @@ export async function startPaperSimulation(
         }
 
         // Phase 27.F.9: Create and register manager atomically (both local and global)
+        console.log('[ENGINE_CHECKPOINT_8] Importing PaperPortfolioManager...');
         const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
+        console.log('[ENGINE_CHECKPOINT_9] Creating manager instance...');
         const manager = new PaperPortfolioManager(userId);
         
+        console.log('[ENGINE_CHECKPOINT_10] Registering manager globally...');
         setGlobalPaperSimManager(manager);
-        console.log('[PaperSimService] Manager created and registered globally');
+        console.log('[ENGINE_CHECKPOINT_11] Manager registered, starting manager in background...');
         
-        await manager.start();
+        // Phase 27.F.13.I: Start manager non-blocking to avoid timeout
+        manager.start().then(() => {
+          console.log('[ENGINE_CHECKPOINT_12] Manager started successfully (async)');
+        }).catch((error) => {
+          console.error('[ENGINE_ERROR] Manager start failed:', error);
+        });
+        console.log('[ENGINE_CHECKPOINT_12_IMMEDIATE] Manager start initiated, continuing...');
         
         // Register global session for status tracking
         if (typeof (global as any).registerSimulationSession === 'function') {

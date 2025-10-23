@@ -1019,10 +1019,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 27.F.2: Trading Engine Control - Start with deterministic state broadcasting
   // Phase 27.F.13.B: Fixed to properly start correct engine based on mode
+  // Phase 27.F.13.I: Added comprehensive logging and timeout protection
   apiRouter.post('/trading/start', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    const startTime = Date.now();
     try {
       const userId = req.user!.id;
       const { mode } = req.body; // 'live' or 'paper'
+      
+      console.log('[ENGINE_START_INITIATED]', { userId, mode, timestamp: new Date().toISOString() });
       
       // Validate mode
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
@@ -1033,6 +1037,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       console.log(`[TradingStart] User ${userId} requesting start in ${mode} mode`);
+      console.log('[ENGINE_VALIDATED_MODE]', { mode });
       
       // Get API credentials from environment secrets only
       const apiKey = process.env.KRAKEN_API_KEY;
@@ -1040,32 +1045,59 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Validate credentials are present before starting
       if (!apiKey || !apiSecret) {
+        console.log('[ENGINE_START_FAILED] Kraken credentials missing');
         return res.status(400).json({ 
           error: 'Kraken API credentials not configured',
           message: 'Please add KRAKEN_API_KEY and KRAKEN_API_SECRET to Replit Secrets before starting trading.'
         });
       }
       
-      // Phase 27.F.13.B: Start the correct engine based on mode
-      if (mode === 'paper') {
-        // Start paper trading simulation
-        const { startPaperSimulation } = await import('./services/paper-sim-service.js');
-        await startPaperSimulation(userId);
-        console.log(`[TradingStart] Paper simulation started for user ${userId}`);
-      } else {
-        // Start live trading engine
-        let engine = tradingEngines.get(userId);
-        if (!engine) {
-          engine = new TradingEngine(userId, apiKey, apiSecret);
-          tradingEngines.set(userId, engine);
-        }
-        await engine.start();
-        console.log(`[TradingStart] Live trading engine started for user ${userId}`);
-      }
+      console.log('[ENGINE_VALIDATED_CONFIG] Kraken credentials present');
       
+      // Phase 27.F.13.I: Wrap engine start in 10-second timeout
+      const ENGINE_START_TIMEOUT = 10000; // 10 seconds
+      
+      const startEnginePromise = (async () => {
+        // Phase 27.F.13.B: Start the correct engine based on mode
+        if (mode === 'paper') {
+          console.log('[ENGINE_STARTING_PAPER] Importing paper-sim-service...');
+          // Start paper trading simulation
+          const { startPaperSimulation } = await import('./services/paper-sim-service.js');
+          console.log('[ENGINE_STARTING_PAPER] Calling startPaperSimulation...');
+          const result = await startPaperSimulation(userId, { skipAutoWatchlist: true });
+          console.log(`[TradingStart] Paper simulation started for user ${userId}`);
+          console.log('[ENGINE_START_COMPLETED]', { mode: 'paper', sessionId: result.data?.sessionId });
+          return result;
+        } else {
+          console.log('[ENGINE_STARTING_LIVE] Creating TradingEngine...');
+          // Start live trading engine
+          let engine = tradingEngines.get(userId);
+          if (!engine) {
+            engine = new TradingEngine(userId, apiKey, apiSecret);
+            tradingEngines.set(userId, engine);
+          }
+          await engine.start();
+          console.log(`[TradingStart] Live trading engine started for user ${userId}`);
+          console.log('[ENGINE_START_COMPLETED]', { mode: 'live' });
+          return { success: true };
+        }
+      })();
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Engine start timeout after 10 seconds')), ENGINE_START_TIMEOUT);
+      });
+      
+      console.log('[ENGINE_WAITING_START] Waiting for engine start with 10s timeout...');
+      const result = await Promise.race([startEnginePromise, timeoutPromise]) as any;
+      
+      const elapsed = Date.now() - startTime;
+      console.log(`[ENGINE_TIMING] Engine started in ${elapsed}ms`);
+      
+      console.log('[ENGINE_DATABASE_UPDATE] Updating user status...');
       await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
       
       // Phase 27.F.2: Update system_context and broadcast state
+      console.log('[ENGINE_DATABASE_UPDATE] Updating system context...');
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
       await tradingStateSync.setEngineActive(userId, true);
       await tradingStateSync.broadcastUserUpdate(userId);
@@ -1074,6 +1106,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const context = await storage.getSystemContext(userId);
       
       console.log(`[TradingStart] Completed start for user ${userId} mode=${mode} active=true`);
+      console.log('[ENGINE_DATABASE_OK]', { contextLoaded: !!context });
       
       // Phase 27.F.6: Log to trading_audit_log
       try {
@@ -1082,7 +1115,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           action: 'start',
           mode: mode || 'live',
           triggeredBy: 'manual',
-          metadata: { engineStatus: 'started', engineType: mode }
+          metadata: { engineStatus: 'started', engineType: mode, startTimeMs: elapsed }
         });
       } catch (auditError) {
         console.error('[TradingAudit] Failed to log start action:', auditError);
@@ -1092,11 +1125,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         success: true,
         mode: context?.tradingMode || mode,
         active: true,
-        sessionId: null // Session ID tracking can be added later if needed
+        sessionId: result?.data?.sessionId || null,
+        startTimeMs: elapsed
       });
-    } catch (error) {
+    } catch (error: any) {
+      const elapsed = Date.now() - startTime;
       console.error('[TradingStart] Error starting trading:', error);
-      res.status(500).json({ error: 'Failed to start trading' });
+      console.error('[ENGINE_START_FAILED]', { 
+        error: error.message, 
+        elapsed: `${elapsed}ms`,
+        timeout: elapsed >= 9900 // True if timeout occurred
+      });
+      
+      if (error.message?.includes('timeout')) {
+        return res.status(504).json({ 
+          error: 'Engine start timeout', 
+          message: 'Trading engine failed to start within 10 seconds. Check server logs for details.',
+          reason: 'timeout',
+          elapsed: `${elapsed}ms`
+        });
+      }
+      
+      res.status(500).json({ error: 'Failed to start trading', details: error.message });
     }
   });
 

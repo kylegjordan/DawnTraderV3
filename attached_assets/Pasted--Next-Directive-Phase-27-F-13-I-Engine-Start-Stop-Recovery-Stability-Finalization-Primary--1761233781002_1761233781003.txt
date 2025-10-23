@@ -1,0 +1,121 @@
+🔧 Next Directive — Phase 27.F.13.I: Engine Start/Stop Recovery & Stability Finalization
+🎯 Primary Objective
+
+Unblock the trading engine startup process so PaperSim can run continuously for the 25-minute stability test required by 27.F.13.H.
+Fix hangs, add diagnostics, and implement a safe “force-stop” fallback.
+
+1️⃣ Diagnose and Fix Engine Startup Timeout
+
+Add full logging to /api/trading/start and its underlying service (likely startPaperSimulation() or startTradingEngine()).
+
+Include explicit checkpoints such as:
+
+[ENGINE_START_INITIATED]
+[ENGINE_VALIDATED_CONFIG]
+[ENGINE_KRAKEN_CONNECTION_OK]
+[ENGINE_DATABASE_OK]
+[ENGINE_START_COMPLETED]
+
+
+Add a 5-second timeout guard:
+If the startup sequence exceeds this, abort gracefully and return { success: false, reason: "Timeout during startup" }.
+
+Deliverable:
+Logs that show the exact stage where the process is stalling.
+
+2️⃣ Implement /api/trading/force-stop Endpoint
+
+Admin-only recovery endpoint that terminates any hung engine thread and resets engine state to "stopped".
+
+Must clear all state flags in memory and database.
+
+Response example:
+
+{
+  "status": "reset",
+  "mode": "paper",
+  "message": "Engine forcibly stopped and reset to 'stopped'."
+}
+
+3️⃣ Add Engine Pre-Flight Checks
+
+Before engine start:
+
+Validate Kraken API key access (expect a quick ping response).
+
+Check that database is reachable and portfolio_state exists.
+
+Confirm Goals Engine parameters (guardrails, filters, strategies) are loaded.
+
+Verify mode isolation — ensure only one mode’s engine is flagged as active.
+
+If any fail, return descriptive error messages in the API response.
+
+4️⃣ Implement Basic Engine State Machine
+
+Establish strict transitions:
+
+stopped → starting → running → stopping → stopped
+
+
+Set and clear lock flags in database or memory to prevent race conditions.
+
+Log each transition.
+
+Prevent a new start if previous state ≠ "stopped".
+
+5️⃣ Verify Kill-Switch & Stop Behavior
+
+Once engine can start:
+
+Confirm that Stop button halts engine immediately.
+
+Confirm that daily_loss_kill_switch_percent (and only that parameter) triggers automatic stop under simulated loss conditions.
+
+Log example:
+
+[KILL_SWITCH_TRIGGERED] Mode: paper, Reason: DailyLossExceeded, Threshold: 7%, Loss: 7.1%
+
+6️⃣ Re-Run 25-Minute PaperSim Stability Test
+
+Start engine in Paper Mode.
+
+Log exact UTC timestamps:
+
+[STABILITY_TEST_START] 2025-10-24T09:00:00Z
+[STABILITY_TEST_END] 2025-10-24T09:25:00Z
+
+
+Confirm:
+
+Two full scan cycles completed.
+
+Filtered pairs count stable and identical across tabs.
+
+Ready-to-Buy signals appear and expire.
+
+Engine start/stop synchronization holds steady.
+
+7️⃣ Deliverables
+
+PHASE_27.F.13.I_VALIDATION_REPORT.md including:
+
+Engine startup diagnostics (where previous hang occurred)
+
+Logs from successful start and stop
+
+Guardrail kill-switch test outcome
+
+25-minute PaperSim stability results (timestamps, counts, PnL)
+
+replit.md updated with Phase 27.F.13.I completion summary.
+
+Execution Instructions
+
+Proceed automatically, no pauses for input.
+
+Use same test user credentials.
+
+Paper Mode trading only (no live orders).
+
+Continue logging to /workspace/ for full trace.
