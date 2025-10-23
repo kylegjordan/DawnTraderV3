@@ -1061,9 +1061,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       try {
         // 1. Validate Goals Engine configuration exists
         const [filters, settings, guardrails] = await Promise.all([
-          storage.getScreenerFilters({ userId, mode }),
+          storage.getScreenerFilters({ mode }),
           storage.getTradingSettings(userId),
-          storage.getGuardrails({ userId, mode })
+          storage.getGuardrails({ mode })
         ]);
         
         if (!filters) {

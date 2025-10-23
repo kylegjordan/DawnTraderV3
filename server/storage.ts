@@ -188,7 +188,7 @@ import {
   systemAlerts
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql, isNotNull } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -203,13 +203,13 @@ export interface IStorage {
   createTradingSettings(settings: InsertTradingSettings): Promise<TradingSettings>;
   updateTradingSettings(userId: string, updates: Partial<TradingSettings>): Promise<TradingSettings>;
 
-  // Guardrails methods
-  getGuardrails(params: { userId: string; mode: 'live' | 'paper' }): Promise<Guardrails | null>;
-  upsertGuardrails(data: InsertGuardrails): Promise<Guardrails>;
+  // Guardrails methods (global settings per mode)
+  getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null>;
+  upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails>;
 
-  // Screener filters methods
-  getScreenerFilters(params: { userId: string; mode: 'live' | 'paper' }): Promise<ScreenerFilters | null>;
-  upsertScreenerFilters(data: InsertScreenerFilters): Promise<ScreenerFilters>;
+  // Screener filters methods (global settings per mode)
+  getScreenerFilters(params: { mode: 'live' | 'paper' }): Promise<ScreenerFilters | null>;
+  upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string }): Promise<ScreenerFilters>;
 
   // Filter diagnostics methods
   getFilterDiagnostics(params: { userId: string; mode: 'live' | 'paper'; hours?: number }): Promise<any[]>;
@@ -655,52 +655,64 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // Guardrails methods
-  async getGuardrails(params: { userId: string; mode: 'live' | 'paper' }): Promise<Guardrails | null> {
+  // Guardrails methods (global settings per mode)
+  async getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null> {
     const [result] = await db
       .select()
       .from(guardrails)
-      .where(and(eq(guardrails.userId, params.userId), eq(guardrails.mode, params.mode)));
+      .where(and(isNull(guardrails.userId), eq(guardrails.mode, params.mode)));
     return result || null;
   }
 
-  async upsertGuardrails(data: InsertGuardrails): Promise<Guardrails> {
-    const existing = await this.getGuardrails({ userId: data.userId, mode: data.mode });
+  async upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails> {
+    const existing = await this.getGuardrails({ mode: data.mode });
+    
+    const updateData = {
+      ...data,
+      userId: null,
+      updatedAt: new Date()
+    };
     
     if (existing) {
       const [result] = await db
         .update(guardrails)
-        .set({ ...data, updatedAt: new Date() })
-        .where(and(eq(guardrails.userId, data.userId), eq(guardrails.mode, data.mode)))
+        .set(updateData)
+        .where(and(isNull(guardrails.userId), eq(guardrails.mode, data.mode)))
         .returning();
       return result;
     } else {
-      const [result] = await db.insert(guardrails).values(data).returning();
+      const [result] = await db.insert(guardrails).values(updateData).returning();
       return result;
     }
   }
 
-  // Screener filters methods
-  async getScreenerFilters(params: { userId: string; mode: 'live' | 'paper' }): Promise<ScreenerFilters | null> {
+  // Screener filters methods (global settings per mode)
+  async getScreenerFilters(params: { mode: 'live' | 'paper' }): Promise<ScreenerFilters | null> {
     const [result] = await db
       .select()
       .from(screenerFilters)
-      .where(and(eq(screenerFilters.userId, params.userId), eq(screenerFilters.mode, params.mode)));
+      .where(and(isNull(screenerFilters.userId), eq(screenerFilters.mode, params.mode)));
     return result || null;
   }
 
-  async upsertScreenerFilters(data: InsertScreenerFilters): Promise<ScreenerFilters> {
-    const existing = await this.getScreenerFilters({ userId: data.userId, mode: data.mode });
+  async upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string }): Promise<ScreenerFilters> {
+    const existing = await this.getScreenerFilters({ mode: data.mode });
+    
+    const updateData = {
+      ...data,
+      userId: null,
+      updatedAt: new Date()
+    };
     
     if (existing) {
       const [result] = await db
         .update(screenerFilters)
-        .set({ ...data, updatedAt: new Date() })
-        .where(and(eq(screenerFilters.userId, data.userId), eq(screenerFilters.mode, data.mode)))
+        .set(updateData)
+        .where(and(isNull(screenerFilters.userId), eq(screenerFilters.mode, data.mode)))
         .returning();
       return result;
     } else {
-      const [result] = await db.insert(screenerFilters).values(data).returning();
+      const [result] = await db.insert(screenerFilters).values(updateData).returning();
       return result;
     }
   }
