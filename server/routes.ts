@@ -1063,7 +1063,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const [filters, settings, guardrails] = await Promise.all([
           storage.getScreenerFilters({ userId, mode }),
           storage.getTradingSettings(userId),
-          storage.getGuardrails({ globalContextId: 'default', mode })
+          storage.getGuardrails({ userId, mode })
         ]);
         
         if (!filters) {
