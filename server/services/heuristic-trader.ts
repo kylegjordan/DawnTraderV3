@@ -67,6 +67,7 @@ export interface AdjustmentRecommendation {
   changePercent: number;
   reason: string;
   confidence: number;
+  ruleId?: string; // Track which rule generated this recommendation
 }
 
 export interface AdjustmentLog {
@@ -494,7 +495,7 @@ class HeuristicEngine {
           
           // Fetch current values and calculate recommended values
           for (const rec of ruleRecommendations) {
-            const enriched = await this.enrichRecommendation(rec, mode);
+            const enriched = await this.enrichRecommendation({ ...rec, ruleId: rule.id }, mode);
             if (enriched) {
               recommendations.push(enriched);
             }
@@ -633,7 +634,7 @@ class AdjustmentExecutor {
         if (success) {
           const log: AdjustmentLog = {
             mode,
-            ruleId: 'manual', // Will be set by caller
+            ruleId: rec.ruleId || 'unknown',
             parameterType: rec.type,
             parameterName: rec.parameter,
             oldValue: rec.currentValue,
@@ -705,13 +706,47 @@ class AdjustmentExecutor {
    * Save adjustment log to database
    */
   private async saveAdjustmentLog(log: AdjustmentLog): Promise<void> {
-    // Note: Would use storage.createHeuristicAdjustment() but table doesn't exist yet
-    // For now, just log to console
-    console.log(`[${this.MODULE_NAME}] 📊 Adjustment logged:`, {
-      parameter: log.parameterName,
-      change: `${log.oldValue} → ${log.newValue}`,
-      reason: log.reason
-    });
+    try {
+      // Store in logs table for durable audit trail
+      await storage.createSystemLog({
+        level: 'info',
+        category: 'heuristic_trader',
+        message: `LHTS Adjustment: ${log.parameterName} ${log.oldValue.toFixed(2)} → ${log.newValue.toFixed(2)} (${log.changePercent > 0 ? '+' : ''}${log.changePercent}%)`,
+        metadata: {
+          mode: log.mode,
+          ruleId: log.ruleId,
+          parameterType: log.parameterType,
+          parameterName: log.parameterName,
+          oldValue: log.oldValue,
+          newValue: log.newValue,
+          changePercent: log.changePercent,
+          reason: log.reason,
+          executionTimeMs: log.executionTimeMs,
+          triggerMetrics: {
+            winRate: log.triggerMetrics.winRate,
+            drawdown: log.triggerMetrics.currentDrawdown,
+            exposure: log.triggerMetrics.exposurePercent
+          }
+        },
+        userId: null // System-level log
+      });
+      
+      console.log(`[${this.MODULE_NAME}] 📊 Adjustment logged to database:`, {
+        ruleId: log.ruleId,
+        parameter: log.parameterName,
+        change: `${log.oldValue.toFixed(2)} → ${log.newValue.toFixed(2)}`,
+        reason: log.reason
+      });
+    } catch (error: any) {
+      console.error(`[${this.MODULE_NAME}] ❌ Failed to save adjustment log:`, error.message);
+      // Fallback to console logging
+      console.log(`[${this.MODULE_NAME}] 📊 Adjustment (console fallback):`, {
+        ruleId: log.ruleId,
+        parameter: log.parameterName,
+        change: `${log.oldValue} → ${log.newValue}`,
+        reason: log.reason
+      });
+    }
   }
 
   /**
@@ -880,9 +915,10 @@ export class HeuristicTraderService {
       }
       
       // Update system context
+      const currentContext = await storage.getSystemContext(this.config.mode);
       await storage.updateSystemContext(this.config.mode, {
         lhtsLastRun: new Date(),
-        lhtsAdjustmentsCount: (await storage.getSystemContext(this.config.mode))?.lhtsAdjustmentsCount || 0 + logs.length
+        lhtsAdjustmentsCount: ((currentContext?.lhtsAdjustmentsCount ?? 0) + logs.length)
       });
       
       const duration = Date.now() - startTime;
