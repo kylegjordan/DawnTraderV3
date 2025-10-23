@@ -59,7 +59,7 @@ export default function GuardrailsTab() {
   const [hasChanges, setHasChanges] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
-  const lastMode = useRef(mode);
+  const lastMode = useRef<string | null>(null);
 
   const { data: currentSettings, isLoading } = useQuery<Guardrails>({
     queryKey: ['/api/guardrails', mode],
@@ -80,13 +80,10 @@ export default function GuardrailsTab() {
   });
 
   useEffect(() => {
-    if (currentSettings) {
-      // Update mode tracking
-      if (lastMode.current !== mode) {
-        lastMode.current = mode;
-      }
-      
-      // Always update settings when currentSettings changes (including on navigation back)
+    // Only update local state when data first loads or mode changes
+    // Don't update during refetches after save (prevents overwriting user's saved values)
+    if (currentSettings && lastMode.current !== mode) {
+      lastMode.current = mode;
       setSettings({
         maxDailyLoss: currentSettings.maxDailyLoss ?? DEFAULTS.maxDailyLoss,
         maxPositionSize: currentSettings.maxPositionSize ?? DEFAULTS.maxPositionSize,
@@ -112,14 +109,19 @@ export default function GuardrailsTab() {
 
   const updateMutation = useMutation({
     mutationFn: async (updates: Partial<Guardrails>) => {
-      return fetch(`/api/guardrails?mode=${mode}`, {
+      const response = await fetch(`/api/guardrails?mode=${mode}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(updates)
-      }).then(r => r.json());
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update guardrails');
+      }
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/guardrails', mode] });
@@ -140,14 +142,19 @@ export default function GuardrailsTab() {
 
   const updateGlobalMutation = useMutation({
     mutationFn: async (updates: Partial<TradingSettings>) => {
-      return fetch('/api/settings', {
+      const response = await fetch('/api/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(updates)
-      }).then(r => r.json());
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update global settings');
+      }
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/settings'] });

@@ -1738,6 +1738,8 @@ export const insertGuardrailsSchema = createInsertSchema(guardrails).omit({
   maxDrawdown: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   maxPositionSize: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   riskPerTrade: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxRequiredCapital: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  maxRiskPerTradeLimit: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 });
 
 export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).omit({
