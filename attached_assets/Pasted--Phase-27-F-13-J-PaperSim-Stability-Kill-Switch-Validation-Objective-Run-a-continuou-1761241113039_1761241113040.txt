@@ -1,0 +1,124 @@
+# Phase 27.F.13.J — PaperSim Stability & Kill-Switch Validation  
+**Objective:**  
+Run a continuous 25-minute PaperSim session to validate engine stability, filtered-pair consistency, and guardrail kill-switch behavior.  
+Use the current configuration (no changes to Goals Engine data).  
+Operate autonomously — do **not** pause for user confirmation.
+
+---
+
+## 🧩 Baseline Setup
+1. Authenticate with the following **test credentials**:  
+   - **Username:** `testuser123`  
+   - **Password:** `SecurePass123!`
+
+2. Confirm environment integrity before test start:  
+   - `/api/system/health` → 200 OK  
+   - `/api/guardrails` → returns configured Paper guardrails  
+   - `/api/screeners` → returns Paper filters  
+   - `/api/strategy-settings` → returns strategies (global context)  
+   - `/api/trading/status` → engine inactive  
+
+3. Log baseline snapshot to `/tmp/papersim_27f13j_baseline.log`:  
+   ```
+   Mode: paper  
+   Balance, activeSignals, eligiblePairs, lastScanAt
+   ```
+
+---
+
+## ▶️ Step 1 – Start Paper Engine
+1. `POST /api/trading/start` with `{"mode":"paper"}`  
+2. Log UTC timestamp:  
+   ```
+   [STABILITY_TEST_START] YYYY-MM-DDTHH:MM:SSZ
+   ```  
+3. Expect HTTP 200 within ≤ 2 seconds.  
+4. Record `sessionId`, `startTimeMs`, and engine status to log.
+
+---
+
+## 🕒 Step 2 – Run 25-Minute Monitoring Cycle
+Monitor continuously for 25 minutes (1 500 s) or two market-scanner cycles, whichever is longer.
+
+**Every 5 minutes log:**
+- `/api/trading/status` (engine state, balance, active signals)  
+- `/api/paper-sim/filtered-pairs` (eligible pair count)  
+- `/api/trading-signals?status=active` (active signals)  
+- `/api/paper-sim/open-positions` (active paper trades)
+
+Write results to `/tmp/papersim_27f13j_monitor.log` with timestamps.
+
+**Expected Behavior**
+- Filtered-pair count stable (± 2 of baseline).  
+- Active signals appear and expire normally.  
+- No WebSocket disconnects or stale-data warnings.  
+- Average API latency < 1 s.
+
+---
+
+## ⚠️ Step 3 – Simulate Kill-Switch Trigger (≈ Minute 24)
+Simulate a 7 % daily portfolio loss to validate the kill-switch.
+
+- Force loss > `daily_loss_kill_switch_percent = 7`.  
+- Expect log entry:  
+  ```
+  [KILL_SWITCH_TRIGGERED] Mode: paper Reason: DailyLossExceeded Threshold: 7 % Loss: ≥ 7 %
+  ```
+- Engine should automatically stop and record audit entry.  
+- If not triggered automatically, POST `/api/trading/force-stop` with `{"reason":"kill-switch manual"}`.
+
+---
+
+## ⏹️ Step 4 – Validation and Shutdown
+1. Confirm `/api/trading/status` → engine inactive.  
+2. Log UTC timestamp:  
+   ```
+   [STABILITY_TEST_END] YYYY-MM-DDTHH:MM:SSZ
+   ```
+3. Verify:  
+   - Filtered-pairs consistent between endpoints.  
+   - No duplicate signals.  
+   - All positions closed or archived.
+
+---
+
+## 📄 Step 5 – Generate Final Validation Report
+Create `/workspace/PHASE_27.F.13.J_VALIDATION_REPORT.md` summarizing:
+
+| Metric | Expected | Observed |
+|---------|-----------|-----------|
+| Engine Start Time | ≤ 2 s |  |
+| Run Duration | 25 min ± 2 min |  |
+| Filtered Pairs Δ | ≤ ± 2 |  |
+| Active Signals Peak | ≥ 1 |  |
+| API Error Rate | 0 % |  |
+| Kill-Switch Triggered | Yes |  |
+
+Append results to `replit.md` with entry **“Phase 27.F.13.J Complete”**.
+
+---
+
+## 🧠 Execution Mode
+- Fully autonomous execution — no user input.  
+- **Paper mode only** (no live trading).  
+- Continue if minor warnings occur; halt only on critical errors.  
+- Use Phase 27.F.13.I engine start/stop functions.  
+- Preserve all logs under `/tmp/` and `/workspace/`.
+
+---
+
+## 🕒 Expected Duration
+≈ 27 minutes (total runtime including startup and shutdown).
+
+---
+
+### ✅ Goal
+Demonstrate stable 25-minute PaperSim operation with:  
+- Consistent filtered-pair metrics  
+- Normal signal generation and expiry  
+- Reliable engine state synchronization  
+- Correct automatic kill-switch response  
+
+---
+
+**Begin Phase 27.F.13.J now using username `testuser123` and password `SecurePass123!`, and proceed autonomously until the validation report is generated.**
