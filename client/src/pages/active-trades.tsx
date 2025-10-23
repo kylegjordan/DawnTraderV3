@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ActiveTrades from "@/components/trading/active-trades";
 import Watchlist from "@/components/trading/watchlist";
@@ -7,12 +7,63 @@ import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import ModeBanner from "@/components/mode-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Filter, Lightbulb, RefreshCw } from "lucide-react";
+import { BarChart3, TrendingUp, Filter, Lightbulb, RefreshCw, AlertTriangle } from "lucide-react";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 import { FilterInsights } from "@/components/trading/filter-insights";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/queryClient";
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Trading page error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 space-y-4">
+          <Card className="border-destructive">
+            <CardHeader>
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                <CardTitle>Error Loading Trading Page</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                {this.state.error?.message || 'An unexpected error occurred'}
+              </p>
+              <Button onClick={() => window.location.reload()}>
+                Reload Page
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 interface FilteredPair {
   symbol: string;
@@ -152,7 +203,7 @@ function FilteredPairsTab() {
   );
 }
 
-export default function TradingPage() {
+function TradingPageContent() {
   const [activeTab, setActiveTab] = useState("open");
   const { isAdmin, isOwner } = useUserRole();
   
@@ -215,5 +266,13 @@ export default function TradingPage() {
         )}
       </Tabs>
     </div>
+  );
+}
+
+export default function TradingPage() {
+  return (
+    <ErrorBoundary>
+      <TradingPageContent />
+    </ErrorBoundary>
   );
 }
