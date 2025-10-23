@@ -1211,6 +1211,83 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 27.F.13.I: Force Stop - Admin-only emergency recovery endpoint
+  apiRouter.post('/trading/force-stop', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { targetUserId, reason } = req.body;
+      const stopUserId = targetUserId || userId;
+      
+      console.log(`[ForceStop] Admin ${userId} forcing stop for user ${stopUserId}, reason: ${reason || 'none'}`);
+      
+      // Get current state
+      const context = await storage.getSystemContext(stopUserId);
+      const currentMode = context?.tradingMode || 'paper';
+      
+      // Force stop both engines regardless of current mode
+      try {
+        const { stopPaperSimulation, clearGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
+        await stopPaperSimulation(stopUserId);
+        clearGlobalPaperSimManager();
+        console.log(`[ForceStop] Paper simulation force-stopped`);
+      } catch (err) {
+        console.error(`[ForceStop] Error stopping paper sim:`, err);
+      }
+      
+      try {
+        const engine = tradingEngines.get(stopUserId);
+        if (engine) {
+          await engine.stop();
+          tradingEngines.delete(stopUserId);
+        }
+        console.log(`[ForceStop] Live trading engine force-stopped`);
+      } catch (err) {
+        console.error(`[ForceStop] Error stopping live engine:`, err);
+      }
+      
+      // Force reset database state
+      await storage.updateUser(stopUserId, { tradingStatus: 'stopped' });
+      
+      // Force update system_context
+      const { tradingStateSync } = await import('./services/trading-state-sync.js');
+      await tradingStateSync.setEngineActive(stopUserId, false);
+      await tradingStateSync.broadcastUserUpdate(stopUserId);
+      
+      // Audit log
+      try {
+        await storage.createTradingAuditLog({
+          userId: stopUserId,
+          action: 'force_stop',
+          mode: currentMode,
+          triggeredBy: 'admin',
+          metadata: { 
+            adminUserId: userId,
+            reason: reason || 'emergency_recovery',
+            forcedBothEngines: true
+          }
+        });
+      } catch (auditError) {
+        console.error('[ForceStop] Failed to log audit:', auditError);
+      }
+      
+      console.log(`[ForceStop] Completed force-stop for user ${stopUserId}`);
+      
+      res.json({ 
+        success: true,
+        message: 'Trading engines force-stopped',
+        userId: stopUserId,
+        stoppedEngines: ['paper', 'live'],
+        active: false
+      });
+    } catch (error: any) {
+      console.error('[ForceStop] Error during force-stop:', error);
+      res.status(500).json({ 
+        error: 'Force-stop failed', 
+        message: error.message 
+      });
+    }
+  });
+
   // Phase 27.4: Set Trading Mode with Permission Validation
   apiRouter.post('/trading/set-mode', authenticateToken, async (req: TracedRequest, res) => {
     try {
