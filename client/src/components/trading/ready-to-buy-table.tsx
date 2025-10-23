@@ -217,8 +217,18 @@ export default function ReadyToBuyTable() {
               </thead>
               <tbody>
                 {sortedSignals.map((signal, index) => {
-                  const profitPotential = ((signal.targetPrice - signal.entryPrice) / signal.entryPrice) * 100;
-                  const riskPercent = ((signal.entryPrice - signal.stopPrice) / signal.entryPrice) * 100;
+                  // Convert all numeric fields to numbers to handle potential string values from database
+                  const entryPrice = Number(signal.entryPrice);
+                  const targetPrice = Number(signal.targetPrice);
+                  const stopPrice = Number(signal.stopPrice);
+                  const currentPrice = Number(signal.currentPrice);
+                  const confidence = Number(signal.confidence);
+                  const dailyRange = signal.dailyRange !== null ? Number(signal.dailyRange) : null;
+                  const volume24h = signal.volume24h !== null ? Number(signal.volume24h) : null;
+                  const vwap = signal.vwap !== null ? Number(signal.vwap) : null;
+                  
+                  const profitPotential = ((targetPrice - entryPrice) / entryPrice) * 100;
+                  const riskPercent = ((entryPrice - stopPrice) / entryPrice) * 100;
 
                   return (
                     <tr 
@@ -233,23 +243,26 @@ export default function ReadyToBuyTable() {
                         {signal.baseCurrency}
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-volume-${index}`}>
-                        {signal.volume24h !== null 
-                          ? `$${(signal.volume24h / 1000000).toFixed(2)}M`
+                        {volume24h !== null && !isNaN(volume24h)
+                          ? `$${(volume24h / 1000000).toFixed(2)}M`
                           : '—'
                         }
                       </td>
                       <td className="text-right py-3 px-3 font-mono" data-testid={`text-price-${index}`}>
-                        ${signal.currentPrice.toFixed(signal.currentPrice < 1 ? 4 : 2)}
+                        {!isNaN(currentPrice) 
+                          ? `$${currentPrice.toFixed(currentPrice < 1 ? 4 : 2)}`
+                          : '—'
+                        }
                       </td>
                       <td className="text-right py-3 px-3 font-mono" data-testid={`text-vwap-${index}`}>
-                        {signal.vwap !== null 
-                          ? `$${signal.vwap.toFixed(signal.vwap < 1 ? 4 : 2)}`
+                        {vwap !== null && !isNaN(vwap)
+                          ? `$${vwap.toFixed(vwap < 1 ? 4 : 2)}`
                           : '—'
                         }
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-range-${index}`}>
-                        {signal.dailyRange !== null 
-                          ? `${signal.dailyRange.toFixed(2)}%`
+                        {dailyRange !== null && !isNaN(dailyRange)
+                          ? `${dailyRange.toFixed(2)}%`
                           : '—'
                         }
                       </td>
@@ -259,26 +272,43 @@ export default function ReadyToBuyTable() {
                         </span>
                       </td>
                       <td className="text-right py-3 px-3 font-mono font-semibold text-success" data-testid={`text-entry-${index}`}>
-                        ${signal.entryPrice.toFixed(signal.entryPrice < 1 ? 4 : 2)}
+                        {!isNaN(entryPrice) 
+                          ? `$${entryPrice.toFixed(entryPrice < 1 ? 4 : 2)}`
+                          : '—'
+                        }
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-target-${index}`}>
                         <div className="flex flex-col items-end">
-                          <span className="font-mono">${signal.targetPrice.toFixed(signal.targetPrice < 1 ? 4 : 2)}</span>
-                          <span className="text-xs text-success">+{profitPotential.toFixed(1)}%</span>
+                          <span className="font-mono">
+                            {!isNaN(targetPrice) 
+                              ? `$${targetPrice.toFixed(targetPrice < 1 ? 4 : 2)}`
+                              : '—'
+                            }
+                          </span>
+                          {!isNaN(profitPotential) && (
+                            <span className="text-xs text-success">+{profitPotential.toFixed(1)}%</span>
+                          )}
                         </div>
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-stop-${index}`}>
                         <div className="flex flex-col items-end">
-                          <span className="font-mono">${signal.stopPrice.toFixed(signal.stopPrice < 1 ? 4 : 2)}</span>
-                          <span className="text-xs text-destructive">-{riskPercent.toFixed(1)}%</span>
+                          <span className="font-mono">
+                            {!isNaN(stopPrice) 
+                              ? `$${stopPrice.toFixed(stopPrice < 1 ? 4 : 2)}`
+                              : '—'
+                            }
+                          </span>
+                          {!isNaN(riskPercent) && (
+                            <span className="text-xs text-destructive">-{riskPercent.toFixed(1)}%</span>
+                          )}
                         </div>
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-confidence-${index}`}>
                         <span className={cn(
                           "font-semibold",
-                          signal.confidence >= 0.8 ? "text-success" : signal.confidence >= 0.6 ? "text-primary" : "text-muted-foreground"
+                          confidence >= 0.8 ? "text-success" : confidence >= 0.6 ? "text-primary" : "text-muted-foreground"
                         )}>
-                          {(signal.confidence * 100).toFixed(0)}%
+                          {!isNaN(confidence) ? `${(confidence * 100).toFixed(0)}%` : '—'}
                         </span>
                       </td>
                     </tr>
