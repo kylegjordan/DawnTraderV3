@@ -231,92 +231,87 @@ export class TradingStateSync {
   /**
    * Phase 27.F.3: Broadcast complete trading state snapshot to user
    * Phase 27.F.12: Extended to include both isEngineActivePaper and isEngineActiveLive
+   * Phase 27.F.13.O: Refactored to use mode-based global broadcasts
    * Called after any start/stop/mode change action
    */
   async broadcastUserUpdate(userId: string): Promise<void> {
     try {
-      const context = await storage.getSystemContext(userId);
+      // Phase 27.F.13.O: Get global system context for both modes
+      const paperContext = await storage.getSystemContext('paper');
+      const liveContext = await storage.getSystemContext('live');
       
-      if (!context) {
-        console.warn(`[TradingSync] No context found for user ${userId}, skipping broadcast`);
+      if (!paperContext && !liveContext) {
+        console.warn(`[TradingSync] No context found for any mode, skipping broadcast`);
         return;
       }
       
-      // Phase 27.F.12: Compute mode-specific engine states
-      // Check if paper sim session is active
-      const paperSimSession = await storage.getActivePaperSimSession(userId);
-      const isEngineActivePaper = paperSimSession !== null;
+      // Phase 27.F.13.O: Compute mode-specific engine states from global contexts
+      const isEngineActivePaper = paperContext?.isEngineActive || false;
+      const isEngineActiveLive = liveContext?.isEngineActive || false;
       
-      // For live mode, check system_context.isEngineActive when mode is 'live'
-      const isEngineActiveLive = context.tradingMode === 'live' && context.isEngineActive;
+      // Determine current mode from user's last action (defaulting to paper)
+      const currentMode = paperContext?.tradingMode || 'paper';
       
       // Phase 27.F.17b: Add explicit status field (RUNNING/STOPPED)
-      const status = (context.tradingMode === 'paper' ? isEngineActivePaper : isEngineActiveLive) 
+      const status = (currentMode === 'paper' ? isEngineActivePaper : isEngineActiveLive) 
         ? 'RUNNING' 
         : 'STOPPED';
       
       const payload = {
-        userId,
-        mode: context.tradingMode,
+        userId, // Keep for audit trail
+        mode: currentMode,
         status, // Phase 27.F.17b: Explicit RUNNING/STOPPED status
-        isEngineActive: context.isEngineActive || false,
-        active: context.isEngineActive || false, // Keep both for backwards compatibility
+        isEngineActive: (currentMode === 'paper' ? isEngineActivePaper : isEngineActiveLive),
+        active: (currentMode === 'paper' ? isEngineActivePaper : isEngineActiveLive), // Keep both for backwards compatibility
         // Phase 27.F.12: Add mode-specific status
         isEngineActivePaper,
         isEngineActiveLive,
-        tradingModeLabel: context.tradingMode.toUpperCase() + ' TRADING',
-        lastModeChange: context.lastModeChange,
-        changedBy: context.changedBy,
-        changeReason: context.changeReason,
+        tradingModeLabel: currentMode.toUpperCase() + ' TRADING',
+        lastModeChange: (currentMode === 'paper' ? paperContext?.lastModeChange : liveContext?.lastModeChange),
+        changedBy: (currentMode === 'paper' ? paperContext?.lastStartedBy : liveContext?.lastStartedBy),
+        changeReason: 'Engine state changed',
         timestamp: new Date().toISOString()
       };
       
+      // Phase 27.F.13.O: Global mode-based broadcast (NO userId filter)
       await contextBridge.broadcast({
         type: 'trading_state_changed',
         payload,
-        userId, // Scope to specific user
-        mode: context.tradingMode
+        mode: currentMode // Mode-scoped, all clients receive
       });
       
-      console.log(`[SYNC][Phase-27.F.12] Broadcasted complete state snapshot for user ${userId}: mode=${payload.mode}, activePaper=${payload.isEngineActivePaper}, activeLive=${payload.isEngineActiveLive}`);
+      console.log(`[SYNC][Phase-27.F.13.O] Broadcasted global state snapshot for ${currentMode} mode: activePaper=${payload.isEngineActivePaper}, activeLive=${payload.isEngineActiveLive} (initiated by userId: ${userId})`);
     } catch (error) {
-      console.error(`[TradingSync] Error broadcasting update for user ${userId}:`, error);
+      console.error(`[TradingSync] Error broadcasting update for userId ${userId}:`, error);
     }
   }
 
   /**
    * Phase 27.F.2: Reconciliation Guard
+   * Phase 27.F.13.O: Refactored to use mode-based global context
    * Periodically checks for DB/cache mismatches and re-broadcasts state
    */
   private startReconciliationGuard(): void {
     setInterval(async () => {
       try {
-        // Get all users with system context (in production, this would be scoped better)
-        // For now, we'll reconcile users we have in memory
-        for (const [userId, cachedMode] of this.currentMode.entries()) {
-          const context = await storage.getSystemContext(userId);
+        // Phase 27.F.13.O: Check both global mode contexts
+        const paperContext = await storage.getSystemContext('paper');
+        const liveContext = await storage.getSystemContext('live');
+        
+        // Broadcast state for both modes if they exist
+        if (paperContext || liveContext) {
+          // Use a dummy userId for broadcast trigger (actual broadcast is global)
+          const triggerUserId = 'system-reconciliation';
+          await this.broadcastUserUpdate(triggerUserId);
           
-          if (!context) {
-            continue;
-          }
-          
-          // Check for mode mismatch
-          if (context.tradingMode !== cachedMode) {
-            console.log(`[SYNC][Phase-27.F.3][ReconciliationGuard] Detected mode mismatch for user ${userId}: cache=${cachedMode}, db=${context.tradingMode}`);
-            
-            // Update cache from DB (DB is source of truth)
-            this.currentMode.set(userId, context.tradingMode);
-            
-            // Re-broadcast to sync all clients
-            await this.broadcastUserUpdate(userId);
-          }
+          console.log(`[SYNC][Phase-27.F.13.O][ReconciliationGuard] Reconciliation broadcast sent (paper: ${paperContext?.isEngineActive || false}, live: ${liveContext?.isEngineActive || false})`);
         }
       } catch (error) {
         console.error('[SYNC][Phase-27.F.3][ReconciliationGuard] Error during reconciliation:', error);
       }
     }, 15000); // Run every 15 seconds
     
-    console.log('[SYNC][Phase-27.F.3][ReconciliationGuard] Started (checks every 15s)');
+    console.log('[SYNC][Phase-27.F.13.O][ReconciliationGuard] Started (checks every 15s, global mode-based)');
   }
 
   /**

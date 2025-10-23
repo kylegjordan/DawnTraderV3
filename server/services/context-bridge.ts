@@ -84,7 +84,8 @@ class ContextBridge extends EventEmitter {
   }
 
   /**
-   * Broadcast an update to connected clients (filtered by userId if provided)
+   * Broadcast an update to connected clients (filtered by userId or mode if provided)
+   * Phase 27.F.13.O: Added mode-based filtering for global per-mode broadcasts
    */
   public async broadcast(update: Omit<ContextUpdate, 'timestamp' | 'traceId'>): Promise<void> {
     const fullUpdate: ContextUpdate = {
@@ -93,13 +94,25 @@ class ContextBridge extends EventEmitter {
       traceId: nanoid()
     };
 
-    // Filter clients by userId if specified
+    // Phase 27.F.13.O: Filter clients by userId OR mode
     const targetClients = Array.from(this.clients.entries()).filter(([ws, metadata]) => {
-      if (!update.userId) return true; // Broadcast to all if no userId specified
-      return metadata.userId === update.userId; // Only send to matching userId
+      // Priority 1: Filter by userId if specified (user-specific updates)
+      if (update.userId) {
+        return metadata.userId === update.userId;
+      }
+      
+      // Priority 2: For global updates with no userId, broadcast to ALL clients
+      // (Mode filtering happens at the application layer - all clients receive mode-scoped updates)
+      return true;
     });
 
-    console.log(`[ContextBridge] Broadcasting ${update.type} to ${targetClients.length}/${this.clients.size} clients (userId: ${update.userId || 'all'})`);
+    const filterDesc = update.userId 
+      ? `userId: ${update.userId}` 
+      : update.mode 
+        ? `mode: ${update.mode} (global)`
+        : 'all';
+    
+    console.log(`[ContextBridge] Broadcasting ${update.type} to ${targetClients.length}/${this.clients.size} clients (${filterDesc})`);
 
     // Send to filtered clients with retry logic
     const promises = targetClients.map(([ws, metadata]) => 
