@@ -3793,6 +3793,10 @@ export const systemContext = pgTable("system_context", {
   lastStartedBy: varchar("last_started_by"), // UUID of user who started engine
   lastStoppedBy: varchar("last_stopped_by"), // UUID of user who stopped engine
   lastHeartbeat: timestamp("last_heartbeat", { withTimezone: true }), // Engine health monitoring
+  // Phase 27.F.14: Local Heuristic Trader Service (LHTS) state
+  lhtsEnabled: boolean("lhts_enabled").default(false), // Whether LHTS is running
+  lhtsLastRun: timestamp("lhts_last_run", { withTimezone: true }), // Last evaluation cycle
+  lhtsAdjustmentsCount: integer("lhts_adjustments_count").default(0), // Total adjustments made
   metadata: jsonb("metadata").default(sql`'{}'`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
