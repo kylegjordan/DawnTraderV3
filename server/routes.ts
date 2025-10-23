@@ -763,6 +763,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 27.F.14: Local Heuristic Trader Service API Endpoints
+  apiRouter.get('/heuristic-trader/health', authenticateToken, handleLHTSHealth);
+  apiRouter.post('/heuristic-trader/toggle', authenticateToken, handleLHTSToggle);
+  apiRouter.post('/heuristic-trader/emergency-stop', authenticateToken, handleLHTSEmergencyStop);
+
   // Guardrails endpoints (mode-isolated)
   // Phase 7.4: ConfigBob transparent routing for guardrails endpoint
   apiRouter.get('/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -14130,3 +14135,60 @@ function generatePnLReport(trades: any[], period: 'monthly' | 'quarterly' | 'ann
   return [headers.join(','), ...rows].join('\n');
 }
 
+
+// ============================================================================
+// Phase 27.F.14: Local Heuristic Trader Service API Endpoints
+// ============================================================================
+
+/**
+ * Get LHTS health status
+ * GET /api/heuristic-trader/health
+ */
+export async function handleLHTSHealth(req: Request, res: Response) {
+  try {
+    const { heuristicTrader } = await import('./services/heuristic-trader');
+    const health = await heuristicTrader.getHealth();
+    res.json(health);
+  } catch (error: any) {
+    console.error('[LHTS-API] Error getting health:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Toggle LHTS on/off
+ * POST /api/heuristic-trader/toggle
+ * Body: { enabled: boolean, mode?: 'paper' | 'live' }
+ */
+export async function handleLHTSToggle(req: Request, res: Response) {
+  try {
+    const { enabled, mode = 'paper' } = req.body;
+    const { heuristicTrader } = await import('./services/heuristic-trader');
+    
+    if (enabled) {
+      await heuristicTrader.start(mode);
+      res.json({ success: true, message: `LHTS started in ${mode} mode` });
+    } else {
+      await heuristicTrader.stop();
+      res.json({ success: true, message: 'LHTS stopped' });
+    }
+  } catch (error: any) {
+    console.error('[LHTS-API] Error toggling LHTS:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Emergency stop - immediately halt LHTS
+ * POST /api/heuristic-trader/emergency-stop
+ */
+export async function handleLHTSEmergencyStop(req: Request, res: Response) {
+  try {
+    const { heuristicTrader } = await import('./services/heuristic-trader');
+    await heuristicTrader.emergencyStop();
+    res.json({ success: true, message: 'LHTS emergency stop executed' });
+  } catch (error: any) {
+    console.error('[LHTS-API] Error executing emergency stop:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
