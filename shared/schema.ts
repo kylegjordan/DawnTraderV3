@@ -3776,22 +3776,30 @@ export const parameterBaseline = pgTable("parameter_baseline", {
 }));
 
 // Phase 27.4: Trading State Synchronization & Fail-Safe Recovery
+// Phase 27.F.13.O: Global Engine Unification - system_context is now global-per-mode
+// IMPORTANT: userId preserved for audit trail only, NOT used for business logic
+// Primary isolation: tradingMode ('live' | 'paper')
+// Exactly 2 rows total: 1 for paper mode, 1 for live mode
 export const systemContext = pgTable("system_context", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  userId: varchar("user_id").references(() => users.id), // LEGACY: Audit only, no longer unique constraint
   tradingMode: tradingModeEnum("trading_mode").notNull().default("paper"),
-  lastSafeState: jsonb("last_safe_state").notNull().default(sql`'{}'`), // Backup of system state before mode change
+  lastSafeState: jsonb("last_safe_state").notNull().default(sql`'{}'`),
   isEngineActive: boolean("is_engine_active").notNull().default(false),
   lastModeChange: timestamp("last_mode_change", { withTimezone: true }),
   changedBy: varchar("changed_by", { length: 50 }), // 'user', 'walter', 'recovery', 'admin'
   changeReason: text("change_reason"),
+  // Phase 27.F.13.O: New audit columns for global engine
+  lastStartedBy: varchar("last_started_by"), // UUID of user who started engine
+  lastStoppedBy: varchar("last_stopped_by"), // UUID of user who stopped engine
+  lastHeartbeat: timestamp("last_heartbeat", { withTimezone: true }), // Engine health monitoring
   metadata: jsonb("metadata").default(sql`'{}'`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
-  userIdIdx: index("system_context_user_id_idx").on(table.userId),
   tradingModeIdx: index("system_context_trading_mode_idx").on(table.tradingMode),
   lastModeChangeIdx: index("system_context_last_mode_change_idx").on(table.lastModeChange),
+  isEngineActiveIdx: index("system_context_is_engine_active_idx").on(table.isEngineActive),
 }));
 
 // Insert schemas for Phase 17

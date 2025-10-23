@@ -579,10 +579,10 @@ export interface IStorage {
   createTuningEvent(data: any): Promise<any>;
   updateTuningEvent(id: string, updates: any): Promise<any>;
 
-  // System Context methods (Phase 27.4)
-  getSystemContext(userId: string): Promise<SystemContext | undefined>;
-  upsertSystemContext(data: Partial<InsertSystemContext> & { userId: string }): Promise<SystemContext>;
-  updateSystemContext(userId: string, updates: Partial<SystemContext>): Promise<SystemContext>;
+  // System Context methods (Phase 27.4, Phase 27.F.13.O: Global per-mode)
+  getSystemContext(mode: 'live' | 'paper'): Promise<SystemContext | undefined>;
+  upsertSystemContext(data: Partial<InsertSystemContext> & { tradingMode: 'live' | 'paper' }): Promise<SystemContext>;
+  updateSystemContext(mode: 'live' | 'paper', updates: Partial<SystemContext>): Promise<SystemContext>;
   
   // Walter Actions methods (Phase 27.F)
   getWalterActions(userId: string, mode: 'live' | 'paper', filters?: { status?: string; source?: string; limit?: number }): Promise<WalterAction[]>;
@@ -3348,22 +3348,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   // System Context methods (Phase 27.4: Trading State Synchronization)
-  async getSystemContext(userId: string): Promise<SystemContext | undefined> {
+  // Phase 27.F.13.O: Refactored for global-per-mode architecture (mode-only, no userId)
+  async getSystemContext(mode: 'live' | 'paper'): Promise<SystemContext | undefined> {
     const [context] = await db
       .select()
       .from(systemContext)
-      .where(eq(systemContext.userId, userId));
+      .where(eq(systemContext.tradingMode, mode));
     return context || undefined;
   }
 
-  async upsertSystemContext(data: Partial<InsertSystemContext> & { userId: string }): Promise<SystemContext> {
-    const existing = await this.getSystemContext(data.userId);
+  async upsertSystemContext(data: Partial<InsertSystemContext> & { tradingMode: 'live' | 'paper' }): Promise<SystemContext> {
+    const existing = await this.getSystemContext(data.tradingMode);
     
     if (existing) {
       const [updated] = await db
         .update(systemContext)
         .set({ ...data, updatedAt: new Date() })
-        .where(eq(systemContext.userId, data.userId))
+        .where(eq(systemContext.tradingMode, data.tradingMode))
         .returning();
       return updated;
     }
@@ -3375,11 +3376,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateSystemContext(userId: string, updates: Partial<SystemContext>): Promise<SystemContext> {
+  async updateSystemContext(mode: 'live' | 'paper', updates: Partial<SystemContext>): Promise<SystemContext> {
     const [updated] = await db
       .update(systemContext)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(systemContext.userId, userId))
+      .where(eq(systemContext.tradingMode, mode))
       .returning();
     return updated;
   }
