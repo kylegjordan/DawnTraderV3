@@ -109,6 +109,11 @@ export class MarketScanner {
           await this.scanForSignals(user.id, 'live');
         }
       }
+      
+      // Dawn Trader Phase 2: Automatic signal cleanup (runs every 10 minutes with scan)
+      console.log('\n🧹 Running signal cleanup...');
+      const expiredCount = await storage.expireAllExpiredSignals();
+      console.log(`✅ Signal cleanup complete: ${expiredCount} expired signals removed`);
 
     } catch (error) {
       console.error('Error during market scan:', error);

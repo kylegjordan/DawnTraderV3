@@ -1,0 +1,144 @@
+🌅 DAWN TRADER FOLLOW-UP DIRECTIVE — PAPER MODE VALIDATION & SYSTEM FINALIZATION
+
+Objective:
+Complete final validation of the PaperSim trading workflow, confirm data flow stability across the system, and ensure dashboard and widget data accurately reflects post-trade metrics.
+
+🔐 Test User Credentials
+
+Use these credentials for all testing, simulation runs, and verifications:
+
+username: testuser123
+password: SecurePass123!
+
+1️⃣ PaperSim Stability & Verification Run (20-Minute Cycle)
+
+Goal:
+Run a complete simulated trading cycle in Paper Mode using real Kraken data to confirm that the system performs end-to-end trading operations without errors, desyncs, or undefined states.
+
+Actions:
+
+Start PaperSim in paper mode with the test user.
+
+Confirm the portfolio starting balance prompt works (default $800).
+
+Let the simulation run continuously for 20 minutes, completing at least two trading scan cycles.
+
+Verify:
+
+Filters reduce total eligible pairs to ~20–30.
+
+5–10 pairs appear in the Ready-to-Buy tab.
+
+At least 1–3 simulated trades execute successfully.
+
+No state drift, sync, or toggle errors occur when starting or stopping PaperSim.
+
+Heartbeat logs show consistent healthy status throughout the 20-minute period.
+
+Deliverables:
+
+Extract and summarize the last 50 log lines covering:
+
+Session creation
+
+Watchlist population
+
+Trade execution events
+
+Heartbeat confirmation
+
+2️⃣ Signal Cleanup Scheduler
+
+Goal:
+Implement or confirm an automated cleanup mechanism that regularly removes expired or stale signals to maintain database integrity and accurate Ready-to-Buy displays.
+
+Actions:
+
+Create a periodic scheduler or cron-like function to automatically call the existing signal cleanup routine.
+
+Frequency: at least once every hour (or more often if practical).
+
+Verify that the scheduler:
+
+Cleans up expired signals correctly.
+
+Does not interfere with active sessions.
+
+Logs all cleanup runs and results clearly.
+
+After implementation, confirm the trading_signals table only contains current, valid signals.
+
+Deliverables:
+
+Confirmation that the signal cleanup job runs successfully.
+
+Example log entries showing cleanup cycles and counts of expired signals removed.
+
+3️⃣ Dashboard & Widget Data Verification
+
+Goal:
+Ensure that all widgets on the Dashboard accurately reflect real-time data following the 20-minute PaperSim run, using simulated trade results as the data source.
+
+Actions:
+
+After the 20-minute PaperSim run completes, verify that all four dashboard widgets update correctly:
+
+Total Trades
+
+Active Positions
+
+Profit/Loss (PnL)
+
+Portfolio Balance
+
+Confirm that:
+
+Each widget reflects paper_sim data accurately.
+
+The data flow from paper_sim tables to dashboard widgets is complete and real-time.
+
+No stale or null values persist.
+
+Validate that the same widgets correctly switch to live data when the mode is toggled to Live.
+
+Deliverables:
+
+Short summary confirming widget data accuracy for both modes.
+
+Any discrepancies or null fields listed clearly with suggested corrections.
+
+4️⃣ Reporting & Continuity
+
+Goal:
+Compile a single end-of-run summary that confirms completion and system health.
+
+Actions:
+
+Combine the results of all three phases into one consolidated report:
+PHASE_27.F.13.E_PAPER_MODE_VALIDATION_SUMMARY.md
+
+The summary should include:
+
+PaperSim stability results
+
+Scheduler confirmation logs
+
+Dashboard widget verification results
+
+Any remaining non-blocking recommendations
+
+Important:
+Do not pause or wait for confirmation mid-run. Proceed through all steps sequentially.
+If audit findings require human input, note them but continue with other executable phases.
+
+Expected Outcome
+
+By the end of this directive:
+
+The 20-minute PaperSim run has executed successfully with trades simulated and logged.
+
+The signal cleanup scheduler is active and confirmed functional.
+
+Dashboard widgets reflect accurate data from recent trades.
+
+A consolidated summary report is generated documenting the full system verification.

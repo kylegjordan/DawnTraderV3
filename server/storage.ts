@@ -929,7 +929,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addWatchlistPair(pair: InsertWatchlistPair): Promise<WatchlistPair> {
-    const [result] = await db.insert(watchlistPairs).values(pair).returning();
+    const [result] = await db.insert(watchlistPairs)
+      .values(pair)
+      .onConflictDoUpdate({
+        target: [watchlistPairs.userId, watchlistPairs.mode, watchlistPairs.symbol],
+        set: {
+          volume24h: pair.volume24h,
+          currentPrice: pair.currentPrice,
+          vwap: pair.vwap,
+          dailyRange: pair.dailyRange,
+          lastScanned: pair.lastScanned || new Date()
+        }
+      })
+      .returning();
     return result;
   }
 
