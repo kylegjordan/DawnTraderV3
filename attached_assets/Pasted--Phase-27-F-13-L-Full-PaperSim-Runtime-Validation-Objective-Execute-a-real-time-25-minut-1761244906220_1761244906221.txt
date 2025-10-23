@@ -1,0 +1,135 @@
+# Phase 27.F.13.L — Full PaperSim Runtime Validation
+**Objective:**  
+Execute a real-time 25-minute PaperSim trading session using the finalized **global configuration model** (from Phase 27.F.13.K).  
+Verify continuous operation, cleanup cycles, filtered-pair stability, trade flow, and automatic kill-switch activation at the configured daily-loss threshold.
+
+---
+
+## 🧩 Part 1 — Test Environment Setup
+### 1. Credentials
+```
+username = testuser123
+password = SecurePass123!
+```
+
+### 2. Mode
+Run exclusively in **Paper** mode.  
+No live trading calls or live portfolio interactions are permitted.
+
+### 3. Baseline Snapshot
+Before starting:
+- `/api/guardrails?mode=paper` → confirm maxDailyLoss = 2500 (≈ 7 % portfolio loss)  
+- `/api/screeners?mode=paper` → confirm filters load correctly  
+- `/api/strategy-settings?mode=paper` → confirm 8 strategies enabled  
+- `/api/trading/status` → confirm `isEngineActive=false`  
+- `/api/paper-sim/filtered-pairs` → log total eligible pairs and next scan time  
+
+Write baseline to `/tmp/papersim_27f13l_baseline.log`.
+
+---
+
+## 🧩 Part 2 — Engine Start & Monitoring
+### 1. Start Engine
+POST `/api/trading/start` with  
+```json
+{"mode":"paper"}
+```
+Expect HTTP 200 within ≤ 2 s.  
+Log:
+```
+[ENGINE_START] sessionId: <uuid>
+StartTime: <timestamp>
+```
+
+### 2. Real-Time 25-Minute Monitoring
+Run for **25 minutes (1 500 s)** with 5-minute checkpoints.  
+Script: `/tmp/monitor_papersim_27f13l.sh`
+
+At each checkpoint (i = 1 – 5) log:
+
+| Metric | Endpoint | Expected Behavior |
+|---------|-----------|------------------|
+| Engine Status | `/api/trading/status` | `isEngineActive=true` throughout |
+| Filtered Pairs | `/api/paper-sim/filtered-pairs` | Count stable ± 2 |
+| Active Signals | `/api/trading-signals?status=active` | Generate / expire normally |
+| Open Trades | `/api/paper-sim/open-positions` | At least 1 open + 1 close cycle |
+| System CPU/Mem (optional) | `top -b -n 1` | Within normal range |
+| Timestamp | `date -u` | Accurate to seconds |
+
+Write all output to `/tmp/papersim_27f13l_monitor.log`.
+
+---
+
+## 🧩 Part 3 — Kill-Switch Validation (Minute 24)
+1. Simulate portfolio loss ≥ 7 %.  
+   - Adjust unrealized PnL or temporary trade data to exceed the guardrail limit.  
+2. Confirm engine auto-stop:
+   ```
+   [KILL_SWITCH_TRIGGERED] Mode: paper Reason: DailyLossExceeded
+   ```
+3. `/api/trading/status` → expect `isEngineActive=false`.
+
+---
+
+## 🧩 Part 4 — Shutdown & Post-Run Verification
+After 25 minutes (±2 min):
+1. Verify all open positions closed / archived.  
+2. Check cleanup logs:
+   ```
+   🧹 Running comprehensive cleanup…
+   ✅ Cleanup complete: <n> records removed
+   ```
+3. Confirm filtered-pair counts consistent across all endpoints.  
+4. Record final summary to `/tmp/papersim_27f13l_summary.log` with:
+   - Start / End timestamps  
+   - Engine uptime  
+   - Number of signals generated  
+   - Number of trades executed  
+   - Kill-switch result  
+
+---
+
+## 🧩 Part 5 — Validation Report
+Generate `/workspace/PHASE_27.F.13.L_VALIDATION_REPORT.md` containing:
+
+| Metric | Expected | Observed |
+|---------|-----------|-----------|
+| Engine Start Time | ≤ 2 s |  |
+| Total Runtime | 25 min ± 2 min |  |
+| Filtered Pairs Δ | ≤ ± 2 |  |
+| Signals Generated | > 50 |  |
+| Trades Executed | ≥ 1 open/close cycle |  |
+| Kill-Switch Triggered | Yes |  |
+| Cleanup Runs | ≥ 2 |  |
+| API Error Rate | 0 % |  |
+| Data Scope | Global per mode ✓ |  |
+
+Attach:
+- `/tmp/papersim_27f13l_baseline.log`
+- `/tmp/papersim_27f13l_monitor.log`
+- `/tmp/papersim_27f13l_summary.log`
+
+Update `replit.md` → append entry:  
+**“Phase 27.F.13.L — Full 25-Minute PaperSim Runtime Validation Complete.”**
+
+---
+
+## ⚙️ Execution Rules
+- Run autonomously and continuously for the full 25 minutes.  
+- Abort only on fatal error (HTTP ≥ 500).  
+- Paper mode only — no live orders.  
+- All logs and reports saved under `/tmp/` and `/workspace/`.  
+- Expected runtime ≈ 27 minutes total.
+
+---
+
+### ✅ Expected Outcome
+1. Paper engine runs continuously for 25 minutes without error.  
+2. Guardrail kill-switch triggers at 7 % loss and stops engine cleanly.  
+3. Cleanup scheduler runs at least twice (10-min interval).  
+4. All data consistent across diagnostic endpoints.  
+5. Full validation report and replit.md update generated.
+
+---
+
+**Begin Phase 27.F.13.L now.**
