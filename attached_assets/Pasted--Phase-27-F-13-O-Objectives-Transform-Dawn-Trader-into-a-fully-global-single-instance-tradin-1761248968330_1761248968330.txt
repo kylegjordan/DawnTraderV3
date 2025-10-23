@@ -1,0 +1,154 @@
+## Phase 27.F.13.O — Objectives
+Transform Dawn Trader into a **fully global, single-instance trading system** for each mode (`paper`, `live`) so that:
+- All users share one active engine state per mode  
+- All dashboards reflect the same running simulation  
+- All guardrails, screeners, strategies, trades, and portfolios are global-per-mode  
+- Any user (or device) can start/stop or observe the same engine instance  
+- No logic path depends on `user_id` except for authentication / audit trail
+
+---
+
+## A — Global Engine Architecture Migration
+
+### A1 . Schema and Database Changes
+1. **system_context table**
+   - Drop the `user_id` column (or mark deprecated).  
+   - New PK: `mode`  
+   - Columns to keep:  
+     - `mode` (`paper` | `live`)  
+     - `is_engine_active` BOOLEAN  
+     - `last_heartbeat` TIMESTAMP  
+     - `last_started_by` UUID (NEW)  
+     - `last_stopped_by` UUID (NEW)  
+     - `last_updated_at` TIMESTAMP (autoupdated)  
+   - Migration SQL:
+     ```sql
+     ALTER TABLE system_context
+       ADD COLUMN last_started_by UUID,
+       ADD COLUMN last_stopped_by UUID;
+     ```
+     Then remove duplicates, keep one row per mode.
+
+2. **trades**, **positions**, **portfolio_state**
+   - Verify they use `mode` as the isolation key (not `user_id`).  
+   - If `user_id` still exists, mark it unused and document removal.
+
+3. **signals**, **filtered_pairs**, **watchlist**
+   - Confirm all reference `mode` and not `user_id`.  
+   - Drop/ignore user_id fields if any remain.
+
+---
+
+## B — Backend Code Refactor
+
+### B1 . Engine Managers
+- In `paper-sim-service.ts` and `live-sim-service.ts`:  
+  - Replace manager registry keys from `userId + mode` → `mode`.  
+  - There should be **one** global Paper manager and **one** global Live manager.  
+  - Each manager tracks:
+    ```typescript
+    { mode, startedBy, startTime, activeStrategies, portfolioManager }
+    ```
+  - Modify start/stop logic:
+    - `/api/trading/start` → starts global engine for `mode`
+    - `/api/trading/stop` → stops global engine for `mode`
+    - `/api/trading/status` → returns the single engine status for `mode`
+
+### B2 . API Routes
+- Remove all `userId` dependencies from:
+  - `/api/trading/start|stop|status`
+  - `/api/system/heartbeat`
+  - `/api/trading/force-stop`
+- Add audit fields:
+  ```typescript
+  last_started_by = req.user?.id
+  last_stopped_by = req.user?.id
+  ```
+  stored in `system_context`.
+
+### B3 . WebSocket and Observer Broadcasts
+- Broadcast updates by `mode`:
+  ```
+  ws.emit(`engine:update:${mode}`, status)
+  ws.emit(`scan:update:${mode}`, filteredPairs)
+  ws.emit(`trade:update:${mode}`, trades)
+  ```
+- Any logged-in client automatically subscribes to its current mode topic.  
+- Add read-only endpoint:
+  ```
+  GET /api/trading/observer?mode=paper|live
+  ```
+  → returns current engine, portfolio, signals, and trades for that mode.
+
+---
+
+## C — Global Data Consistency Audit
+After migration, verify and document in `/workspace/PHASE_27.F.13.O_DB_AUDIT.md`:
+
+| Table | Expected Rows | Key Column | user_id present? | Action |
+|-------|----------------|-------------|------------------|--------|
+| guardrails | 2 (paper/live) | mode | no | ✅ |
+| screener_filters | 2 (paper/live) | mode | no | ✅ |
+| strategy_settings | 8+ per mode | mode | no | ✅ |
+| system_context | 2 (paper/live) | mode | no | ✅ |
+| portfolio_state | 2 (paper/live) | mode | no | ✅ |
+| trades | varies | mode | no | ✅ |
+| positions | varies | mode | no | ✅ |
+
+---
+
+## D — Functional Verification Tests
+
+### D1 . Parallel Access Test
+- Log in on **two different devices** (same user credentials).  
+- Start engine on Device A.  
+- Confirm Device B immediately shows engineActive = true via observer endpoint.  
+- Toggle stop on Device B → Device A should show engineActive = false.
+
+### D2 . Visibility Checks (while engine running)
+- Filter Insights, Filtered Pairs, Ready-to-Buy, Active Trades tabs update live on both devices.  
+- No duplicate data between clients.
+
+### D3 . Persistence Checks
+- Stop the engine → `system_context.is_engine_active=false` for that mode.  
+- Restart → new session timestamp + last_started_by updates.  
+- Confirm restart visible on both devices.
+
+---
+
+## E — Deliverables
+1. `/workspace/PHASE_27.F.13.O_VALIDATION_REPORT.md`  
+   - Migration summary, audit tables, and parallel access test results.  
+2. `/workspace/PHASE_27.F.13.O_DB_AUDIT.md` (see Section C).  
+3. Update `replit.md` with a new section:
+   ```
+   Phase 27.F.13.O — Global Engine Unification (Completed ✅ )
+   ```
+4. Tag repository commit `phase-27f13o-global-engine`.
+
+---
+
+## F — Pass/Fail Criteria
+✅ **Pass** when:
+- Only two engine instances exist (`paper`, `live`) and they’re shared across users.  
+- `system_context` has 2 rows (total).  
+- All settings tables contain exactly 1 row per mode and no `user_id` references.  
+- WebSocket observer updates propagate to multiple logged-in sessions simultaneously.  
+- Start/Stop actions work from any device in sync.  
+- All previous guardrail, screener, and strategy data still function as expected.
+
+❌ **Fail** if any user-specific dependency remains or multiple engine rows appear.
+
+---
+
+### Summary
+After Phase 27.F.13.O:
+- Dawn Trader operates as **one global system** shared by all users.  
+- Any login on any device sees the exact same active trading session.  
+- Global guardrails, screeners, and strategies govern the engine.  
+- Multiple observers can monitor the live scan/trade cycle concurrently.  
+- All `user_id` references are purely audit metadata—no business logic depends on them.
+
+**Outcome:**  
+🟢 Complete global synchronization of the trading engine, configuration, and visibility across every logged-in session.
+
