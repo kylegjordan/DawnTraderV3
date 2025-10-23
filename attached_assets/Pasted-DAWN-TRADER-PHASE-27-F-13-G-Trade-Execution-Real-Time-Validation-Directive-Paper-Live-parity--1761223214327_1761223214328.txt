@@ -1,0 +1,342 @@
+DAWN TRADER — PHASE 27.F.13.G
+Trade Execution & Real-Time Validation Directive (Paper + Live parity)
+
+Do not pause to ask for instructions. Execute all steps sequentially, report findings inline, and proceed to the next step whenever the outcome is unambiguous.
+
+Test user (same as prior runs):
+
+Username: testuser123
+
+Email: testuser@example.com
+
+Password: (same one you already used for 27.F.13.E and 27.F.21; do not reset)
+
+0) Environment & Baseline
+
+Objective
+Start from the most recent “RUNNING” build, confirm prerequisites are in place, and pin consistent data sources for Paper + Live.
+
+Actions
+
+Verify the app boots cleanly and binds to the HTTP port before scanner work kicks off (no blocking awaits on scanner start).
+
+Confirm Kraken is the market data source for both modes; only portfolio state and order routing differ between Paper (local fills) and Live (Kraken orders).
+
+Confirm the OpenAI rate limiter is wired on all AI usages and circuit-breaker triggers are NOT fatal to trading.
+
+Confirm Goals Engine values (Guardrails, Screener Filters, Strategy settings) are read from DB for the test user in both modes—no hardcoded fallbacks.
+
+Deliverables
+
+“Environment OK” block in the report noting: server start time, port, data-source confirmation, rate-limit health, Goals Engine readback snapshot for Paper + Live.
+
+Validation
+
+Startup log shows port bind before scanner work.
+
+One-line JSON echo per mode: {mode:"paper", goalsLoaded:true} and {mode:"live", goalsLoaded:true}.
+
+1) Filtered Pairs — Single Source of Truth & “Live Validity”
+
+Issues Seen
+
+Divergent eligible counts across Filter Insights, Filtered Pairs, and Filter Health.
+
+Only 10 rows showing despite a higher eligible count.
+
+Counts changed with Refresh even while Trading = Stopped.
+
+“Quote Currency” appeared as top failure despite being removed.
+
+Suspected Causes
+
+Mixed endpoints with different limits/caches.
+
+Legacy diagnostic cache and/or hardcoded page limits.
+
+Refresh calling an endpoint with a different limit.
+
+Old failure reasons read from a table instead of live diagnostic.
+
+What to implement
+
+Use one diagnostic service for all three surfaces with the same universe limit (full Kraken universe).
+
+Ensure no hidden .slice or limit on filtered-pairs API responses.
+
+When Trading is Stopped, Refresh must read the latest scan output cache but must NOT trigger a fresh market scan; counts should only change if validity windows expired.
+
+Replace legacy failure-reason reads with live computation.
+
+Add real-time invalidation rule for Filtered Pairs:
+
+Pair is valid only if last-seen market tick (price/vol/range) used in the diagnostic is ≤ 12 minutes old AND all active filters still pass AND it hasn’t been explicitly blacklisted.
+
+The moment any condition fails, the pair falls out immediately (don’t wait for the 10-min cleanup).
+
+Expected Outcome
+
+All three surfaces show identical eligible count and identical rows.
+
+Filtered Pairs table shows all eligible rows (no silent limit).
+
+Refresh while Trading=Stopped only drops items that expired by staleness/filters—not random swings.
+
+Validation
+
+Add a one-line diagnostic footer on both tabs:
+eligible={N} ineligible={M} by_rule={vol:X, spread:Y, range:Z, history:H} universe=1447 limit=1447 at=<UTC timestamp>
+
+Log lines for any immediate invalidation (pair + reason).
+
+Screenshot of all three surfaces with the same N.
+
+2) Ready-to-Buy Table — Deduping, Numeric Safety, Real-Time Expiry
+
+Issues Seen
+
+Blank white page (JS error: .toFixed on non-number).
+
+Thousands of signals accumulating and repeating.
+
+Signals not expiring quickly enough relative to current market.
+
+Suspected Causes
+
+Mixed types (string numbers) feeding formatting.
+
+Signals persisted without strict dedupe keys.
+
+Expiry tied to a 24h horizon, not to current validity.
+
+What to implement
+
+Type safety on all numeric fields before formatting (price, vwap, range, entry/stop/target, confidence).
+
+Idempotent persistence: ensure userId + mode + symbol + strategy + detected_at bucket (or a hash of entry/stop/target + symbol + strategy) dedupes. Store a dedupe_key column if helpful.
+
+Immediate expiry rule for signals in “Ready to Buy”:
+
+A signal is valid only while all strategy preconditions stay true and entry window remains within bounds (e.g., price proximity to entry, range intact, volume confirmation not stale).
+
+If preconditions fail for 5 consecutive minutes (or two full scan cycles), mark expired and hide from the table immediately (don’t wait for periodic cleanup).
+
+Keep Active/Dismissed/Expired/Executed statuses and surface “Why it expired” in a hover/help cell.
+
+Expected Outcome
+
+No blank page; table loads consistently.
+
+Duplicate signals cease; visible list only contains current opportunities.
+
+The Ready-to-Buy count drops naturally as conditions fall off.
+
+Validation
+
+Add a small “data types OK” metric on the table footer: typed=true once all fields are numbers.
+
+Log lines for dedupe prevented (with dedupe_key) and signal expired (with reason).
+
+Screenshot showing Ready-to-Buy count decreasing as conditions roll off.
+
+3) Why We’re Not Getting Trades — “Why-Not” Execution Audit
+
+Problem
+Ready-to-Buy is populated, but no Paper trades execute.
+
+What to add (instrumentation & logic checks)
+
+A Why-Not Execution Trace for at least 50 consecutive signals in Paper mode, per scan:
+
+For each candidate, log a compact decision line:
+symbol=X | strat=Y | entryOk=bool | guardrailsOk=bool | capitalOk=bool | riskOk=bool | cooldownOk=bool | duplicationOk=bool | result=SKIP_REASON or EXECUTED
+
+Verify guardrails are evaluated with the same units the UI shows (we previously fixed percent ↔ decimal conversion; reconfirm here).
+
+Re-validate order sizing:
+
+Risk-per-trade % vs Max Risk Per Trade $ (cap).
+
+Optional per-trade Max Notional rule if present.
+
+Respect Max Open Positions and per-strategy concurrency limits.
+
+Check cooldowns, duplicate symbol avoidance, and min holding conflicts.
+
+Confirm paper fills are allowed with the test guards/filters/strategies.
+
+Expected Outcome
+
+A concise audit table explaining each non-execution and at least some EXECUTED entries when conditions truly match.
+
+If zero executions persist, the trace must conclusively identify a gating rule; propose change(s) and implement them (unless they’re policy changes you explicitly want left for review).
+
+Validation
+
+Provide the Why-Not CSV (or markdown table) covering at least 50 decisions during the test window.
+
+Provide at least one executed paper trade unless every single candidate legitimately fails a rule (in which case, show the rule and counts).
+
+4) Guardrails & Strategy Units — Final Consistency Pass
+
+Why
+We fixed percent↔decimal conversions already, but toggling, presets, and read-back can still miss a path.
+
+Actions
+
+Re-exercise all update paths for strategy params and guardrails: Edit, Save, Toggle Enable/Disable, Load Preset, Display mode.
+
+Confirm the same conversion helper is used on every path (no stray path forgetting to convert).
+
+Add a one-line “unit echo” on Strategy cards and Guardrails: e.g., riskPerTrade_ui=1.0% → backend=0.0100 at render time (hidden in prod logs but visible in dev logs).
+
+Expected Outcome
+
+No validation errors due to unit mismatch.
+
+Toggle-while-editing works without forced refresh.
+
+Validation
+
+Short log sample showing each path with before/after values.
+
+5) Cleanup Scheduler — Extend + Real-Time Triggers
+
+Current
+10-minute cleanup runs for signals. We also need deterministic, immediate invalidation.
+
+Add / confirm
+
+Keep the 10-minute cleanup (batch hygiene).
+
+Add real-time triggers (no waiting) for:
+
+Filtered Pairs losing validity (staleness >12m, filter fails, blacklist).
+
+Ready-to-Buy signals where preconditions fail for 5 consecutive minutes.
+
+Ensure Active Trades list updates automatically when trades close; nothing stale remains.
+
+Expected Outcome
+
+Lists reflect reality instantly when something becomes invalid, and batch cleanup only removes anything missed.
+
+Validation
+
+Logs showing immediate invalidation events and the 10-minute batch jobs, with counts.
+
+6) Dashboard Widgets — Live after Trades
+
+Objective
+Validate that Total Trades, Open Positions, PnL update from the correct tables in Paper mode once trades exist.
+
+Actions
+
+After we get at least 1–3 paper trades opened/closed, confirm:
+
+Open Positions = Paper open positions table.
+
+Total Trades / Closed Trades = Paper trades table.
+
+Realized PnL = sum of realized_pl on closed paper trades; Unrealized = mark-to-market on open.
+
+Test closing a paper trade and confirm widgets update within one refresh cycle.
+
+Expected Outcome
+
+Widgets reflect the executed/closed trades and PnL matches the trade math.
+
+Validation
+
+Screenshot of widgets pre- and post-close, plus a one-line calc check for one trade.
+
+7) Paper ↔ Live Parity (no “reset” in Live)
+
+Objective
+Ensure Paper and Live are mirror images except:
+
+Paper uses local portfolio and simulated fills, supports resets.
+
+Live uses Kraken portfolio/fills, no resets.
+
+Actions
+
+Re-audit parity of endpoints and UI logic.
+
+Ensure Reset Simulation exists only in Paper.
+
+Confirm data isolation per mode (no cross-contamination of trades, positions, or portfolio_state).
+
+Deliverables
+
+“Parity OK” summary noting any edge-case differences and why.
+
+8) Alert Center — Keep User Control
+
+Objective
+Rate-limit warnings should not flood the UI and must be dismissible by the user.
+
+Actions
+
+Ensure Dismiss and Clear All work from the UI (the recent front-end param order bug was fixed—confirm it across all five related calls).
+
+Add a simple roll-up: identical alerts within a 10-minute window are grouped to a single row with a counter (xN).
+
+Expected Outcome
+
+User can clear alerts; grouped presentation reduces noise.
+
+Validation
+
+Quick demo in logs that POSTs for clear actions hit backend; screenshot of grouped alerts.
+
+9) Time-Stamped Stability Run (Paper) — 25 Minutes
+
+Objective
+Prove the run actually lasted the intended time and covered two scan cycles.
+
+Actions
+
+Start Paper trading ON with the test user and current configs.
+
+Record UTC timestamps to a small log shard and the DB:
+
+stability.start_at_utc, stability.end_at_utc, scan_count, signals_seen, trades_attempted, trades_executed, why_not_summary.
+
+Run 25 minutes so we cross two full scan cycles.
+
+Do not loosen guardrails unless the Why-Not audit shows a true gating bug.
+
+Expected Outcome
+
+Two completed scans, Why-Not table populated, at least some executions if conditions are truly met; otherwise a clear, quantified gating reason.
+
+Validation
+
+Paste the stability block into the report with timestamps and counts.
+
+10) Final Artifacts to Produce
+
+WHY_NOT_EXECUTIONS.csv (or markdown) — 50+ lines with the decision flags and results.
+
+FILTER_DIAGNOSTIC_SNAPSHOT.md — identical eligible counts across all three surfaces with the diagnostic footer and UTC timestamps.
+
+READY_TO_BUY_HEALTH.md — counts before/after, dedupe events, and expiry-reason samples.
+
+WIDGETS_AFTER_TRADES.png — screenshot showing widgets reflecting trades/PnL.
+
+STABILITY_RUN.json — start/end UTC, scan_count, signals_seen, trades_attempted, trades_executed, top 3 SKIP reasons.
+
+PARITY_CHECK.md — Paper vs Live parity notes (and confirmation that Reset controls are Paper-only).
+
+Notes & Guardrails for Replit
+
+Operate in the high-level style above; do not block on questions.
+
+If a rule prevents all executions, surface the exact rule and counts; then continue with the rest of the directive.
+
+Never hardcode config—all values must flow through the existing UI → API → DB paths.
+
+Keep logs compact and searchable; prefix with tags like [WhyNot], [Filter], [Signal], [Trade], [Widget], [Stability].
+
+Include a short “What changed and why” note next to any behavior change.
