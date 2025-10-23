@@ -11004,17 +11004,27 @@ Important: Extract the exact field names and numeric values from the user's requ
       const userId = req.user!.id;
       const alertId = req.params.id;
       
+      console.log(`[AlertAPI] Acknowledging alert ${alertId} for user ${userId}`);
+      
       const AlertsService = (await import('./services/alerts-service')).default;
       const alert = await AlertsService.acknowledgeAlert(alertId, userId);
       
       if (!alert) {
+        console.log(`[AlertAPI] Alert ${alertId} not found for user ${userId}`);
         return res.status(404).json({ error: 'Alert not found or access denied' });
       }
       
+      console.log(`[AlertAPI] Successfully acknowledged alert ${alertId}`);
       res.json({ ok: true, alert });
     } catch (error: any) {
-      console.error('Error acknowledging alert:', error);
-      res.status(500).json({ error: 'Failed to acknowledge alert' });
+      console.error('[AlertAPI] Error acknowledging alert:', error);
+      console.error('[AlertAPI] Error details:', {
+        alertId: req.params.id,
+        userId: req.user?.id,
+        message: error.message,
+        stack: error.stack
+      });
+      res.status(500).json({ error: 'Failed to acknowledge alert', details: error.message });
     }
   });
 
@@ -11024,13 +11034,22 @@ Important: Extract the exact field names and numeric values from the user's requ
       const userId = req.user!.id;
       const mode = (req.user!.tradingMode || 'paper') as 'live' | 'paper';
       
+      console.log(`[AlertAPI] Acknowledging all alerts for user ${userId} in ${mode} mode`);
+      
       const AlertsService = (await import('./services/alerts-service')).default;
       const alerts = await AlertsService.acknowledgeAll(userId, mode);
       
+      console.log(`[AlertAPI] Successfully acknowledged ${alerts.length} alerts for user ${userId}`);
       res.json({ ok: true, count: alerts.length });
     } catch (error: any) {
-      console.error('Error acknowledging all alerts:', error);
-      res.status(500).json({ error: 'Failed to acknowledge all alerts' });
+      console.error('[AlertAPI] Error acknowledging all alerts:', error);
+      console.error('[AlertAPI] Error details:', {
+        userId: req.user?.id,
+        mode: req.user?.tradingMode,
+        message: error.message,
+        stack: error.stack
+      });
+      res.status(500).json({ error: 'Failed to acknowledge all alerts', details: error.message });
     }
   });
 
