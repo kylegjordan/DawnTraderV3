@@ -313,7 +313,7 @@ export class PaperSimDiagnosticService {
       eligible_count: eligiblePairs.length,
       ineligible_count: ineligibleCount,
       breakdown,
-      top_candidates: topCandidates.slice(0, 10),
+      top_candidates: topCandidates, // Phase 27.F.21: Return ALL candidates (removed .slice(0, 10) limit)
       ts: new Date().toISOString(),
       nextScanAt // Phase 27.F.19b: Next scheduled scan time
     };
