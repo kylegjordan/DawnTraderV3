@@ -849,10 +849,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
       
       // Get live scan results from diagnostic service (same source as Filter Insights)
+      // Phase 27.F.21: Use limit=9999 to evaluate ENTIRE universe (same as all other endpoints)
       const scanResult = await paperSimDiagnosticService.performUniverseScan({
         userId,
         mode,
-        limit: 500,
+        limit: 9999,
         trace: false,
         strategies: false
       });

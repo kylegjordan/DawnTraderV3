@@ -76,8 +76,9 @@ export function FilterInsights() {
   const [currentTime, setCurrentTime] = useState<number>(Date.now()); // Phase 27.F.19: Ticking state for countdown
 
   // Query filter insights synchronized to MarketScanner 10-minute cycle
+  // Phase 27.F.21: Use limit=9999 to evaluate ENTIRE universe (consistent with all other endpoints)
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
-    queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'],
+    queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=9999&trace=false&strategies=all'],
     staleTime: 10 * 60 * 1000, // 10 minutes - matches MarketScanner cycle
     refetchInterval: 10 * 60 * 1000, // Auto-refresh every 10 minutes
   });
@@ -94,7 +95,7 @@ export function FilterInsights() {
     const scanCompleteEvents = wsMessages.filter((msg: any) => msg.type === 'scan_complete');
     if (scanCompleteEvents.length > 0) {
       console.log('[FilterInsights] Received scan_complete event, refreshing data...');
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=9999&trace=false&strategies=all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
     }
   }, [wsMessages]);
@@ -118,7 +119,7 @@ export function FilterInsights() {
 
   // Handle manual refresh - Phase 27.F.19: Manual refresh trigger
   const handleManualRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=300&trace=false&strategies=all'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=9999&trace=false&strategies=all'] });
     queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
     refetch();
   };
