@@ -404,23 +404,119 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       className="sticky top-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border"
       data-testid="top-bar"
     >
-      <div className="flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {/* Mobile Menu Toggle */}
           {showMenuButton && (
             <Button
               variant="ghost"
               size="sm"
               onClick={onMenuClick}
-              className="lg:hidden p-2 hover:bg-muted"
+              className="lg:hidden p-1.5 sm:p-2 hover:bg-muted"
               data-testid="button-menu"
             >
-              <Menu className="w-6 h-6" />
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
             </Button>
           )}
           
-          {/* Master Controls */}
-          <div className="flex items-center gap-3">
+          {/* Mobile Controls (< md) */}
+          <div className="flex md:hidden items-center gap-2">
+            {/* Trading Status Dropdown for Mobile */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={isStarting || isStopping || !canEdit}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 py-1.5 bg-muted rounded-md text-xs font-medium h-auto",
+                    !canEdit && "opacity-50 cursor-not-allowed"
+                  )}
+                  data-testid="dropdown-trading-status-mobile"
+                >
+                  <span className={`status-dot ${isActive ? 'active' : 'inactive'}`} />
+                  <span className={isActive ? 'text-success' : 'text-destructive'}>
+                    {isActive ? 'Active' : 'Stopped'}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Trading Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => handleTradingToggle(true)}
+                  disabled={isActive || isStarting || isStopping || !canEdit}
+                  className="flex items-center gap-2"
+                  data-testid="menu-start-trading"
+                >
+                  <span className="status-dot active" />
+                  <span className="text-success font-medium">Start Trading</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleTradingToggle(false)}
+                  disabled={!isActive || isStarting || isStopping || !canEdit}
+                  className="flex items-center gap-2"
+                  data-testid="menu-stop-trading"
+                >
+                  <span className="status-dot inactive" />
+                  <span className="text-destructive font-medium">Stop Trading</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Mode Dropdown for Mobile */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex items-center gap-1.5 px-2 py-1.5 bg-muted rounded-md text-xs font-semibold h-auto"
+                  data-testid="dropdown-mode-mobile"
+                >
+                  {currentMode === 'live' ? 'LIVE' : 'PAPER'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>Trading Mode</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => handleModeChange('live')}
+                  disabled={!can('trade_live') || currentMode === 'live'}
+                  className="font-semibold"
+                  data-testid="menu-live-mode"
+                >
+                  LIVE Trading
+                  {currentMode === 'live' && ' ✓'}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleModeChange('paper')}
+                  disabled={!can('trade_paper') || currentMode === 'paper'}
+                  className="font-semibold"
+                  data-testid="menu-paper-mode"
+                >
+                  PAPER Trading
+                  {currentMode === 'paper' && ' ✓'}
+                </DropdownMenuItem>
+                {currentMode === 'paper' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setShowResetDialog(true)}
+                      disabled={!canEdit || isResettingPaperSim}
+                      className="text-destructive"
+                      data-testid="menu-reset-paper-sim"
+                    >
+                      <RotateCcw className="w-3 h-3 mr-2" />
+                      Reset Simulation
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Desktop Controls (≥ md) */}
+          <div className="hidden md:flex items-center gap-3">
             {/* Start/Stop Toggle */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3 px-4 py-2 bg-muted rounded-lg">
