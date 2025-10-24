@@ -35,31 +35,55 @@ export class TradingStateSync {
 
   /**
    * Initialize the service and recover previous trading state from database
+   * Phase 27.F.14.D: Fixed to use mode-based system context (not userId)
+   * Check both paper and live contexts to recover the actual persisted mode
    */
   async initialize(userId: string): Promise<void> {
     try {
-      const context = await storage.getSystemContext(userId);
+      // Phase 27.F.14.D: Check both paper and live contexts to recover actual mode
+      const [paperContext, liveContext] = await Promise.all([
+        storage.getSystemContext('paper'),
+        storage.getSystemContext('live')
+      ]);
       
-      if (context) {
-        this.currentMode.set(userId, context.tradingMode);
-        console.log(`[TradingStateSync] Recovered trading mode for user ${userId}: ${context.tradingMode}`);
+      // Determine which mode was last active based on timestamps
+      let activeMode: 'paper' | 'live' = 'paper'; // default
+      let activeContext = paperContext;
+      
+      if (liveContext && paperContext) {
+        // Compare last mode change timestamps to find most recent
+        const liveTimestamp = liveContext.lastModeChange?.getTime() || 0;
+        const paperTimestamp = paperContext.lastModeChange?.getTime() || 0;
+        if (liveTimestamp > paperTimestamp) {
+          activeMode = 'live';
+          activeContext = liveContext;
+        }
+      } else if (liveContext && !paperContext) {
+        activeMode = 'live';
+        activeContext = liveContext;
+      }
+      
+      if (activeContext) {
+        // Global mode architecture: all users share same mode per instance
+        this.currentMode.set(userId, activeContext.tradingMode);
+        console.log(`[TradingStateSync] Initialized (mode=${activeContext.tradingMode})`);
         
         // Emit recovery event
         clusterBus.emit('trading_state_recovered', {
           userId,
-          mode: context.tradingMode,
-          lastChange: context.lastModeChange,
+          mode: activeContext.tradingMode,
+          lastChange: activeContext.lastModeChange,
           timestamp: new Date()
         });
       } else {
-        // Initialize with default paper mode
+        // Initialize with default paper mode if no contexts exist
         await this.setTradingMode(userId, 'paper', 'system', 'Initial setup');
-        console.log(`[TradingStateSync] Initialized user ${userId} with default paper mode`);
+        console.log(`[TradingStateSync] Initialized (mode=paper)`);
       }
       
       this.initialized = true;
     } catch (error) {
-      console.error(`[TradingStateSync] Error initializing for user ${userId}:`, error);
+      console.error(`[TradingStateSync] Error initializing:`, error);
       // Fail-safe: default to paper mode
       this.currentMode.set(userId, 'paper');
     }
@@ -74,6 +98,7 @@ export class TradingStateSync {
 
   /**
    * Set trading mode with persistence and cluster synchronization
+   * Phase 27.F.14.D: Updated to use mode-based system context
    */
   async setTradingMode(
     userId: string,
@@ -86,9 +111,8 @@ export class TradingStateSync {
     // Update in-memory state
     this.currentMode.set(userId, newMode);
     
-    // Persist to database
+    // Phase 27.F.14.D: Persist to database using mode-based context
     const context = await storage.upsertSystemContext({
-      userId,
       tradingMode: newMode,
       lastModeChange: new Date(),
       changedBy,
@@ -114,7 +138,7 @@ export class TradingStateSync {
     // Phase 27.F.3: Broadcast complete state snapshot via broadcastUserUpdate
     await this.broadcastUserUpdate(userId);
     
-    console.log(`[SYNC][Phase-27.F.3] Trading mode changed for user ${userId}: ${previousMode} → ${newMode} (by: ${changedBy})`);
+    console.log(`[SYNC][Phase-27.F.3] Trading mode changed: ${previousMode} → ${newMode} (by: ${changedBy})`);
     
     return context;
   }

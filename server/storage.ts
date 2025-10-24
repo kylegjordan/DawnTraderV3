@@ -191,7 +191,7 @@ import {
   systemAlerts
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
+import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -245,7 +245,7 @@ export interface IStorage {
   cleanStaleWatchlistPairs(minutesOld: number): Promise<number>;
 
   // Trading signals methods
-  saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal>;
+  saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal | null>;
   getTradingSignals(params: { userId: string; mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]>;
   updateSignalStatus(id: string, status: string, executedAt?: Date): Promise<TradingSignal>;
   expireOldSignals(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
@@ -1003,9 +1003,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Trading signals methods
-  async saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal> {
+  async saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal | null> {
+    // Phase 27.F.14.D: TRUE no-op if already expired - skip database write entirely
+    if (signal.expiresAt && signal.expiresAt <= new Date()) {
+      console.log(`[SignalManager] Skipped insert — expired (${signal.symbol}, ${signal.strategy})`);
+      return null; // True skip - no database write
+    }
+    
     // Delete any existing active signals for same symbol+strategy+user+mode to prevent duplicates
-    await db
+    const deletedRows = await db
       .delete(tradingSignals)
       .where(and(
         eq(tradingSignals.userId, signal.userId),
@@ -1013,16 +1019,40 @@ export class DatabaseStorage implements IStorage {
         eq(tradingSignals.symbol, signal.symbol),
         eq(tradingSignals.strategy, signal.strategy as any),
         eq(tradingSignals.status, 'active')
-      ));
+      ))
+      .returning();
+    
+    if (deletedRows.length > 0) {
+      console.log(`[SignalManager] Replaced ${deletedRows.length} duplicate(s) for ${signal.symbol}/${signal.strategy} in mode=${signal.mode}`);
+    }
     
     const [result] = await db.insert(tradingSignals).values(signal).returning();
     return result;
   }
 
   async getTradingSignals(params: { userId: string; mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]> {
+    // Phase 27.F.14.D: Side-effect purge of expired signals SCOPED to this user/mode only
+    try {
+      const purgedRows = await db
+        .delete(tradingSignals)
+        .where(and(
+          eq(tradingSignals.userId, params.userId),
+          eq(tradingSignals.mode, params.mode),
+          lte(tradingSignals.expiresAt, new Date())
+        ))
+        .returning();
+      
+      if (purgedRows.length > 0) {
+        console.log(`[RealtimeCleanup] Purged ${purgedRows.length} expired on fetch (user=${params.userId}, mode=${params.mode})`);
+      }
+    } catch (error) {
+      // Non-critical, continue with query
+    }
+    
     const conditions = [
       eq(tradingSignals.userId, params.userId),
       eq(tradingSignals.mode, params.mode),
+      gt(tradingSignals.expiresAt, new Date()) // Phase 27.F.14.D: Filter expired
     ];
     
     if (params.status) {

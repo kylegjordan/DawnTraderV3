@@ -1,0 +1,205 @@
+🧭 REPLIT DEBUG DIRECTIVE — Phase 27.F.14.D (Scheduler + Self-Purge)
+🎯 Objective
+
+Make the system keep these lists clean at all times:
+
+Immediate (reactive) purge on insert/fetch when a signal is expired or a duplicate.
+
+Scheduled cleanup every 5 minutes as a safety net (and verified to actually run).
+
+Fix TradingStateSync passing userId where mode is expected (enum error).
+
+0) Preconditions
+
+Secrets: WALTER_DISABLED=true
+
+Mode: test in PAPER
+
+Log every action with clear tags:
+
+[SignalsCleanup] …
+
+[RealtimeCleanup] …
+
+[SignalManager] …
+
+[TradingStateSync] …
+
+1) Get the Scheduler Running Reliably
+
+Problem seen: imports/registry prevented job from initializing; no cleanup logs executed.
+
+Actions
+
+In server/services/trading-signals-cleanup.ts
+
+Use correct imports only (no broken aliases):
+
+DB client: ../db (or whatever other services use)
+
+schema/types: ../../shared/schema
+
+In server/index.ts (or the service that boots autonomous tasks)
+
+Ensure the cleanup task is registered and started:
+
+SchedulerRegistry.register('trading_signals_cleanup', TradingSignalsCleanupTask, { intervalMs: 300000 })
+
+Log on boot:
+
+[SchedulerRegistry] Registered: trading_signals_cleanup (every 5m)
+[SchedulerRegistry] All autonomous tasks started successfully
+
+
+On run the task must log:
+
+[SignalsCleanup] Cycle start
+[SignalsCleanup] Marked X expired, deleted Y old_expired
+[SignalsCleanup] Next run in 5m
+
+
+Quick verification
+
+# after restart
+grep -E "SchedulerRegistry|SignalsCleanup" /tmp/logs/Start_application_* | tail -50
+
+2) Add REAL-TIME SELF-PURGING (reactive layer)
+2A) On INSERT (MarketScanner / StrategyEngine → saveTradingSignal)
+
+Required behavior
+
+If expires_at <= NOW() → skip insert, log:
+[SignalManager] Skipped insert — expired (SYMBOL, strategy)
+
+Enforce de-dup before insert on (mode, symbol, strategy):
+
+Delete any existing rows with same (mode, symbol, strategy) before insert.
+
+Log: [SignalManager] Replaced N duplicate(s) for SYMBOL/strategy in mode=paper
+
+Defensive DB constraint (migration)
+
+Add unique index to guarantee no dupes even if code path misses:
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_trading_signals_mode_symbol_strategy
+ON trading_signals (mode, symbol, strategy);
+
+
+(If there’s a composite PK already, adapt accordingly; if multi-status is required, include status too.)
+
+2B) On FETCH (API for Filtered/Ready/Active signals)
+
+All data select queries must filter and purge on the fly:
+
+Selection: WHERE expires_at > NOW()
+
+Side-effect purge (same request, best-effort):
+DELETE FROM trading_signals WHERE expires_at <= NOW();
+
+Log once per request (rate-limit logs to 1/10s):
+[RealtimeCleanup] Purged K expired on fetch (endpoint=ready_to_buy)
+
+2C) On INVALIDATION (guardrail/safety turn a signal “bad”)
+
+Immediately remove it:
+
+DELETE FROM trading_signals WHERE id = $1
+
+Log: [RealtimeCleanup] Removed invalidated signal (SYMBOL, reason=GuardrailFailed)
+
+2D) Query performance (optional but recommended)
+
+Indexes:
+
+CREATE INDEX IF NOT EXISTS ix_trading_signals_expires_at
+ON trading_signals (expires_at);
+
+CREATE INDEX IF NOT EXISTS ix_trading_signals_mode_status
+ON trading_signals (mode, status);
+
+3) Fix the TradingStateSync enum error
+
+Symptom:
+error: invalid input value for enum trading_mode: "3ace5ebb-..."
+
+Root cause: trading-state-sync.ts passes userId to getSystemContext() after the global-mode refactor; the function expects mode.
+
+Fix
+
+In server/services/trading-state-sync.ts:
+
+Replace the call to getSystemContext(userId) with getSystemContext(mode) where mode ∈ { paper, live } (from global context).
+
+If the service used to loop users, collapse to one global record per mode.
+
+Add log:
+
+[TradingStateSync] Initialized (mode=paper) 
+
+
+Ensure no DB writes attempt to store userId in trading_mode enum fields.
+
+4) Validation Suite (must pass)
+Runtime logs (within first 6–7 minutes after restart)
+
+[SchedulerRegistry] Registered: trading_signals_cleanup (every 5m)
+
+[SchedulerRegistry] All autonomous tasks started successfully
+
+On first fetch of each tab:
+
+[RealtimeCleanup] Purged K expired on fetch (endpoint=filtered_pairs)
+
+[RealtimeCleanup] Purged L expired on fetch (endpoint=ready_to_buy)
+
+On first insert of a duplicate:
+
+[SignalManager] Replaced N duplicate(s) …
+
+On the 5-minute boundary:
+
+[SignalsCleanup] Cycle start
+
+[SignalsCleanup] Marked X expired, deleted Y old_expired
+
+TradingStateSync shows mode-based init, no enum errors.
+
+DB spot checks
+-- 0 expired visible:
+SELECT COUNT(*) FROM trading_signals WHERE expires_at <= NOW();
+
+-- 0 duplicate tuples (should return 0 rows if unique index added):
+SELECT mode, symbol, strategy, COUNT(*) 
+FROM trading_signals 
+GROUP BY 1,2,3 HAVING COUNT(*) > 1;
+
+-- counts seen by UI should fall quickly after purge:
+SELECT COUNT(*) FROM trading_signals WHERE mode='paper' AND expires_at > NOW();
+
+UI expectations (after a refresh or 1 minute)
+
+Ready-to-Buy: stabilizes to ≤ ~15
+
+Filtered Pairs: ≤ ~150–200
+
+No flicker from repeated failing fetches
+
+Counts continue to stay sane while scanner runs
+
+5) Deliverables
+
+PR or diff summary of:
+
+trading-signals-cleanup.ts (imports + log lines)
+
+saveTradingSignal duplicate/expired handling
+
+API controllers (fetch-time purge + filter)
+
+trading-state-sync.ts mode-based refactor
+
+SQL for indexes / unique constraint
+
+Logs excerpt showing first RealtimeCleanup actions and first SignalsCleanup cycle.
+
+A short note in PHASE_27.F.14.D_SELF_PURGE.md describing behavior and how to verify.

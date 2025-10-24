@@ -47,7 +47,11 @@ Automated Trading Signals Cleanup Scheduler (Phase 27.F.14.D) implements a 5-min
 - **Oct 24, 2025**: Signal deduplication implemented in `saveTradingSignal()` to prevent duplicate signals
 
 ## Known Technical Debt
-- **TradingStateSync Refactor Required**: The `TradingStateSync` service contains per-user mode architecture that conflicts with Phase 27.F.13.O global-per-mode refactor. Specifically, `TradingStateSync.initialize()` passes `userId` to `storage.getSystemContext()` which now expects a `mode` parameter. This causes harmless errors during startup (caught by fallback to default paper mode). Future work should refactor `TradingStateSync` to eliminate per-user mode tracking and align with global mode architecture.
+- **TradingStateSync Partial Refactor** (Phase 27.F.14.D): The `TradingStateSync` service has been partially refactored to use mode-based system context. Key methods updated: `initialize()` (checks both paper and live contexts to recover actual mode), `setTradingMode()` (passes tradingMode to upsertSystemContext). However, two methods still need refactoring to complete the mode-based migration:
+  - `emergencyStop()` - Still passes `userId` to upsertSystemContext (line 191-202)
+  - `restoreLastSafeState()` - Still calls `storage.getSystemContext(userId)` (line 221)
+  
+  These methods are rarely used (emergency recovery paths) and don't affect normal operation. The enum error is resolved and normal trading state operations work correctly. Future work should complete the refactor for full consistency.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
