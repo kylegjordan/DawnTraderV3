@@ -26,12 +26,14 @@ export function TradingModeProvider({ children }: { children: ReactNode }) {
   });
 
   const setMode = (newMode: TradingMode) => {
+    console.log('[UI] Auto-refresh triggered on mode switch:', mode, '->', newMode);
     setModeState(newMode);
     localStorage.setItem(MODE_STORAGE_KEY, newMode);
     // Sync with global mode for API requests
     setGlobalTradingMode(newMode);
     // Invalidate all queries to fetch fresh data for the new mode
     queryClient.invalidateQueries();
+    console.log('[UI] Mode switch complete - all queries invalidated for:', newMode);
   };
 
   // Phase 27.4.2: Listen for trading_state_changed WebSocket events

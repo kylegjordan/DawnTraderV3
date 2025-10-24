@@ -163,46 +163,47 @@ app.use((req, res, next) => {
     console.error('[Server] Failed to start Market Data Health Check service:', error);
   });
 
-  // Start AI Opportunities service (async, non-blocking)
-  import('./services/ai-opportunities').then(({ aiOpportunitiesService }) => {
-    aiOpportunitiesService.startHourlyOpportunityGeneration().catch((error) => {
-      console.error('[Server] Failed to start AI Opportunities service:', error);
+  // Phase 27.F.14.B: Walter Full Shutdown
+  // When WALTER_DISABLED=true, skip all AI Opportunities, Daily Brief, Market Analysis, AI Orchestrator, and Walter Health Monitor
+  const WALTER_DISABLED = process.env.WALTER_DISABLED === 'true';
+  
+  if (!WALTER_DISABLED) {
+    // Start AI Opportunities service (async, non-blocking)
+    import('./services/ai-opportunities').then(({ aiOpportunitiesService }) => {
+      aiOpportunitiesService.startHourlyOpportunityGeneration().catch((error) => {
+        console.error('[Server] Failed to start AI Opportunities service:', error);
+      });
     });
-  });
 
-  // Start Daily Brief service (async, non-blocking)
-  import('./services/daily-brief').then(({ dailyBriefService }) => {
-    dailyBriefService.startDailyBriefScheduler().catch((error) => {
-      console.error('[Server] Failed to start Daily Brief service:', error);
+    // Start Daily Brief service (async, non-blocking)
+    import('./services/daily-brief').then(({ dailyBriefService }) => {
+      dailyBriefService.startDailyBriefScheduler().catch((error) => {
+        console.error('[Server] Failed to start Daily Brief service:', error);
+      });
     });
-  });
 
-  // Start Market Analysis scheduler (async, non-blocking)
-  import('./services/market-analysis-scheduler').then(({ marketAnalysisScheduler }) => {
-    marketAnalysisScheduler.startDailyAnalysisScheduler().catch((error) => {
-      console.error('[Server] Failed to start Market Analysis Scheduler:', error);
+    // Start Market Analysis scheduler (async, non-blocking)
+    import('./services/market-analysis-scheduler').then(({ marketAnalysisScheduler }) => {
+      marketAnalysisScheduler.startDailyAnalysisScheduler().catch((error) => {
+        console.error('[Server] Failed to start Market Analysis Scheduler:', error);
+      });
     });
-  });
 
-  // Start AI Orchestrator (async, non-blocking)
-  import('./orchestrator/orchestrator').then(({ aiOrchestrator }) => {
-    aiOrchestrator.start().catch((error) => {
-      console.error('[Server] Failed to start AI Orchestrator:', error);
+    // Start AI Orchestrator (async, non-blocking)
+    import('./orchestrator/orchestrator').then(({ aiOrchestrator }) => {
+      aiOrchestrator.start().catch((error) => {
+        console.error('[Server] Failed to start AI Orchestrator:', error);
+      });
     });
-  });
 
-  // Start Walter Health Monitor (async, non-blocking) - Phase 7.4: Re-enabled
-  // Phase 27.F.14: Conditionally disable Walter if WALTER_ENABLED=false
-  const WALTER_ENABLED = process.env.WALTER_ENABLED !== 'false';
-  if (WALTER_ENABLED) {
+    // Start Walter Health Monitor (async, non-blocking)
     import('./services/walter-health-monitor').then(({ walterHealthMonitor }) => {
       walterHealthMonitor.start().catch((error) => {
         console.error('[Server] Failed to start Walter Health Monitor:', error);
       });
     });
-    console.log('[Server] ✅ Walter Health Monitor enabled');
   } else {
-    console.log('[Server] ⚠️  Walter Health Monitor DISABLED (WALTER_ENABLED=false)');
+    console.log('[Walter] Standby mode – AI adjustment disabled');
   }
 
   // Phase 27.F.14.B: Start LATTI (Local Autonomous Trading Tuning Intelligence) - Dual Mode
@@ -212,7 +213,7 @@ app.use((req, res, next) => {
       lattiManager.startBoth().catch((error) => {
         console.error('[Server] Failed to start LATTI dual-mode operation:', error);
       });
-      console.log('[Server] ✅ LATTI (Local Autonomous Trading Tuning Intelligence) started in DUAL MODE');
+      console.log('[LATTIManager] Both LATTI instances active (Paper, Live)');
     });
   } else {
     console.log('[Server] ⚠️  LATTI DISABLED (LATTI_ENABLED=false)');

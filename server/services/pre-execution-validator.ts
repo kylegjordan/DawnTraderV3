@@ -77,6 +77,26 @@ export class PreExecutionValidator {
       const slippagePercent = Math.abs(slippageModel.slippageBps / 100);
       const feesPercent = (feeModel.totalFees / orderValue) * 100;
 
+      // Phase 27.F.14.B: Fee-Aware Pre-Trade Validation
+      // Get fee configuration from system_context
+      const systemContext = await storage.getSystemContext(request.mode);
+      const makerFeePct = parseFloat(systemContext?.makerFeePct || '0.0016');
+      const takerFeePct = parseFloat(systemContext?.takerFeePct || '0.0026');
+      const defaultFeeMode = systemContext?.defaultFeeMode || 'taker';
+      const minNetProfitThreshold = parseFloat(systemContext?.minNetProfitThreshold || '0.0030');
+
+      // Calculate expected profit percentage
+      const profitDistance = Math.abs(request.signal.targetPrice - request.signal.entryPrice);
+      const expectedGainPct = (profitDistance / request.signal.entryPrice) * 100;
+
+      // Calculate round-trip fee (entry + exit)
+      const feeRate = defaultFeeMode === 'maker' ? makerFeePct : takerFeePct;
+      const roundTripFeePct = feeRate * 2 * 100; // Convert to percentage and double for round trip
+
+      // Calculate net expected gain after fees
+      const netExpectedGainPct = expectedGainPct - roundTripFeePct;
+      const minNetProfitPct = minNetProfitThreshold * 100;
+
       const details: string[] = [];
       details.push(`Risk checks: ${riskCheckResult.approved ? 'PASSED' : 'FAILED'}`);
       if (riskCheckResult.reason) {
@@ -85,11 +105,16 @@ export class PreExecutionValidator {
       details.push(`Goal alignment: ${goalAlignmentPercent}%`);
       details.push(`Slippage estimate: ${slippagePercent.toFixed(3)}%`);
       details.push(`Fee estimate: ${feesPercent.toFixed(3)}%`);
+      details.push(`Expected gain: ${expectedGainPct.toFixed(3)}%`);
+      details.push(`Round-trip fees: ${roundTripFeePct.toFixed(3)}%`);
+      details.push(`Net expected gain: ${netExpectedGainPct.toFixed(3)}%`);
+      details.push(`Min net profit threshold: ${minNetProfitPct.toFixed(3)}%`);
 
       const goalAlignmentThreshold = 75;
       const goalAlignmentPassed = goalAlignmentPercent >= goalAlignmentThreshold;
+      const feeProfitabilityPassed = netExpectedGainPct >= minNetProfitPct;
 
-      let canExecute = riskCheckResult.approved && goalAlignmentPassed;
+      let canExecute = riskCheckResult.approved && goalAlignmentPassed && feeProfitabilityPassed;
       let blockReason: string | undefined;
 
       if (!riskCheckResult.approved) {
@@ -98,8 +123,12 @@ export class PreExecutionValidator {
       } else if (!goalAlignmentPassed) {
         blockReason = `Goal alignment score ${goalAlignmentPercent}% below threshold ${goalAlignmentThreshold}%`;
         details.push(`❌ Blocked: ${blockReason}`);
+      } else if (!feeProfitabilityPassed) {
+        blockReason = `Fee-adjusted gain ${netExpectedGainPct.toFixed(3)}% below threshold ${minNetProfitPct.toFixed(3)}%`;
+        details.push(`❌ Blocked: ${blockReason}`);
+        console.log(`[LATTI] Trade rejected – fee-adjusted gain below threshold (${netExpectedGainPct.toFixed(3)}% < ${minNetProfitPct.toFixed(3)}%)`);
       } else {
-        details.push('✅ All validations passed');
+        details.push('✅ All validations passed (including fee-aware profitability)');
       }
 
       await provenanceLogger.logLineage({
