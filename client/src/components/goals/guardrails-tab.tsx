@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { Shield, Save, RotateCcw, AlertTriangle } from "lucide-react";
+import { Shield, Save, RotateCcw, AlertTriangle, Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
@@ -21,6 +21,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CopyToLiveModal } from "./copy-to-live-modal";
+import { useTrading } from "@/hooks/use-trading";
 
 const DEFAULTS = {
   maxDailyLoss: 1000,
@@ -63,9 +65,13 @@ export default function GuardrailsTab() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const lastMode = useRef<string | null>(null);
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   
   // Phase 27.F.14.B - Task 3: Fee-Aware Metrics Display
   const { data: baselineStatus } = useBaselineStatus({ enabled: mode === 'paper' });
+  
+  // Phase 27.F.14.B - Task 4: Copy to Live - Check if live trading is stopped
+  const { tradingStatus } = useTrading();
 
   const { data: currentSettings, isLoading } = useQuery<Guardrails>({
     queryKey: ['/api/guardrails', mode],
@@ -234,6 +240,49 @@ export default function GuardrailsTab() {
       description: "Guardrails have been reset to default values.",
     });
   };
+
+  // Phase 27.F.14.B - Task 4: Copy paper parameters to live mode fields
+  const handleCopyToLive = () => {
+    if (!baselineStatus?.snapshot) return;
+    
+    const snapshot = baselineStatus.snapshot;
+    
+    // Copy optimized parameters from paper baseline to local state
+    // Note: These are the LIVE mode values stored in a separate query cache
+    // We'll fetch them and update them in state
+    queryClient.fetchQuery({
+      queryKey: ['/api/guardrails', 'live'],
+      queryFn: () => fetch('/api/guardrails?mode=live', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      }).then(r => r.json())
+    }).then((liveSettings: Guardrails) => {
+      // Create updated live settings with paper baseline values
+      const updatedLiveSettings = {
+        ...liveSettings,
+        riskPerTrade: snapshot.riskPerTradePercent,
+        maxDailyLoss: snapshot.maxDailyLoss,
+        maxDrawdown: snapshot.maxDrawdown,
+        // Map tradesPerDay to maxOpenPositions (conservative estimate)
+        maxOpenPositions: Math.ceil(snapshot.tradesPerDay)
+      };
+      
+      // Update the live mode cache directly
+      queryClient.setQueryData(['/api/guardrails', 'live'], updatedLiveSettings);
+      
+      toast({
+        title: "✅ Parameters copied to Live mode",
+        description: "Switch to Live mode and click Save to persist these changes.",
+      });
+    });
+  };
+
+  // Check if Copy to Live button should be enabled
+  const isCopyToLiveEnabled = 
+    mode === 'paper' && 
+    baselineStatus?.snapshot?.established === true &&
+    tradingStatus?.isEngineActiveLive === false;
 
   if (isLoading || isLoadingSettings) {
     return (
@@ -595,7 +644,52 @@ export default function GuardrailsTab() {
             )}
           </div>
         )}
+
+        {/* Phase 27.F.14.B - Task 4: Copy to Live Button */}
+        {mode === 'paper' && baselineStatus?.snapshot && (
+          <div className="mt-4">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="inline-block">
+                    <Button
+                      onClick={() => setIsCopyModalOpen(true)}
+                      disabled={!isCopyToLiveEnabled}
+                      variant="outline"
+                      className="border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                      data-testid="button-copy-to-live"
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy to Live Mode
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="max-w-xs">
+                    {!baselineStatus.snapshot.established ? (
+                      <p>Baseline must be established before copying parameters</p>
+                    ) : tradingStatus?.isEngineActiveLive ? (
+                      <p>Live trading must be stopped before copying parameters</p>
+                    ) : (
+                      <p>Copy optimized paper trading parameters to Live mode guardrail fields</p>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
       </CardContent>
+
+      {/* Copy to Live Confirmation Modal */}
+      {baselineStatus?.snapshot && (
+        <CopyToLiveModal
+          isOpen={isCopyModalOpen}
+          onClose={() => setIsCopyModalOpen(false)}
+          onConfirm={handleCopyToLive}
+          baselineSnapshot={baselineStatus.snapshot}
+        />
+      )}
     </Card>
   );
 }
