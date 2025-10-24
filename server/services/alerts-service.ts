@@ -55,6 +55,26 @@ export class AlertsService {
       acknowledged: false,
     }).returning();
 
+    // Phase 27.F.14.E: Broadcast alert creation to all clients
+    try {
+      const { contextBridge } = await import('./context-bridge.js');
+      await contextBridge.broadcast({
+        type: 'alerts_updated',
+        payload: {
+          action: 'created',
+          alertId: alert.id,
+          severity: alert.severity,
+          category: alert.category,
+          userId: input.userId,
+          mode: input.mode,
+          timestamp: new Date().toISOString()
+        }
+      });
+      console.log('[Phase-27.F.14.E] Broadcasted alert creation:', alert.id);
+    } catch (error: any) {
+      console.error('[Phase-27.F.14.E] Failed to broadcast alert creation:', error.message);
+    }
+
     return alert;
   }
 

@@ -43,7 +43,10 @@ Automated Trading Signals Cleanup Scheduler (Phase 27.F.14.D) implements a 5-min
 
 Portfolio Balance Confirmation System (Phase 27.F.14.D-POST) implements mandatory balance confirmation before starting Paper Trading. The system checks if the portfolio balance has been confirmed within the last 24 hours via the `balance_last_confirmed` timestamp in `system_context`. If confirmation is missing or stale, the API returns `requiresConfirmation: true` with the current balance, prompting the user to confirm via modal before starting. Confirmation updates both the portfolio balance and timestamp through the `/api/paper-sim/confirm-balance` endpoint. The check is integrated into both `/api/trading/start` (for paper mode) and `/api/paper-sim/start` direct endpoints.
 
+Multi-User Synchronization (Phase 27.F.14.E) provides real-time WebSocket broadcast synchronization across all user sessions. When portfolio balances are confirmed, the backend broadcasts `portfolio_balance_updated` events, triggering immediate dashboard refresh for all connected clients. Trading toggle state automatically syncs via existing `trading_state_changed` broadcasts, ensuring all users see identical start/stop states. Global alert synchronization broadcasts `alerts_updated` events when alerts are created, dismissed, or cleared, so all users maintain identical alert visibility. Frontend components (`TopBar`, `AlertBanner`) listen for these WebSocket events and invalidate React Query caches to immediately reflect changes across sessions.
+
 ## Recent Changes
+- **Oct 24, 2025**: Multi-user synchronization completed (Phase 27.F.14.E) - portfolio balance, trading toggle, and alerts sync across all sessions via WebSocket broadcasts
 - **Oct 24, 2025**: Portfolio balance confirmation system fully implemented (Phase 27.F.14.D-POST) - backend and frontend complete with modal state synchronization fix
 - **Oct 24, 2025**: Automated cleanup scheduler implemented and verified working (Phase 27.F.14.D)
 - **Oct 24, 2025**: Mobile responsive overhaul completed across Trading, Watchlist, Reports, and System Monitoring pages with icon-only tabs for dense tab sets (<640px)

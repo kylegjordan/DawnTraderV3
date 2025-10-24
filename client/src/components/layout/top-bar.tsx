@@ -151,6 +151,19 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   }, [wsMessages, queryClient, setMode]);
 
+  // Phase 27.F.14.E: Listen for portfolio_balance_updated events to refresh dashboard
+  useEffect(() => {
+    const balanceUpdates = wsMessages.filter((msg: any) => msg.type === 'portfolio_balance_updated');
+    if (balanceUpdates.length > 0) {
+      const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
+      console.log('[Phase-27.F.14.E] Received portfolio_balance_updated event:', latestUpdate);
+      
+      // Invalidate portfolio queries to immediately refresh balance across all sessions
+      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+    }
+  }, [wsMessages, queryClient]);
+
   const handleTradingToggle = async (enabled: boolean) => {
     console.log('[Phase-27.F.6] Toggle clicked:', { enabled, mode: currentMode });
     
@@ -324,6 +337,11 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         balance, 
         mode: currentMode 
       });
+      
+      // Phase 27.F.14.E: Immediately refresh portfolio value across all sessions
+      console.log('[Phase-27.F.14.E] Invalidating portfolio queries after balance confirmation');
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       
       // Close the modal
       setShowBalanceConfirmation(false);

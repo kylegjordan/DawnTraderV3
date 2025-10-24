@@ -1,0 +1,113 @@
+🧭 REPLIT DIRECTIVE — Phase 27.F.14.E
+Final Synchronization + Dashboard Refresh Fix (with Multi-User Validation Adjustments)
+🧩 Context
+
+The backend and frontend portfolio confirmation flow are now complete and functional.
+Remaining issues involve UI synchronization between multiple users, dashboard refresh lag, and alert visibility scope.
+
+🧠 Current Observations
+Function	Status	Notes
+Portfolio balance prompt	✅ Working	Correctly shows and records user input (e.g., $834 or $888).
+Backend confirmation	✅ Logged correctly	Toast correctly confirms user input.
+Dashboard balance value	⚠️ Still $800	Frontend dashboard isn’t refreshing after confirmation.
+Cross-session start	✅ In sync	Both dashboards go Active immediately when one user starts trading.
+Cross-session stop	⚠️ Partial	Only the user who started trading can fully sync toggle + bar + toast on stop.
+Alerts	⚠️ Desynced	Kyle’s are cleared, testuser123’s remain. Need backend-driven global sync.
+🧭 Objective
+
+Finish system synchronization by:
+
+Making portfolio value update instantly after confirmation.
+
+Making start/stop trading fully real-time across sessions (no double clicks).
+
+Making critical alerts global—so one update or clear action reflects across all users.
+(But preserve existing alerts for testing.)
+
+🧱 Tasks for Replit
+1️⃣ Dashboard Portfolio Value Auto-Refresh
+
+After a user confirms a new portfolio balance (e.g., $888), the dashboard must immediately update to display the new value.
+
+Ensure that when /api/paper-sim/confirm-balance completes, the frontend triggers a data reload or query invalidation on the “Portfolio Overview” widget.
+
+This refresh must also propagate across sessions (so the new value appears for both users).
+
+✅ Verification Steps
+
+Log in as Kyle G. Jordan and testuser123 / SecurePass123! (two browsers).
+
+Start Paper Trading as Kyle G. Jordan.
+
+When prompted, enter $888 and click Confirm.
+
+You only need to verify the dashboard balance value, not the toast.
+
+The Portfolio Value on both dashboards should show $888.00 immediately.
+
+✅ Expected Behavior
+
+[PaperSim] Portfolio balance confirmed: $888
+[UI] Portfolio value updated → $888.00
+
+2️⃣ Trading Toggle Real-Time Synchronization
+
+The toggle state must reflect the backend’s broadcast state for all users, not only the one who clicked it.
+
+The frontend top-bar trading toggle should subscribe to the same socket broadcast that drives the blue bar.
+
+When a global state broadcast occurs:
+
+If status = running → toggle = Active
+
+If status = stopped → toggle = Stopped
+
+✅ Verification Steps
+
+Start trading as Kyle G. Jordan.
+
+Both dashboards: blue bar = Active, toggle = Active.
+
+Stop trading as testuser123.
+
+Both dashboards: blue bar = Stopped, toggle = Stopped.
+
+Toasts may appear independently per user; only Kyle needs to confirm full state sync.
+
+Confirm only one click is required to start or stop—no double-clicks or delayed transitions.
+
+✅ Expected Log Output
+
+[TradingStateSync] Broadcast → mode=paper, status=running (2 clients updated)
+[TradingStateSync] Broadcast → mode=paper, status=stopped (2 clients updated)
+
+3️⃣ Global Alert Synchronization (Non-Destructive Test)
+
+Implement global broadcast behavior for alerts without deleting existing ones.
+
+When one user receives or clears alerts, the other sessions should mirror that change.
+
+Do not clear Kyle’s already-empty alerts; instead, focus on syncing testuser123’s current alert list to Kyle’s view.
+
+✅ Verification Steps
+
+Log in as both users.
+
+Confirm that the 50+ “OpenAI quota exhausted” alerts visible under testuser123 are now also visible under Kyle’s dashboard.
+
+This shows global sync is functioning.
+
+Do not clear them yet—verify propagation only.
+
+Once sync works, you may test the “Clear All” action from testuser123 to confirm it clears for both.
+
+✅ Expected Behavior
+
+Kyle’s dashboard now mirrors all alerts visible to testuser123.
+
+Clearing from one removes them everywhere.
+
+Logs show:
+
+[AlertsSync] Broadcast → 53 critical alerts updated across 2 clients
+[AlertsSync] Broadcast → Alerts cleared (2 clients)

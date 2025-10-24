@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useWebSocket } from '@/hooks/use-websocket';
 
 interface AlertsResponse {
   ok: boolean;
@@ -30,6 +31,7 @@ export default function AlertBanner() {
   const [showClearAllDialog, setShowClearAllDialog] = useState(false);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const { toast } = useToast();
+  const { messages: wsMessages } = useWebSocket();
 
   // Fetch unacknowledged alerts
   const { data, isLoading } = useQuery<AlertsResponse>({
@@ -42,6 +44,18 @@ export default function AlertBanner() {
     queryKey: ['/api/settings'],
     staleTime: 60000,
   });
+
+  // Phase 27.F.14.E: Listen for alerts_updated events to sync across sessions
+  useEffect(() => {
+    const alertUpdates = wsMessages.filter((msg: any) => msg.type === 'alerts_updated');
+    if (alertUpdates.length > 0) {
+      const latestUpdate = alertUpdates[alertUpdates.length - 1];
+      console.log('[Phase-27.F.14.E] Received alerts_updated event:', latestUpdate);
+      
+      // Invalidate alerts query to immediately refresh across all sessions
+      queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });
+    }
+  }, [wsMessages]);
 
   // Mutation to dismiss a single alert
   const dismissAlertMutation = useMutation({

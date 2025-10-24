@@ -3472,6 +3472,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { confirmPortfolioBalance } = await import('./services/paper-sim-service.js');
       await confirmPortfolioBalance(tradingMode, parseFloat(balance));
       
+      // Phase 27.F.14.E: Broadcast portfolio balance update to all clients
+      console.log('[Phase-27.F.14.E] Broadcasting portfolio balance update:', balance);
+      const { contextBridge } = await import('./services/context-bridge.js');
+      await contextBridge.broadcast({
+        type: 'portfolio_balance_updated',
+        payload: {
+          balance: parseFloat(balance),
+          mode: tradingMode,
+          reason: 'balance_confirmed',
+          timestamp: new Date().toISOString()
+        },
+        mode: tradingMode
+      });
+      
       res.json({ success: true, message: `Balance confirmed: $${balance}` });
     } catch (error: any) {
       console.error('Error confirming portfolio balance:', error);
@@ -11356,6 +11370,19 @@ Important: Extract the exact field names and numeric values from the user's requ
         return res.status(404).json({ error: 'Alert not found or access denied' });
       }
       
+      // Phase 27.F.14.E: Broadcast alert dismissal to all clients
+      console.log('[Phase-27.F.14.E] Broadcasting alert dismissal:', alertId);
+      const { contextBridge } = await import('./services/context-bridge.js');
+      await contextBridge.broadcast({
+        type: 'alerts_updated',
+        payload: {
+          action: 'dismissed',
+          alertId,
+          userId,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
       console.log(`[AlertAPI] Successfully acknowledged alert ${alertId}`);
       res.json({ ok: true, alert });
     } catch (error: any) {
@@ -11380,6 +11407,20 @@ Important: Extract the exact field names and numeric values from the user's requ
       
       const AlertsService = (await import('./services/alerts-service')).default;
       const alerts = await AlertsService.acknowledgeAll(userId, mode);
+      
+      // Phase 27.F.14.E: Broadcast alert clear-all to all clients
+      console.log('[Phase-27.F.14.E] Broadcasting alerts cleared:', alerts.length);
+      const { contextBridge } = await import('./services/context-bridge.js');
+      await contextBridge.broadcast({
+        type: 'alerts_updated',
+        payload: {
+          action: 'cleared_all',
+          count: alerts.length,
+          userId,
+          mode,
+          timestamp: new Date().toISOString()
+        }
+      });
       
       console.log(`[AlertAPI] Successfully acknowledged ${alerts.length} alerts for user ${userId}`);
       res.json({ ok: true, count: alerts.length });
