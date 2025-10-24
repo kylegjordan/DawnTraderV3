@@ -1004,6 +1004,17 @@ export class DatabaseStorage implements IStorage {
 
   // Trading signals methods
   async saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal> {
+    // Delete any existing active signals for same symbol+strategy+user+mode to prevent duplicates
+    await db
+      .delete(tradingSignals)
+      .where(and(
+        eq(tradingSignals.userId, signal.userId),
+        eq(tradingSignals.mode, signal.mode),
+        eq(tradingSignals.symbol, signal.symbol),
+        eq(tradingSignals.strategy, signal.strategy as any),
+        eq(tradingSignals.status, 'active')
+      ));
+    
     const [result] = await db.insert(tradingSignals).values(signal).returning();
     return result;
   }

@@ -241,6 +241,7 @@ app.use((req, res, next) => {
       const { diagnosticAnalysisTask } = await import('./services/diagnostic-analysis-task');
       const { optimizationAnalysisTask } = await import('./services/optimization-analysis-task');
       const { weeklyExpertInsightsTask } = await import('./services/weekly-expert-insights-task');
+      const { tradingSignalsCleanupTask } = await import('./services/trading-signals-cleanup');
       const { registerLearningFeedbackJob } = await import('./jobs/learning-feedback');
       const { registerCognitiveTuningJob } = await import('./jobs/cognitive-tuning-job');
       const { registerFormulaAuditJob } = await import('./jobs/formula-auto-audit');
@@ -367,6 +368,17 @@ app.use((req, res, next) => {
         frequency: weeklyExpertInsightsTask.frequency,
         intervalMs: weeklyExpertInsightsTask.intervalMs,
         run: weeklyExpertInsightsTask.run.bind(weeklyExpertInsightsTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+      
+      schedulerRegistry.registerTask({
+        name: tradingSignalsCleanupTask.name,
+        description: tradingSignalsCleanupTask.description,
+        frequency: tradingSignalsCleanupTask.frequency,
+        intervalMs: tradingSignalsCleanupTask.intervalMs,
+        run: tradingSignalsCleanupTask.run.bind(tradingSignalsCleanupTask),
         lastRun: null,
         nextRun: null,
         status: 'idle'

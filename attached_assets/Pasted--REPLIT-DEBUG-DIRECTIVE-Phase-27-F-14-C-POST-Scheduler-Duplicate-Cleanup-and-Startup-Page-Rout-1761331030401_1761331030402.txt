@@ -1,0 +1,112 @@
+🧭 REPLIT DEBUG DIRECTIVE — Phase 27.F.14.C-POST
+Scheduler, Duplicate Cleanup, and Startup Page Routing Fixes
+
+Context:
+After the successful pre-simulation fixes (Phase 27.F.14.C-PRE), the Trading tabs are now displaying correctly, and both Filtered Pairs and Ready-to-Buy lists populate normally.
+However, several persistent logic and routing issues remain that must be resolved before running the 10-minute simulation.
+
+⚠️ ISSUES TO INVESTIGATE AND FIX
+1️⃣ Ready-to-Buy / Filtered Pairs Cleanup Not Working
+
+Symptoms:
+
+Ready-to-Buy shows 824 pairs (should be ≈ 10–15).
+
+Filtered Pairs retains expired or duplicate entries.
+
+Items that previously disappeared automatically now persist indefinitely.
+
+Expected Behavior:
+
+Cleanup scheduler runs every 5 minutes (or configured interval).
+
+Removes:
+
+expired trades (expires_at < NOW()),
+
+duplicate entries (same symbol + strategy),
+
+invalidated pairs failing safety filters.
+
+Logs successful cycle:
+
+[PaperSimCleanup] ✅ Removed N expired signals, M duplicates
+
+
+Tasks for Replit:
+
+Verify that the PaperSimCleanupScheduler (or TradingSignalCleanupJob) is registered and running at app startup.
+
+Confirm the cron/interval configuration (*/5 * * * *) still executes.
+
+Inspect trading_signals table for:
+
+expires_at values,
+
+duplicate (symbol, strategy) pairs.
+
+Repair or re-enable the cleanup job so that only current, unique signals remain.
+
+Confirm new log output during cleanup cycles.
+
+2️⃣ Duplicate Signal Generation
+
+Symptoms:
+
+Same symbol appears multiple times in Ready-to-Buy with identical strategy and metrics.
+Tasks:
+
+Trace the signal-generation process in MarketScanner / StrategyEngine.
+
+Confirm de-duplication check (symbol, strategy) exists before insertion.
+
+Add explicit unique constraint at the DB or service level if missing.
+
+Ensure new signal creation logs include “skipped duplicate”.
+
+3️⃣ Application Startup Routing
+
+Symptoms:
+
+On app startup (after stop/restart), the app always opens on Goals Engine, not Dashboard, regardless of where it was stopped.
+Expected Behavior:
+
+App should load Dashboard by default (route /dashboard).
+
+If last-visited page memory feature exists, it should restore the last route, not force Goals Engine.
+
+Tasks:
+
+Check router configuration (likely in client/src/App.tsx or router/index.tsx).
+
+Verify the default route (/) redirects to /dashboard.
+
+Confirm Goals Engine is not set as fallback or hard-coded default.
+
+Test startup in both authenticated and guest sessions.
+
+Log confirmation:
+
+[UI] ✅ Default route set to Dashboard
+
+🧾 VALIDATION CHECKLIST
+Check	Expected Result
+Cleanup Scheduler	Logs successful cycle every 5 min
+Expired Signals	Removed automatically from Ready-to-Buy
+Duplicate Pairs	Deduplicated before insert
+Filtered Pairs Count	≈ 50–200 eligible (not thousands)
+Ready-to-Buy Count	≤ 15 signals active
+Startup Route	App opens on Dashboard
+Logs	[PaperSimCleanup], [UI] Default route set to Dashboard appear
+📘 DELIVERABLES
+
+Confirmation log excerpt showing:
+
+[PaperSimCleanup] ✅ Removed N expired, M duplicates  
+[Scheduler] Next run in 5 min  
+[UI] ✅ Default route set to Dashboard
+
+
+Verified database snapshot showing correct signal counts.
+
+Confirmation that filtered pairs and ready-to-buy tabs update cleanly during runtime.
