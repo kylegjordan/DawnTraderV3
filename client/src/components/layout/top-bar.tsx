@@ -59,6 +59,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [utcTimeDate, setUtcTimeDate] = useState<string>('');
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
+  const [timePreference, setTimePreference] = useState<'local' | 'utc'>('local');
   const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
   const [showStopConfirmation, setShowStopConfirmation] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -484,7 +485,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   disabled={!can('trade_live') || currentMode === 'live'}
                   className={cn(
                     "font-semibold",
-                    currentMode === 'live' && "text-base font-bold"
+                    currentMode === 'live' && "text-base font-bold text-foreground"
                   )}
                   data-testid="menu-live-mode"
                 >
@@ -496,7 +497,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   disabled={!can('trade_paper') || currentMode === 'paper'}
                   className={cn(
                     "font-semibold",
-                    currentMode === 'paper' && "text-base font-bold"
+                    currentMode === 'paper' && "text-base font-bold text-foreground"
                   )}
                   data-testid="menu-paper-mode"
                 >
@@ -601,61 +602,77 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         
         {/* Right Actions */}
         <div className="flex items-center gap-1.5 sm:gap-3">
-          {/* Mobile Time Display (compact clickable dropdowns) */}
-          <div className="flex md:hidden items-center gap-1">
-            {/* UTC Time - Mobile */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex items-center gap-1 px-1.5 py-1 bg-muted rounded text-[10px] h-auto hover:bg-muted/80"
-                  data-testid="dropdown-utc-time-mobile"
-                >
-                  <Globe className="w-3 h-3 text-muted-foreground" />
-                  <span className="font-mono text-foreground whitespace-nowrap">
-                    {utcTimeDate.split('—')[0]?.trim() || utcTimeDate.split(' ').slice(0, 2).join(' ')}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-auto min-w-[200px]">
-                <DropdownMenuLabel>UTC Time</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <div className="px-3 py-2 text-sm">
-                  <div className="font-mono font-semibold">{utcTimeDate}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Coordinated Universal Time</div>
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setLocation('/settings')} data-testid="menu-utc-goto-settings">
-                  Go to Settings to change timezone
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            {/* Local Time - Mobile */}
+          {/* Mobile Time Display - Unified Dropdown with Local/UTC Selection */}
+          <div className="flex md:hidden items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="flex items-center gap-1 px-1.5 py-1 bg-primary/10 rounded border border-primary/20 text-[10px] h-auto hover:bg-primary/20"
-                  data-testid="dropdown-local-time-mobile"
+                  data-testid="dropdown-time-mobile"
                 >
-                  <Clock className="w-3 h-3 text-primary" />
+                  {timePreference === 'utc' ? (
+                    <Globe className="w-3 h-3 text-primary" />
+                  ) : (
+                    <Clock className="w-3 h-3 text-primary" />
+                  )}
                   <span className="font-mono text-foreground whitespace-nowrap">
-                    {localTimeDate.split('—')[0]?.trim() || localTimeDate.split(' ').slice(0, 2).join(' ')}
+                    {timePreference === 'utc' 
+                      ? (utcTimeDate.split('—')[0]?.trim() || utcTimeDate.split(' ').slice(0, 2).join(' '))
+                      : (localTimeDate.split('—')[0]?.trim() || localTimeDate.split(' ').slice(0, 2).join(' '))
+                    }
                   </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel>Local Time ({localTzAbbr})</DropdownMenuLabel>
+                <DropdownMenuLabel>Select Time Display</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <div className="px-3 py-2">
-                  <div className="font-mono font-semibold text-sm mb-2">{localTimeDate}</div>
-                  <div className="text-xs text-muted-foreground mb-1">Timezone: {settings?.timezone || 'Asia/Dubai'}</div>
-                </div>
+                
+                {/* Local Time Option */}
+                <DropdownMenuItem 
+                  onClick={() => setTimePreference('local')}
+                  className={cn(
+                    "flex flex-col items-start gap-1 cursor-pointer",
+                    timePreference === 'local' && "bg-primary/10"
+                  )}
+                  data-testid="menu-select-local-time"
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    <Clock className="w-4 h-4" />
+                    <span className="font-semibold">Local Time ({localTzAbbr})</span>
+                    {timePreference === 'local' && <span className="ml-auto">✓</span>}
+                  </div>
+                  <div className="font-mono text-sm ml-6">{localTimeDate}</div>
+                  <div className="text-xs text-muted-foreground ml-6">
+                    {settings?.timezone || 'Asia/Dubai'}
+                  </div>
+                </DropdownMenuItem>
+                
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setLocation('/settings')} data-testid="menu-local-goto-settings">
+                
+                {/* UTC Time Option */}
+                <DropdownMenuItem 
+                  onClick={() => setTimePreference('utc')}
+                  className={cn(
+                    "flex flex-col items-start gap-1 cursor-pointer",
+                    timePreference === 'utc' && "bg-primary/10"
+                  )}
+                  data-testid="menu-select-utc-time"
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    <Globe className="w-4 h-4" />
+                    <span className="font-semibold">UTC Time</span>
+                    {timePreference === 'utc' && <span className="ml-auto">✓</span>}
+                  </div>
+                  <div className="font-mono text-sm ml-6">{utcTimeDate}</div>
+                  <div className="text-xs text-muted-foreground ml-6">
+                    Coordinated Universal Time
+                  </div>
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setLocation('/settings')} data-testid="menu-time-goto-settings">
                   Go to Settings to change timezone
                 </DropdownMenuItem>
               </DropdownMenuContent>
