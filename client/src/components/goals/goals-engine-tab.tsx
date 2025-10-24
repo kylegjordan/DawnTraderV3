@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import PerformanceTrackingMetrics from "./performance-tracking-metrics";
+import TradingPaceControl from "./trading-pace-control";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 
 interface Goal {
@@ -242,6 +243,9 @@ export default function GoalsEngineTab() {
 
   return (
     <div className="space-y-6">
+      {/* Trading Pace Control - Global setting for trading aggressiveness */}
+      <TradingPaceControl />
+      
       {/* Performance Tracking Metrics - Primary Goals Table */}
       <PerformanceTrackingMetrics />
     </div>

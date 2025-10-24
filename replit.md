@@ -37,6 +37,8 @@ Systematic Global Settings Migration eliminated all userId dependencies from set
 
 The Local Autonomous Trading Tuning Intelligence (LATTI) service, an evolution of the Local Heuristic Trader Service (LHTS), provides autonomous trading parameter optimization, operating offline with zero external dependencies. It includes MetricsCollector, HeuristicEngine with rule-based decision rules, and AdjustmentExecutor with safety-bounded parameter changes. LATTI supports independent paper and live mode instances, with dual `HeuristicTraderService` instances coordinated by a `LATTIManager` class. A `BaselineIndicator Service` implements a simplified manual-copy baseline approach for paper-to-live parameter transfer, with criteria for baseline establishment and fee-aware calculations. Fee-Aware Metrics Display provides comprehensive fee-aware metrics visualization across the Dashboard and Goals Engine.
 
+Trading Pace Control provides global trading aggressiveness settings via the Goals Engine. It features four pace options (Conservative, Baseline, Optimistic, Aggressive) with dynamic target metrics for risk per trade, trades per day, earnings per trade, and daily profit targets. The trading pace is stored in `system_context.trading_pace` and applies globally to both Live and Paper modes. The UI component is located in the Goals tab and integrates with LATTI for autonomous parameter adjustment within user-defined pace boundaries.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

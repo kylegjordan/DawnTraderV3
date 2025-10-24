@@ -771,6 +771,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Phase 27.F.14.B: LATTI Baseline Indicator API Endpoint
   apiRouter.get('/baseline-indicator/status', authenticateToken, handleBaselineStatus);
 
+  // Phase 27.F.14.B: Trading Pace Control API Endpoints
+  apiRouter.get('/system/trading-pace', authenticateToken, handleGetTradingPace);
+  apiRouter.put('/system/trading-pace', authenticateToken, handleUpdateTradingPace);
+
   // Guardrails endpoints (mode-isolated)
   // Phase 7.4: ConfigBob transparent routing for guardrails endpoint
   apiRouter.get('/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -14212,6 +14216,61 @@ export async function handleBaselineStatus(req: AuthenticatedRequest, res: Respo
     res.json(status);
   } catch (error: any) {
     console.error('[BaselineIndicator-API] Error getting baseline status:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+// ============================================================================
+// Phase 27.F.14.B: Trading Pace Control API Endpoints
+// ============================================================================
+
+/**
+ * Get current trading pace from system context
+ * GET /api/system/trading-pace
+ */
+export async function handleGetTradingPace(req: AuthenticatedRequest, res: Response) {
+  try {
+    // Trading pace is global, we can use either mode to fetch it
+    // Since it's the same across both modes, we'll use paper mode
+    const context = await storage.getSystemContext('paper');
+    
+    res.json({
+      tradingPace: context?.tradingPace || 'baseline'
+    });
+  } catch (error: any) {
+    console.error('[TradingPace-API] Error getting trading pace:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Update trading pace in system context (applies to both modes)
+ * PUT /api/system/trading-pace
+ */
+export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { tradingPace } = req.body;
+    
+    // Validate trading pace value
+    const validPaces = ['conservative', 'baseline', 'optimistic', 'aggressive'];
+    if (!validPaces.includes(tradingPace)) {
+      return res.status(400).json({ 
+        error: `Invalid trading pace. Must be one of: ${validPaces.join(', ')}` 
+      });
+    }
+    
+    // Update trading pace for BOTH modes since it's a global setting
+    await storage.updateSystemContext('paper', { tradingPace });
+    await storage.updateSystemContext('live', { tradingPace });
+    
+    console.log(`[TradingPace-API] Updated trading pace to: ${tradingPace} (global for both modes)`);
+    
+    res.json({
+      success: true,
+      tradingPace
+    });
+  } catch (error: any) {
+    console.error('[TradingPace-API] Error updating trading pace:', error.message);
     res.status(500).json({ error: error.message });
   }
 }
