@@ -485,7 +485,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   className="font-semibold"
                   data-testid="menu-live-mode"
                 >
-                  LIVE Trading
+                  Live
                   {currentMode === 'live' && ' ✓'}
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -494,7 +494,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   className="font-semibold"
                   data-testid="menu-paper-mode"
                 >
-                  PAPER Trading
+                  Paper
                   {currentMode === 'paper' && ' ✓'}
                 </DropdownMenuItem>
                 {currentMode === 'paper' && (
@@ -594,8 +594,27 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         </div>
         
         {/* Right Actions */}
-        <div className="flex items-center gap-3">
-          {/* Dual Time Display: UTC + Local */}
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          {/* Mobile Time Display (compact) */}
+          <div className="flex md:hidden items-center gap-1">
+            {/* UTC Time - Mobile */}
+            <div className="flex items-center gap-1 px-1.5 py-1 bg-muted rounded text-[10px]">
+              <Globe className="w-3 h-3 text-muted-foreground" />
+              <span className="font-mono text-foreground" data-testid="text-utc-time-mobile">
+                {utcTimeDate.split(' ')[1]}
+              </span>
+            </div>
+            
+            {/* Local Time - Mobile */}
+            <div className="flex items-center gap-1 px-1.5 py-1 bg-primary/10 rounded border border-primary/20 text-[10px]">
+              <Clock className="w-3 h-3 text-primary" />
+              <span className="font-mono text-foreground" data-testid="text-local-time-mobile">
+                {localTimeDate.split(' ')[1]}
+              </span>
+            </div>
+          </div>
+
+          {/* Desktop Time Display: UTC + Local */}
           <div className="hidden md:flex items-center gap-3">
             {/* UTC Time */}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md">
