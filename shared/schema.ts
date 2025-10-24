@@ -3816,6 +3816,47 @@ export const systemContext = pgTable("system_context", {
   isEngineActiveIdx: index("system_context_is_engine_active_idx").on(table.isEngineActive),
 }));
 
+// Phase 27.F.14.B: LATTI Baseline History Table
+// Tracks parameter recalibration events and performance metrics before/after adjustments
+export const lattiBaselineHistory = pgTable("latti_baseline_history", {
+  id: serial("id").primaryKey(),
+  tradingMode: tradingModeEnum("trading_mode").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  triggerReason: varchar("trigger_reason", { length: 100 }).notNull(), // e.g., 'knowledge_bridge_sync', 'event_driven_reanchor'
+  tradesSinceAnchor: integer("trades_since_anchor").notNull().default(0),
+  // Win rate metrics
+  winRateBefore: decimal("win_rate_before", { precision: 5, scale: 4 }),
+  winRateAfter: decimal("win_rate_after", { precision: 5, scale: 4 }),
+  // Profit factor metrics
+  profitFactorBefore: decimal("profit_factor_before", { precision: 8, scale: 4 }),
+  profitFactorAfter: decimal("profit_factor_after", { precision: 8, scale: 4 }),
+  // Drawdown metrics
+  drawdownBefore: decimal("drawdown_before", { precision: 10, scale: 2 }),
+  drawdownAfter: decimal("drawdown_after", { precision: 10, scale: 2 }),
+  // Risk parameters
+  riskPerTradeBefore: decimal("risk_per_trade_before", { precision: 10, scale: 2 }),
+  riskPerTradeAfter: decimal("risk_per_trade_after", { precision: 10, scale: 2 }),
+  // Trading frequency
+  tradesPerDayBefore: decimal("trades_per_day_before", { precision: 8, scale: 2 }),
+  tradesPerDayAfter: decimal("trades_per_day_after", { precision: 8, scale: 2 }),
+  // Expected profit
+  expectedProfitPerTradeBefore: decimal("expected_profit_per_trade_before", { precision: 10, scale: 4 }),
+  expectedProfitPerTradeAfter: decimal("expected_profit_per_trade_after", { precision: 10, scale: 4 }),
+  // Additional metadata
+  metadata: jsonb("metadata").default(sql`'{}'`),
+}, (table) => ({
+  tradingModeIdx: index("latti_baseline_history_trading_mode_idx").on(table.tradingMode),
+  timestampIdx: index("latti_baseline_history_timestamp_idx").on(table.timestamp),
+}));
+
+export const insertLattiBaselineHistorySchema = createInsertSchema(lattiBaselineHistory).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertLattiBaselineHistory = z.infer<typeof insertLattiBaselineHistorySchema>;
+export type LattiBaselineHistory = typeof lattiBaselineHistory.$inferSelect;
+
 // Insert schemas for Phase 17
 export const insertClusterNodeSchema = createInsertSchema(clusterNode).omit({ 
   id: true, 
