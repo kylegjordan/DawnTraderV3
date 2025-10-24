@@ -122,10 +122,19 @@ export default function ReportsPage() {
         className="space-y-6"
       >
         <TabsList className="grid w-full max-w-4xl grid-cols-4">
-          <TabsTrigger value="trade-history" data-testid="tab-trade-history">Trade History</TabsTrigger>
-          <TabsTrigger value="canned" data-testid="tab-canned-reports">Canned Reports</TabsTrigger>
-          <TabsTrigger value="custom" data-testid="tab-custom-reports">Custom Reports</TabsTrigger>
-          <TabsTrigger value="exports" data-testid="tab-exports">Exports</TabsTrigger>
+          <TabsTrigger value="trade-history" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-trade-history">
+            <span className="hidden xs:inline">Trade History</span>
+            <span className="xs:hidden">History</span>
+          </TabsTrigger>
+          <TabsTrigger value="canned" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-canned-reports">
+            <span className="hidden xs:inline">Canned Reports</span>
+            <span className="xs:hidden">Canned</span>
+          </TabsTrigger>
+          <TabsTrigger value="custom" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-custom-reports">
+            <span className="hidden xs:inline">Custom Reports</span>
+            <span className="xs:hidden">Custom</span>
+          </TabsTrigger>
+          <TabsTrigger value="exports" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-exports">Exports</TabsTrigger>
         </TabsList>
 
         {/* Canned Reports Tab */}

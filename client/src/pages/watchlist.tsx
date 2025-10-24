@@ -271,17 +271,20 @@ export default function WatchlistPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3" data-testid="watchlist-tabs">
-          <TabsTrigger value="ai-opportunities" className="flex items-center gap-2" data-testid="tab-ai-opportunities">
-            <Sparkles className="w-4 h-4" />
-            AI Opportunities
+          <TabsTrigger value="ai-opportunities" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-ai-opportunities">
+            <Sparkles className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">AI Opportunities</span>
+            <span className="xs:hidden">AI</span>
           </TabsTrigger>
-          <TabsTrigger value="user-watchlist" className="flex items-center gap-2" data-testid="tab-user-watchlist">
-            <List className="w-4 h-4" />
-            User Watchlists
+          <TabsTrigger value="user-watchlist" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-user-watchlist">
+            <List className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">User Watchlists</span>
+            <span className="xs:hidden">Watchlist</span>
           </TabsTrigger>
-          <TabsTrigger value="search-analysis" className="flex items-center gap-2" data-testid="tab-search-analysis">
-            <Search className="w-4 h-4" />
-            Search and Analysis
+          <TabsTrigger value="search-analysis" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-search-analysis">
+            <Search className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Search and Analysis</span>
+            <span className="xs:hidden">Search</span>
           </TabsTrigger>
         </TabsList>
 

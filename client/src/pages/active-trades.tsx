@@ -227,22 +227,26 @@ function TradingPageContent() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className={`grid w-full ${showFilterInsights ? 'grid-cols-4' : 'grid-cols-3'}`} data-testid="trading-tabs">
-          <TabsTrigger value="open" className="flex items-center gap-2" data-testid="tab-open-trades">
-            <BarChart3 className="w-4 h-4" />
-            Open Trades
+          <TabsTrigger value="open" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-open-trades">
+            <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Open Trades</span>
+            <span className="xs:hidden">Open</span>
           </TabsTrigger>
-          <TabsTrigger value="ready" className="flex items-center gap-2" data-testid="tab-ready-to-buy">
-            <TrendingUp className="w-4 h-4" />
-            Ready to Buy
+          <TabsTrigger value="ready" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-ready-to-buy">
+            <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Ready to Buy</span>
+            <span className="xs:hidden">Ready</span>
           </TabsTrigger>
-          <TabsTrigger value="filtered" className="flex items-center gap-2" data-testid="tab-filtered-pairs">
-            <Filter className="w-4 h-4" />
-            Filtered Pairs
+          <TabsTrigger value="filtered" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-filtered-pairs">
+            <Filter className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Filtered Pairs</span>
+            <span className="xs:hidden">Filtered</span>
           </TabsTrigger>
           {showFilterInsights && (
-            <TabsTrigger value="insights" className="flex items-center gap-2" data-testid="tab-filter-insights">
-              <Lightbulb className="w-4 h-4" />
-              Filter Insights
+            <TabsTrigger value="insights" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-filter-insights">
+              <Lightbulb className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Filter Insights</span>
+              <span className="xs:hidden">Insights</span>
             </TabsTrigger>
           )}
         </TabsList>
