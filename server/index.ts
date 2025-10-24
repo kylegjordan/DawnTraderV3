@@ -205,18 +205,17 @@ app.use((req, res, next) => {
     console.log('[Server] ⚠️  Walter Health Monitor DISABLED (WALTER_ENABLED=false)');
   }
 
-  // Phase 27.F.14: Start Local Heuristic Trader Service (Walter Stand-In)
-  const LHTS_ENABLED = process.env.LHTS_ENABLED !== 'false'; // Enabled by default
-  const LHTS_MODE = (process.env.LHTS_MODE || 'paper') as 'paper' | 'live';
-  if (LHTS_ENABLED) {
-    import('./services/heuristic-trader').then(({ heuristicTrader }) => {
-      heuristicTrader.start(LHTS_MODE).catch((error) => {
-        console.error('[Server] Failed to start Local Heuristic Trader Service:', error);
+  // Phase 27.F.14.B: Start LATTI (Local Autonomous Trading Tuning Intelligence) - Dual Mode
+  const LATTI_ENABLED = process.env.LATTI_ENABLED !== 'false'; // Enabled by default
+  if (LATTI_ENABLED) {
+    import('./services/heuristic-trader').then(({ lattiManager }) => {
+      lattiManager.startBoth().catch((error) => {
+        console.error('[Server] Failed to start LATTI dual-mode operation:', error);
       });
-      console.log(`[Server] ✅ Local Heuristic Trader Service started in ${LHTS_MODE} mode`);
+      console.log('[Server] ✅ LATTI (Local Autonomous Trading Tuning Intelligence) started in DUAL MODE');
     });
   } else {
-    console.log('[Server] ⚠️  Local Heuristic Trader Service DISABLED (LHTS_ENABLED=false)');
+    console.log('[Server] ⚠️  LATTI DISABLED (LATTI_ENABLED=false)');
   }
 
   // Phase 8.8.2: Initialize Memory Lifecycle Manager (async, non-blocking)

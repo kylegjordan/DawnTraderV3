@@ -3797,6 +3797,16 @@ export const systemContext = pgTable("system_context", {
   lhtsEnabled: boolean("lhts_enabled").default(false), // Whether LHTS is running
   lhtsLastRun: timestamp("lhts_last_run", { withTimezone: true }), // Last evaluation cycle
   lhtsAdjustmentsCount: integer("lhts_adjustments_count").default(0), // Total adjustments made
+  // Phase 27.F.14.B: LATTI (Local Autonomous Trading Tuning Intelligence) expansion
+  lattiMode: varchar("latti_mode", { length: 20 }).default("paper"), // Active LATTI mode: 'paper' | 'live'
+  lattiLastAnchorTime: timestamp("latti_last_anchor_time", { withTimezone: true }), // Last baseline re-anchor
+  lattiLastModeSyncTime: timestamp("latti_last_mode_sync_time", { withTimezone: true }), // Last KnowledgeBridge sync
+  tradingPace: varchar("trading_pace", { length: 20 }).default("baseline"), // 'conservative' | 'baseline' | 'optimistic' | 'aggressive'
+  // Fee configuration for profitability calculations
+  makerFeePct: decimal("maker_fee_pct", { precision: 5, scale: 4 }).default("0.0016"), // Kraken maker fee (0.16%)
+  takerFeePct: decimal("taker_fee_pct", { precision: 5, scale: 4 }).default("0.0026"), // Kraken taker fee (0.26%)
+  defaultFeeMode: varchar("default_fee_mode", { length: 10 }).default("taker"), // 'maker' | 'taker'
+  minNetProfitThreshold: decimal("min_net_profit_threshold", { precision: 5, scale: 4 }).default("0.0030"), // Min 0.30% after fees
   metadata: jsonb("metadata").default(sql`'{}'`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

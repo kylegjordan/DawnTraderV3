@@ -703,17 +703,17 @@ class AdjustmentExecutor {
   }
 
   /**
-   * Save adjustment log to database
+   * Save adjustment log to database for durable audit trail
    */
   private async saveAdjustmentLog(log: AdjustmentLog): Promise<void> {
     try {
-      // Store in logs table for durable audit trail
-      await storage.createSystemLog({
-        level: 'info',
-        category: 'heuristic_trader',
-        message: `LHTS Adjustment: ${log.parameterName} ${log.oldValue.toFixed(2)} → ${log.newValue.toFixed(2)} (${log.changePercent > 0 ? '+' : ''}${log.changePercent}%)`,
+      // Phase 27.F.14.B: Use createTradingAuditLog for durable persistence
+      await storage.createTradingAuditLog({
+        userId: 'system', // LATTI is system-level, not user-specific
+        action: `latti_adjustment_${log.parameterType}`,
+        mode: log.mode,
+        triggeredBy: 'latti_heuristic',
         metadata: {
-          mode: log.mode,
           ruleId: log.ruleId,
           parameterType: log.parameterType,
           parameterName: log.parameterName,
@@ -724,22 +724,24 @@ class AdjustmentExecutor {
           executionTimeMs: log.executionTimeMs,
           triggerMetrics: {
             winRate: log.triggerMetrics.winRate,
+            profitFactor: log.triggerMetrics.profitFactor,
             drawdown: log.triggerMetrics.currentDrawdown,
-            exposure: log.triggerMetrics.exposurePercent
+            exposure: log.triggerMetrics.exposurePercent,
+            tradesLast24h: log.triggerMetrics.tradesLast24h
           }
-        },
-        userId: null // System-level log
+        }
       });
       
-      console.log(`[${this.MODULE_NAME}] 📊 Adjustment logged to database:`, {
+      console.log(`[${this.MODULE_NAME}] 📊 LATTI Adjustment Applied & Logged:`, {
+        mode: log.mode,
         ruleId: log.ruleId,
         parameter: log.parameterName,
-        change: `${log.oldValue.toFixed(2)} → ${log.newValue.toFixed(2)}`,
+        change: `${log.oldValue.toFixed(2)} → ${log.newValue.toFixed(2)} (${log.changePercent > 0 ? '+' : ''}${log.changePercent}%)`,
         reason: log.reason
       });
     } catch (error: any) {
       console.error(`[${this.MODULE_NAME}] ❌ Failed to save adjustment log:`, error.message);
-      // Fallback to console logging
+      // Fallback to console-only logging if database write fails
       console.log(`[${this.MODULE_NAME}] 📊 Adjustment (console fallback):`, {
         ruleId: log.ruleId,
         parameter: log.parameterName,
@@ -960,7 +962,86 @@ export class HeuristicTraderService {
 }
 
 // ============================================================================
-// SINGLETON EXPORT
+// SINGLETON EXPORT (Legacy - Phase 27.F.14)
 // ============================================================================
 
 export const heuristicTrader = new HeuristicTraderService();
+
+// ============================================================================
+// DUAL-MODE LATTI INSTANCES (Phase 27.F.14.B)
+// ============================================================================
+// Local Autonomous Trading Tuning Intelligence - operates independently in
+// both paper and live trading modes for comprehensive optimization coverage
+
+console.log('[LATTI] Module loaded - creating dual-mode instances...');
+export const lattiPaper = new HeuristicTraderService();
+export const lattiLive = new HeuristicTraderService();
+console.log('[LATTI] Paper and Live instances created');
+
+// LATTI Manager for coordinated dual-mode operations
+export class LATTIManager {
+  private readonly MODULE_NAME = 'LATTIManager';
+  
+  /**
+   * Start both LATTI instances
+   */
+  async startBoth(): Promise<void> {
+    console.log(`[${this.MODULE_NAME}] 🚀 Starting LATTI dual-mode operation...`);
+    
+    try {
+      await Promise.all([
+        lattiPaper.start('paper'),
+        lattiLive.start('live')
+      ]);
+      
+      console.log(`[${this.MODULE_NAME}] ✅ Both LATTI instances started successfully`);
+      console.log(`[${this.MODULE_NAME}]    - Paper mode: ACTIVE`);
+      console.log(`[${this.MODULE_NAME}]    - Live mode: ACTIVE`);
+    } catch (error: any) {
+      console.error(`[${this.MODULE_NAME}] ❌ Failed to start LATTI instances:`, error.message);
+      throw error;
+    }
+  }
+  
+  /**
+   * Stop both LATTI instances
+   */
+  async stopBoth(): Promise<void> {
+    console.log(`[${this.MODULE_NAME}] 🛑 Stopping LATTI dual-mode operation...`);
+    
+    await Promise.all([
+      lattiPaper.stop(),
+      lattiLive.stop()
+    ]);
+    
+    console.log(`[${this.MODULE_NAME}] ✅ Both LATTI instances stopped`);
+  }
+  
+  /**
+   * Get health status of both instances
+   */
+  async getHealthStatus(): Promise<{ paper: LHTSHealth; live: LHTSHealth }> {
+    const [paper, live] = await Promise.all([
+      lattiPaper.getHealth(),
+      lattiLive.getHealth()
+    ]);
+    
+    return { paper, live };
+  }
+  
+  /**
+   * Emergency stop for both instances
+   */
+  async emergencyStopAll(): Promise<void> {
+    console.log(`[${this.MODULE_NAME}] 🚨 EMERGENCY STOP - Halting all LATTI operations`);
+    
+    await Promise.all([
+      lattiPaper.emergencyStop(),
+      lattiLive.emergencyStop()
+    ]);
+    
+    console.log(`[${this.MODULE_NAME}] ✅ All LATTI instances emergency stopped`);
+  }
+}
+
+export const lattiManager = new LATTIManager();
