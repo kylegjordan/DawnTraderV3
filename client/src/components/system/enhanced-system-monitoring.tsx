@@ -453,101 +453,101 @@ export default function EnhancedSystemMonitoring() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="relative">
         <div className="sticky top-0 z-20 bg-background pb-16">
-          <TabsList className="flex w-full flex-wrap gap-y-3 bg-background pt-2 pb-6" data-testid="tabs-system-monitoring">
-          <TabsTrigger value="performance" data-testid="tab-performance">
-            <Cpu className="w-4 h-4 mr-2" />
+          <TabsList className="flex w-full flex-wrap gap-y-2 bg-background pt-2 pb-6" data-testid="tabs-system-monitoring">
+          <TabsTrigger value="performance" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-performance">
+            <Cpu className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Performance
           </TabsTrigger>
-          <TabsTrigger value="trading-engine" data-testid="tab-trading-engine">
-            <TrendingUp className="w-4 h-4 mr-2" />
+          <TabsTrigger value="trading-engine" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-trading-engine">
+            <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Trading Engine
           </TabsTrigger>
-          <TabsTrigger value="walter" data-testid="tab-walter">
-            <Bot className="w-4 h-4 mr-2" />
+          <TabsTrigger value="walter" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-walter">
+            <Bot className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Walter Activity
           </TabsTrigger>
-          <TabsTrigger value="database" data-testid="tab-database">
-            <Database className="w-4 h-4 mr-2" />
+          <TabsTrigger value="database" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-database">
+            <Database className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Database
           </TabsTrigger>
-          <TabsTrigger value="awareness" data-testid="tab-awareness">
-            <Brain className="w-4 h-4 mr-2" />
+          <TabsTrigger value="awareness" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-awareness">
+            <Brain className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Awareness
           </TabsTrigger>
-          <TabsTrigger value="alignment" data-testid="tab-alignment">
-            <CheckCircle2 className="w-4 h-4 mr-2" />
+          <TabsTrigger value="alignment" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-alignment">
+            <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Alignment
           </TabsTrigger>
-          <TabsTrigger value="strategy" data-testid="tab-strategy">
-            <Target className="w-4 h-4 mr-2" />
+          <TabsTrigger value="strategy" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-strategy">
+            <Target className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Strategy
           </TabsTrigger>
-          <TabsTrigger value="simulation" data-testid="tab-simulation">
-            <Sparkles className="w-4 h-4 mr-2" />
+          <TabsTrigger value="simulation" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-simulation">
+            <Sparkles className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Simulation
           </TabsTrigger>
-          <TabsTrigger value="reflection" data-testid="tab-reflection">
-            <Eye className="w-4 h-4 mr-2" />
+          <TabsTrigger value="reflection" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-reflection">
+            <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Reflection
           </TabsTrigger>
-          <TabsTrigger value="ethics" data-testid="tab-ethics">
-            <CheckCircle2 className="w-4 h-4 mr-2" />
+          <TabsTrigger value="ethics" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-ethics">
+            <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Ethics
           </TabsTrigger>
-          <TabsTrigger value="federation" data-testid="tab-federation">
-            <Globe className="w-4 h-4 mr-2" />
+          <TabsTrigger value="federation" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-federation">
+            <Globe className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Federation
           </TabsTrigger>
-          <TabsTrigger value="collaboration" data-testid="tab-collaboration">
-            <Bot className="w-4 h-4 mr-2" />
+          <TabsTrigger value="collaboration" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-collaboration">
+            <Bot className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Collaboration
           </TabsTrigger>
-          <TabsTrigger value="learning" data-testid="tab-learning">
-            <GraduationCap className="w-4 h-4 mr-2" />
+          <TabsTrigger value="learning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-learning">
+            <GraduationCap className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Learning
           </TabsTrigger>
-          <TabsTrigger value="oversight" data-testid="tab-oversight">
-            <Shield className="w-4 h-4 mr-2" />
+          <TabsTrigger value="oversight" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-oversight">
+            <Shield className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Oversight
           </TabsTrigger>
-          <TabsTrigger value="memory" data-testid="tab-memory">
-            <Archive className="w-4 h-4 mr-2" />
+          <TabsTrigger value="memory" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-memory">
+            <Archive className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Memory
           </TabsTrigger>
-          <TabsTrigger value="core" data-testid="tab-core">
-            <Cpu className="w-4 h-4 mr-2" />
+          <TabsTrigger value="core" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-core">
+            <Cpu className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Core
           </TabsTrigger>
-          <TabsTrigger value="safety" data-testid="tab-safety">
-            <Shield className="w-4 h-4 mr-2" />
+          <TabsTrigger value="safety" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-safety">
+            <Shield className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Safety
           </TabsTrigger>
-          <TabsTrigger value="perf-metrics" data-testid="tab-perf-metrics">
-            <Gauge className="w-4 h-4 mr-2" />
+          <TabsTrigger value="perf-metrics" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-perf-metrics">
+            <Gauge className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Task Performance
           </TabsTrigger>
-          <TabsTrigger value="alerts" data-testid="tab-alerts">
-            <AlertTriangle className="w-4 h-4 mr-2" />
+          <TabsTrigger value="alerts" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-alerts">
+            <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Alerts ({errors.filter(e => !e.resolved).length})
           </TabsTrigger>
-          <TabsTrigger value="ux-monitor" data-testid="tab-ux-monitor">
-            <Monitor className="w-4 h-4 mr-2" />
+          <TabsTrigger value="ux-monitor" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-ux-monitor">
+            <Monitor className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             UX Monitor
           </TabsTrigger>
-          <TabsTrigger value="introspection" data-testid="tab-introspection">
-            <ScanLine className="w-4 h-4 mr-2" />
+          <TabsTrigger value="introspection" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-introspection">
+            <ScanLine className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Introspection
           </TabsTrigger>
-          <TabsTrigger value="knowledge" data-testid="tab-knowledge">
-            <BookOpen className="w-4 h-4 mr-2" />
+          <TabsTrigger value="knowledge" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-knowledge">
+            <BookOpen className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Knowledge
           </TabsTrigger>
-          <TabsTrigger value="cluster" data-testid="tab-cluster">
-            <Server className="w-4 h-4 mr-2" />
+          <TabsTrigger value="cluster" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-cluster">
+            <Server className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Cluster
           </TabsTrigger>
-          <TabsTrigger value="learning" data-testid="tab-learning">
-            <Brain className="w-4 h-4 mr-2" />
+          <TabsTrigger value="learning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-learning">
+            <Brain className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Learning Network
           </TabsTrigger>
         </TabsList>
