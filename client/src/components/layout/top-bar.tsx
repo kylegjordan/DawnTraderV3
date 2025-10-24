@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ConfirmLiveTradingModal } from "@/components/trading/confirm-live-trading-modal";
 import { ConfirmStopLiveTradingModal } from "@/components/trading/confirm-stop-live-trading-modal";
+import { ConfirmBalanceModal } from "@/components/trading/confirm-balance-modal";
 import { useTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -64,6 +65,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [timePreference, setTimePreference] = useState<'local' | 'utc'>('local');
   const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
   const [showStopConfirmation, setShowStopConfirmation] = useState(false);
+  const [showBalanceConfirmation, setShowBalanceConfirmation] = useState(false);
+  const [balanceToConfirm, setBalanceToConfirm] = useState(800);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetBalance, setResetBalance] = useState("800");
   const [, setLocation] = useLocation();
@@ -168,7 +171,16 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     try {
       if (enabled) {
         console.log('[Phase-27.F.6] Starting paper trading...');
-        await startTrading('paper');
+        const result = await startTrading('paper');
+        
+        // Phase 27.F.14.D-POST: Check if balance confirmation is required
+        if (result && typeof result === 'object' && 'requiresConfirmation' in result && result.requiresConfirmation) {
+          console.log('[Phase-27.F.14.D-POST] Balance confirmation required');
+          setBalanceToConfirm(result.currentBalance || 800);
+          setShowBalanceConfirmation(true);
+          return; // Wait for user to confirm balance
+        }
+        
         toast({
           title: "Trading Started",
           description: "Paper Trading Simulation engine started successfully",
@@ -191,6 +203,15 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
           const jsonMatch = error.message.match(/\d+:\s*({.*})/);
           if (jsonMatch) {
             const errorData = JSON.parse(jsonMatch[1]);
+            
+            // Phase 27.F.14.D-POST: Check if balance confirmation is required in error
+            if (errorData.requiresConfirmation) {
+              console.log('[Phase-27.F.14.D-POST] Balance confirmation required (from error)');
+              setBalanceToConfirm(errorData.currentBalance || 800);
+              setShowBalanceConfirmation(true);
+              return; // Wait for user to confirm balance
+            }
+            
             errorMessage = errorData.message || errorData.error || errorMessage;
           } else {
             errorMessage = error.message;
@@ -289,6 +310,60 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       });
       
       // Refetch status to ensure UI reflects actual backend state
+      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
+    }
+  };
+
+  // Phase 27.F.14.D-POST: Handle balance confirmation
+  const handleConfirmBalance = async (balance: number) => {
+    console.log('[Phase-27.F.14.D-POST] Confirming balance:', balance);
+    
+    try {
+      // Send balance confirmation to backend
+      await apiRequest('POST', '/api/paper-sim/confirm-balance', { 
+        balance, 
+        mode: currentMode 
+      });
+      
+      // Close the modal
+      setShowBalanceConfirmation(false);
+      
+      // Retry starting trading
+      console.log('[Phase-27.F.14.D-POST] Balance confirmed, retrying start...');
+      await startTrading('paper');
+      
+      toast({
+        title: "Trading Started",
+        description: `Paper Trading started with balance $${balance.toFixed(2)}`,
+      });
+    } catch (error: any) {
+      let errorMessage = "Failed to confirm balance and start trading";
+      
+      // Parse error message from API response
+      if (error?.message) {
+        try {
+          // Extract JSON from error message (format: "400: {json}")
+          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
+          if (jsonMatch) {
+            const errorData = JSON.parse(jsonMatch[1]);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            errorMessage = error.message;
+          }
+        } catch {
+          errorMessage = error.message;
+        }
+      }
+      
+      console.error('[Phase-27.F.14.D-POST] Balance confirmation error:', errorMessage);
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      
+      // Refetch status to ensure UI reflects actual backend state
+      await queryClient.refetchQueries({ queryKey: ['/api/paper-sim/status'] });
       await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };
@@ -785,6 +860,15 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         open={showStopConfirmation}
         onOpenChange={setShowStopConfirmation}
         onConfirm={handleConfirmStopLiveTrading}
+      />
+      
+      {/* Phase 27.F.14.D-POST: Balance Confirmation Modal */}
+      <ConfirmBalanceModal
+        open={showBalanceConfirmation}
+        onOpenChange={setShowBalanceConfirmation}
+        currentBalance={balanceToConfirm}
+        onConfirm={handleConfirmBalance}
+        mode={currentMode}
       />
       
       {/* Phase 27.F.13.C: Reset Paper Simulation Dialog */}
