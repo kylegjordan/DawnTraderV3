@@ -1,0 +1,104 @@
+🧭 REPLIT DIRECTIVE — Phase 27.F.14.D-PRE.3
+Restore Portfolio Balance Confirmation Prompt on Paper Trading Start
+
+Purpose:
+When Paper Trading starts, the system should automatically prompt the user to confirm or update their starting portfolio balance (for example, $800).
+That prompt must appear before LATTI begins trading so that all calculations, baselines, and risk limits start from the correct balance.
+
+🧩 Background
+
+In earlier phases, a pop-up appeared each time you began Paper Trading to confirm or edit the portfolio balance.
+
+After the “global mode” update (Phase 27.F.13.M), the system now uses a single shared balance for Paper and Live modes.
+
+Because of that change, the system no longer shows the confirmation prompt — it assumes the old value ($800) and starts trading immediately.
+
+This task restores that confirmation step.
+
+🧱 What Brett Needs To Do
+1️⃣ Backend logic
+
+Make sure the system checks the Paper Mode portfolio balance every time Paper Trading starts.
+
+If the balance is missing or hasn’t been confirmed within the last 24 hours, it must stop startup and display a prompt asking the user to confirm or update it.
+
+Once confirmed, the system should record the new balance, then continue startup and initialize LATTI’s baseline.
+
+Expected log messages when this works correctly:
+
+[PaperSim] Portfolio balance confirmation required
+[UI] Modal opened: Confirm starting balance
+[PaperSim] Portfolio balance confirmed: $800
+[LATTI][Paper] Baseline initialization started
+
+2️⃣ Front-end behavior
+
+When the confirmation prompt appears, it should clearly ask:
+
+Confirm Starting Portfolio Balance
+“Enter your starting portfolio balance for Paper Mode.”
+(Default = last confirmed balance or $800)
+[Confirm] [Cancel]
+
+Once the user clicks Confirm, the chosen balance should be saved and displayed in the logs, then LATTI should start trading normally.
+
+3️⃣ Portfolio update request
+
+Confirm that the system records the new value in the database under portfolio_state for mode = paper.
+
+The logs should show something like:
+
+[PaperSim] Portfolio balance updated to: $900 for mode=paper
+
+4️⃣ Validation checklist
+
+After Replit implements and restarts the app:
+
+Check	Expected Result
+When Paper Trading starts	The confirmation prompt appears automatically
+After confirming balance	LATTI starts immediately
+Database	Shows the updated value for Paper Mode
+Logs	Show “Portfolio balance set” before baseline starts
+Repeat start within 24 h	Prompt skipped (reuses last confirmed value)
+Fee-aware & risk logic	Reflect the confirmed balance
+5️⃣ Test Procedure (for Brett)
+
+Stop the app completely.
+
+Start the app again.
+
+Login credentials for testing:
+
+Username: testuser123
+Password: SecurePass123!
+
+
+Confirm that the landing page is the Dashboard and that Paper Mode is selected in the blue bar.
+
+Click the Trading toggle to start Paper Trading.
+
+The balance prompt should appear automatically.
+
+Type or confirm the starting balance (e.g., 800).
+
+Press Confirm.
+
+Check the console for:
+
+[PaperSim] Portfolio balance confirmed:
+
+[LATTI][Paper] Baseline initialization started
+
+LATTI should then begin trading normally.
+
+✅ Success Criteria
+
+Balance prompt always appears the first time Paper Trading starts or after 24 hours.
+
+Confirmed balance is saved and logged.
+
+LATTI baseline starts immediately afterward.
+
+Prompt is skipped on later starts if the balance was already confirmed recently.
+
+No delays or crashes during startup.

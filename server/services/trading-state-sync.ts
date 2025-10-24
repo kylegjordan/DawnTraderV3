@@ -178,18 +178,18 @@ export class TradingStateSync {
 
   /**
    * Emergency stop - force paper mode and disable engine
+   * Phase 27.F.14.D: Updated to use mode-based system context
    */
   async emergencyStop(userId: string, reason: string): Promise<void> {
-    console.warn(`[TradingStateSync] EMERGENCY STOP triggered for user ${userId}: ${reason}`);
+    console.warn(`[TradingStateSync] EMERGENCY STOP triggered: ${reason}`);
     
     const previousMode = this.getTradingMode(userId);
     
     // Force paper mode
     this.currentMode.set(userId, 'paper');
     
-    // Persist emergency state
+    // Phase 27.F.14.D: Persist emergency state using mode-based context (paper mode)
     await storage.upsertSystemContext({
-      userId,
       tradingMode: 'paper',
       isEngineActive: false,
       lastModeChange: new Date(),
@@ -216,19 +216,22 @@ export class TradingStateSync {
 
   /**
    * Restore to last safe state
+   * Phase 27.F.14.D: Updated to use mode-based system context
    */
   async restoreLastSafeState(userId: string): Promise<SystemContext | undefined> {
-    const context = await storage.getSystemContext(userId);
+    // Phase 27.F.14.D: Get current mode for this user, then check that mode's context
+    const currentMode = this.getTradingMode(userId);
+    const context = await storage.getSystemContext(currentMode);
     
     if (!context || !context.lastSafeState) {
-      console.warn(`[TradingStateSync] No safe state to restore for user ${userId}`);
+      console.warn(`[TradingStateSync] No safe state to restore (current mode: ${currentMode})`);
       return undefined;
     }
     
     const lastSafeState = context.lastSafeState as any;
     const safeMode = lastSafeState.mode || 'paper';
     
-    console.log(`[TradingStateSync] Restoring user ${userId} to last safe state: ${safeMode}`);
+    console.log(`[TradingStateSync] Restoring to last safe state: ${safeMode} (from ${currentMode} context)`);
     
     return await this.setTradingMode(userId, safeMode, 'system', 'Restored from safe state');
   }
@@ -348,11 +351,12 @@ export class TradingStateSync {
 
   /**
    * Get diagnostic information
+   * Phase 27.F.14.D: Updated to use mode-based system context
    */
   async getDiagnostics(userId: string): Promise<any> {
-    const context = await storage.getSystemContext(userId);
     const currentMode = this.getTradingMode(userId);
-    const isActive = await this.isEngineActive(userId);
+    const context = await storage.getSystemContext(currentMode);
+    const isActive = await this.isEngineActive(currentMode);
     
     return {
       userId,
