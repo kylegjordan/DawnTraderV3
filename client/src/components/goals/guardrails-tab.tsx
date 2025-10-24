@@ -12,6 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { formatNumberWithCommas, parseCommaFormattedNumber } from "@/lib/utils";
+import { useBaselineStatus } from "@/hooks/use-baseline-status";
+import { Badge } from "@/components/ui/badge";
+import { DollarSign, TrendingUp, CheckCircle2, Clock } from "lucide-react";
 import { 
   Tooltip,
   TooltipContent,
@@ -60,6 +63,9 @@ export default function GuardrailsTab() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const lastMode = useRef<string | null>(null);
+  
+  // Phase 27.F.14.B - Task 3: Fee-Aware Metrics Display
+  const { data: baselineStatus } = useBaselineStatus({ enabled: mode === 'paper' });
 
   const { data: currentSettings, isLoading } = useQuery<Guardrails>({
     queryKey: ['/api/guardrails', mode],
@@ -476,6 +482,119 @@ export default function GuardrailsTab() {
             When enabled, the AI can modify these guardrails to optimize risk/reward balance while staying within safe limits
           </p>
         </div>
+
+        {/* Phase 27.F.14.B - Task 3: Fee-Aware Metrics Display (Paper Mode Only) */}
+        {mode === 'paper' && baselineStatus && (
+          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-lg space-y-4" data-testid="fee-aware-metrics">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <h3 className="font-semibold text-blue-900 dark:text-blue-100">LATTI Baseline Status</h3>
+              </div>
+              {baselineStatus.snapshot?.established ? (
+                <Badge variant="default" className="bg-green-600" data-testid="baseline-badge-established">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  Established
+                </Badge>
+              ) : (
+                <Badge variant="secondary" data-testid="baseline-badge-pending">
+                  <Clock className="w-3 h-3 mr-1" />
+                  Building...
+                </Badge>
+              )}
+            </div>
+
+            {baselineStatus.snapshot?.established ? (
+              <div className="space-y-3">
+                <p className="text-sm text-blue-700 dark:text-blue-200/80">
+                  Paper trading baseline established. Fee-aware metrics ready for manual copy to Live mode.
+                </p>
+                
+                {/* Fee Comparison Table */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white dark:bg-slate-950 p-3 rounded border border-blue-200 dark:border-blue-900/50">
+                    <div className="text-xs text-muted-foreground mb-2">Maker Fee Mode (0.16%)</div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Gross P/L:</span>
+                        <span className="font-semibold">${baselineStatus.snapshot.avgGrossProfit.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Fees:</span>
+                        <span className="text-red-600">-${baselineStatus.snapshot.makerFeesPerTrade.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm border-t pt-1">
+                        <span className="font-medium">Net P/L:</span>
+                        <span className={`font-bold ${baselineStatus.snapshot.avgNetProfitMaker >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {baselineStatus.snapshot.avgNetProfitMaker >= 0 ? '+' : ''}${baselineStatus.snapshot.avgNetProfitMaker.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-950 p-3 rounded border border-blue-200 dark:border-blue-900/50">
+                    <div className="text-xs text-muted-foreground mb-2">Taker Fee Mode (0.26%)</div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Gross P/L:</span>
+                        <span className="font-semibold">${baselineStatus.snapshot.avgGrossProfit.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Fees:</span>
+                        <span className="text-red-600">-${baselineStatus.snapshot.takerFeesPerTrade.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm border-t pt-1">
+                        <span className="font-medium">Net P/L:</span>
+                        <span className={`font-bold ${baselineStatus.snapshot.avgNetProfitTaker >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {baselineStatus.snapshot.avgNetProfitTaker >= 0 ? '+' : ''}${baselineStatus.snapshot.avgNetProfitTaker.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Performance Metrics */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                  <div data-testid="baseline-metric-winrate">
+                    <div className="text-xs text-muted-foreground">Win Rate</div>
+                    <div className="text-lg font-semibold text-foreground flex items-center gap-1">
+                      <TrendingUp className="w-4 h-4 text-green-600" />
+                      {(baselineStatus.snapshot.winRate * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div data-testid="baseline-metric-profit-factor">
+                    <div className="text-xs text-muted-foreground">Profit Factor</div>
+                    <div className="text-lg font-semibold text-foreground">
+                      {baselineStatus.snapshot.profitFactor.toFixed(2)}x
+                    </div>
+                  </div>
+                  <div data-testid="baseline-metric-max-drawdown">
+                    <div className="text-xs text-muted-foreground">Max Drawdown</div>
+                    <div className="text-lg font-semibold text-foreground">
+                      {baselineStatus.snapshot.maxDrawdown.toFixed(1)}%
+                    </div>
+                  </div>
+                  <div data-testid="baseline-metric-trades">
+                    <div className="text-xs text-muted-foreground">Closed Trades</div>
+                    <div className="text-lg font-semibold text-foreground">
+                      {baselineStatus.snapshot.closedTradesCount}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-blue-700 dark:text-blue-200/80">
+                  Building reliable baseline... Trade more in paper mode to establish parameters.
+                </p>
+                <div className="text-sm space-y-1">
+                  <div>Trades: {baselineStatus.progress.closedTrades} / {baselineStatus.progress.targetTrades}</div>
+                  <div>Runtime: {baselineStatus.progress.runtimeHours.toFixed(1)}h / {baselineStatus.progress.targetHours}h</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

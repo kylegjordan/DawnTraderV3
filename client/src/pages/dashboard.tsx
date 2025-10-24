@@ -16,6 +16,7 @@ import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
 import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
+import { BaselineStatusWidget } from "@/components/dashboard/baseline-status-widget";
 import AlertBanner from "@/components/alerts/alert-banner";
 import SystemHealthSummary from "@/components/system-health-summary";
 import { useSystemHealth } from "@/hooks/use-system-health";
@@ -72,6 +73,9 @@ export default function Dashboard() {
           <AveragesWidget />
         </div>
       </section>
+
+      {/* LATTI Baseline Status Widget - Paper Mode Only */}
+      <BaselineStatusWidget />
 
       {/* Daily Trading Brief (includes Market Insights) */}
       <DailyBriefCard />
