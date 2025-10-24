@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Shield, AlertTriangle, Clock, Activity } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Shield, AlertTriangle, Clock, Activity, TrendingUp, TrendingDown, Minus, Download, FileJson, FileText } from "lucide-react";
+import { useState } from "react";
 
 interface SafetySummary {
   totalAdjustments24h: number;
@@ -17,10 +20,59 @@ interface LATTISafetySummaryResponse {
 }
 
 export function LATTISafetyMonitor() {
+  const [isExporting, setIsExporting] = useState(false);
+  
   const { data: safetySummary, isLoading } = useQuery<LATTISafetySummaryResponse>({
     queryKey: ['/api/heuristic-trader/safety-summary'],
     refetchInterval: 10000, // Refresh every 10 seconds
   });
+  
+  // Phase 27.F.14.B Task 11: Export LATTI logs
+  const handleExport = async (mode: 'paper' | 'live', format: 'json' | 'csv', days: number = 7) => {
+    setIsExporting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `/api/heuristic-trader/adjustment-logs?mode=${mode}&days=${days}&format=${format}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      if (format === 'csv') {
+        // Download CSV file
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `latti-adjustments-${mode}-${days}d.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        // Download JSON file
+        const data = await response.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `latti-adjustments-${mode}-${days}d.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const getSafetyIcon = (status: string) => {
     switch (status) {
@@ -83,13 +135,40 @@ export function LATTISafetyMonitor() {
   return (
     <Card data-testid="card-latti-safety-monitor">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Shield className="h-5 w-5" />
-          LATTI Safety Audit
-        </CardTitle>
-        <CardDescription>
-          Phase 27.F.14.B Task 6 - Parameter adjustment safety monitoring
-        </CardDescription>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              LATTI Safety Audit
+            </CardTitle>
+            <CardDescription>
+              Phase 27.F.14.B Task 6 - Parameter adjustment safety monitoring
+            </CardDescription>
+          </div>
+          {/* Phase 27.F.14.B Task 11: Export buttons */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExport('paper', 'csv')}
+              disabled={isExporting}
+              data-testid="button-export-paper-csv"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Paper CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExport('live', 'csv')}
+              disabled={isExporting}
+              data-testid="button-export-live-csv"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Live CSV
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Paper Mode Safety */}
@@ -102,7 +181,7 @@ export function LATTISafetyMonitor() {
             {getSafetyBadge(safetySummary?.paper.status || 'safe')}
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1">
+            <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Activity className="h-3.5 w-3.5" />
                 24h Adjustments
@@ -110,15 +189,35 @@ export function LATTISafetyMonitor() {
               <div className="text-2xl font-bold" data-testid="text-paper-adjustments">
                 {safetySummary?.paper.totalAdjustments24h || 0}
               </div>
+              {/* Phase 27.F.14.B Task 10: Mini-chart for adjustment frequency */}
+              <div className="space-y-1">
+                <div className="text-xs text-muted-foreground">Limit: 72/day (3/hr × 24)</div>
+                <Progress 
+                  value={((safetySummary?.paper.totalAdjustments24h || 0) / 72) * 100} 
+                  className="h-1.5"
+                  data-testid="progress-paper-adjustments"
+                />
+              </div>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 Violations
               </div>
-              <div className="text-2xl font-bold text-red-500" data-testid="text-paper-violations">
-                {safetySummary?.paper.violationsCount || 0}
+              <div className="flex items-center gap-2">
+                <div className="text-2xl font-bold text-red-500" data-testid="text-paper-violations">
+                  {safetySummary?.paper.violationsCount || 0}
+                </div>
+                {/* Phase 27.F.14.B Task 10: Trend indicator */}
+                {(safetySummary?.paper.violationsCount || 0) === 0 ? (
+                  <Minus className="h-4 w-4 text-muted-foreground" />
+                ) : (safetySummary?.paper.violationsCount || 0) < 3 ? (
+                  <TrendingDown className="h-4 w-4 text-green-500" />
+                ) : (
+                  <TrendingUp className="h-4 w-4 text-red-500" />
+                )}
               </div>
+              <div className="text-xs text-muted-foreground">Target: 0 violations</div>
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -142,7 +241,7 @@ export function LATTISafetyMonitor() {
             {getSafetyBadge(safetySummary?.live.status || 'safe')}
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1">
+            <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Activity className="h-3.5 w-3.5" />
                 24h Adjustments
@@ -150,15 +249,35 @@ export function LATTISafetyMonitor() {
               <div className="text-2xl font-bold" data-testid="text-live-adjustments">
                 {safetySummary?.live.totalAdjustments24h || 0}
               </div>
+              {/* Phase 27.F.14.B Task 10: Mini-chart for adjustment frequency */}
+              <div className="space-y-1">
+                <div className="text-xs text-muted-foreground">Limit: 72/day (3/hr × 24)</div>
+                <Progress 
+                  value={((safetySummary?.live.totalAdjustments24h || 0) / 72) * 100} 
+                  className="h-1.5"
+                  data-testid="progress-live-adjustments"
+                />
+              </div>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 Violations
               </div>
-              <div className="text-2xl font-bold text-red-500" data-testid="text-live-violations">
-                {safetySummary?.live.violationsCount || 0}
+              <div className="flex items-center gap-2">
+                <div className="text-2xl font-bold text-red-500" data-testid="text-live-violations">
+                  {safetySummary?.live.violationsCount || 0}
+                </div>
+                {/* Phase 27.F.14.B Task 10: Trend indicator */}
+                {(safetySummary?.live.violationsCount || 0) === 0 ? (
+                  <Minus className="h-4 w-4 text-muted-foreground" />
+                ) : (safetySummary?.live.violationsCount || 0) < 3 ? (
+                  <TrendingDown className="h-4 w-4 text-green-500" />
+                ) : (
+                  <TrendingUp className="h-4 w-4 text-red-500" />
+                )}
               </div>
+              <div className="text-xs text-muted-foreground">Target: 0 violations</div>
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

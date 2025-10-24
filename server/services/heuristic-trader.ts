@@ -461,10 +461,63 @@ class HeuristicEngine {
   }
 
   /**
+   * Get trading pace targets from system context
+   * Phase 27.F.14.B Task 7: Trading-Pace-Driven Performance Targets
+   */
+  private async getPaceTargets(mode: TradingMode): Promise<{
+    targetWinRate: number;
+    targetTradesPerDay: number;
+    targetEarningsPerTrade: number;
+    targetDailyProfit: number;
+    paceName: string;
+  }> {
+    const context = await storage.getSystemContext(mode);
+    const pace = context?.tradingPace || 'baseline';
+    
+    // Define targets for each pace level
+    const paceTargets = {
+      conservative: {
+        targetWinRate: 0.60,      // 60% win rate
+        targetTradesPerDay: 3,    // 3 trades/day
+        targetEarningsPerTrade: 8, // $8/trade
+        targetDailyProfit: 24,    // $24/day
+        paceName: 'Conservative'
+      },
+      baseline: {
+        targetWinRate: 0.55,      // 55% win rate
+        targetTradesPerDay: 5,    // 5 trades/day
+        targetEarningsPerTrade: 6, // $6/trade
+        targetDailyProfit: 30,    // $30/day
+        paceName: 'Baseline'
+      },
+      optimistic: {
+        targetWinRate: 0.50,      // 50% win rate
+        targetTradesPerDay: 8,    // 8 trades/day
+        targetEarningsPerTrade: 5, // $5/trade
+        targetDailyProfit: 40,    // $40/day
+        paceName: 'Optimistic'
+      },
+      aggressive: {
+        targetWinRate: 0.45,      // 45% win rate
+        targetTradesPerDay: 12,   // 12 trades/day
+        targetEarningsPerTrade: 4, // $4/trade
+        targetDailyProfit: 48,    // $48/day
+        paceName: 'Aggressive'
+      }
+    };
+    
+    return paceTargets[pace as keyof typeof paceTargets] || paceTargets.baseline;
+  }
+
+  /**
    * Evaluate all rules and generate recommendations
+   * Phase 27.F.14.B Task 7: Now pace-aware
    */
   async evaluate(metrics: PortfolioMetrics, mode: TradingMode): Promise<AdjustmentRecommendation[]> {
-    console.log(`[${this.MODULE_NAME}] 🎯 Evaluating ${this.rules.length} heuristic rules...`);
+    // Fetch trading pace targets
+    const paceTargets = await this.getPaceTargets(mode);
+    console.log(`[${this.MODULE_NAME}] 🎯 Evaluating ${this.rules.length} heuristic rules (Pace: ${paceTargets.paceName})...`);
+    console.log(`[${this.MODULE_NAME}] 📊 Targets: Win=${(paceTargets.targetWinRate*100).toFixed(0)}%, Trades=${paceTargets.targetTradesPerDay}/day, Earnings=$${paceTargets.targetEarningsPerTrade}/trade`);
     
     const recommendations: AdjustmentRecommendation[] = [];
     const now = new Date();
@@ -486,12 +539,12 @@ class HeuristicEngine {
         }
       }
       
-      // Evaluate condition
+      // Evaluate condition with pace-aware thresholds (Phase 27.F.14.B Task 7)
       try {
-        const triggered = rule.condition(metrics);
+        const triggered = this.evaluatePaceAwareCondition(rule, metrics, paceTargets);
         if (triggered) {
           console.log(`[${this.MODULE_NAME}] ✨ Rule '${rule.id}' triggered`);
-          const ruleRecommendations = rule.action(metrics);
+          const ruleRecommendations = this.generatePaceAwareRecommendations(rule, metrics, paceTargets);
           
           // Fetch current values and calculate recommended values
           for (const rec of ruleRecommendations) {
@@ -511,6 +564,68 @@ class HeuristicEngine {
     
     console.log(`[${this.MODULE_NAME}] 📋 Generated ${recommendations.length} recommendations`);
     return recommendations;
+  }
+  
+  /**
+   * Evaluate rule condition with pace-aware thresholds
+   * Phase 27.F.14.B Task 7
+   */
+  private evaluatePaceAwareCondition(
+    rule: HeuristicRule, 
+    metrics: PortfolioMetrics,
+    paceTargets: any
+  ): boolean {
+    // Use pace-aware thresholds for key rules
+    if (rule.id === 'win_rate_adjustment') {
+      const targetWinRate = paceTargets.targetWinRate * 100;
+      return metrics.winRate < (targetWinRate - 10) || metrics.winRate > (targetWinRate + 10);
+    } else if (rule.id === 'trading_frequency_control') {
+      const targetTrades = paceTargets.targetTradesPerDay;
+      return metrics.tradesLast24h < (targetTrades * 0.5) || metrics.tradesLast24h > (targetTrades * 1.5);
+    }
+    
+    // Fall back to original condition
+    return rule.condition(metrics);
+  }
+  
+  /**
+   * Generate pace-aware recommendations
+   * Phase 27.F.14.B Task 7
+   */
+  private generatePaceAwareRecommendations(
+    rule: HeuristicRule,
+    metrics: PortfolioMetrics,
+    paceTargets: any
+  ): Omit<AdjustmentRecommendation, 'ruleId'>[] {
+    if (rule.id === 'trading_frequency_control') {
+      const targetTrades = paceTargets.targetTradesPerDay;
+      const currentTrades = metrics.tradesLast24h;
+      
+      if (currentTrades < targetTrades * 0.5) {
+        return [{
+          type: 'filter',
+          parameter: 'minVolume',
+          currentValue: 0,
+          recommendedValue: 0,
+          changePercent: -10,
+          reason: `Below ${paceTargets.paceName} pace target (${currentTrades} vs ${targetTrades} trades/day) - loosening filters`,
+          confidence: 70
+        }];
+      } else if (currentTrades > targetTrades * 1.5) {
+        return [{
+          type: 'filter',
+          parameter: 'minVolume',
+          currentValue: 0,
+          recommendedValue: 0,
+          changePercent: 10,
+          reason: `Exceeding ${paceTargets.paceName} pace target (${currentTrades} vs ${targetTrades} trades/day) - tightening filters`,
+          confidence: 70
+        }];
+      }
+    }
+    
+    // Fall back to original action
+    return rule.action(metrics);
   }
 
   /**

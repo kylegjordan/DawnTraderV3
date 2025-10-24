@@ -18,6 +18,7 @@ import { TradingModeProvider } from "@/contexts/trading-mode-context";
 import { RequestTraceProvider } from "@/hooks/use-request-trace";
 import { ensureValidToken } from "@/lib/auth";
 import WalterFloatingAssistant from "@/components/walter-floating-assistant";
+import { LATTIToastListener } from "@/components/latti-toast-listener";
 
 const Settings = lazy(() => import("@/pages/settings"));
 const WalterPage = lazy(() => import("@/pages/walter"));
@@ -191,6 +192,7 @@ function App() {
           <TooltipProvider>
             <div className="min-h-screen bg-background text-foreground">
               <Toaster />
+              <LATTIToastListener />
               <Router />
             </div>
           </TooltipProvider>

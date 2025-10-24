@@ -770,6 +770,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   
   // Phase 27.F.14.B Task 6: LATTI Safety Audit API Endpoints
   apiRouter.get('/heuristic-trader/safety-summary', authenticateToken, handleLATTISafetySummary);
+  
+  // Phase 27.F.14.B Task 11: LATTI Adjustment Logs Export
+  apiRouter.get('/heuristic-trader/adjustment-logs', authenticateToken, handleLATTIAdjustmentLogs);
 
   // Phase 27.F.14.B: LATTI Baseline Indicator API Endpoint
   apiRouter.get('/baseline-indicator/status', authenticateToken, handleBaselineStatus);
@@ -14242,6 +14245,80 @@ export async function handleLATTISafetySummary(req: AuthenticatedRequest, res: R
     });
   } catch (error: any) {
     console.error('[LATTI-Safety-API] Error getting safety summary:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Get LATTI adjustment logs for export
+ * Phase 27.F.14.B Task 11
+ * GET /api/heuristic-trader/adjustment-logs?mode=paper&days=7&format=json
+ */
+export async function handleLATTIAdjustmentLogs(req: AuthenticatedRequest, res: Response) {
+  try {
+    const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+    const days = parseInt(req.query.days as string) || 7;
+    const format = (req.query.format as 'json' | 'csv') || 'json';
+    
+    // Validate mode
+    if (mode !== 'paper' && mode !== 'live') {
+      return res.status(400).json({ error: 'Mode must be "paper" or "live"' });
+    }
+    
+    // Fetch logs from database
+    const daysAgo = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const { db } = await import('./db');
+    const { tradingAuditLog } = await import('../shared/schema');
+    const { and, like, eq, gte } = await import('drizzle-orm');
+    
+    const logs = await db
+      .select()
+      .from(tradingAuditLog)
+      .where(
+        and(
+          like(tradingAuditLog.action, 'latti_adjustment_%'),
+          eq(tradingAuditLog.mode, mode),
+          gte(tradingAuditLog.createdAt, daysAgo)
+        )
+      )
+      .orderBy(tradingAuditLog.createdAt);
+    
+    // Transform logs for export
+    const exportData = logs.map(log => ({
+      timestamp: log.createdAt,
+      mode: log.mode,
+      parameterType: log.metadata?.parameterType || 'unknown',
+      parameterName: log.metadata?.parameterName || 'unknown',
+      oldValue: log.metadata?.oldValue || 0,
+      newValue: log.metadata?.newValue || 0,
+      changePercent: log.metadata?.changePercent || 0,
+      reason: log.metadata?.reason || '',
+      ruleId: log.metadata?.ruleId || '',
+      triggeredBy: log.triggeredBy || 'latti_heuristic'
+    }));
+    
+    // Return based on format
+    if (format === 'csv') {
+      // Generate CSV
+      const csvHeader = 'Timestamp,Mode,Parameter Type,Parameter Name,Old Value,New Value,Change %,Reason,Rule ID,Triggered By\n';
+      const csvRows = exportData.map(row => 
+        `${row.timestamp.toISOString()},${row.mode},${row.parameterType},${row.parameterName},${row.oldValue},${row.newValue},${row.changePercent},"${row.reason}",${row.ruleId},${row.triggeredBy}`
+      ).join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=latti-adjustments-${mode}-${days}d.csv`);
+      res.send(csvHeader + csvRows);
+    } else {
+      // Return JSON
+      res.json({
+        mode,
+        days,
+        totalLogs: exportData.length,
+        logs: exportData
+      });
+    }
+  } catch (error: any) {
+    console.error('[LATTI-Logs-API] Error getting adjustment logs:', error.message);
     res.status(500).json({ error: error.message });
   }
 }
