@@ -1,0 +1,119 @@
+🧭 REPLIT DEBUG DIRECTIVE — Phase 27.F.14.C-PRE
+Pre-Simulation UI/Backend Desync & Trading Mode Initialization Failures
+
+Context:
+This directive documents the system issues observed during an attempted start of the paper-trading simulation (Oct 24 2025).
+The goal is to have Replit investigate, reproduce, and fix these problems before the 10-minute functional simulation begins.
+
+🧪 Summary of Actions Taken
+
+The app was stopped and restarted, then I logged out and back in.
+
+Attempted to start paper trading by toggling the Trading switch from Stopped → Active.
+
+Immediately received a red toast error at the bottom of the screen (message disappeared too quickly to read).
+
+Trading did not start.
+
+⚠️ Observed Issues & Required Investigation
+1️⃣ UI Tab Label Regression
+
+Problem: Tab names in the Trading panel now display truncated labels.
+
+Current	Expected
+“Insights”	“Filter Insights”
+“Filtered”	“Filtered Pairs”
+“Ready”	“Ready to Buy”
+“Open”	“Open Trades”
+
+Suspected cause: Recent responsive-layout changes for mobile view may have shortened tab text globally instead of only under mobile breakpoints.
+Task: Restore full tab names in desktop view while keeping condensed labels for mobile widths.
+
+2️⃣ Filter Insights Panel Empty
+
+Problem: The Filter Insights tab shows no metrics or placeholders.
+Previously, placeholder metrics or zeros appeared even when no data was present.
+Task:
+
+Verify the component renders default metrics from /api/filters/diagnostics.
+
+Confirm that placeholder data still loads before live metrics populate.
+
+3️⃣ Filtered Pairs Load Failure
+
+Error shown:
+
+Failed to load filtered pairs: 500 {"error":"No screener filters or trading settings found for user"}
+
+
+Additional behavior:
+The Filter Health widget flickers on/off every 20–30 seconds.
+Tasks:
+
+Verify backend endpoint /api/paper-sim/filtered-pairs or equivalent diagnostic route.
+
+Confirm that screener_filters and trading_settings are being created for the logged-in user (Kyle G Jordan).
+
+Identify why API returns 500 instead of fallback default filters.
+
+Fix the flicker caused by repeated failing refresh attempts.
+
+4️⃣ Ready-to-Buy Oversaturation
+
+Problem: Ready-to-Buy list shows 824 pairs instead of the expected ~10.
+Interpretation: The scheduler and automatic cleanup logic (that removes expired or filled entries) are not running.
+Tasks:
+
+Confirm that the deletion/refresh job is active.
+
+Review scheduler logs for missed cycles or failed cron triggers.
+
+Re-enable automatic pruning to keep Ready-to-Buy count ≤ 15.
+
+5️⃣ Frontend ↔ Backend Trading State Desynchronization
+
+Behavior:
+
+Blue status bar shows “Paper Trading Mode – Active.”
+
+Top toggle still shows Stopped.
+
+Clicking the toggle repeatedly triggers “Trading Started” toast messages but never switches to Stopped.
+Result: Frontend and backend states are out of sync.
+
+Tasks:
+
+Compare /api/state/summary.trading.paper vs. the UI toggle status after each click.
+
+Identify which side (UI or backend) fails to update or broadcast the state.
+
+Confirm trading_state_changed WebSocket event fires and is received by the frontend.
+
+Ensure that toggling off sends a proper POST /api/trading/pause or /api/trading/stop signal and updates both the backend state and the UI flag.
+
+🧰 Expected Deliverables
+
+Root-cause analysis and list of fixes for:
+
+Tab label rendering
+
+Filter Insights placeholder regression
+
+Filtered Pairs 500 error
+
+Scheduler inactivity
+
+UI/Backend trading-state desync
+
+Confirmation that both Kyle G Jordan and testuser123 accounts load identical screener and trading settings.
+
+Console/log excerpts showing corrected startup sequence:
+
+[LATTIManager] Both LATTI instances active (Paper, Live)
+[UI] Trading state: ACTIVE
+[PaperSim] Scheduler heartbeat OK
+
+
+Verification screenshots or log timestamps confirming synchronization between UI and backend.
+
+Goal: Resolve these initialization and synchronization defects so the 10-minute simulation (Phase 27.F.14.C) can start under stable conditions with verified UI/backend parity.
