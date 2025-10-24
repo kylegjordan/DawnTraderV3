@@ -79,6 +79,20 @@ export function formatLocalTimeWithDate(timezone: string, timeFormat: '12hr' | '
   return `${time} — ${date}`;
 }
 
+export function formatUTCCompact(timeFormat: '12hr' | '24hr'): string {
+  const format = timeFormat === '12hr' ? 'h:mm A' : 'HH:mm';
+  const time = dayjs().utc().format(format);
+  const date = dayjs().utc().format('ddd MMM D');
+  return `${time}  ${date}`;
+}
+
+export function formatLocalCompact(timezone: string, timeFormat: '12hr' | '24hr'): string {
+  const format = timeFormat === '12hr' ? 'h:mm A' : 'HH:mm';
+  const time = dayjs().tz(timezone).format(format);
+  const date = dayjs().tz(timezone).format('ddd MMM D');
+  return `${time}  ${date}`;
+}
+
 export function getTimezoneAbbr(timezone: string): string {
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {

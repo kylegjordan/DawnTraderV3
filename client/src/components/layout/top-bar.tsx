@@ -21,7 +21,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatUTCTimeWithDate, formatLocalTimeWithDate, getTimezoneAbbr } from "@/lib/timezone";
+import { formatUTCTimeWithDate, formatLocalTimeWithDate, getTimezoneAbbr, formatUTCCompact, formatLocalCompact } from "@/lib/timezone";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -58,6 +58,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const queryClient = useQueryClient();
   const [utcTimeDate, setUtcTimeDate] = useState<string>('');
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
+  const [utcCompact, setUtcCompact] = useState<string>('');
+  const [localCompact, setLocalCompact] = useState<string>('');
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
   const [timePreference, setTimePreference] = useState<'local' | 'utc'>('local');
   const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
@@ -96,9 +98,11 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       
       // Update UTC time and date (formatted together)
       setUtcTimeDate(formatUTCTimeWithDate(timeFormat));
+      setUtcCompact(formatUTCCompact(timeFormat));
       
       // Update local time, date, and timezone abbreviation
       setLocalTimeDate(formatLocalTimeWithDate(timezone, timeFormat));
+      setLocalCompact(formatLocalCompact(timezone, timeFormat));
       setLocalTzAbbr(getTimezoneAbbr(timezone));
     };
 
@@ -618,10 +622,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                     <Clock className="w-3 h-3 text-primary" />
                   )}
                   <span className="font-mono text-foreground whitespace-nowrap">
-                    {timePreference === 'utc' 
-                      ? (utcTimeDate.split('—')[0]?.trim() || utcTimeDate.split(' ').slice(0, 2).join(' '))
-                      : (localTimeDate.split('—')[0]?.trim() || localTimeDate.split(' ').slice(0, 2).join(' '))
-                    }
+                    {timePreference === 'utc' ? utcCompact : localCompact}
                   </span>
                 </Button>
               </DropdownMenuTrigger>
