@@ -57,7 +57,7 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
         className={cn(
           "sidebar sidebar-transition w-64 bg-card border-r border-border flex-shrink-0 overflow-y-auto scrollbar-thin",
           !isOpen && "lg:translate-x-0 -translate-x-full",
-          isOpen && "translate-x-0",
+          isOpen && "translate-x-0 open",
           className
         )}
         data-testid="sidebar"
