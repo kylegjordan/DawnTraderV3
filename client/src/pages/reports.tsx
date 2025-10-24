@@ -123,16 +123,16 @@ export default function ReportsPage() {
       >
         <TabsList className="grid w-full max-w-4xl grid-cols-4">
           <TabsTrigger value="trade-history" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-trade-history">
-            <span className="hidden xs:inline">Trade History</span>
-            <span className="xs:hidden">History</span>
+            <span className="hidden sm:inline">Trade History</span>
+            <span className="sm:hidden">History</span>
           </TabsTrigger>
           <TabsTrigger value="canned" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-canned-reports">
-            <span className="hidden xs:inline">Canned Reports</span>
-            <span className="xs:hidden">Canned</span>
+            <span className="hidden sm:inline">Canned Reports</span>
+            <span className="sm:hidden">Canned</span>
           </TabsTrigger>
           <TabsTrigger value="custom" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-custom-reports">
-            <span className="hidden xs:inline">Custom Reports</span>
-            <span className="xs:hidden">Custom</span>
+            <span className="hidden sm:inline">Custom Reports</span>
+            <span className="sm:hidden">Custom</span>
           </TabsTrigger>
           <TabsTrigger value="exports" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-exports">Exports</TabsTrigger>
         </TabsList>
