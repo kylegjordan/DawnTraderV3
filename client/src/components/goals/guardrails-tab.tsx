@@ -646,7 +646,7 @@ export default function GuardrailsTab() {
         )}
 
         {/* Phase 27.F.14.B - Task 4: Copy to Live Button */}
-        {mode === 'paper' && baselineStatus?.snapshot && (
+        {mode === 'paper' && baselineStatus && (
           <div className="mt-4">
             <TooltipProvider>
               <Tooltip>
@@ -666,7 +666,7 @@ export default function GuardrailsTab() {
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="max-w-xs">
-                    {!baselineStatus.snapshot.established ? (
+                    {!baselineStatus.snapshot?.established ? (
                       <p>Baseline must be established before copying parameters</p>
                     ) : tradingStatus?.isEngineActiveLive ? (
                       <p>Live trading must be stopped before copying parameters</p>
