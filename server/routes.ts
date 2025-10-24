@@ -14204,10 +14204,11 @@ export async function handleLHTSEmergencyStop(req: Request, res: Response) {
  * Get baseline indicator status
  * GET /api/baseline-indicator/status
  */
-export async function handleBaselineStatus(req: Request, res: Response) {
+export async function handleBaselineStatus(req: AuthenticatedRequest, res: Response) {
   try {
+    const userId = req.user!.id;
     const { baselineIndicator } = await import('./services/baseline-indicator');
-    const status = await baselineIndicator.getBaselineStatus();
+    const status = await baselineIndicator.checkBaselineStatus(userId);
     res.json(status);
   } catch (error: any) {
     console.error('[BaselineIndicator-API] Error getting baseline status:', error.message);
