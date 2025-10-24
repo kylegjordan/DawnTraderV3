@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface ConfirmBalanceModalProps {
   open: boolean;
@@ -28,6 +28,13 @@ export function ConfirmBalanceModal({
   mode
 }: ConfirmBalanceModalProps) {
   const [balance, setBalance] = useState(currentBalance.toString());
+
+  // Phase 27.F.14.D-POST: Sync input value when modal opens or balance prop changes
+  useEffect(() => {
+    if (open) {
+      setBalance(currentBalance.toString());
+    }
+  }, [open, currentBalance]);
 
   const handleConfirm = () => {
     const parsedBalance = parseFloat(balance);
