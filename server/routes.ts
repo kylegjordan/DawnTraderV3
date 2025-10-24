@@ -1142,6 +1142,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       }
       
+      // Phase 27.F.14.D-POST: Check balance confirmation for paper mode
+      if (mode === 'paper') {
+        const { checkBalanceConfirmationRequired } = await import('./services/paper-sim-service.js');
+        const confirmationCheck = await checkBalanceConfirmationRequired('paper');
+        
+        if (confirmationCheck.required) {
+          console.log('[PaperSim] Balance confirmation required, prompting user');
+          return res.json({
+            success: false,
+            requiresConfirmation: true,
+            currentBalance: confirmationCheck.currentBalance,
+            message: 'Please confirm your starting portfolio balance'
+          });
+        }
+      }
+      
       // Phase 27.F.13.I: Wrap engine start in 10-second timeout
       const ENGINE_START_TIMEOUT = 10000; // 10 seconds
       
@@ -3443,10 +3459,44 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // ==================== End Phase 8.5 ====================
 
+  // Phase 27.F.14.D-POST: Confirm portfolio balance before starting
+  apiRouter.post('/paper-sim/confirm-balance', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { balance, mode } = req.body;
+      
+      if (!balance || balance <= 0) {
+        return res.status(400).json({ error: 'Invalid balance provided' });
+      }
+      
+      const tradingMode = (mode || 'paper') as 'live' | 'paper';
+      const { confirmPortfolioBalance } = await import('./services/paper-sim-service.js');
+      await confirmPortfolioBalance(tradingMode, parseFloat(balance));
+      
+      res.json({ success: true, message: `Balance confirmed: $${balance}` });
+    } catch (error: any) {
+      console.error('Error confirming portfolio balance:', error);
+      res.status(500).json({ error: error.message || 'Failed to confirm balance' });
+    }
+  });
+
   apiRouter.post('/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     
     try {
+      // Phase 27.F.14.D-POST: Check if balance confirmation is required
+      const { checkBalanceConfirmationRequired } = await import('./services/paper-sim-service.js');
+      const confirmationCheck = await checkBalanceConfirmationRequired('paper');
+      
+      if (confirmationCheck.required) {
+        console.log('[PaperSim] Balance confirmation required, prompting user');
+        return res.json({
+          success: false,
+          requiresConfirmation: true,
+          currentBalance: confirmationCheck.currentBalance,
+          message: 'Please confirm your starting portfolio balance'
+        });
+      }
+      
       // Use unified service function to ensure consistent state management
       const { startPaperSimulation } = await import('./services/paper-sim-service.js');
       const result = await startPaperSimulation(userId);

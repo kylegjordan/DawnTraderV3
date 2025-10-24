@@ -16,6 +16,65 @@ export interface PaperSimResult {
   message: string;
   data?: any;
   error?: string;
+  requiresConfirmation?: boolean; // Phase 27.F.14.D-POST: Indicates balance confirmation needed
+  currentBalance?: number; // Phase 27.F.14.D-POST: Current balance for confirmation prompt
+}
+
+/**
+ * Phase 27.F.14.D-POST: Check if portfolio balance confirmation is required
+ * Returns true if balance hasn't been confirmed in the last 24 hours
+ */
+export async function checkBalanceConfirmationRequired(mode: 'live' | 'paper' = 'paper'): Promise<{ required: boolean; currentBalance: number }> {
+  try {
+    // Get system context to check last confirmation time
+    const context = await storage.getSystemContext(mode);
+    const balanceLastConfirmed = context?.balanceLastConfirmed;
+    
+    // Get current portfolio balance
+    const portfolioState = await storage.getPortfolioState({ mode });
+    const currentBalance = portfolioState ? parseFloat(portfolioState.balance) : 800; // Default to $800
+    
+    // Check if confirmation is missing or stale (>24 hours old)
+    if (!balanceLastConfirmed) {
+      console.log(`[PaperSim] Portfolio balance confirmation required (mode=${mode}, never confirmed)`);
+      return { required: true, currentBalance };
+    }
+    
+    const hoursSinceConfirmation = (Date.now() - balanceLastConfirmed.getTime()) / (1000 * 60 * 60);
+    if (hoursSinceConfirmation > 24) {
+      console.log(`[PaperSim] Portfolio balance confirmation required (mode=${mode}, last confirmed ${hoursSinceConfirmation.toFixed(1)}h ago)`);
+      return { required: true, currentBalance };
+    }
+    
+    console.log(`[PaperSim] Balance confirmation recent (${hoursSinceConfirmation.toFixed(1)}h ago), proceeding with start`);
+    return { required: false, currentBalance };
+  } catch (error) {
+    console.error('[PaperSim] Error checking balance confirmation:', error);
+    // Default to requiring confirmation on error
+    return { required: true, currentBalance: 800 };
+  }
+}
+
+/**
+ * Phase 27.F.14.D-POST: Confirm portfolio balance
+ * Updates the balance and records confirmation timestamp
+ */
+export async function confirmPortfolioBalance(mode: 'live' | 'paper', balance: number): Promise<void> {
+  try {
+    // Update portfolio balance
+    await storage.updatePortfolioBalance({ mode, balance });
+    
+    // Record confirmation timestamp in system context
+    await storage.upsertSystemContext({
+      tradingMode: mode,
+      balanceLastConfirmed: new Date()
+    });
+    
+    console.log(`[PaperSim] Portfolio balance confirmed: $${balance} for mode=${mode}`);
+  } catch (error) {
+    console.error('[PaperSim] Error confirming portfolio balance:', error);
+    throw error;
+  }
 }
 
 // Global in-memory state for the active portfolio manager

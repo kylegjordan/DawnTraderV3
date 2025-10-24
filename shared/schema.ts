@@ -3802,6 +3802,8 @@ export const systemContext = pgTable("system_context", {
   lattiLastAnchorTime: timestamp("latti_last_anchor_time", { withTimezone: true }), // Last baseline re-anchor
   lattiLastModeSyncTime: timestamp("latti_last_mode_sync_time", { withTimezone: true }), // Last KnowledgeBridge sync
   tradingPace: varchar("trading_pace", { length: 20 }).default("baseline"), // 'conservative' | 'baseline' | 'optimistic' | 'aggressive'
+  // Phase 27.F.14.D-POST: Portfolio balance confirmation
+  balanceLastConfirmed: timestamp("balance_last_confirmed", { withTimezone: true }), // Last time user confirmed starting balance
   // Fee configuration for profitability calculations
   makerFeePct: decimal("maker_fee_pct", { precision: 5, scale: 4 }).default("0.0016"), // Kraken maker fee (0.16%)
   takerFeePct: decimal("taker_fee_pct", { precision: 5, scale: 4 }).default("0.0026"), // Kraken taker fee (0.26%)
