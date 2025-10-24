@@ -484,6 +484,7 @@ export interface IStorage {
   getPaperSimTrade(id: string): Promise<PaperSimTrade | undefined>;
   getPaperSimTrades(userId: string, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>;
   getPaperSimTradesBySymbol(userId: string, symbol: string): Promise<PaperSimTrade[]>;
+  getPaperSimTradesGlobal(filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   
   // Open positions
   createPaperSimOpenPosition(position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition>;
@@ -2759,6 +2760,28 @@ export class DatabaseStorage implements IStorage {
         eq(paperSimTrades.symbol, symbol)
       ))
       .orderBy(desc(paperSimTrades.openedAt));
+  }
+
+  // Phase 27.F.14.B: Global-per-mode query for LATTI baseline calculations
+  async getPaperSimTradesGlobal(filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
+    const limit = filters?.limit || 1000; // Higher default for global aggregation
+    const closedOnly = filters?.closedOnly ?? false;
+    
+    const conditions = [];
+    if (closedOnly) {
+      conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL` as any);
+    }
+    
+    const query = db.select()
+      .from(paperSimTrades)
+      .orderBy(desc(paperSimTrades.closedAt))
+      .limit(limit);
+    
+    if (conditions.length > 0) {
+      return await query.where(and(...conditions));
+    }
+    
+    return await query;
   }
 
   async createPaperSimOpenPosition(position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition> {

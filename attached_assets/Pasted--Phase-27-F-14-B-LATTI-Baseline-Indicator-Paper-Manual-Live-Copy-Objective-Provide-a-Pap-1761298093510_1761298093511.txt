@@ -1,0 +1,146 @@
+⚙️ Phase 27.F.14.B — LATTI Baseline Indicator (Paper → Manual Live Copy)
+🎯 Objective
+
+Provide a Paper-mode UI indicator that lights up when LATTI has enough data to declare a Baseline Established, and display a compact table of the current optimal parameters & key metrics. No transfers, no API calls—user copies values manually into Live mode if desired.
+
+1) Scope & Placement
+
+Where: Goals Engine → Goals tab (top section), and a dashboard widget (summary only).
+
+Modes: Indicator appears only in Paper mode. Live shows nothing for this feature.
+
+Persistence: The most recent “baseline established” snapshot should be saved so it persists across reloads (source of truth is Paper mode state).
+
+2) Baseline Establishment Criteria (simple & robust)
+
+Mark Baseline as Established only when all are true (Paper mode):
+
+Minimum runtime or activity:
+
+Option A (time): ≥ 24 hours of engine uptime, or
+
+Option B (activity): ≥ 150 closed paper trades (choose whichever occurs first).
+
+Stability check: Last 50 closed trades show:
+
+Win rate within a stable band (±7 percentage points compared with the previous 50-trade window), and
+
+Profit factor ≥ 1.2, and
+
+Max drawdown (paper) ≤ 7% over the window.
+
+No safety events: No kill-switch triggers or emergency stops during the same window.
+
+Replit may tune numeric thresholds slightly if existing data ranges require it, but must keep the spirit: enough data + basic stability + safety.
+
+3) What to Display (Paper mode, when Established)
+
+Show a read-only table labeled “LATTI Paper Baseline (copy these into Live if desired)”:
+
+A) Key Parameters (the ones you would manually copy)
+
+Risk per trade (absolute $ and % of portfolio)
+
+Max daily loss (absolute $ and %)
+
+Trades per day (target)
+
+Expected profit per trade (target, $)
+
+Min net profit threshold ($) — fee-aware target (must be ≥ exchange fee estimate)
+
+B) Performance Metrics (context)
+
+Win rate (last 50 closed trades)
+
+Profit factor (last 50 closed trades)
+
+Max drawdown (since baseline window start)
+
+Avg net P/L per trade ($) (fees subtracted using default fee mode)
+
+Fees per trade (est.) and Default fee mode (maker/taker)
+
+C) Timestamp & Provenance
+
+Baseline timestamp (UTC + local)
+
+Window definition (e.g., “Last 50 closed trades”)
+
+LATTI trading pace active during snapshot (Conservative / Baseline / Optimistic / Aggressive)
+
+All values are pulled from Paper mode’s current state; do not mutate Live.
+
+4) When Baseline is Not Established (Paper mode)
+
+Show a neutral card with:
+
+Status: “Baseline not established yet.”
+
+Progress hints (e.g., “Closed trades: 42/150; Runtime: 7h/24h; Stability: pending”).
+
+A concise sentence: “Once the baseline lights green, you can manually copy these values into Live mode from this panel.”
+
+5) Dashboard Summary Widget
+
+A small, read-only widget:
+
+Status pill: Baseline Established / Not Established (Paper)
+
+If established: Risk/trade ($), Trades/day, Expected P/trade ($), Win rate, PF
+
+A link/CTA: “Open Goals → Baseline details”
+
+6) Fee Awareness (display only)
+
+Use the platform’s configured default fee mode (maker/taker) and fee rates to compute:
+
+Estimated fee/trade ($) for typical order sizes,
+
+Avg net P/L per trade ($) in metrics (gross minus estimated fees).
+
+No changes to execution logic here—display only to guide manual decisions.
+
+7) Audit & Logging (lightweight)
+
+Write an audit log entry when Paper baseline first transitions from Not Established → Established (include timestamp, window length, headline values).
+
+If the baseline later drops out of criteria (e.g., stability broken), do not auto-revoke; keep the last “Established” snapshot until a better snapshot qualifies and replaces it. Log the replacement.
+
+8) Validation Checklist
+
+After deployment, verify:
+
+Paper mode, engine running:
+
+Before thresholds met → “Not Established” card with progress.
+
+After thresholds met → “Established” card with table values.
+
+Dashboard widget reflects the same status and headline fields.
+
+Refresh/relogin → snapshot persists.
+
+Audit shows the establishment event (and replacement if a better snapshot later qualifies).
+
+Live mode shows no baseline UI and remains unchanged.
+
+9) Test User for Review
+
+User: testuser123
+
+Password: SecurePass123!
+
+✅ Expected Outcome
+
+You’ll see a clear “Baseline Established” panel in Paper with the exact numbers you need.
+
+You can manually type those into Live (no API calls, no automation, minimal troubleshooting).
+
+Fees are visibly factored into net P/L metrics for context.
+
+The system remains simple, stable, and auditable.
+
+Footnote
+
+After completing this UI feature, continue with the remaining Phase 27.F.14.B tasks (fee-aware profitability checks in pre-trade, Trading Pace control in Goals Engine & Dashboard, Walter shutdown, etc.) as previously directed.

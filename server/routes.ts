@@ -768,6 +768,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.post('/heuristic-trader/toggle', authenticateToken, handleLHTSToggle);
   apiRouter.post('/heuristic-trader/emergency-stop', authenticateToken, handleLHTSEmergencyStop);
 
+  // Phase 27.F.14.B: LATTI Baseline Indicator API Endpoint
+  apiRouter.get('/baseline-indicator/status', authenticateToken, handleBaselineStatus);
+
   // Guardrails endpoints (mode-isolated)
   // Phase 7.4: ConfigBob transparent routing for guardrails endpoint
   apiRouter.get('/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -14189,6 +14192,25 @@ export async function handleLHTSEmergencyStop(req: Request, res: Response) {
     res.json({ success: true, message: 'LHTS emergency stop executed' });
   } catch (error: any) {
     console.error('[LHTS-API] Error executing emergency stop:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+// ============================================================================
+// Phase 27.F.14.B: LATTI Baseline Indicator API Endpoints
+// ============================================================================
+
+/**
+ * Get baseline indicator status
+ * GET /api/baseline-indicator/status
+ */
+export async function handleBaselineStatus(req: Request, res: Response) {
+  try {
+    const { baselineIndicator } = await import('./services/baseline-indicator');
+    const status = await baselineIndicator.getBaselineStatus();
+    res.json(status);
+  } catch (error: any) {
+    console.error('[BaselineIndicator-API] Error getting baseline status:', error.message);
     res.status(500).json({ error: error.message });
   }
 }
