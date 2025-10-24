@@ -45,8 +45,13 @@ export default function ModeBanner() {
         {isPaper && (
           <>
             <Beaker className="w-4 h-4" />
-            <span className="text-sm font-semibold">Paper Trading Mode</span>
-            <span className="text-xs opacity-70">• Simulated trading • No real money</span>
+            <div className="flex flex-col items-start">
+              <span className="text-sm font-semibold">Paper Trading Mode</span>
+              <div className="flex flex-col text-xs opacity-70">
+                <span>Simulated trading</span>
+                <span>• No real money</span>
+              </div>
+            </div>
             <span className="mx-2 text-xs opacity-50">|</span>
             {isActive ? (
               <>
