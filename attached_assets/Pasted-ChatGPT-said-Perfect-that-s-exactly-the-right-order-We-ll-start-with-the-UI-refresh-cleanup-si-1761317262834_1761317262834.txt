@@ -1,0 +1,163 @@
+ChatGPT said:
+
+Perfect — that’s exactly the right order. We’ll start with the UI refresh cleanup (since that affects both modes), then proceed with the Walter shutdown, Walter standby hooks, and finally the fee-aware pre-trade validation before starting the 48-hour simulation.
+
+Here’s the updated directive you can paste directly into Replit — fully sequenced, no code, all clearly described step by step.
+
+🧭 Directive to Replit — Phase 27.F.14.B (Finalization & Simulation Prep)
+
+User: testuser123
+Password: SecurePass123!
+
+This directive finalizes all remaining setup items before the 48-hour paper-mode simulation.
+
+🧼 Task 1 – Remove Manual Refresh Button + Enable Auto-Refresh on Mode Change
+
+Goal: Simplify the top-bar UI and ensure automatic rehydration when switching between Live and Paper modes.
+
+Instructions
+
+In the top bar / trading mode selector (likely in client/src/components/layout/top-bar.tsx or mode-selector.tsx):
+
+Remove the circular refresh icon or any “manual refresh” button currently displayed beside the LIVE / PAPER toggle.
+
+Implement automatic context rehydration on mode switch:
+
+When the user toggles between modes, trigger a system context reload automatically.
+
+Ensure the following components auto-update to show data from the selected mode:
+
+Dashboard cards (earnings, win rate, etc.)
+
+Goals Engine (Goals and Guardrails tabs)
+
+LATTI Baseline Status section
+
+LATTI Dashboard widget
+
+Safety Monitor (if open)
+
+Confirm the log output includes:
+
+[UI] Auto-refresh triggered on mode switch
+[LATTIManager] Context rehydration complete for mode: live/paper
+
+
+Validate that the toggle area now shows only:
+LIVE | PAPER — with no refresh icon.
+
+🧱 Task 2 – Walter Full Shutdown
+
+Goal: Disable Walter’s autonomous adjustment loops and prevent any OpenAI-dependent execution.
+
+Instructions
+
+Introduce or confirm a feature flag WALTER_DISABLED = true.
+
+When active:
+
+Skip or short-circuit all references to WalterAdjustmentService, WalterAI, or any loop calling OpenAI models.
+
+Prevent Walter logs, updates, or errors from appearing.
+
+On startup, verify these appear in the logs:
+
+[Walter] Standby mode – AI adjustment disabled
+[LATTIManager] Both LATTI instances active (Paper, Live)
+
+
+Confirm that no [Walter] or “OpenAI quota” messages appear anywhere during operation.
+
+⚙️ Task 3 – Add Walter Standby Hooks
+
+Goal: Keep Walter safely parked but easily re-activatable for future AI-LATTI integration.
+
+Instructions
+
+Leave a placeholder export or “stub” within the Walter service:
+
+The stub should load but never interact with trading logic.
+
+When invoked, it should only log:
+
+[Walter] Standby mode – ready for future hybrid integration
+
+
+Add a comment noting that reactivation will occur in Phase 27.F.15 (Walter + LATTI Co-op Mode).
+
+💰 Task 4 – Fee-Aware Pre-Trade Validation
+
+Goal: Ensure all trade validations account for Kraken fees and reject trades that can’t meet minimum profitability thresholds.
+
+Instructions
+
+In the trade validation pipeline (used by both PaperSim and Live):
+
+Before confirming a trade, compute:
+
+netExpectedGain = expectedGain - (roundTripFee)
+
+
+Use existing fields from system_context:
+
+makerFeePct, takerFeePct, defaultFeeMode, minNetProfitThreshold.
+
+If netExpectedGain < minNetProfitThreshold, reject the trade and log:
+
+[LATTI] Trade rejected – fee-adjusted gain below threshold
+
+
+Apply this logic consistently in PaperSim and Live validation flows.
+
+Confirm in the logs that fee-related rejections appear for marginal trades.
+
+🧪 Task 5 – Begin 48-Hour Continuous Paper Simulation
+
+Goal: Run LATTI in Paper mode to stabilize baselines and validate all integrations.
+
+Instructions
+
+Log in using:
+
+Username: testuser123
+
+Password: SecurePass123!
+
+Start PaperSim normally.
+
+Confirm initialization messages:
+
+[LATTI][Paper] Baseline initialization started
+[LATTIManager] Both LATTI instances active (Paper, Live)
+[LATTI][Paper] Fee-aware validation enabled
+
+
+Let the system run uninterrupted for 48 hours.
+
+Expected LATTI behavior:
+
+Tracks portfolio balance, win rate, drawdown, and fee-adjusted profitability.
+
+Performs guardrail and pace adjustments within safety bounds.
+
+Logs parameter changes in trading_audit_log and safety_summary.
+
+At the end of 48 hours, confirm:
+
+[LATTI][Paper] Baseline established from N trades
+
+latti_baseline_initial populated in the database.
+
+✅ Validation Checklist
+
+ Manual refresh icon removed from mode toggle.
+
+ Switching modes triggers automatic data refresh across UI.
+
+ No [Walter] messages except standby confirmation.
+
+ Fee-aware trade validation logging active.
+
+ Baseline metrics visible and updating during PaperSim.
+
+ Safety Monitor showing no violations.
