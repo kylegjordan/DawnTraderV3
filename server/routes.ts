@@ -767,6 +767,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/heuristic-trader/health', authenticateToken, handleLHTSHealth);
   apiRouter.post('/heuristic-trader/toggle', authenticateToken, handleLHTSToggle);
   apiRouter.post('/heuristic-trader/emergency-stop', authenticateToken, handleLHTSEmergencyStop);
+  
+  // Phase 27.F.14.B Task 6: LATTI Safety Audit API Endpoints
+  apiRouter.get('/heuristic-trader/safety-summary', authenticateToken, handleLATTISafetySummary);
 
   // Phase 27.F.14.B: LATTI Baseline Indicator API Endpoint
   apiRouter.get('/baseline-indicator/status', authenticateToken, handleBaselineStatus);
@@ -14216,6 +14219,29 @@ export async function handleBaselineStatus(req: AuthenticatedRequest, res: Respo
     res.json(status);
   } catch (error: any) {
     console.error('[BaselineIndicator-API] Error getting baseline status:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Get LATTI safety summary
+ * Phase 27.F.14.B Task 6
+ * GET /api/heuristic-trader/safety-summary
+ */
+export async function handleLATTISafetySummary(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { lattiPaper, lattiLive } = await import('./services/heuristic-trader');
+    
+    // Get safety summary for both modes
+    const paperSummary = await lattiPaper.getSafetySummary();
+    const liveSummary = await lattiLive.getSafetySummary();
+    
+    res.json({
+      paper: paperSummary,
+      live: liveSummary
+    });
+  } catch (error: any) {
+    console.error('[LATTI-Safety-API] Error getting safety summary:', error.message);
     res.status(500).json({ error: error.message });
   }
 }

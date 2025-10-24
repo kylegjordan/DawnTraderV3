@@ -589,11 +589,213 @@ class HeuristicEngine {
 }
 
 // ============================================================================
+// SAFETY VALIDATOR - Phase 27.F.14.B Task 6
+// ============================================================================
+
+interface SafetyViolation {
+  type: 'EXCESSIVE_CHANGE' | 'RATE_LIMIT_EXCEEDED';
+  parameter: string;
+  attemptedChange: number;
+  limit: number;
+  details: string;
+}
+
+class SafetyValidator {
+  private readonly MODULE_NAME = 'SafetyValidator';
+  private readonly MAX_CHANGE_PERCENT = 30; // ±30%
+  private readonly MAX_ADJUSTMENTS_PER_HOUR = 3;
+  
+  // Track adjustments per parameter per mode
+  private adjustmentHistory: Map<string, Date[]> = new Map();
+
+  /**
+   * Validate adjustment against safety rules
+   */
+  async validateAdjustment(
+    rec: AdjustmentRecommendation,
+    mode: TradingMode
+  ): Promise<{ valid: boolean; violation?: SafetyViolation }> {
+    // Rule 1: No parameter change > ±30%
+    const changePercent = Math.abs(rec.changePercent);
+    if (changePercent > this.MAX_CHANGE_PERCENT) {
+      return {
+        valid: false,
+        violation: {
+          type: 'EXCESSIVE_CHANGE',
+          parameter: rec.parameter,
+          attemptedChange: rec.changePercent,
+          limit: this.MAX_CHANGE_PERCENT,
+          details: `Attempted ${rec.changePercent.toFixed(1)}% change exceeds ±${this.MAX_CHANGE_PERCENT}% limit`
+        }
+      };
+    }
+
+    // Rule 2: Max 3 adjustments per hour per parameter
+    const historyKey = `${mode}:${rec.parameter}`;
+    const recentCount = this.getRecentAdjustmentCount(historyKey);
+    
+    if (recentCount >= this.MAX_ADJUSTMENTS_PER_HOUR) {
+      return {
+        valid: false,
+        violation: {
+          type: 'RATE_LIMIT_EXCEEDED',
+          parameter: rec.parameter,
+          attemptedChange: recentCount + 1,
+          limit: this.MAX_ADJUSTMENTS_PER_HOUR,
+          details: `Already made ${recentCount} adjustments in past hour (limit: ${this.MAX_ADJUSTMENTS_PER_HOUR})`
+        }
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Record successful adjustment
+   */
+  recordAdjustment(parameter: string, mode: TradingMode): void {
+    const historyKey = `${mode}:${parameter}`;
+    const history = this.adjustmentHistory.get(historyKey) || [];
+    history.push(new Date());
+    this.adjustmentHistory.set(historyKey, history);
+  }
+
+  /**
+   * Get count of recent adjustments (past hour)
+   */
+  private getRecentAdjustmentCount(historyKey: string): number {
+    const history = this.adjustmentHistory.get(historyKey) || [];
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    
+    // Filter to only recent adjustments
+    const recentAdjustments = history.filter(date => date > oneHourAgo);
+    this.adjustmentHistory.set(historyKey, recentAdjustments);
+    
+    return recentAdjustments.length;
+  }
+
+  /**
+   * Log safety violation to audit trail
+   */
+  async logViolation(
+    violation: SafetyViolation,
+    rec: AdjustmentRecommendation,
+    mode: TradingMode
+  ): Promise<void> {
+    try {
+      await storage.createTradingAuditLog({
+        userId: 'system',
+        action: 'LATTI_SAFETY_VIOLATION',
+        mode,
+        triggeredBy: 'latti_safety_validator',
+        metadata: {
+          violationType: violation.type,
+          parameter: violation.parameter,
+          attemptedChange: violation.attemptedChange,
+          limit: violation.limit,
+          details: violation.details,
+          recommendation: {
+            currentValue: rec.currentValue,
+            recommendedValue: rec.recommendedValue,
+            changePercent: rec.changePercent,
+            reason: rec.reason
+          }
+        }
+      });
+
+      console.warn(`[${this.MODULE_NAME}] ⚠️  SAFETY VIOLATION:`, {
+        type: violation.type,
+        parameter: violation.parameter,
+        details: violation.details
+      });
+    } catch (error: any) {
+      console.error(`[${this.MODULE_NAME}] ❌ Failed to log violation:`, error.message);
+    }
+  }
+
+  /**
+   * Get safety status summary
+   */
+  async getSafetySummary(mode: TradingMode): Promise<{
+    totalAdjustments24h: number;
+    violationsCount: number;
+    lastViolationTime: Date | null;
+    status: 'safe' | 'warning' | 'limit_reached';
+  }> {
+    try {
+      // Import db and schema
+      const { db } = await import('../db');
+      const { tradingAuditLog } = await import('@shared/schema');
+      const { and, like, eq, gte } = await import('drizzle-orm');
+      
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      // Get adjustments from past 24h (any action starting with latti_adjustment_)
+      const adjustments = await db
+        .select()
+        .from(tradingAuditLog)
+        .where(
+          and(
+            like(tradingAuditLog.action, 'latti_adjustment_%'),
+            eq(tradingAuditLog.mode, mode),
+            gte(tradingAuditLog.createdAt, oneDayAgo)
+          )
+        );
+
+      // Get violations
+      const violations = await db
+        .select()
+        .from(tradingAuditLog)
+        .where(
+          and(
+            eq(tradingAuditLog.action, 'LATTI_SAFETY_VIOLATION'),
+            eq(tradingAuditLog.mode, mode),
+            gte(tradingAuditLog.createdAt, oneDayAgo)
+          )
+        )
+        .orderBy(tradingAuditLog.createdAt);
+
+      const totalAdjustments24h = adjustments.length;
+      const violationsCount = violations.length;
+      const lastViolationTime = violations.length > 0 
+        ? new Date(violations[violations.length - 1].createdAt) 
+        : null;
+
+      // Determine status
+      let status: 'safe' | 'warning' | 'limit_reached' = 'safe';
+      if (violationsCount > 0) {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const recentViolations = violations.filter(v => 
+          new Date(v.createdAt) > oneHourAgo
+        );
+        status = recentViolations.length >= 3 ? 'limit_reached' : 'warning';
+      }
+
+      return {
+        totalAdjustments24h,
+        violationsCount,
+        lastViolationTime,
+        status
+      };
+    } catch (error: any) {
+      console.error(`[${this.MODULE_NAME}] Error getting safety summary:`, error.message);
+      return {
+        totalAdjustments24h: 0,
+        violationsCount: 0,
+        lastViolationTime: null,
+        status: 'safe'
+      };
+    }
+  }
+}
+
+// ============================================================================
 // ADJUSTMENT EXECUTOR
 // ============================================================================
 
 class AdjustmentExecutor {
   private readonly MODULE_NAME = 'AdjustmentExecutor';
+  private safetyValidator = new SafetyValidator();
   
   // Safety bounds for parameters
   private readonly BOUNDS = {
@@ -607,6 +809,7 @@ class AdjustmentExecutor {
 
   /**
    * Execute adjustments with safety validation
+   * Phase 27.F.14.B Task 6: Added safety validation layer
    */
   async execute(
     recommendations: AdjustmentRecommendation[],
@@ -622,6 +825,15 @@ class AdjustmentExecutor {
       const startTime = Date.now();
       
       try {
+        // Phase 27.F.14.B Task 6: Safety validation
+        const safetyCheck = await this.safetyValidator.validateAdjustment(rec, mode);
+        if (!safetyCheck.valid && safetyCheck.violation) {
+          // Log violation to audit trail
+          await this.safetyValidator.logViolation(safetyCheck.violation, rec, mode);
+          console.warn(`[${this.MODULE_NAME}] 🛑 SAFETY BLOCK: ${safetyCheck.violation.details}`);
+          continue;
+        }
+        
         // Validate bounds
         if (!this.validateBounds(rec.parameter, rec.recommendedValue)) {
           console.warn(`[${this.MODULE_NAME}] ⚠️  Skipping adjustment: ${rec.parameter} = ${rec.recommendedValue} exceeds safety bounds`);
@@ -632,6 +844,9 @@ class AdjustmentExecutor {
         const success = await this.applyAdjustment(rec, mode, userId);
         
         if (success) {
+          // Record successful adjustment in safety validator
+          this.safetyValidator.recordAdjustment(rec.parameter, mode);
+          
           const log: AdjustmentLog = {
             mode,
             ruleId: rec.ruleId || 'unknown',
@@ -950,6 +1165,19 @@ export class HeuristicTraderService {
       averageExecutionTimeMs: 0, // Would calculate from logs
       errors: []
     };
+  }
+
+  /**
+   * Get safety summary for LATTI adjustments
+   * Phase 27.F.14.B Task 6
+   */
+  async getSafetySummary(): Promise<{
+    totalAdjustments24h: number;
+    violationsCount: number;
+    lastViolationTime: Date | null;
+    status: 'safe' | 'warning' | 'limit_reached';
+  }> {
+    return await this.adjustmentExecutor['safetyValidator'].getSafetySummary(this.config.mode);
   }
 
   /**

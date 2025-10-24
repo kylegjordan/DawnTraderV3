@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import ClusterTab from "./cluster-tab";
 import LearningNetworkTab from "./learning-network-tab";
+import { LATTISafetyMonitor } from "./latti-safety-monitor";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SystemMetrics {
@@ -3397,6 +3398,9 @@ function SafetyTab() {
           </CardContent>
         </Card>
       </div>
+      
+      {/* Phase 27.F.14.B Task 6: LATTI Safety Audit & Bound Verification */}
+      <LATTISafetyMonitor />
     </div>
   );
 }

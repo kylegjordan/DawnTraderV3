@@ -1,6 +1,7 @@
 /**
  * LATTI Baseline Status Widget
  * Phase 27.F.14.B - Task 3: Fee-Aware Metrics Display
+ * Phase 27.F.14.B - Task 6: Safety Audit & Bound Verification
  * 
  * Displays baseline establishment status and key net metrics
  */
@@ -8,18 +9,45 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useBaselineStatus } from "@/hooks/use-baseline-status";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { CheckCircle2, Clock, TrendingUp, DollarSign, Target } from "lucide-react";
+import { CheckCircle2, Clock, TrendingUp, DollarSign, Target, Shield, AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useQuery } from "@tanstack/react-query";
+
+interface SafetySummary {
+  totalAdjustments24h: number;
+  violationsCount: number;
+  lastViolationTime: Date | null;
+  status: 'safe' | 'warning' | 'limit_reached';
+}
+
+interface LATTISafetySummaryResponse {
+  paper: SafetySummary;
+  live: SafetySummary;
+}
 
 export function BaselineStatusWidget() {
   const { mode } = useTradingMode();
   const { data: baselineStatus, isLoading } = useBaselineStatus({
     enabled: mode === 'paper' // Only fetch in paper mode
   });
+  
+  // Fetch LATTI safety status (Phase 27.F.14.B Task 6)
+  const { data: safetySummary } = useQuery<LATTISafetySummaryResponse>({
+    queryKey: ['/api/heuristic-trader/safety-summary'],
+    refetchInterval: 10000, // Refresh every 10 seconds
+    enabled: mode === 'paper'
+  });
 
   if (mode !== 'paper') {
     return null; // Don't show in live mode
   }
+  
+  // Get safety indicator for paper mode
+  const paperSafetyStatus = safetySummary?.paper.status || 'safe';
+  const safetyIcon = paperSafetyStatus === 'safe' ? '🟢' : 
+                     paperSafetyStatus === 'warning' ? '🟡' : '🔴';
+  const safetyText = paperSafetyStatus === 'safe' ? 'Safe' : 
+                     paperSafetyStatus === 'warning' ? 'Warning' : 'Limit Reached';
 
   if (isLoading) {
     return (
@@ -53,17 +81,31 @@ export function BaselineStatusWidget() {
             <Target className="w-5 h-5" />
             LATTI Baseline
           </CardTitle>
-          {isEstablished ? (
-            <Badge variant="default" className="bg-green-600" data-testid="baseline-badge-established">
-              <CheckCircle2 className="w-3 h-3 mr-1" />
-              Established
+          <div className="flex items-center gap-2">
+            {/* Safety Indicator (Phase 27.F.14.B Task 6) */}
+            <Badge 
+              variant={paperSafetyStatus === 'safe' ? 'default' : 'destructive'}
+              className={
+                paperSafetyStatus === 'safe' ? 'bg-green-600' :
+                paperSafetyStatus === 'warning' ? 'bg-yellow-600' : 'bg-red-600'
+              }
+              data-testid="baseline-safety-indicator"
+            >
+              {safetyIcon} {safetyText}
             </Badge>
-          ) : (
-            <Badge variant="secondary" data-testid="baseline-badge-pending">
-              <Clock className="w-3 h-3 mr-1" />
-              Pending ({Math.round(overallProgress)}%)
-            </Badge>
-          )}
+            {/* Baseline Status */}
+            {isEstablished ? (
+              <Badge variant="default" className="bg-green-600" data-testid="baseline-badge-established">
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+                Established
+              </Badge>
+            ) : (
+              <Badge variant="secondary" data-testid="baseline-badge-pending">
+                <Clock className="w-3 h-3 mr-1" />
+                Pending ({Math.round(overallProgress)}%)
+              </Badge>
+            )}
+          </div>
         </div>
         <CardDescription className="text-xs">
           {isEstablished 
