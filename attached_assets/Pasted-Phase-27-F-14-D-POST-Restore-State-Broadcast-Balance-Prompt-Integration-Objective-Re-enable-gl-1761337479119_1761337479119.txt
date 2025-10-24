@@ -1,0 +1,82 @@
+Phase 27.F.14.D-POST — Restore State Broadcast + Balance Prompt Integration
+
+Objective:
+Re-enable global trading-state synchronization so that all connected users see accurate and simultaneous toggle/blue-bar updates, and ensure the portfolio balance confirmation prompt fires again at startup.
+
+Tasks for Replit
+1️⃣ Verify and Re-enable Global State Broadcast
+
+Reintroduce a unified TradingStateSync.broadcast() method that fires whenever PaperSim or LiveSim changes state.
+
+The event should include:
+
+{ mode: "paper", status: "running"/"stopped", timestamp }
+
+
+Ensure this event is emitted to all connected clients, not just the initiating user.
+
+On the frontend, the listener updates the toggle, blue bar, and toast simultaneously.
+
+Expected log confirmation:
+
+[TradingStateSync] Broadcast → mode=paper, status=stopped (2 clients updated)
+
+2️⃣ Ensure the Balance Prompt Hook Runs After State Initialization
+
+The balance check must occur after global context initialization but before LATTI baseline starts.
+
+If portfolio balance is missing or stale, the system pauses startup and sends the prompt event:
+[PaperSim] Portfolio balance confirmation required.
+
+Expected sequence after fix:
+
+[TradingStateSync] Initialized (mode=paper)
+[PaperSim] Portfolio balance confirmation required
+[UI] Modal opened: Confirm starting balance
+
+3️⃣ Cross-Session Verification
+
+After implementation:
+
+Log in as Kyle G. Jordan in one browser.
+
+Log in as testuser123 / SecurePass123! in another.
+
+Start trading from one session.
+
+Both dashboards should update instantly:
+
+Toast: Trading started.
+
+Blue bar: Active.
+
+Toggle: Active.
+
+Stop trading from the other session.
+
+Both sessions immediately show stopped.
+
+Toast: Trading stopped.
+
+Toggle and bar switch to stopped without double click.
+
+✅ Success Criteria
+Check	Expected Result
+Portfolio Prompt	Appears before PaperSim start (if stale or missing)
+TradingStateSync Logs	Show broadcast events for start/stop
+Cross-Session Sync	Both accounts reflect same state instantly
+Double-Click Bug	Eliminated — toggle responds once
+Blue Bar & Toast	Always match backend state
+Global Mode	Confirmed (mode=paper) for both users
+🧾 Deliverables
+
+Log snippet confirming:
+
+[TradingStateSync] Broadcast → mode=paper, status=running
+[TradingStateSync] Broadcast → mode=paper, status=stopped
+[PaperSim] Portfolio balance confirmation required
+
+
+Verification screenshot showing both users’ dashboards synchronized.
+
+Updated architecture note in replit.md under TradingStateSync (Global Broadcast v2).
