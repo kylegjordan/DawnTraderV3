@@ -399,11 +399,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     ? tradingStatus?.isEngineActivePaper || false
     : tradingStatus?.isEngineActiveLive || false;
 
-  // Phase 27.F.13.O: Get audit info for who started/stopped the engine
-  const auditInfo = isActive 
-    ? tradingStatus?.lastStartedBy || tradingStatus?.changedBy
-    : tradingStatus?.lastStoppedBy;
-
   return (
     <header 
       className="sticky top-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border"
@@ -445,17 +440,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   </span>
                 </div>
               </div>
-              {/* Phase 27.F.13.O: Audit info display */}
-              {auditInfo && (
-                <div className="px-2 flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">
-                    {isActive ? 'Started by:' : 'Stopped by:'}
-                  </span>
-                  <span className="text-[10px] font-mono text-foreground/80" data-testid="text-audit-user">
-                    {auditInfo}
-                  </span>
-                </div>
-              )}
             </div>
             
             {/* Mode Toggle - Phase 27.3: Permission-gated */}
