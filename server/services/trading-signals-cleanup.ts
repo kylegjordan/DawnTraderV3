@@ -1,5 +1,5 @@
-import { db } from "../db/index";
-import { tradingSignals } from "../db/schema";
+import { db } from "../db";
+import { tradingSignals } from "../../shared/schema";
 import { and, eq, lte } from "drizzle-orm";
 
 export class TradingSignalsCleanupTask {

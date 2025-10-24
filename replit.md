@@ -39,6 +39,16 @@ The Local Autonomous Trading Tuning Intelligence (LATTI) service, an evolution o
 
 Trading Pace Control provides global trading aggressiveness settings via the Goals Engine. It features four pace options (Conservative, Baseline, Optimistic, Aggressive) with dynamic target metrics for risk per trade, trades per day, earnings per trade, and daily profit targets. The trading pace is stored in `system_context.trading_pace` and applies globally to both Live and Paper modes. The UI component is located in the Goals tab and integrates with LATTI for autonomous parameter adjustment within user-defined pace boundaries.
 
+Automated Trading Signals Cleanup Scheduler (Phase 27.F.14.D) implements a 5-minute recurring task that marks expired signals and removes old entries (>7 days expired) to prevent database bloat. The cleanup task is registered with `SchedulerRegistry` and runs via `TradingSignalsCleanupTask`. Manual cleanup reduced active signals from 5,032 → 555 (91% reduction) by removing 4,400+ duplicates in October 2025.
+
+## Recent Changes
+- **Oct 24, 2025**: Automated cleanup scheduler implemented and verified working (Phase 27.F.14.D)
+- **Oct 24, 2025**: Mobile responsive overhaul completed across Trading, Watchlist, Reports, and System Monitoring pages with icon-only tabs for dense tab sets (<640px)
+- **Oct 24, 2025**: Signal deduplication implemented in `saveTradingSignal()` to prevent duplicate signals
+
+## Known Technical Debt
+- **TradingStateSync Refactor Required**: The `TradingStateSync` service contains per-user mode architecture that conflicts with Phase 27.F.13.O global-per-mode refactor. Specifically, `TradingStateSync.initialize()` passes `userId` to `storage.getSystemContext()` which now expects a `mode` parameter. This causes harmless errors during startup (caught by fallback to default paper mode). Future work should refactor `TradingStateSync` to eliminate per-user mode tracking and align with global mode architecture.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

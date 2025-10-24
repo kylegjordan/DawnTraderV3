@@ -1,0 +1,108 @@
+🧭 REPLIT DEBUG DIRECTIVE — Phase 27.F.14.D-PRE
+Cleanup Scheduler Execution Failure (Filtered/Ready-to-Buy Non-Purge)
+
+Context:
+After Phase 27.F.14.C-POST, the cleanup service was successfully created and registered.
+However, inspection shows that duplicate and expired pairs still remain visible in both Filtered Pairs and Ready-to-Buy tabs.
+Logs confirm scheduler creation but no visible deletion occurs.
+
+This directive asks Replit to investigate why the cleanup job isn’t effectively purging signals, even though deduplication and expiration logic exist in code.
+
+🧪 Observed Symptoms
+Component	Problem	Evidence
+Filtered Pairs Tab	Expired and duplicate entries persist	156 eligible pairs – several have identical symbols & strategies.
+Ready-to-Buy Tab	Hundreds of records remain (≈ 676)	Same symbols appear multiple times with identical metrics.
+Cleanup Scheduler	Appears registered but not executing delete queries	No [SignalsCleanup] log entries showing deletions during runtime.
+expireAllExpiredSignals()	Likely defined but never invoked inside active job loop	Cleanup method exists but not referenced inside scheduler task.
+⚙️ Tasks for Replit to Perform (Investigation → Fix → Validation)
+1️⃣ Verify Scheduler Execution
+
+Confirm that SignalsCleanupScheduler (or trading-signals-cleanup.ts) is:
+
+Registered in server/index.ts or schedulerRegistry.
+
+Actually executing every 5 minutes (*/5 * * * *).
+
+Check logs after startup:
+
+[Scheduler] Registered task: trading_signals_cleanup
+[SignalsCleanup] Starting cleanup cycle
+
+
+If missing → job not firing.
+
+Confirm the cleanup job is not blocked by WALTER_DISABLED or paused due to safe-mode flags.
+
+2️⃣ Confirm Database Purge Logic
+
+Inspect the methods called during cleanup:
+
+expireAllExpiredSignals()
+
+removeDuplicates()
+
+removeInvalidSignals()
+
+Ensure each method is executed and commits deletions (await db.delete().where(...)).
+
+Check transaction commits: verify no early return or silent catch preventing persistence.
+
+3️⃣ Validate Expiry Conditions
+
+Review schema → column expires_at.
+
+Confirm data type = timestamptz.
+
+Verify timezone consistency (UTC vs local).
+
+Ensure WHERE expires_at < NOW() correctly matches stored timestamps.
+
+Adjust query to use timezone('UTC', NOW()) if offsets are causing expiry mis-matches.
+
+4️⃣ Check UI Data Source Caching
+
+Verify that the Filtered Pairs and Ready-to-Buy tabs pull directly from updated endpoints, not cached data.
+
+Confirm the React query interval (10 s) actually re-fetches from /api/paper-sim/filtered-pairs and /api/watchlist.
+
+5️⃣ Post-Fix Validation Checklist
+
+After applying fixes, confirm:
+
+Scheduler log entries appear every 5 min:
+
+[SignalsCleanup] ✅ Removed N expired, M duplicates | Next run in 5 min
+
+
+Database query:
+
+SELECT COUNT(*) FROM trading_signals WHERE expires_at < NOW();
+
+
+returns 0 rows.
+
+Duplicate symbol+strategy pairs = 0.
+
+UI tabs update within ≤ 1 minute of deletion.
+
+Active signal count stabilizes ≤ 50–150 (valid level).
+
+🧾 Deliverables
+
+Log excerpt showing scheduler startup + at least one successful purge cycle.
+
+Database count comparison (before vs after).
+
+Confirmation that frontend tabs reflect reduced signal count after refresh.
+
+🎯 Goal Before Simulation
+
+Establish confirmed, functioning cleanup scheduler that:
+
+Deletes expired and duplicate signals automatically,
+
+Runs every 5 minutes reliably,
+
+Keeps Ready-to-Buy ≤ 15 signals and Filtered Pairs ≤ 200 eligible.
+
+Once validated, proceed to Phase 27.F.14.D – 25-Minute Simulation with Pace Testing.
