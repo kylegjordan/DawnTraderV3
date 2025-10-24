@@ -41,17 +41,16 @@ Trading Pace Control provides global trading aggressiveness settings via the Goa
 
 Automated Trading Signals Cleanup Scheduler (Phase 27.F.14.D) implements a 5-minute recurring task that marks expired signals and removes old entries (>7 days expired) to prevent database bloat. The cleanup task is registered with `SchedulerRegistry` and runs via `TradingSignalsCleanupTask`. Manual cleanup reduced active signals from 5,032 → 555 (91% reduction) by removing 4,400+ duplicates in October 2025.
 
+Portfolio Balance Confirmation System (Phase 27.F.14.D-POST) implements mandatory balance confirmation before starting Paper Trading. The system checks if the portfolio balance has been confirmed within the last 24 hours via the `balance_last_confirmed` timestamp in `system_context`. If confirmation is missing or stale, the API returns `requiresConfirmation: true` with the current balance, prompting the user to confirm via modal before starting. Confirmation updates both the portfolio balance and timestamp through the `/api/paper-sim/confirm-balance` endpoint. The check is integrated into both `/api/trading/start` (for paper mode) and `/api/paper-sim/start` direct endpoints.
+
 ## Recent Changes
+- **Oct 24, 2025**: Portfolio balance confirmation system implemented (Phase 27.F.14.D-POST) - backend complete, frontend integration pending
 - **Oct 24, 2025**: Automated cleanup scheduler implemented and verified working (Phase 27.F.14.D)
 - **Oct 24, 2025**: Mobile responsive overhaul completed across Trading, Watchlist, Reports, and System Monitoring pages with icon-only tabs for dense tab sets (<640px)
 - **Oct 24, 2025**: Signal deduplication implemented in `saveTradingSignal()` to prevent duplicate signals
 
 ## Known Technical Debt
-- **TradingStateSync Partial Refactor** (Phase 27.F.14.D): The `TradingStateSync` service has been partially refactored to use mode-based system context. Key methods updated: `initialize()` (checks both paper and live contexts to recover actual mode), `setTradingMode()` (passes tradingMode to upsertSystemContext). However, two methods still need refactoring to complete the mode-based migration:
-  - `emergencyStop()` - Still passes `userId` to upsertSystemContext (line 191-202)
-  - `restoreLastSafeState()` - Still calls `storage.getSystemContext(userId)` (line 221)
-  
-  These methods are rarely used (emergency recovery paths) and don't affect normal operation. The enum error is resolved and normal trading state operations work correctly. Future work should complete the refactor for full consistency.
+- **Pre-existing LSP Type Errors in paper-sim-service.ts**: Lines 239-540 have type errors related to null/undefined handling and return type mismatches. These are in older code sections and do not affect runtime functionality. These should be addressed in future cleanup work.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
