@@ -92,12 +92,9 @@ class MetricsCore {
         const tradeValue = parseFloat(trade.entryPrice) * parseFloat(trade.quantity);
         currentExposure += tradeValue;
         
-        // For unrealized P/L, we'd need current market prices
-        // Simplified calculation for now
-        if (trade.currentPrice) {
-          const currentValue = parseFloat(trade.currentPrice) * parseFloat(trade.quantity);
-          unrealizedPL += (currentValue - tradeValue);
-        }
+        // For unrealized P/L, we'd need current market prices from live feed
+        // For now, this is a placeholder - in production we'd fetch live prices
+        // The trade object doesn't have currentPrice, we'd need to fetch it separately
       }
 
       // Calculate realized P/L from closed trades
@@ -106,16 +103,11 @@ class MetricsCore {
       }, 0);
 
       // Get portfolio balance based on mode
-      let startingBalance = 0;
-      if (mode === 'paper') {
-        // Get paper balance from database
-        const paperBalance = await storage.getPaperPortfolioBalance('paper');
-        startingBalance = paperBalance?.balance || 820; // Default to $820 if not set
-      } else {
-        // Get live balance from database
-        const liveBalance = await storage.getLivePortfolioBalance();
-        startingBalance = liveBalance?.balance || 1000; // Default to $1000 if not set
-      }
+      // Phase 27.F.15.C: Use getPortfolioState for both modes
+      const portfolioState = await storage.getPortfolioState({ mode });
+      const startingBalance = portfolioState?.balance 
+        ? parseFloat(portfolioState.balance) 
+        : (mode === 'paper' ? 820 : 1000); // Defaults: paper=$820, live=$1000
 
       const totalValue = startingBalance + realizedPL + unrealizedPL;
       
