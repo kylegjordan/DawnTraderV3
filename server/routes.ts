@@ -3561,8 +3561,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
         
         // Phase 27.F.14.J: Reset LATTI baseline for paper mode (per_simulation baseline)
-        await storage.updateSystemContext({
-          mode: 'paper',
+        await storage.updateSystemContext('paper', {
           baselineMode: 'per_simulation',
           lattiLastAnchorTime: new Date()
         });
@@ -3594,8 +3593,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
         
         // Reset trading pace to baseline
-        await storage.updateSystemContext({
-          mode: 'paper',
+        await storage.updateSystemContext('paper', {
           tradingPace: 'baseline'
         });
         
@@ -3627,8 +3625,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       if (baselineMode === 'per_simulation') {
         // Reset baseline for new simulation
-        await storage.updateSystemContext({
-          mode: 'paper',
+        await storage.updateSystemContext('paper', {
           lattiLastAnchorTime: new Date()
         });
         console.log('[LATTI][Paper] Baseline reset for per_simulation mode');

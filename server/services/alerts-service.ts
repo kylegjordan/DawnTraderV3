@@ -89,15 +89,17 @@ export class AlertsService {
   }
 
   /**
-   * Gets unacknowledged alerts for a user and mode
+   * Gets unacknowledged alerts for a mode (GLOBAL - shared across ALL users)
+   * Phase 27.F.14.J-POST: Alerts are now global per mode, not per user
    */
   static async getUnacknowledgedAlerts(userId: string, mode: 'live' | 'paper') {
+    // NOTE: userId parameter kept for API compatibility but NOT used in query
+    // All users see the same alerts for each mode
     const alerts = await db
       .select()
       .from(systemAlerts)
       .where(
         and(
-          eq(systemAlerts.userId, userId),
           eq(systemAlerts.mode, mode),
           eq(systemAlerts.acknowledged, false)
         )
@@ -109,18 +111,16 @@ export class AlertsService {
   }
 
   /**
-   * Gets all alerts for a user and mode (including acknowledged)
+   * Gets all alerts for a mode (GLOBAL - shared across ALL users, including acknowledged)
+   * Phase 27.F.14.J-POST: Alerts are now global per mode, not per user
    */
   static async getAllAlerts(userId: string, mode: 'live' | 'paper', limit = 100) {
+    // NOTE: userId parameter kept for API compatibility but NOT used in query
+    // All users see the same alerts for each mode
     const alerts = await db
       .select()
       .from(systemAlerts)
-      .where(
-        and(
-          eq(systemAlerts.userId, userId),
-          eq(systemAlerts.mode, mode)
-        )
-      )
+      .where(eq(systemAlerts.mode, mode))
       .orderBy(desc(systemAlerts.timestamp))
       .limit(limit);
 
@@ -128,33 +128,33 @@ export class AlertsService {
   }
 
   /**
-   * Acknowledges a specific alert
+   * Acknowledges a specific alert (GLOBAL - affects all users)
+   * Phase 27.F.14.J-POST: Alerts are now global, so dismissing affects all users
    */
   static async acknowledgeAlert(alertId: string, userId: string) {
+    // NOTE: userId parameter kept for API compatibility but NOT used in query
+    // Dismissing an alert dismisses it for ALL users
     const [alert] = await db
       .update(systemAlerts)
       .set({ acknowledged: true })
-      .where(
-        and(
-          eq(systemAlerts.id, alertId),
-          eq(systemAlerts.userId, userId)
-        )
-      )
+      .where(eq(systemAlerts.id, alertId))
       .returning();
 
     return alert;
   }
 
   /**
-   * Acknowledges all unacknowledged alerts for a user and mode
+   * Acknowledges all unacknowledged alerts for a mode (GLOBAL - affects all users)
+   * Phase 27.F.14.J-POST: Alerts are now global, so clearing affects all users
    */
   static async acknowledgeAll(userId: string, mode: 'live' | 'paper') {
+    // NOTE: userId parameter kept for API compatibility but NOT used in query
+    // Clearing alerts clears them for ALL users in this mode
     const result = await db
       .update(systemAlerts)
       .set({ acknowledged: true })
       .where(
         and(
-          eq(systemAlerts.userId, userId),
           eq(systemAlerts.mode, mode),
           eq(systemAlerts.acknowledged, false)
         )
@@ -165,15 +165,16 @@ export class AlertsService {
   }
 
   /**
-   * Acknowledges all low severity (info) alerts for a user and mode
+   * Acknowledges all low severity (info) alerts for a mode (GLOBAL - affects all users)
+   * Phase 27.F.14.J-POST: Alerts are now global per mode
    */
   static async muteLowSeverity(userId: string, mode: 'live' | 'paper') {
+    // NOTE: userId parameter kept for API compatibility but NOT used in query
     const result = await db
       .update(systemAlerts)
       .set({ acknowledged: true })
       .where(
         and(
-          eq(systemAlerts.userId, userId),
           eq(systemAlerts.mode, mode),
           eq(systemAlerts.severity, 'info'),
           eq(systemAlerts.acknowledged, false)

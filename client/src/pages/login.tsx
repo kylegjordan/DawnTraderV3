@@ -18,11 +18,23 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [offerBiometricSetup, setOfferBiometricSetup] = useState(false);
 
   useEffect(() => {
-    // Check if biometric authentication is available
-    isBiometricAvailable().then(setBiometricAvailable);
+    // Check if this is a mobile device
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+    };
+    
+    const mobile = checkMobile();
+    setIsMobileDevice(mobile);
+    
+    // Only check biometric availability on mobile devices
+    if (mobile) {
+      isBiometricAvailable().then(setBiometricAvailable);
+    }
   }, []);
 
   async function handleBiometricLogin() {
@@ -73,8 +85,13 @@ export default function LoginPage() {
           permissionCount: userData.permissions.length
         });
         
-        // Offer biometric setup if available and not already enabled
-        if (biometricAvailable && !localStorage.getItem("biometricEnabled")) {
+        // Only offer biometric setup on mobile devices if:
+        // 1. This is a mobile device
+        // 2. Biometric is available
+        // 3. Not already enabled
+        // 4. User hasn't declined before
+        const hasDeclinedBiometric = localStorage.getItem("biometricDeclined") === "true";
+        if (isMobileDevice && biometricAvailable && !localStorage.getItem("biometricEnabled") && !hasDeclinedBiometric) {
           setOfferBiometricSetup(true);
         } else {
           setLocation("/");
@@ -91,6 +108,8 @@ export default function LoginPage() {
     try {
       const success = await enableBiometricLogin(username);
       if (success) {
+        // Successfully enabled - clear any declined flag
+        localStorage.removeItem("biometricDeclined");
         setLocation("/");
       } else {
         setOfferBiometricSetup(false);
@@ -100,6 +119,13 @@ export default function LoginPage() {
       setOfferBiometricSetup(false);
       setLocation("/");
     }
+  }
+  
+  function handleSkipBiometric() {
+    // Remember that user declined biometric setup
+    localStorage.setItem("biometricDeclined", "true");
+    setOfferBiometricSetup(false);
+    setLocation("/");
   }
 
   if (offerBiometricSetup) {
@@ -117,7 +143,7 @@ export default function LoginPage() {
               <Fingerprint className="mr-2 h-4 w-4" />
               Enable Biometric Login
             </Button>
-            <Button onClick={() => setLocation("/")} variant="outline" className="w-full" data-testid="button-skip-biometric">
+            <Button onClick={handleSkipBiometric} variant="outline" className="w-full" data-testid="button-skip-biometric">
               Skip for now
             </Button>
           </CardContent>
