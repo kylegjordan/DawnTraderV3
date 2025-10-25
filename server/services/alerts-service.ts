@@ -55,11 +55,11 @@ export class AlertsService {
       acknowledged: false,
     }).returning();
 
-    // Phase 27.F.14.E: Broadcast alert creation to all clients
+    // Phase 27.F.14.J: Broadcast alert creation to all clients with enhanced debug logging
     try {
       const { contextBridge } = await import('./context-bridge.js');
-      await contextBridge.broadcast({
-        type: 'alerts_updated',
+      const broadcastPayload = {
+        type: 'alerts_updated' as const,
         payload: {
           action: 'created',
           alertId: alert.id,
@@ -69,10 +69,20 @@ export class AlertsService {
           mode: input.mode,
           timestamp: new Date().toISOString()
         }
+      };
+      
+      console.log('[Phase-27.F.14.J][AlertSync] 📡 Broadcasting alert creation:', {
+        alertId: alert.id,
+        severity: alert.severity,
+        category: alert.category,
+        connectedClients: contextBridge.getClientCount(),
+        timestamp: new Date().toISOString()
       });
-      console.log('[Phase-27.F.14.E] Broadcasted alert creation:', alert.id);
+      
+      await contextBridge.broadcast(broadcastPayload);
+      console.log('[Phase-27.F.14.J][AlertSync] ✅ Alert broadcast sent successfully');
     } catch (error: any) {
-      console.error('[Phase-27.F.14.E] Failed to broadcast alert creation:', error.message);
+      console.error('[Phase-27.F.14.J][AlertSync] ❌ Failed to broadcast alert creation:', error.message);
     }
 
     return alert;

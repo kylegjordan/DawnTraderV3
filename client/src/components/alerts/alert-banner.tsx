@@ -45,15 +45,29 @@ export default function AlertBanner() {
     staleTime: 60000,
   });
 
-  // Phase 27.F.14.E: Listen for alerts_updated events to sync across sessions
+  // Phase 27.F.14.J: Listen for alerts_updated events to sync across sessions with enhanced debug logging
   useEffect(() => {
     const alertUpdates = wsMessages.filter((msg: any) => msg.type === 'alerts_updated');
     if (alertUpdates.length > 0) {
       const latestUpdate = alertUpdates[alertUpdates.length - 1];
-      console.log('[Phase-27.F.14.E] Received alerts_updated event:', latestUpdate);
+      const broadcastTimestamp = latestUpdate.payload?.timestamp || latestUpdate.timestamp;
+      const timeSinceBroadcast = broadcastTimestamp 
+        ? Date.now() - new Date(broadcastTimestamp).getTime()
+        : 0;
+      
+      console.log('[Phase-27.F.14.J][AlertSync] 📨 Received alerts_updated event:', {
+        action: latestUpdate.payload?.action,
+        alertId: latestUpdate.payload?.alertId,
+        severity: latestUpdate.payload?.severity,
+        category: latestUpdate.payload?.category,
+        latencyMs: timeSinceBroadcast,
+        timestamp: broadcastTimestamp
+      });
       
       // Invalidate alerts query to immediately refresh across all sessions
       queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });
+      
+      console.log('[Phase-27.F.14.J][AlertSync] ✅ Alert cache invalidated, UI will refresh');
     }
   }, [wsMessages]);
 

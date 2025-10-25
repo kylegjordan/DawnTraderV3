@@ -3536,16 +3536,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     const { mode = 'continue', initialBalance } = req.body; // Phase 27.F.14.I: Support continue/new modes
     
     try {
-      // Phase 27.F.14.I: Handle "Start New Simulation" mode
+      // Phase 27.F.14.J: Handle "Start New Simulation" mode
       if (mode === 'new') {
         const balance = initialBalance ? parseFloat(initialBalance) : 800;
-        console.log(`[Phase-27.F.14.I] Starting NEW simulation with balance $${balance}`);
+        console.log(`[Phase-27.F.14.J] Starting NEW simulation with balance $${balance}`);
         
         // Stop paper simulation if running (gracefully handle if already stopped)
         const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
         const stopResult = await stopPaperSimulation(userId);
         if (!stopResult.success && !stopResult.message?.includes('not running')) {
-          console.warn('[Phase-27.F.14.I] Stop failed but continuing:', stopResult.message);
+          console.warn('[Phase-27.F.14.J] Stop failed but continuing:', stopResult.message);
         }
         
         // Reset baseline and portfolio state
@@ -3555,18 +3555,50 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         await storage.upsertPortfolioState({
           globalContextId: contextId,
           mode: 'paper',
-          balance: balance.toString(), // Phase 27.F.14.I: Use correct field name
+          balance: balance.toString(),
           lastUpdate: new Date()
         });
         
-        // Reset LATTI baseline for paper mode (per_simulation baseline)
+        // Phase 27.F.14.J: Reset LATTI baseline for paper mode (per_simulation baseline)
         await storage.updateSystemContext({
           mode: 'paper',
           baselineMode: 'per_simulation',
           lattiLastAnchorTime: new Date()
         });
+        console.log('[LATTI][Paper] Baseline mode: per_simulation');
+        console.log('[LATTI][Paper] Baseline reset successfully');
         
-        console.log('[Phase-27.F.14.I] Baseline reset for new simulation');
+        // Phase 27.F.14.J: Reset guardrails, screener filters, and trading pace to defaults
+        console.log('[LATTI][Paper] Resetting guardrails and filters to baseline defaults...');
+        
+        // Reset guardrails to defaults
+        await storage.updateGuardrail('maxDailyLoss', { value: '150.00', mode: 'paper' });
+        await storage.updateGuardrail('maxExposure', { value: '25.00', mode: 'paper' });
+        await storage.updateGuardrail('maxPositionSize', { value: '10.00', mode: 'paper' });
+        await storage.updateGuardrail('minWinRate', { value: '40.00', mode: 'paper' });
+        
+        // Reset screener filters to defaults
+        await storage.upsertScreenerFilter({
+          userId,
+          minVolume: '5000',
+          minLiquidity: '0',
+          maxBidAskSpread: '2.0',
+          minPrice: '0.01',
+          maxPrice: null,
+          volatilityMin: null,
+          volatilityMax: null,
+          rsiMin: null,
+          rsiMax: null,
+          excludeStablecoins: true
+        });
+        
+        // Reset trading pace to baseline
+        await storage.updateSystemContext({
+          mode: 'paper',
+          tradingPace: 'baseline'
+        });
+        
+        console.log('[LATTI][Paper] Guardrails and filters reset to baseline defaults');
         
         // Start the simulation
         const { startPaperSimulation } = await import('./services/paper-sim-service.js');
@@ -3583,8 +3615,29 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.json({ success: true, message: `New simulation started with $${balance.toFixed(2)}` });
       }
       
-      // Phase 27.F.14.I: Handle "Continue Previous Simulation" mode (default)
-      console.log('[Phase-27.F.14.I] Continuing previous simulation');
+      // Phase 27.F.14.J: Handle "Continue Previous Simulation" mode (default)
+      console.log('[Phase-27.F.14.J] Continuing previous simulation');
+      
+      // Phase 27.F.14.J: Check baseline mode and apply policy
+      const context = await storage.getSystemContext('paper');
+      const baselineMode = context?.baselineMode || 'per_simulation';
+      
+      console.log(`[LATTI][Paper] Baseline mode: ${baselineMode}`);
+      
+      if (baselineMode === 'per_simulation') {
+        // Reset baseline for new simulation
+        await storage.updateSystemContext({
+          mode: 'paper',
+          lattiLastAnchorTime: new Date()
+        });
+        console.log('[LATTI][Paper] Baseline reset for per_simulation mode');
+      } else if (baselineMode === 'cumulative') {
+        // Reload previous baseline, append new metrics
+        console.log('[LATTI][Paper] Baseline resumed successfully (cumulative mode)');
+      } else if (baselineMode === 'persistent') {
+        // Continue fully without reset
+        console.log('[LATTI][Paper] Baseline continued without reset (persistent mode)');
+      }
       
       // Phase 27.F.14.D-POST: Check if balance confirmation is required
       const { checkBalanceConfirmationRequired } = await import('./services/paper-sim-service.js');

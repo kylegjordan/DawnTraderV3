@@ -1,0 +1,69 @@
+🧭 REPLIT DIRECTIVE — Phase 27.F.14.J
+Final Baseline Policy Integration + Guardrails Reset + Trade Execution + Alert Sync Verification
+🎯 Objectives
+
+Integrate confirmed baseline-mode policy (per_simulation / cumulative / persistent).
+
+Add guardrail + filter reset logic for new simulations.
+
+Verify global alert synchronization now works.
+
+Run a 5-minute PaperSim diagnostic to confirm LATTI executes trades end-to-end.
+
+1️⃣ Baseline Mode Policy Integration
+
+On PaperSim start, check system_context.baseline_mode.
+
+per_simulation → reset baseline & adaptive metrics.
+
+cumulative → reload previous baseline, append new metrics.
+
+persistent → continue fully without reset.
+
+Log:
+
+[LATTI][Paper] Baseline mode: cumulative
+[LATTI][Paper] Baseline resumed successfully
+
+2️⃣ Guardrails & Filters Reset Logic
+
+When startMode === "new":
+
+Reset guardrails, screener filters, trading pace, and adaptive safety parameters to default baseline.
+
+Log:
+
+[LATTI][Paper] Guardrails and filters reset to baseline defaults
+
+3️⃣ Global Alert Synchronization
+
+Verify that alerts_updated WebSocket events are fired and received by all clients.
+
+Add temporary debug logs on both backend broadcast and frontend listener.
+
+Expected: clearing or triggering alerts in one session updates the other within ≤ 1 s.
+
+4️⃣ Trade Execution Verification (5-Minute Diagnostic)
+
+Confirm LATTI executes paper trades:
+
+[LATTI][Paper] FilteredPairs → N
+
+[LATTI][Paper] ReadyToBuy → X
+
+[LATTI][Paper] TradesExecuted → Y
+
+[LATTI][Paper] TradesClosed → Z
+
+If TradesExecuted = 0, identify cause (validation, guardrail, scheduler).
+
+Provide log snippets and DB row counts for each table (trading_signals, executed_trades, closed_trades).
+
+✅ Success Criteria
+Check	Expected Result
+Alerts	Sync instantly across sessions.
+Guardrails / Filters	Reset on new, persist on continue.
+Baseline Mode	Logs show correct mode per run.
+Trade Execution	Trades execute normally in paper mode.
+Scheduler	Executes on expected interval.
+Logs	Clean trade lifecycle output, no missing stages.
