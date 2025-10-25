@@ -187,7 +187,7 @@ export class CommandRouter {
       }
 
       // Find the trade
-      const trades = await storage.getActiveTrades(userId);
+      const trades = await storage.getActiveTrades();
       const trade = trades.find(t => t.symbol === pair);
 
       if (!trade) {
@@ -328,7 +328,7 @@ export class CommandRouter {
 
     // Active positions
     if (entity === 'positions') {
-      const trades = await storage.getActiveTrades(userId);
+      const trades = await storage.getActiveTrades();
       
       return {
         success: true,

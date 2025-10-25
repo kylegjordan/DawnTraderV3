@@ -222,8 +222,8 @@ export async function getGuardrails(userId: string, mode: 'live' | 'paper') {
 export async function getGoals(userId: string, mode: 'live' | 'paper') {
   try {
     const goalsData = mode === 'live' 
-      ? await storage.getUserGoalsLive(userId)
-      : await storage.getUserGoalsPaper(userId);
+      ? await storage.getGoalsLive()
+      : await storage.getGoalsPaper();
     return goalsData;
   } catch (error: any) {
     console.error('[ConfigUpdateService] Error fetching goals:', error);

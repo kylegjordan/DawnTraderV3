@@ -235,7 +235,6 @@ export const tradingSettings = pgTable("trading_settings", {
 // Guardrails (mode-isolated risk parameters) - GLOBAL per mode
 export const guardrails = pgTable("guardrails", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   maxDailyLoss: decimal("max_daily_loss", { precision: 10, scale: 2 }).default("1000.00"),
   maxDrawdown: decimal("max_drawdown", { precision: 5, scale: 2 }).default("10.00"),
@@ -254,7 +253,6 @@ export const guardrails = pgTable("guardrails", {
 // Screener Filters (mode-isolated screening criteria) - GLOBAL per mode
 export const screenerFilters = pgTable("screener_filters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   minVolume: decimal("min_volume", { precision: 15, scale: 2 }).default("1000000.00"),
   minPrice: decimal("min_price", { precision: 10, scale: 8 }).default("0.01"),
@@ -307,7 +305,6 @@ export const strategySettingsAudit = pgTable("strategy_settings_audit", {
 // Watchlist pairs - GLOBAL per mode
 export const watchlistPairs = pgTable("watchlist_pairs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull().default("paper"),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
@@ -328,7 +325,6 @@ export const watchlistPairs = pgTable("watchlist_pairs", {
 // Trading Signals - Active trading opportunities waiting to be executed - GLOBAL per mode
 export const tradingSignals = pgTable("trading_signals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull().default("paper"),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
@@ -356,7 +352,6 @@ export const tradingSignals = pgTable("trading_signals", {
 // Trades - GLOBAL per mode
 export const trades = pgTable("trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
   mode: tradingModeEnum("mode").notNull(),
@@ -921,7 +916,6 @@ export const learningFragments = pgTable("learning_fragments", {
 // Filter diagnostics (screening health metrics) - GLOBAL per mode
 export const filterDiagnostics = pgTable("filter_diagnostics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
   pairsScanned: integer("pairs_scanned").notNull().default(0),
@@ -950,7 +944,6 @@ export const portfolioState = pgTable("portfolio_state", {
 // Paper trades (simulated trades - completely isolated from live) - GLOBAL (legacy table)
 export const paperTrades = pgTable("paper_trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
   status: tradeStatusEnum("status").default("open"),
@@ -1088,7 +1081,6 @@ export const featureSnapshots = pgTable("feature_snapshots", {
 // Goals Engine - Live Mode - GLOBAL
 export const goalsLive = pgTable("goals_live", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   metricName: varchar("metric_name", { length: 100 }).notNull(), // Display name
   metricKey: varchar("metric_key", { length: 100 }).notNull(), // Canonical normalized key
   goalValue: decimal("goal_value", { precision: 15, scale: 2 }),
@@ -1103,7 +1095,6 @@ export const goalsLive = pgTable("goals_live", {
 // Goals Engine - Paper Mode - GLOBAL
 export const goalsPaper = pgTable("goals_paper", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   metricName: varchar("metric_name", { length: 100 }).notNull(), // Display name
   metricKey: varchar("metric_key", { length: 100 }).notNull(), // Canonical normalized key
   goalValue: decimal("goal_value", { precision: 15, scale: 2 }),
@@ -1118,7 +1109,6 @@ export const goalsPaper = pgTable("goals_paper", {
 // Goal Analysis History - Live Mode - GLOBAL
 export const goalAnalysisHistoryLive = pgTable("goal_analysis_history_live", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   conversationId: varchar("conversation_id"),
   userMessage: text("user_message"),
   aiResponse: text("ai_response"),
@@ -1133,7 +1123,6 @@ export const goalAnalysisHistoryLive = pgTable("goal_analysis_history_live", {
 // Goal Analysis History - Paper Mode - GLOBAL
 export const goalAnalysisHistoryPaper = pgTable("goal_analysis_history_paper", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   conversationId: varchar("conversation_id"),
   userMessage: text("user_message"),
   aiResponse: text("ai_response"),
@@ -1148,7 +1137,6 @@ export const goalAnalysisHistoryPaper = pgTable("goal_analysis_history_paper", {
 // Phase 27.5: Goal Audit Log (tracks all goal changes across modes) - GLOBAL
 export const goalAuditLog = pgTable("goal_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   action: varchar("action", { length: 50 }).notNull(), // 'created', 'updated', 'deleted', 'analyzed', 'applied'
   metricName: varchar("metric_name", { length: 100 }),
@@ -1167,7 +1155,6 @@ export const goalAuditLog = pgTable("goal_audit_log", {
 // Screener Results (operational data - mode isolated) - GLOBAL per mode
 export const screenerResults = pgTable("screener_results", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   exchange: varchar("exchange", { length: 20 }).default("kraken"),
@@ -1188,7 +1175,6 @@ export const screenerResults = pgTable("screener_results", {
 // Filter Calibration Log (learning data - mode-aware but shared via fallback) - GLOBAL per mode
 export const filterCalibrationLog = pgTable("filter_calibration_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   minVolume: decimal("min_volume", { precision: 15, scale: 2 }),
   minPrice: decimal("min_price", { precision: 10, scale: 8 }),
@@ -1206,7 +1192,6 @@ export const filterCalibrationLog = pgTable("filter_calibration_log", {
 // Intraday Adjustments (learning data - mode-aware but shared via fallback) - GLOBAL per mode
 export const intradayAdjustments = pgTable("intraday_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   adjustmentType: varchar("adjustment_type", { length: 50 }).notNull(),
   previousValue: decimal("previous_value", { precision: 20, scale: 8 }),
@@ -1237,7 +1222,6 @@ export const aiLessons = pgTable("ai_lessons", {
 // Portfolio Adjustments (learning data - mode-aware but shared via fallback) - GLOBAL per mode
 export const portfolioAdjustments = pgTable("portfolio_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   adjustmentType: varchar("adjustment_type", { length: 50 }).notNull(),
   parameter: varchar("parameter", { length: 100 }),
@@ -1378,7 +1362,6 @@ export const assetCapabilities = pgTable("asset_capabilities", {
 // Milestone 17C: Historic Signals (backfilled market signals for AI learning) - GLOBAL
 export const historicSignals = pgTable("historic_signals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   exchange: varchar("exchange", { length: 50 }).default("Kraken").notNull(),
   strategyId: strategyTypeEnum("strategy_id").notNull(),
@@ -1403,7 +1386,6 @@ export const historicSignals = pgTable("historic_signals", {
 // Paper Trades - Historical record of closed simulated trades - GLOBAL
 export const paperSimTrades = pgTable("paper_sim_trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
@@ -1431,7 +1413,6 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
 // Open Positions - Currently active simulated positions - GLOBAL
 export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
@@ -1454,7 +1435,6 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
 // Trade Logs - Chronological event log for paper trading transparency - GLOBAL
 export const paperSimTradeLogs = pgTable("paper_sim_trade_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   tradeId: varchar("trade_id"), // References paper_sim_trades.id (nullable for system events)
   positionId: varchar("position_id"), // References paper_sim_open_positions.id (nullable)
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),

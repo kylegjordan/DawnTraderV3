@@ -19,7 +19,7 @@ export class DatabaseQueryService {
    * Get watchlist/scanner results
    */
   async getWatchlist(userId: string, mode: 'live' | 'paper' = 'paper'): Promise<WatchlistPair[]> {
-    return await storage.getWatchlist({ userId, mode });
+    return await storage.getWatchlist({ mode });
   }
 
   /**
@@ -34,14 +34,14 @@ export class DatabaseQueryService {
       limit?: number;
     }
   ): Promise<Trade[]> {
-    return await storage.getTrades(userId, filters);
+    return await storage.getTrades(filters);
   }
 
   /**
    * Get currently open trades
    */
   async getOpenTrades(userId: string): Promise<Trade[]> {
-    return await storage.getActiveTrades(userId);
+    return await storage.getActiveTrades();
   }
 
   /**
@@ -57,7 +57,7 @@ export class DatabaseQueryService {
     totalPL: number;
     avgRMultiple: number;
   }> {
-    const trades = await storage.getTrades(userId, { limit: 10000 });
+    const trades = await storage.getTrades({ limit: 10000 });
     const openTrades = trades.filter(t => t.status === 'open');
     const closedTrades = trades.filter(t => t.status === 'closed');
     const winningTrades = closedTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
@@ -119,7 +119,7 @@ export class DatabaseQueryService {
     avgPL: number;
     avgRMultiple: number;
   }[]> {
-    const trades = await storage.getTrades(userId, { status: 'closed', limit: 10000 });
+    const trades = await storage.getTrades({ status: 'closed', limit: 10000 });
     
     const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'];
     return strategies.map(strategy => {

@@ -117,10 +117,10 @@ import {
   type InsertAILesson,
   type PortfolioAdjustment,
   type InsertPortfolioAdjustment,
-  type UserGoalLive,
-  type InsertUserGoalLive,
-  type UserGoalPaper,
-  type InsertUserGoalPaper,
+  type GoalLive,
+  type InsertGoalLive,
+  type GoalPaper,
+  type InsertGoalPaper,
   type GoalAnalysisHistoryLive,
   type InsertGoalAnalysisHistoryLive,
   type GoalAnalysisHistoryPaper,
@@ -215,30 +215,30 @@ export interface IStorage {
   upsertScreenerFilters(data: Omit<InsertScreenerFilters, 'userId'> & { lastUpdatedBy?: string }): Promise<ScreenerFilters>;
 
   // Filter diagnostics methods
-  getFilterDiagnostics(params: { userId: string; mode: 'live' | 'paper'; hours?: number }): Promise<any[]>;
-  logFilterDiagnostic(data: { userId: string; mode: 'live' | 'paper'; pairsScanned: number; eligiblePairs: number; topFailureReason: string; failurePercent: string }): Promise<void>;
+  getFilterDiagnostics(params: { mode: 'live' | 'paper'; hours?: number }): Promise<any[]>;
+  logFilterDiagnostic(data: { mode: 'live' | 'paper'; pairsScanned: number; eligiblePairs: number; topFailureReason: string; failurePercent: string }): Promise<void>;
 
   // Filter calibration methods
-  getLatestCalibration(params: { userId: string; mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null>;
-  getLatestPaperCalibration(userId: string): Promise<FilterCalibrationLog | null>;
-  getCalibrationWithFallback(userId: string, mode: 'live' | 'paper', maxAgeHours?: number): Promise<FilterCalibrationLog | null>;
-  getRecentCalibrations(params: { userId?: string; mode: 'live' | 'paper'; limit?: number; maxAgeHours?: number }): Promise<FilterCalibrationLog[]>;
+  getLatestCalibration(params: { mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null>;
+  getLatestPaperCalibration(): Promise<FilterCalibrationLog | null>;
+  getCalibrationWithFallback(mode: 'live' | 'paper', maxAgeHours?: number): Promise<FilterCalibrationLog | null>;
+  getRecentCalibrations(params: { mode: 'live' | 'paper'; limit?: number; maxAgeHours?: number }): Promise<FilterCalibrationLog[]>;
   createCalibration(data: InsertFilterCalibrationLog): Promise<FilterCalibrationLog>;
 
   // Screener results methods
-  getScreenerResults(params: { userId: string; mode: 'live' | 'paper'; limit?: number }): Promise<ScreenerResult[]>;
+  getScreenerResults(params: { mode: 'live' | 'paper'; limit?: number }): Promise<ScreenerResult[]>;
   createScreenerResults(data: InsertScreenerResult[]): Promise<void>;
-  deleteOldScreenerResults(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
+  deleteOldScreenerResults(params: { mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
 
   // Strategy settings methods
   getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null>;
   listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]>;
   upsertStrategySettings(row: InsertStrategySettings): Promise<StrategySettings>;
   insertStrategySettingsAudit(row: InsertStrategySettingsAudit): Promise<void>;
-  listStrategySettingsAudit(params: { userId: string; limit?: number }): Promise<StrategySettingsAudit[]>;
+  listStrategySettingsAudit(params: { limit?: number }): Promise<StrategySettingsAudit[]>;
 
   // Watchlist methods
-  getWatchlist(params: { userId: string; mode: 'live' | 'paper' }): Promise<WatchlistPair[]>;
+  getWatchlist(params: { mode: 'live' | 'paper' }): Promise<WatchlistPair[]>;
   addWatchlistPair(pair: InsertWatchlistPair): Promise<WatchlistPair>;
   updateWatchlistPair(id: string, updates: Partial<WatchlistPair>): Promise<WatchlistPair>;
   removeWatchlistPair(id: string): Promise<void>;
@@ -246,14 +246,14 @@ export interface IStorage {
 
   // Trading signals methods
   saveTradingSignal(signal: InsertTradingSignal): Promise<TradingSignal | null>;
-  getTradingSignals(params: { userId: string; mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]>;
+  getTradingSignals(params: { mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]>;
   updateSignalStatus(id: string, status: string, executedAt?: Date): Promise<TradingSignal>;
-  expireOldSignals(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
+  expireOldSignals(params: { mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
   expireAllExpiredSignals(): Promise<number>;
 
   // Trade methods
-  getTrades(userId: string, filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }): Promise<Trade[]>;
-  getActiveTrades(userId: string): Promise<Trade[]>;
+  getTrades(filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }): Promise<Trade[]>;
+  getActiveTrades(): Promise<Trade[]>;
   createTrade(trade: InsertTrade): Promise<Trade>;
   updateTrade(id: string, updates: Partial<Trade>): Promise<Trade>;
   closeTrade(id: string, exitPrice: number, exitFee: number, exitSlippage: number): Promise<Trade>;
@@ -357,15 +357,15 @@ export interface IStorage {
   createPaperTrade(trade: InsertPaperTrade): Promise<PaperTrade>;
   updatePaperTrade(id: string, updates: Partial<PaperTrade>): Promise<PaperTrade>;
   getPaperTradeById(id: string): Promise<PaperTrade | undefined>;
-  getAllPaperTrades(userId: string): Promise<PaperTrade[]>;
-  getOpenPaperTrades(userId: string): Promise<PaperTrade[]>;
-  deleteAllPaperTrades(userId: string): Promise<void>;
+  getAllPaperTrades(): Promise<PaperTrade[]>;
+  getOpenPaperTrades(): Promise<PaperTrade[]>;
+  deleteAllPaperTrades(): Promise<void>;
 
   // Paper daily brief methods
   createPaperDailyBrief(brief: InsertPaperDailyBrief): Promise<PaperDailyBrief>;
   updatePaperDailyBrief(id: string, updates: Partial<PaperDailyBrief>): Promise<PaperDailyBrief>;
-  getPaperDailyBrief(userId: string, date: string): Promise<PaperDailyBrief | undefined>;
-  getPaperDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<PaperDailyBrief[]>;
+  getPaperDailyBrief(date: string): Promise<PaperDailyBrief | undefined>;
+  getPaperDailyBriefs(filters?: { status?: string; limit?: number }): Promise<PaperDailyBrief[]>;
   finalizePaperDailyBrief(id: string): Promise<PaperDailyBrief>;
 
   // Paper AI report methods
@@ -409,19 +409,19 @@ export interface IStorage {
   getLatestFeatureSnapshot(symbol: string): Promise<FeatureSnapshot | undefined>;
 
   // Goals Engine methods - Live mode
-  getUserGoalsLive(userId: string): Promise<UserGoalLive[]>;
-  getGoalLive(userId: string, metricName: string): Promise<UserGoalLive | undefined>;
-  createGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive>;
-  updateGoalLive(id: string, updates: Partial<UserGoalLive>): Promise<UserGoalLive>;
-  upsertGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive>;
+  getGoalsLive(): Promise<GoalLive[]>;
+  getGoalLive(metricName: string): Promise<GoalLive | undefined>;
+  createGoalLive(goal: InsertGoalLive): Promise<GoalLive>;
+  updateGoalLive(id: string, updates: Partial<GoalLive>): Promise<GoalLive>;
+  upsertGoalLive(goal: InsertGoalLive): Promise<GoalLive>;
   deleteGoalLive(id: string): Promise<void>;
 
   // Goals Engine methods - Paper mode
-  getUserGoalsPaper(userId: string): Promise<UserGoalPaper[]>;
-  getGoalPaper(userId: string, metricName: string): Promise<UserGoalPaper | undefined>;
-  createGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper>;
-  updateGoalPaper(id: string, updates: Partial<UserGoalPaper>): Promise<UserGoalPaper>;
-  upsertGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper>;
+  getGoalsPaper(): Promise<GoalPaper[]>;
+  getGoalPaper(metricName: string): Promise<GoalPaper | undefined>;
+  createGoalPaper(goal: InsertGoalPaper): Promise<GoalPaper>;
+  updateGoalPaper(id: string, updates: Partial<GoalPaper>): Promise<GoalPaper>;
+  upsertGoalPaper(goal: InsertGoalPaper): Promise<GoalPaper>;
   deleteGoalPaper(id: string): Promise<void>;
 
   // Goal Analysis History - Live mode
@@ -664,7 +664,7 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db
       .select()
       .from(guardrails)
-      .where(and(isNull(guardrails.userId), eq(guardrails.mode, params.mode)));
+      .where(eq(guardrails.mode, params.mode));
     return result || null;
   }
 
@@ -680,22 +680,21 @@ export class DatabaseStorage implements IStorage {
       const [result] = await db
         .update(guardrails)
         .set(updateData)
-        .where(and(isNull(guardrails.userId), eq(guardrails.mode, data.mode)))
+        .where(eq(guardrails.mode, data.mode))
         .returning();
       return result;
     } else {
-      const insertData = { ...updateData, userId: undefined };
-      const [result] = await db.insert(guardrails).values(insertData).returning();
+      const [result] = await db.insert(guardrails).values(updateData).returning();
       return result;
     }
   }
 
-  // Screener filters methods (global settings per mode)
+  // Screener filters methods (global settings per mode - Phase 27.F.15.A)
   async getScreenerFilters(params: { mode: 'live' | 'paper' }): Promise<ScreenerFilters | null> {
     const [result] = await db
       .select()
       .from(screenerFilters)
-      .where(and(isNull(screenerFilters.userId), eq(screenerFilters.mode, params.mode)));
+      .where(eq(screenerFilters.mode, params.mode));
     return result || null;
   }
 
@@ -711,12 +710,11 @@ export class DatabaseStorage implements IStorage {
       const [result] = await db
         .update(screenerFilters)
         .set(updateData)
-        .where(and(isNull(screenerFilters.userId), eq(screenerFilters.mode, data.mode)))
+        .where(eq(screenerFilters.mode, data.mode))
         .returning();
       return result;
     } else {
-      const insertData = { ...updateData, userId: undefined };
-      const [result] = await db.insert(screenerFilters).values(insertData).returning();
+      const [result] = await db.insert(screenerFilters).values(updateData).returning();
       return result;
     }
   }
@@ -744,8 +742,8 @@ export class DatabaseStorage implements IStorage {
     return this.getSystemSetting('PRIMARY_OPERATOR_USER_ID');
   }
 
-  // Filter diagnostics methods
-  async getFilterDiagnostics(params: { userId: string; mode: 'live' | 'paper'; hours?: number }): Promise<any[]> {
+  // Filter diagnostics methods (Phase 27.F.15.A - GLOBAL)
+  async getFilterDiagnostics(params: { mode: 'live' | 'paper'; hours?: number }): Promise<any[]> {
     const hours = params.hours || 24;
     const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000);
     
@@ -754,7 +752,6 @@ export class DatabaseStorage implements IStorage {
       .from(filterDiagnostics)
       .where(
         and(
-          eq(filterDiagnostics.userId, params.userId),
           eq(filterDiagnostics.mode, params.mode),
           gte(filterDiagnostics.timestamp, cutoffTime)
         )
@@ -765,7 +762,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async logFilterDiagnostic(data: { 
-    userId: string; 
     mode: 'live' | 'paper'; 
     pairsScanned: number; 
     eligiblePairs: number; 
@@ -773,7 +769,6 @@ export class DatabaseStorage implements IStorage {
     failurePercent: string 
   }): Promise<void> {
     await db.insert(filterDiagnostics).values({
-      userId: data.userId,
       mode: data.mode,
       pairsScanned: data.pairsScanned,
       eligiblePairs: data.eligiblePairs,
@@ -782,8 +777,8 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  // Filter calibration methods
-  async getLatestCalibration(params: { userId: string; mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null> {
+  // Filter calibration methods (Phase 27.F.15.A - GLOBAL)
+  async getLatestCalibration(params: { mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null> {
     const maxAgeHours = params.maxAgeHours || 24;
     const cutoffTime = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
     
@@ -792,7 +787,6 @@ export class DatabaseStorage implements IStorage {
       .from(filterCalibrationLog)
       .where(
         and(
-          eq(filterCalibrationLog.userId, params.userId),
           eq(filterCalibrationLog.mode, params.mode),
           gte(filterCalibrationLog.timestamp, cutoffTime)
         )
@@ -803,28 +797,23 @@ export class DatabaseStorage implements IStorage {
     return result || null;
   }
 
-  async getLatestPaperCalibration(userId: string): Promise<FilterCalibrationLog | null> {
+  async getLatestPaperCalibration(): Promise<FilterCalibrationLog | null> {
     const [result] = await db
       .select()
       .from(filterCalibrationLog)
-      .where(
-        and(
-          eq(filterCalibrationLog.userId, userId),
-          eq(filterCalibrationLog.mode, 'paper')
-        )
-      )
+      .where(eq(filterCalibrationLog.mode, 'paper'))
       .orderBy(desc(filterCalibrationLog.timestamp))
       .limit(1);
     
     return result || null;
   }
 
-  async getCalibrationWithFallback(userId: string, mode: 'live' | 'paper', maxAgeHours = 24): Promise<FilterCalibrationLog | null> {
-    let calibration = await this.getLatestCalibration({ userId, mode, maxAgeHours });
+  async getCalibrationWithFallback(mode: 'live' | 'paper', maxAgeHours = 24): Promise<FilterCalibrationLog | null> {
+    let calibration = await this.getLatestCalibration({ mode, maxAgeHours });
     
     if (!calibration && mode === 'live') {
-      console.log(`[Storage] No recent Live calibration for user ${userId}, falling back to Paper mode`);
-      calibration = await this.getLatestPaperCalibration(userId);
+      console.log(`[Storage] No recent Live calibration, falling back to Paper mode`);
+      calibration = await this.getLatestPaperCalibration();
       if (calibration) {
         calibration = { ...calibration, source: 'paper-fallback' };
       }
@@ -838,13 +827,9 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getRecentCalibrations(params: { userId?: string; mode: 'live' | 'paper'; limit?: number; maxAgeHours?: number }): Promise<FilterCalibrationLog[]> {
+  async getRecentCalibrations(params: { mode: 'live' | 'paper'; limit?: number; maxAgeHours?: number }): Promise<FilterCalibrationLog[]> {
     const limit = params.limit || 10;
     const conditions = [eq(filterCalibrationLog.mode, params.mode)];
-    
-    if (params.userId) {
-      conditions.push(eq(filterCalibrationLog.userId, params.userId));
-    }
     
     if (params.maxAgeHours) {
       const cutoffTime = new Date(Date.now() - params.maxAgeHours * 60 * 60 * 1000);
@@ -861,17 +846,12 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  // Screener results methods
-  async getScreenerResults(params: { userId: string; mode: 'live' | 'paper'; limit?: number }): Promise<ScreenerResult[]> {
+  // Screener results methods (Phase 27.F.15.A - GLOBAL)
+  async getScreenerResults(params: { mode: 'live' | 'paper'; limit?: number }): Promise<ScreenerResult[]> {
     const results = await db
       .select()
       .from(screenerResults)
-      .where(
-        and(
-          eq(screenerResults.userId, params.userId),
-          eq(screenerResults.mode, params.mode)
-        )
-      )
+      .where(eq(screenerResults.mode, params.mode))
       .orderBy(desc(screenerResults.scannedAt))
       .limit(params.limit || 50);
     
@@ -884,12 +864,11 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async deleteOldScreenerResults(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void> {
+  async deleteOldScreenerResults(params: { mode: 'live' | 'paper'; beforeDate: Date }): Promise<void> {
     await db
       .delete(screenerResults)
       .where(
         and(
-          eq(screenerResults.userId, params.userId),
           eq(screenerResults.mode, params.mode),
           lte(screenerResults.scannedAt, params.beforeDate)
         )
@@ -947,23 +926,21 @@ export class DatabaseStorage implements IStorage {
     await db.insert(strategySettingsAudit).values(row);
   }
 
-  async listStrategySettingsAudit(params: { userId: string; limit?: number }): Promise<StrategySettingsAudit[]> {
+  async listStrategySettingsAudit(params: { limit?: number }): Promise<StrategySettingsAudit[]> {
     const limit = params.limit || 50;
     return await db
       .select()
       .from(strategySettingsAudit)
-      .where(eq(strategySettingsAudit.userId, params.userId))
       .orderBy(desc(strategySettingsAudit.createdAt))
       .limit(limit);
   }
 
-  // Watchlist methods
-  async getWatchlist(params: { userId: string; mode: 'live' | 'paper' }): Promise<WatchlistPair[]> {
+  // Watchlist methods (Phase 27.F.15.A - GLOBAL)
+  async getWatchlist(params: { mode: 'live' | 'paper' }): Promise<WatchlistPair[]> {
     return await db
       .select()
       .from(watchlistPairs)
       .where(and(
-        eq(watchlistPairs.userId, params.userId), 
         eq(watchlistPairs.mode, params.mode),
         eq(watchlistPairs.isActive, true)
       ))
@@ -974,7 +951,7 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.insert(watchlistPairs)
       .values(pair)
       .onConflictDoUpdate({
-        target: [watchlistPairs.userId, watchlistPairs.mode, watchlistPairs.symbol],
+        target: [watchlistPairs.mode, watchlistPairs.symbol],
         set: {
           volume24h: pair.volume24h,
           currentPrice: pair.currentPrice,
@@ -1010,11 +987,10 @@ export class DatabaseStorage implements IStorage {
       return null; // True skip - no database write
     }
     
-    // Delete any existing active signals for same symbol+strategy+user+mode to prevent duplicates
+    // Delete any existing active signals for same symbol+strategy+mode to prevent duplicates (GLOBAL)
     const deletedRows = await db
       .delete(tradingSignals)
       .where(and(
-        eq(tradingSignals.userId, signal.userId),
         eq(tradingSignals.mode, signal.mode),
         eq(tradingSignals.symbol, signal.symbol),
         eq(tradingSignals.strategy, signal.strategy as any),
@@ -1030,27 +1006,25 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getTradingSignals(params: { userId: string; mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]> {
-    // Phase 27.F.14.D: Side-effect purge of expired signals SCOPED to this user/mode only
+  async getTradingSignals(params: { mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]> {
+    // Phase 27.F.15.A: Side-effect purge of expired signals SCOPED to mode only (GLOBAL)
     try {
       const purgedRows = await db
         .delete(tradingSignals)
         .where(and(
-          eq(tradingSignals.userId, params.userId),
           eq(tradingSignals.mode, params.mode),
           lte(tradingSignals.expiresAt, new Date())
         ))
         .returning();
       
       if (purgedRows.length > 0) {
-        console.log(`[RealtimeCleanup] Purged ${purgedRows.length} expired on fetch (user=${params.userId}, mode=${params.mode})`);
+        console.log(`[RealtimeCleanup] Purged ${purgedRows.length} expired on fetch (mode=${params.mode})`);
       }
     } catch (error) {
       // Non-critical, continue with query
     }
     
     const conditions = [
-      eq(tradingSignals.userId, params.userId),
       eq(tradingSignals.mode, params.mode),
       gt(tradingSignals.expiresAt, new Date()) // Phase 27.F.14.D: Filter expired
     ];
@@ -1080,15 +1054,14 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async expireOldSignals(params: { userId: string; mode: 'live' | 'paper'; beforeDate: Date }): Promise<void> {
+  async expireOldSignals(params: { mode: 'live' | 'paper'; beforeDate: Date }): Promise<void> {
     await db
       .update(tradingSignals)
       .set({ status: 'expired' })
       .where(and(
-        eq(tradingSignals.userId, params.userId),
         eq(tradingSignals.mode, params.mode),
         eq(tradingSignals.status, 'active'),
-        lte(tradingSignals.expiresAt, params.beforeDate) // FIX: Check expiresAt, not detectedAt!
+        lte(tradingSignals.expiresAt, params.beforeDate)
       ));
   }
   
@@ -1105,12 +1078,11 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  // Trade methods
+  // Trade methods (Phase 27.F.15.A - GLOBAL)
   async getTrades(
-    userId: string, 
     filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }
   ): Promise<Trade[]> {
-    const conditions = [eq(trades.userId, userId)];
+    const conditions: any[] = [];
     
     if (filters?.status) {
       conditions.push(eq(trades.status, filters.status as any));
@@ -1122,7 +1094,11 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(trades.strategy, filters.strategy as any));
     }
     
-    let query = db.select().from(trades).where(and(...conditions)).orderBy(desc(trades.entryTime));
+    let query = db.select().from(trades);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    query = query.orderBy(desc(trades.entryTime));
     
     if (filters?.limit) {
       return await query.limit(filters.limit);
@@ -1131,11 +1107,11 @@ export class DatabaseStorage implements IStorage {
     return await query;
   }
 
-  async getActiveTrades(userId: string): Promise<Trade[]> {
+  async getActiveTrades(): Promise<Trade[]> {
     return await db
       .select()
       .from(trades)
-      .where(and(eq(trades.userId, userId), eq(trades.status, "open")))
+      .where(eq(trades.status, "open"))
       .orderBy(desc(trades.entryTime));
   }
 
@@ -1943,7 +1919,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // Paper trading methods (completely isolated from live)
+  // Paper trading methods (Phase 27.F.15.A - GLOBAL, isolated from live)
   async createPaperTrade(trade: InsertPaperTrade): Promise<PaperTrade> {
     const [result] = await db.insert(paperTrades).values(trade).returning();
     return result;
@@ -1966,24 +1942,23 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
-  async getAllPaperTrades(userId: string): Promise<PaperTrade[]> {
+  async getAllPaperTrades(): Promise<PaperTrade[]> {
     return await db
       .select()
       .from(paperTrades)
-      .where(eq(paperTrades.userId, userId))
       .orderBy(desc(paperTrades.entryTime));
   }
 
-  async getOpenPaperTrades(userId: string): Promise<PaperTrade[]> {
+  async getOpenPaperTrades(): Promise<PaperTrade[]> {
     return await db
       .select()
       .from(paperTrades)
-      .where(and(eq(paperTrades.userId, userId), eq(paperTrades.status, 'open')))
+      .where(eq(paperTrades.status, 'open'))
       .orderBy(desc(paperTrades.entryTime));
   }
 
-  async deleteAllPaperTrades(userId: string): Promise<void> {
-    await db.delete(paperTrades).where(eq(paperTrades.userId, userId));
+  async deleteAllPaperTrades(): Promise<void> {
+    await db.delete(paperTrades);
   }
 
   // Paper daily brief methods
@@ -2001,16 +1976,16 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getPaperDailyBrief(userId: string, date: string): Promise<PaperDailyBrief | undefined> {
+  async getPaperDailyBrief(date: string): Promise<PaperDailyBrief | undefined> {
     const [result] = await db
       .select()
       .from(paperDailyBriefs)
-      .where(and(eq(paperDailyBriefs.userId, userId), eq(paperDailyBriefs.date, date)));
+      .where(eq(paperDailyBriefs.date, date));
     return result || undefined;
   }
 
-  async getPaperDailyBriefs(userId: string, filters?: { status?: string; limit?: number }): Promise<PaperDailyBrief[]> {
-    const conditions = [eq(paperDailyBriefs.userId, userId)];
+  async getPaperDailyBriefs(filters?: { status?: string; limit?: number }): Promise<PaperDailyBrief[]> {
+    const conditions: any[] = [];
     
     if (filters?.status) {
       conditions.push(eq(paperDailyBriefs.status, filters.status as any));
@@ -2361,33 +2336,29 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
-  // Goals Engine methods - Live mode
-  async getUserGoalsLive(userId: string): Promise<UserGoalLive[]> {
+  // Goals Engine methods - Live mode (Phase 27.F.15.A - GLOBAL)
+  async getGoalsLive(): Promise<GoalLive[]> {
     return await db
       .select()
       .from(goalsLive)
-      .where(eq(goalsLive.userId, userId))
       .orderBy(goalsLive.metricName);
   }
 
-  async getGoalLive(userId: string, metricName: string): Promise<UserGoalLive | undefined> {
+  async getGoalLive(metricName: string): Promise<GoalLive | undefined> {
     const [result] = await db
       .select()
       .from(goalsLive)
-      .where(and(
-        eq(goalsLive.userId, userId),
-        eq(goalsLive.metricName, metricName)
-      ))
+      .where(eq(goalsLive.metricName, metricName))
       .limit(1);
     return result || undefined;
   }
 
-  async createGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive> {
+  async createGoalLive(goal: InsertGoalLive): Promise<GoalLive> {
     const [result] = await db.insert(goalsLive).values(goal).returning();
     return result;
   }
 
-  async updateGoalLive(id: string, updates: Partial<UserGoalLive>): Promise<UserGoalLive> {
+  async updateGoalLive(id: string, updates: Partial<GoalLive>): Promise<GoalLive> {
     const [result] = await db
       .update(goalsLive)
       .set({ ...updates, lastUpdated: new Date() })
@@ -2396,16 +2367,13 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async upsertGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive> {
+  async upsertGoalLive(goal: InsertGoalLive): Promise<GoalLive> {
     // Phase 27.F: Use metric_key for lookups to prevent duplicates
     const metricKey = goal.metricKey || canonicalizeMetricName(goal.metricName);
     const [existing] = await db
       .select()
       .from(goalsLive)
-      .where(and(
-        eq(goalsLive.userId, goal.userId),
-        eq(goalsLive.metricKey, metricKey)
-      ))
+      .where(eq(goalsLive.metricKey, metricKey))
       .limit(1);
     
     if (existing) {
@@ -2419,33 +2387,29 @@ export class DatabaseStorage implements IStorage {
     await db.delete(goalsLive).where(eq(goalsLive.id, id));
   }
 
-  // Goals Engine methods - Paper mode
-  async getUserGoalsPaper(userId: string): Promise<UserGoalPaper[]> {
+  // Goals Engine methods - Paper mode (Phase 27.F.15.A - GLOBAL)
+  async getGoalsPaper(): Promise<GoalPaper[]> {
     return await db
       .select()
       .from(goalsPaper)
-      .where(eq(goalsPaper.userId, userId))
       .orderBy(goalsPaper.metricName);
   }
 
-  async getGoalPaper(userId: string, metricName: string): Promise<UserGoalPaper | undefined> {
+  async getGoalPaper(metricName: string): Promise<GoalPaper | undefined> {
     const [result] = await db
       .select()
       .from(goalsPaper)
-      .where(and(
-        eq(goalsPaper.userId, userId),
-        eq(goalsPaper.metricName, metricName)
-      ))
+      .where(eq(goalsPaper.metricName, metricName))
       .limit(1);
     return result || undefined;
   }
 
-  async createGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper> {
+  async createGoalPaper(goal: InsertGoalPaper): Promise<GoalPaper> {
     const [result] = await db.insert(goalsPaper).values(goal).returning();
     return result;
   }
 
-  async updateGoalPaper(id: string, updates: Partial<UserGoalPaper>): Promise<UserGoalPaper> {
+  async updateGoalPaper(id: string, updates: Partial<GoalPaper>): Promise<GoalPaper> {
     const [result] = await db
       .update(goalsPaper)
       .set({ ...updates, lastUpdated: new Date() })
@@ -2454,16 +2418,13 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async upsertGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper> {
+  async upsertGoalPaper(goal: InsertGoalPaper): Promise<GoalPaper> {
     // Phase 27.F: Use metric_key for lookups to prevent duplicates
     const metricKey = goal.metricKey || canonicalizeMetricName(goal.metricName);
     const [existing] = await db
       .select()
       .from(goalsPaper)
-      .where(and(
-        eq(goalsPaper.userId, goal.userId),
-        eq(goalsPaper.metricKey, metricKey)
-      ))
+      .where(eq(goalsPaper.metricKey, metricKey))
       .limit(1);
     
     if (existing) {

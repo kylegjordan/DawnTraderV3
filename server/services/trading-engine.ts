@@ -55,8 +55,8 @@ export class TradingEngine {
     try {
       // Get user goals for the specific mode
       const goals = mode === 'live' 
-        ? await storage.getUserGoalsLive(this.userId)
-        : await storage.getUserGoalsPaper(this.userId);
+        ? await storage.getGoalsLive()
+        : await storage.getGoalsPaper();
       
       // Find profitability_vs_consistency goal
       const profConsGoal = goals.find(g => g.metricName === 'profitability_vs_consistency');

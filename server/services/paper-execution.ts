@@ -385,7 +385,7 @@ export class PaperExecutionService {
   // Reset all paper trades for this user (for testing/fresh start)
   async resetAllTrades(): Promise<void> {
     console.log(`[PaperExecution:${this.userId}] Resetting all paper trades`);
-    await storage.deleteAllPaperTrades(this.userId);
+    await storage.deleteAllPaperTrades();
     console.log(`[PaperExecution:${this.userId}] All paper trades deleted`);
   }
 }

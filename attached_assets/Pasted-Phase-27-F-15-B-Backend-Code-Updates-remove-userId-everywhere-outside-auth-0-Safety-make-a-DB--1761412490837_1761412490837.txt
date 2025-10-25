@@ -1,0 +1,188 @@
+Phase 27.F.15.B — Backend Code Updates (remove userId everywhere outside auth)
+0) Safety: make a DB snapshot now
+
+Even if Replit has checkpoints, take a dump so we can compare state.
+
+mkdir -p backups
+pg_dump dawntrader > backups/pre_27F15B.sql
+
+1) Apply the actual DB migration (columns still exist in DB)
+
+Schema edits landed in code, but the DB tables still have user_id. Run this idempotent SQL so production rows match code:
+
+-- PAPER/LIVE context id helper (read-only)
+-- (Skip if system_context already exists and populated)
+-- SELECT id, mode FROM system_context;
+
+-- Guardrails / Filters (examples – run all blocks)
+ALTER TABLE IF EXISTS guardrails       DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS screener_filters DROP COLUMN IF EXISTS user_id;
+
+-- Trading & paper sim
+ALTER TABLE IF EXISTS trading_signals           DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS trades                    DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS paper_trades              DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS paper_sim_trades          DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS paper_sim_open_positions  DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS paper_sim_trade_logs      DROP COLUMN IF EXISTS user_id;
+
+-- Goals engine (post-rename)
+ALTER TABLE IF EXISTS goals_live                         DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS goals_paper                        DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS goal_analysis_history_live         DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS goal_analysis_history_paper        DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS goal_audit_log                     DROP COLUMN IF EXISTS user_id;
+
+-- Diagnostics / results / adjustments / params
+ALTER TABLE IF EXISTS filter_diagnostics       DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS screener_results         DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS filter_calibration_log   DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS intraday_adjustments     DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS portfolio_adjustments    DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS strategy_parameters      DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS historic_signals         DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS watchlist_pairs          DROP COLUMN IF EXISTS user_id;
+
+-- Optional: add composite uniqueness that enforces “one global row per mode”
+-- (Adjust per table where it makes sense)
+-- CREATE UNIQUE INDEX IF NOT EXISTS uniq_guardrails_mode ON guardrails(mode);
+
+
+Then rebuild Drizzle metadata if you use it:
+
+npm run drizzle:generate || true
+
+2) Storage/service signatures: mechanical refactor
+2.1 Create helpers (one place):
+
+server/services/context-bridge.ts already has a context helper. Ensure we have:
+
+// server/services/system-context.ts
+import { storage } from '../storage';
+
+export async function getSystemContextIdForMode(mode: 'paper'|'live') {
+  const ctx = await storage.getSystemContext(mode); // existing helper or implement
+  if (!ctx) throw new Error(`No system_context row for mode=${mode}`);
+  return ctx.id;
+}
+
+2.2 Refactor pattern (apply to ~60 methods)
+
+Before (example)
+
+async function getScreenerFilters(userId: string, mode: 'paper'|'live') {
+  return db.select().from(screenerFilters)
+    .where(and(eq(screenerFilters.userId, userId), eq(screenerFilters.mode, mode)));
+}
+
+
+After
+
+import { getSystemContextIdForMode } from './services/system-context';
+
+async function getScreenerFilters(mode: 'paper'|'live') {
+  const globalContextId = await getSystemContextIdForMode(mode);
+  return db.select().from(screenerFilters)
+    .where(and(eq(screenerFilters.mode, mode), eq(screenerFilters.globalContextId, globalContextId)));
+}
+
+
+Update ALL trading/paper/filters/goals/storage methods that currently take (userId, mode):
+
+Change signature to (mode) (or { mode, ... }).
+
+Replace eq(table.userId, userId) with eq(table.globalContextId, globalContextId) and eq(table.mode, mode).
+
+Never pass userId into queries for Category-B tables.
+
+Top offenders to fix first (they’re causing your current errors):
+
+getScreenerFilters
+
+getTrades, getAllPaperTrades, insertPaperTrade, updatePaperTrade
+
+getUserGoalsLive → rename to getGoalsLive
+
+getUserGoalsPaper → rename to getGoalsPaper
+
+getTradingSignals, upsertGuardrails, upsertScreenerFilters
+
+Any “start/stop/diagnostics” paper-sim methods touching portfolio/engine state
+
+Search-and-rewrite hints:
+
+# list candidate functions
+rg -n "function .*?\(.*userId.*,.*mode" server/storage.ts
+rg -n "userId.*mode" server/storage.ts
+rg -n "eq\(.+\.userId" server
+
+3) Routes & callers: remove userId plumbing
+
+In server/routes.ts and services, stop reading req.user?.id for these endpoints.
+
+All trading endpoints must accept/use only mode (usually inferred from paper vs live route, or query/body mode).
+
+WebSocket broadcast payloads must not include any userId. Keep { type, mode, payload, timestamp }.
+
+Quick greps:
+
+rg -n "req\.user\.id|userId" server/routes.ts
+rg -n "userId" server/services server/controllers
+
+
+Replace “dismiss alerts”, “filtered pairs/insights”, “ready-to-buy”, “paper-sim start/stop”, “portfolio/overview/state”.
+
+4) Frontend: remove userId assumptions (if any remain)
+
+Hooks like useTrading, useFilters, useGoals should no longer append userId to query keys/URLs/localStorage.
+
+Query keys should be mode-scoped only, e.g. ['paper', 'filteredPairs'].
+
+WebSocket listeners should key by mode, never userId.
+
+Greps:
+
+rg -n "userId" client/src | grep -v auth
+rg -n "localStorage.*userId" client/src
+
+5) Fix the “contextBridge2.getClientCount is not a function” error
+
+You likely imported contextBridge as a different alias in one file. Standardize:
+
+// Always import like this
+import { contextBridge } from './services/context-bridge';
+
+// And call the existing method names:
+contextBridge.getClientCount();         // ✅
+contextBridge.broadcast({ ... });       // ✅
+// DO NOT use contextBridge2 or renamed methods
+
+
+Search and replace any contextBridge2 / mismatched names.
+
+6) Build & verify (no lingering userId in Category-B paths)
+# typecheck/build
+npm run build
+
+# runtime smoke
+npm run start &  # or the Start application workflow
+
+# grep to confirm we removed userId from trading code paths:
+rg -n "(userId|user_id)" server | grep -E "routes\.ts|services|storage\.ts" \
+  | grep -v "auth\|users\|sessions\|audit\|permissions" || echo "OK: no userId left"
+
+
+Manual verification (two browsers or accounts open):
+
+Start new paper simulation → confirm portfolio balance updates in both sessions within 1–2s.
+
+Visit Trading → Filtered Pairs / Ready to Buy / Filter Insights show the same counts in both users.
+
+Start/Stop trading from either user → toggle + blue bar stay in sync on both.
+
+Dismiss a new alert from one user → disappears for both; no 500s.
+
+7) Rollback plan (if needed)
+psql dawntrader < backups/pre_27F15B.sql
+git checkout .
+npm run build

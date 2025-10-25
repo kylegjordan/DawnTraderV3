@@ -79,8 +79,8 @@ export class SystemHealthService {
 
     // Check goals for both modes
     try {
-      const liveGoals = await storage.getUserGoalsLive(userId);
-      const paperGoals = await storage.getUserGoalsPaper(userId);
+      const liveGoals = await storage.getGoalsLive();
+      const paperGoals = await storage.getGoalsPaper();
       healthData.goals = {
         live: { count: liveGoals.length, hasGoals: liveGoals.length > 0 },
         paper: { count: paperGoals.length, hasGoals: paperGoals.length > 0 },

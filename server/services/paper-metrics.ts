@@ -28,8 +28,8 @@ export class PaperMetricsService {
     cryptoPercent: number;
   }> {
     const [allTrades, activeTrades] = await Promise.all([
-      storage.getAllPaperTrades(this.userId),
-      storage.getOpenPaperTrades(this.userId)
+      storage.getAllPaperTrades(),
+      storage.getOpenPaperTrades()
     ]);
 
     const closedTrades = allTrades.filter(t => t.status === 'closed');
@@ -86,7 +86,7 @@ export class PaperMetricsService {
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - days);
 
-    const allTrades = await storage.getAllPaperTrades(this.userId);
+    const allTrades = await storage.getAllPaperTrades();
     const closedTrades = allTrades.filter(t => t.status === 'closed');
     const recentTrades = closedTrades.filter(trade => 
       trade.exitTime && new Date(trade.exitTime) >= fromDate
@@ -132,7 +132,7 @@ export class PaperMetricsService {
   }> {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
-    const allTrades = await storage.getAllPaperTrades(this.userId);
+    const allTrades = await storage.getAllPaperTrades();
     const closedTrades = allTrades.filter(t => t.status === 'closed');
     
     // Get trades closed in last 24h
@@ -176,7 +176,7 @@ export class PaperMetricsService {
     thisYear: number;
     lifetime: number;
   }> {
-    const allTrades = await storage.getAllPaperTrades(this.userId);
+    const allTrades = await storage.getAllPaperTrades();
     const closedTrades = allTrades.filter(t => t.status === 'closed');
     
     const now = new Date();
@@ -224,7 +224,7 @@ export class PaperMetricsService {
     totalPL: number;
     avgRMultiple: number;
   }> {
-    const allTrades = await storage.getAllPaperTrades(this.userId);
+    const allTrades = await storage.getAllPaperTrades();
     const openTrades = allTrades.filter(t => t.status === 'open');
     const closedTrades = allTrades.filter(t => t.status === 'closed');
     const winningTrades = closedTrades.filter(t => parseFloat(t.realizedPL || '0') > 0);
@@ -266,7 +266,7 @@ export class PaperMetricsService {
     avgWin: number;
     avgLoss: number;
   }[]> {
-    const allTrades = await storage.getAllPaperTrades(this.userId);
+    const allTrades = await storage.getAllPaperTrades();
     const closedTrades = allTrades.filter(t => t.status === 'closed');
     
     // All 8 strategies
@@ -338,7 +338,7 @@ export class PaperMetricsService {
     balance: number;
     dayPL: number;
   }[]> {
-    const allTrades = await storage.getAllPaperTrades(this.userId);
+    const allTrades = await storage.getAllPaperTrades();
     const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
     
     // Sort trades by exit time
@@ -387,7 +387,7 @@ export class PaperMetricsService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const allTrades = await storage.getAllPaperTrades(this.userId);
+    const allTrades = await storage.getAllPaperTrades();
     const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
     const recentTrades = closedTrades.filter(trade => 
       new Date(trade.exitTime!) >= thirtyDaysAgo
@@ -422,7 +422,7 @@ export class PaperMetricsService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const allTrades = await storage.getAllPaperTrades(this.userId);
+    const allTrades = await storage.getAllPaperTrades();
     const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
     const recentTrades = closedTrades.filter(trade => 
       new Date(trade.exitTime!) >= sevenDaysAgo

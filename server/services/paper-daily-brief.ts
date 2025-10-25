@@ -199,13 +199,13 @@ export class PaperDailyBriefService {
     const metricsService = new PaperMetricsService(userId);
     
     // Get today's paper trades
-    const allTrades = await storage.getAllPaperTrades(userId);
+    const allTrades = await storage.getAllPaperTrades();
     const closedTrades = allTrades.filter(t => t.status === 'closed');
     const todayTrades = closedTrades.filter(trade => 
       trade.exitTime && new Date(trade.exitTime) >= todayStart
     );
     
-    const openTrades = await storage.getOpenPaperTrades(userId);
+    const openTrades = await storage.getOpenPaperTrades();
     
     // Get metrics from paper metrics service
     const portfolioMetrics = await metricsService.getPortfolioMetrics();

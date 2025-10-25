@@ -198,8 +198,8 @@ export class PreExecutionValidator {
   ): Promise<number> {
     try {
       const goals = mode === 'live' 
-        ? await storage.getUserGoalsLive(userId)
-        : await storage.getUserGoalsPaper(userId);
+        ? await storage.getGoalsLive()
+        : await storage.getGoalsPaper();
       
       const profConsGoal = goals.find(g => g.metricName === 'profitability_vs_consistency');
       

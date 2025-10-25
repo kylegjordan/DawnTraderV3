@@ -106,7 +106,7 @@ class TradingBob {
       }
 
       // Get risk metrics
-      const activeTrades = await storage.getActiveTrades(userId);
+      const activeTrades = await storage.getActiveTrades();
       const openTrades = mode === 'live'
         ? activeTrades
         : activeTrades.filter((t: any) => t.mode === 'paper');

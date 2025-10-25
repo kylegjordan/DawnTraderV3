@@ -156,7 +156,7 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
     const [settings, user, activeTrades] = await Promise.all([
       storage.getTradingSettings(userId),
       storage.getUser(userId),
-      storage.getActiveTrades(userId)
+      storage.getActiveTrades()
     ]);
 
     const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
