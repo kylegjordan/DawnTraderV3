@@ -125,6 +125,33 @@ export class FilteredPairsService {
     // Update cache
     this.cache.set(cacheKey, { data: result, timestamp: now });
     
+    // Phase 27.F.14.N: Broadcast trading data update to all clients
+    try {
+      const { contextBridge } = await import('./context-bridge.js');
+      const clientCount = contextBridge.getClientCount();
+      
+      console.log(`[FilterEngine] Broadcast trading_data_updated (mode=${mode}, pairs=${filteredPairs.length}) → ${clientCount} clients`, {
+        mode,
+        eligiblePairs: filteredPairs.length,
+        totalPairs: allPairs.length,
+        timestamp: lastScanAt.toISOString()
+      });
+      
+      await contextBridge.broadcast({
+        type: 'trading_data_updated',
+        payload: {
+          mode,
+          source: 'filter_engine',
+          eligibleCount: filteredPairs.length,
+          totalCount: allPairs.length,
+          timestamp: lastScanAt.toISOString()
+        },
+        mode
+      });
+    } catch (error: any) {
+      console.error('[FilterEngine] ❌ Failed to broadcast trading_data_updated:', error.message);
+    }
+    
     return result;
   }
 

@@ -162,6 +162,23 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   }, [wsMessages, queryClient]);
 
+  // Phase 27.F.14.N: Listen for trading_data_updated events to refresh trading tabs
+  useEffect(() => {
+    const tradingDataUpdates = wsMessages.filter((msg: any) => msg.type === 'trading_data_updated');
+    if (tradingDataUpdates.length > 0) {
+      const latestUpdate = tradingDataUpdates[tradingDataUpdates.length - 1];
+      console.log('[Phase-27.F.14.N][TradingSync] Received trading_data_updated event:', latestUpdate);
+      
+      // Invalidate all trading-related queries for immediate cross-session sync
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/filtered-pairs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trading-signals'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      
+      console.log('[Phase-27.F.14.N][TradingSync] ✅ Trading queries invalidated for mode:', latestUpdate.payload?.mode);
+    }
+  }, [wsMessages, queryClient]);
+
   const handleTradingToggle = async (enabled: boolean) => {
     console.log('[Phase-27.F.6] Toggle clicked:', { enabled, mode: currentMode });
     
