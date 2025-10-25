@@ -1,0 +1,188 @@
+🧭 Directive: Phase 27.F.15.B.4 – System-Wide Optimization & Final Convergence
+🎯 Objective
+
+Finalize migration to the unified, mode-based backend by aligning all dependent systems — Bob services, AI modules, Cortex, Alerts, and Metrics — with the global architecture.
+Both paper and live modes must operate concurrently, share identical logic paths, and emit synchronized telemetry.
+
+⚙️ Implementation Tasks
+1️⃣ Bob Services (DataBob, ConfigBob, TradingBob)
+
+Remove all userId references.
+
+Standardize to:
+
+DataBob.fetchAverages(mode)
+ConfigBob.fetchGuardrails(mode)
+TradingBob.fetchActivity(mode)
+
+
+Broadcast updates per mode:
+
+[Bob][mode=live] Metrics refreshed.
+[Bob][mode=paper] Metrics refreshed.
+
+2️⃣ AI & Cortex Integration
+
+Update AI Analyst, Walter, and Cortex Analytics Scheduler to accept and propagate mode.
+
+Store summaries and reinforcement data per-mode:
+
+[Cortex][mode=paper] Reinforcement cycle complete.
+
+3️⃣ Alerts & Notifications
+
+Replace per-user filtering with per-mode streams (/alerts/paper, /alerts/live).
+
+Verify dismiss / ack broadcasts globally:
+
+[AlertSync][mode=live] dismissed 3 alerts across 4 clients.
+
+4️⃣ Portfolio & Metrics Sync
+
+Merge PaperMetricsService and LiveMetricsService into BaseMetricsService.
+
+Implement:
+
+getPortfolioMetrics(mode)
+getRiskExposure(mode)
+
+
+Dashboards must auto-refresh on broadcast.
+
+5️⃣ Global Mode Telemetry Registry
+
+Create /services/mode-registry.ts:
+
+export const ModeRegistry = {
+  paper: { engineStatus: 'stopped', riskSummary: {}, alerts: 0 },
+  live:  { engineStatus: 'stopped', riskSummary: {}, alerts: 0 }
+};
+
+
+Update on every engine start/stop, alert, or risk update.
+
+/api/system/health must return both modes’ telemetry snapshots.
+
+🧪 Auto-Validation Script
+# Phase 27.F.15.B.4 – Validation Routine
+echo "[Validation] Starting Paper and Live Engines ..."
+curl -s -X POST http://localhost:5000/api/paper-sim/start
+curl -s -X POST http://localhost:5000/api/trading/start
+
+sleep 5
+
+echo "[Validation] Checking status endpoints ..."
+curl -s http://localhost:5000/api/paper-sim/status
+curl -s http://localhost:5000/api/trading/status
+
+echo "[Validation] Recent broadcasts:"
+grep -E "Broadcast|AlertSync|RiskManager|ModeRegistry" /tmp/logs/Start_application_* | tail -40
+
+echo "[Validation] System health:"
+curl -s http://localhost:5000/api/system/health | jq .
+
+
+Expected output
+
+[Phase-27.F.15.B.4][mode=paper] Engine started.
+[Phase-27.F.15.B.4][mode=live] Engine started.
+[AlertSync][mode=paper] OK
+[AlertSync][mode=live] OK
+/health → both modes active, metricsSynced=true
+
+✅ Success Criteria
+
+No userId logic remains in Bob, AI, Cortex, or Alerts.
+
+Both modes emit independent, correctly-tagged event streams.
+
+/api/system/health shows:
+
+[
+  {"mode":"paper","engine":"running","alerts":0,"metricsSynced":true},
+  {"mode":"live","engine":"running","alerts":0,"metricsSynced":true}
+]
+
+
+Architect review passes with zero regressions.
+
+Validation script confirms synchronized dual-mode operation.
+
+🧹 Phase 27.F.15.B.4-POST – Automatic Cleanup & LSP Audit
+🎯 Objective
+
+Stabilize and verify system integrity immediately after B.4 validation completes.
+
+🧱 Tasks
+
+LSP & TypeScript Audit
+
+npm run tsc -- --noEmit
+eslint --fix server/** client/**
+
+
+Confirm zero errors.
+
+Schema Verification
+
+npm run db:push -- --verify-only
+
+
+Ensure no user_id or deprecated columns exist.
+
+Performance & Caching
+
+Benchmark getPortfolioMetrics(mode) and getRiskExposure(mode) latency.
+
+Cache results inside ModeRegistry for fast telemetry.
+
+Telemetry Integrity
+
+Verify both modes report consistent fields via contextBridge.
+
+Final Dual-Mode Health Check
+
+curl -s http://localhost:5000/api/system/health | jq .
+grep -E "ModeRegistry|Broadcast|AlertSync" /tmp/logs/Start_application_* | tail -20
+
+
+Expected Result
+
+TypeScript Diagnostics: 0 errors
+Schema Verification: Up-to-date
+Health: Both modes active and synchronized
+
+🤖 Auto-Trigger Sequence
+
+At the end of the validation script, Replit must automatically execute:
+
+echo "[Auto-Trigger] Phase 27.F.15.B.4 Validation Passed – launching POST phase..."
+bash ./scripts/phase_27f15b4_post.sh
+
+
+phase_27f15b4_post.sh should contain:
+
+echo "[Phase 27.F.15.B.4-POST] Running LSP + Schema audit..."
+npm run tsc -- --noEmit
+npm run db:push -- --verify-only
+
+echo "[Phase 27.F.15.B.4-POST] Verifying dual-mode telemetry..."
+curl -s http://localhost:5000/api/system/health | jq .
+grep -E "ModeRegistry|Broadcast|AlertSync" /tmp/logs/Start_application_* | tail -20
+
+
+If all checks pass:
+
+✅ Phase 27.F.15.B.4 & B.4-POST Complete
+Both paper and live modes synchronized and healthy.
+All dependent services fully mode-based.
+TypeScript + Schema verification passed with 0 errors.
+
+📘 Final Output to replit.md
+
+Replit must append:
+
+✅ Phase 27.F.15.B.4 & B.4-POST – Complete
+All dependent services unified under mode-based architecture.
+Paper and live trading fully synchronized.
+All diagnostics and schema verifications passed.
