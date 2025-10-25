@@ -52,19 +52,16 @@ class TradeBob {
   // ========================================
 
   /**
-   * Fetch ALL active trades (live + paper combined)
+   * Fetch ALL active trades (live + paper combined) - GLOBAL per mode
+   * Phase 27.F.15.A: Trades are now global (no userId filtering)
    * Matches /api/trades/active endpoint behavior
    */
   private async fetchActiveTrades(context: FetchContext): Promise<any> {
-    const { userId } = context;
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching all active trades (live + paper)${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
     
     const start = Date.now();
     const result = await db.query.trades.findMany({
-      where: and(
-        eq(trades.userId, userId),
-        eq(trades.status, 'open')
-      ),
+      where: eq(trades.status, 'open'),
       orderBy: (trades, { desc }) => [desc(trades.entryTime)]
     });
     
@@ -91,17 +88,16 @@ class TradeBob {
   }
 
   /**
-   * Fetch open paper trades only
+   * Fetch open paper trades only - GLOBAL per mode
+   * Phase 27.F.15.A: Trades are now global (no userId filtering)
    * Matches /api/paper/trades/open endpoint behavior
    */
   private async fetchOpenPaperTrades(context: FetchContext): Promise<any> {
-    const { userId } = context;
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching open paper trades${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
     
     const start = Date.now();
     const result = await db.query.trades.findMany({
       where: and(
-        eq(trades.userId, userId),
         eq(trades.status, 'open'),
         eq(trades.mode, 'paper')
       ),
@@ -135,12 +131,13 @@ class TradeBob {
   // ========================================
 
   /**
-   * Get all active trades (live + paper combined)
+   * Get all active trades (live + paper combined) - GLOBAL
+   * Phase 27.F.15.A: userId kept for backwards compatibility but trades are global
    * Used by /api/trades/active endpoint
    */
   async getAllActiveTrades(userId: string): Promise<any> {
     if (!this.ENABLED) {
-      return this.fetchActiveTrades({ userId });
+      return this.fetchActiveTrades({ userId, mode: 'live' });
     }
 
     const cacheKey = `trade:active:${userId}`;
@@ -148,7 +145,7 @@ class TradeBob {
 
     return bobCore.fetchOrServe(
       cacheKey,
-      () => this.fetchActiveTrades({ userId }),
+      () => this.fetchActiveTrades({ userId, mode: 'live' }),
       this.TTL_ACTIVE_TRADES,
       [tag, 'trade:active'],
       'activeTrades'
@@ -156,12 +153,13 @@ class TradeBob {
   }
 
   /**
-   * Get open paper trades only
+   * Get open paper trades only - GLOBAL
+   * Phase 27.F.15.A: userId kept for backwards compatibility but trades are global
    * Used by /api/paper/trades/open endpoint
    */
   async getOpenPaperTrades(userId: string): Promise<any> {
     if (!this.ENABLED) {
-      return this.fetchOpenPaperTrades({ userId });
+      return this.fetchOpenPaperTrades({ userId, mode: 'paper' });
     }
 
     const cacheKey = `trade:paper:open:${userId}`;
@@ -169,7 +167,7 @@ class TradeBob {
 
     return bobCore.fetchOrServe(
       cacheKey,
-      () => this.fetchOpenPaperTrades({ userId }),
+      () => this.fetchOpenPaperTrades({ userId, mode: 'paper' }),
       this.TTL_ACTIVE_TRADES,
       [tag, 'trade:paper'],
       'openPaperTrades'
