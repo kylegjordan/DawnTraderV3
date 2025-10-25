@@ -435,7 +435,7 @@ export class PaperExecutionEngine {
     };
 
     const riskCheck = await this.riskManager.checkPreTradeRisk(
-      this.userId,
+      this.mode,
       tradeSignal,
       settings
     );

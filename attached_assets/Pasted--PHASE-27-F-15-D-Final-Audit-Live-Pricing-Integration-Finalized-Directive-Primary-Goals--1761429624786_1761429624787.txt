@@ -1,0 +1,210 @@
+🧩 PHASE 27.F.15.D – Final Audit & Live-Pricing Integration (Finalized Directive)
+🎯 Primary Goals
+
+Final Codebase Audit (Expanded + Contextual)
+
+Live Pricing Adapter Integration
+
+Metrics Extension for Live Mode
+
+Full Regression + Broadcast Verification
+
+Architect Sign-off → Completion of 27.F.15 Series
+
+🔍 1. FINAL CODEBASE AUDIT (Expanded & Contextual)
+
+Perform a complete end-to-end scan for all per-user state, including both direct and contextual references.
+
+Search Scope Includes:
+userId | user_id | userID | userid
+ctx.user | authContext | req.user | session.user
+userContext | getUserContext | setUserContext
+auth.user | decoded.userId | currentUser | activeUser
+userProfile | userScope | userSession | userSessionId
+REFERENCES users | FOREIGN KEY.*user_id | JOIN.*user_id
+
+
+These patterns catch:
+
+Direct DB / schema per-user references
+
+Indirect context bindings (ctx.user, authContext, etc.)
+
+Residual foreign keys or joins referencing user-based data
+
+Audit Commands
+
+Main full-scope audit:
+
+grep -r -i -n -E "(user_id|userId|userID|userid|ctx\.user|authContext|req\.user|session\.user|userContext|getUserContext|setUserContext|auth\.user|decoded\.userId|currentUser|activeUser|userProfile|userScope|userSession|userSessionId|REFERENCES users|FOREIGN KEY.*user_id|JOIN.*user_id)" \
+--include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+--exclude-dir=node_modules --exclude-dir=.git \
+server/ client/ shared/ > logs/audit_userid_final.txt
+
+
+Separate contextual-only audit (for ctx.user and session patterns):
+
+grep -r -i -n -E "(ctx\.user|authContext|req\.user|session\.user|userContext|getUserContext|setUserContext)" \
+--include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" \
+--exclude-dir=node_modules --exclude-dir=.git \
+server/ client/ shared/ > logs/audit_user_context_only.txt
+
+
+Schema sanity check:
+
+grep -r -n "REFERENCES users" shared/schema.ts > logs/schema_sanity_check.txt
+
+
+✅ Deliverables:
+
+/logs/audit_userid_final.txt
+
+/logs/audit_user_context_only.txt
+
+/logs/schema_sanity_check.txt
+
+✅ Audit Acceptance Criteria:
+
+0 residual user-linked references outside:
+
+AuthService
+
+UserService
+
+SessionService
+
+⚙️ 2. LIVE PRICING ADAPTER
+New Service
+
+/server/services/live-pricing-adapter.ts
+
+Features:
+
+Fetches live quotes via public API (Binance, CoinGecko, or test sandbox).
+
+Default refresh: every 15 seconds.
+
+Caches results under live_prices:<symbol> via in-memory or Redis store.
+
+Broadcasts via WebSocket as:
+
+{
+  "type": "price_updated",
+  "mode": "live",
+  "symbol": "BTCUSDT",
+  "price": 68451.22,
+  "timestamp": "2025-10-27T14:42:11Z"
+}
+
+
+Adds [27.F.15.D][Pricing] logs to system console.
+
+Mock / Offline Fallback
+
+If no API key or connection available:
+
+Generates synthetic price updates ±0.2% every 15s.
+
+Logs [27.F.15.D][Pricing-MOCK] with simulated deltas.
+
+Prevents dependency on external connectivity during testing.
+
+📊 3. METRICS EXTENSION
+
+Enhance MetricsCore to consume live quote data for live mode only.
+
+Integration Details
+
+Extend computeExecutionKPIs('live'):
+
+Use cached quotes from LivePricingAdapter.
+
+Recalculate unrealized P/L, exposure, and current value.
+
+Maintain cache isolation:
+
+metrics:kpis:live
+
+metrics:kpis:paper
+
+Fire metrics_updated WebSocket event on live price changes.
+
+Logging
+
+Use new structured tags:
+
+[27.F.15.D][Metrics-Live]
+
+[27.F.15.D][Metrics-Paper]
+
+🧪 4. FINAL VERIFICATION
+Regression Testing
+
+Run full test suite:
+
+server/tests/metrics-core-msi-validation.ts
+
+server/tests/live-pricing-validation.ts
+
+Validation Targets
+Check	Expected Result
+/api/system/health	Displays lastLivePriceUpdate timestamp (≤30s old)
+metrics_updated events	Broadcast to both users
+price_updated events	Broadcast from LivePricingAdapter
+Paper mode	No API calls, static simulation data
+Live mode	Realtime KPI updates reflect price feed
+Audit logs	0 residual per-user references
+
+Output results to:
+/logs/phase_27F15D_results.txt
+
+🧾 5. POST-TESTING & DOCUMENTATION
+
+After successful validation:
+
+Confirm architect sign-off → ✅ completion of 27.F.15 series
+
+Update /replit.md with:
+
+Final audit findings
+
+LivePricingAdapter architecture summary
+
+Dual-mode metrics verification results
+
+Broadcast validation summary
+
+Architect approval statement
+
+🧱 Implementation Deliverables
+File	Purpose
+/server/services/live-pricing-adapter.ts	Live market price adapter with caching and mock fallback
+/server/tests/live-pricing-validation.ts	Ensures KPI recalculations and price broadcasts work
+/logs/audit_userid_final.txt	Full per-user reference audit
+/logs/audit_user_context_only.txt	Isolated audit for ctx.user and session usage
+/logs/schema_sanity_check.txt	Confirms schema independence
+/logs/phase_27F15D_results.txt	Consolidated final validation log
+/replit.md	Updated final documentation
+✅ Completion Criteria
+
+No remaining user-based references in code or schema (verified in all logs).
+
+LivePricingAdapter fully operational (API or mock).
+
+MetricsCore consumes live data for live mode only.
+
+Paper mode fully simulation-based.
+
+/system/health reflects live timestamp updates.
+
+All validation tests pass (0 failures).
+
+Architect review = ✅ Approved, concluding Phase 27.F.15 series.
+
+🧩 Add-ons Now Included
+
+✅ Separate contextual-only audit log (/logs/audit_user_context_only.txt)
+✅ Mock fallback for offline live pricing
+✅ Broadcast validation logging (price_updated, metrics_updated)
+✅ Schema sanity check confirmation step
+✅ Automated test suite + results log
