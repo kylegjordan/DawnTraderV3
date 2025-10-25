@@ -3549,11 +3549,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
         
         // Reset baseline and portfolio state
-        const contextId = await storage.getGlobalContextId();
+        const systemContext = await storage.getSystemContext('paper');
+        console.log('[LATTIManager] Retrieved system context for mode: paper');
         
         // Reset portfolio balance for paper mode
         await storage.upsertPortfolioState({
-          globalContextId: contextId,
+          globalContextId: systemContext!.id,
           mode: 'paper',
           balance: balance.toString(),
           lastUpdate: new Date()
@@ -3719,9 +3720,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       await storage.deleteAllPaperSimTradeLogs(userId);
       
       // Reset portfolio state for paper mode
-      const contextId = await storage.getGlobalContextId();
+      const systemContext = await storage.getSystemContext('paper');
+      console.log('[LATTIManager] Retrieved system context for mode: paper');
       await storage.upsertPortfolioState({
-        globalContextId: contextId,
+        globalContextId: systemContext!.id,
         mode: 'paper',
         totalValue: balance.toString(),
         unrealizedPnl: '0',
@@ -11513,8 +11515,9 @@ Important: Extract the exact field names and numeric values from the user's requ
       }
       
       // Phase 27.F.14.E: Broadcast alert dismissal to all clients
-      console.log('[Phase-27.F.14.E] Broadcasting alert dismissal:', alertId);
       const { contextBridge } = await import('./services/context-bridge.js');
+      const clientCount = contextBridge.getClientCount();
+      console.log(`[AlertSync][Backend] Broadcasting alerts_updated to ${clientCount} clients (action: dismissed)`);
       await contextBridge.broadcast({
         type: 'alerts_updated',
         payload: {
@@ -11551,8 +11554,9 @@ Important: Extract the exact field names and numeric values from the user's requ
       const alerts = await AlertsService.acknowledgeAll(userId, mode);
       
       // Phase 27.F.14.E: Broadcast alert clear-all to all clients
-      console.log('[Phase-27.F.14.E] Broadcasting alerts cleared:', alerts.length);
       const { contextBridge } = await import('./services/context-bridge.js');
+      const clientCount = contextBridge.getClientCount();
+      console.log(`[AlertSync][Backend] Broadcasting alerts_updated to ${clientCount} clients (action: cleared_all, count: ${alerts.length})`);
       await contextBridge.broadcast({
         type: 'alerts_updated',
         payload: {

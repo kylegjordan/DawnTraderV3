@@ -55,11 +55,10 @@ export default function AlertBanner() {
         ? Date.now() - new Date(broadcastTimestamp).getTime()
         : 0;
       
-      console.log('[Phase-27.F.14.J][AlertSync] 📨 Received alerts_updated event:', {
+      console.log('[AlertSync][Frontend] 📨 Received alerts_updated event:', {
         action: latestUpdate.payload?.action,
         alertId: latestUpdate.payload?.alertId,
-        severity: latestUpdate.payload?.severity,
-        category: latestUpdate.payload?.category,
+        count: latestUpdate.payload?.count,
         latencyMs: timeSinceBroadcast,
         timestamp: broadcastTimestamp
       });
@@ -67,7 +66,7 @@ export default function AlertBanner() {
       // Invalidate alerts query to immediately refresh across all sessions
       queryClient.invalidateQueries({ queryKey: ['/api/alerts'] });
       
-      console.log('[Phase-27.F.14.J][AlertSync] ✅ Alert cache invalidated, UI will refresh');
+      console.log('[AlertSync][Frontend] ✅ Received alerts_updated payload → invalidating cache');
     }
   }, [wsMessages]);
 
