@@ -148,12 +148,25 @@ export class CommandRouter {
   private async handleAction(intent: ParsedIntent, userId: string, warnings?: string[]): Promise<CommandResult> {
     const { action, entity, parameters } = intent;
     
-    // Phase 27.F.15.B.3: Get current mode from system context
-    const systemContext = await storage.getSystemContext('paper');
-    const currentMode = (systemContext?.tradingMode || 'paper') as 'live' | 'paper';
+    // Phase 27.F.15.B.3: Determine active mode by checking which engine is running
+    const [liveContext, paperContext] = await Promise.all([
+      storage.getSystemContext('live'),
+      storage.getSystemContext('paper')
+    ]);
+    
+    let currentMode: 'live' | 'paper' | null = null;
+    if (liveContext?.isEngineActive) currentMode = 'live';
+    else if (paperContext?.isEngineActive) currentMode = 'paper';
 
-    // Pause trading
+    // Pause trading - requires active engine
     if (action === 'pause' && entity === 'trading') {
+      if (!currentMode) {
+        return {
+          success: false,
+          message: 'No trading engine is currently active',
+          warnings,
+        };
+      }
       const engine = this.getEngine(currentMode);
       await engine.stop();
       return {
@@ -163,18 +176,47 @@ export class CommandRouter {
       };
     }
 
-    // Resume trading
+    // Resume trading - requires knowing which mode to resume
     if (action === 'resume' && entity === 'trading') {
-      const engine = this.getEngine(currentMode);
+      // Determine mode to resume: current active or last used from context
+      let modeToResume: 'live' | 'paper' | null = currentMode;
+      
+      if (!modeToResume) {
+        // Check which mode was last used (tradingMode field in system context)
+        const liveMode = liveContext?.tradingMode as 'live' | 'paper' | null;
+        const paperMode = paperContext?.tradingMode as 'live' | 'paper' | null;
+        
+        // Prefer the most recently updated context
+        const liveUpdated = liveContext?.updatedAt ? new Date(liveContext.updatedAt).getTime() : 0;
+        const paperUpdated = paperContext?.updatedAt ? new Date(paperContext.updatedAt).getTime() : 0;
+        
+        // Strict ordering: must have a clear winner
+        if (liveUpdated > paperUpdated && liveMode) {
+          modeToResume = liveMode;
+        } else if (paperUpdated > liveUpdated && paperMode) {
+          modeToResume = paperMode;
+        }
+        // If liveUpdated === paperUpdated or both are 0, leave modeToResume as null
+      }
+      
+      if (!modeToResume) {
+        return {
+          success: false,
+          message: 'Cannot determine which trading mode to resume. Please start trading explicitly via the UI.',
+          warnings,
+        };
+      }
+      
+      const engine = this.getEngine(modeToResume);
       await engine.start();
       return {
         success: true,
-        message: `Trading resumed successfully (${currentMode} mode)`,
+        message: `Trading resumed successfully (${modeToResume} mode)`,
         warnings,
       };
     }
 
-    // Close position
+    // Close position - check both modes if no active engine
     if (action === 'close' && entity === 'position') {
       const pair = parameters.pairs?.[0];
       if (!pair) {
@@ -184,23 +226,27 @@ export class CommandRouter {
         };
       }
 
-      // Phase 27.F.15.B.3: Get trades for current mode
-      const trades = await storage.getActiveTrades(currentMode);
-      const trade = trades.find(t => t.symbol === pair);
-
-      if (!trade) {
-        return {
-          success: false,
-          message: `No active position found for ${pair}`,
-        };
+      // Phase 27.F.15.B.3: Search for trade in active mode first, then other mode
+      const modesToCheck = currentMode ? [currentMode] : ['live', 'paper'] as ('live' | 'paper')[];
+      
+      for (const mode of modesToCheck) {
+        const trades = await storage.getActiveTrades(mode);
+        const trade = trades.find(t => t.symbol === pair);
+        
+        if (trade) {
+          const engine = this.getEngine(mode);
+          await engine.closeTrade(trade.id, 'user_command');
+          return {
+            success: true,
+            message: `Position closed for ${pair} (${mode} mode)`,
+            warnings,
+          };
+        }
       }
 
-      const engine = this.getEngine(currentMode);
-      await engine.closeTrade(trade.id, 'user_command');
       return {
-        success: true,
-        message: `Position closed for ${pair} (${currentMode} mode)`,
-        warnings,
+        success: false,
+        message: `No active position found for ${pair}`,
       };
     }
 
@@ -302,40 +348,49 @@ export class CommandRouter {
   private async handleStatus(intent: ParsedIntent, userId: string): Promise<CommandResult> {
     const { entity } = intent;
     
-    // Phase 27.F.15.B.3: Get current mode from system context
-    const systemContext = await storage.getSystemContext('paper');
-    const currentMode = (systemContext?.tradingMode || 'paper') as 'live' | 'paper';
+    // Phase 27.F.15.B.3: Determine active mode by checking which engine is running
+    const [liveContext, paperContext] = await Promise.all([
+      storage.getSystemContext('live'),
+      storage.getSystemContext('paper')
+    ]);
+    
+    let currentMode: 'live' | 'paper' | null = null;
+    if (liveContext?.isEngineActive) currentMode = 'live';
+    else if (paperContext?.isEngineActive) currentMode = 'paper';
 
-    // Trading status
+    // Trading status - show status of both modes
     if (entity === 'trading') {
-      const engine = this.getEngine(currentMode);
-      const isRunning = engine.isEngineRunning();
+      const liveRunning = this.globalLiveEngine.isEngineRunning();
+      const paperRunning = this.globalPaperEngine.isEngineRunning();
       
       return {
         success: true,
         message: 'Trading status retrieved',
         data: {
-          isRunning,
-          mode: currentMode,
+          activeMode: currentMode || 'none',
+          live: { isRunning: liveRunning },
+          paper: { isRunning: paperRunning },
         },
       };
     }
 
-    // Active positions
+    // Active positions - check active mode or default to paper
     if (entity === 'positions') {
-      const trades = await storage.getActiveTrades(currentMode);
+      const modeToCheck = currentMode || 'paper';
+      const trades = await storage.getActiveTrades(modeToCheck);
       
       return {
         success: true,
-        message: `Found ${trades.length} active position${trades.length === 1 ? '' : 's'}`,
-        data: { trades },
+        message: `Found ${trades.length} active position${trades.length === 1 ? '' : 's'} (${modeToCheck} mode)`,
+        data: { trades, mode: modeToCheck },
       };
     }
 
-    // Performance
+    // Performance - check active mode or default to paper
     if (entity === 'performance') {
+      const modeToCheck = currentMode || 'paper';
       // Phase 27.F.15.B.3: Global mode-based query
-      const trades = await storage.getTrades(currentMode, {});
+      const trades = await storage.getTrades(modeToCheck, {});
       console.log('[Phase-27.F.15.B.3] Updated service command-router → mode-based');
       const closedTrades = trades.filter(t => t.status === 'closed');
       const totalProfit = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
@@ -374,14 +429,21 @@ export class CommandRouter {
   private async handleAnalysis(intent: ParsedIntent, userId: string): Promise<CommandResult> {
     const { action, entity, parameters } = intent;
     
-    // Phase 27.F.15.B.3: Get current mode from system context
-    const systemContext = await storage.getSystemContext('paper');
-    const currentMode = (systemContext?.tradingMode || 'paper') as 'live' | 'paper';
+    // Phase 27.F.15.B.3: Determine active mode by checking which engine is running
+    const [liveContext, paperContext] = await Promise.all([
+      storage.getSystemContext('live'),
+      storage.getSystemContext('paper')
+    ]);
+    
+    let currentMode: 'live' | 'paper' | null = null;
+    if (liveContext?.isEngineActive) currentMode = 'live';
+    else if (paperContext?.isEngineActive) currentMode = 'paper';
 
-    // Explain trade reasoning
+    // Explain trade reasoning - default to paper if no active mode
     if (action === 'explain' && entity === 'trade') {
+      const modeToCheck = currentMode || 'paper';
       // Phase 27.F.15.B.3: Global mode-based query
-      const trades = await storage.getTrades(currentMode);
+      const trades = await storage.getTrades(modeToCheck);
       const lastTrade = trades[0]; // Most recent
 
       if (!lastTrade) {
