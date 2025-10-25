@@ -1,0 +1,145 @@
+🧭 REPLIT INVESTIGATION DIRECTIVE — Phase 27.F.14.E-DIAG
+Diagnostic Analysis of Ongoing Desynchronization and UI Inconsistencies
+
+Context:
+The Phase 27.F.14.E “Multi-User Synchronization” installation completed without errors, but multiple behaviors still do not align with the intended results.
+We now need Replit to investigate the actual runtime logic and determine precisely where synchronization or event propagation is breaking down.
+
+🧩 1️⃣ Observed Issues (Current Behavior)
+
+Portfolio Balance Confirmation
+
+The balance prompt no longer appears when starting Paper Trading (even after restart).
+
+System immediately activates trading without requesting balance confirmation.
+
+Portfolio Value on Dashboard
+
+When trading starts, the dashboard still shows $800 rather than the last confirmed amount (e.g., $834 or $888).
+
+Trading State Synchronization
+
+Starting trading from one user works: both dashboards show Active.
+
+Stopping trading from another user only partially works:
+
+Toast and blue bar show Stopped
+
+Toggle button remains Active until double-clicked by the user who started the trading.
+
+Alerts
+
+Alerts remain desynchronized: Kyle’s dashboard shows none, testuser123 shows 50+.
+
+Clearing alerts from one user does not affect the other.
+
+🧭 2️⃣ Replit’s Investigation Tasks
+
+Replit must conduct a root-cause diagnostic analysis and produce a clear, detailed summary that includes:
+
+Findings: What is causing each of the above issues (with references to specific code sections, events, or broadcast logic).
+
+Evidence:
+
+Relevant log excerpts showing when events are triggered and what payloads they contain.
+
+Confirmation of which sockets or listeners are receiving/not receiving those events.
+
+Proposed Fixes:
+
+For each issue, propose an actionable fix (or multiple options).
+
+Identify whether the cause is frontend (listener missing, stale cache, or wrong event type) or backend (broadcast not firing, event timing, etc.).
+
+Dependencies:
+
+Identify whether any missing or misaligned dependencies (e.g., TradingStateSync, TopBar useEffect hooks, or contextBridge listeners) might be preventing propagation.
+
+Verification Plan:
+
+Provide a short list of tests that will confirm the issue is fully fixed once the solution is applied.
+
+🧱 3️⃣ Areas for Replit to Examine
+
+Replit should specifically check and document the following points:
+
+A. Portfolio Balance Confirmation
+
+Whether the checkBalanceConfirmationRequired() function is actually being called on /api/paper-sim/start or /api/trading/start.
+
+If it is called, confirm whether it correctly returns { requiresConfirmation: true }.
+
+If not, identify where the check is being skipped or overridden.
+
+B. Dashboard Portfolio Refresh
+
+Confirm that the portfolio_balance_updated event is indeed being broadcast after confirmation.
+
+Verify whether the frontend WebSocket listener for that event is being triggered and invalidating the portfolio query.
+
+Log timestamps for broadcast and listener reaction to measure latency or failure.
+
+C. Trading State Synchronization
+
+Examine the flow of trading_state_changed events:
+
+Which clients receive the message when one user starts or stops trading?
+
+Do the clients update the local isActive state correctly on receipt?
+
+Identify whether the toggle button’s internal state differs from the global store.
+
+D. Global Alert Synchronization
+
+Confirm whether the alerts_updated WebSocket broadcast actually fires when alerts change.
+
+If fired, confirm if both clients receive the event and refresh their alerts list.
+
+If not firing, identify the missing trigger (e.g., alert creation or deletion event not calling the broadcast function).
+
+🧠 4️⃣ Expected Deliverables
+
+Replit must return a structured diagnostic report with the following sections:
+
+Summary Table of Issues and Root Causes
+
+Area	Root Cause	Severity	Requires Frontend	Requires Backend
+Portfolio Prompt	…	…	✅/❌	✅/❌
+Portfolio Refresh	…	…	✅/❌	✅/❌
+Trading Toggle	…	…	✅/❌	✅/❌
+Alerts Sync	…	…	✅/❌	✅/❌
+
+Evidence & Logs
+
+Attach relevant excerpts (time-stamped) showing when broadcasts fire and which clients receive them.
+
+Identify any missing listener registrations or incorrect event names.
+
+Proposed Fixes
+
+For each issue, provide the recommended fix and reasoning.
+
+Example: “Move balance confirmation check to PaperSimManager.start() after mode initialization so it triggers before baseline start.”
+
+Verification Plan
+
+List the steps we can take to confirm each fix works in the next test cycle.
+
+🧾 Summary of What Replit Must Deliver
+Deliverable	Description
+Diagnostic Summary Report	Lists root causes and severity for all four issue categories.
+Evidence Logs	Backend/Frontend event logs confirming broadcast failures or delays.
+Fix Proposals	Clearly written proposed changes (frontend/backend split).
+Verification Plan	A short test checklist for validation after next deployment.
+🧭 Objective for this Phase
+
+This is an investigative phase only — no fixes should be implemented yet.
+The goal is to produce a clear, evidence-based understanding of:
+
+Why the balance prompt disappeared,
+
+Why the dashboard portfolio value doesn’t refresh,
+
+Why trading state stops desynchronize, and
+
+Why alerts remain out of sync.

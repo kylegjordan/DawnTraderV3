@@ -6,6 +6,12 @@ This project is a long-only, spot-trading cryptocurrency day trading web applica
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Test Credentials
+For functionality testing and all future tests:
+- Username: testuser123
+- Password: SecurePass123!
+Note: Always use username (not email) for login.
+
 ## System Architecture
 The application features a React, TypeScript, Vite frontend with a mobile-first, responsive design. The backend is built with Node.js and Express, providing a RESTful API and WebSocket support. Data persistence is managed by PostgreSQL using Neon serverless driver and Drizzle ORM.
 
