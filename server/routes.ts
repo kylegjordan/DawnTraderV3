@@ -351,6 +351,32 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     });
   });
 
+  // Phase 27.F.15.B.4-Prep: System health endpoint for dual-mode telemetry
+  apiRouter.get('/system/health', async (_req, res) => {
+    try {
+      const { ModeRegistry } = await import('./services/mode-registry');
+      res.json([
+        {
+          mode: 'paper',
+          engine: ModeRegistry.paper.engineStatus,
+          alerts: ModeRegistry.paper.alerts,
+          metricsSynced: true,
+          lastUpdate: ModeRegistry.paper.lastUpdate
+        },
+        {
+          mode: 'live',
+          engine: ModeRegistry.live.engineStatus,
+          alerts: ModeRegistry.live.alerts,
+          metricsSynced: true,
+          lastUpdate: ModeRegistry.live.lastUpdate
+        }
+      ]);
+    } catch (err) {
+      console.error('[Health] Error:', err);
+      res.status(500).json({ error: 'System health check failed' });
+    }
+  });
+
   // Authentication Routes
   
   // REGISTER - DISABLED FOR SINGLE-USER MODE

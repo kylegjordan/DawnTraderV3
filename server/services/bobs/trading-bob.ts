@@ -123,9 +123,8 @@ class TradingBob {
       // Find top performing strategy
       let topPerformingStrategy: string | undefined;
       try {
-        const allTradesForStrategy = mode === 'live' 
-          ? await storage.getTrades(userId, { limit: 1000 })
-          : await storage.getAllPaperTrades(userId);
+        // Phase 27.F.15.B.4-Prep: Use mode-based storage methods
+        const allTradesForStrategy = await storage.getTrades(mode, { limit: 1000 });
         const closedTrades = allTradesForStrategy.filter((t: any) => t.status === 'closed');
         if (closedTrades.length > 0) {
           const strategyPL = new Map<string, number>();
