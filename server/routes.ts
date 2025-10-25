@@ -3090,6 +3090,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Frontend connection status (clients ping this endpoint, so we assume connected)
       healthData.frontendConnected = true;
 
+      // Phase 27.F.15.D: Live Pricing Adapter status
+      try {
+        const { livePricingAdapter } = await import('./services/live-pricing-adapter');
+        const adapterStatus = livePricingAdapter.getStatus();
+        const allPrices = livePricingAdapter.getAllPrices();
+        
+        healthData.livePricing = {
+          isActive: adapterStatus.isRunning,
+          mode: adapterStatus.mode,
+          trackedSymbols: adapterStatus.trackedSymbols.length,
+          cachedPrices: allPrices.length,
+          lastUpdate: allPrices.length > 0 ? 
+            Math.max(...allPrices.map(p => new Date(p.timestamp).getTime())) : null,
+          lastUpdateISO: allPrices.length > 0 ? 
+            new Date(Math.max(...allPrices.map(p => new Date(p.timestamp).getTime()))).toISOString() : null
+        };
+      } catch (error) {
+        healthData.livePricing = { isActive: false, error: 'Failed to get pricing status' };
+      }
+
       // Return appropriate status code
       const statusCode = allHealthy ? 200 : 503;
       res.status(statusCode).json(healthData);

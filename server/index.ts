@@ -487,6 +487,19 @@ app.use((req, res, next) => {
       console.error('[SystemHealthMonitor] ⚠️ Integration failed:', error);
     }
 
+    // Phase 27.F.15.D: Start Live Pricing Adapter
+    try {
+      const { livePricingAdapter } = await import('./services/live-pricing-adapter');
+      
+      // Start in mock mode by default (change to false for production with real APIs)
+      const useMockMode = process.env.LIVE_PRICING_MOCK !== 'false';
+      await livePricingAdapter.start(useMockMode);
+      
+      console.log('[27.F.15.D] ✅ LivePricingAdapter started successfully');
+    } catch (error) {
+      console.error('[27.F.15.D] ⚠️ LivePricingAdapter startup failed:', error);
+    }
+
     // Phase 8.3: Start Health Report Scheduler (hourly reports)
     try {
       const { healthReportScheduler } = await import('./services/health-report-scheduler');
