@@ -1,10 +1,10 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-25T10:01:43.831Z",
+    "timestamp": "2025-10-25T10:02:43.831Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-25T10:01:43.830Z",
+        "lastUpdate": "2025-10-25T10:02:43.829Z",
         "stale": false,
         "hitRate": "80.0%",
         "cacheSize": 1,
@@ -12,7 +12,7 @@
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-25T10:01:43.830Z",
+        "lastUpdate": "2025-10-25T10:02:43.829Z",
         "stale": false,
         "hitRate": "80.0%",
         "cacheSize": 1,
@@ -20,7 +20,7 @@
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-25T10:01:43.830Z",
+        "lastUpdate": "2025-10-25T10:02:43.829Z",
         "stale": false,
         "hitRate": "80.0%",
         "cacheSize": 1,
@@ -28,7 +28,7 @@
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-25T10:01:43.830Z",
+        "lastUpdate": "2025-10-25T10:02:43.829Z",
         "stale": false,
         "hitRate": "80.0%",
         "cacheSize": 1,
@@ -36,7 +36,7 @@
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-25T10:01:43.830Z",
+        "lastUpdate": "2025-10-25T10:02:43.829Z",
         "stale": false,
         "hitRate": "80.0%",
         "cacheSize": 1,
@@ -44,7 +44,7 @@
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-10-25T10:01:43.830Z",
+        "lastUpdate": "2025-10-25T10:02:43.829Z",
         "stale": false,
         "hitRate": "80.0%",
         "cacheSize": 1,
@@ -52,7 +52,7 @@
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-10-25T10:01:43.830Z",
+        "lastUpdate": "2025-10-25T10:02:43.829Z",
         "stale": false,
         "hitRate": "80.0%",
         "cacheSize": 1,
@@ -63,8 +63,8 @@
       "modulesActive": 7,
       "totalCacheSize": 1,
       "overallHitRate": "80.0%",
-      "totalHits": 56,
-      "totalMisses": 14
+      "totalHits": 72,
+      "totalMisses": 18
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -129,23 +129,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-10-25T10:01:43.831Z",
+        "timestamp": "2025-10-25T10:02:43.831Z",
         "system": {
           "cpuUsage": 53,
           "memoryUsage": {
             "total": 67436744704,
-            "used": 32982310912,
-            "free": 34454433792,
-            "percentUsed": 49
+            "used": 32316956672,
+            "free": 35119788032,
+            "percentUsed": 48
           },
-          "uptime": 191
+          "uptime": 251
         },
         "cache": {
           "hitRate": 82,
           "missRate": 18,
-          "totalRequests": 68,
-          "hits": 56,
-          "misses": 12
+          "totalRequests": 88,
+          "hits": 72,
+          "misses": 16
         },
         "latency": {
           "cortex": null,
@@ -154,11 +154,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 191,
-            "lastRun": "2025-10-25T10:01:13.835Z"
+            "uptime": 251,
+            "lastRun": "2025-10-25T10:02:13.832Z"
           },
           "analytics": {
-            "uptime": 191,
+            "uptime": 251,
             "lastRun": "2025-10-25T09:58:44.710Z"
           }
         },
@@ -192,7 +192,7 @@
         },
         "execution": {
           "marketDataSource": "rest_fallback",
-          "lastTickAgeMs": 9773,
+          "lastTickAgeMs": 9781,
           "avgSubmitAckMs": 0,
           "avgSlippageBps": 0,
           "avgFeesPerTrade": 0,
@@ -214,10 +214,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-25T10:01:43.830Z"
+      "timestamp": "2025-10-25T10:02:43.829Z"
     }
   },
-  "last_sync": "2025-10-25T10:01:43.832Z",
+  "last_sync": "2025-10-25T10:02:43.831Z",
   "memory": {
     "analytics_live_1": {
       "value": {
