@@ -129,26 +129,55 @@ export class AlertsService {
 
   /**
    * Acknowledges a specific alert (GLOBAL - affects all users)
-   * Phase 27.F.14.J-POST: Alerts are now global, so dismissing affects all users
+   * Phase 27.F.14.N: Alerts are truly global now - userId optional for API compatibility
    */
-  static async acknowledgeAlert(alertId: string, userId: string) {
-    // NOTE: userId parameter kept for API compatibility but NOT used in query
-    // Dismissing an alert dismisses it for ALL users
+  static async acknowledgeAlert(alertId: string, userId?: string) {
+    // Dismissing an alert dismisses it for ALL users globally
     const [alert] = await db
       .update(systemAlerts)
       .set({ acknowledged: true })
       .where(eq(systemAlerts.id, alertId))
       .returning();
 
+    if (!alert) {
+      console.warn(`[AlertSync][Backend] ⚠️  Alert ${alertId} not found`);
+      return null;
+    }
+
+    // Phase 27.F.14.N: Broadcast alert dismissal to all clients
+    try {
+      const { contextBridge } = await import('./context-bridge.js');
+      const clientCount = contextBridge.getClientCount();
+      
+      console.log(`[AlertSync][Backend] ✅ Global alert dismissed → broadcasted to ${clientCount} clients`, {
+        alertId: alert.id,
+        alertType: alert.alertType,
+        mode: alert.mode,
+        clientCount,
+        timestamp: new Date().toISOString()
+      });
+      
+      await contextBridge.broadcast({
+        type: 'alerts_updated',
+        payload: {
+          action: 'dismissed',
+          alertId: alert.id,
+          mode: alert.mode,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error: any) {
+      console.error('[AlertSync][Backend] ❌ Failed to broadcast alert dismissal:', error.message);
+    }
+
     return alert;
   }
 
   /**
    * Acknowledges all unacknowledged alerts for a mode (GLOBAL - affects all users)
-   * Phase 27.F.14.J-POST: Alerts are now global, so clearing affects all users
+   * Phase 27.F.14.N: Alerts are truly global now - userId optional for API compatibility
    */
-  static async acknowledgeAll(userId: string, mode: 'live' | 'paper') {
-    // NOTE: userId parameter kept for API compatibility but NOT used in query
+  static async acknowledgeAll(userId: string | undefined, mode: 'live' | 'paper') {
     // Clearing alerts clears them for ALL users in this mode
     const result = await db
       .update(systemAlerts)
@@ -160,6 +189,33 @@ export class AlertsService {
         )
       )
       .returning();
+
+    // Phase 27.F.14.N: Broadcast clear all to all clients
+    if (result.length > 0) {
+      try {
+        const { contextBridge } = await import('./context-bridge.js');
+        const clientCount = contextBridge.getClientCount();
+        
+        console.log(`[AlertSync][Backend] ✅ Global clear all (${result.length} alerts) → broadcasted to ${clientCount} clients`, {
+          mode,
+          count: result.length,
+          clientCount,
+          timestamp: new Date().toISOString()
+        });
+        
+        await contextBridge.broadcast({
+          type: 'alerts_updated',
+          payload: {
+            action: 'cleared_all',
+            mode,
+            count: result.length,
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch (error: any) {
+        console.error('[AlertSync][Backend] ❌ Failed to broadcast clear all:', error.message);
+      }
+    }
 
     return result;
   }
