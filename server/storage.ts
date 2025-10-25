@@ -33,8 +33,8 @@ import {
   intradayAdjustments,
   aiLessons,
   portfolioAdjustments,
-  userGoalsLive,
-  userGoalsPaper,
+  goalsLive,
+  goalsPaper,
   goalAnalysisHistoryLive,
   goalAnalysisHistoryPaper,
   goalAuditLog,
@@ -2365,33 +2365,33 @@ export class DatabaseStorage implements IStorage {
   async getUserGoalsLive(userId: string): Promise<UserGoalLive[]> {
     return await db
       .select()
-      .from(userGoalsLive)
-      .where(eq(userGoalsLive.userId, userId))
-      .orderBy(userGoalsLive.metricName);
+      .from(goalsLive)
+      .where(eq(goalsLive.userId, userId))
+      .orderBy(goalsLive.metricName);
   }
 
   async getGoalLive(userId: string, metricName: string): Promise<UserGoalLive | undefined> {
     const [result] = await db
       .select()
-      .from(userGoalsLive)
+      .from(goalsLive)
       .where(and(
-        eq(userGoalsLive.userId, userId),
-        eq(userGoalsLive.metricName, metricName)
+        eq(goalsLive.userId, userId),
+        eq(goalsLive.metricName, metricName)
       ))
       .limit(1);
     return result || undefined;
   }
 
   async createGoalLive(goal: InsertUserGoalLive): Promise<UserGoalLive> {
-    const [result] = await db.insert(userGoalsLive).values(goal).returning();
+    const [result] = await db.insert(goalsLive).values(goal).returning();
     return result;
   }
 
   async updateGoalLive(id: string, updates: Partial<UserGoalLive>): Promise<UserGoalLive> {
     const [result] = await db
-      .update(userGoalsLive)
+      .update(goalsLive)
       .set({ ...updates, lastUpdated: new Date() })
-      .where(eq(userGoalsLive.id, id))
+      .where(eq(goalsLive.id, id))
       .returning();
     return result;
   }
@@ -2401,10 +2401,10 @@ export class DatabaseStorage implements IStorage {
     const metricKey = goal.metricKey || canonicalizeMetricName(goal.metricName);
     const [existing] = await db
       .select()
-      .from(userGoalsLive)
+      .from(goalsLive)
       .where(and(
-        eq(userGoalsLive.userId, goal.userId),
-        eq(userGoalsLive.metricKey, metricKey)
+        eq(goalsLive.userId, goal.userId),
+        eq(goalsLive.metricKey, metricKey)
       ))
       .limit(1);
     
@@ -2416,40 +2416,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteGoalLive(id: string): Promise<void> {
-    await db.delete(userGoalsLive).where(eq(userGoalsLive.id, id));
+    await db.delete(goalsLive).where(eq(goalsLive.id, id));
   }
 
   // Goals Engine methods - Paper mode
   async getUserGoalsPaper(userId: string): Promise<UserGoalPaper[]> {
     return await db
       .select()
-      .from(userGoalsPaper)
-      .where(eq(userGoalsPaper.userId, userId))
-      .orderBy(userGoalsPaper.metricName);
+      .from(goalsPaper)
+      .where(eq(goalsPaper.userId, userId))
+      .orderBy(goalsPaper.metricName);
   }
 
   async getGoalPaper(userId: string, metricName: string): Promise<UserGoalPaper | undefined> {
     const [result] = await db
       .select()
-      .from(userGoalsPaper)
+      .from(goalsPaper)
       .where(and(
-        eq(userGoalsPaper.userId, userId),
-        eq(userGoalsPaper.metricName, metricName)
+        eq(goalsPaper.userId, userId),
+        eq(goalsPaper.metricName, metricName)
       ))
       .limit(1);
     return result || undefined;
   }
 
   async createGoalPaper(goal: InsertUserGoalPaper): Promise<UserGoalPaper> {
-    const [result] = await db.insert(userGoalsPaper).values(goal).returning();
+    const [result] = await db.insert(goalsPaper).values(goal).returning();
     return result;
   }
 
   async updateGoalPaper(id: string, updates: Partial<UserGoalPaper>): Promise<UserGoalPaper> {
     const [result] = await db
-      .update(userGoalsPaper)
+      .update(goalsPaper)
       .set({ ...updates, lastUpdated: new Date() })
-      .where(eq(userGoalsPaper.id, id))
+      .where(eq(goalsPaper.id, id))
       .returning();
     return result;
   }
@@ -2459,10 +2459,10 @@ export class DatabaseStorage implements IStorage {
     const metricKey = goal.metricKey || canonicalizeMetricName(goal.metricName);
     const [existing] = await db
       .select()
-      .from(userGoalsPaper)
+      .from(goalsPaper)
       .where(and(
-        eq(userGoalsPaper.userId, goal.userId),
-        eq(userGoalsPaper.metricKey, metricKey)
+        eq(goalsPaper.userId, goal.userId),
+        eq(goalsPaper.metricKey, metricKey)
       ))
       .limit(1);
     
@@ -2474,7 +2474,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteGoalPaper(id: string): Promise<void> {
-    await db.delete(userGoalsPaper).where(eq(userGoalsPaper.id, id));
+    await db.delete(goalsPaper).where(eq(goalsPaper.id, id));
   }
 
   // Goal Analysis History - Live mode

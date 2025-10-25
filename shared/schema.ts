@@ -232,10 +232,10 @@ export const tradingSettings = pgTable("trading_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-// Guardrails (mode-isolated risk parameters)
+// Guardrails (mode-isolated risk parameters) - GLOBAL per mode
 export const guardrails = pgTable("guardrails", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   maxDailyLoss: decimal("max_daily_loss", { precision: 10, scale: 2 }).default("1000.00"),
   maxDrawdown: decimal("max_drawdown", { precision: 5, scale: 2 }).default("10.00"),
@@ -248,13 +248,13 @@ export const guardrails = pgTable("guardrails", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueUserMode: uniqueIndex("guardrails_user_mode_idx").on(table.userId, table.mode),
+  uniqueMode: uniqueIndex("guardrails_mode_idx").on(table.mode),
 }));
 
-// Screener Filters (mode-isolated screening criteria)
+// Screener Filters (mode-isolated screening criteria) - GLOBAL per mode
 export const screenerFilters = pgTable("screener_filters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   minVolume: decimal("min_volume", { precision: 15, scale: 2 }).default("1000000.00"),
   minPrice: decimal("min_price", { precision: 10, scale: 8 }).default("0.01"),
@@ -271,7 +271,7 @@ export const screenerFilters = pgTable("screener_filters", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueUserMode: uniqueIndex("screener_filters_user_mode_idx").on(table.userId, table.mode),
+  uniqueMode: uniqueIndex("screener_filters_mode_idx").on(table.mode),
 }));
 
 // Strategy Settings (per mode, per user, per strategy)
@@ -290,10 +290,10 @@ export const strategySettings = pgTable("strategy_settings", {
   uniqueGlobalContextModeStrategy: uniqueIndex("strategy_settings_global_context_mode_strategy_idx").on(table.globalContextId, table.mode, table.strategy),
 }));
 
-// Strategy Settings Audit Log
+// Strategy Settings Audit Log - GLOBAL per mode
 export const strategySettingsAudit = pgTable("strategy_settings_audit", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
   prevParams: jsonb("prev_params"),
@@ -304,10 +304,10 @@ export const strategySettingsAudit = pgTable("strategy_settings_audit", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
-// Watchlist pairs
+// Watchlist pairs - GLOBAL per mode
 export const watchlistPairs = pgTable("watchlist_pairs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull().default("paper"),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
@@ -322,13 +322,13 @@ export const watchlistPairs = pgTable("watchlist_pairs", {
   isActive: boolean("is_active").default(true),
   addedAt: timestamp("added_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueUserModeSymbol: uniqueIndex("watchlist_pairs_user_mode_symbol_idx").on(table.userId, table.mode, table.symbol),
+  uniqueModeSymbol: uniqueIndex("watchlist_pairs_mode_symbol_idx").on(table.mode, table.symbol),
 }));
 
-// Trading Signals - Active trading opportunities waiting to be executed
+// Trading Signals - Active trading opportunities waiting to be executed - GLOBAL per mode
 export const tradingSignals = pgTable("trading_signals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull().default("paper"),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   baseCurrency: varchar("base_currency", { length: 10 }).notNull(),
@@ -348,15 +348,15 @@ export const tradingSignals = pgTable("trading_signals", {
   executedAt: timestamp("executed_at", { withTimezone: true }),
   metadata: jsonb("metadata"), // Additional signal context (technical indicators, etc.)
 }, (table) => ({
-  userModeStatusIdx: index("trading_signals_user_mode_status_idx").on(table.userId, table.mode, table.status),
+  modeStatusIdx: index("trading_signals_mode_status_idx").on(table.mode, table.status),
   symbolStrategyIdx: index("trading_signals_symbol_strategy_idx").on(table.symbol, table.strategy),
   detectedAtIdx: index("trading_signals_detected_at_idx").on(table.detectedAt),
 }));
 
-// Trades
+// Trades - GLOBAL per mode
 export const trades = pgTable("trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
   mode: tradingModeEnum("mode").notNull(),
@@ -382,7 +382,10 @@ export const trades = pgTable("trades", {
   entryTime: timestamp("entry_time", { withTimezone: true }).defaultNow(),
   exitTime: timestamp("exit_time", { withTimezone: true }),
   metadata: jsonb("metadata"), // Additional strategy-specific data
-});
+}, (table) => ({
+  modeIdx: index("trades_mode_idx").on(table.mode),
+  symbolIdx: index("trades_symbol_idx").on(table.symbol),
+}));
 
 // AI reports
 export const aiReports = pgTable("ai_reports", {
@@ -915,10 +918,10 @@ export const learningFragments = pgTable("learning_fragments", {
   categoryIdx: index("learning_fragments_category_idx").on(table.eventCategory),
 }));
 
-// Filter diagnostics (screening health metrics)
+// Filter diagnostics (screening health metrics) - GLOBAL per mode
 export const filterDiagnostics = pgTable("filter_diagnostics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
   pairsScanned: integer("pairs_scanned").notNull().default(0),
@@ -944,10 +947,10 @@ export const portfolioState = pgTable("portfolio_state", {
 
 // ===== PAPER TRADING TABLES (Isolated from Live) =====
 
-// Paper trades (simulated trades - completely isolated from live)
+// Paper trades (simulated trades - completely isolated from live) - GLOBAL (legacy table)
 export const paperTrades = pgTable("paper_trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
   status: tradeStatusEnum("status").default("open"),
@@ -1082,10 +1085,10 @@ export const featureSnapshots = pgTable("feature_snapshots", {
   normalizationWindow: integer("normalization_window").default(30),
 });
 
-// Goals Engine - Live Mode
-export const userGoalsLive = pgTable("user_goals_live", {
+// Goals Engine - Live Mode - GLOBAL
+export const goalsLive = pgTable("goals_live", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   metricName: varchar("metric_name", { length: 100 }).notNull(), // Display name
   metricKey: varchar("metric_key", { length: 100 }).notNull(), // Canonical normalized key
   goalValue: decimal("goal_value", { precision: 15, scale: 2 }),
@@ -1094,13 +1097,13 @@ export const userGoalsLive = pgTable("user_goals_live", {
   aiValidationNotes: text("ai_validation_notes"),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueUserMetric: unique().on(table.userId, table.metricKey),
+  uniqueMetric: unique().on(table.metricKey),
 }));
 
-// Goals Engine - Paper Mode
-export const userGoalsPaper = pgTable("user_goals_paper", {
+// Goals Engine - Paper Mode - GLOBAL
+export const goalsPaper = pgTable("goals_paper", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   metricName: varchar("metric_name", { length: 100 }).notNull(), // Display name
   metricKey: varchar("metric_key", { length: 100 }).notNull(), // Canonical normalized key
   goalValue: decimal("goal_value", { precision: 15, scale: 2 }),
@@ -1109,13 +1112,13 @@ export const userGoalsPaper = pgTable("user_goals_paper", {
   aiValidationNotes: text("ai_validation_notes"),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueUserMetric: unique().on(table.userId, table.metricKey),
+  uniqueMetric: unique().on(table.metricKey),
 }));
 
-// Goal Analysis History - Live Mode
+// Goal Analysis History - Live Mode - GLOBAL
 export const goalAnalysisHistoryLive = pgTable("goal_analysis_history_live", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   conversationId: varchar("conversation_id"),
   userMessage: text("user_message"),
   aiResponse: text("ai_response"),
@@ -1127,10 +1130,10 @@ export const goalAnalysisHistoryLive = pgTable("goal_analysis_history_live", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
-// Goal Analysis History - Paper Mode
+// Goal Analysis History - Paper Mode - GLOBAL
 export const goalAnalysisHistoryPaper = pgTable("goal_analysis_history_paper", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   conversationId: varchar("conversation_id"),
   userMessage: text("user_message"),
   aiResponse: text("ai_response"),
@@ -1142,10 +1145,10 @@ export const goalAnalysisHistoryPaper = pgTable("goal_analysis_history_paper", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
-// Phase 27.5: Goal Audit Log (tracks all goal changes across modes)
+// Phase 27.5: Goal Audit Log (tracks all goal changes across modes) - GLOBAL
 export const goalAuditLog = pgTable("goal_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   action: varchar("action", { length: 50 }).notNull(), // 'created', 'updated', 'deleted', 'analyzed', 'applied'
   metricName: varchar("metric_name", { length: 100 }),
@@ -1156,16 +1159,15 @@ export const goalAuditLog = pgTable("goal_audit_log", {
   metadata: jsonb("metadata"), // Additional context
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  userIdIdx: index("goal_audit_log_user_id_idx").on(table.userId),
   modeIdx: index("goal_audit_log_mode_idx").on(table.mode),
   actionIdx: index("goal_audit_log_action_idx").on(table.action),
   timestampIdx: index("goal_audit_log_timestamp_idx").on(table.timestamp),
 }));
 
-// Screener Results (operational data - mode isolated)
+// Screener Results (operational data - mode isolated) - GLOBAL per mode
 export const screenerResults = pgTable("screener_results", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   exchange: varchar("exchange", { length: 20 }).default("kraken"),
@@ -1180,13 +1182,13 @@ export const screenerResults = pgTable("screener_results", {
   bidAskSpread: decimal("bid_ask_spread", { precision: 5, scale: 2 }),
   scannedAt: timestamp("scanned_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  userModeTimestampIdx: uniqueIndex("screener_results_user_mode_timestamp_idx").on(table.userId, table.mode, table.scannedAt),
+  modeTimestampIdx: uniqueIndex("screener_results_mode_timestamp_idx").on(table.mode, table.scannedAt),
 }));
 
-// Filter Calibration Log (learning data - mode-aware but shared via fallback)
+// Filter Calibration Log (learning data - mode-aware but shared via fallback) - GLOBAL per mode
 export const filterCalibrationLog = pgTable("filter_calibration_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   minVolume: decimal("min_volume", { precision: 15, scale: 2 }),
   minPrice: decimal("min_price", { precision: 10, scale: 8 }),
@@ -1198,13 +1200,13 @@ export const filterCalibrationLog = pgTable("filter_calibration_log", {
   source: varchar("source", { length: 20 }).default("system"),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  userModeTimestampIdx: uniqueIndex("filter_calibration_log_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+  modeTimestampIdx: uniqueIndex("filter_calibration_log_mode_timestamp_idx").on(table.mode, table.timestamp),
 }));
 
-// Intraday Adjustments (learning data - mode-aware but shared via fallback)
+// Intraday Adjustments (learning data - mode-aware but shared via fallback) - GLOBAL per mode
 export const intradayAdjustments = pgTable("intraday_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   adjustmentType: varchar("adjustment_type", { length: 50 }).notNull(),
   previousValue: decimal("previous_value", { precision: 20, scale: 8 }),
@@ -1213,7 +1215,7 @@ export const intradayAdjustments = pgTable("intraday_adjustments", {
   marketCondition: varchar("market_condition", { length: 50 }),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  userModeTimestampIdx: uniqueIndex("intraday_adjustments_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+  modeTimestampIdx: uniqueIndex("intraday_adjustments_mode_timestamp_idx").on(table.mode, table.timestamp),
 }));
 
 // AI Lessons (learning data - mode-aware but shared via fallback)
@@ -1232,10 +1234,10 @@ export const aiLessons = pgTable("ai_lessons", {
   userModeTimestampIdx: uniqueIndex("ai_lessons_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
 }));
 
-// Portfolio Adjustments (learning data - mode-aware but shared via fallback)
+// Portfolio Adjustments (learning data - mode-aware but shared via fallback) - GLOBAL per mode
 export const portfolioAdjustments = pgTable("portfolio_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
   adjustmentType: varchar("adjustment_type", { length: 50 }).notNull(),
   parameter: varchar("parameter", { length: 100 }),
@@ -1245,7 +1247,7 @@ export const portfolioAdjustments = pgTable("portfolio_adjustments", {
   performanceImpact: decimal("performance_impact", { precision: 10, scale: 4 }),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  userModeTimestampIdx: uniqueIndex("portfolio_adjustments_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
+  modeTimestampIdx: uniqueIndex("portfolio_adjustments_mode_timestamp_idx").on(table.mode, table.timestamp),
 }));
 
 // System Alerts (operational data - mode isolated)
@@ -1265,10 +1267,10 @@ export const systemAlerts = pgTable("system_alerts", {
   userModeTimestampIdx: uniqueIndex("system_alerts_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
 }));
 
-// Strategy Parameters (shared global parameters - NO mode column)
+// Strategy Parameters (shared global parameters - NO mode column) - GLOBAL
 export const strategyParameters = pgTable("strategy_parameters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   parameterName: varchar("parameter_name", { length: 100 }).notNull(),
   parameterValue: decimal("parameter_value", { precision: 20, scale: 8 }).notNull(),
   description: text("description"),
@@ -1276,7 +1278,7 @@ export const strategyParameters = pgTable("strategy_parameters", {
   updatedBy: varchar("updated_by", { length: 20 }).default("user"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueUserParam: uniqueIndex("strategy_parameters_user_param_idx").on(table.userId, table.parameterName),
+  uniqueParam: uniqueIndex("strategy_parameters_param_idx").on(table.parameterName),
 }));
 
 // AI Transparency Log (scheduler and automation activity logs)
@@ -1373,10 +1375,10 @@ export const assetCapabilities = pgTable("asset_capabilities", {
   symbolIdx: uniqueIndex("asset_capabilities_symbol_idx").on(table.symbol),
 }));
 
-// Milestone 17C: Historic Signals (backfilled market signals for AI learning)
+// Milestone 17C: Historic Signals (backfilled market signals for AI learning) - GLOBAL
 export const historicSignals = pgTable("historic_signals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   exchange: varchar("exchange", { length: 50 }).default("Kraken").notNull(),
   strategyId: strategyTypeEnum("strategy_id").notNull(),
@@ -1394,15 +1396,14 @@ export const historicSignals = pgTable("historic_signals", {
   symbolIdx: index("historic_signals_symbol_idx").on(table.symbol),
   strategyIdx: index("historic_signals_strategy_idx").on(table.strategyId),
   triggerTimeIdx: index("historic_signals_trigger_time_idx").on(table.triggerTime),
-  userStrategyTimeIdx: index("historic_signals_user_strategy_time_idx").on(table.userId, table.strategyId, table.triggerTime),
 }));
 
 // Milestone 18: Paper Trading Simulation Engine Tables
 
-// Paper Trades - Historical record of closed simulated trades
+// Paper Trades - Historical record of closed simulated trades - GLOBAL
 export const paperSimTrades = pgTable("paper_sim_trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
@@ -1421,16 +1422,16 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   confidence: decimal("confidence", { precision: 5, scale: 2 }),
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
-  userSymbolIdx: index("paper_sim_trades_user_symbol_idx").on(table.userId, table.symbol),
+  symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),
   strategyIdx: index("paper_sim_trades_strategy_idx").on(table.strategyName),
   openedAtIdx: index("paper_sim_trades_opened_at_idx").on(table.openedAt),
   closedAtIdx: index("paper_sim_trades_closed_at_idx").on(table.closedAt),
 }));
 
-// Open Positions - Currently active simulated positions
+// Open Positions - Currently active simulated positions - GLOBAL
 export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
@@ -1446,15 +1447,14 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   confidence: decimal("confidence", { precision: 5, scale: 2 }),
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
 }, (table) => ({
-  userSymbolIdx: uniqueIndex("paper_sim_open_positions_user_symbol_idx").on(table.userId, table.symbol),
-  userIdx: index("paper_sim_open_positions_user_idx").on(table.userId),
+  symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),
   strategyIdx: index("paper_sim_open_positions_strategy_idx").on(table.strategyName),
 }));
 
-// Trade Logs - Chronological event log for paper trading transparency
+// Trade Logs - Chronological event log for paper trading transparency - GLOBAL
 export const paperSimTradeLogs = pgTable("paper_sim_trade_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   tradeId: varchar("trade_id"), // References paper_sim_trades.id (nullable for system events)
   positionId: varchar("position_id"), // References paper_sim_open_positions.id (nullable)
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
@@ -1462,7 +1462,7 @@ export const paperSimTradeLogs = pgTable("paper_sim_trade_logs", {
   message: text("message").notNull(),
   metadata: jsonb("metadata"), // Additional context (prices, quantities, reasons)
 }, (table) => ({
-  userTimestampIdx: index("paper_sim_trade_logs_user_timestamp_idx").on(table.userId, table.timestamp),
+  timestampIdx: index("paper_sim_trade_logs_timestamp_idx").on(table.timestamp),
   tradeIdIdx: index("paper_sim_trade_logs_trade_id_idx").on(table.tradeId),
   eventTypeIdx: index("paper_sim_trade_logs_event_type_idx").on(table.eventType),
 }));
@@ -1508,24 +1508,25 @@ export const tradingAuditLog = pgTable("trading_audit_log", {
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   settings: many(tradingSettings),
-  watchlist: many(watchlistPairs),
-  trades: many(trades),
+  // NOTE: Removed global trading tables - they no longer have userId after Phase 27.F.15.A
+  // watchlist: many(watchlistPairs),
+  // trades: many(trades),
+  // paperTrades: many(paperTrades),
+  // goalsLive: many(goalsLive),
+  // goalsPaper: many(goalsPaper),
+  // goalAnalysisHistoryLive: many(goalAnalysisHistoryLive),
+  // goalAnalysisHistoryPaper: many(goalAnalysisHistoryPaper),
   reports: many(aiReports),
   conversations: many(aiConversations),
   killSwitchEvents: many(killSwitchEvents),
   opportunityRuns: many(aiOpportunityRuns),
   opportunities: many(aiOpportunities),
   dailyBriefs: many(dailyBriefs),
-  paperTrades: many(paperTrades),
   paperDailyBriefs: many(paperDailyBriefs),
   paperAIReports: many(paperAIReports),
   learningSources: many(learningSources),
   signalWeights: many(signalWeights),
   predictionOutcomes: many(predictionOutcomes),
-  goalsLive: many(userGoalsLive),
-  goalsPaper: many(userGoalsPaper),
-  goalAnalysisHistoryLive: many(goalAnalysisHistoryLive),
-  goalAnalysisHistoryPaper: many(goalAnalysisHistoryPaper),
   walterPendingApprovals: many(walterPendingApprovals),
   walterChats: many(walterChats),
   walterChatLogs: many(walterChatLogs),
@@ -1539,26 +1540,9 @@ export const tradingSettingsRelations = relations(tradingSettings, ({ one }) => 
   }),
 }));
 
-export const watchlistPairsRelations = relations(watchlistPairs, ({ one }) => ({
-  user: one(users, {
-    fields: [watchlistPairs.userId],
-    references: [users.id],
-  }),
-}));
-
-export const tradingSignalsRelations = relations(tradingSignals, ({ one }) => ({
-  user: one(users, {
-    fields: [tradingSignals.userId],
-    references: [users.id],
-  }),
-}));
-
-export const tradesRelations = relations(trades, ({ one }) => ({
-  user: one(users, {
-    fields: [trades.userId],
-    references: [users.id],
-  }),
-}));
+// Phase 27.F.15.A: Removed user relations for global trading tables
+// watchlistPairsRelations, tradingSignalsRelations, tradesRelations
+// These tables are now global per mode and don't have userId
 
 export const aiReportsRelations = relations(aiReports, ({ one }) => ({
   user: one(users, {
@@ -1620,12 +1604,7 @@ export const dailyBriefsRelations = relations(dailyBriefs, ({ one }) => ({
   }),
 }));
 
-export const paperTradesRelations = relations(paperTrades, ({ one }) => ({
-  user: one(users, {
-    fields: [paperTrades.userId],
-    references: [users.id],
-  }),
-}));
+// Phase 27.F.15.A: Removed paperTradesRelations - table is now global
 
 export const paperDailyBriefsRelations = relations(paperDailyBriefs, ({ one }) => ({
   user: one(users, {
