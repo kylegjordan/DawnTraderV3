@@ -82,9 +82,8 @@ class TradingBob {
 
       try {
         // Try to get aggregated portfolio data
-        const allTrades = mode === 'live' 
-          ? await storage.getTrades(userId, { limit: 1000 })
-          : await storage.getAllPaperTrades(userId);
+        // Phase 27.F.15.B.4-Prep: Use mode-based storage methods
+        const allTrades = await storage.getTrades(mode, { limit: 1000 });
         
         const globalContextId = 'default';
         const portfolioState = await storage.getPortfolioState({ globalContextId, mode });
@@ -106,10 +105,9 @@ class TradingBob {
       }
 
       // Get risk metrics
-      const activeTrades = await storage.getActiveTrades();
-      const openTrades = mode === 'live'
-        ? activeTrades
-        : activeTrades.filter((t: any) => t.mode === 'paper');
+      // Phase 27.F.15.B.4-Prep: Use mode-based storage methods
+      const activeTrades = await storage.getActiveTrades(mode);
+      const openTrades = activeTrades;
       
       const maxExposure = parseFloat(settings?.maxExposurePercent || '25');
       const currentExposure = openTrades.length > 0 

@@ -1,0 +1,94 @@
+⚙️ Directive: Phase 27.F.15.B.4-Prep – Quick Stability Fix
+🎯 Objective
+
+Stabilize the system before full rollout of Phase 27.F.15.B.4 by clearing LSP/runtime blockers, creating placeholders for yet-to-be-implemented services, and ensuring the application starts cleanly.
+
+🧩 Tasks
+1️⃣ Fix Immediate LSP and Runtime Errors
+
+Update trading-bob.ts, data-bob.ts, and config-bob.ts so they call mode-based storage methods instead of userId-based ones.
+Replace patterns such as:
+
+storage.getTrades(userId)
+
+
+with:
+
+storage.getTrades('paper')
+
+
+or 'live' depending on context.
+
+Remove any unused userId parameters from constructors or service calls in these Bob files.
+
+Ensure all Bob services compile and run without TypeScript errors.
+
+2️⃣ Add Temporary ModeRegistry Service (Placeholder)
+
+Create a lightweight file at
+server/services/mode-registry.ts
+containing:
+
+export const ModeRegistry = {
+  paper: { engineStatus: 'stopped', riskSummary: {}, alerts: 0 },
+  live:  { engineStatus: 'stopped', riskSummary: {}, alerts: 0 },
+};
+
+
+This is a stub that lets dependent systems reference ModeRegistry until the full telemetry registry is implemented.
+
+3️⃣ Add Temporary /api/system/health Endpoint
+
+In server/routes.ts, add a minimal endpoint:
+
+apiRouter.get('/system/health', async (_req, res) => {
+  try {
+    res.json([
+      { mode: 'paper', engine: 'stopped', alerts: 0 },
+      { mode: 'live',  engine: 'stopped', alerts: 0 },
+    ]);
+  } catch (err) {
+    console.error('[Health] Error:', err);
+    res.status(500).json({ error: 'System health check failed' });
+  }
+});
+
+
+This allows monitoring and validation scripts to run immediately.
+
+4️⃣ Verify System Compiles and Starts
+
+Run:
+
+npm run tsc -- --noEmit
+npm run start
+
+
+and confirm:
+
+No TypeScript errors
+
+Server boots without SQL or import errors
+
+/api/system/health returns two mode objects
+
+5️⃣ Update Documentation
+
+Append to replit.md:
+
+✅ Phase 27.F.15.B.4-Prep Complete
+Bob services stable and mode-compatible.
+Placeholder ModeRegistry and /system/health endpoint operational.
+System compiles and runs cleanly—ready for full Phase 27.F.15.B.4 integration.
+
+✅ Success Criteria
+
+Application compiles and runs without LSP or SQL errors.
+
+/api/system/health returns mock telemetry for both modes.
+
+Bob services execute without userId-related issues.
+
+All routes and services load successfully at startup.
+
+Once this prep phase completes successfully, immediately proceed with the full Phase 27.F.15.B.4 directive (with auto-triggered POST) to finish the global optimization.
