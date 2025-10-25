@@ -645,20 +645,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                   Paper
                   {currentMode === 'paper' && ' ✓'}
                 </DropdownMenuItem>
-                {currentMode === 'paper' && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setShowResetDialog(true)}
-                      disabled={!canEdit || isResettingPaperSim}
-                      className="text-destructive"
-                      data-testid="menu-reset-paper-sim"
-                    >
-                      <RotateCcw className="w-3 h-3 mr-2" />
-                      Reset Simulation
-                    </DropdownMenuItem>
-                  </>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -722,21 +708,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               >
                 PAPER
               </Button>
-              
-              {/* Phase 27.F.13.C: Reset Paper Simulation Button - only shown in paper mode */}
-              {currentMode === 'paper' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowResetDialog(true)}
-                  disabled={!canEdit || isResettingPaperSim}
-                  className="px-2 py-1 text-xs hover:bg-destructive/10"
-                  title={!canEdit ? `Viewers cannot reset simulation (Role: ${role})` : 'Reset Paper Simulation'}
-                  data-testid="button-reset-paper-sim"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              )}
             </div>
           </div>
         </div>
