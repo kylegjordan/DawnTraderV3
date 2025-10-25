@@ -51,7 +51,9 @@ export class RiskManager {
 
     if (mode === 'paper') {
       // Milestone 18: Use paper_sim_open_positions for paper trading
-      const paperPositions = await storage.getPaperSimOpenPositions(userId);
+      // Phase 27.F.15.A: Global mode-based query (no userId)
+      const paperPositions = await storage.getPaperSimOpenPositions();
+      console.log('[Phase-27.F.15.B.2] Updated service risk-manager → mode-based only');
       return paperPositions.map(p => ({
         symbol: p.symbol,
         quantity: p.quantity,
@@ -60,7 +62,9 @@ export class RiskManager {
       }));
     } else {
       // Live mode: Use legacy trades table
-      const activeTrades = await storage.getActiveTrades(userId);
+      // Phase 27.F.15.A: Global mode-based query (no userId)
+      const activeTrades = await storage.getActiveTrades();
+      console.log('[Phase-27.F.15.B.2] Updated service risk-manager → mode-based only');
       return activeTrades.map(t => ({
         symbol: t.symbol,
         quantity: t.quantity,

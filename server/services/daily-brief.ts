@@ -183,12 +183,15 @@ export class DailyBriefService {
     const todayStart = new Date(today + 'T00:00:00Z');
     
     // Get today's trades
-    const allTrades = await storage.getTrades(userId, { status: 'closed' });
+    // Phase 27.F.15.A: Global mode-based query (no userId)
+    const allTrades = await storage.getTrades({ status: 'closed' });
     const todayTrades = allTrades.filter(trade => 
       trade.exitTime && new Date(trade.exitTime) >= todayStart
     );
     
-    const openTrades = await storage.getActiveTrades(userId);
+    // Phase 27.F.15.A: Global mode-based query (no userId)
+    const openTrades = await storage.getActiveTrades();
+    console.log('[Phase-27.F.15.B.2] Updated service daily-brief → mode-based only');
     
     // Get metrics from risk manager
     const portfolioMetrics = await this.riskManager.getPortfolioMetrics(userId);

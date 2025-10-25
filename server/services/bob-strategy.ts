@@ -50,9 +50,11 @@ class StrategyBobModule {
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
+      // Phase 27.F.15.A: Global mode-based queries (no userId)
       const allTrades = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
+        ? await storage.getTrades({})
+        : await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.2] Updated service bob-strategy → mode-based only');
 
       const recentTrades = allTrades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate

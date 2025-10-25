@@ -339,7 +339,9 @@ export class CommandRouter {
 
     // Performance
     if (entity === 'performance') {
-      const trades = await storage.getTrades(userId, {});
+      // Phase 27.F.15.A: Global mode-based query (no userId)
+      const trades = await storage.getTrades({});
+      console.log('[Phase-27.F.15.B.2] Updated service command-router → mode-based only');
       const closedTrades = trades.filter(t => t.status === 'closed');
       const totalProfit = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
       const winningTrades = closedTrades.filter(t => parseFloat(t.realizedPL || '0') > 0).length;
@@ -379,7 +381,8 @@ export class CommandRouter {
 
     // Explain trade reasoning
     if (action === 'explain' && entity === 'trade') {
-      const trades = await storage.getTrades(userId);
+      // Phase 27.F.15.A: Global mode-based query (no userId)
+      const trades = await storage.getTrades();
       const lastTrade = trades[0]; // Most recent
 
       if (!lastTrade) {

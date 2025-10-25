@@ -43,13 +43,16 @@ export class AISummaryTask implements Omit<ScheduledTask, 'lastRun' | 'nextRun' 
       const startOfDay = new Date(today + 'T00:00:00Z');
       const endOfDay = new Date(today + 'T23:59:59Z');
       
-      const liveTrades = await storage.getTrades(userId, { limit: 1000 });
+      // Phase 27.F.15.A: Global mode-based queries (no userId)
+      const liveTrades = await storage.getTrades({ limit: 1000 });
       const todaysLiveTrades = liveTrades.filter(t => {
         const entryTime = t.entryTime ? new Date(t.entryTime) : null;
         return entryTime && entryTime >= startOfDay && entryTime <= endOfDay;
       });
 
-      const paperTrades = await storage.getAllPaperTrades(userId);
+      // Phase 27.F.15.A: Global mode-based query (no userId)
+      const paperTrades = await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.2] Updated service ai-summary-task → mode-based only');
       const todaysPaperTrades = paperTrades.filter(t => {
         const entryTime = t.entryTime ? new Date(t.entryTime) : null;
         return entryTime && entryTime >= startOfDay && entryTime <= endOfDay;

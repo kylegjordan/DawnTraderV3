@@ -547,7 +547,9 @@ export class WalterOpsEngine {
     anomaly: AnomalyInput
   ): Promise<AlertContext> {
     // Get active trades for this user
-    const all_trades = await storage.getTrades(userId, { status: 'open' });
+    // Phase 27.F.15.A: Global mode-based query (no userId)
+    const all_trades = await storage.getTrades({ status: 'open' });
+    console.log('[Phase-27.F.15.B.2] Updated service walter-ops-engine → mode-based only');
     const active_trades = all_trades.filter((t: Trade) => t.mode === mode && t.status === 'open');
     
     // Calculate open positions value

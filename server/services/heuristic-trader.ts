@@ -143,11 +143,14 @@ class MetricsCollector {
           entryTime: t.timestamp,
           exitTime: t.message?.includes('CLOSED') ? t.timestamp : null
         }));
-        activePositions = await storage.getPaperSimOpenPositions(userId);
+        // Phase 27.F.15.A: Global mode-based query (no userId)
+        activePositions = await storage.getPaperSimOpenPositions();
+        console.log('[Phase-27.F.15.B.2] Updated service heuristic-trader → mode-based only');
       } else {
         // For live mode, get regular trades
-        allTrades = await storage.getTrades(userId);
-        activePositions = await storage.getTrades(userId, { status: 'open' });
+        // Phase 27.F.15.A: Global mode-based queries (no userId)
+        allTrades = await storage.getTrades({});
+        activePositions = await storage.getActiveTrades();
       }
       
       // Filter recent trades

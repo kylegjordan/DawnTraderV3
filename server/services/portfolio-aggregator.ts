@@ -62,9 +62,11 @@ class PortfolioAggregatorService {
       : 0;
 
     // Get all trades for equity curve
+    // Phase 27.F.15.A: Global mode-based queries (no userId)
     const allTrades = mode === 'live' 
-      ? await storage.getTrades(userId, { limit: 10000 })
-      : await storage.getAllPaperTrades(userId);
+      ? await storage.getTrades({ limit: 10000 })
+      : await storage.getAllPaperTrades();
+    console.log('[Phase-27.F.15.B.2] Updated service portfolio-aggregator → mode-based only');
 
     const closedTrades = allTrades.filter((t: any) => t.status === 'closed' && t.exitTime);
 

@@ -49,9 +49,11 @@ class StrategyAnalyticsService {
     const start = Date.now();
 
     // Get all trades for the user (mode-filtered in storage)
+    // Phase 27.F.15.A: Global mode-based queries (no userId)
     const allTrades = mode === 'live' 
-      ? await storage.getTrades(userId, { limit: 10000 })
-      : await storage.getAllPaperTrades(userId);
+      ? await storage.getTrades({ limit: 10000 })
+      : await storage.getAllPaperTrades();
+    console.log('[Phase-27.F.15.B.2] Updated service strategy-analytics → mode-based only');
 
     // Filter to last 7 days
     const windowStart = new Date();

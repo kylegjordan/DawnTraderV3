@@ -43,11 +43,13 @@ export class AIAnalyst {
   async generateDailyReport(userId: string): Promise<AIReport> {
     try {
       // Gather trading data
+      // Phase 27.F.15.A: Global mode-based queries (no userId)
       const [trades, settings, activeTrades] = await Promise.all([
-        storage.getTrades(userId, { status: 'closed', limit: 50 }),
+        storage.getTrades({ status: 'closed', limit: 50 }),
         storage.getTradingSettings(userId),
-        storage.getActiveTrades(userId)
+        storage.getActiveTrades()
       ]);
+      console.log('[Phase-27.F.15.B.2] Updated service ai-analyst → mode-based only');
 
       const today = new Date().toISOString().split('T')[0];
       const todayTrades = trades.filter(trade => 
