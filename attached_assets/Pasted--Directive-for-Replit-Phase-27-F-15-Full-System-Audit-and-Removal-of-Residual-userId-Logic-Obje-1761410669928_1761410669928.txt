@@ -1,0 +1,196 @@
+🧭 Directive for Replit: Phase 27.F.15 – Full System Audit and Removal of Residual userId Logic
+Objective
+
+Perform a complete, system-wide audit and cleanup to eliminate all dependencies on userId (or equivalent identifiers) in the backend, database schema, and frontend codebase.
+Replace all such references with mode (paper / live) or globalContextId, ensuring all multi-user synchronization is purely context-based, not account-based.
+
+This phase is mandatory to stabilize global synchronization before expanding to live trading.
+
+PHASE TASK LIST
+1️⃣ Global Search and Audit Preparation
+
+Execute a recursive search for all legacy user ID references:
+
+rg -i "(user_id|userId|userID|userid|usercontext|ctx.user|byUser)" --hidden --glob '!node_modules/*' > audit_userid_refs.txt
+
+
+Output file: audit_userid_refs.txt
+
+Include results from backend, frontend, and shared schema directories:
+
+/server/
+
+/client/
+
+/shared/
+
+/migrations/
+
+/services/
+
+This file will serve as the master reference ledger of all code segments still linked to per-user contexts.
+
+2️⃣ Classification and Replacement Plan
+
+Create a new documentation file:
+docs/audit_userid_matrix.md
+
+Populate it with a markdown table in this format:
+
+Location	Purpose	Replacement	Action
+/server/services/alerts-service.ts	Filter alerts per user	Replace with mode	Update query and broadcast
+/shared/schema.ts	Column user_id in system_alerts	Remove column	Drop and reindex by mode
+/client/src/hooks/usePortfolio.tsx	Fetch per-user data	Replace with mode	Refactor API call
+/server/services/trading-service.ts	userId in WebSocket broadcast	Replace with mode	Update broadcast signature
+
+Every match from audit_userid_refs.txt must be assigned to one row in this matrix.
+No unclassified matches should remain.
+
+3️⃣ Schema and Backend Refactor
+
+Perform database and service-layer cleanup to enforce mode-based scoping only:
+
+✅ Schema cleanup
+
+Drop all user_id columns from tables like:
+
+system_alerts
+
+guardrails
+
+filters
+
+paper_trades
+
+live_trades
+
+trading_sessions
+
+Confirm all tables are keyed by:
+
+{ id, mode, globalContextId }
+
+✅ Service refactor
+
+Refactor all methods currently using userId:
+
+// Before
+getGuardrails(userId, mode);
+getFilteredPairs(userId, mode);
+
+// After
+getGuardrailsByMode(mode);
+getFilteredPairsByMode(mode);
+
+
+Remove userId arguments entirely from:
+
+alerts-service.ts
+
+filtered-pairs-service.ts
+
+portfolio-service.ts
+
+paper-sim-service.ts
+
+live-trading-service.ts
+
+✅ WebSocket layer update
+
+In /server/services/context-bridge.ts:
+
+Remove all client filters using userId.
+
+Standardize all broadcast payloads to:
+
+{
+  mode: 'paper' | 'live',
+  payload,
+  timestamp: new Date().toISOString()
+}
+
+
+Confirm all events broadcast to every connected session sharing the same mode.
+
+4️⃣ Frontend Cleanup
+
+Search all React hooks and API calls for userId usage:
+
+/client/src/hooks/
+
+/client/src/pages/trading/
+
+/client/src/pages/dashboard/
+
+/client/src/pages/ai-transparency/
+
+Replace all query parameters:
+
+?userId= → ?mode=
+
+
+Verify:
+
+usePortfolio(), useTrading(), useAlerts(), and useFilterData() depend only on mode.
+
+No component reads or stores localStorage.userId, session.user, or similar.
+
+5️⃣ Verification Script
+
+Add /scripts/verify-no-userid.js:
+
+import { execSync } from 'child_process';
+
+try {
+  const result = execSync('rg -i "(user_id|userId|userID|userid|byUser|usercontext|ctx.user)" --glob "!node_modules/*"', { encoding: 'utf8' });
+  if (result.trim().length > 0) {
+    console.error("❌ Found lingering userId references:\n", result);
+    process.exit(1);
+  } else {
+    console.log("✅ No userId references detected in codebase!");
+  }
+} catch (err) {
+  console.error("❌ Verification script error:", err);
+  process.exit(1);
+}
+
+
+After completion of this phase, Replit must run:
+
+npm run verify-no-userid
+
+
+Expected output:
+
+✅ No userId references detected in codebase!
+
+6️⃣ Deliverables
+
+audit_userid_refs.txt – raw search output
+
+docs/audit_userid_matrix.md – classification and replacement table
+
+Updated database schema (no user_id columns)
+
+Fully refactored backend and client code
+
+Working verification script
+
+Passing verification check (✅ No userId references detected in codebase!)
+
+7️⃣ Verification Checklist
+
+✅ No code in /server, /client, /shared, or /migrations contains any userId reference.
+✅ All synchronization is mode- or context-based (mode, contextId, globalContextId).
+✅ Alerts, filters, portfolios, and trading data are identical across users in the same mode.
+✅ WebSocket events broadcast globally with mode-based routing only.
+✅ Verification script passes cleanly with no matches found.
+
+Architectural Log Tags for This Phase
+
+Add these logging identifiers during code review:
+
+[Audit][Backend] Removed residual userId reference
+[Schema][Migration] Dropped column user_id
+[Broadcast][Refactor] Using mode-based sync only
+[Verify][Script] All clear – no userId references
