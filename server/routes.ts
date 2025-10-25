@@ -351,24 +351,63 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     });
   });
 
-  // Phase 27.F.15.B.4: Production system health endpoint with live telemetry
+  // Phase 27.F.15.B.4 + 27.F.15.C: Production system health endpoint with live telemetry and dual-mode metrics
   apiRouter.get('/system/health', async (_req, res) => {
     try {
       const { getAllModeStatus } = await import('./services/mode-registry');
+      const { metricsCore } = await import('./services/metrics-core.js');
       const registry = getAllModeStatus();
       
-      const status = Object.entries(registry).map(([mode, data]) => ({
-        mode,
-        engine: data.engineStatus,
-        alerts: data.alerts,
-        trades: data.trades,
-        lastUpdate: data.lastUpdate,
-      }));
+      // Phase 27.F.15.C: Fetch dual-mode metrics (paper + live)
+      const [paperMetrics, liveMetrics] = await Promise.all([
+        metricsCore.getCachedOrCompute('paper').catch((err) => {
+          console.warn('[27.F.15.C][Health] Paper metrics unavailable:', err.message);
+          return null;
+        }),
+        metricsCore.getCachedOrCompute('live').catch((err) => {
+          console.warn('[27.F.15.C][Health] Live metrics unavailable:', err.message);
+          return null;
+        })
+      ]);
       
-      console.log(`[Phase-27.F.15.B.4][Health] System health check: ${JSON.stringify(status)}`);
+      const status = Object.entries(registry).map(([mode, data]) => {
+        const metrics = mode === 'paper' ? paperMetrics : liveMetrics;
+        
+        return {
+          mode,
+          engine: data.engineStatus,
+          alerts: data.alerts,
+          trades: data.trades,
+          lastUpdate: data.lastUpdate,
+          // Phase 27.F.15.C: Add metrics block
+          metrics: metrics ? {
+            portfolio: {
+              totalValue: metrics.portfolio.totalValue,
+              realizedPL: metrics.portfolio.realizedPL,
+              unrealizedPL: metrics.portfolio.unrealizedPL,
+              openTrades: metrics.portfolio.openTradesCount
+            },
+            risk: {
+              winRate: metrics.risk.winRate,
+              profitFactor: metrics.risk.profitFactor,
+              maxDrawdown: metrics.risk.maxDrawdown,
+              sharpeRatio: metrics.risk.sharpeRatio
+            },
+            execution: {
+              totalTrades: metrics.execution.totalTrades,
+              wins: metrics.execution.wins,
+              losses: metrics.execution.losses,
+              avgRMultiple: metrics.execution.avgRMultiple
+            },
+            computedAt: metrics.computedAt
+          } : null
+        };
+      });
+      
+      console.log(`[27.F.15.C][Health] System health check with metrics: ${Object.keys(registry).join(', ')}`);
       res.json(status);
     } catch (err: any) {
-      console.error('[Phase-27.F.15.B.4][Health] Error:', err.message);
+      console.error('[27.F.15.C][Health] Error:', err.message);
       res.status(500).json({ error: 'System health check failed' });
     }
   });
@@ -3538,6 +3577,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       const tradingMode = (mode || 'paper') as 'live' | 'paper';
+      
+      // Phase 27.F.15.C MSI: Live mode balance safeguards - reject manual edits
+      if (tradingMode === 'live') {
+        console.error('[27.F.15.C][MSI] ❌ Manual balance edit rejected for live mode');
+        return res.status(403).json({ 
+          error: 'Live mode balance cannot be manually edited - it must be sourced from exchange API',
+          code: 'MSI_LIVE_BALANCE_PROTECTED'
+        });
+      }
+      
       const { confirmPortfolioBalance } = await import('./services/paper-sim-service.js');
       await confirmPortfolioBalance(tradingMode, parseFloat(balance));
       
@@ -3599,6 +3648,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           },
           mode: 'paper'
         });
+        
+        // Phase 27.F.15.C: Reset MetricsCore for paper mode (enforces MSI)
+        const { metricsCore } = await import('./services/metrics-core.js');
+        await metricsCore.reset('paper');
+        console.log('[27.F.15.C][MSI] ✅ Paper mode metrics reset complete');
         
         // Phase 27.F.14.J: Reset LATTI baseline for paper mode (per_simulation baseline)
         await storage.updateSystemContext('paper', {
