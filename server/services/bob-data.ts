@@ -45,10 +45,7 @@ class DataBobModule {
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching results (mode: ${mode}, period: ${period})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for results fetch');
-      }
-
+      // Phase 27.F.15.B.1-POST: Global query (trades table no longer has user_id)
       // Calculate date range based on period
       const now = new Date();
       let startDate: Date;
@@ -67,10 +64,9 @@ class DataBobModule {
           startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       }
 
-      // Query trades for the period
+      // Query trades for the period (global for mode)
       const tradesData = await db.query.trades.findMany({
         where: and(
-          eq(trades.userId, userId),
           eq(trades.mode, mode),
           gte(trades.exitTime, startDate)
         ),
@@ -132,16 +128,10 @@ class DataBobModule {
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching averages (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for averages fetch');
-      }
-
-      // Get all trades for the user
+      // Phase 27.F.15.B.1-POST: Global query (trades table no longer has user_id)
+      // Get all trades for the mode (global)
       const allTrades = await db.query.trades.findMany({
-        where: and(
-          eq(trades.userId, userId),
-          eq(trades.mode, mode)
-        )
+        where: eq(trades.mode, mode)
       });
 
       // Calculate time-based metrics
@@ -207,18 +197,14 @@ class DataBobModule {
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching activity (mode: ${mode}, limit: ${limit})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for activity fetch');
-      }
-
+      // Phase 27.F.15.B.1-POST: Global query (trades table no longer has user_id)
       // Calculate today's range
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      // Get today's trades
+      // Get today's trades (global for mode)
       const todayTrades = await db.query.trades.findMany({
         where: and(
-          eq(trades.userId, userId),
           eq(trades.mode, mode),
           gte(trades.exitTime, today)
         ),

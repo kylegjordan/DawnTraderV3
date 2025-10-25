@@ -143,15 +143,9 @@ class ConfigBobModule {
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching guardrails (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for guardrails fetch');
-      }
-
+      // Phase 27.F.15.B.1-POST: Global query (guardrails table no longer has user_id)
       const guardrailsData = await db.query.guardrails.findFirst({
-        where: and(
-          eq(guardrails.userId, userId),
-          eq(guardrails.mode, mode)
-        )
+        where: eq(guardrails.mode, mode)
       });
 
       const duration = Date.now() - startTime;
@@ -222,15 +216,9 @@ class ConfigBobModule {
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching screeners (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for screeners fetch');
-      }
-
+      // Phase 27.F.15.B.1-POST: Global query (screener_filters table no longer has user_id)
       const screenersData = await db.query.screenerFilters.findFirst({
-        where: and(
-          eq(screenerFilters.userId, userId),
-          eq(screenerFilters.mode, mode)
-        )
+        where: eq(screenerFilters.mode, mode)
       });
 
       const duration = Date.now() - startTime;

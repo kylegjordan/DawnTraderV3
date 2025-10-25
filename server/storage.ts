@@ -2739,28 +2739,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPaperSimTrades(userId: string, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
     const limit = filters?.limit || 100;
     const closedOnly = filters?.closedOnly ?? false;
     
-    const conditions = [eq(paperSimTrades.userId, userId)];
+    const conditions = [];
     if (closedOnly) {
       conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL` as any);
     }
     
+    if (conditions.length > 0) {
+      return await db.select()
+        .from(paperSimTrades)
+        .where(and(...conditions))
+        .orderBy(desc(paperSimTrades.openedAt))
+        .limit(limit);
+    }
+    
     return await db.select()
       .from(paperSimTrades)
-      .where(and(...conditions))
       .orderBy(desc(paperSimTrades.openedAt))
       .limit(limit);
   }
 
   async getPaperSimTradesBySymbol(userId: string, symbol: string): Promise<PaperSimTrade[]> {
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
     return await db.select()
       .from(paperSimTrades)
-      .where(and(
-        eq(paperSimTrades.userId, userId),
-        eq(paperSimTrades.symbol, symbol)
-      ))
+      .where(eq(paperSimTrades.symbol, symbol))
       .orderBy(desc(paperSimTrades.openedAt));
   }
 
@@ -2807,19 +2813,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPaperSimOpenPositionBySymbol(userId: string, symbol: string): Promise<PaperSimOpenPosition | undefined> {
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
     const [position] = await db.select()
       .from(paperSimOpenPositions)
-      .where(and(
-        eq(paperSimOpenPositions.userId, userId),
-        eq(paperSimOpenPositions.symbol, symbol)
-      ));
+      .where(eq(paperSimOpenPositions.symbol, symbol));
     return position || undefined;
   }
 
   async getPaperSimOpenPositions(userId: string): Promise<PaperSimOpenPosition[]> {
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
     return await db.select()
       .from(paperSimOpenPositions)
-      .where(eq(paperSimOpenPositions.userId, userId))
       .orderBy(desc(paperSimOpenPositions.openedAt));
   }
 
@@ -2829,15 +2833,18 @@ export class DatabaseStorage implements IStorage {
 
   // Phase 27.F.13.C: Reset simulation methods
   async deleteAllPaperSimOpenPositions(userId: string): Promise<void> {
-    await db.delete(paperSimOpenPositions).where(eq(paperSimOpenPositions.userId, userId));
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+    await db.delete(paperSimOpenPositions);
   }
 
   async deleteAllPaperSimTradeLogs(userId: string): Promise<void> {
-    await db.delete(paperSimTradeLogs).where(eq(paperSimTradeLogs.userId, userId));
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+    await db.delete(paperSimTradeLogs);
   }
 
   async deleteAllPaperSimTrades(userId: string): Promise<void> {
-    await db.delete(paperSimTrades).where(eq(paperSimTrades.userId, userId));
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+    await db.delete(paperSimTrades);
   }
 
   // Phase 27.F.13.F: Cleanup method for old closed paper sim trades
@@ -2862,16 +2869,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPaperSimTradeLogs(userId: string, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]> {
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
     const limit = filters?.limit || 100;
     
-    const conditions = [eq(paperSimTradeLogs.userId, userId)];
+    const conditions = [];
     if (filters?.tradeId) {
       conditions.push(eq(paperSimTradeLogs.tradeId, filters.tradeId));
     }
     
+    if (conditions.length > 0) {
+      return await db.select()
+        .from(paperSimTradeLogs)
+        .where(and(...conditions))
+        .orderBy(desc(paperSimTradeLogs.timestamp))
+        .limit(limit);
+    }
+    
     return await db.select()
       .from(paperSimTradeLogs)
-      .where(and(...conditions))
       .orderBy(desc(paperSimTradeLogs.timestamp))
       .limit(limit);
   }
@@ -2892,13 +2907,12 @@ export class DatabaseStorage implements IStorage {
       totalPnl: number;
     }>;
   }> {
+    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
     const trades = await db.select()
-      .from(paperSimTrades)
-      .where(eq(paperSimTrades.userId, userId));
+      .from(paperSimTrades);
 
     const openPositions = await db.select()
-      .from(paperSimOpenPositions)
-      .where(eq(paperSimOpenPositions.userId, userId));
+      .from(paperSimOpenPositions);
 
     const totalTrades = trades.length;
     const closedTrades = trades.filter(t => t.closedAt).length;
