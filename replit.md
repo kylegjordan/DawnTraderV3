@@ -47,6 +47,8 @@ Multi-User Synchronization provides real-time WebSocket broadcast synchronizatio
 
 Simulation Startup Modal implements a user choice dialog when starting paper trading: Continue Previous Simulation (resumes with existing baseline) or Start New Simulation (resets baseline, metrics, and portfolio balance). The modal includes balance input for new simulations. Backend supports 'continue' and 'new' modes via `/api/paper-sim/start` endpoint.
 
+**Phase 27.F.15.B.2: Mode-Based Paper Simulation Refactor** completed the transition to true mode-based architecture. All 20 paper_sim storage methods now require a `mode: TradingMode` parameter as the first argument. `PaperExecutionEngine` no longer accepts or stores userId—only mode parameter. All dependent services (routes.ts, baseline-indicator, heuristic-trader, paper-48hr-simulation, paper-portfolio-manager, risk-manager) updated to pass mode='paper' to storage calls. This refactor eliminates per-user paper sim state, enabling truly global paper trading sessions shared across all users, and prepares the foundation for future live mode implementation.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
