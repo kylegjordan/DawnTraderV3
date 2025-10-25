@@ -1,15 +1,16 @@
 /**
- * Phase 27.F.15.B.4-Prep: ModeRegistry Placeholder
+ * Phase 27.F.15.B.4: ModeRegistry - Production Telemetry Layer
  * 
- * Lightweight global telemetry registry for paper and live trading modes.
- * This is a temporary stub until the full telemetry registry is implemented.
+ * Global real-time telemetry registry for paper and live trading modes.
+ * Provides runtime tracking, status updates, and WebSocket broadcast integration.
  */
 
 export interface ModeStatus {
   engineStatus: 'stopped' | 'starting' | 'running' | 'paused' | 'error';
   riskSummary: Record<string, any>;
   alerts: number;
-  lastUpdate?: Date;
+  trades: number;
+  lastUpdate: Date;
 }
 
 export interface ModeRegistryType {
@@ -22,29 +23,45 @@ export const ModeRegistry: ModeRegistryType = {
     engineStatus: 'stopped', 
     riskSummary: {}, 
     alerts: 0,
+    trades: 0,
     lastUpdate: new Date()
   },
   live: { 
     engineStatus: 'stopped', 
     riskSummary: {}, 
     alerts: 0,
+    trades: 0,
     lastUpdate: new Date()
   },
 };
 
 /**
- * Update mode registry status
+ * Update mode registry status with WebSocket broadcast
+ * Phase 27.F.15.B.4: Production telemetry integration
  */
-export function updateModeStatus(
+export async function updateModeStatus(
   mode: 'live' | 'paper',
-  status: Partial<ModeStatus>
-): void {
+  data: Partial<ModeStatus>
+): Promise<void> {
   ModeRegistry[mode] = {
     ...ModeRegistry[mode],
-    ...status,
+    ...data,
     lastUpdate: new Date()
   };
-  console.log(`[ModeRegistry][mode=${mode}] Status updated:`, status);
+
+  console.log(`[Phase-27.F.15.B.4][Telemetry][${mode}] Updated mode status:`, JSON.stringify(data));
+
+  try {
+    const { contextBridge } = await import('./context-bridge');
+    await contextBridge.broadcast({
+      type: 'mode_status_updated',
+      payload: { mode, ...ModeRegistry[mode] },
+      mode
+    });
+    console.log(`[Phase-27.F.15.B.4][Telemetry][${mode}] Broadcast sent successfully`);
+  } catch (error: any) {
+    console.error(`[Phase-27.F.15.B.4][Telemetry][${mode}] Broadcast failed:`, error.message);
+  }
 }
 
 /**
@@ -59,4 +76,34 @@ export function getModeStatus(mode: 'live' | 'paper'): ModeStatus {
  */
 export function getAllModeStatus(): ModeRegistryType {
   return ModeRegistry;
+}
+
+/**
+ * Increment trade count for a mode
+ */
+export async function incrementTradeCount(mode: 'live' | 'paper'): Promise<void> {
+  await updateModeStatus(mode, {
+    trades: ModeRegistry[mode].trades + 1
+  });
+}
+
+/**
+ * Increment alert count for a mode
+ */
+export async function incrementAlertCount(mode: 'live' | 'paper'): Promise<void> {
+  await updateModeStatus(mode, {
+    alerts: ModeRegistry[mode].alerts + 1
+  });
+}
+
+/**
+ * Reset mode status (typically on engine start)
+ */
+export async function resetModeStatus(mode: 'live' | 'paper'): Promise<void> {
+  await updateModeStatus(mode, {
+    engineStatus: 'stopped',
+    riskSummary: {},
+    alerts: 0,
+    trades: 0
+  });
 }

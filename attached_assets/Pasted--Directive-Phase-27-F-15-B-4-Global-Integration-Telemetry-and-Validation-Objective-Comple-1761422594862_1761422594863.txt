@@ -1,0 +1,163 @@
+⚙️ Directive: Phase 27.F.15.B.4 – Global Integration, Telemetry, and Validation
+🎯 Objective
+
+Complete the final backend migration to a fully mode-based global architecture, extend all dependent services (Bob, AI, Cortex, Alerts, Metrics) to support dual-mode operation, integrate real-time telemetry via ModeRegistry, and automatically verify correct synchronization across both paper and live trading modes.
+
+🧩 Scope
+
+The system is already stable from Phase 27.F.15.B.4-Prep.
+Do not recreate the placeholder ModeRegistry or /api/system/health endpoint — instead, expand them into their production versions.
+
+🧱 Implementation Tasks
+1️⃣ Bob Services – Mode Integration
+
+Refactor all Bob services to operate globally per mode.
+
+Files:
+server/services/data-bob.ts, config-bob.ts, trading-bob.ts, metrics-bob.ts, strategy-bob.ts
+
+Changes:
+
+// Replace userId-based calls
+const trades = await storage.getTrades('paper');
+// with
+const trades = await storage.getTrades(mode);
+
+
+Inject mode: 'live' | 'paper' throughout each class and broadcast updates via contextBridge.broadcast({ type:'bob_data_updated', mode, payload }).
+
+2️⃣ AI / Cortex / Analyst Services
+
+Make all intelligence layers aware of trading mode context.
+
+Files:
+server/services/ai-analyst.ts, cortex-core.ts, walter.ts
+
+Tasks:
+
+Add mode parameter to constructor and logging.
+
+Use ModeRegistry.getModeStatus(mode) to contextualize insights.
+
+Ensure generated alerts and summaries include mode in payload.
+
+3️⃣ Alerts and Metrics Refactor
+
+Globalize alert and metric systems per mode.
+
+Update alerts-service.ts to store alerts with a mode column instead of userId.
+
+Update paper-metrics-service.ts → metrics-service.ts for unified dual-mode metrics.
+
+All broadcasts must include:
+
+type: 'alerts_updated',
+payload: { mode, ... }
+
+4️⃣ Expand ModeRegistry → Telemetry Layer
+
+Transform the existing placeholder into an active telemetry manager.
+
+File: server/services/mode-registry.ts
+
+Add runtime tracking fields:
+
+export const ModeRegistry = {
+  paper: { engineStatus:'stopped', riskSummary:{}, alerts:0, trades:0, lastUpdate:new Date() },
+  live:  { engineStatus:'stopped', riskSummary:{}, alerts:0, trades:0, lastUpdate:new Date() },
+};
+
+export function updateModeStatus(mode, data) {
+  ModeRegistry[mode] = { ...ModeRegistry[mode], ...data, lastUpdate:new Date() };
+  contextBridge.broadcast({ type:'mode_status_updated', payload:{ mode, ...ModeRegistry[mode] } });
+}
+
+
+Integrate this telemetry into:
+
+TradingEngine, RiskManager, PaperExecutionEngine
+
+AlertService, MetricsService, DataBob
+
+5️⃣ Enhance /api/system/health
+
+Replace the placeholder with live telemetry output:
+
+apiRouter.get('/system/health', async (_req,res)=>{
+  const status = Object.entries(ModeRegistry).map(([mode,data])=>({
+    mode,
+    engine:data.engineStatus,
+    alerts:data.alerts,
+    trades:data.trades,
+    lastUpdate:data.lastUpdate,
+  }));
+  res.json(status);
+});
+
+6️⃣ Logging & Instrumentation
+
+Add [Phase-27.F.15.B.4] prefix to all logs in modified files.
+
+Add broadcast confirmations to console:
+[Telemetry][${mode}] Updated mode status – ${JSON.stringify(data)}
+
+7️⃣ Automatic Validation (POST Phase Trigger)
+
+When implementation completes, automatically run validation steps:
+
+✅ 1. Health Check
+curl -s http://localhost:5000/api/system/health
+
+
+Expect both paper and live objects with valid telemetry.
+
+✅ 2. Bob Endpoint Audit
+
+Run:
+
+curl -s http://localhost:5000/api/bob/trades | jq length
+
+
+Verify same structure for both modes and no userId fields.
+
+✅ 3. Alert & Metrics Broadcast Test
+
+Simulate alert creation in paper mode; ensure both users receive identical update in logs:
+[alerts_updated][paper] broadcast → 2 clients.
+
+✅ 4. Dual-Mode Isolation Check
+
+Start paper trading, confirm live mode remains unaffected in /api/system/health.
+
+✅ 5. Final LSP & Runtime Check
+
+Run:
+
+npm run tsc -- --noEmit
+npm run start
+
+
+Confirm 0 blocking errors and healthy startup.
+
+🧾 Documentation Update
+
+Append to replit.md:
+
+✅ Phase 27.F.15.B.4 & POST Complete
+All Bob, AI, and Metrics services refactored for global mode support.
+ModeRegistry now provides real-time telemetry for paper & live engines.
+System validated through automated POST checks – dual-mode synchronization verified.
+
+🧪 Success Criteria
+
+All Bob, AI, Cortex, and Metrics services compile and run error-free.
+
+/api/system/health returns live telemetry for both modes.
+
+Alerts and trades are broadcast per mode correctly.
+
+Trading in one mode does not affect the other.
+
+0 blocking TypeScript or SQL errors at startup.
+
+Once validation passes, automatically mark the task as ✅ Phase 27.F.15.B.4 – Global Mode Integration & Verification COMPLETE.
