@@ -67,13 +67,19 @@ export const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const tradingEngines = new Map<string, TradingEngine>();
 const marketScanner = new MarketScanner();
 const aiAnalyst = new AIAnalyst();
+const riskManager = new RiskManager();
+
+// Phase 27.F.15.B.3: Global mode-based trading engines (no per-user instances)
+const globalLiveEngine = new TradingEngine('live');
+const globalPaperEngine = new TradingEngine('paper');
+
+// Legacy Map for backward compatibility (will be removed after full migration)
+const tradingEngines = new Map<string, TradingEngine>();
 
 // Expose tradingEngines globally for context refresh coordinator (Phase 8.5 Addendum K.4)
 (global as any).tradingEngines = tradingEngines;
-const riskManager = new RiskManager();
 const commandRouter = new CommandRouter(tradingEngines);
 
 // Phase 22: Initialize ExecutionPolicyController for autonomous execution layer
@@ -1174,16 +1180,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           console.log('[ENGINE_START_COMPLETED]', { mode: 'paper', sessionId: result.data?.sessionId });
           return result;
         } else {
-          console.log('[ENGINE_STARTING_LIVE] Creating TradingEngine...');
-          // Start live trading engine
-          let engine = tradingEngines.get(userId);
-          if (!engine) {
-            engine = new TradingEngine(userId, apiKey, apiSecret);
-            tradingEngines.set(userId, engine);
-          }
-          await engine.start();
-          console.log(`[TradingStart] Live trading engine started for user ${userId}`);
-          console.log('[ENGINE_START_COMPLETED]', { mode: 'live' });
+          console.log('[ENGINE_STARTING_LIVE][Phase-27.F.15.B.3] Using global live engine...');
+          // Phase 27.F.15.B.3: Use global live engine (shared by all users)
+          await globalLiveEngine.start();
+          console.log(`[TradingStart] Global live trading engine started by user ${userId}`);
+          console.log('[ENGINE_START_COMPLETED]', { mode: 'live', engine: 'global' });
           return { success: true };
         }
       })();
@@ -1295,12 +1296,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         await stopPaperSimulation(userId);
         console.log(`[TradingStop] Paper simulation stopped for user ${userId}`);
       } else {
-        // Stop live trading engine
-        const engine = tradingEngines.get(userId);
-        if (engine) {
-          await engine.stop();
-          console.log(`[TradingStop] Live trading engine stopped for user ${userId}`);
-        }
+        // Phase 27.F.15.B.3: Stop global live trading engine
+        await globalLiveEngine.stop();
+        console.log(`[TradingStop] Global live trading engine stopped by user ${userId}`);
       }
       
       await storage.updateUser(userId, { tradingStatus: 'stopped' });
@@ -1585,9 +1583,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
       const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
       
-      // Phase 8.5 Addendum K.4.1: Check live engine status from tradingEngines map
-      const liveEngine = tradingEngines.get(userId);
-      const isLiveEngineRunning = !!(liveEngine && liveEngine.isEngineRunning());
+      // Phase 27.F.15.B.3: Check global live engine status
+      const isLiveEngineRunning = globalLiveEngine.isEngineRunning();
       
       // Fetch data for BOTH modes in parallel
       const [
@@ -1603,7 +1600,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         storage.listStrategySettings({ globalContextId, mode: 'live' }),
         storage.listStrategySettings({ globalContextId, mode: 'paper' }),
         storage.getWatchlist({ mode: currentMode }),
-        storage.getActiveTrades()
+        storage.getActiveTrades(currentMode)
       ]);
       console.log('[Phase-27.F.15.B.1] Updated route /api/trading/status → mode-based only');
       
@@ -1981,10 +1978,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       
+      // Phase 27.F.15.B.3: Get mode from query, default to paper
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       // Phase 7.6: Use TradeBob for caching if enabled, otherwise fallback
       const trades = tradeBob.isEnabled()
         ? await tradeBob.getAllActiveTrades(userId)
-        : await storage.getActiveTrades();
+        : await storage.getActiveTrades(mode);
       console.log('[Phase-27.F.15.B.1] Updated route /api/trades/active → mode-based only');
       
       res.json(trades);
@@ -1997,12 +1996,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.post('/trades/:id/close', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { id } = req.params;
+      const { id, mode } = req.params;
+      const tradeMode = (req.body.mode || mode || 'paper') as 'live' | 'paper';
       
-      const engine = tradingEngines.get(userId);
-      if (!engine) {
-        return res.status(400).json({ error: 'Trading engine not initialized' });
-      }
+      // Phase 27.F.15.B.3: Use global engine based on mode
+      const engine = tradeMode === 'live' ? globalLiveEngine : globalPaperEngine;
       
       const closedTrade = await engine.closeTrade(id, 'manual');
       
@@ -10614,12 +10612,11 @@ Summary:`;
       // 2. Database Status
       const dbStatus = await storage.getDatabaseStatus?.() || { current: { sizeMb: 0, sizeGb: 0 }, history: [] };
 
-      // 3. Trading Engine Status
+      // 3. Trading Engine Status - Phase 27.F.15.B.3: Use global engines
       const settings = await storage.getTradingSettings(userId);
       const tradingMode = settings?.tradingMode || 'paper';
       
-      const liveEngine = tradingEngines.get(userId);
-      const liveEngineStatus = liveEngine?.getStatus?.() || { tradingStatus: 'stopped' };
+      const liveEngineStatus = globalLiveEngine.getStatus?.() || { tradingStatus: 'stopped' };
       
       const paperStatus = await getPaperSimulationStatus(userId);
       const paperEngineStatus = { 
@@ -11444,17 +11441,12 @@ Important: Extract the exact field names and numeric values from the user's requ
                   // Determine mode
                   const targetMode = interpretation.actionType === 'start_live' ? 'live' : 'paper';
                   
-                  // Start trading engine
-                  let engine = tradingEngines.get(userId);
-                  if (!engine) {
-                    engine = new TradingEngine(userId, apiKey, apiSecret);
-                    tradingEngines.set(userId, engine);
-                  }
-                  
+                  // Phase 27.F.15.B.3: Start global trading engine
+                  const engine = targetMode === 'live' ? globalLiveEngine : globalPaperEngine;
                   await engine.start();
                   await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: targetMode });
                   
-                  console.info(`[Walter] Started ${targetMode} trading for user ${userId}`);
+                  console.info(`[Walter] Started ${targetMode} trading using global engine`);
                   finalResponse = `${interpretation.response}\n\n✅ ${targetMode.charAt(0).toUpperCase() + targetMode.slice(1)} trading started successfully.`;
                 }
               }
@@ -11462,15 +11454,14 @@ Important: Extract the exact field names and numeric values from the user's requ
 
             case 'stop_paper':
             case 'stop_live':
-              // Stop trading engine
-              const engineToStop = tradingEngines.get(userId);
-              if (engineToStop) {
-                await engineToStop.stop();
-              }
+              // Phase 27.F.15.B.3: Stop global trading engine
+              const targetModeStop = interpretation.actionType === 'stop_live' ? 'live' : 'paper';
+              const engineToStop = targetModeStop === 'live' ? globalLiveEngine : globalPaperEngine;
+              await engineToStop.stop();
               
               await storage.updateUser(userId, { tradingStatus: 'stopped' });
               
-              console.info(`[Walter] Stopped trading for user ${userId}`);
+              console.info(`[Walter] Stopped ${targetModeStop} trading using global engine`);
               finalResponse = `${interpretation.response}\n\n✅ Trading stopped successfully.`;
               break;
 
