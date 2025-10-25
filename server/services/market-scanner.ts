@@ -74,8 +74,8 @@ export class MarketScanner {
           
           // Apply user-specific screener filters (NO HARDCODED FALLBACKS - use database values ONLY)
           const eligiblePairs = await this.kraken.getEligiblePairs({
-            minVolume: screenerSettings.minVolume || undefined,
-            minDailyRange: tradingSettings.minDailyRange || undefined,
+            minVolume: screenerSettings.minVolume || '0',
+            minDailyRange: tradingSettings.minDailyRange || '0',
             minPrice: screenerSettings.minPrice || undefined,
             maxPrice: screenerSettings.maxPrice || undefined,
             maxBidAskSpread: screenerSettings.maxBidAskSpread || undefined,
@@ -163,7 +163,8 @@ export class MarketScanner {
   private async updateUserWatchlist(userId: string, mode: 'live' | 'paper', eligiblePairs: any[]): Promise<void> {
     try {
       // Get current user watchlist for this mode
-      const currentWatchlist = await storage.getWatchlist({ userId, mode });
+      // Phase 27.F.15.B.4: getWatchlist is now mode-only (global)
+      const currentWatchlist = await storage.getWatchlist({ mode });
       const currentSymbols = new Set(currentWatchlist.map(p => p.symbol));
 
       // Add new eligible pairs to watchlist
@@ -213,7 +214,8 @@ export class MarketScanner {
 
   private async scanForSignals(userId: string, mode: 'live' | 'paper'): Promise<void> {
     try {
-      const watchlist = await storage.getWatchlist({ userId, mode });
+      // Phase 27.F.15.B.4: getWatchlist is now mode-only (global)
+      const watchlist = await storage.getWatchlist({ mode });
       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) return;
@@ -224,8 +226,8 @@ export class MarketScanner {
         return;
       }
 
-      // Fetch all strategy settings for this user and mode
-      const strategySettings = await storage.listStrategySettings({ userId, mode });
+      // Phase 27.F.15.B.4: listStrategySettings is now mode-only (global)
+      const strategySettings = await storage.listStrategySettings({ mode });
 
       for (const pair of watchlist) {
         await this.analyzeSymbolForSignals(userId, pair, settings, strategySettings, mode);
@@ -443,8 +445,8 @@ export class MarketScanner {
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 24);
 
+      // Phase 27.F.15.B.4: saveTradingSignal is now mode-only (global)
       await storage.saveTradingSignal({
-        userId,
         mode,
         symbol: signal.symbol,
         baseCurrency,
@@ -468,10 +470,11 @@ export class MarketScanner {
 
       console.log(`✅ Trading signal saved to database for ${signal.symbol}`);
       
-      // Clean up expired signals for this user/mode (older than 24 hours)
+      // Clean up expired signals for this mode (older than 24 hours)
+      // Phase 27.F.15.B.4: expireOldSignals is now mode-only (global)
       const expirationCutoff = new Date();
       expirationCutoff.setHours(expirationCutoff.getHours() - 24);
-      await storage.expireOldSignals({ userId, mode, beforeDate: expirationCutoff });
+      await storage.expireOldSignals({ mode, beforeDate: expirationCutoff });
       
     } catch (error) {
       console.error(`Error saving trading signal for ${signal.symbol}:`, error);
@@ -565,8 +568,8 @@ export class MarketScanner {
       }
       
       // Log to database
+      // Phase 27.F.15.B.4: logFilterDiagnostic is now mode-only (global)
       await storage.logFilterDiagnostic({
-        userId,
         mode,
         pairsScanned,
         eligiblePairs: eligibleCount,

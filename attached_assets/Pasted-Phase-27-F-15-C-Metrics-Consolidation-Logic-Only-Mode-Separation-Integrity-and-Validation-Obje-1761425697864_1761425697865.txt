@@ -1,0 +1,249 @@
+Phase 27.F.15.C — Metrics Consolidation (Logic-Only), Mode Separation Integrity, and Validation
+Objectives
+
+Consolidate metrics calculation logic into a single service while keeping data, lifecycle, and behavior strictly separated by mode (paper vs live).
+
+Ensure paper supports “Continue” vs “Start New Simulation” resets; live never resets.
+
+Remove any residual userId usage from trading/metrics paths (keep only in auth/profile).
+
+Provide testable, observable, and auditable behavior via logs, WebSocket events, and health endpoints.
+
+Non-Negotiable Mode Separation Integrity (MSI)
+
+Paper mode
+
+Supports: “Continue” and “Start New Simulation”.
+
+On Start New Simulation:
+
+Clears simulation-scoped data (insights, filtered pairs, ready-to-buy, paper_sim_*).
+
+Resets paper metrics only.
+
+Allows manual portfolio balance input at start.
+
+Paper metrics accumulate per simulation only.
+
+Live mode
+
+No “Start New Simulation”.
+
+Never clears trading data automatically.
+
+No manual portfolio balance edits (must come from live sources/persistence).
+
+Live metrics persist across sessions (cumulative).
+
+Shared
+
+Single metrics calculation engine (same formulas), but separate storage & separate cache keys by mode.
+
+Do not introduce cross-mode contamination: no writes that affect the other mode, no reads accidentally mixing modes.
+
+Deliverables
+A) MetricsCore (new/updated)
+
+Create server/services/metrics-core.ts (or update existing) as the only place that runs metrics formulas.
+
+Public API (all methods require mode: 'paper' | 'live'):
+
+computePortfolioKPIs(mode)
+
+computeRiskKPIs(mode)
+
+computeExecutionKPIs(mode)
+
+recomputeAll(mode) → orchestrates the above + emits telemetry
+
+reset(mode) → must no-op for live, clears metrics for paper
+
+Internals:
+
+Fetches inputs from storage by mode only (no userId).
+
+Writes to mode-separated targets:
+
+metrics_paper and metrics_live (table names or logical namespaces). If tables don’t exist, use existing per-mode stores consistently (do not rename tables in this phase).
+
+Caching:
+
+All caches include mode in key, e.g. metrics:kpis:paper, metrics:kpis:live.
+
+B) Paper Simulation Hooks (enforce MSI)
+
+In /api/paper-sim/start:
+
+If { action: 'new' }:
+
+await storage.resetPaperSimData() (paper_sim_open_positions, paper_sim_trades, paper_sim_trade_logs, filtered caches, insights, ready-to-buy).
+
+await metricsCore.reset('paper')
+
+If { action: 'continue' }: no reset.
+
+Balance: accept manual balance only for paper start; persist via the existing paper balance API.
+
+In /api/trading/start (live):
+
+Must reject body payloads attempting to change balance.
+
+No metrics reset on live start.
+
+C) Live Mode Safeguards
+
+Add guard to any balance-update path:
+
+if (mode === 'live') throw new Error('Live balance is not editable');
+
+
+Ensure no live table is touched by paper resets (resetPaperSimData).
+
+D) Endpoints & Telemetry
+
+/api/system/health (already present): extend payload to include separate blocks:
+
+{
+  "paper": {
+    "engine": "...",
+    "alerts": n,
+    "portfolio": {...},
+    "metrics": { "updatedAt": "...", "kpis": {...} }
+  },
+  "live": {
+    "engine": "...",
+    "alerts": m,
+    "portfolio": {...},
+    "metrics": { "updatedAt": "...", "kpis": {...} }
+  }
+}
+
+
+WebSocket broadcast (ContextBridge):
+
+type: 'metrics_updated', payload: { mode, kpis, timestamp }
+
+Fire after recomputeAll(mode) completes.
+
+Logging tags (use in all new/changed code):
+
+[27.F.15.C][MSI]
+
+[27.F.15.C][Metrics]
+
+[27.F.15.C][WS]
+
+E) Storage Contract (read/write)
+
+All metrics reads/writes are explicitly mode-scoped.
+
+No userId in any metrics/trading path (auth/profile still allowed).
+
+Do not rename tables in this phase; instead, ensure queries filter by mode and write to the correct per-mode targets.
+
+Validation & Test Plan (must pass)
+1) Paper reset vs Live persistence
+
+Paper flow:
+
+Start new simulation with balance $X.
+
+Verify dashboard shows $X for paper.
+
+Visit trading tabs → verify counts reset to zero (insights, filtered pairs, ready-to-buy, paper_sim_* tables).
+
+Confirm metricsCore.reset('paper') was called (log + WS metrics_updated for paper with fresh timestamp).
+
+Live flow:
+
+Start live trading.
+
+Verify no resets performed (no calls to reset functions).
+
+Verify live metrics retain previous cumulative values.
+
+Verify no manual balance changes are accepted (400/422 with clear error).
+
+2) Cross-session consistency
+
+Open two browsers (Kyle and Test User).
+
+Start paper new simulation in one session; verify WS:
+
+Both sessions receive metrics_updated with mode: 'paper'.
+
+Both dashboards refresh and show identical paper metrics.
+
+Start live (if enabled); verify separate metrics_updated with mode: 'live'.
+
+3) No cross-mode bleed
+
+Change guardrails in paper; verify live guardrails unchanged.
+
+Change risk params in live; verify paper params unchanged.
+
+Confirm metrics caches and keys are distinct by mode.
+
+4) Health endpoint
+
+/api/system/health returns both blocks; timestamps differ if only one mode was recomputed.
+
+5) Regression checks
+
+Starting/stopping engines still syncs toggle, blue bar, and toasts across sessions.
+
+Portfolio balance paper updates still broadcast immediately.
+
+Alerts remain global-per-mode; dismissals reflect for all users in that mode.
+
+Acceptance Criteria (hard pass/fail)
+
+✅ Paper “Start New Simulation” resets only paper data/metrics; no impact to live.
+
+✅ Live never allows manual balance changes; attempts return a clear error.
+
+✅ Single metrics engine used by both modes (same formulas), but results stored/retrieved per mode and broadcast with mode.
+
+✅ /api/system/health shows two separate telemetry blocks.
+
+✅ No userId usage in any metrics/trading path; CI grep check passes.
+
+✅ All validation steps above pass in both single-session and dual-session tests.
+
+Guardrails & Audits
+
+Add a CI step (script or task) to fail build if any new userId appears in server/services/*trading*, server/services/*metrics*, server/storage.ts metrics/trading functions:
+
+grep -RInE "(user_id|userId)" server/services server/storage.ts | \
+  grep -E "(trading|metrics|paper-sim|risk|engine)" && exit 1 || exit 0
+
+
+Add unit tests (or lightweight integration tests) for:
+
+metricsCore.reset('paper') triggers broadcast; reset('live') throws or no-ops with log.
+
+Notes / Constraints
+
+Do not rename tables or perform destructive schema changes in this phase.
+
+Do not reintroduce userId into trading/metrics paths.
+
+Preserve existing modal UX for paper (Continue vs Start New), and ensure portfolio input appears only in paper.
+
+Done = Merged + Verified
+
+All acceptance criteria pass.
+
+Logs contain [27.F.15.C][MSI] and [27.F.15.C][Metrics] traces for both modes.
+
+Two-browser validation demonstrated with screenshots (optional, but encouraged).
+
+replit.md updated with:
+
+What changed
+
+How to test the differences between paper vs live
+
+Known limitations (if any)
+
+Rollback notes (none expected; no schema changes)
