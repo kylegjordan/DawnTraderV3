@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { portfolioState, strategySettings, guardrails, screenerFilters, userGoalsLive, userGoalsPaper } from '@shared/schema';
+import { portfolioState, strategySettings, guardrails, screenerFilters, goalsLive, goalsPaper } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { provenanceLogger } from './provenance-logger.js';
@@ -236,15 +236,12 @@ class StateAwarenessService {
 
   /**
    * Get count of goals for a specific mode
+   * Phase 27.F.15.A: Goals are now global per mode
    */
   private async getGoalsCount(userId: string, mode: 'live' | 'paper', traceId: string): Promise<number> {
     const goals = mode === 'live'
-      ? await db.query.userGoalsLive.findMany({
-          where: eq(userGoalsLive.userId, userId),
-        })
-      : await db.query.userGoalsPaper.findMany({
-          where: eq(userGoalsPaper.userId, userId),
-        });
+      ? await db.query.goalsLive.findMany()
+      : await db.query.goalsPaper.findMany();
 
     return goals.length;
   }

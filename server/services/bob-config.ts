@@ -8,7 +8,7 @@
 
 import { bobCore, FetchContext } from './bob-core';
 import { db } from '../db';
-import { userGoalsLive, userGoalsPaper, guardrails, screenerFilters, strategySettings, walterPurpose } from '@shared/schema';
+import { goalsLive, goalsPaper, guardrails, screenerFilters, strategySettings, walterPurpose } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
 import { nanoid } from 'nanoid'; // For generating traceIds
@@ -54,14 +54,12 @@ class ConfigBobModule {
         throw new Error('userId is required for goals fetch');
       }
 
-      // Fetch goals for the user in the specified mode (mode-specific tables)
+      // Fetch goals for the specified mode (GLOBAL - Phase 27.F.15.A)
       const userGoals = mode === 'live'
-        ? await db.query.userGoalsLive.findMany({
-            where: eq(userGoalsLive.userId, userId),
+        ? await db.query.goalsLive.findMany({
             orderBy: (table, { asc }) => [asc(table.metricName)]
           })
-        : await db.query.userGoalsPaper.findMany({
-            where: eq(userGoalsPaper.userId, userId),
+        : await db.query.goalsPaper.findMany({
             orderBy: (table, { asc }) => [asc(table.metricName)]
           });
 

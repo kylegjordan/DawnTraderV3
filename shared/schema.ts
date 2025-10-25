@@ -1887,14 +1887,15 @@ export const insertFeatureSnapshotSchema = createInsertSchema(featureSnapshots).
 
 // Goals Engine insert schemas
 // Phase 27.F: Make metric_key optional since it's auto-generated from metric_name
-export const insertUserGoalLiveSchema = createInsertSchema(userGoalsLive).omit({
+// Phase 27.F.15.A: Renamed tables userGoalsLive→goalsLive, userGoalsPaper→goalsPaper
+export const insertGoalLiveSchema = createInsertSchema(goalsLive).omit({
   id: true,
   lastUpdated: true,
 }).extend({
   metricKey: z.string().optional(),
 });
 
-export const insertUserGoalPaperSchema = createInsertSchema(userGoalsPaper).omit({
+export const insertGoalPaperSchema = createInsertSchema(goalsPaper).omit({
   id: true,
   lastUpdated: true,
 }).extend({
@@ -2172,11 +2173,11 @@ export type PredictionOutcome = typeof predictionOutcomes.$inferSelect;
 export type InsertFeatureSnapshot = z.infer<typeof insertFeatureSnapshotSchema>;
 export type FeatureSnapshot = typeof featureSnapshots.$inferSelect;
 
-export type InsertUserGoalLive = z.infer<typeof insertUserGoalLiveSchema>;
-export type UserGoalLive = typeof userGoalsLive.$inferSelect;
+export type InsertGoalLive = z.infer<typeof insertGoalLiveSchema>;
+export type GoalLive = typeof goalsLive.$inferSelect;
 
-export type InsertUserGoalPaper = z.infer<typeof insertUserGoalPaperSchema>;
-export type UserGoalPaper = typeof userGoalsPaper.$inferSelect;
+export type InsertGoalPaper = z.infer<typeof insertGoalPaperSchema>;
+export type GoalPaper = typeof goalsPaper.$inferSelect;
 
 export type InsertGoalAnalysisHistoryLive = z.infer<typeof insertGoalAnalysisHistoryLiveSchema>;
 export type GoalAnalysisHistoryLive = typeof goalAnalysisHistoryLive.$inferSelect;
