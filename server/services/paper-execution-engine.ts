@@ -11,8 +11,7 @@ interface ExitCondition {
 }
 
 export class PaperExecutionEngine {
-  private mode: 'live' | 'paper'; // Phase 27.F.13.O: Mode-based (not per-user)
-  private userId: string; // Phase 27.F.13.O: Kept for audit/logging only
+  private mode: 'live' | 'paper'; // Phase 27.F.15.B.2: Mode-based only, global per mode
   private isRunning: boolean = false;
   private isCycleRunning: boolean = false; // Re-entrancy guard
   private krakenService: KrakenService;
@@ -27,9 +26,8 @@ export class PaperExecutionEngine {
   private readonly MONITOR_INTERVAL_MS = 10000; // Check every 10 seconds
   private readonly MAX_PRICE_HISTORY = 100; // Keep last 100 candles per symbol
 
-  constructor(mode: 'live' | 'paper', userId?: string) {
+  constructor(mode: 'live' | 'paper') {
     this.mode = mode;
-    this.userId = userId || 'system'; // Fallback for backward compatibility
     this.krakenService = new KrakenService();
     this.strategyEngine = new StrategyEngine();
     this.riskManager = new RiskManager();
@@ -37,12 +35,12 @@ export class PaperExecutionEngine {
 
   async start(): Promise<void> {
     if (this.isRunning) {
-      console.log(`[PaperExecution:${this.userId}] Already running`);
+      console.log(`[PaperExecution:${this.mode}] Already running`);
       return;
     }
 
     this.isRunning = true;
-    console.log(`[PaperExecution:${this.userId}] Starting paper trading engine`);
+    console.log(`[PaperExecution:${this.mode}] Starting paper trading engine`);
 
     // Start monitoring loop
     this.monitoringInterval = setInterval(async () => {
@@ -61,19 +59,19 @@ export class PaperExecutionEngine {
       this.monitoringInterval = null;
     }
 
-    console.log(`[PaperExecution:${this.userId}] Stopped paper trading engine`);
+    console.log(`[PaperExecution:${this.mode}] Stopped paper trading engine`);
   }
 
   private async monitoringCycle(): Promise<void> {
     // Re-entrancy guard: skip if previous cycle is still running
     if (this.isCycleRunning) {
-      console.log(`[PaperExecution:${this.userId}] Skipping cycle - previous cycle still running`);
+      console.log(`[PaperExecution:${this.mode}] Skipping cycle - previous cycle still running`);
       return;
     }
 
     // Skip if engine has been stopped
     if (!this.isRunning) {
-      console.log(`[PaperExecution:${this.userId}] Skipping cycle - engine stopped`);
+      console.log(`[PaperExecution:${this.mode}] Skipping cycle - engine stopped`);
       return;
     }
 
@@ -86,18 +84,18 @@ export class PaperExecutionEngine {
       // Step 2: Scan for new trading opportunities
       await this.scanForSignals();
     } catch (error) {
-      console.error(`[PaperExecution:${this.userId}] Monitoring cycle error:`, error);
+      console.error(`[PaperExecution:${this.mode}] Monitoring cycle error:`, error);
       
-      // Log error to trade logs
-      await storage.createPaperSimTradeLog({
-        userId: this.userId,
+      // Log error to trade logs (Phase 27.F.15.B.2: Global mode-based)
+      await storage.createPaperSimTradeLog(this.mode, {
         tradeId: null,
         positionId: null,
         eventType: 'error',
         message: `Monitoring cycle error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         metadata: {
           timestamp: new Date().toISOString(),
-          error: error instanceof Error ? error.stack : undefined
+          error: error instanceof Error ? error.stack : undefined,
+          mode: this.mode
         }
       });
     } finally {
@@ -106,7 +104,7 @@ export class PaperExecutionEngine {
   }
 
   private async checkOpenPositions(): Promise<void> {
-    const openPositions = await storage.getPaperSimOpenPositions(this.userId);
+    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
 
     for (const position of openPositions) {
       try {
@@ -115,7 +113,7 @@ export class PaperExecutionEngine {
         const tickerData = Object.values(ticker)[0];
         
         if (!tickerData) {
-          console.warn(`[PaperExecution:${this.userId}] No ticker data for ${position.symbol}`);
+          console.warn(`[PaperExecution:${this.mode}] No ticker data for ${position.symbol}`);
           continue;
         }
 
@@ -129,7 +127,7 @@ export class PaperExecutionEngine {
         const pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;
 
         // Update position with current P/L
-        await storage.updatePaperSimOpenPosition(position.id, {
+        await storage.updatePaperSimOpenPosition(this.mode, position.id, {
           currentPrice: currentPrice.toString(),
           unrealizedPnl: pnl.toString(),
           unrealizedPnlPercent: pnlPercent.toString()
@@ -148,7 +146,7 @@ export class PaperExecutionEngine {
           await this.closePosition(position.id, currentPrice, exitCondition);
         }
       } catch (error) {
-        console.error(`[PaperExecution:${this.userId}] Error checking position ${position.symbol}:`, error);
+        console.error(`[PaperExecution:${this.mode}] Error checking position ${position.symbol}:`, error);
       }
     }
   }
@@ -187,7 +185,7 @@ export class PaperExecutionEngine {
 
       // Update high water mark if current price is higher
       if (currentPrice > highWaterMark) {
-        await storage.updatePaperSimOpenPosition(position.id, {
+        await storage.updatePaperSimOpenPosition(this.mode, position.id, {
           metadata: {
             ...metadata,
             highWaterMark: currentPrice.toString()
@@ -229,9 +227,9 @@ export class PaperExecutionEngine {
     exitPrice: number,
     exitCondition: ExitCondition
   ): Promise<void> {
-    const position = await storage.getPaperSimOpenPosition(positionId);
+    const position = await storage.getPaperSimOpenPosition(this.mode, positionId);
     if (!position) {
-      console.warn(`[PaperExecution:${this.userId}] Position ${positionId} not found`);
+      console.warn(`[PaperExecution:${this.mode}] Position ${positionId} not found`);
       return;
     }
 
@@ -253,18 +251,18 @@ export class PaperExecutionEngine {
     const netPnl = grossPnl - totalFees;
     const pnlPercent = (netPnl / entryValue) * 100;
 
-    console.log(`[PaperExecution:${this.userId}] Closing position ${position.symbol}:`);
+    console.log(`[PaperExecution:${this.mode}] Closing position ${position.symbol}:`);
     console.log(`  Entry: ${avgPrice.toFixed(2)}, Exit: ${actualExitPrice.toFixed(2)}`);
     console.log(`  Gross P/L: $${grossPnl.toFixed(2)}, Fees: $${totalFees.toFixed(2)}, Net P/L: $${netPnl.toFixed(2)} (${pnlPercent.toFixed(2)}%)`);
     console.log(`  Reason: ${exitCondition.reason}`);
 
     // Find the corresponding trade record
-    const trades = await storage.getPaperSimTradesBySymbol(this.userId, position.symbol);
+    const trades = await storage.getPaperSimTradesBySymbol(this.mode,  position.symbol);
     const trade = trades.find(t => t.openedAt && !t.closedAt);
     
     if (trade) {
       // Update trade record
-      await storage.updatePaperSimTrade(trade.id, {
+      await storage.updatePaperSimTrade(this.mode, trade.id, {
         exitPrice: actualExitPrice.toString(),
         pnl: netPnl.toString(),
         pnlPercent: pnlPercent.toString(),
@@ -275,8 +273,7 @@ export class PaperExecutionEngine {
       });
 
       // Log the exit event
-      await storage.createPaperSimTradeLog({
-        userId: this.userId,
+      await storage.createPaperSimTradeLog(this.mode, {
         tradeId: trade.id,
         positionId: positionId,
         eventType: 'position_closed',
@@ -293,23 +290,23 @@ export class PaperExecutionEngine {
     }
 
     // Delete open position
-    await storage.deletePaperSimOpenPosition(positionId);
+    await storage.deletePaperSimOpenPosition(this.mode, positionId);
 
-    console.log(`[PaperExecution:${this.userId}] Position ${position.symbol} closed successfully`);
+    console.log(`[PaperExecution:${this.mode}] Position ${position.symbol} closed successfully`);
   }
 
   private async scanForSignals(): Promise<void> {
     try {
-      const settings = await storage.getTradingSettings(this.userId);
+      const settings = await storage.getTradingSettings("system");
       if (!settings) {
-        console.warn(`[PaperExecution:${this.userId}] No trading settings found`);
+        console.warn(`[PaperExecution:${this.mode}] No trading settings found`);
         return;
       }
 
       // Get watchlist pairs
-      const watchlist = await storage.getWatchlist({ userId: this.userId, mode: 'paper' });
+      const watchlist = await storage.getWatchlist({ mode: this.mode });
       if (watchlist.length === 0) {
-        console.log(`[PaperExecution:${this.userId}] No watchlist pairs configured`);
+        console.log(`[PaperExecution:${this.mode}] No watchlist pairs configured`);
         return;
       }
 
@@ -318,17 +315,17 @@ export class PaperExecutionEngine {
         try {
           await this.checkSymbolForSignal(pair.symbol, settings);
         } catch (error) {
-          console.error(`[PaperExecution:${this.userId}] Error scanning ${pair.symbol}:`, error);
+          console.error(`[PaperExecution:${this.mode}] Error scanning ${pair.symbol}:`, error);
         }
       }
     } catch (error) {
-      console.error(`[PaperExecution:${this.userId}] Error in signal scanning:`, error);
+      console.error(`[PaperExecution:${this.mode}] Error in signal scanning:`, error);
     }
   }
 
   private async checkSymbolForSignal(symbol: string, settings: TradingSettings): Promise<void> {
     // Check if we already have an open position for this symbol
-    const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.userId, symbol);
+    const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.mode,  symbol);
     if (existingPosition) {
       // Skip - already have position for this symbol
       return;
@@ -420,7 +417,7 @@ export class PaperExecutionEngine {
   }
 
   private async executeSimulatedTrade(signal: StrategySignal, settings: TradingSettings): Promise<void> {
-    console.log(`[PaperExecution:${this.userId}] Signal detected for ${signal.symbol}:`);
+    console.log(`[PaperExecution:${this.mode}] Signal detected for ${signal.symbol}:`);
     console.log(`  Strategy: ${signal.strategy}, Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
     console.log(`  Entry: ${signal.entryPrice.toFixed(2)}, Stop: ${signal.stopPrice.toFixed(2)}, Target: ${signal.targetPrice.toFixed(2)}`);
 
@@ -444,11 +441,10 @@ export class PaperExecutionEngine {
     );
 
     if (!riskCheck.approved) {
-      console.log(`[PaperExecution:${this.userId}] Paper trade rejected by risk manager: ${riskCheck.reason}`);
+      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by risk manager: ${riskCheck.reason}`);
       
       // Log rejection
-      await storage.createPaperSimTradeLog({
-        userId: this.userId,
+      await storage.createPaperSimTradeLog(this.mode, {
         tradeId: null,
         positionId: null,
         eventType: 'trade_rejected',
@@ -478,8 +474,7 @@ export class PaperExecutionEngine {
     console.log(`  Entry Slippage: $${totalSlippage.toFixed(2)}, Entry Fee: $${entryFee.toFixed(2)}`);
 
     // Create trade record
-    const trade = await storage.createPaperSimTrade({
-      userId: this.userId,
+    const trade = await storage.createPaperSimTrade(this.mode, {
       symbol: signal.symbol,
       strategyName: signal.strategy,
       side: 'buy',
@@ -495,8 +490,7 @@ export class PaperExecutionEngine {
     });
 
     // Create open position
-    await storage.createPaperSimOpenPosition({
-      userId: this.userId,
+    await storage.createPaperSimOpenPosition(this.mode, {
       symbol: signal.symbol,
       strategyName: signal.strategy,
       side: 'buy',
@@ -516,8 +510,7 @@ export class PaperExecutionEngine {
     });
 
     // Log the entry event
-    await storage.createPaperSimTradeLog({
-      userId: this.userId,
+    await storage.createPaperSimTradeLog(this.mode, {
       tradeId: trade.id,
       positionId: null,
       eventType: 'position_opened',
@@ -535,7 +528,7 @@ export class PaperExecutionEngine {
       }
     });
 
-    console.log(`[PaperExecution:${this.userId}] Simulated trade opened: ${signal.symbol} (Trade ID: ${trade.id})`);
+    console.log(`[PaperExecution:${this.mode}] Simulated trade opened: ${signal.symbol} (Trade ID: ${trade.id})`);
   }
 
   private calculateVWAP(priceData: PriceData[]): number {
@@ -556,7 +549,7 @@ export class PaperExecutionEngine {
 
   // Public methods for external control
   async getStatus(): Promise<{ isRunning: boolean; openPositions: number }> {
-    const openPositions = await storage.getPaperSimOpenPositions(this.userId);
+    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
     return {
       isRunning: this.isRunning,
       openPositions: openPositions.length
@@ -564,18 +557,18 @@ export class PaperExecutionEngine {
   }
 
   async getOpenPositions() {
-    return await storage.getPaperSimOpenPositions(this.userId);
+    return await storage.getPaperSimOpenPositions(this.mode);
   }
 
   async getTradeHistory(limit: number = 50) {
-    return await storage.getPaperSimTrades(this.userId, { limit, closedOnly: true });
+    return await storage.getPaperSimTrades(this.mode, { limit, closedOnly: true });
   }
 
   async getTradeLogs(limit: number = 100) {
-    return await storage.getPaperSimTradeLogs(this.userId, { limit });
+    return await storage.getPaperSimTradeLogs(this.mode, { limit });
   }
 
   async getStats() {
-    return await storage.getPaperSimStats(this.userId);
+    return await storage.getPaperSimStats(this.mode);
   }
 }

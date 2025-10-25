@@ -477,33 +477,33 @@ export interface IStorage {
     }>;
   }>;
 
-  // Paper simulation methods (Milestone 18)
+  // Paper simulation methods (Milestone 18) - Phase 27.F.15.B.2: Global per mode with explicit mode parameter
   // Paper trades
-  createPaperSimTrade(trade: InsertPaperSimTrade): Promise<PaperSimTrade>;
-  updatePaperSimTrade(id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade>;
-  getPaperSimTrade(id: string): Promise<PaperSimTrade | undefined>;
-  getPaperSimTrades(userId: string, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>;
-  getPaperSimTradesBySymbol(userId: string, symbol: string): Promise<PaperSimTrade[]>;
-  getPaperSimTradesGlobal(filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
+  createPaperSimTrade(mode: TradingMode, trade: InsertPaperSimTrade): Promise<PaperSimTrade>;
+  updatePaperSimTrade(mode: TradingMode, id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade>;
+  getPaperSimTrade(mode: TradingMode, id: string): Promise<PaperSimTrade | undefined>;
+  getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>;
+  getPaperSimTradesBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimTrade[]>;
+  getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   
   // Open positions
-  createPaperSimOpenPosition(position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition>;
-  updatePaperSimOpenPosition(id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition>;
-  getPaperSimOpenPosition(id: string): Promise<PaperSimOpenPosition | undefined>;
-  getPaperSimOpenPositionBySymbol(userId: string, symbol: string): Promise<PaperSimOpenPosition | undefined>;
-  getPaperSimOpenPositions(userId: string): Promise<PaperSimOpenPosition[]>;
-  deletePaperSimOpenPosition(id: string): Promise<void>;
-  deleteAllPaperSimOpenPositions(userId: string): Promise<void>; // Phase 27.F.13.C: Reset simulation
+  createPaperSimOpenPosition(mode: TradingMode, position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition>;
+  updatePaperSimOpenPosition(mode: TradingMode, id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition>;
+  getPaperSimOpenPosition(mode: TradingMode, id: string): Promise<PaperSimOpenPosition | undefined>;
+  getPaperSimOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimOpenPosition | undefined>;
+  getPaperSimOpenPositions(mode: TradingMode): Promise<PaperSimOpenPosition[]>;
+  deletePaperSimOpenPosition(mode: TradingMode, id: string): Promise<void>;
+  deleteAllPaperSimOpenPositions(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
   
   // Trade logs
-  createPaperSimTradeLog(log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog>;
-  getPaperSimTradeLogs(userId: string, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]>;
-  deleteAllPaperSimTradeLogs(userId: string): Promise<void>; // Phase 27.F.13.C: Reset simulation
-  deleteAllPaperSimTrades(userId: string): Promise<void>; // Phase 27.F.13.C: Reset simulation
-  cleanOldPaperSimTrades(hoursOld: number): Promise<number>; // Phase 27.F.13.F: Cleanup old closed trades
+  createPaperSimTradeLog(mode: TradingMode, log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog>;
+  getPaperSimTradeLogs(mode: TradingMode, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]>;
+  deleteAllPaperSimTradeLogs(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
+  deleteAllPaperSimTrades(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
+  cleanOldPaperSimTrades(mode: TradingMode, hoursOld: number): Promise<number>; // Phase 27.F.13.F: Cleanup old closed trades
   
   // Stats
-  getPaperSimStats(userId: string): Promise<{
+  getPaperSimStats(mode: TradingMode): Promise<{
     totalTrades: number;
     openPositions: number;
     closedTrades: number;
@@ -2718,12 +2718,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Paper simulation methods (Milestone 18)
-  async createPaperSimTrade(trade: InsertPaperSimTrade): Promise<PaperSimTrade> {
+  async createPaperSimTrade(mode: TradingMode, trade: InsertPaperSimTrade): Promise<PaperSimTrade> {
     const [result] = await db.insert(paperSimTrades).values(trade).returning();
     return result;
   }
 
-  async updatePaperSimTrade(id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade> {
+  async updatePaperSimTrade(mode: TradingMode, id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade> {
     const [result] = await db.update(paperSimTrades)
       .set(updates)
       .where(eq(paperSimTrades.id, id))
@@ -2731,15 +2731,15 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getPaperSimTrade(id: string): Promise<PaperSimTrade | undefined> {
+  async getPaperSimTrade(mode: TradingMode, id: string): Promise<PaperSimTrade | undefined> {
     const [trade] = await db.select()
       .from(paperSimTrades)
       .where(eq(paperSimTrades.id, id));
     return trade || undefined;
   }
 
-  async getPaperSimTrades(userId: string, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+  async getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
+    // Phase 27.F.15.B.2: Global query, mode-based only
     const limit = filters?.limit || 100;
     const closedOnly = filters?.closedOnly ?? false;
     
@@ -2762,8 +2762,8 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  async getPaperSimTradesBySymbol(userId: string, symbol: string): Promise<PaperSimTrade[]> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+  async getPaperSimTradesBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimTrade[]> {
+    // Phase 27.F.15.B.2: Global query, mode-based only
     return await db.select()
       .from(paperSimTrades)
       .where(eq(paperSimTrades.symbol, symbol))
@@ -2771,7 +2771,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Phase 27.F.14.B: Global-per-mode query for LATTI baseline calculations
-  async getPaperSimTradesGlobal(filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
+  async getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
     const limit = filters?.limit || 1000; // Higher default for global aggregation
     const closedOnly = filters?.closedOnly ?? false;
     
@@ -2792,12 +2792,12 @@ export class DatabaseStorage implements IStorage {
     return await query;
   }
 
-  async createPaperSimOpenPosition(position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition> {
+  async createPaperSimOpenPosition(mode: TradingMode, position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition> {
     const [result] = await db.insert(paperSimOpenPositions).values(position).returning();
     return result;
   }
 
-  async updatePaperSimOpenPosition(id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition> {
+  async updatePaperSimOpenPosition(mode: TradingMode, id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition> {
     const [result] = await db.update(paperSimOpenPositions)
       .set({ ...updates, lastUpdated: new Date() })
       .where(eq(paperSimOpenPositions.id, id))
@@ -2805,50 +2805,47 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getPaperSimOpenPosition(id: string): Promise<PaperSimOpenPosition | undefined> {
+  async getPaperSimOpenPosition(mode: TradingMode, id: string): Promise<PaperSimOpenPosition | undefined> {
     const [position] = await db.select()
       .from(paperSimOpenPositions)
       .where(eq(paperSimOpenPositions.id, id));
     return position || undefined;
   }
 
-  async getPaperSimOpenPositionBySymbol(userId: string, symbol: string): Promise<PaperSimOpenPosition | undefined> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+  async getPaperSimOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimOpenPosition | undefined> {
+    // Phase 27.F.15.B.2: Global query, mode-based only
     const [position] = await db.select()
       .from(paperSimOpenPositions)
       .where(eq(paperSimOpenPositions.symbol, symbol));
     return position || undefined;
   }
 
-  async getPaperSimOpenPositions(userId: string): Promise<PaperSimOpenPosition[]> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+  async getPaperSimOpenPositions(mode: TradingMode): Promise<PaperSimOpenPosition[]> {
+    // Phase 27.F.15.B.2: Global query, mode-based only
     return await db.select()
       .from(paperSimOpenPositions)
       .orderBy(desc(paperSimOpenPositions.openedAt));
   }
 
-  async deletePaperSimOpenPosition(id: string): Promise<void> {
+  async deletePaperSimOpenPosition(mode: TradingMode, id: string): Promise<void> {
     await db.delete(paperSimOpenPositions).where(eq(paperSimOpenPositions.id, id));
   }
 
-  // Phase 27.F.13.C: Reset simulation methods
-  async deleteAllPaperSimOpenPositions(userId: string): Promise<void> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+  // Phase 27.F.13.C: Reset simulation methods - Phase 27.F.15.B.2: Mode-based only
+  async deleteAllPaperSimOpenPositions(mode: TradingMode): Promise<void> {
     await db.delete(paperSimOpenPositions);
   }
 
-  async deleteAllPaperSimTradeLogs(userId: string): Promise<void> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+  async deleteAllPaperSimTradeLogs(mode: TradingMode): Promise<void> {
     await db.delete(paperSimTradeLogs);
   }
 
-  async deleteAllPaperSimTrades(userId: string): Promise<void> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+  async deleteAllPaperSimTrades(mode: TradingMode): Promise<void> {
     await db.delete(paperSimTrades);
   }
 
   // Phase 27.F.13.F: Cleanup method for old closed paper sim trades
-  async cleanOldPaperSimTrades(hoursOld: number): Promise<number> {
+  async cleanOldPaperSimTrades(mode: TradingMode, hoursOld: number): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setHours(cutoffDate.getHours() - hoursOld);
     
@@ -2863,13 +2860,13 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async createPaperSimTradeLog(log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog> {
+  async createPaperSimTradeLog(mode: TradingMode, log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog> {
     const [result] = await db.insert(paperSimTradeLogs).values(log).returning();
     return result;
   }
 
-  async getPaperSimTradeLogs(userId: string, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+  async getPaperSimTradeLogs(mode: TradingMode, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]> {
+    // Phase 27.F.15.B.2: Global query, mode-based only
     const limit = filters?.limit || 100;
     
     const conditions = [];
@@ -2891,7 +2888,7 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  async getPaperSimStats(userId: string): Promise<{
+  async getPaperSimStats(mode: TradingMode): Promise<{
     totalTrades: number;
     openPositions: number;
     closedTrades: number;
@@ -2907,7 +2904,7 @@ export class DatabaseStorage implements IStorage {
       totalPnl: number;
     }>;
   }> {
-    // Phase 27.F.15.B.1-POST: Global query (userId kept for backward compat)
+    // Phase 27.F.15.B.2: Global query, mode-based only
     const trades = await db.select()
       .from(paperSimTrades);
 

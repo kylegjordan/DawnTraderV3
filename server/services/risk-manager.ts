@@ -52,7 +52,7 @@ export class RiskManager {
     if (mode === 'paper') {
       // Milestone 18: Use paper_sim_open_positions for paper trading
       // Phase 27.F.15.A: Global mode-based query (no userId)
-      const paperPositions = await storage.getPaperSimOpenPositions();
+      const paperPositions = await storage.getPaperSimOpenPositions('paper');
       console.log('[Phase-27.F.15.B.2] Updated service risk-manager → mode-based only');
       return paperPositions.map(p => ({
         symbol: p.symbol,

@@ -1633,7 +1633,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Get ready to buy signals (if paper engine is running)
       let readyToBuy = 0;
       if (isPaperSimRunning && currentMode === 'paper') {
-        const openPositions = await storage.getPaperSimOpenPositions(userId);
+        const openPositions = await storage.getPaperSimOpenPositions('paper');
         readyToBuy = Math.max(0, filteredPairs - openPositions.length);
       }
       
@@ -3747,9 +3747,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       await stopPaperSimulation(userId);
       
       // Delete all paper sim data
-      await storage.deleteAllPaperSimTrades(userId);
-      await storage.deleteAllPaperSimOpenPositions(userId);
-      await storage.deleteAllPaperSimTradeLogs(userId);
+      await storage.deleteAllPaperSimTrades('paper');
+      await storage.deleteAllPaperSimOpenPositions('paper');
+      await storage.deleteAllPaperSimTradeLogs('paper');
       
       // Reset portfolio state for paper mode
       const systemContext = await storage.getSystemContext('paper');
@@ -3835,7 +3835,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (limit) options.limit = parseInt(limit as string);
       if (closedOnly) options.closedOnly = closedOnly === 'true';
       
-      const trades = await storage.getPaperSimTrades(userId, options);
+      const trades = await storage.getPaperSimTrades('paper', options);
       res.json(trades);
     } catch (error) {
       console.error('Error fetching paper sim trades:', error);
@@ -3846,7 +3846,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/paper-sim/positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const positions = await storage.getPaperSimOpenPositions(userId);
+      const positions = await storage.getPaperSimOpenPositions('paper');
       res.json({ ok: true, positions });
     } catch (error) {
       console.error('Error fetching paper sim positions:', error);
@@ -3861,7 +3861,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const manager = (global as any).globalPaperPortfolioManager;
       
       if (!status.isRunning || !manager) {
-        const stats = await storage.getPaperSimStats(userId);
+        const stats = await storage.getPaperSimStats('paper');
         return res.json({
           isRunning: false,
           stats: {
@@ -3954,7 +3954,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const { limit } = req.query;
       
-      const logs = await storage.getPaperSimTradeLogs(userId, {
+      const logs = await storage.getPaperSimTradeLogs('paper', {
         limit: limit ? parseInt(limit as string) : 100
       });
       res.json(logs);
