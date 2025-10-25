@@ -43,15 +43,15 @@ export function useSystemHealth() {
     const prev = previousHealthRef.current;
 
     // Detect paper trading status change
-    if (prev.paperTrading.isRunning !== health.paperTrading.isRunning) {
+    if (prev.paperTrading?.isRunning !== health.paperTrading?.isRunning) {
       console.log('[SystemHealth] Paper trading status changed, refreshing dashboard...');
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
     }
 
     // Detect goals count change (for current mode)
-    const prevGoalsCount = mode === 'live' ? prev.goals.live.count : prev.goals.paper.count;
-    const currentGoalsCount = mode === 'live' ? health.goals.live.count : health.goals.paper.count;
+    const prevGoalsCount = mode === 'live' ? prev.goals?.live?.count : prev.goals?.paper?.count;
+    const currentGoalsCount = mode === 'live' ? health.goals?.live?.count : health.goals?.paper?.count;
     
     if (prevGoalsCount !== currentGoalsCount) {
       console.log('[SystemHealth] Goals count changed, refreshing goals widgets...');
