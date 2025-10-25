@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, LogIn, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Loader2, LogIn, AlertCircle, Eye, EyeOff, Fingerprint } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { saveTokens } from "@/lib/auth";
+import { isBiometricAvailable, tryBiometricLogin, enableBiometricLogin } from "@/hooks/useBiometricAuth";
 
 export default function LoginPage() {
   const [_, setLocation] = useLocation();
@@ -16,6 +17,37 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [offerBiometricSetup, setOfferBiometricSetup] = useState(false);
+
+  useEffect(() => {
+    // Check if biometric authentication is available
+    isBiometricAvailable().then(setBiometricAvailable);
+  }, []);
+
+  async function handleBiometricLogin() {
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const biometricUsername = await tryBiometricLogin();
+      
+      if (!biometricUsername) {
+        setError("Biometric authentication failed or not enabled");
+        setIsLoading(false);
+        return;
+      }
+
+      // Auto-login with stored biometric credentials
+      setUsername(biometricUsername);
+      // We need the password for actual login, so prompt user
+      setError("Please enter your password to complete login");
+      setIsLoading(false);
+    } catch (err: any) {
+      setError(err?.message || "Biometric authentication failed");
+      setIsLoading(false);
+    }
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -41,13 +73,57 @@ export default function LoginPage() {
           permissionCount: userData.permissions.length
         });
         
-        setLocation("/");
+        // Offer biometric setup if available and not already enabled
+        if (biometricAvailable && !localStorage.getItem("biometricEnabled")) {
+          setOfferBiometricSetup(true);
+        } else {
+          setLocation("/");
+        }
       }
     } catch (err: any) {
       setError(err?.message || "Login failed. Please check your credentials.");
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function handleBiometricSetup() {
+    try {
+      const success = await enableBiometricLogin(username);
+      if (success) {
+        setLocation("/");
+      } else {
+        setOfferBiometricSetup(false);
+        setLocation("/");
+      }
+    } catch {
+      setOfferBiometricSetup(false);
+      setLocation("/");
+    }
+  }
+
+  if (offerBiometricSetup) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">Enable Biometric Login?</CardTitle>
+            <CardDescription className="text-center">
+              Use fingerprint or face recognition for faster login
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button onClick={handleBiometricSetup} className="w-full" data-testid="button-enable-biometric">
+              <Fingerprint className="mr-2 h-4 w-4" />
+              Enable Biometric Login
+            </Button>
+            <Button onClick={() => setLocation("/")} variant="outline" className="w-full" data-testid="button-skip-biometric">
+              Skip for now
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -60,6 +136,29 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {biometricAvailable && localStorage.getItem("biometricEnabled") && (
+            <div className="mb-4">
+              <Button
+                onClick={handleBiometricLogin}
+                variant="outline"
+                className="w-full mb-4"
+                disabled={isLoading}
+                data-testid="button-biometric-login"
+              >
+                <Fingerprint className="mr-2 h-4 w-4" />
+                Sign in with Biometrics
+              </Button>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
