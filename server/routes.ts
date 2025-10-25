@@ -75,12 +75,8 @@ const riskManager = new RiskManager();
 const globalLiveEngine = new TradingEngine('live');
 const globalPaperEngine = new TradingEngine('paper');
 
-// Legacy Map for backward compatibility (will be removed after full migration)
-const tradingEngines = new Map<string, TradingEngine>();
-
-// Expose tradingEngines globally for context refresh coordinator (Phase 8.5 Addendum K.4)
-(global as any).tradingEngines = tradingEngines;
-const commandRouter = new CommandRouter(tradingEngines);
+// Phase 27.F.15.B.3: CommandRouter uses global engines
+const commandRouter = new CommandRouter(globalLiveEngine, globalPaperEngine);
 
 // Phase 22: Initialize ExecutionPolicyController for autonomous execution layer
 const executionPolicyController = new ExecutionPolicyController(storage as any);
