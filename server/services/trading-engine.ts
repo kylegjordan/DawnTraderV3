@@ -27,15 +27,15 @@ export class TradingEngine {
   private riskManager: RiskManager;
   private strategyEngine: StrategyEngine;
   private isRunning = false;
-  private userId: string;
+  private mode: 'live' | 'paper';
 
   constructor(
-    userId: string, 
+    mode: 'live' | 'paper',
     apiKey?: string, 
     apiSecret?: string,
     dependencies?: TradingEngineDependencies
   ) {
-    this.userId = userId;
+    this.mode = mode;
     this.kraken = dependencies?.krakenService || new KrakenService(apiKey, apiSecret);
     this.riskManager = dependencies?.riskManager || new RiskManager();
     this.strategyEngine = dependencies?.strategyEngine || new StrategyEngine();
@@ -43,12 +43,12 @@ export class TradingEngine {
 
   async start(): Promise<void> {
     this.isRunning = true;
-    console.log(`Trading engine started for user ${this.userId}`);
+    console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trading engine started`);
   }
 
   async stop(): Promise<void> {
     this.isRunning = false;
-    console.log(`Trading engine stopped for user ${this.userId}`);
+    console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trading engine stopped`);
   }
 
   private async calculateGoalAlignmentScore(signal: TradeSignal, mode: 'live' | 'paper'): Promise<number> {
@@ -151,38 +151,42 @@ export class TradingEngine {
     }
   }
 
-  async processSignal(signal: TradeSignal, mode: 'live' | 'paper' = 'paper'): Promise<Trade | null> {
+  async processSignal(signal: TradeSignal): Promise<Trade | null> {
     if (!this.isRunning) {
-      console.log('Trading engine is stopped, ignoring signal');
+      console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trading engine stopped, ignoring signal`);
       return null;
     }
 
     try {
-      // Get user settings
-      const settings = await storage.getTradingSettings(this.userId);
+      // Phase 27.F.15.B.3: Get mode-based settings (global, not per-user)
+      const systemContext = await storage.getSystemContext(this.mode);
+      if (!systemContext) {
+        throw new Error(`System context not found for mode: ${this.mode}`);
+      }
+      const settings = await storage.getTradingSettings(systemContext.id);
       if (!settings) {
-        throw new Error('Trading settings not found');
+        throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
 
       // Calculate goal alignment score and final score
-      const goalAlignmentScore = await this.calculateGoalAlignmentScore(signal, mode);
+      const goalAlignmentScore = await this.calculateGoalAlignmentScore(signal, this.mode);
       signal.goalAlignmentScore = goalAlignmentScore;
       signal.finalScore = (signal.confidence * 0.7) + (goalAlignmentScore * 0.3);
       
-      console.log(`[Goal Alignment] Signal: ${signal.symbol}, Strategy: ${signal.strategy}`);
-      console.log(`[Goal Alignment] Signal Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
-      console.log(`[Goal Alignment] Goal Alignment Score: ${(goalAlignmentScore * 100).toFixed(1)}%`);
-      console.log(`[Goal Alignment] Final Score: ${(signal.finalScore * 100).toFixed(1)}%`);
+      console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Signal: ${signal.symbol}, Strategy: ${signal.strategy}`);
+      console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Signal Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
+      console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Goal Alignment Score: ${(goalAlignmentScore * 100).toFixed(1)}%`);
+      console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Final Score: ${(signal.finalScore * 100).toFixed(1)}%`);
 
-      // Pre-trade risk checks
+      // Pre-trade risk checks (Phase 27.F.15.B.3: mode-based, no userId)
       const riskCheck = await this.riskManager.checkPreTradeRisk(
-        this.userId,
+        this.mode,
         signal,
         settings
       );
 
       if (!riskCheck.approved) {
-        console.log(`Trade rejected: ${riskCheck.reason}`);
+        console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trade rejected: ${riskCheck.reason}`);
         return null;
       }
 
@@ -199,21 +203,21 @@ export class TradingEngine {
       );
 
       if (projectedSlippage > this.getSlippageTolerance(signal.symbol, settings)) {
-        console.log(`Trade rejected: projected slippage ${projectedSlippage.toFixed(2)}% exceeds tolerance`);
+        console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trade rejected: projected slippage ${projectedSlippage.toFixed(2)}% exceeds tolerance`);
         return null;
       }
 
       // Execute trade
-      const trade = await this.executeTrade(signal, quantity, riskAmount, mode);
+      const trade = await this.executeTrade(signal, quantity, riskAmount);
       
-      if (trade && mode === 'live') {
+      if (trade && this.mode === 'live') {
         // Place stop and target orders for live trades
         await this.placeStopAndTargetOrders(trade);
       }
 
       return trade;
     } catch (error) {
-      console.error('Error processing trade signal:', error);
+      console.error(`[Phase-27.F.15.B.3][mode=${this.mode}] Error processing trade signal:`, error);
       return null;
     }
   }
@@ -221,8 +225,7 @@ export class TradingEngine {
   private async executeTrade(
     signal: TradeSignal,
     quantity: number,
-    riskAmount: number,
-    mode: 'live' | 'paper'
+    riskAmount: number
   ): Promise<Trade> {
     let entryOrderId: string | undefined;
     let actualEntryPrice = signal.entryPrice;
@@ -230,14 +233,18 @@ export class TradingEngine {
     let entrySlippage = 0;
     let filledQuantity = quantity; // Will be adjusted for partial fills
 
-    if (mode === 'live') {
-      // Get settings for partial fill configuration
-      const settings = await storage.getTradingSettings(this.userId);
+    if (this.mode === 'live') {
+      // Phase 27.F.15.B.3: Get mode-based settings (global)
+      const systemContext = await storage.getSystemContext(this.mode);
+      if (!systemContext) {
+        throw new Error(`System context not found for mode: ${this.mode}`);
+      }
+      const settings = await storage.getTradingSettings(systemContext.id);
       if (!settings) {
-        throw new Error('Trading settings not found');
+        throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
 
-      console.log(`\n🔧 [PHASE 2] Executing live order for ${signal.symbol}`);
+      console.log(`\n🔧 [Phase-27.F.15.B.3][mode=${this.mode}] Executing live order for ${signal.symbol}`);
       console.log(`   Requested quantity: ${quantity}`);
 
       // Execute live trade
@@ -306,12 +313,11 @@ export class TradingEngine {
       actualEntryPrice *= (1 + entrySlippage / 100);
     }
 
-    // Create trade record with actual filled quantity
+    // Phase 27.F.15.B.3: Create mode-based trade record (no userId)
     const tradeData = {
-      userId: this.userId,
+      mode: this.mode,
       symbol: signal.symbol,
       strategy: signal.strategy,
-      mode,
       entryPrice: actualEntryPrice.toString(),
       quantity: filledQuantity.toString(), // Use filled quantity, not requested
       stopPrice: signal.stopPrice.toString(),
@@ -334,10 +340,9 @@ export class TradingEngine {
     if (signal.metadata?.signal_type || signal.metadata?.confidence) {
       try {
         const predictionData = {
-          userId: this.userId,
+          mode: this.mode,
           tradeId: trade.id,
           strategy: signal.strategy,
-          mode,
           symbol: signal.symbol,
           signalType: signal.metadata.signal_type || signal.strategy,
           predictionConfidence: (signal.metadata.confidence || signal.confidence || 0.5).toString(),
@@ -347,9 +352,9 @@ export class TradingEngine {
         };
         
         await storage.createPredictionOutcome(predictionData);
-        console.log(`📊 Prediction metadata captured for trade ${trade.id}`);
+        console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Prediction metadata captured for trade ${trade.id}`);
       } catch (error) {
-        console.error('Error capturing prediction metadata:', error);
+        console.error(`[Phase-27.F.15.B.3][mode=${this.mode}] Error capturing prediction metadata:`, error);
       }
     }
 
@@ -360,14 +365,18 @@ export class TradingEngine {
     const placedOrders: string[] = [];
     
     try {
-      console.log(`\n🔧 [PHASE 1] Starting bracket order placement for ${trade.symbol}`);
+      console.log(`\n🔧 [Phase-27.F.15.B.3][mode=${this.mode}] Starting bracket order placement for ${trade.symbol}`);
       console.log(`   Trade ID: ${trade.id}`);
       console.log(`   Entry: $${trade.entryPrice}, Stop: $${trade.stopPrice}, Target: $${trade.targetPrice}`);
 
-      // Get settings to apply stop buffer
-      const settings = await storage.getTradingSettings(this.userId);
+      // Phase 27.F.15.B.3: Get mode-based settings (global)
+      const systemContext = await storage.getSystemContext(this.mode);
+      if (!systemContext) {
+        throw new Error(`System context not found for mode: ${this.mode}`);
+      }
+      const settings = await storage.getTradingSettings(systemContext.id);
       if (!settings) {
-        throw new Error('Trading settings not found');
+        throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
 
       // Apply stop buffer to protect against premature stop-outs
@@ -437,8 +446,9 @@ export class TradingEngine {
   }
 
   async closeTrade(tradeId: string, reason: string = 'manual'): Promise<Trade> {
-    const trade = await storage.getTrades(this.userId, { limit: 1000 });
-    const targetTrade = trade.find(t => t.id === tradeId && t.status === 'open');
+    // Phase 27.F.15.B.3: Get mode-based trades (global)
+    const trades = await storage.getTrades(this.mode, { limit: 1000 });
+    const targetTrade = trades.find(t => t.id === tradeId && t.status === 'open');
     
     if (!targetTrade) {
       throw new Error('Trade not found or already closed');
@@ -504,7 +514,8 @@ export class TradingEngine {
   async monitorActiveTrades(): Promise<void> {
     if (!this.isRunning) return;
 
-    const activeTrades = await storage.getActiveTrades(this.userId);
+    // Phase 27.F.15.B.3: Get mode-based active trades (global)
+    const activeTrades = await storage.getActiveTrades(this.mode);
     
     for (const trade of activeTrades) {
       await this.checkTradeExitConditions(trade);
@@ -514,7 +525,10 @@ export class TradingEngine {
   private async checkTradeExitConditions(trade: Trade): Promise<void> {
     try {
       const currentPrice = await this.getCurrentPrice(trade.symbol);
-      const settings = await storage.getTradingSettings(this.userId);
+      // Phase 27.F.15.B.3: Get mode-based settings (global)
+      const systemContext = await storage.getSystemContext(this.mode);
+      if (!systemContext) return;
+      const settings = await storage.getTradingSettings(systemContext.id);
       
       if (!settings) return;
 
@@ -543,29 +557,35 @@ export class TradingEngine {
   }
 
   // Hot-reload strategy settings (called by EngineSettingsBus)
-  async reloadStrategySettings(mode: 'live' | 'paper'): Promise<void> {
+  async reloadStrategySettings(): Promise<void> {
     try {
-      const settings = await storage.listStrategySettings({ userId: this.userId, mode });
-      console.log(`[TradingEngine] Reloaded ${settings.length} strategy settings for user ${this.userId} (${mode} mode)`);
+      // Phase 27.F.15.B.3: Get mode-based strategy settings (global)
+      const systemContext = await storage.getSystemContext(this.mode);
+      if (!systemContext) {
+        console.warn(`[Phase-27.F.15.B.3][mode=${this.mode}] System context not found for settings reload`);
+        return;
+      }
+      const settings = await storage.listStrategySettings({ globalContextId: systemContext.id, mode: this.mode });
+      console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Reloaded ${settings.length} strategy settings`);
       // Settings are stored and will be fetched when needed by strategy engine
       // The strategy engine will pull latest settings on each trade evaluation
     } catch (error) {
-      console.error(`[TradingEngine] Failed to reload strategy settings:`, error);
+      console.error(`[Phase-27.F.15.B.3][mode=${this.mode}] Failed to reload strategy settings:`, error);
     }
   }
 }
 
-// Simple in-process pub/sub for strategy settings hot-reload
+// Phase 27.F.15.B.3: Mode-based settings hot-reload bus
 export const EngineSettingsBus = {
-  _subs: new Set<(msg: { userId: string; mode: 'live' | 'paper' }) => void>(),
+  _subs: new Set<(msg: { mode: 'live' | 'paper' }) => void>(),
   
-  subscribe(fn: (msg: { userId: string; mode: 'live' | 'paper' }) => void) {
+  subscribe(fn: (msg: { mode: 'live' | 'paper' }) => void) {
     this._subs.add(fn);
     return () => this._subs.delete(fn);
   },
   
-  async publish(msg: { userId: string; mode: 'live' | 'paper' }) {
-    console.log(`[EngineSettingsBus] Publishing settings reload for user ${msg.userId} (${msg.mode} mode)`);
+  async publish(msg: { mode: 'live' | 'paper' }) {
+    console.log(`[Phase-27.F.15.B.3][EngineSettingsBus] Publishing settings reload (mode: ${msg.mode})`);
     const subs = Array.from(this._subs);
     for (const fn of subs) {
       try {
