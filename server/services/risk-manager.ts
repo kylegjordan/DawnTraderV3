@@ -30,7 +30,8 @@ interface ActivePosition {
 export class RiskManager {
   private krakenService: KrakenService;
   private assetCapabilitiesService: AssetCapabilitiesService;
-  private balanceCacheMap: Map<string, BalanceCache> = new Map();
+  // Phase 27.F.15.B.3: Mode-based balance cache (not per-user)
+  private balanceCacheMap: Map<'live' | 'paper', BalanceCache> = new Map();
   private readonly BALANCE_CACHE_TTL = 45000;
 
   constructor() {
@@ -39,21 +40,16 @@ export class RiskManager {
   }
 
   /**
-   * Phase 27.F.13.A: Get active positions from correct table based on trading mode
-   * Phase 27.F.13.O: Determine mode from user first, then query system_context
+   * Phase 27.F.15.B.3: Get active positions from correct table based on trading mode
+   * NO userId - mode parameter only (global architecture)
    * Live mode: reads from trades table
    * Paper mode: reads from paper_sim_open_positions table
    */
-  private async getActivePositions(userId: string): Promise<ActivePosition[]> {
-    // Get user's current mode, then query global system_context for that mode
-    const user = await storage.getUser(userId);
-    const mode = user?.tradingMode || 'paper';
-
+  private async getActivePositions(mode: 'live' | 'paper'): Promise<ActivePosition[]> {
     if (mode === 'paper') {
-      // Milestone 18: Use paper_sim_open_positions for paper trading
-      // Phase 27.F.15.A: Global mode-based query (no userId)
+      // Phase 27.F.15.B.3: Global mode-based query (no userId)
       const paperPositions = await storage.getPaperSimOpenPositions('paper');
-      console.log('[Phase-27.F.15.B.2] Updated service risk-manager → mode-based only');
+      console.log('[Phase-27.F.15.B.3] risk-manager.getActivePositions → mode-based (paper)');
       return paperPositions.map(p => ({
         symbol: p.symbol,
         quantity: p.quantity,
@@ -61,10 +57,9 @@ export class RiskManager {
         avgPrice: p.avgPrice,
       }));
     } else {
-      // Live mode: Use legacy trades table
-      // Phase 27.F.15.A: Global mode-based query (no userId)
-      const activeTrades = await storage.getActiveTrades();
-      console.log('[Phase-27.F.15.B.2] Updated service risk-manager → mode-based only');
+      // Phase 27.F.15.B.3: Global mode-based query for live trades (no userId)
+      const activeTrades = await storage.getActiveTrades('live');
+      console.log('[Phase-27.F.15.B.3] risk-manager.getActivePositions → mode-based (live)');
       return activeTrades.map(t => ({
         symbol: t.symbol,
         quantity: t.quantity,
@@ -74,11 +69,11 @@ export class RiskManager {
   }
 
   /**
-   * Fetch live Kraken account balance and convert all holdings to USD
+   * Phase 27.F.15.B.3: Fetch live Kraken account balance (mode-based, global)
    * Uses 45-second cache to avoid excessive API calls
    * Falls back to internal calculation if Kraken API fails
    */
-  async getLiveKrakenBalance(userId: string): Promise<{
+  async getLiveKrakenBalance(mode: 'live' | 'paper'): Promise<{
     totalValueUSD: number;
     cashUSD: number;
     cryptoUSD: number;
@@ -86,14 +81,14 @@ export class RiskManager {
     source: 'kraken' | 'internal';
     error?: string;
   }> {
-    const cachedBalance = this.balanceCacheMap.get(userId);
+    const cachedBalance = this.balanceCacheMap.get(mode);
     if (cachedBalance && Date.now() - cachedBalance.syncTimestamp < this.BALANCE_CACHE_TTL) {
-      console.log(`[Portfolio:${userId}] Using cached balance (${Math.floor((Date.now() - cachedBalance.syncTimestamp) / 1000)}s old)`);
+      console.log(`[Phase-27.F.15.B.3][mode=${mode}] Using cached balance (${Math.floor((Date.now() - cachedBalance.syncTimestamp) / 1000)}s old)`);
       return cachedBalance;
     }
 
     try {
-      console.log(`[Portfolio:${userId}] Fetching live Kraken balance...`);
+      console.log(`[Phase-27.F.15.B.3][mode=${mode}] Fetching live Kraken balance...`);
       const balances = await this.krakenService.getAccountBalance();
       
       let cashUSD = 0;
@@ -109,22 +104,22 @@ export class RiskManager {
         
         if (USD_ASSETS.includes(asset) || USD_ASSETS.includes(normalizedAsset)) {
           cashUSD += amount;
-          console.log(`  [Portfolio:${userId}] ${asset}: $${amount.toFixed(2)} (USD)`);
+          console.log(`  [Phase-27.F.15.B.3][mode=${mode}] ${asset}: $${amount.toFixed(2)} (USD)`);
         } else {
           try {
             const marketData = await marketDataService.getMarketData(normalizedAsset);
             const valueUSD = amount * marketData.price;
             cryptoUSD += valueUSD;
-            console.log(`  [Portfolio:${userId}] ${asset}: ${amount.toFixed(8)} × $${marketData.price.toFixed(2)} = $${valueUSD.toFixed(2)}`);
+            console.log(`  [Phase-27.F.15.B.3][mode=${mode}] ${asset}: ${amount.toFixed(8)} × $${marketData.price.toFixed(2)} = $${valueUSD.toFixed(2)}`);
           } catch (error) {
-            console.warn(`  [Portfolio:${userId}] Failed to get price for ${asset}, skipping:`, error);
+            console.warn(`  [Phase-27.F.15.B.3][mode=${mode}] Failed to get price for ${asset}, skipping:`, error);
           }
         }
       }
       
       const totalValueUSD = cashUSD + cryptoUSD;
       
-      console.log(`[Portfolio:${userId}] Kraken balance: $${totalValueUSD.toFixed(2)} (Cash: $${cashUSD.toFixed(2)}, Crypto: $${cryptoUSD.toFixed(2)})`);
+      console.log(`[Phase-27.F.15.B.3][mode=${mode}] Kraken balance: $${totalValueUSD.toFixed(2)} (Cash: $${cashUSD.toFixed(2)}, Crypto: $${cryptoUSD.toFixed(2)})`);
       
       const krakenBalance = {
         totalValueUSD,
@@ -134,13 +129,13 @@ export class RiskManager {
         source: 'kraken' as const
       };
       
-      this.balanceCacheMap.set(userId, krakenBalance);
+      this.balanceCacheMap.set(mode, krakenBalance);
       return krakenBalance;
     } catch (error: any) {
-      console.error(`[Portfolio:${userId}] Failed to fetch Kraken balance, falling back to internal calculation:`, error.message);
+      console.error(`[Phase-27.F.15.B.3][mode=${mode}] Failed to fetch Kraken balance, falling back to internal calculation:`, error.message);
       
-      const metrics = await this.getPortfolioMetrics(userId);
-      const cashCrypto = await this.getCashVsCrypto(userId);
+      const metrics = await this.getPortfolioMetrics(mode);
+      const cashCrypto = await this.getCashVsCrypto(mode);
       
       const fallbackResult = {
         totalValueUSD: metrics.totalValue,
@@ -151,13 +146,16 @@ export class RiskManager {
         error: 'Kraken API unavailable'
       };
       
-      this.balanceCacheMap.set(userId, fallbackResult);
+      this.balanceCacheMap.set(mode, fallbackResult);
       return fallbackResult;
     }
   }
 
+  /**
+   * Phase 27.F.15.B.3: Mode-based pre-trade risk checks (no userId)
+   */
   async checkPreTradeRisk(
-    userId: string,
+    mode: 'live' | 'paper',
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
@@ -176,37 +174,37 @@ export class RiskManager {
     }
 
     // Check 2: Max 1 position per asset (Task 8 Safety Guardrail - MOVED TO TOP)
-    const assetCheck = await this.checkMaxPositionsPerAsset(userId, signal);
+    const assetCheck = await this.checkMaxPositionsPerAsset(mode, signal);
     if (!assetCheck.approved) {
       return assetCheck;
     }
 
     // Check 3: Position size cap (Task 8 Safety Guardrail - MOVED BEFORE EXPOSURE)
-    const positionSizeCheck = await this.checkPositionSizeCap(userId, signal, settings);
+    const positionSizeCheck = await this.checkPositionSizeCap(mode, signal, settings);
     if (!positionSizeCheck.approved) {
       return positionSizeCheck;
     }
 
     // Check 4: Risk per trade
-    const riskCheck = await this.checkRiskPerTrade(userId, signal, settings);
+    const riskCheck = await this.checkRiskPerTrade(mode, signal, settings);
     if (!riskCheck.approved) {
       return riskCheck;
     }
 
     // Check 5: Available balance (for live trading)
-    const balanceCheck = await this.checkAvailableBalance(userId, signal, settings);
+    const balanceCheck = await this.checkAvailableBalance(mode, signal, settings);
     if (!balanceCheck.approved) {
       return balanceCheck;
     }
 
     // Check 6: Maximum concurrent exposure
-    const exposureCheck = await this.checkMaxExposure(userId, signal, settings);
+    const exposureCheck = await this.checkMaxExposure(mode, signal, settings);
     if (!exposureCheck.approved) {
       return exposureCheck;
     }
 
     // Check 7: Maximum open trades
-    const maxTradesCheck = await this.checkMaxOpenTrades(userId, settings);
+    const maxTradesCheck = await this.checkMaxOpenTrades(mode, settings);
     if (!maxTradesCheck.approved) {
       return maxTradesCheck;
     }
@@ -214,32 +212,31 @@ export class RiskManager {
     return { approved: true };
   }
 
+  /**
+   * Phase 27.F.15.B.3: Mode-based available balance check (no userId)
+   */
   private async checkAvailableBalance(
-    userId: string,
+    mode: 'live' | 'paper',
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
     try {
       // For paper trading, always approve
-      const user = await storage.getUser(userId);
-      if (!user || user.tradingMode === 'paper') {
+      if (mode === 'paper') {
         return { approved: true };
       }
 
-      // For live trading, we'd check actual Kraken balance
-      // This is a simplified check
+      // For live trading, check actual Kraken balance
       const riskAmount = parseFloat(settings.riskPerTrade || '0');
       const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
       const positionSize = riskAmount / stopDistance;
       const requiredCapital = positionSize * signal.entryPrice;
 
-      // Phase 27.F.13.M: Load max capital requirement from global guardrails (mode-only, no userId)
-      // Phase 27.F.13.O: Get mode from user, not from system_context(userId)
-      const mode = user?.tradingMode || 'live'; // Default to live for this check
+      // Phase 27.F.15.B.3: Load max capital requirement from global guardrails (mode-only)
       const guardrailsData = await storage.getGuardrails({ mode });
       
       if (!guardrailsData || !guardrailsData.maxRequiredCapital) {
-        console.warn(`[RiskManager] Guardrails not configured for user ${userId} mode ${mode}, rejecting trade for safety`);
+        console.warn(`[Phase-27.F.15.B.3][mode=${mode}] Guardrails not configured, rejecting trade for safety`);
         return {
           approved: false,
           reason: 'Guardrails not configured - please configure risk limits in Settings'
@@ -264,8 +261,11 @@ export class RiskManager {
     }
   }
 
+  /**
+   * Phase 27.F.15.B.3: Mode-based risk per trade check (no userId)
+   */
   private async checkRiskPerTrade(
-    userId: string,
+    mode: 'live' | 'paper',
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
@@ -278,14 +278,11 @@ export class RiskManager {
       };
     }
 
-    // Phase 27.F.13.M: Load max risk limit from global guardrails (mode-only, no userId)
-    // Phase 27.F.13.O: Get mode from user, not from system_context(userId)
-    const user = await storage.getUser(userId);
-    const mode = user?.tradingMode || 'paper';
+    // Phase 27.F.15.B.3: Load max risk limit from global guardrails (mode-only)
     const guardrailsData = await storage.getGuardrails({ mode });
     
     if (!guardrailsData || !guardrailsData.maxRiskPerTradeLimit) {
-      console.warn(`[RiskManager] Guardrails not configured for user ${userId} mode ${mode}, rejecting trade for safety`);
+      console.warn(`[Phase-27.F.15.B.3][mode=${mode}] Guardrails not configured, rejecting trade for safety`);
       return {
         approved: false,
         reason: 'Guardrails not configured - please configure risk limits in Settings'
@@ -304,12 +301,15 @@ export class RiskManager {
     return { approved: true };
   }
 
+  /**
+   * Phase 27.F.15.B.3: Mode-based max exposure check (no userId)
+   */
   private async checkMaxExposure(
-    userId: string,
+    mode: 'live' | 'paper',
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
-    const activePositions = await this.getActivePositions(userId);
+    const activePositions = await this.getActivePositions(mode);
     const maxExposurePercent = parseFloat(settings.maxExposurePercent || '0');
 
     // Calculate current exposure
@@ -325,28 +325,29 @@ export class RiskManager {
     const positionSize = riskAmount / stopDistance;
     const newTradeValue = positionSize * signal.entryPrice;
 
-    // Phase 27.F.13.A FIX: Get actual portfolio value from portfolio_state table
+    // Phase 27.F.15.B.3: Get actual portfolio value from mode-based portfolio_state
     let portfolioValue = 0;
     
-    // Phase 27.F.13.O: Get mode from user, not from system_context(userId)
-    const user = await storage.getUser(userId);
-    const mode = user?.tradingMode || 'paper';
-    
-    // Get actual balance from portfolio_state table
-    const portfolioState = await storage.getPortfolioState({ userId, mode });
-    if (portfolioState?.balance) {
-      portfolioValue = parseFloat(portfolioState.balance as string);
-      console.log(`[MaxExposure] Using actual ${mode} balance from portfolio_state: $${portfolioValue.toFixed(2)}`);
+    const systemContext = await storage.getSystemContext(mode);
+    if (!systemContext) {
+      console.warn(`[Phase-27.F.15.B.3][mode=${mode}] System context not found`);
+      portfolioValue = 50000; // fallback
     } else {
-      // Fallback to settings.portfolioValue if portfolio_state not available
-      portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 50000;
-      console.log(`[MaxExposure] Fallback to settings: $${portfolioValue.toFixed(2)}`);
+      const portfolioState = await storage.getPortfolioState({ globalContextId: systemContext.id, mode });
+      if (portfolioState?.balance) {
+        portfolioValue = parseFloat(portfolioState.balance as string);
+        console.log(`[Phase-27.F.15.B.3][mode=${mode}] Using actual balance from portfolio_state: $${portfolioValue.toFixed(2)}`);
+      } else {
+        // Fallback to settings.portfolioValue if portfolio_state not available
+        portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 50000;
+        console.log(`[Phase-27.F.15.B.3][mode=${mode}] Fallback to settings: $${portfolioValue.toFixed(2)}`);
+      }
     }
     
     const totalExposure = currentExposure + newTradeValue;
     const exposurePercent = (totalExposure / portfolioValue) * 100;
 
-    console.log(`[MaxExposure] Mode=${mode}, Current=$${currentExposure.toFixed(0)}, New=$${newTradeValue.toFixed(0)}, Total=$${totalExposure.toFixed(0)} (${exposurePercent.toFixed(1)}% of $${portfolioValue.toFixed(0)}), Max=${maxExposurePercent}%`);
+    console.log(`[Phase-27.F.15.B.3][mode=${mode}] Current=$${currentExposure.toFixed(0)}, New=$${newTradeValue.toFixed(0)}, Total=$${totalExposure.toFixed(0)} (${exposurePercent.toFixed(1)}% of $${portfolioValue.toFixed(0)}), Max=${maxExposurePercent}%`);
 
     if (exposurePercent > maxExposurePercent) {
       return {
@@ -358,11 +359,14 @@ export class RiskManager {
     return { approved: true };
   }
 
+  /**
+   * Phase 27.F.15.B.3: Mode-based max open trades check (no userId)
+   */
   private async checkMaxOpenTrades(
-    userId: string,
+    mode: 'live' | 'paper',
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
-    const activePositions = await this.getActivePositions(userId);
+    const activePositions = await this.getActivePositions(mode);
     const maxOpenTrades = settings.maxOpenTrades || 0;
 
     if (activePositions.length >= maxOpenTrades) {
@@ -376,14 +380,14 @@ export class RiskManager {
   }
 
   /**
-   * Task 8 Safety Guardrail: Max 1 position per asset
+   * Phase 27.F.15.B.3: Mode-based max positions per asset check (no userId)
    * Prevents multiple simultaneous positions in the same asset
    */
   private async checkMaxPositionsPerAsset(
-    userId: string,
+    mode: 'live' | 'paper',
     signal: TradeSignal
   ): Promise<RiskCheckResult> {
-    const activePositions = await this.getActivePositions(userId);
+    const activePositions = await this.getActivePositions(mode);
     
     // Extract base asset from symbol - handles all Kraken variants
     // Kraken uses: XXBTZUSD (double prefix), XBTUSD, XBT/USD, BTC/USD
@@ -443,13 +447,11 @@ export class RiskManager {
   }
 
   /**
-   * Task 8 Safety Guardrail: Position size cap
+   * Phase 27.F.15.B.3: Mode-based position size cap check (no userId)
    * Prevents oversized positions (max 10% of portfolio per position)
-   * 
-   * Phase 27.F.13.A: Fixed to use actual paper balance from portfolio_state instead of settings.portfolioValue
    */
   private async checkPositionSizeCap(
-    userId: string,
+    mode: 'live' | 'paper',
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
@@ -463,30 +465,30 @@ export class RiskManager {
     const positionSize = riskAmount / stopDistance;
     const positionValue = positionSize * signal.entryPrice;
 
-    // Phase 27.F.13.A FIX: Get actual portfolio value from portfolio_state table
-    // For paper trading, this will be the real balance (e.g., $800), not the settings value ($50k)
+    // Phase 27.F.15.B.3: Get actual portfolio value from mode-based portfolio_state
     let portfolioValue = 0;
     
-    // Phase 27.F.13.O: Get mode from user, not from system_context(userId)
-    const user = await storage.getUser(userId);
-    const mode = user?.tradingMode || 'paper';
-    
-    // Get actual balance from portfolio_state table
-    const portfolioState = await storage.getPortfolioState({ userId, mode });
-    if (portfolioState?.balance) {
-      portfolioValue = parseFloat(portfolioState.balance as string);
-      console.log(`[Position Size Cap] Using actual ${mode} balance from portfolio_state: $${portfolioValue.toFixed(2)}`);
+    const systemContext = await storage.getSystemContext(mode);
+    if (!systemContext) {
+      console.warn(`[Phase-27.F.15.B.3][mode=${mode}] System context not found`);
+      portfolioValue = 50000; // fallback
     } else {
-      // Fallback to settings.portfolioValue if portfolio_state not available
-      portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 0;
-      console.log(`[Position Size Cap] Fallback to settings.portfolioValue: $${portfolioValue.toFixed(2)}`);
+      const portfolioState = await storage.getPortfolioState({ globalContextId: systemContext.id, mode });
+      if (portfolioState?.balance) {
+        portfolioValue = parseFloat(portfolioState.balance as string);
+        console.log(`[Phase-27.F.15.B.3][mode=${mode}] Using actual balance from portfolio_state: $${portfolioValue.toFixed(2)}`);
+      } else {
+        // Fallback to settings.portfolioValue if portfolio_state not available
+        portfolioValue = settings.portfolioValue ? parseFloat(settings.portfolioValue.toString()) : 0;
+        console.log(`[Phase-27.F.15.B.3][mode=${mode}] Fallback to settings.portfolioValue: $${portfolioValue.toFixed(2)}`);
+      }
     }
     
     // Final fallback if still zero
     if (portfolioValue === 0) {
-      const metrics = await this.getPortfolioMetrics(userId);
+      const metrics = await this.getPortfolioMetrics(mode);
       portfolioValue = metrics.totalValue || 50000;
-      console.log(`[Position Size Cap] Final fallback to metrics: $${portfolioValue.toFixed(2)}`);
+      console.log(`[Phase-27.F.15.B.3][mode=${mode}] Final fallback to metrics: $${portfolioValue.toFixed(2)}`);
     }
     
     // Maximum single position: dynamically configured (default 10% of portfolio)
@@ -494,7 +496,7 @@ export class RiskManager {
     const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
     const positionPercent = (positionValue / portfolioValue) * 100;
 
-    console.log(`[Position Size Cap] Mode=${mode}, Risk=${riskAmount}, Stop=${stopDistance}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
+    console.log(`[Phase-27.F.15.B.3][mode=${mode}] Risk=${riskAmount}, Stop=${stopDistance}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
 
     if (positionPercent > maxPositionPercent) {
       return {
@@ -593,7 +595,10 @@ export class RiskManager {
     return { risk, reward, ratio };
   }
 
-  async getPortfolioMetrics(userId: string, mode?: 'live' | 'paper'): Promise<{
+  /**
+   * Phase 27.F.15.B.3: Mode-based portfolio metrics (no userId)
+   */
+  async getPortfolioMetrics(mode: 'live' | 'paper'): Promise<{
     totalValue: number;
     unrealizedPL: number;
     realizedPL: number;
@@ -601,8 +606,8 @@ export class RiskManager {
     openTradesCount: number;
   }> {
     const [activeTrades, closedTrades] = await Promise.all([
-      storage.getActiveTrades(userId),
-      storage.getTrades(userId, { status: 'closed', limit: 1000 })
+      storage.getActiveTrades(mode),
+      storage.getTrades(mode, { status: 'closed', limit: 1000 })
     ]);
 
     let unrealizedPL = 0;
@@ -622,11 +627,14 @@ export class RiskManager {
       return total + (parseFloat(trade.realizedPL || '0'));
     }, 0);
 
-    // Get base portfolio value from settings if available
+    // Get base portfolio value from mode-based system context
     let baseValue = 50000; // Default fallback
-    const settings = await storage.getTradingSettings(userId);
-    if (settings?.portfolioValue) {
-      baseValue = parseFloat(settings.portfolioValue.toString());
+    const systemContext = await storage.getSystemContext(mode);
+    if (systemContext) {
+      const settings = await storage.getTradingSettings(systemContext.id);
+      if (settings?.portfolioValue) {
+        baseValue = parseFloat(settings.portfolioValue.toString());
+      }
     }
 
     // Total value = base + realized P/L + unrealized P/L
@@ -1014,16 +1022,16 @@ export class RiskManager {
   }
 
   /**
-   * Calculate Cash vs Crypto allocation
+   * Phase 27.F.15.B.3: Mode-based cash vs crypto allocation (no userId)
    */
-  async getCashVsCrypto(userId: string): Promise<{
+  async getCashVsCrypto(mode: 'live' | 'paper'): Promise<{
     cash: number;
     crypto: number;
     cashPercent: number;
     cryptoPercent: number;
   }> {
-    const activePositions = await this.getActivePositions(userId);
-    const metrics = await this.getPortfolioMetrics(userId);
+    const activePositions = await this.getActivePositions(mode);
+    const metrics = await this.getPortfolioMetrics(mode);
     
     const cryptoValue = activePositions.reduce((sum, position) => {
       return sum + (parseFloat(position.entryPrice) * parseFloat(position.quantity));

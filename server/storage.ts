@@ -252,8 +252,8 @@ export interface IStorage {
   expireAllExpiredSignals(): Promise<number>;
 
   // Trade methods
-  getTrades(filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }): Promise<Trade[]>;
-  getActiveTrades(): Promise<Trade[]>;
+  getTrades(mode: 'live' | 'paper', filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }): Promise<Trade[]>;
+  getActiveTrades(mode: 'live' | 'paper'): Promise<Trade[]>;
   createTrade(trade: InsertTrade): Promise<Trade>;
   updateTrade(id: string, updates: Partial<Trade>): Promise<Trade>;
   closeTrade(id: string, exitPrice: number, exitFee: number, exitSlippage: number): Promise<Trade>;
@@ -1078,11 +1078,12 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  // Trade methods (Phase 27.F.15.A - GLOBAL)
+  // Phase 27.F.15.B.3: Mode-based trade methods (GLOBAL per mode)
   async getTrades(
+    mode: 'live' | 'paper',
     filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }
   ): Promise<Trade[]> {
-    const conditions: any[] = [];
+    const conditions: any[] = [eq(trades.mode, mode)];
     
     if (filters?.status) {
       conditions.push(eq(trades.status, filters.status as any));
@@ -1094,10 +1095,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(trades.strategy, filters.strategy as any));
     }
     
-    let query = db.select().from(trades);
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
+    let query = db.select().from(trades).where(and(...conditions));
     query = query.orderBy(desc(trades.entryTime));
     
     if (filters?.limit) {
@@ -1107,11 +1105,14 @@ export class DatabaseStorage implements IStorage {
     return await query;
   }
 
-  async getActiveTrades(): Promise<Trade[]> {
+  async getActiveTrades(mode: 'live' | 'paper'): Promise<Trade[]> {
     return await db
       .select()
       .from(trades)
-      .where(eq(trades.status, "open"))
+      .where(and(
+        eq(trades.status, "open"),
+        eq(trades.mode, mode)
+      ))
       .orderBy(desc(trades.entryTime));
   }
 
