@@ -1,0 +1,176 @@
+🧭 REPLIT DIRECTIVE — Phase 27.F.14.I
+Final Multi-User Sync Fixes + Baseline Transition Logic + Trade Execution Verification
+🎯 Objective
+
+Bring the Paper Simulation system to a fully operational state by:
+
+Implementing the fixes already confirmed in the previous Replit diagnostic report.
+
+Adding the Simulation Startup Modal that gives the choice to Continue or Start New Simulation.
+
+Implementing the correct baseline management model — per-simulation for early short runs, cumulative for longer learning simulations.
+
+Conducting a 5-minute trade execution diagnostic to confirm that LATTI’s trade pipeline is working end-to-end.
+
+Once complete, the system should be ready for the official 10-minute simulation (Phase 27.F.15).
+
+🧱 REQUIRED IMPLEMENTATION TASKS
+1️⃣ Apply Confirmed Fixes from Diagnostic Report
+🐛 Fix #1 — Dashboard Portfolio Value Display
+
+File: client/src/components/goals/portfolio-value-widget.tsx
+
+Replace the paper mode endpoint:
+
+Before: '/api/paper/metrics/portfolio'
+
+After: '/api/portfolio/overview'
+
+Verify this fix applies to both Paper and Live modes.
+
+Expected behavior:
+
+After confirming a new balance, dashboard instantly updates to show that value.
+
+Both users’ dashboards reflect the same number (synced).
+
+🐛 Fix #2 — Trading Toggle Synchronization
+
+File: client/src/hooks/use-trading.tsx
+
+Around line 32, update WebSocket data extraction:
+
+Before: const payload = latestUpdate.data;
+
+After: const payload = latestUpdate.payload;
+
+This ensures all clients receive and apply the correct trading state instantly.
+
+Expected result:
+
+One-click start/stop.
+
+Both users see the same state (blue bar, toggle, and toast in sync).
+
+🐛 Fix #3 — Global Alert Synchronization
+
+After applying Fix #2, test whether alert sync now works automatically.
+
+If alerts remain desynced:
+
+Add debug logging to verify that alerts_updated WebSocket events are being received by all clients.
+
+Confirm frontend invalidates /api/alerts query when receiving the broadcast.
+
+Expected result:
+
+Alerts visible and clearable across all sessions.
+
+2️⃣ Implement Simulation Startup Modal
+UI Design
+
+When user clicks Trading Toggle to start Paper Mode:
+
+Simulation Startup
+Would you like to continue your previous simulation or start a new one?
+
+[Continue Previous Simulation]
+
+[Start New Simulation]
+(If “Start New Simulation” is chosen)
+Enter starting portfolio balance: [Input field]
+[Confirm & Start]
+
+Backend Behavior
+Mode	LATTI Action	System Behavior
+Continue	Resume baseline, metrics, open positions	No resets; continue trading where left off
+New	Reset baseline, metrics, guardrails	Clear dashboard and simulation context; create new baseline
+
+Add backend event logging:
+
+[PaperSim] Continuing previous simulation
+[LATTI][Paper] Baseline resumed
+
+
+or
+
+[PaperSim] New simulation started with initial balance: $X
+[LATTI][Paper] Baseline reset
+
+3️⃣ Implement Baseline Transition Logic
+🧩 Phase-Based Rules
+Phase	Duration	Baseline Type	Guardrails/Filters	Notes
+Short Burst (5–10 min)	Debug tests	Reset per simulation	Reset to defaults	Baseline = 0 at start of every test
+25-Minute Simulation	Stability test	Cumulative within session	Resets on new run	LATTI begins adaptive learning mid-run
+48-Hour Simulation	Learning phase	Persistent cumulative baseline	Persist between restarts	Produces final baseline for live trading
+Implementation Details
+
+Add a field in system_context:
+baseline_mode = "per_simulation" | "cumulative" | "persistent"
+
+Each simulation startup checks this value:
+
+If per_simulation → reset LATTI baseline
+
+If cumulative or persistent → reload and continue
+
+Ensure logs confirm baseline mode:
+
+[LATTI] Baseline mode: cumulative (carried over from last run)
+
+Guardrails and Filters
+
+When starting new simulation, reset guardrails and filter thresholds to defaults.
+
+When continuing, reload them from prior context.
+
+4️⃣ Trade Execution Verification (Critical)
+
+Once fixes above are implemented and confirmed, Replit must verify that LATTI’s paper trade execution loop is actually working.
+
+Diagnostic Steps
+
+Run LATTI in Paper Mode for 5 minutes.
+
+Observe logs:
+
+[LATTI][Paper] FilteredPairs → N
+[LATTI][Paper] ReadyToBuy → X
+[LATTI][Paper] TradesExecuted → Y
+[LATTI][Paper] TradesClosed → Z
+
+
+Verify all four values appear.
+
+If TradesExecuted = 0 → identify which function blocks execution.
+
+Inspect these components:
+
+PaperSimService
+
+TradeOrchestrator
+
+OrderManager
+
+PaperExchangeAdapter
+
+trade_validation_pipeline
+
+Deliverables
+
+Report exact point of failure if trades are not executing.
+
+Include logs and database record counts (trading_signals, executed_trades, closed_trades).
+
+Propose any necessary code adjustments.
+
+✅ SUCCESS CRITERIA
+Check	Expected Result
+Dashboard Portfolio	Displays correct confirmed balance (Paper + Live).
+Toggle + Blue Bar	Fully synchronized across both users.
+Alerts	Identical across both sessions; clear one → clears both.
+Simulation Startup	Modal appears with Continue/New options.
+Baseline Mode	Confirmed reset/resume behavior per phase.
+Guardrails/Filters	Reset on new sim; persistent on continue.
+Trade Execution	Trades execute in Paper mode and appear in logs/DB.
+Logs	Show full trade lifecycle with no missing stages.

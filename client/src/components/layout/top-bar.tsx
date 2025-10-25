@@ -16,6 +16,7 @@ import {
 import { ConfirmLiveTradingModal } from "@/components/trading/confirm-live-trading-modal";
 import { ConfirmStopLiveTradingModal } from "@/components/trading/confirm-stop-live-trading-modal";
 import { ConfirmBalanceModal } from "@/components/trading/confirm-balance-modal";
+import { SimulationStartupModal } from "@/components/modals/simulation-startup-modal";
 import { useTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -69,6 +70,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [balanceToConfirm, setBalanceToConfirm] = useState(800);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetBalance, setResetBalance] = useState("800");
+  const [showSimulationStartup, setShowSimulationStartup] = useState(false); // Phase 27.F.14.I
   const [, setLocation] = useLocation();
   const { messages: wsMessages} = useWebSocket();
 
@@ -180,32 +182,21 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       }
     }
     
-    // For Paper mode, proceed directly without confirmation
+    // Phase 27.F.14.I: For Paper mode, show simulation startup modal when starting
+    if (enabled) {
+      console.log('[Phase-27.F.14.I] Showing simulation startup modal...');
+      setShowSimulationStartup(true);
+      return;
+    }
+    
+    // Stopping paper mode - proceed directly
     try {
-      if (enabled) {
-        console.log('[Phase-27.F.6] Starting paper trading...');
-        const result = await startTrading('paper');
-        
-        // Phase 27.F.14.D-POST: Check if balance confirmation is required
-        if (result && typeof result === 'object' && 'requiresConfirmation' in result && result.requiresConfirmation) {
-          console.log('[Phase-27.F.14.D-POST] Balance confirmation required');
-          setBalanceToConfirm(result.currentBalance || 800);
-          setShowBalanceConfirmation(true);
-          return; // Wait for user to confirm balance
-        }
-        
-        toast({
-          title: "Trading Started",
-          description: "Paper Trading Simulation engine started successfully",
-        });
-      } else {
-        console.log('[Phase-27.F.6] Stopping paper trading...');
-        await stopTrading('paper');
-        toast({
-          title: "Trading Stopped",
-          description: "Paper Trading Simulation engine has been stopped",
-        });
-      }
+      console.log('[Phase-27.F.6] Stopping paper trading...');
+      await stopTrading('paper');
+      toast({
+        title: "Trading Stopped",
+        description: "Paper Trading Simulation engine has been stopped",
+      });
     } catch (error: any) {
       let errorMessage = "Failed to toggle trading status";
       
@@ -244,6 +235,59 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       // Refetch status to ensure UI reflects actual backend state
       await queryClient.refetchQueries({ queryKey: ['/api/paper-sim/status'] });
       await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
+    }
+  };
+
+  // Phase 27.F.14.I: Handle Continue Previous Simulation
+  const handleContinueSimulation = async () => {
+    console.log('[Phase-27.F.14.I] Continue previous simulation');
+    
+    try {
+      const result = await apiRequest('POST', '/api/paper-sim/start', { mode: 'continue' });
+      
+      // Check if balance confirmation is required
+      if (result && typeof result === 'object' && 'requiresConfirmation' in result && result.requiresConfirmation) {
+        console.log('[Phase-27.F.14.I] Balance confirmation required');
+        setBalanceToConfirm(result.currentBalance || 800);
+        setShowBalanceConfirmation(true);
+        return;
+      }
+      
+      toast({
+        title: "Simulation Continued",
+        description: "Resumed previous simulation with existing baseline",
+      });
+    } catch (error: any) {
+      console.error('[Phase-27.F.14.I] Continue simulation error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to continue simulation",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Phase 27.F.14.I: Handle Start New Simulation
+  const handleStartNewSimulation = async (balance: number) => {
+    console.log('[Phase-27.F.14.I] Start new simulation with balance:', balance);
+    
+    try {
+      await apiRequest('POST', '/api/paper-sim/start', { 
+        mode: 'new', 
+        initialBalance: balance 
+      });
+      
+      toast({
+        title: "New Simulation Started",
+        description: `Started fresh simulation with $${balance.toFixed(2)} balance`,
+      });
+    } catch (error: any) {
+      console.error('[Phase-27.F.14.I] Start new simulation error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start new simulation",
+        variant: "destructive",
+      });
     }
   };
 
@@ -887,6 +931,15 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         currentBalance={balanceToConfirm}
         onConfirm={handleConfirmBalance}
         mode={currentMode}
+      />
+      
+      {/* Phase 27.F.14.I: Simulation Startup Modal */}
+      <SimulationStartupModal
+        open={showSimulationStartup}
+        onClose={() => setShowSimulationStartup(false)}
+        onContinue={handleContinueSimulation}
+        onStartNew={handleStartNewSimulation}
+        defaultBalance={balanceToConfirm}
       />
       
       {/* Phase 27.F.13.C: Reset Paper Simulation Dialog */}

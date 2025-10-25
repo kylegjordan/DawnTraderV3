@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 export interface WebSocketMessage {
   type: string;
   data?: any;
+  payload?: any; // Phase 27.F.14.I: Support payload field for WebSocket messages
 }
 
 export function useWebSocket(url?: string) {

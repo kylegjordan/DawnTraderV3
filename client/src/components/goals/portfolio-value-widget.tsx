@@ -30,8 +30,9 @@ export default function PortfolioValueWidget() {
   
   const { portfolioMetrics: livePortfolioMetrics, portfolioLoading: livePortfolioLoading } = useTrading();
   
+  // Phase 27.F.14.I: Use paper-specific endpoint that queries portfolio_state table
   const { data: paperPortfolioMetrics, isLoading: paperPortfolioLoading } = useQuery<PortfolioMetrics>({
-    queryKey: ['/api/paper/metrics/portfolio'],
+    queryKey: ['/api/paper/portfolio/state'],
     enabled: isPaper,
     refetchInterval: 60000,
     staleTime: 60000,

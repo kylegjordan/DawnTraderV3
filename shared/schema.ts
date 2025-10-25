@@ -3804,6 +3804,8 @@ export const systemContext = pgTable("system_context", {
   tradingPace: varchar("trading_pace", { length: 20 }).default("baseline"), // 'conservative' | 'baseline' | 'optimistic' | 'aggressive'
   // Phase 27.F.14.D-POST: Portfolio balance confirmation
   balanceLastConfirmed: timestamp("balance_last_confirmed", { withTimezone: true }), // Last time user confirmed starting balance
+  // Phase 27.F.14.I: Baseline transition logic for simulation phases
+  baselineMode: varchar("baseline_mode", { length: 20 }).default("per_simulation"), // 'per_simulation' | 'cumulative' | 'persistent'
   // Fee configuration for profitability calculations
   makerFeePct: decimal("maker_fee_pct", { precision: 5, scale: 4 }).default("0.0016"), // Kraken maker fee (0.16%)
   takerFeePct: decimal("taker_fee_pct", { precision: 5, scale: 4 }).default("0.0026"), // Kraken taker fee (0.26%)

@@ -2329,6 +2329,44 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 27.F.14.I: Paper portfolio state from portfolio_state table (accurate balance)
+  apiRouter.get('/paper/portfolio/state', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
+      
+      if (!portfolioState) {
+        return res.status(404).json({ error: 'Paper portfolio state not found' });
+      }
+      
+      const balance = parseFloat(portfolioState.balance || '800');
+      const unrealizedPnl = parseFloat(portfolioState.unrealizedPnl || '0');
+      const realizedPnl = parseFloat(portfolioState.realizedPnl || '0');
+      const cryptoValue = parseFloat(portfolioState.cryptoValue || '0');
+      const cash = parseFloat(portfolioState.cash || balance.toString());
+      
+      res.json({
+        totalValue: balance,
+        cash,
+        crypto: cryptoValue,
+        cashPercent: balance > 0 ? (cash / balance) * 100 : 0,
+        cryptoPercent: balance > 0 ? (cryptoValue / balance) * 100 : 0,
+        unrealizedPL: unrealizedPnl,
+        realizedPL: realizedPnl,
+        currentExposure: 0, // TODO: Calculate from open positions
+        openTradesCount: 0, // TODO: Count from open positions
+        totalTrades: 0, // TODO: Count from trades history
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        balanceSource: 'portfolio_state_table',
+        syncTimestamp: portfolioState.lastUpdated?.getTime() || Date.now()
+      });
+    } catch (error) {
+      console.error('Error fetching paper portfolio state:', error);
+      res.status(500).json({ error: 'Failed to fetch paper portfolio state' });
+    }
+  });
+
   apiRouter.get('/paper/metrics/earnings-chart', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -3495,8 +3533,59 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   apiRouter.post('/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
+    const { mode = 'continue', initialBalance } = req.body; // Phase 27.F.14.I: Support continue/new modes
     
     try {
+      // Phase 27.F.14.I: Handle "Start New Simulation" mode
+      if (mode === 'new') {
+        const balance = initialBalance ? parseFloat(initialBalance) : 800;
+        console.log(`[Phase-27.F.14.I] Starting NEW simulation with balance $${balance}`);
+        
+        // Stop paper simulation if running (gracefully handle if already stopped)
+        const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
+        const stopResult = await stopPaperSimulation(userId);
+        if (!stopResult.success && !stopResult.message?.includes('not running')) {
+          console.warn('[Phase-27.F.14.I] Stop failed but continuing:', stopResult.message);
+        }
+        
+        // Reset baseline and portfolio state
+        const contextId = await storage.getGlobalContextId();
+        
+        // Reset portfolio balance for paper mode
+        await storage.upsertPortfolioState({
+          globalContextId: contextId,
+          mode: 'paper',
+          balance: balance.toString(), // Phase 27.F.14.I: Use correct field name
+          lastUpdate: new Date()
+        });
+        
+        // Reset LATTI baseline for paper mode (per_simulation baseline)
+        await storage.updateSystemContext({
+          mode: 'paper',
+          baselineMode: 'per_simulation',
+          lattiLastAnchorTime: new Date()
+        });
+        
+        console.log('[Phase-27.F.14.I] Baseline reset for new simulation');
+        
+        // Start the simulation
+        const { startPaperSimulation } = await import('./services/paper-sim-service.js');
+        const result = await startPaperSimulation(userId);
+        
+        // Invalidate Bob Core cache
+        bobCore.invalidate('metrics:paperSimStatus');
+        bobCore.invalidate('metrics:portfolioOverview');
+        
+        if (!result.success) {
+          return res.status(400).json({ error: result.message || result.error });
+        }
+        
+        return res.json({ success: true, message: `New simulation started with $${balance.toFixed(2)}` });
+      }
+      
+      // Phase 27.F.14.I: Handle "Continue Previous Simulation" mode (default)
+      console.log('[Phase-27.F.14.I] Continuing previous simulation');
+      
       // Phase 27.F.14.D-POST: Check if balance confirmation is required
       const { checkBalanceConfirmationRequired } = await import('./services/paper-sim-service.js');
       const confirmationCheck = await checkBalanceConfirmationRequired('paper');
@@ -3511,7 +3600,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       }
       
-      // Use unified service function to ensure consistent state management
+      // Continue with existing baseline
       const { startPaperSimulation } = await import('./services/paper-sim-service.js');
       const result = await startPaperSimulation(userId);
       

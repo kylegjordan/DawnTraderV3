@@ -30,7 +30,8 @@ export function useTrading() {
     const tradingStateUpdates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
     if (tradingStateUpdates.length > 0) {
       const latestUpdate = tradingStateUpdates[tradingStateUpdates.length - 1];
-      const payload = latestUpdate.data;
+      // Phase 27.F.14.I: Fix #2 - Extract payload from correct field
+      const payload = latestUpdate.payload;
       
       console.log('[SYNC][Phase-27.F.10] Trading state changed:', payload?.mode, payload?.active || payload?.isEngineActive);
       
