@@ -56,6 +56,7 @@ import type { UserRole } from './config/permissions.js';
 import { randomUUID } from 'crypto';
 import { getPaperSimulationStatus } from './services/paper-sim-service';
 import { numericNormalizationMiddleware } from './utils/numeric-normalizer.js';
+import { contextBridge } from './services/context-bridge.js';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -3978,6 +3979,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }));
 
       console.log(`[FilteredPairs] Returning ${filteredPairs.length}/${scanResult.eligible_count} eligible pairs for user ${userId}`);
+      
+      // Phase 27.F.14.N: Broadcast trading data update to all clients
+      const clientCount = contextBridge.getClientCount();
+      console.log(`[FilterEngine] Broadcast trading_data_updated (mode=paper, pairs=${filteredPairs.length}) → ${clientCount} clients`);
+      contextBridge.broadcast({
+        type: 'trading_data_updated',
+        payload: {
+          mode: 'paper',
+          source: 'filtered_pairs_endpoint',
+          eligibleCount: filteredPairs.length,
+          totalCount: scanResult.evaluated,
+          timestamp: scanResult.ts
+        },
+        mode: 'paper'
+      }).catch(err => console.error('[FilterEngine] ❌ Failed to broadcast trading_data_updated:', err.message));
       
       res.json({
         pairs: filteredPairs,
