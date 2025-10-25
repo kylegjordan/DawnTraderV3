@@ -427,11 +427,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: 'Username and password are required' });
       }
       
-      // Support both username and email login
-      let user = await storage.getUserByUsername(username);
+      // Support both username and email login (case-insensitive)
+      let user = await storage.getUserByUsername(username.toLowerCase());
       if (!user) {
-        // Try email if username lookup failed
-        user = await storage.getUserByEmail(username);
+        // Try email if username lookup failed (case-insensitive)
+        user = await storage.getUserByEmail(username.toLowerCase());
       }
       
       if (!user) {

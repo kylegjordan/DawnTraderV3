@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, LogIn, AlertCircle } from "lucide-react";
+import { Loader2, LogIn, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { saveTokens } from "@/lib/auth";
 
@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -75,16 +76,32 @@ export default function LoginPage() {
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-                required
-                data-testid="input-password"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
+                  required
+                  data-testid="input-password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-toggle-password"
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -112,6 +129,20 @@ export default function LoginPage() {
                 </>
               )}
             </Button>
+
+            <div className="text-center text-sm text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  alert("Password reset is currently not available. Please contact your system administrator for assistance.");
+                }}
+                className="text-primary hover:underline font-medium"
+                data-testid="link-forgot-password"
+              >
+                Forgot password?
+              </button>
+            </div>
 
             {/* Public registration disabled - Admin-only user management */}
             {/* 
