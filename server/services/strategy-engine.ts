@@ -849,4 +849,23 @@ export class StrategyEngine {
     
     return sum / period;
   }
+
+  // Phase 27.F.14: Filter signals by confidence threshold
+  filterByConfidence(signals: StrategySignal[], confidenceThreshold: number): StrategySignal[] {
+    if (!signals || signals.length === 0) return [];
+    
+    const threshold = confidenceThreshold / 100; // Convert percentage to decimal
+    const filtered = signals.filter(signal => signal.confidence >= threshold);
+    
+    const rejected = signals.length - filtered.length;
+    if (rejected > 0) {
+      console.log(`[27.F.14][StrategyEngine] Confidence threshold ${confidenceThreshold}% filtered out ${rejected} signal(s)`);
+      signals.forEach(signal => {
+        const passed = signal.confidence >= threshold ? '✅' : '❌';
+        console.log(`  ${passed} ${signal.strategy} (${signal.symbol}): confidence ${(signal.confidence * 100).toFixed(0)}%`);
+      });
+    }
+    
+    return filtered;
+  }
 }

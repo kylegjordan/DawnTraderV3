@@ -244,6 +244,10 @@ export const guardrails = pgTable("guardrails", {
   maxRequiredCapital: decimal("max_required_capital", { precision: 12, scale: 2 }).default("100000.00"),
   maxRiskPerTradeLimit: decimal("max_risk_per_trade_limit", { precision: 10, scale: 2 }).default("1000.00"),
   aiCanAdjust: boolean("ai_can_adjust").default(false),
+  
+  // Phase 27.F.14: Execution Rhythm Controls
+  cooldownMinutes: integer("cooldown_minutes").default(15), // Symbol cooldown period in minutes (0-90)
+  
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -266,6 +270,13 @@ export const screenerFilters = pgTable("screener_filters", {
   excludeStablecoins: boolean("exclude_stablecoins").default(true),
   minLiquidity: decimal("min_liquidity", { precision: 15, scale: 2 }).default("500000.00"),
   allowRegulatedOnly: boolean("allow_regulated_only").default(false),
+  
+  // Phase 27.F.14: Advanced Universe & Signal Controls
+  universeSize: integer("universe_size").default(100), // Market universe size (25-150)
+  quoteCurrencies: jsonb("quote_currencies").default(sql`'["USD"]'::jsonb`), // Array of quote currencies (e.g., ["USD", "EUR", "USDT"])
+  activeTimeframes: jsonb("active_timeframes").default(sql`'["5m", "15m", "1h"]'::jsonb`), // Active timeframes (5m, 15m, 1h, 4h)
+  confidenceThreshold: integer("confidence_threshold").default(60), // Minimum confidence % (40-90)
+  
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({

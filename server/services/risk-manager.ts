@@ -179,7 +179,13 @@ export class RiskManager {
       return assetCheck;
     }
 
-    // Check 3: Position size cap (Task 8 Safety Guardrail - MOVED BEFORE EXPOSURE)
+    // Check 3: Symbol cooldown period (Phase 27.F.14)
+    const cooldownCheck = await this.checkSymbolCooldown(mode, signal);
+    if (!cooldownCheck.approved) {
+      return cooldownCheck;
+    }
+
+    // Check 4: Position size cap (Task 8 Safety Guardrail - MOVED BEFORE EXPOSURE)
     const positionSizeCheck = await this.checkPositionSizeCap(mode, signal, settings);
     if (!positionSizeCheck.approved) {
       return positionSizeCheck;
@@ -377,6 +383,64 @@ export class RiskManager {
     }
 
     return { approved: true };
+  }
+
+  /**
+   * Phase 27.F.14: Symbol cooldown period check
+   * Prevents trading the same symbol within specified cooldown period
+   */
+  private async checkSymbolCooldown(
+    mode: 'live' | 'paper',
+    signal: TradeSignal
+  ): Promise<RiskCheckResult> {
+    try {
+      // Get cooldown setting from guardrails
+      const guardrails = await storage.getGuardrails({ mode });
+      if (!guardrails || guardrails.cooldownMinutes === null || guardrails.cooldownMinutes === undefined) {
+        // No cooldown configured, approve
+        return { approved: true };
+      }
+
+      const cooldownMinutes = guardrails.cooldownMinutes;
+      if (cooldownMinutes === 0) {
+        // Cooldown disabled, approve
+        return { approved: true };
+      }
+
+      // Get last trade for this symbol
+      const lastTrades = await storage.getTrades(mode, {
+        symbol: signal.symbol,
+        status: 'closed' as const,
+        limit: 1
+      });
+
+      if (!lastTrades || lastTrades.length === 0) {
+        // No previous trades, approve
+        console.log(`[27.F.14][RiskManager] No previous trades for ${signal.symbol}, cooldown check passed`);
+        return { approved: true };
+      }
+
+      const lastTrade = lastTrades[0];
+      const lastTradeTime = new Date(lastTrade.closedAt || lastTrade.createdAt).getTime();
+      const currentTime = Date.now();
+      const minutesSinceLastTrade = (currentTime - lastTradeTime) / (1000 * 60);
+
+      if (minutesSinceLastTrade < cooldownMinutes) {
+        const remainingMinutes = Math.ceil(cooldownMinutes - minutesSinceLastTrade);
+        console.log(`[27.F.14][RiskManager] Cooldown active for ${signal.symbol}: ${remainingMinutes} minutes remaining`);
+        return {
+          approved: false,
+          reason: `Symbol ${signal.symbol} is in cooldown period. ${remainingMinutes} minute(s) remaining (last traded ${Math.floor(minutesSinceLastTrade)} minute(s) ago).`
+        };
+      }
+
+      console.log(`[27.F.14][RiskManager] Cooldown check passed for ${signal.symbol} (last traded ${Math.floor(minutesSinceLastTrade)} minutes ago, cooldown: ${cooldownMinutes} minutes)`);
+      return { approved: true };
+    } catch (error) {
+      console.error(`[27.F.14][RiskManager] Error checking cooldown:`, error);
+      // On error, approve to avoid blocking trades
+      return { approved: true };
+    }
   }
 
   /**

@@ -90,8 +90,14 @@ export class MarketScanner {
             volatilityMax: screenerSettings.volatilityMax || undefined,
             minLiquidity: screenerSettings.minLiquidity || undefined,
             minMarketCap: screenerSettings.minMarketCap || undefined,
-            allowRegulatedOnly: screenerSettings.allowRegulatedOnly ?? false
+            allowRegulatedOnly: screenerSettings.allowRegulatedOnly ?? false,
+            // Phase 27.F.14: Advanced Universe & Signal Controls
+            universeSize: screenerSettings.universeSize || undefined,
+            quoteCurrencies: screenerSettings.quoteCurrencies as string[] || undefined,
+            activeTimeframes: screenerSettings.activeTimeframes as string[] || undefined
           });
+          
+          console.log(`[27.F.14][MarketScanner] Universe limited to ${screenerSettings.universeSize || 'unlimited'} pairs`);
           
           // Phase 27.F.15.A: Log filter diagnostics for both modes
           await this.logFilterDiagnostics(user.id, 'paper', eligiblePairs);

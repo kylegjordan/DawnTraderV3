@@ -1,0 +1,147 @@
+⚙️ Replit Directive — Phase 27.F.14.Unified
+
+Advanced Universe & Signal Controls + Paper Trade Execution Verification
+
+🎯 Objective
+
+Extend LATTI’s tunable parameters to the frontend and verify that paper-mode trade execution works end-to-end before the 10 / 25 / 48-hour simulations.
+
+This combined phase will:
+
+Add new behavioral parameters (universe size, quote currencies, active timeframes, confidence threshold, cooldown minutes) to the existing Filters and Guardrails tabs.
+
+Wire those values through the backend (Drizzle schema → services → UI).
+
+Re-enable and instrument the Paper Execution Pipeline so trades visibly open again.
+
+Guarantee at least one forced trade on the first cycle for proof.
+
+Confirm mode-scoped data parity and synchronized tabs across users.
+
+🧱 Part A — Behavioral Parameter Integration
+
+(from former 27.F.14.K)
+
+Database Layer
+
+Add columns to screener_filters:
+universe_size int, quote_currencies jsonb, active_timeframes jsonb, confidence_threshold int
+
+Add cooldown_minutes int to guardrails.
+
+Update ORM schema + migration files.
+
+Backend Services
+
+Update MarketScanner to honor universe_size, quote_currencies, and active_timeframes.
+
+Update StrategyEngine to filter by confidence_threshold.
+
+Update RiskManager to enforce cooldown_minutes.
+
+Register these five fields as tunable parameters in TuningPolicyService with the defined min/max bounds.
+
+Frontend (UI)
+
+In Filters tab, add section “Advanced Universe & Signal Controls”:
+• Market Universe Size (dropdown 25–150)
+• Quote Currencies (multi-select from Kraken /AssetPairs)
+• Active Timeframes (checkboxes 5 m / 15 m / 1 h / 4 h)
+• Confidence Threshold (slider 40–90 %)
+
+In Guardrails tab, add “Execution Rhythm Controls”: Symbol Cool-Down (minutes 0–90).
+
+Fields auto-persist per mode (“paper” editable, “live” read-only).
+
+Logging / Verification
+Expected log lines:
+
+[UI] Updated screener_filters with advanced parameters
+[MarketScanner] Universe limited to X pairs
+[StrategyEngine] Confidence threshold ≥ Y %
+[RiskManager] Enforcing cooldown = Z minutes
+
+⚙️ Part B — Paper-Trade Execution Verification
+
+(from Exec.1 plan)
+
+1️⃣ Pipeline Instrumentation
+Edit server/services/paper-execution-engine.ts: emit structured logs and WebSocket events at each stage:
+
+filter_cycle_started, candidate_selected, risk_check_passed/failed,
+order_computed, paper_trade_opened
+
+
+2️⃣ Deterministic Force-Trade
+
+Add env flag PAPER_FORCE_TRADE_SYMBOL=BTCUSD.
+
+If no eligible candidates exist in a cycle, inject this symbol (only in paper mode).
+
+Guard with MSI so it never runs in live mode.
+
+3️⃣ Storage Verification
+Confirm that paper methods persist mode-scoped data correctly:
+createPaperSimOpenPosition, createPaperSimTrade, createPaperSimTradeLog.
+No user filtering applied.
+
+4️⃣ Engine Lifecycle Test
+
+Start PaperSim via /api/paper-sim/start → kick an immediate cycle.
+
+Expect logs within 10 s:
+[PaperSim] paper_trade_opened {symbol:"BTC/USD", …}
+
+Stop via UI → both sessions show inactive status.
+
+5️⃣ Cross-Session Parity
+Unify tab data sources to use mode-scoped endpoints; invalidate queries on trading_pipeline_event.
+Both users (Kyle + TestUser) see identical counts for: Filtered Insights, Filtered Pairs, Ready to Buy, Active Trades.
+
+6️⃣ Security Preflight
+
+Hide credentials in UI logs.
+
+Rate-limit login attempts.
+
+Lockout after 5 failed tries.
+
+🔍 Part C — Automated Verification Sequence
+
+This section runs automatically after build completes; no manual checks required.
+
+Checkpoint	Expected Result
+A.1 Schema Migration	New columns exist in DB; no errors in startup log.
+A.2 UI Behavior	Advanced Universe & Signal Controls visible in Filters tab.
+B.1 Forced Trade	paper_trade_opened appears in logs < 10 s after start.
+B.2 Open Position	Active Trades tab shows same symbol for both users.
+B.3 MSI Integrity	Live mode unaffected; no force trade triggered.
+B.4 Logs	trading_pipeline_event and parameters_updated events broadcast.
+C.1 Security	No credential echoes; login rate-limit active.
+🧾 Deliverables
+
+Updated tables screener_filters + guardrails
+
+Enhanced backend services and UI tabs
+
+Functional PaperSim engine with visible trade execution
+
+Cross-session synchronization confirmed
+
+Security preflight active
+
+Log artifact: /logs/phase_27F14_unified_completion.txt showing each checkpoint ✅ PASS
+
+🚀 Execution Instruction (for Replit)
+
+Paste the entire directive above into Replit’s chat and run as:
+
+“Implement Phase 27.F.14.Unified — Behavioral Parameter Integration + Paper Trade Execution Verification”
+
+The system will:
+
+Perform the schema and frontend updates.
+
+Run instrumentation and auto-verify forced trade execution.
+
+Generate the completion log automatically (no manual approval required).

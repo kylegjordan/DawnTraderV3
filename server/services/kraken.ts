@@ -633,6 +633,10 @@ export class KrakenService {
     minLiquidity?: string;
     minMarketCap?: string;
     allowRegulatedOnly?: boolean;
+    // Phase 27.F.14: Advanced Universe & Signal Controls
+    universeSize?: number;
+    quoteCurrencies?: string[];
+    activeTimeframes?: string[];
   }): Promise<Array<{
     symbol: string;
     baseCurrency: string;
@@ -657,7 +661,7 @@ export class KrakenService {
     const minDailyRange = parseFloat(settings.minDailyRange);
     const minPrice = parseFloat(settings.minPrice || '0.01');
     const maxPrice = settings.maxPrice ? parseFloat(settings.maxPrice) : undefined;
-    const maxBidAskSpread = parseFloat(settings.maxBidAskSpread);
+    const maxBidAskSpread = settings.maxBidAskSpread ? parseFloat(settings.maxBidAskSpread) : 100; // Default to 100% if not specified
     const excludeStablecoins = settings.excludeStablecoins ?? true;
     // Phase 27.F.13.B: Quote currency filter disabled - accept all currencies per user requirement
     const allowedQuotes = settings.allowedTradingPairs || [];
@@ -667,6 +671,10 @@ export class KrakenService {
     // Phase 27.F.15.B: Parse new filter parameters
     const volatilityMin = settings.volatilityMin ? parseFloat(settings.volatilityMin) : undefined;
     const volatilityMax = settings.volatilityMax ? parseFloat(settings.volatilityMax) : undefined;
+    
+    // Phase 27.F.14: Parse Advanced Universe & Signal Controls
+    const universeSize = settings.universeSize || undefined; // Limit number of pairs (25-150)
+    const quoteCurrencies = settings.quoteCurrencies || undefined; // Filter by specific quote currencies
     
     /**
      * Phase 27.F.15.B: Filters NOT IMPLEMENTED (require expensive operations or unavailable data):
@@ -712,7 +720,17 @@ export class KrakenService {
         return;
       }
 
-      // Filter 3: Quote currency check removed per user request - no currency restrictions
+      // Filter 3: Quote currency check (Phase 27.F.14)
+      // If quoteCurrencies is specified, filter by allowed quote currencies
+      if (quoteCurrencies && quoteCurrencies.length > 0) {
+        const matchesQuoteCurrency = quoteCurrencies.some(currency => 
+          pairInfo.quote.toUpperCase() === currency.toUpperCase()
+        );
+        if (!matchesQuoteCurrency) {
+          exclusionReasons[pairName] = `Quote currency ${pairInfo.quote} not in allowed list`;
+          return;
+        }
+      }
 
       // Filter 4: Stablecoin exclusion
       if (excludeStablecoins && stablecoinPatterns.some(pattern => pairInfo.base.includes(pattern))) {
@@ -812,14 +830,24 @@ export class KrakenService {
       }
     }
 
-    if (eligiblePairs.length > 0) {
+    // Phase 27.F.14: Limit universe size if specified
+    let finalPairs = eligiblePairs;
+    if (universeSize && eligiblePairs.length > universeSize) {
+      // Sort by volume descending and take top N pairs
+      finalPairs = eligiblePairs
+        .sort((a, b) => b.volume24h - a.volume24h)
+        .slice(0, universeSize);
+      console.log(`\n[27.F.14] Universe limited to top ${universeSize} pairs by volume`);
+    }
+
+    if (finalPairs.length > 0) {
       console.log(`\n✅ Eligible pairs:`);
-      eligiblePairs.forEach(pair => {
+      finalPairs.forEach(pair => {
         console.log(`  ${pair.symbol}: Vol=$${(pair.volume24h/1000000).toFixed(1)}M, Range=${pair.dailyRange.toFixed(1)}%, Price=$${pair.currentPrice}`);
       });
     }
 
-    return eligiblePairs;
+    return finalPairs;
   }
 
   async calculateProjectedSlippage(pair: string, volume: number, side: 'buy' | 'sell'): Promise<number> {
