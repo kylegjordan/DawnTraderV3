@@ -147,16 +147,18 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   }, [wsMessages, queryClient, setMode]);
 
-  // Phase 27.F.14.E: Listen for portfolio_balance_updated events to refresh dashboard
+  // Phase 27.F.14.E + 27.F.14.M: Listen for portfolio_balance_updated events to refresh dashboard
   useEffect(() => {
     const balanceUpdates = wsMessages.filter((msg: any) => msg.type === 'portfolio_balance_updated');
     if (balanceUpdates.length > 0) {
       const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
       console.log('[Phase-27.F.14.E] Received portfolio_balance_updated event:', latestUpdate);
       
-      // Invalidate portfolio queries to immediately refresh balance across all sessions
+      // Phase 27.F.14.M: Invalidate all portfolio-related queries to immediately refresh balance
       queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
     }
   }, [wsMessages, queryClient]);
 

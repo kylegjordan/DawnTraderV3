@@ -3552,12 +3552,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const systemContext = await storage.getSystemContext('paper');
         console.log('[LATTIManager] Retrieved system context for mode: paper');
         
-        // Reset portfolio balance for paper mode
-        await storage.upsertPortfolioState({
-          globalContextId: systemContext!.id,
-          mode: 'paper',
-          balance: balance.toString(),
-          lastUpdate: new Date()
+        // Phase 27.F.14.M: Reset portfolio balance for paper mode using updatePortfolioBalance
+        await storage.updatePortfolioBalance({ mode: 'paper', balance });
+        console.log(`[PaperSim] Started simulation (balance=$${balance})`);
+        
+        // Phase 27.F.14.M: Broadcast portfolio balance update to all clients
+        const { contextBridge } = await import('./services/context-bridge.js');
+        await contextBridge.broadcast({
+          type: 'portfolio_balance_updated',
+          payload: {
+            balance,
+            mode: 'paper',
+            reason: 'new_simulation_started',
+            timestamp: new Date().toISOString()
+          },
+          mode: 'paper'
         });
         
         // Phase 27.F.14.J: Reset LATTI baseline for paper mode (per_simulation baseline)
