@@ -3571,7 +3571,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Phase 27.F.14.J: Reset guardrails, screener filters, and trading pace to defaults
         console.log('[LATTI][Paper] Resetting guardrails and filters to baseline defaults...');
         
-        // Reset guardrails to defaults
+        // Reset guardrails to defaults (Phase 27.F.14.K: Fixed field names)
         await storage.upsertGuardrails({
           mode: 'paper',
           maxDailyLoss: '150.00',
@@ -3581,8 +3581,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           riskPerTrade: '1.5',
           maxRequiredCapital: '100000.00',
           maxRiskPerTradeLimit: '1000.00',
-          maxExposure: '25.00',
-          minWinRate: '40.00',
           aiCanAdjust: false,
           lastUpdatedBy: userId
         });
