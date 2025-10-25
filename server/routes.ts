@@ -1602,9 +1602,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         storage.getPortfolioState({ globalContextId, mode: 'paper' }),
         storage.listStrategySettings({ globalContextId, mode: 'live' }),
         storage.listStrategySettings({ globalContextId, mode: 'paper' }),
-        storage.getWatchlist({ userId, mode: currentMode }),
-        storage.getActiveTrades(userId)
+        storage.getWatchlist({ mode: currentMode }),
+        storage.getActiveTrades()
       ]);
+      console.log('[Phase-27.F.15.B.1] Updated route /api/trading/status → mode-based only');
       
       // Process live mode data
       const liveBalance = livePortfolioState ? parseFloat(livePortfolioState.balance) : 0;
@@ -1782,7 +1783,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           break;
       }
       
-      const allTrades = await storage.getTrades(userId, {});
+      const allTrades = await storage.getTrades({});
+      console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/history → mode-based only');
       const closedTrades = allTrades.filter(t => 
         t.status === 'closed' && 
         t.exitTime
@@ -1862,7 +1864,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           break;
       }
       
-      const allTrades = await storage.getTrades(userId, {});
+      const allTrades = await storage.getTrades({});
+      console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/value-history → mode-based only');
       const closedTrades = allTrades.filter(t => 
         t.status === 'closed' && 
         t.exitTime
@@ -1920,7 +1923,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       const initialBalance = 800;
       
-      const allTrades = await storage.getTrades(userId, {});
+      const allTrades = await storage.getTrades({});
+      console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/stats → mode-based only');
       const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
       
       const totalProfitLoss = closedTrades.reduce((sum, t) => sum + (Number(t.realizedPL) || 0), 0);
@@ -1958,12 +1962,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const { status, symbol, strategy, limit } = req.query;
       
-      const trades = await storage.getTrades(userId, {
+      const trades = await storage.getTrades({
         status: status as string,
         symbol: symbol as string,
         strategy: strategy as string,
         limit: limit ? parseInt(limit as string) : undefined
       });
+      console.log('[Phase-27.F.15.B.1] Updated route /api/trades → mode-based only');
       
       res.json(trades);
     } catch (error) {
@@ -1979,7 +1984,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 7.6: Use TradeBob for caching if enabled, otherwise fallback
       const trades = tradeBob.isEnabled()
         ? await tradeBob.getAllActiveTrades(userId)
-        : await storage.getActiveTrades(userId);
+        : await storage.getActiveTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/trades/active → mode-based only');
       
       res.json(trades);
     } catch (error) {
@@ -2018,7 +2024,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
-      const watchlist = await storage.getWatchlist({ userId, mode });
+      const watchlist = await storage.getWatchlist({ mode });
+      console.log('[Phase-27.F.15.B.1] Updated route /api/watchlist → mode-based only');
       res.json(watchlist);
     } catch (error) {
       console.error('Error fetching watchlist:', error);
@@ -2059,10 +2066,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { status } = req.query;
       
       const signals = await storage.getTradingSignals({ 
-        userId, 
         mode, 
         status: status as string | undefined 
       });
+      console.log('[Phase-27.F.15.B.1] Updated route /api/trading-signals → mode-based only');
       
       res.json(signals);
     } catch (error) {
@@ -2215,7 +2222,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/paper/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const trades = await storage.getAllPaperTrades(userId);
+      const trades = await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/paper/trades → mode-based only');
       res.json(trades);
     } catch (error) {
       console.error('Error fetching paper trades:', error);
@@ -2230,7 +2238,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 7.6: Use TradeBob for caching if enabled, otherwise fallback
       const trades = tradeBob.isEnabled()
         ? await tradeBob.getOpenPaperTrades(userId)
-        : await storage.getOpenPaperTrades(userId);
+        : await storage.getOpenPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/paper/trades/open → mode-based only');
       
       res.json(trades);
     } catch (error) {
@@ -2242,7 +2251,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.delete('/paper/trades/clear', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      await storage.deleteAllPaperTrades(userId);
+      await storage.deleteAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/paper/trades/clear → mode-based only');
       
       // Phase 7.6: Invalidate TradeBob cache when paper trades are cleared
       tradeBob.invalidateActiveTrades(userId); // Invalidate combined cache
@@ -2378,7 +2388,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       
-      const trades = await storage.getAllPaperTrades(userId);
+      const trades = await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/paper/metrics/earnings-chart → mode-based only');
       
       // Group trades by date and calculate daily earnings
       const earningsByDate = new Map<string, number>();
@@ -2418,7 +2429,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       
-      const trades = await storage.getAllPaperTrades(userId);
+      const trades = await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/paper/metrics/history → mode-based only');
       
       // Get initial balance from portfolio_state
       const portfolioState = await storage.getPortfolioState({ userId, mode: 'paper' });
@@ -2458,7 +2470,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/paper/trades/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const allTrades = await storage.getAllPaperTrades(userId);
+      const allTrades = await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/paper/trades/active → mode-based only');
       const activeTrades = allTrades.filter(t => t.status === 'open');
       res.json(activeTrades);
     } catch (error) {
@@ -3007,12 +3020,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       // Check goals for both modes
       try {
-        const liveGoals = await storage.getUserGoalsLive(userId);
-        const paperGoals = await storage.getUserGoalsPaper(userId);
+        const liveGoals = await storage.getGoalsLive();
+        const paperGoals = await storage.getGoalsPaper();
         healthData.goals = {
           live: { count: liveGoals.length, hasGoals: liveGoals.length > 0 },
           paper: { count: paperGoals.length, hasGoals: paperGoals.length > 0 }
         };
+        console.log('[Phase-27.F.15.B.1] Updated route /api/system/health → mode-based goals only');
       } catch (error) {
         healthData.goals = { error: 'Failed to get goals' };
         allHealthy = false;
@@ -5029,10 +5043,11 @@ Provide specific, actionable recommendations.`,
       const { reportType, format, from, to, symbol, strategy, mode } = req.query;
       
       // Fetch all trades for the user
-      const allTrades = await storage.getTrades(userId, { 
+      const allTrades = await storage.getTrades({ 
         status: 'closed',
         limit: 10000 
       });
+      console.log('[Phase-27.F.15.B.1] Updated route /api/reports/export → mode-based only');
       
       // Apply filters
       let filteredTrades = allTrades;
@@ -5195,10 +5210,11 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const { from, to, format } = req.query;
       
-      const trades = await storage.getTrades(userId, { 
+      const trades = await storage.getTrades({ 
         status: 'closed',
         limit: 10000 
       });
+      console.log('[Phase-27.F.15.B.1] Updated route /api/export/trades → mode-based only');
       
       // Filter by date range if provided
       let filteredTrades = trades;
@@ -5669,7 +5685,8 @@ Provide specific, actionable recommendations.`,
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
-      const watchlist = await storage.getWatchlist({ userId, mode });
+      const watchlist = await storage.getWatchlist({ mode });
+      console.log('[Phase-27.F.15.B.1] Updated route /api/strategies/test → mode-based only');
       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) {
@@ -7050,9 +7067,10 @@ Provide specific, actionable recommendations.`,
       
       // Get all trades
       const [paperTrades, liveTrades] = await Promise.all([
-        storage.getAllPaperTrades(userId),
-        storage.getTrades(userId, {}),
+        storage.getAllPaperTrades(),
+        storage.getTrades({}),
       ]);
+      console.log('[Phase-27.F.15.B.1] Updated route /api/learning/performance-snapshot → mode-based only');
       
       // Helper function to calculate metrics for a period
       const calculatePeriodMetrics = (trades: any[], startDate: Date, endDate: Date) => {
@@ -7340,7 +7358,8 @@ Provide specific, actionable recommendations.`,
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
-      const trades = await storage.getTrades(userId, {});
+      const trades = await storage.getTrades({});
+      console.log('[Phase-27.F.15.B.1] Updated route /api/metrics/strategies → mode-based only');
       const recentTrades = trades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate
       );
@@ -7436,7 +7455,8 @@ Provide specific, actionable recommendations.`,
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
-      const trades = await storage.getAllPaperTrades(userId);
+      const trades = await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/paper/metrics/strategies → mode-based only');
       const recentTrades = trades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate
       );
@@ -7519,8 +7539,9 @@ Provide specific, actionable recommendations.`,
       fromDate.setDate(fromDate.getDate() - days);
 
       const trades = mode === 'live'
-        ? await storage.getTrades(userId, { strategy })
-        : await storage.getAllPaperTrades(userId);
+        ? await storage.getTrades({ strategy })
+        : await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/metrics/strategies/:strategy/details → mode-based only');
       const recentTrades = trades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate && t.strategy === strategy
       );
@@ -7775,8 +7796,9 @@ Provide specific, actionable recommendations.`,
       console.log(`[Goals] Fetching all goals for user ${userId} in ${mode} mode`);
 
       const goalsData = mode === 'live' 
-        ? await storage.getUserGoalsLive(userId)
-        : await storage.getUserGoalsPaper(userId);
+        ? await storage.getGoalsLive()
+        : await storage.getGoalsPaper();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/goals → mode-based only');
 
       // Get most recent lastUpdated for ETag
       const mostRecent = goalsData.reduce((latest, goal) => {
@@ -7824,8 +7846,9 @@ Provide specific, actionable recommendations.`,
       console.log(`[Goals] Fetching goals summary for user ${userId} in ${mode} mode`);
 
       const goalsData = mode === 'live' 
-        ? await storage.getUserGoalsLive(userId)
-        : await storage.getUserGoalsPaper(userId);
+        ? await storage.getGoalsLive()
+        : await storage.getGoalsPaper();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/goals/summary → mode-based only');
 
       console.log(`[Goals] Found ${goalsData.length} goals in ${mode} mode for user ${userId}`);
 
@@ -7867,8 +7890,8 @@ Provide specific, actionable recommendations.`,
       for (const goal of goals) {
         // Phase 27.5: Get previous value for audit log
         const previousGoal = mode === 'live'
-          ? await storage.getGoalLive(userId, goal.metricName)
-          : await storage.getGoalPaper(userId, goal.metricName);
+          ? await storage.getGoalLive(goal.metricName)
+          : await storage.getGoalPaper(goal.metricName);
         
         if (DIAGNOSTIC_MODE) {
           console.log(`[DX-GOALS] db.before for ${goal.metricName}:`, JSON.stringify(previousGoal, null, 2));
@@ -7925,12 +7948,13 @@ Provide specific, actionable recommendations.`,
       // Phase 27.DX: Immediate verification read
       if (DIAGNOSTIC_MODE) {
         const verifyGoals = mode === 'live'
-          ? await storage.getUserGoalsLive(userId)
-          : await storage.getUserGoalsPaper(userId);
+          ? await storage.getGoalsLive()
+          : await storage.getGoalsPaper();
         console.log(`[DX-GOALS] Immediate verification read (count: ${verifyGoals.length}):`, JSON.stringify(verifyGoals, null, 2));
         console.log(`[DX-GOALS] ========== GOALS SAVE TRACE END (req.id=${req.traceId}) ==========`);
       }
       
+      console.log('[Phase-27.F.15.B.1] Updated route /api/goals/update → mode-based only');
       res.json({ success: true, data: updatedGoals, mode });
     } catch (error: any) {
       console.error('Error updating goals:', error);
@@ -7950,12 +7974,13 @@ Provide specific, actionable recommendations.`,
       }
 
       const currentGoals = mode === 'live'
-        ? await storage.getUserGoalsLive(userId)
-        : await storage.getUserGoalsPaper(userId);
+        ? await storage.getGoalsLive()
+        : await storage.getGoalsPaper();
 
       const trades = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
+        ? await storage.getTrades({})
+        : await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/goals/analyze → mode-based only');
       const closedTrades = trades.filter(t => t.status === 'closed');
       
       const totalPL = closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
@@ -8033,8 +8058,8 @@ Please:
       for (const goal of goals) {
         // Phase 27.5: Get previous value for audit log
         const previousGoal = mode === 'live'
-          ? await storage.getGoalLive(userId, goal.metricName)
-          : await storage.getGoalPaper(userId, goal.metricName);
+          ? await storage.getGoalLive(goal.metricName)
+          : await storage.getGoalPaper(goal.metricName);
         
         const goalData = {
           userId,
@@ -8124,8 +8149,9 @@ Please:
       fromDate.setDate(fromDate.getDate() - days);
 
       const trades = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
+        ? await storage.getTrades({})
+        : await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/trading/activity → mode-based only');
       const periodTrades = trades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate && t.status === 'closed'
       );
@@ -8206,8 +8232,9 @@ Please:
       fromDate.setDate(fromDate.getDate() - days);
 
       const trades = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
+        ? await storage.getTrades({})
+        : await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/trading/averages → mode-based only');
       const periodTrades = trades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate && t.status === 'closed'
       );
@@ -8296,8 +8323,9 @@ Please:
       fromDate.setDate(fromDate.getDate() - days);
 
       const trades = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
+        ? await storage.getTrades({})
+        : await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/trading/results → mode-based only');
       const periodTrades = trades.filter(t => 
         t.exitTime && new Date(t.exitTime) >= fromDate && t.status === 'closed'
       );
@@ -8365,8 +8393,9 @@ Please:
       const mode = (req.query.mode as string) || 'live';
 
       const trades = mode === 'live'
-        ? await storage.getTrades(userId, {})
-        : await storage.getAllPaperTrades(userId);
+        ? await storage.getTrades({})
+        : await storage.getAllPaperTrades();
+      console.log('[Phase-27.F.15.B.1] Updated route /api/earnings/summary → mode-based only');
       const closedTrades = trades.filter(t => t.status === 'closed' && t.exitTime);
 
       const now = new Date();
