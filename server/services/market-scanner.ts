@@ -122,7 +122,8 @@ export class MarketScanner {
       console.log(`[Cleanup] ${stalePairs} stale filtered pairs removed`);
       
       // 3. Clean old closed paper trades (older than 24 hours)
-      const oldPaperTrades = await storage.cleanOldPaperSimTrades(24);
+      // Phase 27.F.15.B.4: Updated to mode-based signature
+      const oldPaperTrades = await storage.cleanOldPaperSimTrades('paper', 24);
       console.log(`[Cleanup] ${oldPaperTrades} closed paper trades archived`);
       
       // 4. Clean old closed live trades (older than 30 days)
