@@ -3572,10 +3572,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log('[LATTI][Paper] Resetting guardrails and filters to baseline defaults...');
         
         // Reset guardrails to defaults
-        await storage.updateGuardrail('maxDailyLoss', { value: '150.00', mode: 'paper' });
-        await storage.updateGuardrail('maxExposure', { value: '25.00', mode: 'paper' });
-        await storage.updateGuardrail('maxPositionSize', { value: '10.00', mode: 'paper' });
-        await storage.updateGuardrail('minWinRate', { value: '40.00', mode: 'paper' });
+        await storage.upsertGuardrails({
+          mode: 'paper',
+          maxDailyLoss: '150.00',
+          maxDrawdown: '10.00',
+          maxPositionSize: '10.00',
+          maxOpenPositions: 5,
+          riskPerTrade: '1.5',
+          maxRequiredCapital: '100000.00',
+          maxRiskPerTradeLimit: '1000.00',
+          maxExposure: '25.00',
+          minWinRate: '40.00',
+          aiCanAdjust: false,
+          lastUpdatedBy: userId
+        });
         
         // Reset screener filters to defaults
         await storage.upsertScreenerFilter({
