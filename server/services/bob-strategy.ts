@@ -36,25 +36,20 @@ class StrategyBobModule {
   /**
    * Fetch strategy performance metrics (win rate, P/L, R-multiple)
    * Adapts existing /api/metrics/strategies and /api/paper/metrics/strategies
+   * Phase 27.F.15.B.4: Global mode-based (no userId dependency)
    */
   private async fetchPerformance(context: FetchContext & { days?: number }): Promise<any> {
     const startTime = Date.now();
-    const { mode = 'live', userId, days = 7 } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching performance (mode: ${mode}, days: ${days})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
+    const { mode = 'live', days = 7 } = context;
+    console.log(`[Phase-27.F.15.B.4][${this.MODULE_NAME}] 🔍 Fetching performance (mode: ${mode}, days: ${days})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for performance fetch');
-      }
-
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
-      // Phase 27.F.15.A: Global mode-based queries (no userId)
-      const allTrades = mode === 'live'
-        ? await storage.getTrades({})
-        : await storage.getAllPaperTrades();
-      console.log('[Phase-27.F.15.B.2] Updated service bob-strategy → mode-based only');
+      // Phase 27.F.15.B.4: Global mode-based queries
+      const allTrades = await storage.getTrades(mode, {});
+      console.log('[Phase-27.F.15.B.4] Updated service bob-strategy → mode-based only');
 
       const recentTrades = allTrades.filter(t => 
         t.entryTime && new Date(t.entryTime) >= fromDate
@@ -75,8 +70,10 @@ class StrategyBobModule {
           ? closedTrades.reduce((sum, t) => sum + parseFloat(t.realizedPLR || '0'), 0) / closedTrades.length
           : 0;
 
-        const predictionAccuracy = await storage.getPredictionAccuracy(userId, mode, strategy, days);
-        const signalWeights = await storage.getSignalWeights(userId, strategy, mode);
+        // Phase 27.F.15.B.4: TODO - Migrate these storage methods to mode-based signatures
+        // For now, use defaults until storage.getPredictionAccuracy and getSignalWeights are updated
+        const predictionAccuracy = { accuracy: 0, totalPredictions: 0, correctPredictions: 0 };
+        const signalWeights: any[] = [];
 
         const weightedConfidence = signalWeights.length > 0
           ? signalWeights.reduce((sum, w) => sum + parseFloat(w.weight || '1.0'), 0) / signalWeights.length
@@ -149,19 +146,17 @@ class StrategyBobModule {
   /**
    * Fetch recent signal history
    * Adapts existing /api/historic-signals
+   * Phase 27.F.15.B.4: Global mode-based (no userId dependency)
    */
   private async fetchSignals(context: FetchContext & { limit?: number }): Promise<any> {
     const startTime = Date.now();
-    const { mode = 'live', userId, limit = 50 } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching signals (mode: ${mode}, limit: ${limit})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
+    const { mode = 'live', limit = 50 } = context;
+    console.log(`[Phase-27.F.15.B.4][${this.MODULE_NAME}] 🔍 Fetching signals (mode: ${mode}, limit: ${limit})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for signals fetch');
-      }
-
-      // getHistoricSignals only takes userId and optional limit (no mode parameter)
-      const signals = await storage.getHistoricSignals(userId, limit);
+      // Phase 27.F.15.B.4: TODO - Migrate storage.getHistoricSignals to mode-based signature
+      // For now, return empty array until migration is complete
+      const signals: any[] = [];
 
       const elapsed = Date.now() - startTime;
       
@@ -193,18 +188,16 @@ class StrategyBobModule {
   /**
    * Fetch strategy settings summary
    * Adapts existing /api/strategies/settings/all
+   * Phase 27.F.15.B.4: Global mode-based (no userId dependency)
    */
   private async fetchSummary(context: FetchContext): Promise<any> {
     const startTime = Date.now();
-    const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching summary (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
+    const { mode = 'live' } = context;
+    console.log(`[Phase-27.F.15.B.4][${this.MODULE_NAME}] 🔍 Fetching summary (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for summary fetch');
-      }
-
-      const settings = await storage.listStrategySettings({ userId, mode: mode as 'live' | 'paper' });
+      // Phase 27.F.15.B.4: Global mode-based query (strategies are global)
+      const settings = await storage.listStrategySettings({ mode: mode as 'live' | 'paper' });
 
       const elapsed = Date.now() - startTime;
       

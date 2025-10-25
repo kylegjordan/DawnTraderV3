@@ -43,18 +43,15 @@ class ConfigBobModule {
   /**
    * Fetch goals summary for a specific mode
    * Mirrors /api/goals/summary endpoint
+   * Phase 27.F.15.B.4: Global mode-based (no userId dependency)
    */
   private async fetchGoals(context: FetchContext): Promise<any> {
     const startTime = Date.now();
-    const { mode = 'live', userId } = context;
-    console.log(`[${this.MODULE_NAME}] 🔍 Fetching goals (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
+    const { mode = 'live' } = context;
+    console.log(`[Phase-27.F.15.B.4][${this.MODULE_NAME}] 🔍 Fetching goals (mode: ${mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      if (!userId) {
-        throw new Error('userId is required for goals fetch');
-      }
-
-      // Fetch goals for the specified mode (GLOBAL - Phase 27.F.15.A)
+      // Phase 27.F.15.B.4: Fetch goals for the specified mode (GLOBAL)
       const userGoals = mode === 'live'
         ? await db.query.goalsLive.findMany({
             orderBy: (table, { asc }) => [asc(table.metricName)]
