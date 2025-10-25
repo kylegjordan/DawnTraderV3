@@ -351,28 +351,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     });
   });
 
-  // Phase 27.F.15.B.4-Prep: System health endpoint for dual-mode telemetry
+  // Phase 27.F.15.B.4: Production system health endpoint with live telemetry
   apiRouter.get('/system/health', async (_req, res) => {
     try {
-      const { ModeRegistry } = await import('./services/mode-registry');
-      res.json([
-        {
-          mode: 'paper',
-          engine: ModeRegistry.paper.engineStatus,
-          alerts: ModeRegistry.paper.alerts,
-          metricsSynced: true,
-          lastUpdate: ModeRegistry.paper.lastUpdate
-        },
-        {
-          mode: 'live',
-          engine: ModeRegistry.live.engineStatus,
-          alerts: ModeRegistry.live.alerts,
-          metricsSynced: true,
-          lastUpdate: ModeRegistry.live.lastUpdate
-        }
-      ]);
-    } catch (err) {
-      console.error('[Health] Error:', err);
+      const { getAllModeStatus } = await import('./services/mode-registry');
+      const registry = getAllModeStatus();
+      
+      const status = Object.entries(registry).map(([mode, data]) => ({
+        mode,
+        engine: data.engineStatus,
+        alerts: data.alerts,
+        trades: data.trades,
+        lastUpdate: data.lastUpdate,
+      }));
+      
+      console.log(`[Phase-27.F.15.B.4][Health] System health check: ${JSON.stringify(status)}`);
+      res.json(status);
+    } catch (err: any) {
+      console.error('[Phase-27.F.15.B.4][Health] Error:', err.message);
       res.status(500).json({ error: 'System health check failed' });
     }
   });
