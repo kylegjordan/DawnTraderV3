@@ -1,15 +1,18 @@
 /**
  * Phase 27.F.15.C: MetricsCore - Consolidated Metrics Calculation Service
+ * Phase 27.F.15.D: Enhanced with Live Pricing Integration
  * 
  * Single source of truth for ALL metrics calculations (paper + live).
  * Enforces Mode Separation Integrity (MSI):
  * - Paper: Supports "Continue" vs "Start New Simulation" resets
  * - Live: Never resets, persistent across sessions
  * - Shared calculation logic, separate storage & caching by mode
+ * - Live mode: Uses LivePricingAdapter for real-time unrealized P/L
  */
 
 import { storage } from '../storage.js';
 import { contextBridge } from './context-bridge.js';
+import { livePricingAdapter } from './live-pricing-adapter.js';
 
 type TradingMode = 'live' | 'paper';
 
@@ -87,14 +90,33 @@ class MetricsCore {
       // Calculate unrealized P/L from open trades
       let unrealizedPL = 0;
       let currentExposure = 0;
+      let livePricesUsed = 0;
       
       for (const trade of activeTrades) {
-        const tradeValue = parseFloat(trade.entryPrice) * parseFloat(trade.quantity);
+        const entryPrice = parseFloat(trade.entryPrice);
+        const quantity = parseFloat(trade.quantity);
+        const tradeValue = entryPrice * quantity;
         currentExposure += tradeValue;
         
-        // For unrealized P/L, we'd need current market prices from live feed
-        // For now, this is a placeholder - in production we'd fetch live prices
-        // The trade object doesn't have currentPrice, we'd need to fetch it separately
+        // Phase 27.F.15.D: Use live pricing for live mode unrealized P/L
+        if (mode === 'live') {
+          const currentPrice = livePricingAdapter.getPrice(trade.symbol);
+          if (currentPrice) {
+            const currentValue = currentPrice.price * quantity;
+            const positionPL = currentValue - tradeValue;
+            unrealizedPL += positionPL;
+            livePricesUsed++;
+            
+            console.log(`[27.F.15.D][Metrics-Live] ${trade.symbol}: Entry=$${entryPrice.toFixed(2)}, Current=$${currentPrice.price.toFixed(2)}, P/L=$${positionPL.toFixed(2)}`);
+          } else {
+            console.log(`[27.F.15.D][Metrics-Live] ⚠️ No live price for ${trade.symbol}, skipping unrealized P/L`);
+          }
+        }
+        // Paper mode: unrealized P/L calculated at position close time (not live pricing)
+      }
+      
+      if (mode === 'live' && livePricesUsed > 0) {
+        console.log(`[27.F.15.D][Metrics-Live] Unrealized P/L calculated using ${livePricesUsed}/${activeTrades.length} live prices`);
       }
 
       // Calculate realized P/L from closed trades
