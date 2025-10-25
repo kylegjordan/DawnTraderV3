@@ -3585,19 +3585,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           lastUpdatedBy: userId
         });
         
-        // Reset screener filters to defaults
-        await storage.upsertScreenerFilter({
-          userId,
-          minVolume: '5000',
-          minLiquidity: '0',
-          maxBidAskSpread: '2.0',
+        // Reset screener filters to defaults (Phase 27.F.14.L: Fixed method name and payload)
+        await storage.upsertScreenerFilters({
+          mode: 'paper',
+          minVolume: '5000.00',
+          minLiquidity: '0.00',
+          maxBidAskSpread: '2.00',
           minPrice: '0.01',
-          maxPrice: null,
-          volatilityMin: null,
-          volatilityMax: null,
-          rsiMin: null,
-          rsiMax: null,
-          excludeStablecoins: true
+          maxPrice: '10000.00',
+          volatilityMin: '0.50',
+          volatilityMax: '5.00',
+          rsiMin: 30,
+          rsiMax: 70,
+          minMarketCap: '100000000.00',
+          excludeStablecoins: true,
+          allowRegulatedOnly: false,
+          lastUpdatedBy: userId
         });
         
         // Reset trading pace to baseline
