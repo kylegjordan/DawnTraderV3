@@ -33,6 +33,9 @@ const DEFAULTS = {
   aiCanAdjust: false,
   maxRequiredCapital: 100000,
   maxRiskPerTradeLimit: 1000,
+  // Phase 27.F.14.MICRO: Micro-Execution Loop Controls
+  microLoopInterval: 8,
+  priceDeltaTrigger: 0.30,
 };
 
 const GLOBAL_DEFAULTS = {
@@ -49,6 +52,9 @@ interface Guardrails {
   aiCanAdjust: boolean;
   maxRequiredCapital: number;
   maxRiskPerTradeLimit: number;
+  // Phase 27.F.14.MICRO: Micro-Execution Loop Controls
+  microLoopInterval?: number;
+  priceDeltaTrigger?: number;
 }
 
 interface TradingSettings {
@@ -105,6 +111,9 @@ export default function GuardrailsTab() {
         aiCanAdjust: currentSettings.aiCanAdjust ?? DEFAULTS.aiCanAdjust,
         maxRequiredCapital: currentSettings.maxRequiredCapital ?? DEFAULTS.maxRequiredCapital,
         maxRiskPerTradeLimit: currentSettings.maxRiskPerTradeLimit ?? DEFAULTS.maxRiskPerTradeLimit,
+        // Phase 27.F.14.MICRO: Micro-Execution Loop Controls
+        microLoopInterval: currentSettings.microLoopInterval ?? DEFAULTS.microLoopInterval,
+        priceDeltaTrigger: currentSettings.priceDeltaTrigger ?? DEFAULTS.priceDeltaTrigger,
       });
       setHasChanges(false);
     }
@@ -512,6 +521,64 @@ export default function GuardrailsTab() {
               Maximum dollar amount at risk (stop-loss distance) allowed per trade
             </p>
           </div>
+        </div>
+
+        {/* Phase 27.F.14.MICRO: Micro-Execution Loop Controls */}
+        <div className="mt-6 mb-4">
+          <h3 className="font-semibold text-sm text-muted-foreground mb-4">
+            Micro-Execution Loop Controls (High-Frequency Monitoring)
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="space-y-2">
+                  <Label htmlFor="microLoopInterval">Micro-Loop Interval (seconds)</Label>
+                  <Input
+                    id="microLoopInterval"
+                    type="text"
+                    value={focusedField === 'microLoopInterval' ? (rawInputValues['microLoopInterval'] ?? settings.microLoopInterval ?? '') : formatNumberWithCommas(settings.microLoopInterval ?? '')}
+                    onChange={(e) => handleChange('microLoopInterval', e.target.value)}
+                    onFocus={() => setFocusedField('microLoopInterval')}
+                    onBlur={() => handleBlur('microLoopInterval', false)}
+                    data-testid="input-micro-loop-interval"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    How often to re-check Ready-to-Buy pairs for rapid price movements (5-15 seconds, default: 8)
+                  </p>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">Interval in seconds for high-frequency price monitoring. Lower values = more responsive but higher API usage. Range: 5-15 seconds.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="space-y-2">
+                  <Label htmlFor="priceDeltaTrigger">Price Delta Trigger (%)</Label>
+                  <Input
+                    id="priceDeltaTrigger"
+                    type="text"
+                    value={focusedField === 'priceDeltaTrigger' ? (rawInputValues['priceDeltaTrigger'] ?? settings.priceDeltaTrigger ?? '') : formatNumberWithCommas(settings.priceDeltaTrigger ?? '')}
+                    onChange={(e) => handleChange('priceDeltaTrigger', e.target.value)}
+                    onFocus={() => setFocusedField('priceDeltaTrigger')}
+                    onBlur={() => handleBlur('priceDeltaTrigger', false)}
+                    data-testid="input-price-delta-trigger"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Minimum price change percentage to trigger execution (0.20-0.60%, default: 0.30)
+                  </p>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">Minimum price movement required to trigger micro-execution. Lower values = more sensitive but more trades. Range: 0.20-0.60%.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-3">

@@ -1,0 +1,83 @@
+⚙️ Replit Directive — Phase 27.F.14.UI-SYNC
+
+Frontend Schema Rebuild + Goals Engine Field Synchronization
+
+🎯 Objective
+
+Force the Goals Engine, Filters, and Guardrails tabs to recognize the newly-added database fields and tunables (universe_size, quote_currencies, active_timeframes, confidence_threshold, cooldown_minutes, heartbeat_micro_interval, price_delta_trigger).
+No manual code edits required.
+
+🧱 Implementation Tasks (automated sequence)
+1️⃣ Rebuild and relink UI forms from schema
+npm run build:client -- --force
+
+
+Compiles the latest Drizzle schema and regenerates:
+
+FiltersForm
+
+GuardrailsForm
+
+GoalsForm
+
+2️⃣ Refresh Goals Engine schema bindings
+npm run refresh:goals-schema
+
+
+Updates logic so Average Return derives dynamically from Target Profit / Trades per Day based on mode presets (Conservative → Aggressive).
+
+3️⃣ Clear local cache & stale bundles
+npm run clean:ui-cache
+
+
+Purges any cached React bundles or outdated field definitions.
+
+4️⃣ Restart full stack
+npm run restart:full
+
+
+Restarts both backend + frontend, ensuring client connects to schema version ≥ 27.F.14.
+
+5️⃣ Verify schema keys (automatic test)
+
+After restart, the system runs quick endpoint checks:
+
+curl -s localhost:3000/api/screener_filters | grep -E 'universe_size|confidence_threshold'
+curl -s localhost:3000/api/guardrails | grep -E 'cooldown_minutes|heartbeat_micro_interval|price_delta_trigger'
+
+
+If those keys are found → UI will now populate new fields automatically.
+
+6️⃣ Auto-refresh browser session
+
+The directive issues a cache-busting reload (Ctrl+Shift+R equivalent) inside Replit’s preview pane.
+
+🧾 Expected Result
+Tab	New Section	Visible Fields
+Filters	Advanced Universe & Signal Controls	Market Universe Size, Quote Currencies, Active Timeframes, Confidence Threshold
+Guardrails	Execution Rhythm Controls	Symbol Cool-Down (min), Micro-Loop Interval (sec), Price-Delta Trigger (%)
+Goals	Dynamic Baseline Goals	Average Return auto-derived; targets shift with mode selection
+
+Logs →
+
+[UI] Schema version 27.F.14 synced  
+[GoalsEngine] Dynamic bindings updated successfully  
+[Guardrails] New fields rendered
+
+🚀 Execution Command (for Replit)
+
+Apply Phase 27.F.14.UI-SYNC — Frontend Schema Rebuild and Goals Engine Synchronization
+
+This command will:
+
+Rebuild client forms
+
+Refresh Goals schema bindings
+
+Clear caches
+
+Restart services
+
+Confirm endpoint fields
+
+Reload UI with new controls
