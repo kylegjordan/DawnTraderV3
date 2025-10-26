@@ -8,31 +8,27 @@ import { useToast } from "@/hooks/use-toast";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, RotateCcw, Info } from "lucide-react";
+import { Save, RotateCcw, Info, Target } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-interface GoalMetric {
-  metric: string;
-  description: string;
-  inputType: 'number' | 'integer' | 'decimal';
-  default: number;
-  min?: number;
-  max?: number;
-  step?: number;
+// Phase 27.F.14.UI-SYNC.2: Trading Pace Presets
+interface TradingPacePreset {
+  name: string;
+  tradesPerDay: number;
+  targetPerTrade: number;
 }
 
-const GOAL_METRICS: GoalMetric[] = [
-  { metric: 'Target Profit (%)', description: 'Desired average monthly gain', inputType: 'number', default: 5, min: 0, max: 100, step: 0.1 },
-  { metric: 'Max Drawdown (%)', description: 'Max allowable account loss', inputType: 'number', default: 10, min: 0, max: 100, step: 0.1 },
-  { metric: 'Daily Loss Limit (%)', description: 'Max daily loss before trading stops', inputType: 'number', default: 3, min: 0, max: 100, step: 0.1 },
-  { metric: 'Monthly Return Goal (%)', description: 'Monthly target return', inputType: 'number', default: 7, min: 0, max: 100, step: 0.1 },
-  { metric: 'Max Concurrent Trades', description: 'Max open trades allowed', inputType: 'integer', default: 5, min: 1, max: 50 },
-  { metric: 'Win Rate Target (%)', description: 'Desired trade win ratio', inputType: 'number', default: 60, min: 0, max: 100, step: 0.1 },
-  { metric: 'Average Risk/Reward Ratio', description: 'Desired ratio between risk and reward', inputType: 'decimal', default: 2.0, min: 0.1, max: 10, step: 0.1 },
-  { metric: 'Max Portfolio Exposure (%)', description: 'Max % of balance in trades', inputType: 'number', default: 75, min: 0, max: 100, step: 0.1 },
-  { metric: 'Stop Loss Strictness (%)', description: 'How tight stop-losses should be', inputType: 'number', default: 80, min: 0, max: 100, step: 1 },
-  { metric: 'Rebalancing Frequency (Days)', description: 'Days between goal re-evaluations', inputType: 'integer', default: 30, min: 1, max: 90 },
+const TRADING_PACE_PRESETS: TradingPacePreset[] = [
+  { name: 'Conservative', tradesPerDay: 2, targetPerTrade: 20 },
+  { name: 'Baseline', tradesPerDay: 4, targetPerTrade: 25 },
+  { name: 'Optimistic', tradesPerDay: 6, targetPerTrade: 30 },
+  { name: 'Aggressive', tradesPerDay: 8, targetPerTrade: 35 },
 ];
+
+const DEFAULT_GOALS = {
+  tradesPerDay: 4,
+  targetPerTrade: 25,
+};
 
 interface UserGoal {
   id: string;
@@ -48,7 +44,11 @@ interface UserGoal {
 export default function GoalsTable() {
   const { mode } = useTradingMode();
   const { toast } = useToast();
-  const [values, setValues] = useState<Record<string, number>>({});
+  const [tradesPerDay, setTradesPerDay] = useState(DEFAULT_GOALS.tradesPerDay);
+  const [targetPerTrade, setTargetPerTrade] = useState(DEFAULT_GOALS.targetPerTrade);
+  
+  // Auto-calculated daily profit
+  const targetDailyProfit = tradesPerDay * targetPerTrade;
 
   const { data: goalsData, isLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
     queryKey: ['goals', 'summary', mode],
@@ -61,36 +61,37 @@ export default function GoalsTable() {
 
   useEffect(() => {
     if (goalsData?.goals && goalsData.goals.length > 0) {
-      const newValues: Record<string, number> = {};
-      goalsData.goals.forEach((goal) => {
-        newValues[goal.metricName] = parseFloat(goal.goalValue) || 0;
-      });
+      const tradesGoal = goalsData.goals.find(g => g.metricName === 'Trades per Day');
+      const targetGoal = goalsData.goals.find(g => g.metricName === 'Target per Trade ($)');
       
-      GOAL_METRICS.forEach((metric) => {
-        if (!(metric.metric in newValues)) {
-          newValues[metric.metric] = metric.default;
-        }
-      });
-      
-      setValues(newValues);
-    } else {
-      const defaults: Record<string, number> = {};
-      GOAL_METRICS.forEach((metric) => {
-        defaults[metric.metric] = metric.default;
-      });
-      setValues(defaults);
+      setTradesPerDay(tradesGoal ? parseFloat(tradesGoal.goalValue) : DEFAULT_GOALS.tradesPerDay);
+      setTargetPerTrade(targetGoal ? parseFloat(targetGoal.goalValue) : DEFAULT_GOALS.targetPerTrade);
     }
   }, [goalsData]);
 
   const saveMutation = useMutation({
-    mutationFn: async (goals: { metricName: string; goalValue: number }[]) => {
+    mutationFn: async () => {
       const payload = {
-        goals: goals.map((g) => ({
-          metricName: g.metricName,
-          goalValue: g.goalValue,
-          actualValue: 0,
-          percentAchieved: 0,
-        })),
+        goals: [
+          {
+            metricName: 'Trades per Day',
+            goalValue: tradesPerDay,
+            actualValue: 0,
+            percentAchieved: 0,
+          },
+          {
+            metricName: 'Target per Trade ($)',
+            goalValue: targetPerTrade,
+            actualValue: 0,
+            percentAchieved: 0,
+          },
+          {
+            metricName: 'Target Daily Profit ($)',
+            goalValue: targetDailyProfit,
+            actualValue: 0,
+            percentAchieved: 0,
+          },
+        ],
         mode,
       };
       return apiRequest('POST', '/api/goals/update', payload);
@@ -112,22 +113,24 @@ export default function GoalsTable() {
   });
 
   const handleSave = () => {
-    const goals = GOAL_METRICS.map((metric) => ({
-      metricName: metric.metric,
-      goalValue: values[metric.metric] || metric.default,
-    }));
-    saveMutation.mutate(goals);
+    saveMutation.mutate();
   };
 
   const handleReset = () => {
-    const defaults: Record<string, number> = {};
-    GOAL_METRICS.forEach((metric) => {
-      defaults[metric.metric] = metric.default;
-    });
-    setValues(defaults);
+    setTradesPerDay(DEFAULT_GOALS.tradesPerDay);
+    setTargetPerTrade(DEFAULT_GOALS.targetPerTrade);
     toast({
       title: "Reset Complete",
       description: "Goals have been reset to defaults.",
+    });
+  };
+
+  const applyPreset = (preset: TradingPacePreset) => {
+    setTradesPerDay(preset.tradesPerDay);
+    setTargetPerTrade(preset.targetPerTrade);
+    toast({
+      title: `${preset.name} Pace Applied`,
+      description: `Set to ${preset.tradesPerDay} trades/day at $${preset.targetPerTrade}/trade`,
     });
   };
 
@@ -148,7 +151,10 @@ export default function GoalsTable() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Trading Goals Configuration</CardTitle>
+          <div className="flex items-center gap-2">
+            <Target className="w-5 h-5" />
+            <CardTitle>Trading Goals Configuration</CardTitle>
+          </div>
           <div className="flex gap-2">
             <Button
               onClick={handleReset}
@@ -171,41 +177,125 @@ export default function GoalsTable() {
           </div>
         </div>
         <p className="text-sm text-muted-foreground mt-2">
-          Define your trading performance targets and risk parameters
+          Set your daily trading targets - LATTI will tune strategies to achieve these goals
         </p>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {GOAL_METRICS.map((metric) => (
-            <div key={metric.metric} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-              <div className="md:col-span-5">
-                <div className="flex items-center gap-2">
-                  <Label className="font-medium">{metric.metric}</Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{metric.description}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              </div>
-              <div className="md:col-span-7">
-                <Input
-                  type="number"
-                  value={values[metric.metric] || metric.default}
-                  onChange={(e) => setValues({ ...values, [metric.metric]: parseFloat(e.target.value) || 0 })}
-                  min={metric.min}
-                  max={metric.max}
-                  step={metric.step || 1}
-                  data-testid={`input-goal-${metric.metric.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-                />
-              </div>
+      <CardContent className="space-y-6">
+        {/* Trading Pace Presets */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Trading Pace Presets</Label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {TRADING_PACE_PRESETS.map((preset) => (
+              <Button
+                key={preset.name}
+                variant="outline"
+                onClick={() => applyPreset(preset)}
+                className="flex flex-col h-auto py-3 gap-1"
+                data-testid={`button-preset-${preset.name.toLowerCase()}`}
+              >
+                <span className="font-semibold">{preset.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {preset.tradesPerDay} trades/day
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  ${preset.targetPerTrade}/trade
+                </span>
+                <span className="text-xs font-medium text-primary">
+                  ${preset.tradesPerDay * preset.targetPerTrade}/day
+                </span>
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <div className="h-px bg-border" />
+
+        {/* Manual Goal Inputs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="tradesPerDay" className="font-medium">Trades per Day</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Target number of trades to execute daily. LATTI tunes based on mode.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
-          ))}
+            <Input
+              id="tradesPerDay"
+              type="number"
+              value={tradesPerDay}
+              onChange={(e) => setTradesPerDay(parseFloat(e.target.value) || 0)}
+              min={1}
+              max={20}
+              step={1}
+              data-testid="input-trades-per-day"
+            />
+            <p className="text-xs text-muted-foreground">
+              How many trades you want to execute per day
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="targetPerTrade" className="font-medium">Target per Trade ($)</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Target profit amount for each trade</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <Input
+              id="targetPerTrade"
+              type="number"
+              value={targetPerTrade}
+              onChange={(e) => setTargetPerTrade(parseFloat(e.target.value) || 0)}
+              min={1}
+              max={200}
+              step={1}
+              data-testid="input-target-per-trade"
+            />
+            <p className="text-xs text-muted-foreground">
+              Desired profit per individual trade
+            </p>
+          </div>
+        </div>
+
+        {/* Auto-calculated Daily Profit */}
+        <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">Target Daily Profit (Auto-Calculated)</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Trades per Day × Target per Trade
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold text-primary" data-testid="text-daily-profit">
+                ${targetDailyProfit.toFixed(2)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                per day
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 bg-muted/50 rounded-lg">
+          <p className="text-sm text-muted-foreground">
+            <Info className="w-4 h-4 inline mr-2" />
+            LATTI automatically adjusts trading parameters nightly to pursue these goals while respecting your risk guardrails.
+          </p>
         </div>
       </CardContent>
     </Card>
