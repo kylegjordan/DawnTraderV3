@@ -1,4 +1,10 @@
 /**
+ * Phase 27.F.14.MICRO: Import types for engine management
+ */
+import type { PaperExecutionEngine } from './paper-execution-engine';
+import type { MicroExecutionService } from './micro-execution-service';
+
+/**
  * Phase 27.F.15.B.4: ModeRegistry - Production Telemetry Layer
  * 
  * Global real-time telemetry registry for paper and live trading modes.
@@ -34,6 +40,43 @@ export const ModeRegistry: ModeRegistryType = {
     lastUpdate: new Date()
   },
 };
+
+/**
+ * Phase 27.F.14.MICRO: Engine Instance Registry
+ * Stores global engine instances per mode
+ */
+const engineInstances: Map<string, PaperExecutionEngine | null> = new Map();
+const microExecutionInstances: Map<string, MicroExecutionService | null> = new Map();
+
+/**
+ * Register a paper execution engine for a mode
+ */
+export function registerEngine(mode: 'live' | 'paper', engine: PaperExecutionEngine): void {
+  engineInstances.set(mode, engine);
+  console.log(`[ModeRegistry] Registered ${mode} execution engine`);
+}
+
+/**
+ * Get the registered engine for a mode
+ */
+export function getEngine(mode: 'live' | 'paper'): PaperExecutionEngine | null {
+  return engineInstances.get(mode) || null;
+}
+
+/**
+ * Register a micro-execution service for a mode
+ */
+export function registerMicroService(mode: 'live' | 'paper', service: MicroExecutionService): void {
+  microExecutionInstances.set(mode, service);
+  console.log(`[ModeRegistry] Registered ${mode} micro-execution service`);
+}
+
+/**
+ * Get the registered micro-execution service for a mode
+ */
+export function getMicroService(mode: 'live' | 'paper'): MicroExecutionService | null {
+  return microExecutionInstances.get(mode) || null;
+}
 
 /**
  * Update mode registry status with WebSocket broadcast

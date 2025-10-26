@@ -248,6 +248,10 @@ export const guardrails = pgTable("guardrails", {
   // Phase 27.F.14: Execution Rhythm Controls
   cooldownMinutes: integer("cooldown_minutes").default(15), // Symbol cooldown period in minutes (0-90)
   
+  // Phase 27.F.14.MICRO: Micro-Execution Loop Controls
+  microLoopInterval: integer("micro_loop_interval").default(8), // Micro-loop interval in seconds (5-15)
+  priceDeltaTrigger: decimal("price_delta_trigger", { precision: 5, scale: 2 }).default("0.30"), // Minimum % price change to trigger micro-check (0.20-0.60)
+  
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({

@@ -1,6 +1,8 @@
 import { storage } from '../storage';
 import { PaperExecutionEngine } from './paper-execution-engine';
+import { MicroExecutionService } from './micro-execution-service';
 import { KrakenService } from './kraken';
+import { registerEngine, registerMicroService } from './mode-registry';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -37,6 +39,7 @@ export class PaperPortfolioManager {
   private mode: 'live' | 'paper'; // Phase 27.F.13.O: Mode-based (not per-user)
   private userId: string; // Phase 27.F.13.O: Kept for audit/logging only
   private executionEngine: PaperExecutionEngine;
+  private microExecutionService: MicroExecutionService; // Phase 27.F.14.MICRO
   private kraken: KrakenService;
   private isRunning: boolean = false;
   private watchlistRefreshInterval: NodeJS.Timeout | null = null;
@@ -51,7 +54,11 @@ export class PaperPortfolioManager {
     this.mode = mode;
     this.userId = userId || 'system'; // Fallback for backward compatibility
     this.executionEngine = new PaperExecutionEngine(mode, userId);
+    this.microExecutionService = new MicroExecutionService(mode); // Phase 27.F.14.MICRO
     this.kraken = new KrakenService();
+    
+    // Phase 27.F.14.MICRO: Link micro-service to main execution engine
+    this.microExecutionService.setPaperEngine(this.executionEngine);
   }
 
   async start(): Promise<void> {
@@ -71,8 +78,15 @@ export class PaperPortfolioManager {
     this.isRunning = true;
     console.log(`[PaperPortfolio:${this.userId}] Starting paper portfolio manager`);
 
+    // Phase 27.F.14.MICRO: Register engines with mode registry
+    registerEngine(this.mode, this.executionEngine);
+    registerMicroService(this.mode, this.microExecutionService);
+
     // Start execution engine
     await this.executionEngine.start();
+
+    // Phase 27.F.14.MICRO: Start micro-execution service
+    await this.microExecutionService.start();
 
     // Start watchlist refresh cycle
     console.log(`[PaperPortfolio:${this.userId}] Starting watchlist refresh (every ${this.WATCHLIST_REFRESH_INTERVAL_MS / 1000}s)`);
@@ -98,6 +112,9 @@ export class PaperPortfolioManager {
       this.watchlistRefreshInterval = null;
       console.log(`[PaperPortfolio:${this.userId}] Stopped watchlist refresh`);
     }
+
+    // Phase 27.F.14.MICRO: Stop micro-execution service
+    await this.microExecutionService.stop();
 
     // Stop execution engine
     await this.executionEngine.stop();

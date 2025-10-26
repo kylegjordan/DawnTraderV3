@@ -496,6 +496,33 @@ app.use((req, res, next) => {
       await livePricingAdapter.start(useMockMode);
       
       console.log('[27.F.15.D] ✅ LivePricingAdapter started successfully');
+      
+      // Phase 27.F.14.MICRO: Forward price updates to MicroExecutionService
+      // Set up price update forwarder that feeds live prices to micro-execution services
+      setInterval(async () => {
+        try {
+          const { getMicroService } = await import('./services/mode-registry');
+          const prices = livePricingAdapter.getAllPrices();
+          
+          for (const quote of prices) {
+            // Forward to paper micro-service
+            const paperMicroService = getMicroService('paper');
+            if (paperMicroService) {
+              paperMicroService.updatePrice(quote.symbol, quote.price);
+            }
+            
+            // Forward to live micro-service (if it exists)
+            const liveMicroService = getMicroService('live');
+            if (liveMicroService) {
+              liveMicroService.updatePrice(quote.symbol, quote.price);
+            }
+          }
+        } catch (error) {
+          // Silently continue - micro-services might not be running yet
+        }
+      }, 1000); // Update every second (fast enough for micro-loop)
+      
+      console.log('[27.F.14.MICRO] ✅ Price update forwarder started');
     } catch (error) {
       console.error('[27.F.15.D] ⚠️ LivePricingAdapter startup failed:', error);
     }
