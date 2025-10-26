@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { useState, useEffect, useRef } from "react";
 import { Filter, Save, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +29,11 @@ const DEFAULTS = {
   minLiquidity: 500000,
   excludeStablecoins: true,
   allowRegulatedOnly: false,
+  // Phase 27.F.14.UI-SYNC.2: Advanced Universe & Signal Controls
+  universeSize: 100,
+  quoteCurrencies: ['USD'],
+  activeTimeframes: ['5m', '15m', '1h'],
+  confidenceThreshold: 60,
 };
 
 interface ScreenerFilters {
@@ -42,6 +49,11 @@ interface ScreenerFilters {
   minLiquidity: number | string;
   excludeStablecoins: boolean;
   allowRegulatedOnly: boolean;
+  // Phase 27.F.14.UI-SYNC.2: Advanced Universe & Signal Controls
+  universeSize?: number;
+  quoteCurrencies?: string[];
+  activeTimeframes?: string[];
+  confidenceThreshold?: number;
 }
 
 interface CalibrationData {
@@ -122,6 +134,11 @@ export default function ScreenerFiltersTab() {
         minLiquidity: parseValue(currentFilters.minLiquidity, DEFAULTS.minLiquidity),
         excludeStablecoins: currentFilters.excludeStablecoins ?? DEFAULTS.excludeStablecoins,
         allowRegulatedOnly: currentFilters.allowRegulatedOnly ?? DEFAULTS.allowRegulatedOnly,
+        // Phase 27.F.14.UI-SYNC.2: Advanced Universe & Signal Controls
+        universeSize: currentFilters.universeSize ?? DEFAULTS.universeSize,
+        quoteCurrencies: currentFilters.quoteCurrencies ?? DEFAULTS.quoteCurrencies,
+        activeTimeframes: currentFilters.activeTimeframes ?? DEFAULTS.activeTimeframes,
+        confidenceThreshold: currentFilters.confidenceThreshold ?? DEFAULTS.confidenceThreshold,
       });
       setHasChanges(false);
     }
@@ -457,6 +474,126 @@ export default function ScreenerFiltersTab() {
                 <Label htmlFor="allowRegulatedOnly" className="text-xs cursor-pointer">
                   Regulated Assets Only
                 </Label>
+              </div>
+            </div>
+          </div>
+
+          {/* Phase 27.F.14.UI-SYNC.2: Advanced Universe & Signal Controls */}
+          <div className="mt-8 space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-cyan-500" />
+              Advanced Universe & Signal Controls
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Market Universe Size */}
+              <div className="space-y-2 p-4 border rounded-lg">
+                <Label htmlFor="universeSize" className="text-sm font-medium">Market Universe Size</Label>
+                <Select
+                  value={String(filters.universeSize ?? DEFAULTS.universeSize)}
+                  onValueChange={(value) => {
+                    setFilters(prev => ({ ...prev, universeSize: parseInt(value) }));
+                    setHasChanges(true);
+                  }}
+                >
+                  <SelectTrigger data-testid="select-universe-size">
+                    <SelectValue placeholder="Select size" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25 pairs</SelectItem>
+                    <SelectItem value="50">50 pairs</SelectItem>
+                    <SelectItem value="75">75 pairs</SelectItem>
+                    <SelectItem value="100">100 pairs</SelectItem>
+                    <SelectItem value="150">150 pairs</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Maximum number of trading pairs to monitor
+                </p>
+              </div>
+
+              {/* Confidence Threshold */}
+              <div className="space-y-3 p-4 border rounded-lg">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="confidenceThreshold" className="text-sm font-medium">
+                    Confidence Threshold ({filters.confidenceThreshold ?? DEFAULTS.confidenceThreshold}%)
+                  </Label>
+                </div>
+                <Slider
+                  id="confidenceThreshold"
+                  min={40}
+                  max={90}
+                  step={5}
+                  value={[filters.confidenceThreshold ?? DEFAULTS.confidenceThreshold]}
+                  onValueChange={(values) => {
+                    setFilters(prev => ({ ...prev, confidenceThreshold: values[0] }));
+                    setHasChanges(true);
+                  }}
+                  data-testid="slider-confidence-threshold"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum confidence level required for trade signals (40-90%)
+                </p>
+              </div>
+
+              {/* Quote Currencies */}
+              <div className="space-y-2 p-4 border rounded-lg">
+                <Label className="text-sm font-medium">Quote Currencies</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {['USD', 'USDT', 'USDC', 'EUR', 'GBP'].map((currency) => (
+                    <div key={currency} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`quote-${currency}`}
+                        checked={(filters.quoteCurrencies ?? DEFAULTS.quoteCurrencies).includes(currency)}
+                        onCheckedChange={(checked) => {
+                          const current = filters.quoteCurrencies ?? DEFAULTS.quoteCurrencies;
+                          const updated = checked 
+                            ? [...current, currency]
+                            : current.filter(c => c !== currency);
+                          setFilters(prev => ({ ...prev, quoteCurrencies: updated }));
+                          setHasChanges(true);
+                        }}
+                        data-testid={`checkbox-quote-${currency.toLowerCase()}`}
+                      />
+                      <Label htmlFor={`quote-${currency}`} className="text-xs cursor-pointer">
+                        {currency}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select which quote currencies to include in trading pairs
+                </p>
+              </div>
+
+              {/* Active Timeframes */}
+              <div className="space-y-2 p-4 border rounded-lg">
+                <Label className="text-sm font-medium">Active Timeframes</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {['5m', '15m', '1h', '4h'].map((timeframe) => (
+                    <div key={timeframe} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`timeframe-${timeframe}`}
+                        checked={(filters.activeTimeframes ?? DEFAULTS.activeTimeframes).includes(timeframe)}
+                        onCheckedChange={(checked) => {
+                          const current = filters.activeTimeframes ?? DEFAULTS.activeTimeframes;
+                          const updated = checked 
+                            ? [...current, timeframe]
+                            : current.filter(t => t !== timeframe);
+                          setFilters(prev => ({ ...prev, activeTimeframes: updated }));
+                          setHasChanges(true);
+                        }}
+                        data-testid={`checkbox-timeframe-${timeframe}`}
+                      />
+                      <Label htmlFor={`timeframe-${timeframe}`} className="text-xs cursor-pointer">
+                        {timeframe}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select timeframes for technical analysis
+                </p>
               </div>
             </div>
           </div>
