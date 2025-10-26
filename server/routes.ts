@@ -4144,6 +4144,39 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 27.F.14.DIAG: Last Cycle Telemetry (diagnostic endpoint)
+  apiRouter.get('/paper-sim/last-cycle', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { PaperExecutionEngine } = await import('./services/paper-execution-engine.js');
+      const { modeRegistry } = await import('./services/mode-registry.js');
+      
+      // Get paper execution engine from mode registry
+      const paperEngine = modeRegistry.getEngine('paper');
+      
+      if (!paperEngine) {
+        return res.json({ 
+          ok: false, 
+          error: 'Paper engine not found',
+          data: {} 
+        });
+      }
+      
+      // Get last cycle summary from engine
+      const lastCycleSummary = paperEngine.getLastCycleSummary();
+      
+      res.json({ 
+        ok: true, 
+        data: lastCycleSummary || {} 
+      });
+    } catch (error) {
+      console.error('[LastCycleTelemetry] Error:', error);
+      res.status(500).json({ 
+        ok: false, 
+        error: error instanceof Error ? error.message : 'Failed to fetch last cycle data' 
+      });
+    }
+  });
+
   apiRouter.get('/ai/conversation', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;

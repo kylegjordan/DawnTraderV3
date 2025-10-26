@@ -8,6 +8,7 @@ import { AssetCapabilitiesService } from './asset-capabilities';
 export interface RiskCheckResult {
   approved: boolean;
   reason?: string;
+  code?: string; // Phase 27.F.14.DIAG: Reason code for diagnostics
 }
 
 interface BalanceCache {
@@ -393,6 +394,9 @@ export class RiskManager {
     mode: 'live' | 'paper',
     signal: TradeSignal
   ): Promise<RiskCheckResult> {
+    // [27.F.14.DIAG] DIAGNOSTIC: Check start
+    console.log(`[Risk] check_start {symbol:${signal.symbol}, check:cooldown, mode:${mode}}`);
+    
     try {
       // Get cooldown setting from guardrails
       const guardrails = await storage.getGuardrails({ mode });
@@ -416,7 +420,7 @@ export class RiskManager {
 
       if (!lastTrades || lastTrades.length === 0) {
         // No previous trades, approve
-        console.log(`[27.F.14][RiskManager] No previous trades for ${signal.symbol}, cooldown check passed`);
+        console.log(`[Risk] cooldown_skip {symbol:${signal.symbol}, reason:no_previous_trades, cooldownMinutes:${cooldownMinutes}}`);
         return { approved: true };
       }
 
@@ -427,17 +431,20 @@ export class RiskManager {
 
       if (minutesSinceLastTrade < cooldownMinutes) {
         const remainingMinutes = Math.ceil(cooldownMinutes - minutesSinceLastTrade);
-        console.log(`[27.F.14][RiskManager] Cooldown active for ${signal.symbol}: ${remainingMinutes} minutes remaining`);
+        // [27.F.14.DIAG] DIAGNOSTIC: Risk check failed with reason code
+        console.warn(`[Risk] risk_check_failed {code:COOLDOWN, symbol:${signal.symbol}, details:{minutesSince:${minutesSinceLastTrade.toFixed(1)}, cooldownMinutes:${cooldownMinutes}, remainingMinutes:${remainingMinutes}}}`);
         return {
           approved: false,
+          code: 'COOLDOWN',
           reason: `Symbol ${signal.symbol} is in cooldown period. ${remainingMinutes} minute(s) remaining (last traded ${Math.floor(minutesSinceLastTrade)} minute(s) ago).`
         };
       }
 
-      console.log(`[27.F.14][RiskManager] Cooldown check passed for ${signal.symbol} (last traded ${Math.floor(minutesSinceLastTrade)} minutes ago, cooldown: ${cooldownMinutes} minutes)`);
+      // [27.F.14.DIAG] DIAGNOSTIC: Cooldown check passed
+      console.log(`[Risk] cooldown_skip {symbol:${signal.symbol}, lastCloseTs:${lastTradeTime}, minutesSince:${minutesSinceLastTrade.toFixed(1)}, cooldownMinutes:${cooldownMinutes}}`);
       return { approved: true };
     } catch (error) {
-      console.error(`[27.F.14][RiskManager] Error checking cooldown:`, error);
+      console.error(`[Risk] Error checking cooldown:`, error);
       // On error, approve to avoid blocking trades
       return { approved: true };
     }
@@ -451,6 +458,9 @@ export class RiskManager {
     mode: 'live' | 'paper',
     signal: TradeSignal
   ): Promise<RiskCheckResult> {
+    // [27.F.14.DIAG] DIAGNOSTIC: Check start
+    console.log(`[Risk] check_start {symbol:${signal.symbol}, check:max_positions_per_asset, mode:${mode}}`);
+    
     const activePositions = await this.getActivePositions(mode);
     
     // Extract base asset from symbol - handles all Kraken variants
@@ -478,8 +488,11 @@ export class RiskManager {
     });
 
     if (existingPosition) {
+      // [27.F.14.DIAG] DIAGNOSTIC: Risk check failed
+      console.warn(`[Risk] risk_check_failed {code:POSITION_LIMIT, symbol:${signal.symbol}, details:{normalizedSymbol:${normalizedSymbol}, existingPosition:true}}`);
       return {
         approved: false,
+        code: 'POSITION_LIMIT',
         reason: `🛡️ Safety: Already have an open position in ${normalizedSymbol}. Max 1 position per asset allowed.`
       };
     }

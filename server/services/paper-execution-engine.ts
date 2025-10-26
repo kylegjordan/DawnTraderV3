@@ -373,6 +373,16 @@ export class PaperExecutionEngine {
           }
         }
       }
+
+      // [27.F.14.DIAG] Cache last cycle summary for telemetry
+      this.lastCycleSummary = {
+        timestamp: new Date().toISOString(),
+        readyToBuyCount: watchlist.length,
+        pulledCount: evaluatedSymbols.length,
+        evaluatedSymbols: evaluatedSymbols,
+        tradesExecuted: tradesExecuted,
+        mode: this.mode
+      };
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Error in signal scanning:`, error);
     }
@@ -466,6 +476,9 @@ export class PaperExecutionEngine {
       const bestSignal = signals.reduce((prev, current) => 
         current.confidence > prev.confidence ? current : prev
       );
+
+      // [27.F.14.DIAG] DIAGNOSTIC: Signal snapshot with confidence evaluation
+      console.log(`[Exec] signal_snapshot {symbol:${bestSignal.symbol}, strategy:${bestSignal.strategy}, confidence:${bestSignal.confidence.toFixed(3)}, entryPrice:${bestSignal.entryPrice.toFixed(2)}}`);
 
       // [27.F.14.B] INSTRUMENTATION: Candidate selected
       console.log(`[27.F.14.B][PaperSim] candidate_selected {symbol:"${bestSignal.symbol}", strategy:"${bestSignal.strategy}", confidence:${(bestSignal.confidence * 100).toFixed(1)}%}`);
