@@ -309,10 +309,22 @@ export class PaperExecutionEngine {
   }
 
   private async scanForSignals(): Promise<void> {
+    // [27.F.14.DIAG] Initialize default summary to prevent stale data on early exits
+    const cycleTimestamp = new Date().toISOString();
+    
     try {
       const settings = await storage.getTradingSettings("system");
       if (!settings) {
         console.warn(`[PaperExecution:${this.mode}] No trading settings found`);
+        // Update summary even on early exit
+        this.lastCycleSummary = {
+          timestamp: cycleTimestamp,
+          readyToBuyCount: 0,
+          pulledCount: 0,
+          evaluatedSymbols: [],
+          tradesExecuted: 0,
+          mode: this.mode
+        };
         return;
       }
 
@@ -320,6 +332,15 @@ export class PaperExecutionEngine {
       const watchlist = await storage.getWatchlist({ mode: this.mode });
       if (watchlist.length === 0) {
         console.log(`[PaperExecution:${this.mode}] No watchlist pairs configured`);
+        // Update summary even on early exit
+        this.lastCycleSummary = {
+          timestamp: cycleTimestamp,
+          readyToBuyCount: 0,
+          pulledCount: 0,
+          evaluatedSymbols: [],
+          tradesExecuted: 0,
+          mode: this.mode
+        };
         return;
       }
 
@@ -375,16 +396,26 @@ export class PaperExecutionEngine {
       }
 
       // [27.F.14.DIAG] Cache last cycle summary for telemetry
+      // Clone evaluatedSymbols for thread safety
       this.lastCycleSummary = {
-        timestamp: new Date().toISOString(),
+        timestamp: cycleTimestamp,
         readyToBuyCount: watchlist.length,
         pulledCount: evaluatedSymbols.length,
-        evaluatedSymbols: evaluatedSymbols,
+        evaluatedSymbols: [...evaluatedSymbols], // Defensive copy for thread safety
         tradesExecuted: tradesExecuted,
         mode: this.mode
       };
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Error in signal scanning:`, error);
+      // [27.F.14.DIAG] Update summary even on error to prevent stale data
+      this.lastCycleSummary = {
+        timestamp: cycleTimestamp,
+        readyToBuyCount: 0,
+        pulledCount: 0,
+        evaluatedSymbols: [],
+        tradesExecuted: 0,
+        mode: this.mode
+      };
     }
   }
 
