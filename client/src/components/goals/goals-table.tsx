@@ -46,6 +46,8 @@ export default function GoalsTable() {
   const { toast } = useToast();
   const [tradesPerDay, setTradesPerDay] = useState(DEFAULT_GOALS.tradesPerDay);
   const [targetPerTrade, setTargetPerTrade] = useState(DEFAULT_GOALS.targetPerTrade);
+  const [feasibilityStatus, setFeasibilityStatus] = useState<'OK' | 'WARN' | 'BLOCK' | null>(null);
+  const [feasibilityReason, setFeasibilityReason] = useState<string>('');
   
   // Auto-calculated daily profit
   const targetDailyProfit = tradesPerDay * targetPerTrade;
@@ -96,18 +98,48 @@ export default function GoalsTable() {
       };
       return apiRequest('POST', '/api/goals/update', payload);
     },
-    onSuccess: () => {
+    onSuccess: (response: any) => {
+      // Phase 27.F.14.UI-SYNC.8: Capture feasibility feedback from backend
+      if (response.feasibility) {
+        setFeasibilityStatus(response.feasibility.status);
+        setFeasibilityReason(response.feasibility.reason);
+        
+        // Show visual feedback based on status
+        if (response.feasibility.status === 'WARN') {
+          toast({
+            title: "⚠️ Goals Saved with Warning",
+            description: response.feasibility.reason,
+            variant: "default",
+          });
+        } else if (response.feasibility.status === 'OK') {
+          setFeasibilityStatus('OK');
+          setFeasibilityReason(response.feasibility.reason);
+        }
+      } else {
+        setFeasibilityStatus(null);
+        setFeasibilityReason('');
+      }
+      
       // Phase 27.F.14.UI-SYNC.8: Invalidate both Trading Goals and Performance Metrics caches
       queryClient.invalidateQueries({ queryKey: ['goals', 'summary', mode] });
       queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] }); // Sync with Performance Metrics
-      toast({
-        title: "Goals Saved",
-        description: "Your trading goals have been saved successfully.",
-      });
+      
+      if (!response.feasibility || response.feasibility.status === 'OK') {
+        toast({
+          title: "✅ Goals Saved",
+          description: "Your trading goals have been saved successfully.",
+        });
+      }
     },
     onError: (error: any) => {
+      // Phase 27.F.14.UI-SYNC.8: Handle BLOCK status from backend
+      if (error.message && error.message.includes('exceeds')) {
+        setFeasibilityStatus('BLOCK');
+        setFeasibilityReason(error.message);
+      }
+      
       toast({
-        title: "Error",
+        title: "❌ Error",
         description: error.message || "Failed to save goals",
         variant: "destructive",
       });
@@ -157,7 +189,40 @@ export default function GoalsTable() {
             <Target className="w-5 h-5" />
             <CardTitle>Trading Goals Configuration</CardTitle>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* Phase 27.F.14.UI-SYNC.8: Feasibility Status Indicator */}
+            {feasibilityStatus && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border" data-testid="feasibility-indicator">
+                      {feasibilityStatus === 'OK' && (
+                        <div className="flex items-center gap-1.5 text-green-600 border-green-600">
+                          <div className="w-2 h-2 bg-green-600 rounded-full" />
+                          <span>OK</span>
+                        </div>
+                      )}
+                      {feasibilityStatus === 'WARN' && (
+                        <div className="flex items-center gap-1.5 text-amber-600 border-amber-600">
+                          <div className="w-2 h-2 bg-amber-600 rounded-full" />
+                          <span>WARN</span>
+                        </div>
+                      )}
+                      {feasibilityStatus === 'BLOCK' && (
+                        <div className="flex items-center gap-1.5 text-red-600 border-red-600">
+                          <div className="w-2 h-2 bg-red-600 rounded-full" />
+                          <span>BLOCK</span>
+                        </div>
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-sm">{feasibilityReason}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            
             <Button
               onClick={handleReset}
               variant="outline"
