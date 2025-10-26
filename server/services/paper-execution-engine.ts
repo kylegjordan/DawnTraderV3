@@ -335,12 +335,29 @@ export class PaperExecutionEngine {
         }
       });
 
+      let tradesExecuted = 0;
+
       // Scan each symbol
       for (const pair of watchlist) {
         try {
-          await this.checkSymbolForSignal(pair.symbol, settings);
+          const executed = await this.checkSymbolForSignal(pair.symbol, settings);
+          if (executed) tradesExecuted++;
         } catch (error) {
           console.error(`[PaperExecution:${this.mode}] Error scanning ${pair.symbol}:`, error);
+        }
+      }
+
+      // [27.F.14.B] PAPER_FORCE_TRADE_SYMBOL: Deterministic Testing
+      // MSI Guard: Only inject forced trades in paper mode
+      if (this.mode === 'paper' && tradesExecuted === 0) {
+        const forceSymbol = process.env.PAPER_FORCE_TRADE_SYMBOL;
+        if (forceSymbol) {
+          console.log(`[27.F.14.B][PaperSim] No qualified trades. Injecting forced trade: ${forceSymbol}`);
+          try {
+            await this.injectForcedTrade(forceSymbol, settings);
+          } catch (error) {
+            console.error(`[27.F.14.B][PaperSim] Failed to inject forced trade:`, error);
+          }
         }
       }
     } catch (error) {
@@ -348,12 +365,12 @@ export class PaperExecutionEngine {
     }
   }
 
-  private async checkSymbolForSignal(symbol: string, settings: TradingSettings): Promise<void> {
+  private async checkSymbolForSignal(symbol: string, settings: TradingSettings): Promise<boolean> {
     // Check if we already have an open position for this symbol
     const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.mode,  symbol);
     if (existingPosition) {
       // Skip - already have position for this symbol
-      return;
+      return false;
     }
 
     // Fetch current market data and build price history
@@ -361,7 +378,7 @@ export class PaperExecutionEngine {
     const tickerData = Object.values(ticker)[0];
     
     if (!tickerData) {
-      return;
+      return false;
     }
 
     // Get OHLC data for technical indicators
@@ -369,7 +386,7 @@ export class PaperExecutionEngine {
     const ohlcData = ohlcResponse.ohlc;
 
     if (ohlcData.length === 0) {
-      return;
+      return false;
     }
 
     // Update price history with SMA field
@@ -456,7 +473,78 @@ export class PaperExecutionEngine {
       });
 
       await this.executeSimulatedTrade(bestSignal, settings);
+      return true;
     }
+
+    return false;
+  }
+
+  /**
+   * [27.F.14.B] Inject a forced trade for deterministic testing
+   * MSI Guard: Only callable in paper mode
+   */
+  private async injectForcedTrade(symbol: string, settings: TradingSettings): Promise<void> {
+    // MSI Guard: Hard check - this should never be called in live mode
+    if (this.mode !== 'paper') {
+      console.error(`[27.F.14.B][MSI VIOLATION] injectForcedTrade called in ${this.mode} mode. REJECTED.`);
+      return;
+    }
+
+    // Check if we already have a position for this symbol
+    const existingPosition = await storage.getPaperSimOpenPositionBySymbol(this.mode, symbol);
+    if (existingPosition) {
+      console.log(`[27.F.14.B][PaperSim] Forced trade skipped - position already exists for ${symbol}`);
+      return;
+    }
+
+    // Fetch current market data
+    const ticker = await this.krakenService.getTicker(symbol);
+    const tickerData = Object.values(ticker)[0];
+    
+    if (!tickerData) {
+      console.error(`[27.F.14.B][PaperSim] No ticker data for forced symbol: ${symbol}`);
+      return;
+    }
+
+    const currentPrice = parseFloat(tickerData.c[0]);
+
+    // Create a simple forced signal
+    const forcedSignal: StrategySignal = {
+      symbol: symbol,
+      strategy: 'vwap_pullback',
+      entryPrice: currentPrice,
+      stopPrice: currentPrice * 0.98, // 2% stop loss
+      targetPrice: currentPrice * 1.04, // 4% target
+      confidence: 0.75, // High confidence for testing
+      metadata: {
+        forced: true,
+        source: 'PAPER_FORCE_TRADE_SYMBOL',
+        reason: 'Deterministic testing - no qualifying trades found'
+      }
+    };
+
+    console.log(`[27.F.14.B][PaperSim] Injecting forced trade for ${symbol} @ ${currentPrice.toFixed(2)}`);
+    
+    // [27.F.14.B] INSTRUMENTATION: Candidate selected
+    console.log(`[27.F.14.B][PaperSim] candidate_selected {symbol:"${symbol}", strategy:"forced", confidence:75.0%, forced:true}`);
+    contextBridge.broadcast({
+      type: 'trading_pipeline_event' as any,
+      payload: {
+        mode: this.mode,
+        eventType: 'candidate_selected',
+        message: `${symbol}: FORCED trade for testing (75.0% confidence)`,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          symbol: symbol,
+          strategy: 'forced',
+          confidence: 0.75,
+          entryPrice: currentPrice,
+          forced: true
+        }
+      }
+    });
+
+    await this.executeSimulatedTrade(forcedSignal, settings);
   }
 
   private async executeSimulatedTrade(signal: StrategySignal, settings: TradingSettings): Promise<void> {
