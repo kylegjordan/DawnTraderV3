@@ -33,6 +33,8 @@ const DEFAULTS = {
   aiCanAdjust: false,
   maxRequiredCapital: 100000,
   maxRiskPerTradeLimit: 1000,
+  // Phase 27.F.14.UI-SYNC.2: Execution Rhythm Controls (Behavioral)
+  cooldownMinutes: 15,
   // Phase 27.F.14.MICRO: Micro-Execution Loop Controls
   microLoopInterval: 8,
   priceDeltaTrigger: 0.30,
@@ -52,6 +54,8 @@ interface Guardrails {
   aiCanAdjust: boolean;
   maxRequiredCapital: number;
   maxRiskPerTradeLimit: number;
+  // Phase 27.F.14.UI-SYNC.2: Execution Rhythm Controls (Behavioral)
+  cooldownMinutes?: number;
   // Phase 27.F.14.MICRO: Micro-Execution Loop Controls
   microLoopInterval?: number;
   priceDeltaTrigger?: number;
@@ -111,6 +115,8 @@ export default function GuardrailsTab() {
         aiCanAdjust: currentSettings.aiCanAdjust ?? DEFAULTS.aiCanAdjust,
         maxRequiredCapital: currentSettings.maxRequiredCapital ?? DEFAULTS.maxRequiredCapital,
         maxRiskPerTradeLimit: currentSettings.maxRiskPerTradeLimit ?? DEFAULTS.maxRiskPerTradeLimit,
+        // Phase 27.F.14.UI-SYNC.2: Execution Rhythm Controls (Behavioral)
+        cooldownMinutes: currentSettings.cooldownMinutes ?? DEFAULTS.cooldownMinutes,
         // Phase 27.F.14.MICRO: Micro-Execution Loop Controls
         microLoopInterval: currentSettings.microLoopInterval ?? DEFAULTS.microLoopInterval,
         priceDeltaTrigger: currentSettings.priceDeltaTrigger ?? DEFAULTS.priceDeltaTrigger,
@@ -519,6 +525,30 @@ export default function GuardrailsTab() {
             />
             <p className="text-xs text-muted-foreground">
               Maximum dollar amount at risk (stop-loss distance) allowed per trade
+            </p>
+          </div>
+        </div>
+
+        {/* Phase 27.F.14.UI-SYNC.2: Execution Rhythm Controls (Behavioral) */}
+        <div className="mt-6 mb-4">
+          <h3 className="font-semibold text-sm text-muted-foreground mb-4">
+            Execution Rhythm Controls (Behavioral)
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="space-y-2">
+            <Label htmlFor="cooldownMinutes">Symbol Cool-Down (minutes)</Label>
+            <Input
+              id="cooldownMinutes"
+              type="text"
+              value={focusedField === 'cooldownMinutes' ? (rawInputValues['cooldownMinutes'] ?? settings.cooldownMinutes ?? '') : formatNumberWithCommas(settings.cooldownMinutes ?? '')}
+              onChange={(e) => handleChange('cooldownMinutes', e.target.value)}
+              onFocus={() => setFocusedField('cooldownMinutes')}
+              onBlur={() => handleBlur('cooldownMinutes', false)}
+              data-testid="input-cooldown-minutes"
+            />
+            <p className="text-xs text-muted-foreground">
+              Minimum time (0-90 minutes) before a symbol can re-enter after trade close
             </p>
           </div>
         </div>
