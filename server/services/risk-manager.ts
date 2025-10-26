@@ -421,7 +421,7 @@ export class RiskManager {
       }
 
       const lastTrade = lastTrades[0];
-      const lastTradeTime = new Date(lastTrade.closedAt || lastTrade.createdAt).getTime();
+      const lastTradeTime = new Date(lastTrade.exitTime || lastTrade.entryTime).getTime();
       const currentTime = Date.now();
       const minutesSinceLastTrade = (currentTime - lastTradeTime) / (1000 * 60);
 
@@ -713,7 +713,7 @@ export class RiskManager {
     };
   }
 
-  async getWinRate(userId: string, days = 30): Promise<{
+  async getWinRate(mode: 'live' | 'paper', days = 30): Promise<{
     winRate: number;
     totalTrades: number;
     wins: number;
@@ -723,7 +723,7 @@ export class RiskManager {
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - days);
 
-    const trades = await storage.getTrades(userId, { status: 'closed' });
+    const trades = await storage.getTrades(mode, { status: 'closed' });
     const recentTrades = trades.filter(trade => 
       trade.exitTime && new Date(trade.exitTime) >= fromDate
     );
@@ -758,7 +758,7 @@ export class RiskManager {
   /**
    * Calculate rolling 24h P/L (realized + unrealized)
    */
-  async calculate24hPL(userId: string, settings?: TradingSettings): Promise<{
+  async calculate24hPL(mode: 'live' | 'paper', settings?: TradingSettings): Promise<{
     totalPL: number;
     realizedPL: number;
     unrealizedPL: number;
@@ -769,7 +769,7 @@ export class RiskManager {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
     // Get all closed trades in last 24h
-    const closedTrades = await storage.getTrades(userId, { status: 'closed' });
+    const closedTrades = await storage.getTrades(mode, { status: 'closed' });
     const recentClosed = closedTrades.filter(trade => 
       trade.exitTime && new Date(trade.exitTime) >= twentyFourHoursAgo
     );
@@ -780,7 +780,7 @@ export class RiskManager {
     );
     
     // Get active positions (Phase 27.F.13.A: Mode-aware)
-    const activePositions = await this.getActivePositions(userId);
+    const activePositions = await this.getActivePositions(mode);
     
     // Calculate unrealized P/L (simplified - in reality would need current market prices)
     let unrealizedPL = 0;
@@ -794,9 +794,12 @@ export class RiskManager {
       basePortfolioValue = parseFloat(settings.portfolioValue.toString());
     } else {
       // Try to get from storage if settings not provided
-      const userSettings = await storage.getTradingSettings(userId);
-      if (userSettings?.portfolioValue) {
-        basePortfolioValue = parseFloat(userSettings.portfolioValue.toString());
+      const systemContext = await storage.getSystemContext(mode);
+      if (systemContext) {
+        const userSettings = await storage.getTradingSettings(systemContext.id);
+        if (userSettings?.portfolioValue) {
+          basePortfolioValue = parseFloat(userSettings.portfolioValue.toString());
+        }
       }
     }
     
@@ -818,7 +821,7 @@ export class RiskManager {
   /**
    * Check kill switch thresholds and trigger if needed
    */
-  async checkKillSwitch(userId: string, settings: TradingSettings): Promise<{
+  async checkKillSwitch(mode: 'live' | 'paper', settings: TradingSettings): Promise<{
     triggered: boolean;
     eventType: 'none' | 'warning' | 'kill_switch';
     message: string;
@@ -913,7 +916,7 @@ export class RiskManager {
     
     if (mode === 'paper') {
       // Close paper positions
-      const paperPositions = await storage.getPaperSimOpenPositions(userId);
+      const paperPositions = await storage.getPaperSimOpenPositions(mode);
       console.log(`   Closing ${paperPositions.length} open paper positions...`);
       
       for (const position of paperPositions) {
@@ -923,7 +926,7 @@ export class RiskManager {
           
           // For paper mode, we'd need to call paper trading close logic
           // For now, just delete the position (simplified)
-          await storage.deletePaperSimOpenPosition(position.id);
+          await storage.deletePaperSimOpenPosition(mode, position.id);
           
           closedTrades.push({
             symbol: position.symbol,
@@ -940,7 +943,7 @@ export class RiskManager {
       }
     } else {
       // Close live trades
-      const activeTrades = await storage.getActiveTrades(userId);
+      const activeTrades = await storage.getActiveTrades(mode);
       console.log(`   Closing ${activeTrades.length} open live trades...`);
       
       for (const trade of activeTrades) {
@@ -972,7 +975,7 @@ export class RiskManager {
    * Calculate earnings for different time periods
    * Excludes paper trades and only includes realized P/L from live trades
    */
-  async getEarnings(userId: string): Promise<{
+  async getEarnings(mode: 'live' | 'paper'): Promise<{
     today: number;
     yesterday: number;
     thisWeek: number;
@@ -992,9 +995,9 @@ export class RiskManager {
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
 
-    const closedTrades = await storage.getTrades(userId, { status: 'closed' });
+    const closedTrades = await storage.getTrades(mode, { status: 'closed' });
     
-    const liveTrades = closedTrades.filter(trade => trade.mode === 'live' && trade.exitTime && trade.realizedPL);
+    const liveTrades = closedTrades.filter(trade => trade.exitTime && trade.realizedPL);
 
     const safeParseFloat = (value: string | null | undefined): number => {
       if (!value) return 0;
@@ -1042,13 +1045,13 @@ export class RiskManager {
    * Get daily earnings data for chart
    * Returns one data point per day showing total earnings for that day
    */
-  async getEarningsChartData(userId: string, days = 30): Promise<Array<{
+  async getEarningsChartData(mode: 'live' | 'paper', days = 30): Promise<Array<{
     date: string;
     earnings: number;
     timestamp: number;
   }>> {
-    const closedTrades = await storage.getTrades(userId, { status: 'closed' });
-    const liveTrades = closedTrades.filter(trade => trade.mode === 'live' && trade.exitTime);
+    const closedTrades = await storage.getTrades(mode, { status: 'closed' });
+    const liveTrades = closedTrades.filter(trade => trade.exitTime);
 
     const now = new Date();
     const startDate = new Date(now);
