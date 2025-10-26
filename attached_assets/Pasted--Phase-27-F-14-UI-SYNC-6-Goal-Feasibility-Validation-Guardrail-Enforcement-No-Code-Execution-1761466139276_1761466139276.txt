@@ -1,0 +1,105 @@
+⚙️ Phase 27.F.14.UI-SYNC.6 — Goal Feasibility Validation & Guardrail Enforcement
+
+(No-Code Execution Plan)
+
+🎯 Objective
+
+Enable LATTI and the system to automatically check whether user-set trading goals are realistic under current guardrails and portfolio size.
+If a goal violates limits (e.g., an impossible Target per Trade $100 000 on an $834 account), the system blocks or warns before saving.
+
+🧱 Automated Tasks (Executed Sequentially)
+1️⃣ Rename and Align Fields
+
+Replace all UI labels “Earnings per Trade” → “Target per Trade ($)”
+
+Add missing numeric input “Trades per Day (1 – 20)” above it.
+
+Link both to unified goal model already established in Phase 27.F.14.UI-SYNC.5.
+
+Remove obsolete “Average Return (%)” field.
+
+2️⃣ Add Feasibility Validation Layer
+
+When the user clicks Save or Recalculate, Replit triggers the following background validation service:
+
+evaluateGoalFeasibility(goals, guardrails, balance):
+    maxRiskPerTrade = guardrails.max_risk_per_trade_usd
+    maxPosCapPct    = guardrails.max_position_size_pct
+    portfolio       = metrics.current_balance
+    riskPct         = guardrails.risk_per_trade_pct
+    rrRatio         = 2.0              # expected risk:reward
+    maxSafeTarget   = maxRiskPerTrade * rrRatio
+
+    if goals.target_per_trade_usd <= maxSafeTarget:
+         return OK
+    if goals.target_per_trade_usd <= maxSafeTarget * 1.5:
+         return WARN("Exceeds Max Risk per Trade by ≈50 %.")
+    else:
+         return BLOCK("Target per Trade exceeds allowed risk/position limits.")
+
+
+The response drives LATTI’s feedback messages.
+
+3️⃣ LATTI Feedback Integration
+
+On OK → ✅ Toast: “Goals saved — within current risk limits.”
+
+On WARN → ⚠️ Toast: “Goal exceeds Max Risk per Trade by ≈ 50 %. Adjust or update guardrails.”
+
+On BLOCK → ❌ Toast: “Goal rejected — exceeds Position Size Cap / Risk Limit.”
+
+Log all messages under [GoalFeasibility] in system logs.
+
+4️⃣ Guardrail Cross-Reference
+
+Pull active guardrail parameters automatically:
+max_risk_per_trade_usd, risk_per_trade_pct, max_position_size_pct, cooldown_minutes.
+
+Include current portfolio balance from MetricsCore for real-time context.
+
+Prevent save if any guardrail conflict remains unresolved.
+
+5️⃣ Exploratory Mode (Optional)
+
+Add toggle “Allow Exploratory Testing (Show Risk Overages)” in Goals tab.
+
+When ON → LATTI logs magnitude of breach instead of blocking save:
+“Exploratory Mode: Target $400 = 1285 % over risk cap.”
+
+When OFF → normal block behavior.
+
+6️⃣ Persistence and Logging
+
+All goal updates (even blocked ones) are stored in user_goals_audit for review.
+Logs show:
+
+[GoalFeasibility] OK – target 25 within bounds.
+[GoalFeasibility] WARN – target 400 > risk limit 1000 × RR 2.0.
+[GoalFeasibility] BLOCK – target 100000 exceeds portfolio balance 834 × cap 10 %.
+
+7️⃣ Restart and Verify
+
+Replit automatically restarts after schema sync.
+Validation Checklist post-launch:
+
+Check	Expected Result
+Goals tab shows “Target per Trade ($)” and “Trades per Day.”	✅
+Enter Target per Trade = $25	✅ Saved (OK)
+Enter Target per Trade = $400	⚠️ Warning
+Enter Target per Trade = $100 000	❌ Blocked
+Toggle Exploratory Mode ON → $100 000 goal	⚠️ Allowed + log “1285 % over limit”
+🚀 Command for Replit
+
+Apply Phase 27.F.14.UI-SYNC.6 — Goal Feasibility Validation and Guardrail Enforcement (No-Code)
+
+✅ Expected Outcome
+
+“Target per Trade ($)” and “Trades per Day” fully synchronized with performance goals.
+
+Automatic validation keeps goals within risk limits.
+
+LATTI provides clear OK / WARN / BLOCK feedback.
+
+Optional Exploratory Mode lets you test higher aggressiveness safely.
+
+All changes require no manual code editing — Replit updates schema, logic, and UI automatically.

@@ -61,10 +61,7 @@ export default function GoalsSummaryWidget() {
   const formatValue = (value: number | null, metric: string, isActual: boolean = false) => {
     if (value == null) return '—';
     
-    // Average Return is a percentage for both goal and actual
-    if (metric === 'Average Return') {
-      return `${value.toFixed(1)}%`;
-    }
+    // Phase 27.F.14.UI-SYNC.7: Removed Average Return handling
     
     // For other percentage-based metrics, format goal as % but actual as $
     const isPercentageMetric = metric.includes('(%)') || metric.includes('Percent') || metric.includes('Rate');

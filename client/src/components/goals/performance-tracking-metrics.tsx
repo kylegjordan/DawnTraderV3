@@ -27,9 +27,9 @@ interface UserGoal {
   percentAchieved: string | null;
 }
 
+// Phase 27.F.14.UI-SYNC.7: Removed "Average Return", renamed "Earnings per Trade" to "Target per Trade ($)"
 const DEFAULT_METRICS: PerformanceMetric[] = [
-  { metric: "Earnings per Trade", goal: 50, actual: 0, percentAchieved: 0 },
-  { metric: "Average Return", goal: 2.5, actual: 0, percentAchieved: 0 },
+  { metric: "Target per Trade ($)", goal: 25, actual: 0, percentAchieved: 0 },
   { metric: "Earnings per Day", goal: 100, actual: 0, percentAchieved: 0 },
   { metric: "Earnings per Week", goal: 700, actual: 0, percentAchieved: 0 },
   { metric: "Earnings per Month", goal: 3000, actual: 0, percentAchieved: 0 },
@@ -279,7 +279,7 @@ export default function PerformanceTrackingMetrics() {
                   <td className="p-3 text-right">
                     <Input
                       type="number"
-                      step={metric.metric === "Average Return" ? "0.1" : "1"}
+                      step="1"
                       value={metric.goal}
                       onChange={(e) => updateGoal(metric.metric, parseFloat(e.target.value) || 0)}
                       className="max-w-[120px] ml-auto text-right"
@@ -289,7 +289,7 @@ export default function PerformanceTrackingMetrics() {
                   <td className="p-3 text-right">
                     <Input
                       type="number"
-                      step={metric.metric === "Average Return" ? "0.1" : "1"}
+                      step="1"
                       value={metric.actual}
                       onChange={(e) => updateActual(metric.metric, parseFloat(e.target.value) || 0)}
                       className="max-w-[120px] ml-auto text-right"

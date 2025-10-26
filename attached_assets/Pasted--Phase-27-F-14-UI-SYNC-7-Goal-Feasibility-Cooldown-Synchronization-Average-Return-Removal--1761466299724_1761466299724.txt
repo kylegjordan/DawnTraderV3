@@ -1,0 +1,99 @@
+⚙️ Phase 27.F.14.UI-SYNC.7 — Goal Feasibility + Cooldown Synchronization + Average-Return Removal
+
+(Full No-Code Directive for Replit)
+
+🎯 Objective
+
+Create a single, risk-aware goal framework that:
+
+Prevents unrealistic “Target per Trade ($)” values.
+
+Keeps the Symbol Cool-Down value synchronized everywhere it appears.
+
+Cleans up legacy “Average Return” remnants.
+
+Requires no manual code editing or migrations.
+
+🧱 Automated Execution Steps
+1️⃣ Field and Label Alignment
+
+Rename every “Earnings per Trade” → “Target per Trade ($)”.
+
+Add missing “Trades per Day (1 – 20)” numeric input directly above it.
+
+Delete the obsolete “Average Return (%)” field from both Goals Tab and Performance Tracking Metrics.
+
+Recalculate button persists as the sync trigger between Pace ↔ Performance.
+
+2️⃣ Goal Feasibility Validation
+
+(Logic identical to Phase 27.F.14.UI-SYNC.6, now extended to include cooldown cross-reference.)
+
+Condition	Result	Feedback Example
+Target per Trade ≤ safe limit	✅ OK	“Goals saved – within current risk limits.”
+Target per Trade ≈ 50 % over limit	⚠️ Warn	“Goal exceeds Max Risk / Trade by 50 %. Adjust guardrails.”
+Target per Trade ≫ limit	❌ Block	“Goal rejected – violates Position Size Cap or Risk Limit.”
+
+All feedback logged under [GoalFeasibility].
+
+3️⃣ Cooldown Synchronization
+
+Create a shared cooldown registry between Guardrails → Tuning → LATTI:
+
+onCooldownUpdate(newValue):
+    guardrails.cooldown_minutes = newValue
+    tuning_policy.cooldown_period = newValue
+    broadcast("cooldown_synced", newValue)
+
+
+Behavior
+
+Editing “Symbol Cool-Down (min)” in Guardrails immediately updates the Tuning section.
+
+When LATTI adjusts cooldown during nightly optimization, UI refreshes to show the new value.
+
+Single truth source =guardrails.cooldown_minutes.
+
+Startup log example:
+
+[PolicySync] Cooldown period synchronized: 15 min (guardrails ↔ tuning)
+
+4️⃣ Exploratory Mode (unchanged)
+
+Optional toggle to allow testing beyond risk limits; LATTI logs how far you’ve exceeded the cap.
+
+5️⃣ Data Persistence & Audit
+
+All goal changes (and blocked attempts) recorded in user_goals_audit.
+Example entries:
+
+[GoalFeasibility] OK – target 25 within bounds.  
+[GoalFeasibility] WARN – target 400 > risk limit 1000 × RR 2.0.  
+[GoalFeasibility] BLOCK – target 100000 > balance 834 × cap 10 %.
+[PolicySync] Cooldown period synced → 15 min.
+
+6️⃣ Restart & Verification
+
+After execution Replit auto-restarts.
+Verify that:
+
+UI Section	What to See
+Goals Tab	“Trades per Day” + “Target per Trade ($)” inputs; no “Average Return.” Recalculate button active.
+Performance Tracking	Daily/Weekly/Monthly/Yearly fields auto-mirror target values.
+Guardrails & Tuning	Cooldown shows the same number (15 min default) in both tabs.
+Logs	[GoalFeasibility] and [PolicySync] entries confirm alignment.
+🚀 Command for Replit
+
+Apply Phase 27.F.14.UI-SYNC.7 — Goal Feasibility + Cooldown Synchronization + Average Return Removal (No-Code)
+
+✅ Final Outcome
+
+“Average Return (%)” removed everywhere.
+
+“Target per Trade ($)” + “Trades per Day” visible and synchronized between Trading Pace and Performance.
+
+LATTI automatically checks goal feasibility against risk guardrails and portfolio size.
+
+Cooldown period fully synced between Guardrails, Tuning Policy, and LATTI.
+
+Exploratory Mode available for safe stress testing.
