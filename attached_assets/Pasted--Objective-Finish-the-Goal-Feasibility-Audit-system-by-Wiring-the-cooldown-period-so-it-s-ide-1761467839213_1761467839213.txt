@@ -1,0 +1,115 @@
+🎯 Objective
+
+Finish the Goal Feasibility & Audit system by:
+
+Wiring the cooldown period so it’s identical in Guardrails, Tuning Policy, and LATTI logs.
+
+Linking Trades per Day ↔ Target per Trade ($) between the Trading Pace section and the Performance Tracking Metrics table.
+
+Completing the backend validation logic and visual OK / WARN / BLOCK feedback.
+
+🧱 Automated Task Sequence
+1️⃣ Cooldown Synchronization Service
+
+Create a central sync controller (no-code injection):
+
+onCooldownUpdate(value):
+    guardrails.cooldown_minutes = value
+    tuning_policy.cooldown_period = value
+    broadcast("cooldown_synced", value)
+    log "[PolicySync] Cooldown period synchronized → " + value + " min"
+
+
+Behavior
+
+Editing Symbol Cool-Down (min) in Guardrails instantly updates the Tuning section and LATTI’s internal policy.
+
+LATTI adjustments during optimization auto-update the Guardrails UI.
+
+One source of truth → guardrails.cooldown_minutes.
+
+2️⃣ Trades per Day Field (Performance Metrics)
+
+Add numeric input immediately below Target per Trade ($) in the Performance Tracking Metrics table:
+
+Metric	Default	Range	Behavior
+Trades per Day	4	1 – 20	Mirrors Trading Pace; changes propagate bidirectionally
+3️⃣ Bidirectional Sync Logic
+A. Top-Down (Pace → Metrics)
+
+When the Trading Pace or Recalculate button updates either value:
+
+performance.trades_per_day = goals.trades_per_day
+performance.target_per_trade = goals.target_per_trade_usd
+recalcPerformance()
+
+B. Bottom-Up (Metrics → Pace)
+
+When user edits either field in Performance Metrics and clicks Recalculate:
+
+goals.trades_per_day = performance.trades_per_day
+goals.target_per_trade_usd = performance.target_per_trade
+recalcGoals()
+
+
+Both directions trigger LATTI sync and database save to user_goals.
+
+4️⃣ Goal Feasibility Validation (Backend)
+
+Finalize the validation service (now live behind the endpoint):
+
+Check	Rule	Action
+Risk per Trade	target_per_trade ≤ max_risk_per_trade_usd × 2	OK / WARN / BLOCK
+Position Size Cap	target_per_trade ≤ portfolio_balance × (max_position_size_pct / 100)	OK / BLOCK
+Guardrail Conflicts	Any exceeded limit	BLOCK + toast reason
+
+Result returned to frontend as:
+
+{ status:"WARN", reason:"Exceeds Max Risk / Trade by 50%" }
+
+5️⃣ Frontend Feedback UI
+
+Visual indicators appear beside the Save button:
+
+Status	Icon / Color	Tooltip
+✅ OK	green dot	Within guardrails
+⚠️ WARN	amber dot	Approaches risk limits
+❌ BLOCK	red dot	Goal rejected – exceeds guardrails
+
+Toast + [GoalFeasibility] log accompany each save attempt.
+
+6️⃣ Audit Logging
+
+Every attempt stored in user_goals_audit with:
+
+Column	Example
+metric_name	target_per_trade_usd
+attempted_value	400
+feasibility_status	WARN
+feasibility_reason	Exceeds Max Risk Per Trade
+exceeds_by	0.5×
+timestamp	2025-10-27 20:32:00
+7️⃣ Restart + Validation Checklist
+Check	Expected Result
+Guardrails ↔ Tuning cooldown values	identical (e.g., 15 min)
+Performance Metrics	shows both Target per Trade ($) and Trades per Day
+Recalculate button	synchronizes values both ways
+Save	triggers OK / WARN / BLOCK feedback
+Logs	[GoalFeasibility] + [PolicySync] entries present
+🚀 Command for Replit
+
+Apply Phase 27.F.14.UI-SYNC.8 — Cooldown Synchronization + Bidirectional Goal Link + Validation Feedback (No-Code)
+
+✅ Outcome
+
+Cooldown period perfectly unified between Guardrails, Tuning, and LATTI.
+
+Performance Tracking Metrics now include Trades per Day and stay synchronized with Trading Pace.
+
+Recalculate button ensures instant two-way sync.
+
+Goal Feasibility Validation actively blocks or warns on unsafe targets.
+
+Audit logging captures every attempt.
+
+After this directive runs, all goal and risk parameters will be mathematically consistent across every layer, so you can safely proceed to full paper-trading validation.

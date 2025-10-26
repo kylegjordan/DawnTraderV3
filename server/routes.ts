@@ -7999,18 +7999,64 @@ Provide specific, actionable recommendations.`,
   apiRouter.post('/goals/update', authenticateToken, async (req: TracedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { goals, mode = 'live' } = req.body;
+      const { goals, mode = 'live', portfolioBalance, exploratoryMode = false } = req.body;
 
       if (DIAGNOSTIC_MODE) {
         console.log(`[DX-GOALS] ========== GOALS SAVE TRACE START (req.id=${req.traceId}) ==========`);
-        console.log(`[DX-GOALS] Request payload:`, JSON.stringify({ userId, mode, goalsCount: goals.length, goals }, null, 2));
+        console.log(`[DX-GOALS] Request payload:`, JSON.stringify({ userId, mode, goalsCount: goals.length, goals, portfolioBalance, exploratoryMode }, null, 2));
       }
 
       console.log(`[Goals] Saving ${goals.length} goals for user ${userId} in ${mode} mode:`, JSON.stringify(goals));
 
       const updatedGoals = [];
+      let feasibilityResult: any = null;
+      
+      // Phase 27.F.14.UI-SYNC.8: Initialize Goal Feasibility Service
+      const { GoalFeasibilityService } = await import('./services/goal-feasibility');
+      const feasibilityService = new GoalFeasibilityService(storage);
       
       for (const goal of goals) {
+        // Phase 27.F.14.UI-SYNC.8: Goal Feasibility Validation for Target per Trade
+        if (goal.metricName === 'Target per Trade ($)') {
+          console.log(`[GoalFeasibility] Validating Target per Trade ($${goal.goalValue})`);
+          
+          feasibilityResult = await feasibilityService.evaluateGoal(userId, mode as 'live' | 'paper', {
+            targetPerTrade: parseFloat(goal.goalValue),
+            portfolioBalance: portfolioBalance ? parseFloat(portfolioBalance) : undefined,
+            exploratoryMode,
+          });
+
+          console.log(`[GoalFeasibility] Validation result: ${feasibilityResult.status} - ${feasibilityResult.reason}`);
+
+          // Log to user_goals_audit table
+          try {
+            await storage.createUserGoalsAudit({
+              userId,
+              mode: mode as 'live' | 'paper',
+              metricName: goal.metricName,
+              attemptedValue: goal.goalValue,
+              feasibilityStatus: feasibilityResult.status,
+              feasibilityReason: feasibilityResult.reason,
+              riskLimit: feasibilityResult.riskLimit ? feasibilityResult.riskLimit.toString() : null,
+              exceedsBy: feasibilityResult.exceedsBy ? feasibilityResult.exceedsBy.toString() : null,
+              exploratoryMode,
+            });
+            console.log(`[GoalFeasibility] Audit log created for ${goal.metricName}`);
+          } catch (auditError: any) {
+            console.warn(`[GoalFeasibility] Failed to log audit entry:`, auditError.message);
+          }
+
+          // Block goal save if status is BLOCK and not in exploratory mode
+          if (feasibilityResult.status === 'BLOCK' && !exploratoryMode) {
+            console.log(`[GoalFeasibility] BLOCK - Goal update rejected for ${goal.metricName}`);
+            return res.status(400).json({
+              success: false,
+              error: feasibilityResult.reason,
+              feasibility: feasibilityResult,
+            });
+          }
+        }
+
         // Phase 27.5: Get previous value for audit log
         const previousGoal = mode === 'live'
           ? await storage.getGoalLive(goal.metricName)
@@ -8078,7 +8124,14 @@ Provide specific, actionable recommendations.`,
       }
       
       console.log('[Phase-27.F.15.B.1] Updated route /api/goals/update → mode-based only');
-      res.json({ success: true, data: updatedGoals, mode });
+      
+      // Phase 27.F.14.UI-SYNC.8: Include feasibility feedback in response
+      res.json({ 
+        success: true, 
+        data: updatedGoals, 
+        mode,
+        feasibility: feasibilityResult // OK, WARN, or null if not applicable
+      });
     } catch (error: any) {
       console.error('Error updating goals:', error);
       res.status(500).json({ success: false, error: error.message });

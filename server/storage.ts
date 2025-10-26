@@ -436,6 +436,10 @@ export interface IStorage {
   createGoalAuditLog(entry: InsertGoalAuditLog): Promise<GoalAuditLog>;
   getGoalAuditLogs(userId: string, mode?: 'live' | 'paper', limit?: number): Promise<GoalAuditLog[]>;
 
+  // Phase 27.F.14.UI-SYNC.7: User Goals Audit
+  createUserGoalsAudit(entry: InsertUserGoalsAudit): Promise<UserGoalsAudit>;
+  getUserGoalsAudit(userId: string, mode?: 'live' | 'paper', limit?: number): Promise<UserGoalsAudit[]>;
+
   // User utility methods
   getAllUsers(): Promise<User[]>;
 
@@ -2481,6 +2485,23 @@ export class DatabaseStorage implements IStorage {
       .from(goalAuditLog)
       .where(mode ? and(eq(goalAuditLog.userId, userId), eq(goalAuditLog.mode, mode)) : eq(goalAuditLog.userId, userId))
       .orderBy(desc(goalAuditLog.timestamp))
+      .limit(limit);
+    
+    return await query;
+  }
+
+  // Phase 27.F.14.UI-SYNC.7: User Goals Audit
+  async createUserGoalsAudit(entry: InsertUserGoalsAudit): Promise<UserGoalsAudit> {
+    const [result] = await db.insert(userGoalsAudit).values(entry).returning();
+    return result;
+  }
+
+  async getUserGoalsAudit(userId: string, mode?: 'live' | 'paper', limit: number = 100): Promise<UserGoalsAudit[]> {
+    const query = db
+      .select()
+      .from(userGoalsAudit)
+      .where(mode ? and(eq(userGoalsAudit.userId, userId), eq(userGoalsAudit.mode, mode)) : eq(userGoalsAudit.userId, userId))
+      .orderBy(desc(userGoalsAudit.timestamp))
       .limit(limit);
     
     return await query;
