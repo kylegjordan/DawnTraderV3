@@ -3,6 +3,7 @@ import { KrakenService } from './kraken';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { RiskManager } from './risk-manager';
 import type { TradingSettings, PriceData } from '@shared/schema';
+import { contextBridge } from './context-bridge';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -41,6 +42,17 @@ export class PaperExecutionEngine {
 
     this.isRunning = true;
     console.log(`[PaperExecution:${this.mode}] Starting paper trading engine`);
+
+    // Broadcast engine start
+    contextBridge.broadcast({
+      type: 'trading_pipeline_event' as any,
+      payload: {
+        mode: this.mode,
+        eventType: 'engine_started',
+        message: `${this.mode} paper trading engine started`,
+        timestamp: new Date().toISOString()
+      }
+    });
 
     // Start monitoring loop
     this.monitoringInterval = setInterval(async () => {
@@ -310,6 +322,19 @@ export class PaperExecutionEngine {
         return;
       }
 
+      // [27.F.14.B] INSTRUMENTATION: Filter cycle started
+      console.log(`[27.F.14.B][PaperSim] filter_cycle_started {watchlist_size:${watchlist.length}, mode:"${this.mode}"}`);
+      contextBridge.broadcast({
+        type: 'trading_pipeline_event' as any,
+        payload: {
+          mode: this.mode,
+          eventType: 'filter_cycle_started',
+          message: `Scanning ${watchlist.length} symbols for trade opportunities`,
+          timestamp: new Date().toISOString(),
+          metadata: { watchlistSize: watchlist.length }
+        }
+      });
+
       // Scan each symbol
       for (const pair of watchlist) {
         try {
@@ -412,6 +437,24 @@ export class PaperExecutionEngine {
         current.confidence > prev.confidence ? current : prev
       );
 
+      // [27.F.14.B] INSTRUMENTATION: Candidate selected
+      console.log(`[27.F.14.B][PaperSim] candidate_selected {symbol:"${bestSignal.symbol}", strategy:"${bestSignal.strategy}", confidence:${(bestSignal.confidence * 100).toFixed(1)}%}`);
+      contextBridge.broadcast({
+        type: 'trading_pipeline_event' as any,
+        payload: {
+          mode: this.mode,
+          eventType: 'candidate_selected',
+          message: `${bestSignal.symbol}: ${bestSignal.strategy} strategy (${(bestSignal.confidence * 100).toFixed(1)}% confidence)`,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            symbol: bestSignal.symbol,
+            strategy: bestSignal.strategy,
+            confidence: bestSignal.confidence,
+            entryPrice: bestSignal.entryPrice
+          }
+        }
+      });
+
       await this.executeSimulatedTrade(bestSignal, settings);
     }
   }
@@ -443,6 +486,23 @@ export class PaperExecutionEngine {
     if (!riskCheck.approved) {
       console.log(`[PaperExecution:${this.mode}] Paper trade rejected by risk manager: ${riskCheck.reason}`);
       
+      // [27.F.14.B] INSTRUMENTATION: Risk check failed
+      console.log(`[27.F.14.B][PaperSim] risk_check_failed {symbol:"${signal.symbol}", reason:"${riskCheck.reason}"}`);
+      contextBridge.broadcast({
+        type: 'trading_pipeline_event' as any,
+        payload: {
+          mode: this.mode,
+          eventType: 'risk_check_failed',
+          message: `${signal.symbol} rejected: ${riskCheck.reason}`,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            symbol: signal.symbol,
+            reason: riskCheck.reason,
+            signal: tradeSignal
+          }
+        }
+      });
+      
       // Log rejection
       await storage.createPaperSimTradeLog(this.mode, {
         tradeId: null,
@@ -458,6 +518,19 @@ export class PaperExecutionEngine {
       return;
     }
 
+    // [27.F.14.B] INSTRUMENTATION: Risk check passed
+    console.log(`[27.F.14.B][PaperSim] risk_check_passed {symbol:"${signal.symbol}"}`);
+    contextBridge.broadcast({
+      type: 'trading_pipeline_event' as any,
+      payload: {
+        mode: this.mode,
+        eventType: 'risk_check_passed',
+        message: `${signal.symbol} passed all risk checks`,
+        timestamp: new Date().toISOString(),
+        metadata: { symbol: signal.symbol }
+      }
+    });
+
     // Calculate position size based on risk
     const riskAmount = parseFloat(settings.riskPerTrade || '100');
     const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
@@ -472,6 +545,28 @@ export class PaperExecutionEngine {
 
     console.log(`  Quantity: ${quantity.toFixed(4)}, Position Value: $${positionValue.toFixed(2)}`);
     console.log(`  Entry Slippage: $${totalSlippage.toFixed(2)}, Entry Fee: $${entryFee.toFixed(2)}`);
+
+    // [27.F.14.B] INSTRUMENTATION: Order computed
+    console.log(`[27.F.14.B][PaperSim] order_computed {symbol:"${signal.symbol}", quantity:${quantity.toFixed(4)}, entry:${actualEntryPrice.toFixed(2)}, stop:${signal.stopPrice.toFixed(2)}, target:${signal.targetPrice.toFixed(2)}}`);
+    contextBridge.broadcast({
+      type: 'trading_pipeline_event' as any,
+      payload: {
+        mode: this.mode,
+        eventType: 'order_computed',
+        message: `Order ready: ${quantity.toFixed(4)} ${signal.symbol} @ $${actualEntryPrice.toFixed(2)}`,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          symbol: signal.symbol,
+          quantity: quantity,
+          entryPrice: actualEntryPrice,
+          stopPrice: signal.stopPrice,
+          targetPrice: signal.targetPrice,
+          positionValue: positionValue,
+          slippage: totalSlippage,
+          fees: entryFee
+        }
+      }
+    });
 
     // Create trade record
     const trade = await storage.createPaperSimTrade(this.mode, {
@@ -529,6 +624,26 @@ export class PaperExecutionEngine {
     });
 
     console.log(`[PaperExecution:${this.mode}] Simulated trade opened: ${signal.symbol} (Trade ID: ${trade.id})`);
+
+    // [27.F.14.B] INSTRUMENTATION: Paper trade opened
+    console.log(`[27.F.14.B][PaperSim] paper_trade_opened {symbol:"${signal.symbol}", tradeId:"${trade.id}", strategy:"${signal.strategy}", entry:${actualEntryPrice.toFixed(2)}}`);
+    contextBridge.broadcast({
+      type: 'trading_pipeline_event' as any,
+      payload: {
+        mode: this.mode,
+        eventType: 'paper_trade_opened',
+        message: `${signal.symbol} position opened: ${signal.strategy} @ $${actualEntryPrice.toFixed(2)}`,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          symbol: signal.symbol,
+          tradeId: trade.id,
+          strategy: signal.strategy,
+          entryPrice: actualEntryPrice,
+          quantity: quantity,
+          positionValue: positionValue
+        }
+      }
+    });
   }
 
   private calculateVWAP(priceData: PriceData[]): number {
