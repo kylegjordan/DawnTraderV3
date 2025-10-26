@@ -97,7 +97,9 @@ export default function GoalsTable() {
       return apiRequest('POST', '/api/goals/update', payload);
     },
     onSuccess: () => {
+      // Phase 27.F.14.UI-SYNC.8: Invalidate both Trading Goals and Performance Metrics caches
       queryClient.invalidateQueries({ queryKey: ['goals', 'summary', mode] });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] }); // Sync with Performance Metrics
       toast({
         title: "Goals Saved",
         description: "Your trading goals have been saved successfully.",

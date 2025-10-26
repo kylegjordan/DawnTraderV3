@@ -27,9 +27,10 @@ interface UserGoal {
   percentAchieved: string | null;
 }
 
-// Phase 27.F.14.UI-SYNC.7: Removed "Average Return", renamed "Earnings per Trade" to "Target per Trade ($)"
+// Phase 27.F.14.UI-SYNC.8: Added "Trades per Day" below "Target per Trade ($)"
 const DEFAULT_METRICS: PerformanceMetric[] = [
   { metric: "Target per Trade ($)", goal: 25, actual: 0, percentAchieved: 0 },
+  { metric: "Trades per Day", goal: 4, actual: 0, percentAchieved: 0 },
   { metric: "Earnings per Day", goal: 100, actual: 0, percentAchieved: 0 },
   { metric: "Earnings per Week", goal: 700, actual: 0, percentAchieved: 0 },
   { metric: "Earnings per Month", goal: 3000, actual: 0, percentAchieved: 0 },
@@ -154,8 +155,9 @@ export default function PerformanceTrackingMetrics() {
       return apiRequest('POST', '/api/goals/update', payload);
     },
     onSuccess: async () => {
-      // Phase 27.F.1: Invalidate and immediately refetch to ensure UI updates
+      // Phase 27.F.14.UI-SYNC.8: Invalidate both Performance Metrics and Trading Goals caches
       await queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] });
+      await queryClient.invalidateQueries({ queryKey: ['goals', 'summary', mode] }); // Sync with Trading Pace
       await refetch(); // Force immediate refetch
       toast({
         title: "Metrics Saved",
