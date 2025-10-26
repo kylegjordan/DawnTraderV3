@@ -1167,6 +1167,25 @@ export const goalAuditLog = pgTable("goal_audit_log", {
   timestampIdx: index("goal_audit_log_timestamp_idx").on(table.timestamp),
 }));
 
+// Phase 27.F.14.UI-SYNC.7: User Goals Audit (tracks feasibility checks and blocked attempts) - GLOBAL
+export const userGoalsAudit = pgTable("user_goals_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  mode: tradingModeEnum("mode").notNull(),
+  metricName: varchar("metric_name", { length: 100 }).notNull(),
+  attemptedValue: decimal("attempted_value", { precision: 20, scale: 8 }).notNull(),
+  feasibilityStatus: varchar("feasibility_status", { length: 20 }).notNull(), // 'OK', 'WARN', 'BLOCK'
+  feasibilityReason: text("feasibility_reason"), // Detailed explanation
+  riskLimit: decimal("risk_limit", { precision: 20, scale: 8 }), // The limit that was checked against
+  exceedsBy: decimal("exceeds_by", { precision: 20, scale: 8 }), // How much over the limit (if applicable)
+  exploratoryMode: boolean("exploratory_mode").default(false),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userIdIdx: index("user_goals_audit_user_id_idx").on(table.userId),
+  statusIdx: index("user_goals_audit_status_idx").on(table.feasibilityStatus),
+  timestampIdx: index("user_goals_audit_timestamp_idx").on(table.timestamp),
+}));
+
 // Screener Results (operational data - mode isolated) - GLOBAL per mode
 export const screenerResults = pgTable("screener_results", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1912,6 +1931,11 @@ export const insertGoalAuditLogSchema = createInsertSchema(goalAuditLog).omit({
   timestamp: true,
 });
 
+export const insertUserGoalsAuditSchema = createInsertSchema(userGoalsAudit).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Screener and Learning insert schemas
 export const insertScreenerResultSchema = createInsertSchema(screenerResults).omit({
   id: true,
@@ -2182,6 +2206,9 @@ export type GoalAnalysisHistoryPaper = typeof goalAnalysisHistoryPaper.$inferSel
 
 export type InsertGoalAuditLog = z.infer<typeof insertGoalAuditLogSchema>;
 export type GoalAuditLog = typeof goalAuditLog.$inferSelect;
+
+export type InsertUserGoalsAudit = z.infer<typeof insertUserGoalsAuditSchema>;
+export type UserGoalsAudit = typeof userGoalsAudit.$inferSelect;
 
 export type InsertScreenerResult = z.infer<typeof insertScreenerResultSchema>;
 export type ScreenerResult = typeof screenerResults.$inferSelect;
