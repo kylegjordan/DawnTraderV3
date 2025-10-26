@@ -37,6 +37,8 @@ The architecture has transitioned to a global mode-based engine, with one engine
 
 `MetricsCore` service provides centralized metrics calculation with strict mode isolation for portfolio, risk, and execution KPIs, with mode-based APIs and real-time WebSocket broadcasts. Live pricing integration is handled by a `LivePricingAdapter` service providing external market price feeds with dual-source integration (Binance public API primary, CoinGecko fallback), 15-second refresh cycle, and WebSocket broadcasts. `MetricsCore` consumes live pricing data for live mode unrealized P/L calculations.
 
+**Phase 27.F.14.Unified Part B** (October 26, 2025): Paper Execution Engine Instrumentation - Implemented comprehensive structured logging and WebSocket broadcasts at 6 key pipeline stages: `filter_cycle_started`, `candidate_selected`, `risk_check_passed/failed`, `order_computed`, and `paper_trade_opened`. All events broadcast via `contextBridge` with type `trading_pipeline_event` for real-time multi-user synchronization. Added `PAPER_FORCE_TRADE_SYMBOL` environment variable for deterministic testing with MSI guard (paper-mode only) that injects forced BTC/USD trades when no signals qualify. Verified global mode-based storage architecture - all `createPaperSimTrade`, `createPaperSimOpenPosition`, and `createPaperSimTradeLog` methods use direct inserts without userId filtering. Confirmed immediate cycle trigger on engine start and security preflight (login rate limiting: 5 attempts per 15 minutes).
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
