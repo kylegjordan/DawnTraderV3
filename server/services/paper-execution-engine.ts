@@ -20,6 +20,7 @@ export class PaperExecutionEngine {
   private riskManager: RiskManager;
   private monitoringInterval: NodeJS.Timeout | null = null;
   private priceHistory: Map<string, PriceData[]> = new Map();
+  private lastCycleSummary: any = {}; // Phase 27.F.14.DIAG: Cache last cycle for telemetry
   
   // Configuration
   private readonly SLIPPAGE_PERCENT = 0.15; // 0.15% slippage
@@ -315,37 +316,49 @@ export class PaperExecutionEngine {
         return;
       }
 
-      // Get watchlist pairs
+      // Get watchlist pairs (Ready-to-Buy candidates)
       const watchlist = await storage.getWatchlist({ mode: this.mode });
       if (watchlist.length === 0) {
         console.log(`[PaperExecution:${this.mode}] No watchlist pairs configured`);
         return;
       }
 
-      // [27.F.14.B] INSTRUMENTATION: Filter cycle started
-      console.log(`[27.F.14.B][PaperSim] filter_cycle_started {watchlist_size:${watchlist.length}, mode:"${this.mode}"}`);
+      // [27.F.14.DIAG] DIAGNOSTIC: Execution cycle start with Ready-to-Buy pairs
+      const readyToBuySymbols = watchlist.map(p => p.symbol);
+      console.log(`[Exec] cycle_start {mode:${this.mode}, readyToBuyCount:${watchlist.length}, symbols:${readyToBuySymbols.join(',')}}`);
       contextBridge.broadcast({
-        type: 'trading_pipeline_event' as any,
+        type: 'exec_cycle_start' as any,
+        mode: this.mode,
         payload: {
-          mode: this.mode,
-          eventType: 'filter_cycle_started',
-          message: `Scanning ${watchlist.length} symbols for trade opportunities`,
-          timestamp: new Date().toISOString(),
-          metadata: { watchlistSize: watchlist.length }
+          readyToBuyCount: watchlist.length,
+          symbols: readyToBuySymbols
         }
       });
 
       let tradesExecuted = 0;
+      const evaluatedSymbols: string[] = [];
 
       // Scan each symbol
       for (const pair of watchlist) {
         try {
           const executed = await this.checkSymbolForSignal(pair.symbol, settings);
+          evaluatedSymbols.push(pair.symbol);
           if (executed) tradesExecuted++;
         } catch (error) {
           console.error(`[PaperExecution:${this.mode}] Error scanning ${pair.symbol}:`, error);
         }
       }
+
+      // [27.F.14.DIAG] DIAGNOSTIC: Pulled for evaluation summary
+      console.log(`[Exec] pulled_for_evaluation {count:${evaluatedSymbols.length}, symbols:${evaluatedSymbols.join(',')}}`);
+      contextBridge.broadcast({
+        type: 'exec_pulled_for_eval' as any,
+        mode: this.mode,
+        payload: {
+          count: evaluatedSymbols.length,
+          symbols: evaluatedSymbols
+        }
+      });
 
       // [27.F.14.B] PAPER_FORCE_TRADE_SYMBOL: Deterministic Testing
       // MSI Guard: Only inject forced trades in paper mode
@@ -656,82 +669,83 @@ export class PaperExecutionEngine {
       }
     });
 
-    // Create trade record
-    const trade = await storage.createPaperSimTrade(this.mode, {
-      symbol: signal.symbol,
-      strategyName: signal.strategy,
-      side: 'buy',
-      quantity: quantity.toString(),
-      entryPrice: actualEntryPrice.toString(),
-      stopLoss: signal.stopPrice.toString(),
-      takeProfit: signal.targetPrice.toString(),
-      fees: entryFee.toString(),
-      slippage: totalSlippage.toString(),
-      confidence: (signal.confidence * 100).toString(),
-      openedAt: new Date(),
-      metadata: signal.metadata || {}
-    });
+    // [27.F.14.DIAG] Create trade record with comprehensive error handling
+    try {
+      const trade = await storage.createPaperSimTrade(this.mode, {
+        symbol: signal.symbol,
+        strategyName: signal.strategy,
+        side: 'buy',
+        quantity: quantity.toString(),
+        entryPrice: actualEntryPrice.toString(),
+        stopLoss: signal.stopPrice.toString(),
+        takeProfit: signal.targetPrice.toString(),
+        fees: entryFee.toString(),
+        slippage: totalSlippage.toString(),
+        confidence: (signal.confidence * 100).toString(),
+        openedAt: new Date(),
+        metadata: signal.metadata || {}
+      });
 
-    // Create open position
-    await storage.createPaperSimOpenPosition(this.mode, {
-      symbol: signal.symbol,
-      strategyName: signal.strategy,
-      side: 'buy',
-      quantity: quantity.toString(),
-      avgPrice: actualEntryPrice.toString(),
-      currentPrice: actualEntryPrice.toString(),
-      stopLoss: signal.stopPrice.toString(),
-      takeProfit: signal.targetPrice.toString(),
-      unrealizedPnl: '0',
-      unrealizedPnlPercent: '0',
-      confidence: (signal.confidence * 100).toString(),
-      metadata: {
-        ...signal.metadata,
-        tradeId: trade.id,
-        highWaterMark: actualEntryPrice.toString() // For trailing stop tracking
-      }
-    });
-
-    // Log the entry event
-    await storage.createPaperSimTradeLog(this.mode, {
-      tradeId: trade.id,
-      positionId: null,
-      eventType: 'position_opened',
-      message: `Position opened: ${signal.symbol} (${signal.strategy}) - Entry: $${actualEntryPrice.toFixed(2)}, Stop: $${signal.stopPrice.toFixed(2)}, Target: $${signal.targetPrice.toFixed(2)}`,
-      metadata: {
-        strategy: signal.strategy,
-        entryPrice: actualEntryPrice,
-        stopPrice: signal.stopPrice,
-        targetPrice: signal.targetPrice,
-        quantity: quantity,
-        positionValue: positionValue,
-        slippage: totalSlippage,
-        fees: entryFee,
-        confidence: signal.confidence
-      }
-    });
-
-    console.log(`[PaperExecution:${this.mode}] Simulated trade opened: ${signal.symbol} (Trade ID: ${trade.id})`);
-
-    // [27.F.14.B] INSTRUMENTATION: Paper trade opened
-    console.log(`[27.F.14.B][PaperSim] paper_trade_opened {symbol:"${signal.symbol}", tradeId:"${trade.id}", strategy:"${signal.strategy}", entry:${actualEntryPrice.toFixed(2)}}`);
-    contextBridge.broadcast({
-      type: 'trading_pipeline_event' as any,
-      payload: {
-        mode: this.mode,
-        eventType: 'paper_trade_opened',
-        message: `${signal.symbol} position opened: ${signal.strategy} @ $${actualEntryPrice.toFixed(2)}`,
-        timestamp: new Date().toISOString(),
+      // Create open position
+      await storage.createPaperSimOpenPosition(this.mode, {
+        symbol: signal.symbol,
+        strategyName: signal.strategy,
+        side: 'buy',
+        quantity: quantity.toString(),
+        avgPrice: actualEntryPrice.toString(),
+        currentPrice: actualEntryPrice.toString(),
+        stopLoss: signal.stopPrice.toString(),
+        takeProfit: signal.targetPrice.toString(),
+        unrealizedPnl: '0',
+        unrealizedPnlPercent: '0',
+        confidence: (signal.confidence * 100).toString(),
         metadata: {
-          symbol: signal.symbol,
+          ...signal.metadata,
           tradeId: trade.id,
+          highWaterMark: actualEntryPrice.toString() // For trailing stop tracking
+        }
+      });
+
+      // Log the entry event
+      await storage.createPaperSimTradeLog(this.mode, {
+        tradeId: trade.id,
+        positionId: null,
+        eventType: 'position_opened',
+        message: `Position opened: ${signal.symbol} (${signal.strategy}) - Entry: $${actualEntryPrice.toFixed(2)}, Stop: $${signal.stopPrice.toFixed(2)}, Target: $${signal.targetPrice.toFixed(2)}`,
+        metadata: {
+          strategy: signal.strategy,
+          entryPrice: actualEntryPrice,
+          stopPrice: signal.stopPrice,
+          targetPrice: signal.targetPrice,
+          quantity: quantity,
+          positionValue: positionValue,
+          slippage: totalSlippage,
+          fees: entryFee,
+          confidence: signal.confidence
+        }
+      });
+
+      console.log(`[PaperExecution:${this.mode}] Simulated trade opened: ${signal.symbol} (Trade ID: ${trade.id})`);
+
+      // [27.F.14.DIAG] DIAGNOSTIC: Trade insert successful
+      console.log(`[DB] trade_insert_ok {tradeId:${trade.id}, symbol:${signal.symbol}}`);
+      contextBridge.broadcast({
+        type: 'paper_trade_opened' as any,
+        mode: this.mode,
+        payload: {
+          tradeId: trade.id,
+          symbol: signal.symbol,
           strategy: signal.strategy,
           entryPrice: actualEntryPrice,
           quantity: quantity,
-          positionValue: positionValue
+          timestamp: new Date().toISOString()
         }
-      }
-    });
+      });
+    } catch (err: any) {
+      // [27.F.14.DIAG] DIAGNOSTIC: Trade insert failed
+      console.error(`[DB] trade_insert_err {symbol:${signal.symbol}, error:${err.message}}`);
+      throw err; // Re-throw to allow caller to handle
+    }
   }
 
   private calculateVWAP(priceData: PriceData[]): number {
@@ -773,5 +787,10 @@ export class PaperExecutionEngine {
 
   async getStats() {
     return await storage.getPaperSimStats(this.mode);
+  }
+
+  // Phase 27.F.14.DIAG: Telemetry accessor for last cycle diagnostics
+  getLastCycleSummary() {
+    return this.lastCycleSummary;
   }
 }

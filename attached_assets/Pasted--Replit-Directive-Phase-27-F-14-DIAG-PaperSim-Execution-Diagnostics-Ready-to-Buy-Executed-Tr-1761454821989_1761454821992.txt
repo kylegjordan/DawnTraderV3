@@ -1,0 +1,161 @@
+⚙️ Replit Directive — Phase 27.F.14.DIAG
+
+PaperSim Execution Diagnostics (Ready-to-Buy → Executed Trade Path)
+
+🎯 Objective
+
+Add deep, event-level diagnostics to the Paper Execution Engine and RiskManager to isolate why Ready-to-Buy pairs aren’t converting to executed trades.
+This replaces the force-trade test with precision logs that expose the exact step and reason any trade stops.
+
+🧱 Implementation Tasks
+1️⃣ Disable Forced-Trade Mode
+
+Remove or comment out PAPER_FORCE_TRADE_SYMBOL from Replit Secrets.
+
+# PAPER_FORCE_TRADE_SYMBOL=BTCUSD
+
+
+The diagnostics will now report only natural trade candidates.
+
+2️⃣ Instrument the Execution Cycle
+
+File: server/services/paper-execution-engine.ts
+
+Insert or update the following log and broadcast calls:
+
+// --- BEGIN DIAGNOSTIC INSTRUMENTATION ---
+
+contextBridge.broadcast({
+  type: 'exec_cycle_start',
+  mode: this.mode,
+  payload: {
+    readyToBuyCount: readyToBuyPairs.length,
+    symbols: readyToBuyPairs.map(p => p.symbol)
+  }
+});
+logger.info(`[Exec] cycle_start {mode:${this.mode}, readyToBuyCount:${readyToBuyPairs.length}, symbols:${readyToBuyPairs.map(p=>p.symbol).join(',')}}`);
+
+contextBridge.broadcast({
+  type: 'exec_pulled_for_eval',
+  mode: this.mode,
+  payload: {
+    count: candidates.length,
+    symbols: candidates.map(c=>c.symbol)
+  }
+});
+logger.info(`[Exec] pulled_for_evaluation {count:${candidates.length}, symbols:${candidates.map(c=>c.symbol).join(',')}}`);
+
+
+Add after StrategyEngine confidence evaluation:
+
+logger.info(`[Exec] signal_snapshot {symbol:${signal.symbol}, strategy:${signal.strategy}, confidence:${signal.confidence}, threshold:${settings.confidence_threshold}}`);
+
+
+After order sizing:
+
+logger.info(`[Order] order_computed {symbol:${order.symbol}, price:${order.entry}, qty:${order.qty}, minQty:${exchangeMinQty}, tickSize:${tickSize}, meetsMin:${order.qty>=exchangeMinQty}}`);
+
+
+After DB insert:
+
+try {
+  await storage.createPaperSimTrade(this.mode, trade);
+  await storage.createPaperSimOpenPosition(this.mode, position);
+  logger.info(`[DB] trade_insert_ok {tradeId:${trade.id}, symbol:${trade.symbol}}`);
+  contextBridge.broadcast({type:'paper_trade_opened', mode:this.mode, payload:{tradeId:trade.id, symbol:trade.symbol}});
+} catch (err) {
+  logger.error(`[DB] trade_insert_err {symbol:${trade.symbol}, error:${err.message}}`);
+}
+
+3️⃣ RiskManager Enhancements
+
+File: server/services/risk-manager.ts
+
+At the top of each check, add:
+
+logger.info(`[Risk] check_start {symbol:${symbol}, check:<name>}`);
+
+
+Expand failures to include reason codes and context:
+
+if (spreadPct > maxSpreadPct) {
+  logger.warn(`[Risk] risk_check_failed {code:'SPREAD', symbol:${symbol}, details:{spreadPct:${spreadPct}, maxAllowed:${maxSpreadPct}}}`);
+  return {ok:false, code:'SPREAD'};
+}
+
+
+Apply similar blocks for:
+POSITION_LIMIT, COOLDOWN, MIN_QTY, PORTFOLIO_CAP, etc.
+Each should return {ok:false, code:<reason>} and log risk_check_failed.
+
+Add after portfolio valuation:
+
+logger.info(`[Risk] portfolio_value_used {mode:${mode}, value:${portfolioValue}, source:'metrics'}`);
+
+
+Add cooldown skip log:
+
+logger.info(`[Risk] cooldown_skip {symbol:${symbol}, lastCloseTs:${lastCloseTs}, minutesSince:${minutesSince}, cooldownMinutes:${cooldownMinutes}}`);
+
+4️⃣ Optional Telemetry Endpoint
+
+File: server/routes.ts
+
+router.get('/api/paper-sim/last-cycle', async (req, res) => {
+  const last = global.paperExecutionEngine?.getLastCycleSummary?.() || {};
+  res.json({ ok: true, data: last });
+});
+
+
+In the engine, cache the last summary:
+
+this.lastCycleSummary = {
+  readyToBuyCount,
+  pulledCount: candidates.length,
+  evaluatedSymbols: candidates.map(c=>c.symbol),
+  riskSummary: { passed, failed, byCode },
+  openedTrades: openedSymbols
+};
+this.getLastCycleSummary = () => this.lastCycleSummary;
+
+5️⃣ Frontend/Console Monitoring
+
+No UI work required — logs and WS events will appear in Replit’s console:
+
+[Exec] cycle_start {mode:paper, readyToBuyCount:5, symbols:BTC/USD,ETH/USD,...}
+[Exec] pulled_for_evaluation {count:5, symbols:BTC/USD,ETH/USD,...}
+[Risk] risk_check_failed {code:'SPREAD', ...}
+[Order] order_computed ...
+[DB] trade_insert_ok {tradeId:312, symbol:BTC/USD}
+[WS] paper_trade_opened {tradeId:312, symbol:BTC/USD}
+
+🧾 Deliverables
+
+Enhanced event and reason-code logging in paper-execution-engine.ts and risk-manager.ts.
+
+Optional /api/paper-sim/last-cycle diagnostic endpoint.
+
+Logs stored in /logs/phase_27F14_DIAG.txt (auto-appended).
+
+✅ Verification Checklist
+Test	Expected Result
+Start PaperSim with Ready-to-Buy pairs	[Exec] cycle_start shows count > 0
+If pulled count = 0	Engine fetch bug (handoff)
+If risk failures	See explicit codes (SPREAD, MIN_QTY, etc.)
+If insert errors	[DB] trade_insert_err … in logs
+If trades open	[DB] trade_insert_ok + [WS] paper_trade_opened
+🚀 Execution Command
+
+Paste this into Replit:
+
+Implement Phase 27.F.14.DIAG — PaperSim Execution Diagnostics (Ready-to-Buy → Executed Trade Path)
+
+Replit will:
+
+Patch both service files.
+
+Add /api/paper-sim/last-cycle.
+
+Start the app and stream live event logs.
+
+Run one or two short PaperSim sessions; the new logs will immediately tell you whether the problem lies in the handoff, risk layer, or order persistence.
