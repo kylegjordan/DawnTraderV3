@@ -1,0 +1,60 @@
+🪄 Directive — Phase 27.F.14.UI-SYNC.2
+
+Goals Refactor + Behavioral Variable Reintegration
+
+1️⃣ Filters Tab Update
+
+Add new section “Advanced Universe & Signal Controls” below existing screener boxes:
+
+Field	Type	Range / Values
+Market Universe Size	dropdown	25 / 50 / 75 / 100 / 150
+Quote Currencies	multiselect	USD, USDT, USDC, EUR, GBP
+Active Timeframes	checkboxes	5m, 15m, 1h, 4h
+Confidence Threshold (%)	slider	40 – 90
+2️⃣ Guardrails Tab Update
+
+Above Micro-Execution Controls, insert “Execution Rhythm Controls (Behavioral)”:
+
+Field	Description	Default	Range
+Symbol Cool-Down (min)	Minimum time before a symbol can re-enter after trade close	15	0 – 90
+3️⃣ Goals Tab Refactor
+
+Replace manual “Average Return” with:
+
+New Field	Source	Behavior
+Trades per Day	Manual / AI-suggested	LATTI tunes based on mode
+Target per Trade ($)	Manual	Editable
+Target Daily Profit ($)	Derived = Trades per Day × Target per Trade	Auto-updates instantly
+
+Each Trading Pace preset updates these defaults:
+
+Mode	Trades / Day	Target / Trade	Daily Profit
+Conservative	2	$20	$40
+Baseline	4	$25	$100
+Optimistic	6	$30	$180
+Aggressive	8	$35	$280
+4️⃣ Backend Schema Verification (automated)
+
+Checks that screener_filters and guardrails tables contain all columns above; if not, adds them idempotently.
+
+5️⃣ Frontend Rebuild + Restart
+npm run build:client -- --force
+npm run restart:full
+
+
+UI reloads with new sections visible.
+
+6️⃣ Validation Checklist
+Tab	Verify
+Filters	“Advanced Universe & Signal Controls” visible, all four fields save/load
+Guardrails	“Execution Rhythm Controls (Behavioral)” + “Micro-Execution Loop Controls” both visible
+Goals	Average Return removed, Trades per Day + Target per Trade + Target Daily Profit auto-linked
+LATTI	Nightly log shows tunables universe_size, confidence_threshold, cooldown_minutes, heartbeat_micro_interval, price_delta_trigger
+🧾 Expected Logs
+[UI-SYNC.2] Added behavioral controls to Filters/Guardrails
+[GoalsEngine] Dynamic goal linkage active
+[Schema] 27.F.14.K + MICRO merged successfully
+
+🚀 Command for Replit
+
+Apply Phase 27.F.14.UI-SYNC.2 — Rebuild Goals Engine and Behavioral Controls UI
