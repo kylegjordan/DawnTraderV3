@@ -62,9 +62,6 @@ export default function TargetDailyGoals() {
   
   // Phase 27.F.22: Cached projections to prevent $0 states during refetch
   const [cachedProjections, setCachedProjections] = useState<ProjectedBalance[] | null>(null);
-  
-  // Phase 27.F.22: Debounced idle refresh timeout
-  const refreshTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Get portfolio balance from portfolio metrics
   const portfolioBalance = portfolioMetrics?.totalValue || 850;
@@ -76,15 +73,33 @@ export default function TargetDailyGoals() {
     maximumFractionDigits: 2 
   });
 
-  // Fetch current trading pace to detect preset changes
+  // Phase 27.F.23: Fetch current trading pace (disable all background refetches)
   const { data: currentPaceData } = useQuery<{ tradingPace: string }>({
     queryKey: ['/api/system/trading-pace'],
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
   
-  // Phase 27.F.18: Fetch LATTI-calculated target daily avg earning %
+  // Phase 27.F.21: Compute current pace early (needed for LATTI query key)
+  const currentPace = currentPaceData?.tradingPace || 'baseline';
+  
+  // Phase 27.F.23: Fetch LATTI-calculated target daily avg earning % (disable all background refetches)
   const { data: lattiTargets, isLoading: lattiLoading } = useQuery<LATTITargets>({
-    queryKey: ['/api/latti/targets', mode],
-    queryFn: async () => apiRequest('GET', `/api/latti/targets?mode=${mode}`),
+    queryKey: ['/api/latti/targets', mode, currentPace], // Phase 27.F.23: Include currentPace to auto-refetch on preset change
+    queryFn: async () => {
+      console.log(`[TargetDailyGoals] Phase 27.F.23: LATTI fetched for ${currentPace} preset at ${new Date().toLocaleTimeString()}`);
+      return apiRequest('GET', `/api/latti/targets?mode=${mode}`);
+    },
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: true, // Phase 27.F.23: Allow mount refetch for preset changes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
   
   // Phase 27.F.21: Diagnostic console.table for LATTI values on frontend
@@ -112,33 +127,29 @@ export default function TargetDailyGoals() {
   // Phase 27.F.21: Track previous trading pace for preset change detection
   const prevPaceRef = useRef<string | null>(null);
   
-  // Phase 27.F.21: Compute current pace and metric name (needed by effects)
-  const currentPace = currentPaceData?.tradingPace || 'baseline';
+  // Phase 27.F.23: Metric name (currentPace already declared above for query key)
   const metricName = `Target Daily Avg Earning % (${currentPace})`;
   
-  // Phase 27.F.22: Fetch goals data BEFORE preset switch effect
+  // Phase 27.F.23: Fetch goals data (disable all background refetches to prevent flicker)
   const { data: goalsData, isLoading: goalsLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
     queryKey: ['/api/goals', mode, currentPace], // Include pace in query key for caching
-    queryFn: async () => apiRequest('GET', `/api/goals?mode=${mode}`), // Phase 27.F.22: Explicit queryFn
+    queryFn: async () => apiRequest('GET', `/api/goals?mode=${mode}`),
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: true, // Phase 27.F.23: Allow mount refetch for preset changes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
   
-  // Phase 27.F.22: When LATTI targets update (from preset change), instantly update input
+  // Phase 27.F.23: When LATTI targets update (from preset change), instantly update input
   useEffect(() => {
     if (currentPaceData && lattiTargets) {
-      const currentPace = currentPaceData.tradingPace;
-      
       // Detect pace change
       if (prevPaceRef.current && prevPaceRef.current !== currentPace) {
-        console.log(`[TargetDailyGoals] Phase 27.F.22: Trading pace changed from ${prevPaceRef.current} to ${currentPace}`);
+        console.log(`[TargetDailyGoals] Phase 27.F.23: Trading pace changed from ${prevPaceRef.current} to ${currentPace} - queries will auto-refresh via key change`);
         prevPaceRef.current = currentPace;
-        
-        // Phase 27.F.22: Invalidate both LATTI and goals data for new preset
-        queryClient.invalidateQueries({ queryKey: ['/api/latti/targets', mode] });
-        queryClient.invalidateQueries({ queryKey: ['/api/goals', mode, currentPace] });
-        
-        // Force refetch for fresh data
-        queryClient.refetchQueries({ queryKey: ['/api/latti/targets', mode] });
-        queryClient.refetchQueries({ queryKey: ['/api/goals', mode, currentPace] });
+        // Phase 27.F.23: No manual invalidation needed - query keys include currentPace, so they auto-refresh
       } else {
         // Phase 27.F.22: LATTI targets updated - only pre-fill if no saved override exists
         const lattiTargetPct = parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2);
@@ -164,10 +175,16 @@ export default function TargetDailyGoals() {
     }
   }, [currentPaceData?.tradingPace, lattiTargets?.target_daily_avg_earning_pct, goalsData?.goals, metricName, mode]); // Phase 27.F.22: Include goalsData to check for saved overrides
 
-  // Fetch guardrails for validation
+  // Phase 27.F.23: Fetch guardrails for validation (disable all background refetches)
   const { data: guardrailsData } = useQuery({
     queryKey: ['/api/guardrails', mode],
     queryFn: async () => apiRequest('GET', `/api/guardrails?mode=${mode}`),
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
 
   // Phase 27.F.22: Initialize target percent with delayed reconciliation (allows LATTI instant sync first)
@@ -234,22 +251,7 @@ export default function TargetDailyGoals() {
         reconcile();
       }
     }
-    
-    // Phase 27.F.22: Debounced idle refresh - schedule ONE refresh after 5 min, not continuous
-    if (refreshTimeout.current) {
-      clearTimeout(refreshTimeout.current);
-    }
-    refreshTimeout.current = setTimeout(() => {
-      console.log('[TargetDailyGoals] Idle refresh after 5 minutes');
-      queryClient.invalidateQueries({ queryKey: ['/api/goals', mode, currentPace] });
-    }, 300000); // 5 minutes
-    
-    return () => {
-      if (refreshTimeout.current) {
-        clearTimeout(refreshTimeout.current);
-      }
-    };
-  }, [goalsData?.goals, lattiTargets?.target_daily_avg_earning_pct, metricName]); // Phase 27.F.22: Only depend on specific values
+  }, [goalsData?.goals, lattiTargets?.target_daily_avg_earning_pct, metricName]); // Phase 27.F.23: No idle refresh - completely static
 
   // Phase 27.F.18/19: Validate target percent against guardrails
   useEffect(() => {
@@ -364,23 +366,32 @@ export default function TargetDailyGoals() {
     }
   };
 
-  // Phase 27.F.22: Calculate projected balances and cache them to prevent $0 states
+  // Phase 27.F.23: Calculate projected balances with proper daily compounding and safety cap
   const effectivePct = parseFloat(targetPercent) || 0;
+  
+  // Phase 27.F.23: Normalize daily rate to decimal and apply safety cap
+  let dailyRate = effectivePct / 100; // e.g., 0.9% → 0.009
+  if (dailyRate > 0.05) {
+    dailyRate = 0.05; // Cap at 5% per day to prevent runaway projections
+    console.warn(`[TargetDailyGoals] Phase 27.F.23: Daily rate ${effectivePct}% exceeds 5% cap, capping at 5%`);
+  }
+  
+  // Phase 27.F.23: Use true daily compounding: currentValue * (1 + dailyRate)^days
   const projections: ProjectedBalance[] = effectivePct > 0 && portfolioBalance > 0 ? [
-    { label: "Tomorrow", days: 1, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 1) },
-    { label: "1 Week", days: 7, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 7) },
-    { label: "1 Month", days: 30, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 30) },
-    { label: "3 Months", days: 90, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 90) },
-    { label: "6 Months", days: 180, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 180) },
-    { label: "1 Year", days: 365, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 365) },
+    { label: "Tomorrow", days: 1, balance: portfolioBalance * Math.pow(1 + dailyRate, 1) },
+    { label: "1 Week", days: 7, balance: portfolioBalance * Math.pow(1 + dailyRate, 7) },
+    { label: "1 Month", days: 30, balance: portfolioBalance * Math.pow(1 + dailyRate, 30) },
+    { label: "3 Months", days: 90, balance: portfolioBalance * Math.pow(1 + dailyRate, 90) },
+    { label: "6 Months", days: 180, balance: portfolioBalance * Math.pow(1 + dailyRate, 180) },
+    { label: "1 Year", days: 365, balance: portfolioBalance * Math.pow(1 + dailyRate, 365) },
   ] : (cachedProjections || []);
   
-  // Phase 27.F.22: Cache projections when we have valid data
+  // Phase 27.F.23: Cache projections when we have valid data
   useEffect(() => {
     if (effectivePct > 0 && portfolioBalance > 0) {
       setCachedProjections(projections);
     }
-  }, [targetPercent, portfolioBalance]); // Only update cache when these change
+  }, [targetPercent, portfolioBalance, dailyRate]); // Phase 27.F.23: Include dailyRate in dependencies
 
   const isLoading = lattiLoading || goalsLoading || portfolioLoading;
 

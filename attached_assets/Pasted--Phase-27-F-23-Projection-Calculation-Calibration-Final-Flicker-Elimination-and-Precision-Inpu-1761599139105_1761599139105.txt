@@ -1,0 +1,154 @@
+⚙️ Phase 27.F.23 — Projection Calculation Calibration, Final Flicker Elimination, and Precision Input Fix
+🎯 Objectives
+
+Correct portfolio projection math for realistic daily compounding.
+
+Eliminate the last background flicker (~every 60–90 seconds).
+
+Allow precise decimal inputs (e.g., “1.5%” stays “1.5%,” not rounded to “2%”).
+
+1️⃣ Fix Projection Calculation Logic
+
+Current Problem:
+
+Conservative and Baseline projections are mis-scaled — Conservative grows too slowly while Baseline explodes exponentially.
+
+The math likely mixes up percentage scaling (0.9 vs. 0.009).
+
+Directive:
+
+Normalize the daily rate to a decimal once before compounding:
+
+const dailyRate = targetPct / 100; // e.g. 0.9 -> 0.009
+
+
+Apply true daily compounding (exponential):
+
+const projectedBalance = currentValue * Math.pow(1 + dailyRate, days);
+const gain = projectedBalance - currentValue;
+
+
+Use standard day mappings:
+
+Period	Days
+Tomorrow	1
+1 Week	7
+1 Month	30
+3 Months	90
+6 Months	180
+1 Year	365
+
+Add a safety cap to avoid runaway projections:
+
+if (dailyRate > 0.05) dailyRate = 0.05; // cap at 5% per day
+
+
+Expected realistic outcomes (starting at $850):
+
+Pace	Daily %	Approx. 1-Year Value	Comment
+Conservative	0.4%	~$1,400 (+65%)	steady
+Baseline	0.9%	~$3,000 (+250%)	moderate
+Optimistic	1.25%	~$5,000 (+490%)	strong
+Aggressive	1.75%	~$10,000 (+1075%)	high
+2️⃣ Eliminate Residual Flicker (Background Refetch)
+
+Current Problem:
+UI still flashes roughly once every minute — caused by background revalidation from React Query or WebSocket syncs.
+
+Directive:
+
+For all queries in Goals Engine, completely disable background polling and auto refetches:
+
+useQuery(['lattiTargets', mode], fetchLattiTargets, {
+  refetchInterval: false,
+  refetchIntervalInBackground: false,
+  refetchOnMount: false,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+  staleTime: Infinity,
+});
+
+
+Search for and remove any:
+
+queryClient.invalidateQueries(['lattiTargets']);
+
+
+or WebSocket refetch() calls.
+
+Add a short diagnostic log to verify that refetches are no longer happening:
+
+console.log("LATTI refetched at:", new Date().toLocaleTimeString());
+
+
+✅ After the fix, no refetch logs should appear for 5+ minutes of idle time.
+
+Expected:
+Zero flicker or projection table refreshes unless the user manually changes input or trading pace.
+
+3️⃣ Fix Input Rounding (Allow Decimals in Manual Entry)
+
+Current Problem:
+When entering 1.5, the system rounds to 2. When entering 2.5, it rounds to 3.
+The issue is likely caused by either:
+
+Math.round() or parseInt() in the input handler, or
+
+improper step / type attributes on the <input> element.
+
+Directive:
+
+Update the input field to preserve fractional precision:
+
+<input
+  type="number"
+  step="0.01"
+  min="0"
+  value={targetPercent}
+  onChange={(e) => setTargetPercent(parseFloat(e.target.value) || 0)}
+/>
+
+
+Remove any Math.round(), Math.ceil(), or Math.floor() logic in the save or pre-fill handler.
+
+Ensure database and frontend both support two-decimal precision (float or numeric(5,2)).
+
+Expected Behavior:
+
+Typing 1.25 stays 1.25%, not rounded.
+
+Saved goals retain full decimal accuracy.
+
+LATTI display and user-entered values use consistent precision (two decimals).
+
+4️⃣ Validate Final State
+
+✅ Expected Results After Phase 27.F.23:
+
+Projection math: all 4 paces compound realistically.
+
+Flicker: no periodic refresh for 5+ minutes of inactivity.
+
+Manual entry: decimal precision preserved exactly as entered.
+
+All UI syncs (preset changes, overrides) remain instantaneous and stable.
+
+🧩 Final Replit Instruction
+
+Phase 27.F.23 — Projection Calculation Calibration, Flicker Elimination, and Input Precision Fix.
+
+Correct projection math — convert daily % to decimals, use Math.pow(1 + r, days), and cap r at 5%.
+
+Disable all background React Query refetches and WebSocket invalidations to stop minute-level flicker.
+
+Fix the input handler so fractional percentages (like 1.5) stay exact and do not round to whole numbers.
+
+Verify that each preset’s 1-year projections are proportional and realistic, and that no UI refresh occurs without user input.
+
+Once this is implemented, the Goals Engine will have:
+
+fully correct growth projections,
+
+perfectly static rendering, and
+
+precise manual control with two-decimal accuracy.
