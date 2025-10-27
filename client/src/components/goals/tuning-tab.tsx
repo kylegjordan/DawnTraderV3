@@ -12,7 +12,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Download, RotateCcw, Power, PowerOff, TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { format } from "date-fns";
 import PaperSimDiagnostic from "@/components/goals/paper-sim-diagnostic";
-import { useWebSocket } from "@/hooks/use-websocket";
+import { useWebSocket, WebSocketMessage } from "@/hooks/use-websocket";
 
 interface TuningEvent {
   id: string;
@@ -48,6 +48,7 @@ export default function TuningTab() {
   const { toast } = useToast();
   const [selectedMode, setSelectedMode] = useState<"paper" | "live">("paper");
   const [autoRefreshActive, setAutoRefreshActive] = useState(true);
+  const { messages: wsMessages } = useWebSocket();
 
   // Fetch tuning events
   const { data: events = [], isLoading: eventsLoading, refetch: refetchEvents } = useQuery<TuningEvent[]>({
@@ -175,12 +176,18 @@ export default function TuningTab() {
   }, []);
 
   // Phase 27.F.17b: WebSocket listener for real-time tuning policy updates
-  useWebSocket("tuning_policy_updated", (data) => {
-    console.log("[TuningTab] Received tuning_policy_updated:", data);
-    // Invalidate policy cache for both modes to ensure fresh data
-    queryClient.invalidateQueries({ queryKey: ["/api/tuning/policy", "paper"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/tuning/policy", "live"] });
-  });
+  useEffect(() => {
+    if (!wsMessages || wsMessages.length === 0) return;
+    
+    const latestMessage = wsMessages[wsMessages.length - 1] as WebSocketMessage;
+    
+    if (latestMessage.type === 'tuning_policy_updated') {
+      console.log("[TuningTab] Received tuning_policy_updated:", latestMessage);
+      // Invalidate policy cache for both modes to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/tuning/policy", "paper"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tuning/policy", "live"] });
+    }
+  }, [wsMessages]);
 
   const loading = eventsLoading || policyLoading;
   const policyData = policy || {
