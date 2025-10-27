@@ -10,6 +10,7 @@ import { db } from '../db';
 import { trades } from '@shared/schema';
 import { eq, and, gte, sql, desc } from 'drizzle-orm';
 import { provenanceLogger } from './provenance-logger'; // Phase 8.6.4: BoB deep-trace
+import { storage } from '../storage';
 
 /**
  * DataBob Module
@@ -149,6 +150,13 @@ class DataBobModule {
       const calculateEarnings = (trades: any[]) => 
         trades.reduce((sum, t) => sum + Number(t.realizedPL || 0), 0);
 
+      // Fetch Average Daily Earnings % from daily_performance_summary table (default: 1 day)
+      const performanceSummaries = await storage.getDailyPerformanceSummaries(mode as 'live' | 'paper', 1);
+      const validSummaries = performanceSummaries.filter(s => s.adePercent != null && s.adePercent !== '');
+      const avgDailyEarningsPct = validSummaries.length > 0
+        ? validSummaries.reduce((sum, s) => sum + parseFloat(s.adePercent), 0) / validSummaries.length
+        : null;
+
       const averages = {
         avgDailyEarnings: Number(calculateEarnings(todayTrades).toFixed(2)),
         avgWeeklyEarnings: Number(calculateEarnings(weekTrades).toFixed(2)),
@@ -157,7 +165,8 @@ class DataBobModule {
         avgTradesPerDay: todayTrades.length,
         avgEarningsPerTrade: allTrades.length > 0 
           ? Number((calculateEarnings(allTrades) / allTrades.length).toFixed(2))
-          : 0
+          : 0,
+        avgDailyEarningsPct
       };
 
       const duration = Date.now() - startTime;

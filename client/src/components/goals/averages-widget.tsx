@@ -13,7 +13,7 @@ interface AveragesData {
   avgEarningsPerTrade: number;
   avgAmountInvestedPerTrade: number;
   avgFeesPerTrade: number;
-  avgReturnPercent: number;
+  avgDailyEarningsPct: number | null;
   avgTradeCompletionTime: string;
 }
 
@@ -83,7 +83,7 @@ export default function AveragesWidget() {
     avgEarningsPerTrade: 0,
     avgAmountInvestedPerTrade: 0,
     avgFeesPerTrade: 0,
-    avgReturnPercent: 0,
+    avgDailyEarningsPct: null,
     avgTradeCompletionTime: '0h 0m',
   };
 
@@ -158,14 +158,14 @@ export default function AveragesWidget() {
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-xs text-muted-foreground">Avg Return %:</span>
+            <span className="text-xs text-muted-foreground">Avg Daily Earnings %:</span>
             <span className={cn(
               "text-sm font-mono",
-              getChangeType(data.avgReturnPercent) === "positive" && "text-success",
-              getChangeType(data.avgReturnPercent) === "negative" && "text-destructive",
-              getChangeType(data.avgReturnPercent) === "neutral" && "text-muted-foreground"
-            )} data-testid="avg-return-percent">
-              {formatPercent(data.avgReturnPercent)}
+              data.avgDailyEarningsPct == null && "text-muted-foreground",
+              data.avgDailyEarningsPct != null && getChangeType(data.avgDailyEarningsPct) === "positive" && "text-success",
+              data.avgDailyEarningsPct != null && getChangeType(data.avgDailyEarningsPct) === "negative" && "text-destructive"
+            )} data-testid="avg-daily-earnings-pct">
+              {data.avgDailyEarningsPct == null ? 'Pending' : formatPercent(data.avgDailyEarningsPct)}
             </span>
           </div>
           <div className="flex justify-between items-center">

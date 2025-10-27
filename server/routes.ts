@@ -8430,13 +8430,12 @@ Please:
       );
       const avgFeesPerTrade = periodTrades.length > 0 ? totalFees / periodTrades.length : 0;
 
-      const avgReturnPercent = periodTrades.length > 0
-        ? periodTrades.reduce((sum, t) => {
-            const entry = parseFloat(t.entryPrice) * parseFloat(t.quantity);
-            const pl = parseFloat(t.realizedPL || '0');
-            return sum + (pl / entry * 100);
-          }, 0) / periodTrades.length
-        : 0;
+      // Fetch Average Daily Earnings % from daily_performance_summary table
+      const performanceSummaries = await storage.getDailyPerformanceSummaries(mode as 'live' | 'paper', days);
+      const validSummaries = performanceSummaries.filter(s => s.adePercent != null && s.adePercent !== '');
+      const avgDailyEarningsPct = validSummaries.length > 0
+        ? validSummaries.reduce((sum, s) => sum + parseFloat(s.adePercent), 0) / validSummaries.length
+        : null;
 
       const totalCompletionTime = periodTrades.reduce((sum, t) => {
         if (t.exitTime && t.entryTime) {
@@ -8455,7 +8454,7 @@ Please:
         avgEarningsPerTrade,
         avgAmountInvestedPerTrade,
         avgFeesPerTrade,
-        avgReturnPercent,
+        avgDailyEarningsPct,
         avgTradeCompletionTime,
       });
     } catch (error: any) {
