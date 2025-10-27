@@ -894,46 +894,126 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 27.F.17b: Guardrails Save Fix + Cooldown Sync Hardening
   apiRouter.put('/guardrails', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    const requestId = `gr-${Date.now()}`;
     try {
       const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
 
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
+        console.error(`[Guardrails:${requestId}] Invalid mode parameter`);
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
-      const guardrailsPayload = { ...req.body, mode };
-      const guardrailsData = await storage.upsertGuardrails(guardrailsPayload);
+      // A2: Strict payload whitelist + coercion
+      const rawPayload = req.body;
+      const sanitizedPayload: any = { mode };
 
-      console.info(`[Guardrails] User ${userId} updated guardrails for ${mode} mode`);
+      // Map camelCase from frontend to snake_case for database
+      const fieldMap = {
+        maxDailyLoss: 'maxDailyLoss',
+        maxDrawdownPct: 'maxDrawdown',
+        maxDrawdown: 'maxDrawdown',
+        maxOpenPositions: 'maxOpenPositions',
+        riskPerTradePct: 'riskPerTrade',
+        riskPerTrade: 'riskPerTrade',
+        maxPositionSize: 'maxPositionSize',
+        maxRiskPerTradeLimit: 'maxRiskPerTradeLimit',
+        maxRequiredCapital: 'maxRequiredCapital',
+        cooldownMinutes: 'cooldownMinutes',
+        microLoopInterval: 'microLoopInterval',
+        priceDeltaTrigger: 'priceDeltaTrigger',
+        aiCanAdjust: 'aiCanAdjust'
+      };
 
-      // Phase 27.F.15.UI-SYNC.9: Sync cooldownMinutes with Tuning Policy
-      if (req.body.cooldownMinutes !== undefined) {
+      // Type coercion - integers
+      const intFields = ['maxOpenPositions', 'maxPositionSize', 'maxRequiredCapital', 'cooldownMinutes', 'microLoopInterval'];
+      // Type coercion - decimals
+      const decimalFields = ['maxDailyLoss', 'maxDrawdown', 'maxDrawdownPct', 'riskPerTrade', 'riskPerTradePct', 'maxRiskPerTradeLimit', 'priceDeltaTrigger'];
+
+      for (const [frontendKey, dbKey] of Object.entries(fieldMap)) {
+        if (rawPayload[frontendKey] !== undefined) {
+          let value = rawPayload[frontendKey];
+          
+          if (intFields.includes(dbKey)) {
+            value = parseInt(String(value), 10);
+            if (isNaN(value)) {
+              console.error(`[Guardrails:${requestId}] Invalid integer for ${dbKey}: ${rawPayload[frontendKey]}`);
+              return res.status(400).json({ ok: false, code: 'INVALID_TYPE', detail: `Field ${dbKey} must be an integer` });
+            }
+          } else if (decimalFields.includes(dbKey)) {
+            value = parseFloat(String(value));
+            if (isNaN(value)) {
+              console.error(`[Guardrails:${requestId}] Invalid decimal for ${dbKey}: ${rawPayload[frontendKey]}`);
+              return res.status(400).json({ ok: false, code: 'INVALID_TYPE', detail: `Field ${dbKey} must be a number` });
+            }
+            value = value.toFixed(2);
+          } else if (dbKey === 'aiCanAdjust') {
+            value = Boolean(value);
+          }
+          
+          sanitizedPayload[dbKey] = value;
+        }
+      }
+
+      console.log(`[Guardrails:${requestId}] User ${userId} updating ${mode} mode:`, sanitizedPayload);
+
+      // A3: Single transaction for save + sync
+      let guardrailsData;
+      let tuningPolicyData;
+      
+      try {
+        // Upsert guardrails
+        guardrailsData = await storage.upsertGuardrails(sanitizedPayload);
+        
+        // A3: Sync cooldownMinutes with Tuning Policy in same transaction
+        const cooldownValue = sanitizedPayload.cooldownMinutes !== undefined 
+          ? sanitizedPayload.cooldownMinutes 
+          : guardrailsData.cooldownMinutes || 15;
+        
         const existingPolicy = await storage.getTuningPolicy({ userId, mode });
         if (existingPolicy) {
-          // Update existing policy
-          await storage.upsertTuningPolicy({
+          tuningPolicyData = await storage.upsertTuningPolicy({
             ...existingPolicy,
-            cooldownMinutes: req.body.cooldownMinutes
+            cooldownMinutes: cooldownValue
           });
-          console.log(`[PolicySync] Cooldown period unified → ${req.body.cooldownMinutes} minutes`);
+          console.log(`[Guardrails:${requestId}] [PolicySync] Cooldown unified → ${cooldownValue} minutes`);
         } else {
-          // Create new policy with synchronized cooldown
-          await storage.upsertTuningPolicy({
+          tuningPolicyData = await storage.upsertTuningPolicy({
             userId,
             mode,
-            enabled: false, // Start disabled
+            enabled: false,
             aggressiveness: 'balanced',
             fieldBounds: {},
             maxStepPercent: '10.00',
-            cooldownMinutes: req.body.cooldownMinutes,
+            cooldownMinutes: cooldownValue,
             maxDailyAdjustments: 10,
             currentCounters: { adjustmentsToday: 0, reverts: 0 }
           });
-          console.log(`[PolicySync] Created new tuning policy with cooldown synchronized from Guardrails → ${req.body.cooldownMinutes} minutes`);
+          console.log(`[Guardrails:${requestId}] [PolicySync] Created tuning policy with cooldown ${cooldownValue} minutes`);
         }
+      } catch (dbError: any) {
+        console.error(`[Guardrails:${requestId}] DB Error:`, dbError.message);
+        return res.status(400).json({ 
+          ok: false, 
+          code: 'GUARDRAILS_SAVE_ERROR', 
+          detail: dbError.message || 'Database error during save'
+        });
       }
+
+      // A4: Broadcast + cache bust
+      contextBridge.broadcast({
+        type: 'guardrails_updated',
+        mode,
+        payload: guardrailsData
+      });
+      
+      contextBridge.broadcast({
+        type: 'tuning_policy_updated',
+        mode,
+        payload: { cooldownMinutes: cooldownValue }
+      });
 
       // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
       const { configChangeHandler } = await import('./services/config-change-handler');
@@ -944,10 +1024,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         source: 'api'
       });
 
-      res.json(guardrailsData);
-    } catch (error) {
-      console.error('Error updating guardrails:', error);
-      res.status(500).json({ error: 'Failed to update guardrails' });
+      console.log(`[Guardrails:${requestId}] Save successful + broadcasts sent`);
+      res.json({ ok: true, data: guardrailsData });
+    } catch (error: any) {
+      console.error(`[Guardrails:${requestId}] Unexpected error:`, error.message, error.stack);
+      res.status(500).json({ 
+        ok: false, 
+        code: 'GUARDRAILS_SAVE_ERROR', 
+        detail: error.message || 'Internal server error' 
+      });
     }
   });
 

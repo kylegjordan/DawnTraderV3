@@ -1,0 +1,150 @@
+Phase 27.F.17b — Guardrails Save Fix + Cooldown Sync Hardening (No-Code)
+🎯 Objective
+
+Eliminate the “Failed to update guardrails” error when saving any guardrail value.
+
+Make cooldownMinutes a single source of truth that stays in sync with Tuning.
+
+Ensure the UI always shows saved values immediately (no stale cache).
+
+A) Server: Endpoint Guard + Instrumentation
+
+A1 — Add structured logging around the save endpoint
+
+Wrap the /api/guardrails PUT handler in a try/catch.
+
+On catch, log: requestId, mode, sanitized payload, exact DB error message.
+
+Return JSON { ok:false, code:"GUARDRAILS_SAVE_ERROR", detail:"<db message>" } with 400.
+
+A2 — Strict payload whitelist + coercion
+
+Accept only these fields:
+maxDailyLoss, maxDrawdownPct, maxOpenPositions, riskPerTradePct, maxPositionSize, maxRiskPerTradeLimit, maxRequiredCapital, cooldownMinutes, microLoopInterval, priceDeltaTrigger
+
+Coerce types:
+
+ints: maxDailyLoss, maxOpenPositions, maxPositionSize, maxRequiredCapital, cooldownMinutes, microLoopInterval
+
+decimals: riskPerTradePct, maxDrawdownPct, maxRiskPerTradeLimit, priceDeltaTrigger
+
+Reject unknown fields (e.g., userId, lastUpdatedBy) to prevent Drizzle/SQL errors.
+
+A3 — Single transaction for save + sync
+
+In one DB transaction:
+
+Upsert row in guardrails for { mode } with sanitized fields.
+
+Upsert row in tuning_policy for the same { mode } with cooldown_minutes = guardrails.cooldown_minutes.
+
+Return the saved guardrails row.
+
+A4 — Broadcast + cache bust
+
+After commit:
+
+contextBridge.broadcast({ type:"guardrails_updated", mode, payload: savedRow })
+
+contextBridge.broadcast({ type:"tuning_policy_updated", mode, payload:{ cooldownMinutes: savedRow.cooldown_minutes } })
+
+B) DB: Sanity & Defaults
+
+B1 — Ensure columns exist with safe defaults
+
+guardrails.cooldown_minutes INT NOT NULL DEFAULT 15
+
+guardrails.micro_loop_interval INT NOT NULL DEFAULT 8
+
+guardrails.price_delta_trigger NUMERIC(6,4) NOT NULL DEFAULT 0.3000
+
+B2 — Range checks
+
+CHECK (cooldown_minutes BETWEEN 0 AND 90)
+
+CHECK (micro_loop_interval BETWEEN 5 AND 60)
+
+CHECK (price_delta_trigger BETWEEN 0.10 AND 1.00)
+
+(If any of these are missing, add them via SQL ALTER TABLE ... ADD COLUMN IF NOT EXISTS and ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS.)
+
+C) Client: Payload, Sync, and UX
+
+C1 — Fix payload names
+
+Map UI → server exactly:
+
+cooldownMinutes → cooldown_minutes
+
+microLoopInterval → micro_loop_interval
+
+priceDeltaTrigger → price_delta_trigger
+
+Do not send userId or lastUpdatedBy.
+
+C2 — Optimistic save + query invalidation
+
+On successful save, invalidate:
+
+['guardrails', mode]
+
+['tuningPolicy', mode]
+
+Subscribe to guardrails_updated and tuning_policy_updated WS events to refresh immediately.
+
+C3 — Cooldown mirror
+
+Tuning tab reads cooldown from tuning_policy.cooldown_minutes.
+
+After a guardrails save, the broadcast refresh should update Tuning instantly.
+
+If no tuning row exists yet, show guardrails value (15) as fallback, but immediately create tuning row during the save (handled by A3).
+
+C4 — Friendly errors
+
+If API returns { ok:false, code:"GUARDRAILS_SAVE_ERROR" }, show the detail text in the toast so we see the real DB reason.
+
+D) Quick Repro & Verification
+
+D1 — Curl test (paper mode)
+
+# Replace TOKEN with any valid test token if needed; otherwise hit directly if not protected.
+curl -X PUT http://localhost:5000/api/guardrails \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "mode":"paper",
+    "cooldown_minutes": 12,
+    "micro_loop_interval": 8,
+    "price_delta_trigger": 0.30
+  }'
+
+
+Expect: { ok:true, data:{ cooldown_minutes:12, ... } } and WS broadcasts in server logs.
+
+D2 — UI test
+
+Goals → Guardrails: set Symbol Cool-Down to 12, Save → green toast.
+
+Switch to Tuning → Cooldown shows 12 without reload.
+
+Refresh browser → both tabs still show 12.
+
+Change other guardrails fields → Save should succeed (no error toast).
+
+E) Common Root Causes We’re Guarding Against
+
+Extra fields (lastUpdatedBy, userId) getting into the SQL upsert → fixed by whitelist.
+
+String numbers ("15") failing constraints → fixed by coercion.
+
+Tuning table missing and UI defaulting to 60 → fixed by transactional upsert + default.
+
+Stale client cache → fixed by broadcasts + invalidation.
+
+F) Success Criteria
+
+No “Failed to update guardrails” on any save.
+
+Cooldown value stays identical on Guardrails and Tuning immediately after save and after a hard refresh.
+
+Server logs show a single transactional upsert with no DB errors.
