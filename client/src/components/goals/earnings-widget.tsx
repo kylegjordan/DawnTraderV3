@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TrendingUp, Info } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
@@ -13,6 +14,7 @@ interface EarningsSummary {
   allTime: number;
   avgDailyEarnings: number;
   avgDailyEarningsStatus: string;
+  avgDailyEarningsPct: number | null;
 }
 
 interface EarningsDataPoint {
@@ -95,6 +97,11 @@ export default function EarningsWidget() {
           
           <div className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">Avg Daily Earnings (ADE):</span>
+            <span className="text-sm font-bold font-mono text-muted-foreground">Pending</span>
+          </div>
+          
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-muted-foreground">Avg Daily Earnings %:</span>
             <span className="text-sm font-bold font-mono text-muted-foreground">Pending</span>
           </div>
           
@@ -216,6 +223,36 @@ export default function EarningsWidget() {
             earnings.avgDailyEarningsStatus !== 'insufficient_data' && getChangeType(earnings.avgDailyEarnings) === "negative" && "text-destructive"
           )} data-testid="earnings-average-daily">
             {earnings.avgDailyEarningsStatus === 'insufficient_data' ? 'Pending' : formatEarnings(earnings.avgDailyEarnings)}
+          </span>
+        </div>
+        
+        <div className="flex justify-between items-center">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground cursor-help">
+                  <span>Avg Daily Earnings %:</span>
+                  <Info className="w-3 h-3" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-xs">
+                <p className="text-xs">
+                  Rolling average daily return as a percentage of portfolio value. 
+                  Calculated as (Daily Profit / Start of Day Portfolio) × 100, 
+                  averaged across all recorded trading days in {isPaper ? 'paper' : 'live'} mode.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <span className={cn(
+            "text-sm font-bold font-mono",
+            earnings.avgDailyEarningsPct == null && "text-muted-foreground",
+            earnings.avgDailyEarningsPct != null && earnings.avgDailyEarningsPct > 0 && "text-success",
+            earnings.avgDailyEarningsPct != null && earnings.avgDailyEarningsPct < 0 && "text-destructive"
+          )} data-testid="earnings-average-daily-pct">
+            {earnings.avgDailyEarningsPct == null 
+              ? 'Pending' 
+              : `${earnings.avgDailyEarningsPct >= 0 ? '+' : ''}${earnings.avgDailyEarningsPct.toFixed(2)}%`}
           </span>
         </div>
         
