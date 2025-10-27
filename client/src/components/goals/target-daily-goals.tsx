@@ -10,7 +10,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ModeIndicator } from "./mode-indicator";
-import { useTrading } from "@/hooks/use-trading";
+import { usePortfolioBalance } from "@/hooks/use-portfolio-balance";
 import { cn } from "@/lib/utils";
 
 interface UserGoal {
@@ -55,7 +55,8 @@ function TargetDailyGoals() {
   
   const { mode } = useTradingMode();
   const { toast } = useToast();
-  const { portfolioMetrics, portfolioLoading } = useTrading();
+  // Phase 27.F.24: Use narrow hook to prevent re-renders from useTrading's WebSocket invalidations
+  const { balance: portfolioBalance, isLoading: portfolioLoading } = usePortfolioBalance();
   const [targetPercent, setTargetPercent] = useState<string>("");
   const [hasEdits, setHasEdits] = useState(false);
   const [isOverride, setIsOverride] = useState(false);
@@ -63,11 +64,6 @@ function TargetDailyGoals() {
   
   // Phase 27.F.19: Throttle updates to prevent flashing
   const lastUpdateRef = useRef<number>(0);
-
-  // Phase 27.F.24: Memoize portfolio balance to prevent re-renders when other portfolio metrics change
-  const portfolioBalance = useMemo(() => {
-    return portfolioMetrics?.totalValue || 850;
-  }, [portfolioMetrics?.totalValue]);
   
   // Phase 27.F.19: Currency formatter
   const currencyFormatter = new Intl.NumberFormat('en-US', { 

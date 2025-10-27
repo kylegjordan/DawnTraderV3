@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import { setGlobalTradingMode, queryClient } from '@/lib/queryClient';
 import { useWebSocket } from '@/hooks/use-websocket';
 
@@ -25,16 +25,19 @@ export function TradingModeProvider({ children }: { children: ReactNode }) {
     return initialMode;
   });
 
-  const setMode = (newMode: TradingMode) => {
-    console.log('[UI] Auto-refresh triggered on mode switch:', mode, '->', newMode);
-    setModeState(newMode);
-    localStorage.setItem(MODE_STORAGE_KEY, newMode);
-    // Sync with global mode for API requests
-    setGlobalTradingMode(newMode);
-    // Invalidate all queries to fetch fresh data for the new mode
-    queryClient.invalidateQueries();
-    console.log('[UI] Mode switch complete - all queries invalidated for:', newMode);
-  };
+  // Phase 27.F.24: Wrap setMode in useCallback for stable reference
+  const setMode = useCallback((newMode: TradingMode) => {
+    setModeState((currentMode) => {
+      console.log('[UI] Auto-refresh triggered on mode switch:', currentMode, '->', newMode);
+      localStorage.setItem(MODE_STORAGE_KEY, newMode);
+      // Sync with global mode for API requests
+      setGlobalTradingMode(newMode);
+      // Invalidate all queries to fetch fresh data for the new mode
+      queryClient.invalidateQueries();
+      console.log('[UI] Mode switch complete - all queries invalidated for:', newMode);
+      return newMode;
+    });
+  }, []);
 
   // Phase 27.4.2: Listen for trading_state_changed WebSocket events
   useEffect(() => {
@@ -73,12 +76,17 @@ export function TradingModeProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  const value: TradingModeContextType = {
-    mode,
-    setMode,
-    isLive: mode === 'live',
-    isPaper: mode === 'paper',
-  };
+  // Phase 27.F.24: Memoize context value to prevent unnecessary re-renders
+  // Only recreate value when mode actually changes, not on every WebSocket message
+  const value: TradingModeContextType = useMemo(() => {
+    console.log('[Phase 27.F.24][TradingModeContext] Creating new context value for mode:', mode);
+    return {
+      mode,
+      setMode,
+      isLive: mode === 'live',
+      isPaper: mode === 'paper',
+    };
+  }, [mode, setMode]);
 
   return (
     <TradingModeContext.Provider value={value}>
