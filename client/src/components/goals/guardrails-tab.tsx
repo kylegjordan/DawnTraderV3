@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import { CopyToLiveModal } from "./copy-to-live-modal";
 import { useTrading } from "@/hooks/use-trading";
+import { useWebSocket } from "@/hooks/use-websocket";
 
 const DEFAULTS = {
   maxDailyLoss: 1000,
@@ -82,6 +83,9 @@ export default function GuardrailsTab() {
   
   // Phase 27.F.14.B - Task 4: Copy to Live - Check if live trading is stopped
   const { tradingStatus } = useTrading();
+  
+  // Phase 27.F.17b: WebSocket subscriptions for real-time updates
+  const { messages } = useWebSocket();
 
   const { data: currentSettings, isLoading } = useQuery<Guardrails>({
     queryKey: ['/api/guardrails', mode],
@@ -133,7 +137,29 @@ export default function GuardrailsTab() {
       });
     }
   }, [tradingSettings]);
+  
+  // Phase 27.F.17b: Listen for WebSocket broadcasts and invalidate caches
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage) return;
+    
+    // Extract mode from payload (server sends { type, mode, payload })
+    const messageMode = (lastMessage as any).mode;
+    
+    // Listen for guardrails_updated broadcast
+    if (lastMessage.type === 'guardrails_updated' && messageMode === mode) {
+      console.log('[Guardrails] Received guardrails_updated broadcast, refreshing cache');
+      queryClient.invalidateQueries({ queryKey: ['/api/guardrails', mode] });
+    }
+    
+    // Listen for tuning_policy_updated broadcast
+    if (lastMessage.type === 'tuning_policy_updated' && messageMode === mode) {
+      console.log('[Guardrails] Received tuning_policy_updated broadcast, refreshing tuning cache');
+      queryClient.invalidateQueries({ queryKey: ['tuningPolicy', mode] });
+    }
+  }, [messages, mode]);
 
+  // Phase 27.F.17b: Updated to handle new response format and invalidate tuning policy cache
   const updateMutation = useMutation({
     mutationFn: async (updates: Partial<Guardrails>) => {
       const response = await fetch(`/api/guardrails?mode=${mode}`, {
@@ -145,13 +171,20 @@ export default function GuardrailsTab() {
         body: JSON.stringify(updates)
       });
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update guardrails');
+      
+      // Phase 27.F.17b: Handle new structured response format
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.detail || data.error || 'Failed to update guardrails');
       }
-      return data;
+      
+      // Return the data field if present (new format), otherwise return full data (backward compat)
+      return data.data || data;
     },
     onSuccess: () => {
+      // Phase 27.F.17b: Invalidate both guardrails and tuning policy caches
       queryClient.invalidateQueries({ queryKey: ['/api/guardrails', mode] });
+      queryClient.invalidateQueries({ queryKey: ['tuningPolicy', mode] });
+      
       toast({
         title: "Guardrails updated",
         description: `Risk parameters have been saved successfully for ${mode} mode.`,
