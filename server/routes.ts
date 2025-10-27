@@ -903,7 +903,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
-      const guardrailsPayload = { ...req.body, mode, lastUpdatedBy: userId };
+      const guardrailsPayload = { ...req.body, mode };
       const guardrailsData = await storage.upsertGuardrails(guardrailsPayload);
 
       console.info(`[Guardrails] User ${userId} updated guardrails for ${mode} mode`);
