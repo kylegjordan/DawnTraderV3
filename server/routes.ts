@@ -15138,52 +15138,73 @@ export async function handleLATTITargets(req: AuthenticatedRequest, res: Respons
     const portfolioState = await storage.getPortfolioState({ globalContextId: userId, mode });
     const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 850;
     
+    // Phase 27.F.21: LATTI targets work BACKWARDS from desired portfolio percentage returns
+    // These are aspirational targets independent of guardrails (which control actual execution limits)
+    const targetPctByPace: Record<string, number> = {
+      conservative: 0.004,  // 0.4% daily (0.3%-0.5% range)
+      baseline: 0.009,      // 0.9% daily (0.8%-1.0% range)
+      optimistic: 0.0125,   // 1.25% daily (1.2%-1.3% range)
+      aggressive: 0.0175    // 1.75% daily (1.5%-2.0% range)
+    };
+    
+    const tradesPerDayByPace: Record<string, number> = {
+      conservative: 2,
+      baseline: 4,
+      optimistic: 6,
+      aggressive: 8
+    };
+    
     // Define LATTI-calculated pace metrics
-    // These are intelligent defaults based on portfolio balance and guardrails
-    // Phase 27.F.18: Dynamic calculation based on risk tolerance and balance
+    // Phase 27.F.21: Calculate from target percentages, NOT from guardrails
     const paceMetrics: Record<string, { 
       risk_per_trade: number; 
       trades_per_day: number; 
       earnings_per_trade: number; 
       daily_profit: number;
       target_daily_avg_earning_pct: string;
-    }> = {
-      conservative: {
-        risk_per_trade: Math.min(50, maxRiskPerTrade * 0.33),
-        trades_per_day: 2,
-        earnings_per_trade: Math.min(50, maxRiskPerTrade * 0.33) * 0.30, // 30% profit target
-        daily_profit: 0,
-        target_daily_avg_earning_pct: '0'
-      },
-      baseline: {
-        risk_per_trade: Math.min(100, maxRiskPerTrade * 0.67),
-        trades_per_day: 4,
-        earnings_per_trade: Math.min(100, maxRiskPerTrade * 0.67) * 0.25, // 25% profit target
-        daily_profit: 0,
-        target_daily_avg_earning_pct: '0'
-      },
-      optimistic: {
-        risk_per_trade: Math.min(150, maxRiskPerTrade),
-        trades_per_day: 6,
-        earnings_per_trade: Math.min(150, maxRiskPerTrade) * 0.23, // 23% profit target
-        daily_profit: 0,
-        target_daily_avg_earning_pct: '0'
-      },
-      aggressive: {
-        risk_per_trade: Math.min(200, maxRiskPerTrade * 1.33),
-        trades_per_day: 8,
-        earnings_per_trade: Math.min(200, maxRiskPerTrade * 1.33) * 0.23, // 23% profit target
-        daily_profit: 0,
-        target_daily_avg_earning_pct: '0'
-      }
-    };
+    }> = {};
     
-    // Calculate daily profit and target daily avg earning %
+    for (const [pace, targetPct] of Object.entries(targetPctByPace)) {
+      const trades_per_day = tradesPerDayByPace[pace];
+      const daily_profit = portfolioBalance * targetPct;
+      const earnings_per_trade = daily_profit / trades_per_day;
+      // Reverse calculate risk from earnings (assuming 25% profit target)
+      const risk_per_trade = earnings_per_trade / 0.25;
+      
+      paceMetrics[pace] = {
+        risk_per_trade: parseFloat(risk_per_trade.toFixed(2)),
+        trades_per_day,
+        earnings_per_trade: parseFloat(earnings_per_trade.toFixed(2)),
+        daily_profit: parseFloat(daily_profit.toFixed(2)),
+        target_daily_avg_earning_pct: ((daily_profit / portfolioBalance) * 100).toFixed(2)
+      };
+    }
+    
     const metrics = paceMetrics[currentPace];
-    metrics.daily_profit = metrics.earnings_per_trade * metrics.trades_per_day;
-    metrics.target_daily_avg_earning_pct = portfolioBalance > 0
-      ? ((metrics.daily_profit / portfolioBalance) * 100).toFixed(2)
-      : '0';
+    
+    // Phase 27.F.21: Diagnostic console.table for all presets
+    console.table({
+      conservative: { 
+        target_pct: paceMetrics.conservative.target_daily_avg_earning_pct + '%',
+        daily_profit: '$' + paceMetrics.conservative.daily_profit,
+        trades: paceMetrics.conservative.trades_per_day 
+      },
+      baseline: { 
+        target_pct: paceMetrics.baseline.target_daily_avg_earning_pct + '%',
+        daily_profit: '$' + paceMetrics.baseline.daily_profit,
+        trades: paceMetrics.baseline.trades_per_day 
+      },
+      optimistic: { 
+        target_pct: paceMetrics.optimistic.target_daily_avg_earning_pct + '%',
+        daily_profit: '$' + paceMetrics.optimistic.daily_profit,
+        trades: paceMetrics.optimistic.trades_per_day 
+      },
+      aggressive: { 
+        target_pct: paceMetrics.aggressive.target_daily_avg_earning_pct + '%',
+        daily_profit: '$' + paceMetrics.aggressive.daily_profit,
+        trades: paceMetrics.aggressive.trades_per_day 
+      }
+    });
     
     console.log(`[LATTI-Targets] ${mode} mode, preset=${currentPace}, balance=$${portfolioBalance}, target=${metrics.target_daily_avg_earning_pct}%`);
     

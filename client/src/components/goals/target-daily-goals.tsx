@@ -70,11 +70,67 @@ export default function TargetDailyGoals() {
     maximumFractionDigits: 2 
   });
 
+  // Fetch current trading pace to detect preset changes
+  const { data: currentPaceData } = useQuery<{ tradingPace: string }>({
+    queryKey: ['/api/system/trading-pace'],
+  });
+  
   // Phase 27.F.18: Fetch LATTI-calculated target daily avg earning %
   const { data: lattiTargets, isLoading: lattiLoading } = useQuery<LATTITargets>({
     queryKey: ['/api/latti/targets', mode],
     queryFn: async () => apiRequest('GET', `/api/latti/targets?mode=${mode}`),
   });
+  
+  // Phase 27.F.21: Diagnostic console.table for LATTI values on frontend
+  useEffect(() => {
+    if (lattiTargets) {
+      console.log(`[TargetDailyGoals] Phase 27.F.21 Frontend Diagnostics - ${mode} mode`);
+      console.log(`  LATTI Raw Value: "${lattiTargets.target_daily_avg_earning_pct}" (string from backend)`);
+      console.log(`  Parsed Display: ${parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2)}%`);
+      console.log(`  Portfolio Balance: $${lattiTargets.portfolio_balance}`);
+      console.log(`  Expected Display Format: Backend returns "1.75" → Frontend shows "1.75%"`);
+    }
+  }, [lattiTargets, mode]);
+  
+  // Phase 27.F.21: Track previous trading pace and preset change state
+  const prevPaceRef = useRef<string | null>(null);
+  const [presetJustChanged, setPresetJustChanged] = useState(false);
+  
+  // Phase 27.F.21: When trading pace changes, refetch LATTI targets and update UI
+  useEffect(() => {
+    if (currentPaceData) {
+      const currentPace = currentPaceData.tradingPace;
+      
+      // Detect pace change
+      if (prevPaceRef.current && prevPaceRef.current !== currentPace) {
+        console.log(`[TargetDailyGoals] Trading pace changed from ${prevPaceRef.current} to ${currentPace} - resetting to LATTI default`);
+        setPresetJustChanged(true); // Temporarily block saved goal reload during transition
+        
+        // Force refetch LATTI targets for the new preset
+        queryClient.invalidateQueries({ queryKey: ['/api/latti/targets', mode] });
+        queryClient.refetchQueries({ queryKey: ['/api/latti/targets', mode] }).then(() => {
+          // After new targets load, update UI to show new LATTI value
+          const refetchedTargets = queryClient.getQueryData(['/api/latti/targets', mode]) as LATTITargets | undefined;
+          if (refetchedTargets) {
+            const lattiTargetPct = parseFloat(refetchedTargets.target_daily_avg_earning_pct).toFixed(2);
+            console.log(`[TargetDailyGoals] LATTI targets refetched - new value: ${lattiTargetPct}% - clearing flag`);
+            setTargetPercent(lattiTargetPct);
+            setIsOverride(false); // Clear override indicator
+            lastUpdateRef.current = Date.now();
+            
+            // Clear flag after transition completes so initialization effect can run again
+            // Phase 27.F.21: Use 1000ms delay to ensure any pending saves complete first
+            setTimeout(() => {
+              setPresetJustChanged(false);
+              console.log('[TargetDailyGoals] Preset change complete - saved goals hydration re-enabled');
+            }, 1000); // 1-second delay prevents race conditions with save mutations
+          }
+        });
+      }
+      
+      prevPaceRef.current = currentPace;
+    }
+  }, [currentPaceData, mode]);
 
   // Fetch current goal value (for overrides)
   const { data: goalsData, isLoading: goalsLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
@@ -91,6 +147,12 @@ export default function TargetDailyGoals() {
 
   // Phase 27.F.20: Initialize target percent from LATTI or override  
   useEffect(() => {
+    // Phase 27.F.21: Skip loading saved goals if preset just changed (use flag, not time window)
+    if (presetJustChanged) {
+      console.log('[TargetDailyGoals] Skipping saved goal load - preset changed, waiting for user to save');
+      return;
+    }
+    
     if (goalsData?.goals && lattiTargets) {
       const savedGoal = goalsData.goals.find(g => g.metricName === "Target Daily Avg Earning %");
       // Phase 27.F.20: Backend already multiplies by 100, so "0.15" = 0.15% (not decimal 0.0015)
@@ -137,7 +199,7 @@ export default function TargetDailyGoals() {
         lastUpdateRef.current = now;
       }
     }
-  }, [goalsData, lattiTargets]);
+  }, [goalsData, lattiTargets, presetJustChanged]); // Phase 27.F.21: Include flag to re-run when it clears
 
   // Phase 27.F.18/19: Validate target percent against guardrails
   useEffect(() => {
@@ -211,6 +273,7 @@ export default function TargetDailyGoals() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] });
       setHasEdits(false);
+      setPresetJustChanged(false); // Phase 27.F.21: Clear flag after explicit save
       // Phase 27.F.20: Backend already multiplies by 100
       const lattiTargetPct = lattiTargets ? parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2) : '0';
       setIsOverride(lattiTargets ? parseFloat(targetPercent) !== parseFloat(lattiTargetPct) : true);
