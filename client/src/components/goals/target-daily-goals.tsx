@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +48,8 @@ interface ValidationResult {
   limitValue?: number;
 }
 
-export default function TargetDailyGoals() {
+// Phase 27.F.24: Wrap in memo to prevent re-renders from parent state changes
+function TargetDailyGoals() {
   // Phase 27.F.24: Diagnostic console log to track re-renders
   console.log(`[TargetDailyGoals] Phase 27.F.24: Component re-rendered at ${new Date().toLocaleTimeString()}`);
   
@@ -63,8 +64,10 @@ export default function TargetDailyGoals() {
   // Phase 27.F.19: Throttle updates to prevent flashing
   const lastUpdateRef = useRef<number>(0);
 
-  // Get portfolio balance from portfolio metrics
-  const portfolioBalance = portfolioMetrics?.totalValue || 850;
+  // Phase 27.F.24: Memoize portfolio balance to prevent re-renders when other portfolio metrics change
+  const portfolioBalance = useMemo(() => {
+    return portfolioMetrics?.totalValue || 850;
+  }, [portfolioMetrics?.totalValue]);
   
   // Phase 27.F.19: Currency formatter
   const currencyFormatter = new Intl.NumberFormat('en-US', { 
@@ -569,3 +572,6 @@ export default function TargetDailyGoals() {
     </Card>
   );
 }
+
+// Phase 27.F.24: Export memoized component to prevent re-renders from parent state changes
+export default memo(TargetDailyGoals);
