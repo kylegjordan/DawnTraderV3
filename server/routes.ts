@@ -908,6 +908,33 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       console.info(`[Guardrails] User ${userId} updated guardrails for ${mode} mode`);
 
+      // Phase 27.F.15.UI-SYNC.9: Sync cooldownMinutes with Tuning Policy
+      if (req.body.cooldownMinutes !== undefined) {
+        const existingPolicy = await storage.getTuningPolicy({ userId, mode });
+        if (existingPolicy) {
+          // Update existing policy
+          await storage.upsertTuningPolicy({
+            ...existingPolicy,
+            cooldownMinutes: req.body.cooldownMinutes
+          });
+          console.log(`[PolicySync] Cooldown period unified → ${req.body.cooldownMinutes} minutes`);
+        } else {
+          // Create new policy with synchronized cooldown
+          await storage.upsertTuningPolicy({
+            userId,
+            mode,
+            enabled: false, // Start disabled
+            aggressiveness: 'balanced',
+            fieldBounds: {},
+            maxStepPercent: '10.00',
+            cooldownMinutes: req.body.cooldownMinutes,
+            maxDailyAdjustments: 10,
+            currentCounters: { adjustmentsToday: 0, reverts: 0 }
+          });
+          console.log(`[PolicySync] Created new tuning policy with cooldown synchronized from Guardrails → ${req.body.cooldownMinutes} minutes`);
+        }
+      }
+
       // Phase 8.6.5: Invalidate caches and refresh context for Walter AI
       const { configChangeHandler } = await import('./services/config-change-handler');
       await configChangeHandler.handleConfigChange({
@@ -2694,6 +2721,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: 'Invalid aggressiveness level' });
       }
       
+      // Phase 27.F.15.UI-SYNC.9: Read cooldownMinutes from Guardrails to keep in sync
+      const guardrails = await storage.getGuardrails(userId, mode);
+      const cooldownMinutes = guardrails?.cooldownMinutes ?? 15; // Default to 15 if not set
+      
       const policy = await storage.upsertTuningPolicy({
         userId,
         mode,
@@ -2701,10 +2732,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         aggressiveness,
         fieldBounds,
         maxStepPercent: '10.00',
-        cooldownMinutes: 60,
+        cooldownMinutes,
         maxDailyAdjustments: 10,
         currentCounters: { adjustmentsToday: 0, reverts: 0 }
       });
+      
+      console.log(`[PolicySync] Tuning enabled with cooldown synchronized from Guardrails → ${cooldownMinutes} minutes`);
       
       res.json({ success: true, policy });
     } catch (error: any) {

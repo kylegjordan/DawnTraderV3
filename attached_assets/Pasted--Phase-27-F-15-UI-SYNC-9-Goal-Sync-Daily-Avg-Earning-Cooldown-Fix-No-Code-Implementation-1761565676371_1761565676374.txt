@@ -1,0 +1,80 @@
+⚙️ Phase 27.F.15.UI-SYNC.9 — Goal Sync + Daily Avg Earning % + Cooldown Fix
+
+(No-Code Implementation)
+
+🎯 Objective
+
+Link Trading Pace presets with Performance Tracking Metrics in both directions.
+
+Add Target Daily Avg Earning % to the Trading Pace block.
+
+Fully synchronize the Symbol Cooldown value between Guardrails ↔ Tuning ↔ LATTI.
+
+🧱 Automated Tasks
+1️⃣ Trading Pace ↔ Performance Metrics Sync
+onTradingPaceChange(preset):
+    goals.trades_per_day = preset.trades_per_day
+    goals.target_per_trade = preset.target_per_trade
+    recalcPerformanceMetrics()
+    broadcast("goals_updated")
+
+
+and inverse:
+
+onPerformanceRecalc():
+    if manual_changes:
+        updateTradingPaceFields()
+        broadcast("performance_updated")
+
+2️⃣ Add “Target Daily Avg Earning %”
+
+Computed dynamically:
+
+targetDailyAvgEarningPct = (targetDailyProfit / portfolioBalance) * 100
+
+
+Displayed directly below “Target Daily Profit ($)” with tooltip:
+
+“Expected average percent return per day based on portfolio size.”
+
+Values auto-update when any of the following change:
+
+Risk per Trade
+
+Trades per Day
+
+Target per Trade
+
+Portfolio Balance
+
+3️⃣ Cooldown Synchronization
+
+Backend sync controller:
+
+onGuardrailsUpdate(field='cooldown_minutes', value):
+    tuning_policy.cooldown_period = value
+    contextBridge.broadcast("cooldown_synced", value)
+    log "[PolicySync] Cooldown period unified → " + value
+
+
+Guarantees all modules (Guardrails tab, Tuning UI, LATTI optimizer) read and display the same number.
+
+4️⃣ Frontend Confirmation Checks
+Area	Expected Behavior
+Goals Tab	Changing preset updates Performance Metrics immediately
+Performance Metrics	Editing values + Recalculate updates Trading Pace
+Trading Pace Block	Shows “Target Daily Avg Earning %” live value
+Guardrails ↔ Tuning	Both display identical cooldown minutes
+🚀 Command for Replit
+
+Apply Phase 27.F.15.UI-SYNC.9 — Link Trading Pace and Performance Metrics, Add Target Daily Avg Earning %, Fix Cooldown Sync (No-Code)
+
+✅ Expected Outcome
+
+Trading pace and performance metrics stay in perfect lockstep.
+
+Target Daily Avg Earning % appears in the Goals tab and updates automatically.
+
+Symbol Cooldown shows the same value (15 min or any other change) across Guardrails and Tuning.
+
+All features fully LATTI-aware and persist correctly per mode.

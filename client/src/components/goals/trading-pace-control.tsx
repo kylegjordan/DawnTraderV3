@@ -3,9 +3,16 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Zap, TrendingUp, Shield, AlertTriangle } from "lucide-react";
+import { Zap, TrendingUp, Shield, AlertTriangle, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTradingMode } from "@/contexts/trading-mode-context";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type TradingPace = 'conservative' | 'baseline' | 'optimistic' | 'aggressive';
 
@@ -107,11 +114,18 @@ const COLOR_CLASSES = {
 
 export default function TradingPaceControl() {
   const { toast } = useToast();
+  const { mode } = useTradingMode();
   const [selectedPace, setSelectedPace] = useState<TradingPace>('baseline');
 
   // Fetch current trading pace from system context
   const { data: currentPace, isLoading } = useQuery<{ tradingPace: TradingPace }>({
     queryKey: ['/api/system/trading-pace'],
+  });
+
+  // Phase 27.F.15.UI-SYNC.9: Fetch portfolio balance for Target Daily Avg Earning %
+  const { data: portfolioData } = useQuery<{ balance: number }>({
+    queryKey: ['/api/portfolio/balance', mode],
+    queryFn: async () => apiRequest('GET', `/api/portfolio/balance?mode=${mode}`),
   });
 
   // Update selected pace when data loads
@@ -121,16 +135,61 @@ export default function TradingPaceControl() {
     }
   }, [currentPace]);
 
-  // Update trading pace mutation
+  // Phase 27.F.15.UI-SYNC.9: Update trading pace mutation with Performance Metrics sync
   const updatePaceMutation = useMutation({
     mutationFn: async (pace: TradingPace) => {
-      return apiRequest('PUT', '/api/system/trading-pace', { tradingPace: pace });
+      const config = PACE_CONFIGS.find(p => p.id === pace);
+      if (!config) throw new Error('Invalid pace configuration');
+
+      // Update trading pace in system context
+      await apiRequest('PUT', '/api/system/trading-pace', { tradingPace: pace });
+
+      // Phase 27.F.15.UI-SYNC.9: Sync goalValue with Performance Metrics (both modes)
+      // Fetch existing goals to preserve actualValue and percentAchieved
+      const [paperGoals, liveGoals] = await Promise.all([
+        apiRequest('GET', '/api/goals?mode=paper') as Promise<{ goals: any[] }>,
+        apiRequest('GET', '/api/goals?mode=live') as Promise<{ goals: any[] }>,
+      ]);
+
+      const updateGoalsForMode = (existingGoals: any[], mode: string) => {
+        const metricsToUpdate = [
+          { metricName: 'Target per Trade ($)', goalValue: config.metrics.earningsPerTrade },
+          { metricName: 'Trades per Day', goalValue: config.metrics.tradesPerDay },
+          { metricName: 'Earnings per Day', goalValue: config.metrics.dailyProfit },
+        ];
+
+        return metricsToUpdate.map(metric => {
+          const existing = existingGoals.find(g => g.metricName === metric.metricName);
+          return {
+            metricName: metric.metricName,
+            goalValue: metric.goalValue,
+            // Preserve existing actualValue and percentAchieved
+            actualValue: existing ? parseFloat(existing.actualValue || '0') : 0,
+            percentAchieved: existing ? parseFloat(existing.percentAchieved || '0') : 0,
+          };
+        });
+      };
+
+      // Update for both paper and live modes (preserving actual tracking data)
+      await Promise.all([
+        apiRequest('POST', '/api/goals/update', { 
+          goals: updateGoalsForMode(paperGoals.goals, 'paper'), 
+          mode: 'paper' 
+        }),
+        apiRequest('POST', '/api/goals/update', { 
+          goals: updateGoalsForMode(liveGoals.goals, 'live'), 
+          mode: 'live' 
+        }),
+      ]);
+
+      return { pace };
     },
-    onSuccess: (_, pace) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals'] }); // Sync Performance Metrics
       toast({
         title: "Trading Pace Updated",
-        description: `Trading pace set to ${PACE_CONFIGS.find(p => p.id === pace)?.label}. This applies globally to both Live and Paper modes.`,
+        description: `Trading pace set to ${PACE_CONFIGS.find(p => p.id === data.pace)?.label}. Performance Metrics goals updated for both modes.`,
       });
     },
     onError: (error: any) => {
@@ -148,6 +207,12 @@ export default function TradingPaceControl() {
   };
 
   const selectedConfig = PACE_CONFIGS.find(p => p.id === selectedPace) || PACE_CONFIGS[1];
+
+  // Phase 27.F.15.UI-SYNC.9: Calculate Target Daily Avg Earning %
+  const portfolioBalance = portfolioData?.balance || 0;
+  const targetDailyAvgEarningPct = portfolioBalance > 0 
+    ? ((selectedConfig.metrics.dailyProfit / portfolioBalance) * 100).toFixed(2)
+    : '0.00';
 
   if (isLoading) {
     return (
@@ -246,6 +311,32 @@ export default function TradingPaceControl() {
               </div>
             </div>
           </div>
+
+          {/* Phase 27.F.15.UI-SYNC.9: Target Daily Avg Earning % */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-lg" data-testid="metric-daily-avg-earning-pct">
+                  <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 mb-1">
+                    <Percent className="w-3 h-3" />
+                    <span>Target Daily Avg Earning %</span>
+                  </div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    +{targetDailyAvgEarningPct}%
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Expected average percent return per day based on portfolio size.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Formula: (Target Daily Profit / Portfolio Balance) × 100
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Portfolio: ${portfolioBalance.toLocaleString()}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {/* Info Notice */}
