@@ -1,0 +1,97 @@
+⚙️ Directive for Replit – Phase 27.F.22 (UI Render Stabilization & Instant Input Sync)
+
+Primary Goals
+
+Stop the Target Daily Goals component from re-rendering or refetching unnecessarily.
+
+Ensure the input field immediately loads LATTI’s value when switching trading paces.
+
+Prevent “empty state” projection calculations (where everything = $0).
+
+1️⃣ Fix the Continuous Refetch Loop
+
+Diagnosis:
+Replit’s throttled refresh (every 5 minutes) was accidentally bound to query state changes and WebSocket triggers — so each internal cache update triggers a “refetch,” which cascades into a UI rebuild every 1–2 seconds.
+
+Fix:
+Replace the existing useEffect(refetch) logic with a debounced idle refresh pattern using useRef and setTimeout.
+
+✅ Example correction:
+
+const refreshTimeout = useRef<NodeJS.Timeout | null>(null);
+
+useEffect(() => {
+  // Cancel any pending refresh
+  if (refreshTimeout.current) clearTimeout(refreshTimeout.current);
+
+  // Schedule one after 5 minutes idle, not continuous
+  refreshTimeout.current = setTimeout(() => {
+    refetch(); // only once, not looped
+  }, 300000); // 5 minutes
+}, [targetPct]); // only when user input changes
+
+
+Remove any of the following if still present:
+
+queryClient.invalidateQueries(['lattiTargets']);
+useInterval(refetch, 60000);
+
+2️⃣ Pre-Fill Input Immediately on Preset Change
+
+When the user clicks a new pace (Baseline, Aggressive, etc.), the input field is currently waiting for the async LATTI refetch to complete — leaving it blank briefly.
+
+✅ Fix:
+
+// Instantly display last-known LATTI value, then update once refetch completes
+const handlePresetChange = (pace: string) => {
+  setInputValue(latestLattiCache[pace] ?? "");  // instant UI fill
+  refetch(); // fetch fresh confirmed value
+};
+
+
+This ensures the input never flashes empty.
+
+3️⃣ Add “Graceful Fallback” During Loading
+
+When a refetch is running (due to manual action or preset switch), display the last cached projection instead of blanking the table.
+
+✅ Fix:
+
+const [cachedProjection, setCachedProjection] = useState(null);
+
+useEffect(() => {
+  if (projectionData) setCachedProjection(projectionData);
+}, [projectionData]);
+
+const displayData = projectionData ?? cachedProjection;
+
+
+This keeps the table populated during short loading cycles.
+
+4️⃣ Verify Dependencies in useEffect Hooks
+
+In both target-daily-goals.tsx and trading-pace-control.tsx, ensure effects only depend on
+
+[selectedPace, lattiTargets.data, userOverride]
+
+
+and not on entire objects like queryClient or refetch (which recreate functions every render, retriggering effects).
+
+5️⃣ Reconfirm Expected Behavior After Fix
+Action	Expected Result
+Switch between Baseline ↔ Aggressive	Input instantly shows correct % (0.9 / 1.75) with no blank delay
+Stay on Goals page for 10+ min	No flicker, no flashing projection table
+Manual input change	Table updates smoothly once, no rapid refresh
+Refresh browser	Preset + override load instantly with last saved value
+✅ Deliverable Summary
+
+Implement Phase 27.F.22 – UI Render Stabilization & Instant Input Sync
+Tasks:
+
+Replace periodic refetch logic with debounced idle refresh (5 min).
+
+Pre-fill input field immediately using cached LATTI data on preset change.
+
+Cache projection table results to prevent $0 states during refetch.
+
+Clean dependency arrays to stop unnecessary rerenders.
