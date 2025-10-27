@@ -1,0 +1,84 @@
+⚙️ Directive for Replit (Phase 27.F.18 – Trading Pace Integration and Dynamic Target %)
+
+Goal: Make the “Trading Pace” section and “Target Daily Goals” section dynamically reflect LATTI’s calculated average daily earning %, replacing static values.
+
+1️⃣ Replace Static Target %
+
+Remove the hard-coded 24.71 % placeholder from TargetDailyGoals.tsx.
+
+Add an API call to /api/latti/targets?mode=${mode} that returns targetDailyAvgEarningPct.
+
+Populate both locations with this live value:
+
+In the Trading Pace blue bar (Target Daily Avg Earning %) – read-only.
+
+In the Target Daily Goals input – editable override.
+
+When a user overrides it and presses Save, store to user_goals as target_daily_avg_earning_pct_override.
+
+2️⃣ Update Trading Pace Presets
+
+Each preset (Conservative / Baseline / Optimistic / Aggressive) must call a helper:
+
+async function updateTradingPace(preset) {
+  const latti = await fetch(`/api/latti/targets?preset=${preset}`).then(r => r.json());
+  setSettings({
+    riskPerTrade: latti.risk_per_trade,
+    tradesPerDay: latti.trades_per_day,
+    targetDailyAvgEarningPct: latti.target_daily_avg_earning_pct
+  });
+}
+
+
+This ensures every preset selection recalculates risk, trade count, and daily %.
+
+3️⃣ Simplify UI Layout
+
+Remove Target per Trade and Target Daily Profit from the Trading Pace box.
+
+Keep only:
+
+Risk per Trade ($)
+
+Trades per Day
+
+Target Daily Avg Earning % (from LATTI)
+
+4️⃣ Recalculate Projected Balances
+
+In TargetDailyGoals.tsx, change:
+
+future = balance * Math.pow(1 + targetPct / 100, days);
+
+
+to
+
+future = balance * Math.pow(1 + (effectivePct / 100), days);
+
+
+where effectivePct = overridePct ?? latti.targetPct.
+
+5️⃣ Bidirectional Sync to Dashboard
+
+When the pace or target % changes:
+
+Broadcast via WebSocket trading_pace_updated.
+
+The Dashboard → LATTI Trading Pace widget listens for this event and updates its own copy of riskPerTrade, tradesPerDay, and targetDailyAvgEarningPct.
+
+6️⃣ Validation and Limits
+
+If a user manually enters a daily % that exceeds risk guardrails, display:
+
+⚠️ Warning: “Target exceeds safe daily growth threshold (> guardrail limit).”
+
+Use color coding (OK ≤ limit, WARN ≤ 2×, BLOCK > 2×).
+
+Log all overrides in user_goals_audit.
+
+✅ Expected Behavior
+Action	Result
+Switch to Baseline	Risk = $100 → Trades = 4 → Daily % ≈ 4 % (auto-fetched)
+Override Daily % to 6 % → Save	Value stored in user_goals; table recalculates; dashboard updates
+Reload page	Same % loads from override or LATTI if none
+Change pace again	All metrics update in sync with LATTI recommendations

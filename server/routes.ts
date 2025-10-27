@@ -845,6 +845,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/system/trading-pace', authenticateToken, handleGetTradingPace);
   apiRouter.put('/system/trading-pace', authenticateToken, handleUpdateTradingPace);
 
+  // Phase 27.F.18: LATTI Targets API Endpoint (dynamic calculation)
+  apiRouter.get('/latti/targets', authenticateToken, handleLATTITargets);
+
   // Guardrails endpoints (mode-isolated)
   // Phase 7.4: ConfigBob transparent routing for guardrails endpoint
   apiRouter.get('/guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
@@ -15046,6 +15049,112 @@ export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Re
     });
   } catch (error: any) {
     console.error('[TradingPace-API] Error updating trading pace:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Phase 27.F.18: Get LATTI-calculated target metrics
+ * GET /api/latti/targets?mode={mode}&preset={preset}
+ * Returns dynamic target metrics based on guardrails, portfolio balance, and optional preset
+ */
+export async function handleLATTITargets(req: AuthenticatedRequest, res: Response) {
+  try {
+    const userId = req.user!.id;
+    const mode = req.query.mode as 'live' | 'paper';
+    const preset = req.query.preset as 'conservative' | 'baseline' | 'optimistic' | 'aggressive' | undefined;
+    
+    // Validate mode
+    if (!mode || (mode !== 'live' && mode !== 'paper')) {
+      return res.status(400).json({ 
+        error: 'Mode parameter is required and must be "live" or "paper"' 
+      });
+    }
+    
+    // Get current system context to determine trading pace
+    const context = await storage.getSystemContext(mode);
+    const currentPace = preset || context?.tradingPace || 'baseline';
+    
+    // Validate preset if provided
+    const validPaces = ['conservative', 'baseline', 'optimistic', 'aggressive'];
+    if (preset && !validPaces.includes(preset)) {
+      return res.status(400).json({ 
+        error: `Invalid preset. Must be one of: ${validPaces.join(', ')}` 
+      });
+    }
+    
+    // Get guardrails for risk limits
+    const guardrails = await storage.getGuardrails({ mode });
+    const maxRiskPerTrade = guardrails ? parseFloat(guardrails.riskPerTrade) : 150;
+    
+    // Get portfolio balance
+    const portfolioState = await storage.getPortfolioState({ globalContextId: userId, mode });
+    const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 850;
+    
+    // Define LATTI-calculated pace metrics
+    // These are intelligent defaults based on portfolio balance and guardrails
+    // Phase 27.F.18: Dynamic calculation based on risk tolerance and balance
+    const paceMetrics: Record<string, { 
+      risk_per_trade: number; 
+      trades_per_day: number; 
+      earnings_per_trade: number; 
+      daily_profit: number;
+      target_daily_avg_earning_pct: string;
+    }> = {
+      conservative: {
+        risk_per_trade: Math.min(50, maxRiskPerTrade * 0.33),
+        trades_per_day: 2,
+        earnings_per_trade: Math.min(50, maxRiskPerTrade * 0.33) * 0.30, // 30% profit target
+        daily_profit: 0,
+        target_daily_avg_earning_pct: '0'
+      },
+      baseline: {
+        risk_per_trade: Math.min(100, maxRiskPerTrade * 0.67),
+        trades_per_day: 4,
+        earnings_per_trade: Math.min(100, maxRiskPerTrade * 0.67) * 0.25, // 25% profit target
+        daily_profit: 0,
+        target_daily_avg_earning_pct: '0'
+      },
+      optimistic: {
+        risk_per_trade: Math.min(150, maxRiskPerTrade),
+        trades_per_day: 6,
+        earnings_per_trade: Math.min(150, maxRiskPerTrade) * 0.23, // 23% profit target
+        daily_profit: 0,
+        target_daily_avg_earning_pct: '0'
+      },
+      aggressive: {
+        risk_per_trade: Math.min(200, maxRiskPerTrade * 1.33),
+        trades_per_day: 8,
+        earnings_per_trade: Math.min(200, maxRiskPerTrade * 1.33) * 0.23, // 23% profit target
+        daily_profit: 0,
+        target_daily_avg_earning_pct: '0'
+      }
+    };
+    
+    // Calculate daily profit and target daily avg earning %
+    const metrics = paceMetrics[currentPace];
+    metrics.daily_profit = metrics.earnings_per_trade * metrics.trades_per_day;
+    metrics.target_daily_avg_earning_pct = portfolioBalance > 0
+      ? ((metrics.daily_profit / portfolioBalance) * 100).toFixed(2)
+      : '0';
+    
+    console.log(`[LATTI-Targets] ${mode} mode, preset=${currentPace}, balance=$${portfolioBalance}, target=${metrics.target_daily_avg_earning_pct}%`);
+    
+    res.json({
+      mode,
+      preset: currentPace,
+      portfolio_balance: portfolioBalance,
+      risk_per_trade: metrics.risk_per_trade,
+      trades_per_day: metrics.trades_per_day,
+      earnings_per_trade: parseFloat(metrics.earnings_per_trade.toFixed(2)),
+      daily_profit: parseFloat(metrics.daily_profit.toFixed(2)),
+      target_daily_avg_earning_pct: metrics.target_daily_avg_earning_pct,
+      // Additional metadata
+      max_risk_per_trade_limit: maxRiskPerTrade,
+      calculated_at: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('[LATTI-Targets] Error calculating targets:', error.message);
     res.status(500).json({ error: error.message });
   }
 }
