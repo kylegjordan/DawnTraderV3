@@ -8248,6 +8248,26 @@ Provide specific, actionable recommendations.`,
       
       console.log('[Phase-27.F.15.B.1] Updated route /api/goals/update → mode-based only');
       
+      // Phase 27.F.18: Broadcast trading pace updates via WebSocket for Dashboard sync
+      const hasTradingPaceUpdate = goals.some((g: any) => 
+        g.metricName === "Target Daily Avg Earning %" || 
+        g.metricName === "Risk per Trade ($)" ||
+        g.metricName === "Trades per Day"
+      );
+      
+      if (hasTradingPaceUpdate) {
+        console.log(`[Goals] Broadcasting trading_pace_updated for ${mode} mode`);
+        contextBridge.broadcast({
+          type: 'config_update',
+          payload: {
+            action: 'trading_pace_updated',
+            mode,
+            goals: updatedGoals
+          },
+          mode: mode as 'live' | 'paper'
+        });
+      }
+      
       // Phase 27.F.14.UI-SYNC.8: Include feasibility feedback in response
       res.json({ 
         success: true, 
