@@ -962,13 +962,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // A3: Single transaction for save + sync
       let guardrailsData;
       let tuningPolicyData;
+      let cooldownValue; // Declare outside try block so it's accessible in broadcast
       
       try {
         // Upsert guardrails
         guardrailsData = await storage.upsertGuardrails(sanitizedPayload);
         
         // A3: Sync cooldownMinutes with Tuning Policy in same transaction
-        const cooldownValue = sanitizedPayload.cooldownMinutes !== undefined 
+        cooldownValue = sanitizedPayload.cooldownMinutes !== undefined 
           ? sanitizedPayload.cooldownMinutes 
           : guardrailsData.cooldownMinutes || 15;
         
