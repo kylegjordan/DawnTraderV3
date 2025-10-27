@@ -20,7 +20,7 @@ interface PortfolioData {
   balance: number;
 }
 
-// Pace targets as defined in HeuristicEngine Task 7
+// Phase 27.F.15.UI-SYNC.9: Updated to match trading-pace-control.tsx PACE_CONFIGS
 const PACE_CONFIGS = {
   conservative: {
     label: 'Conservative',
@@ -28,10 +28,10 @@ const PACE_CONFIGS = {
     bgColor: 'bg-green-500/10',
     borderColor: 'border-green-500/30',
     targetWinRate: 60,
-    targetTradesPerDay: 3,
-    targetEarningsPerTrade: 8,
-    targetDailyProfit: 24,
-    targetYearlyProfit: 8760, // 24 * 365
+    targetTradesPerDay: 2,
+    targetEarningsPerTrade: 15,
+    targetDailyProfit: 30,
+    targetYearlyProfit: 10950, // 30 * 365
   },
   baseline: {
     label: 'Baseline',
@@ -39,10 +39,10 @@ const PACE_CONFIGS = {
     bgColor: 'bg-blue-500/10',
     borderColor: 'border-blue-500/30',
     targetWinRate: 55,
-    targetTradesPerDay: 5,
-    targetEarningsPerTrade: 6,
-    targetDailyProfit: 30,
-    targetYearlyProfit: 10950, // 30 * 365
+    targetTradesPerDay: 4,
+    targetEarningsPerTrade: 25,
+    targetDailyProfit: 100,
+    targetYearlyProfit: 36500, // 100 * 365
   },
   optimistic: {
     label: 'Optimistic',
@@ -50,10 +50,10 @@ const PACE_CONFIGS = {
     bgColor: 'bg-orange-500/10',
     borderColor: 'border-orange-500/30',
     targetWinRate: 50,
-    targetTradesPerDay: 8,
-    targetEarningsPerTrade: 5,
-    targetDailyProfit: 40,
-    targetYearlyProfit: 14600, // 40 * 365
+    targetTradesPerDay: 6,
+    targetEarningsPerTrade: 35,
+    targetDailyProfit: 210,
+    targetYearlyProfit: 76650, // 210 * 365
   },
   aggressive: {
     label: 'Aggressive',
@@ -61,10 +61,10 @@ const PACE_CONFIGS = {
     bgColor: 'bg-red-500/10',
     borderColor: 'border-red-500/30',
     targetWinRate: 45,
-    targetTradesPerDay: 12,
-    targetEarningsPerTrade: 4,
-    targetDailyProfit: 48,
-    targetYearlyProfit: 17520, // 48 * 365
+    targetTradesPerDay: 8,
+    targetEarningsPerTrade: 45,
+    targetDailyProfit: 360,
+    targetYearlyProfit: 131400, // 360 * 365
   },
 };
 
