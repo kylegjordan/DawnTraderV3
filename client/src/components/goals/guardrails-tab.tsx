@@ -155,7 +155,7 @@ export default function GuardrailsTab() {
     // Listen for tuning_policy_updated broadcast
     if (lastMessage.type === 'tuning_policy_updated' && messageMode === mode) {
       console.log('[Guardrails] Received tuning_policy_updated broadcast, refreshing tuning cache');
-      queryClient.invalidateQueries({ queryKey: ['tuningPolicy', mode] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tuning/policy', mode] });
     }
   }, [messages, mode]);
 
@@ -182,8 +182,15 @@ export default function GuardrailsTab() {
     },
     onSuccess: () => {
       // Phase 27.F.17b: Invalidate both guardrails and tuning policy caches
-      queryClient.invalidateQueries({ queryKey: ['/api/guardrails', mode] });
-      queryClient.invalidateQueries({ queryKey: ['tuningPolicy', mode] });
+      // Force immediate refetch with refetchType: 'all' to ensure inactive queries are also refetched
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/guardrails', mode],
+        refetchType: 'all'
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/tuning/policy', mode],
+        refetchType: 'all'
+      });
       
       toast({
         title: "Guardrails updated",
@@ -265,15 +272,33 @@ export default function GuardrailsTab() {
 
   const handleSave = async () => {
     try {
+      // Phase 27.F.17b: Parse any pending raw values before save
+      const finalSettings = { ...settings };
+      const finalGlobalSettings = { ...globalSettings };
+      
+      // Merge raw input values into final settings
+      Object.keys(rawInputValues).forEach(key => {
+        const rawValue = rawInputValues[key];
+        if (rawValue !== undefined) {
+          const numValue = parseCommaFormattedNumber(rawValue);
+          if (key in globalSettings) {
+            (finalGlobalSettings as any)[key] = numValue;
+          } else {
+            (finalSettings as any)[key] = numValue;
+          }
+        }
+      });
+      
       await Promise.all([
-        updateMutation.mutateAsync(settings),
-        updateGlobalMutation.mutateAsync(globalSettings)
+        updateMutation.mutateAsync(finalSettings),
+        updateGlobalMutation.mutateAsync(finalGlobalSettings)
       ]);
       toast({
         title: "Settings saved",
         description: "All guardrail parameters have been updated successfully.",
       });
       setHasChanges(false);
+      setRawInputValues({}); // Clear raw values after save
     } catch (error) {
       // Errors handled by individual mutations
     }

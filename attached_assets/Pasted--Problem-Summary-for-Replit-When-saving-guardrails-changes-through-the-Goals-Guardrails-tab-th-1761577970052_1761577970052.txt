@@ -1,0 +1,125 @@
+⚠️ Problem Summary for Replit
+
+When saving guardrails changes through the Goals → Guardrails tab,
+the UI displays:
+
+❌ Error — Failed to update guardrails
+
+No changes are persisted, and cooldown values remain unchanged.
+This happens even though Replit’s curl test passes and the backend logs show no exception.
+
+🧭 Diagnosis: Where It’s Breaking
+
+UI → API Payload Mismatch
+
+The frontend is still sending camelCase keys (e.g. cooldownMinutes)
+while the API expects snake_case (cooldown_minutes).
+
+The backend silently rejects or discards these unknown fields.
+
+Result: endpoint responds 200 OK (or empty 204),
+but nothing actually updates → frontend throws “Failed to update guardrails.”
+
+Route Path or Query Param Mismatch
+
+The API expects PUT /api/guardrails ?mode=paper or ?mode=live.
+
+The client sometimes sends just /api/guardrails with mode in body → ignored.
+
+So the server saves nothing because it doesn’t know which mode row to upsert.
+
+Incorrect Axios / fetch Handling
+
+The frontend still expects a { ok: true } flag in response.
+
+The new backend returns { success: true, data: … } or no wrapper.
+
+The UI sees no ok key → interprets as error → “Failed to update guardrails.”
+
+Guardrails ↔ Tuning Sync Not Broadcasting
+
+Even if the value updates, the tuning tab doesn’t refresh.
+
+Probably because contextBridge.broadcast('guardrails_updated')
+was added server-side but never subscribed to on the client.
+
+🧰 Request to Replit
+
+Please debug and correct the UI–API data contract for the Guardrails save flow.
+Here’s exactly what to do:
+
+1️⃣ Fix Request Formatting
+
+Ensure the frontend sends this exact payload + URL:
+
+PUT /api/guardrails?mode=paper
+Content-Type: application/json
+
+{
+  "cooldown_minutes": 12,
+  "micro_loop_interval": 8,
+  "price_delta_trigger": 0.3,
+  "max_daily_loss": 150,
+  "max_drawdown_pct": 10,
+  "max_open_positions": 5,
+  "max_position_size": 10,
+  "risk_per_trade_pct": 0.53,
+  "max_required_capital": 100000
+}
+
+
+(snake_case only, no userId, no lastUpdatedBy)
+
+2️⃣ Fix Response Handling
+
+In the Guardrails tab (guardrails-tab.tsx):
+
+const res = await saveGuardrails(payload);
+if (res.ok || res.success) toast.success("Guardrails saved!");
+else toast.error(res.detail ?? "Failed to update guardrails");
+
+
+Accept either ok or success.
+
+Don’t treat a 200 without ok as failure.
+
+3️⃣ Fix Mode Propagation
+
+Ensure the component builds the request URL as:
+
+const url = `/api/guardrails?mode=${tradingMode}`;
+
+
+not /api/guardrails
+and not putting mode in body.
+
+4️⃣ Confirm Realtime Sync
+
+Add a WebSocket or useEffect subscription to refresh the Tuning tab when guardrails_updated or tuning_policy_updated fires.
+
+Verify both show the same cooldown value immediately after Save.
+
+5️⃣ Log Validation
+
+Add a one-time console.log in guardrails-tab.tsx before the PUT:
+
+console.log("Saving guardrails with payload:", payload);
+
+
+Then confirm in logs that keys are cooldown_minutes, not cooldownMinutes.
+
+✅ Success Criteria
+
+Saving any guardrails change produces green “Guardrails saved” toast.
+
+No “Failed to update guardrails” error.
+
+Cooldown = identical between Guardrails & Tuning tabs immediately after save and after refresh.
+
+Server logs show one successful upsert per mode with no schema warnings.
+
+You can phrase it to Replit exactly like this:
+
+“The guardrails save still fails in the UI even though your curl test works.
+Please trace the actual browser request in Network tab — you’ll see camelCase payload keys and/or no ?mode parameter.
+Fix the payload naming, URL, and response-handling contract so that saving from the Guardrails tab persists correctly and syncs cooldown with the Tuning tab.”

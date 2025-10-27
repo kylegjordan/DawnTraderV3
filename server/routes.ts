@@ -985,6 +985,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             mode,
             enabled: false,
             aggressiveness: 'balanced',
+            policyVersion: 1,
             fieldBounds: {},
             maxStepPercent: '10.00',
             cooldownMinutes: cooldownValue,

@@ -12,6 +12,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Download, RotateCcw, Power, PowerOff, TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { format } from "date-fns";
 import PaperSimDiagnostic from "@/components/goals/paper-sim-diagnostic";
+import { useWebSocket } from "@/hooks/use-websocket";
 
 interface TuningEvent {
   id: string;
@@ -52,7 +53,11 @@ export default function TuningTab() {
   const { data: events = [], isLoading: eventsLoading, refetch: refetchEvents } = useQuery<TuningEvent[]>({
     queryKey: ["/api/tuning/events", selectedMode],
     queryFn: async () => {
-      const res = await fetch(`/api/tuning/events?mode=${selectedMode}&limit=50`);
+      const res = await fetch(`/api/tuning/events?mode=${selectedMode}&limit=50`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       if (!res.ok) throw new Error("Failed to fetch tuning events");
       return res.json();
     },
@@ -63,7 +68,11 @@ export default function TuningTab() {
   const { data: policy, isLoading: policyLoading, refetch: refetchPolicy } = useQuery<TuningPolicy>({
     queryKey: ["/api/tuning/policy", selectedMode],
     queryFn: async () => {
-      const res = await fetch(`/api/tuning/policy?mode=${selectedMode}`);
+      const res = await fetch(`/api/tuning/policy?mode=${selectedMode}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       if (!res.ok) throw new Error("Failed to fetch tuning policy");
       return res.json();
     },
@@ -164,6 +173,14 @@ export default function TuningTab() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
+
+  // Phase 27.F.17b: WebSocket listener for real-time tuning policy updates
+  useWebSocket("tuning_policy_updated", (data) => {
+    console.log("[TuningTab] Received tuning_policy_updated:", data);
+    // Invalidate policy cache for both modes to ensure fresh data
+    queryClient.invalidateQueries({ queryKey: ["/api/tuning/policy", "paper"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/tuning/policy", "live"] });
+  });
 
   const loading = eventsLoading || policyLoading;
   const policyData = policy || {
