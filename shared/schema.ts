@@ -1952,6 +1952,11 @@ export const insertUserGoalsAuditSchema = createInsertSchema(userGoalsAudit).omi
   timestamp: true,
 });
 
+export const insertDailyPerformanceSummarySchema = createInsertSchema(dailyPerformanceSummary).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Screener and Learning insert schemas
 export const insertScreenerResultSchema = createInsertSchema(screenerResults).omit({
   id: true,
@@ -2225,6 +2230,9 @@ export type GoalAuditLog = typeof goalAuditLog.$inferSelect;
 
 export type InsertUserGoalsAudit = z.infer<typeof insertUserGoalsAuditSchema>;
 export type UserGoalsAudit = typeof userGoalsAudit.$inferSelect;
+
+export type InsertDailyPerformanceSummary = z.infer<typeof insertDailyPerformanceSummarySchema>;
+export type DailyPerformanceSummary = typeof dailyPerformanceSummary.$inferSelect;
 
 export type InsertScreenerResult = z.infer<typeof insertScreenerResultSchema>;
 export type ScreenerResult = typeof screenerResults.$inferSelect;

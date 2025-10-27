@@ -38,6 +38,8 @@ import {
   goalAnalysisHistoryLive,
   goalAnalysisHistoryPaper,
   goalAuditLog,
+  userGoalsAudit,
+  dailyPerformanceSummary,
   contextChats,
   aiOrchestratorLogs,
   systemSettings,
@@ -127,6 +129,10 @@ import {
   type InsertGoalAnalysisHistoryPaper,
   type GoalAuditLog,
   type InsertGoalAuditLog,
+  type UserGoalsAudit,
+  type InsertUserGoalsAudit,
+  type DailyPerformanceSummary,
+  type InsertDailyPerformanceSummary,
   type LearningSource,
   type InsertLearningSource,
   learningSources,
@@ -439,6 +445,10 @@ export interface IStorage {
   // Phase 27.F.14.UI-SYNC.7: User Goals Audit
   createUserGoalsAudit(entry: InsertUserGoalsAudit): Promise<UserGoalsAudit>;
   getUserGoalsAudit(userId: string, mode?: 'live' | 'paper', limit?: number): Promise<UserGoalsAudit[]>;
+
+  // Phase 27.F.15.UI-EARNINGS.3: Daily Performance Summary
+  createDailyPerformanceSummary(entry: InsertDailyPerformanceSummary): Promise<DailyPerformanceSummary>;
+  getDailyPerformanceSummaries(mode: 'live' | 'paper', limit?: number): Promise<DailyPerformanceSummary[]>;
 
   // User utility methods
   getAllUsers(): Promise<User[]>;
@@ -2505,6 +2515,21 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
     
     return await query;
+  }
+
+  // Phase 27.F.15.UI-EARNINGS.3: Daily Performance Summary
+  async createDailyPerformanceSummary(entry: InsertDailyPerformanceSummary): Promise<DailyPerformanceSummary> {
+    const [result] = await db.insert(dailyPerformanceSummary).values(entry).returning();
+    return result;
+  }
+
+  async getDailyPerformanceSummaries(mode: 'live' | 'paper', limit: number = 90): Promise<DailyPerformanceSummary[]> {
+    return await db
+      .select()
+      .from(dailyPerformanceSummary)
+      .where(eq(dailyPerformanceSummary.mode, mode))
+      .orderBy(desc(dailyPerformanceSummary.date))
+      .limit(limit);
   }
 
   // User utility methods

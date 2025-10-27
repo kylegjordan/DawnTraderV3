@@ -8563,6 +8563,7 @@ Please:
   // ===== EARNINGS SUMMARY ROUTE =====
 
   // Get earnings summary for Earnings widget
+  // Phase 27.F.15.UI-EARNINGS.3: Added avgDailyEarningsPct from daily_performance_summary
   apiRouter.get('/earnings/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -8599,6 +8600,23 @@ Please:
       const avgDailyEarnings = allTime / daysSinceStart;
       const avgDailyEarningsStatus = closedTrades.length < 5 ? 'insufficient_data' : 'ok';
 
+      // Phase 27.F.15.UI-EARNINGS.3: Calculate Average Daily Earnings % from daily summaries
+      let avgDailyEarningsPct = null;
+      let avgDailyEarningsPctStatus = 'insufficient_data';
+      
+      const dailySummaries = await storage.getDailyPerformanceSummaries(mode);
+      console.log(`[Phase-27.F.15.UI-EARNINGS.3] Found ${dailySummaries.length} daily summaries for ${mode} mode`);
+      
+      if (dailySummaries.length > 0) {
+        // Calculate rolling average of ADE%
+        const totalAdePct = dailySummaries.reduce((sum, summary) => {
+          return sum + parseFloat(summary.adePercent || '0');
+        }, 0);
+        avgDailyEarningsPct = totalAdePct / dailySummaries.length;
+        avgDailyEarningsPctStatus = dailySummaries.length >= 3 ? 'ok' : 'insufficient_data';
+        console.log(`[Phase-27.F.15.UI-EARNINGS.3] Avg Daily Earnings %: ${avgDailyEarningsPct.toFixed(4)}% (${dailySummaries.length} days)`);
+      }
+
       res.json({
         today,
         thisWeek,
@@ -8607,6 +8625,8 @@ Please:
         allTime,
         avgDailyEarnings,
         avgDailyEarningsStatus,
+        avgDailyEarningsPct,
+        avgDailyEarningsPctStatus,
       });
     } catch (error: any) {
       console.error('Error fetching earnings summary:', error);
