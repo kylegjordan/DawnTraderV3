@@ -1186,6 +1186,22 @@ export const userGoalsAudit = pgTable("user_goals_audit", {
   timestampIdx: index("user_goals_audit_timestamp_idx").on(table.timestamp),
 }));
 
+// Phase 27.F.15.UI-EARNINGS.3: Daily Performance Summary (tracks daily ADE% per mode) - GLOBAL per mode
+export const dailyPerformanceSummary = pgTable("daily_performance_summary", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: tradingModeEnum("mode").notNull(),
+  date: date("date").notNull(), // Trading day date (YYYY-MM-DD)
+  portfolioStart: decimal("portfolio_start", { precision: 20, scale: 2 }).notNull(), // Start-of-day portfolio value
+  dailyProfit: decimal("daily_profit", { precision: 20, scale: 2 }).notNull(), // Net profit/loss for the day
+  adePercent: decimal("ade_percent", { precision: 10, scale: 4 }).notNull(), // (dailyProfit / portfolioStart) * 100
+  tradesCount: integer("trades_count").default(0), // Number of trades closed this day
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  modeDateIdx: uniqueIndex("daily_performance_summary_mode_date_idx").on(table.mode, table.date),
+  modeIdx: index("daily_performance_summary_mode_idx").on(table.mode),
+  dateIdx: index("daily_performance_summary_date_idx").on(table.date),
+}));
+
 // Screener Results (operational data - mode isolated) - GLOBAL per mode
 export const screenerResults = pgTable("screener_results", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
