@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Save, TrendingUp, DollarSign, Percent } from "lucide-react";
+import { Save, TrendingUp, DollarSign, Percent, AlertCircle, CheckCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ModeIndicator } from "./mode-indicator";
 import { useTrading } from "@/hooks/use-trading";
+import { cn } from "@/lib/utils";
 
 interface UserGoal {
   id: string;
@@ -26,33 +27,108 @@ interface ProjectedBalance {
   balance: number;
 }
 
+interface LATTITargets {
+  mode: string;
+  preset: string;
+  portfolio_balance: number;
+  risk_per_trade: number;
+  trades_per_day: number;
+  earnings_per_trade: number;
+  daily_profit: number;
+  target_daily_avg_earning_pct: string;
+  max_risk_per_trade_limit: number;
+  calculated_at: string;
+}
+
+type ValidationStatus = 'OK' | 'WARN' | 'BLOCK';
+
+interface ValidationResult {
+  status: ValidationStatus;
+  message: string;
+  limitValue?: number;
+}
+
 export default function TargetDailyGoals() {
   const { mode } = useTradingMode();
   const { toast } = useToast();
   const { portfolioMetrics, portfolioLoading } = useTrading();
-  const [targetPercent, setTargetPercent] = useState<string>("1.5");
+  const [targetPercent, setTargetPercent] = useState<string>("");
   const [hasEdits, setHasEdits] = useState(false);
+  const [isOverride, setIsOverride] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   // Get portfolio balance from portfolio metrics
   const portfolioBalance = portfolioMetrics?.totalValue || 850;
 
-  // Fetch current goal value
-  const { data: goalsData, isLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
+  // Phase 27.F.18: Fetch LATTI-calculated target daily avg earning %
+  const { data: lattiTargets, isLoading: lattiLoading } = useQuery<LATTITargets>({
+    queryKey: ['/api/latti/targets', mode],
+    queryFn: async () => apiRequest('GET', `/api/latti/targets?mode=${mode}`),
+  });
+
+  // Fetch current goal value (for overrides)
+  const { data: goalsData, isLoading: goalsLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
     queryKey: ['/api/goals', mode],
     refetchOnMount: 'always',
     staleTime: 0,
   });
 
+  // Fetch guardrails for validation
+  const { data: guardrailsData } = useQuery({
+    queryKey: ['/api/guardrails', mode],
+    queryFn: async () => apiRequest('GET', `/api/guardrails?mode=${mode}`),
+  });
+
+  // Phase 27.F.18: Initialize target percent from LATTI or override
   useEffect(() => {
-    if (goalsData?.goals) {
+    if (goalsData?.goals && lattiTargets) {
       const savedGoal = goalsData.goals.find(g => g.metricName === "Target Daily Avg Earning %");
-      if (savedGoal) {
+      if (savedGoal && savedGoal.goalValue) {
+        // User has an override
         setTargetPercent(savedGoal.goalValue);
+        setIsOverride(parseFloat(savedGoal.goalValue) !== parseFloat(lattiTargets.target_daily_avg_earning_pct));
+      } else if (lattiTargets) {
+        // Use LATTI default
+        setTargetPercent(lattiTargets.target_daily_avg_earning_pct);
+        setIsOverride(false);
       }
     }
-  }, [goalsData]);
+  }, [goalsData, lattiTargets]);
 
-  // Save mutation
+  // Phase 27.F.18: Validate target percent against guardrails
+  useEffect(() => {
+    if (targetPercent && guardrailsData && portfolioBalance > 0) {
+      const targetPct = parseFloat(targetPercent);
+      const maxDailyLoss = parseFloat(guardrailsData.maxDailyLoss || '1000');
+      const maxDailyLossPct = (maxDailyLoss / portfolioBalance) * 100;
+      
+      // Safety threshold: Target should not exceed 2x the max daily loss %
+      const warnThreshold = maxDailyLossPct;
+      const blockThreshold = maxDailyLossPct * 2;
+      
+      if (targetPct <= warnThreshold) {
+        setValidationResult({
+          status: 'OK',
+          message: 'Target is within safe limits',
+          limitValue: warnThreshold
+        });
+      } else if (targetPct <= blockThreshold) {
+        setValidationResult({
+          status: 'WARN',
+          message: `Target exceeds recommended threshold (${warnThreshold.toFixed(2)}%)`,
+          limitValue: blockThreshold
+        });
+      } else {
+        setValidationResult({
+          status: 'BLOCK',
+          message: `Target exceeds maximum safe threshold (${blockThreshold.toFixed(2)}%)`,
+          limitValue: blockThreshold
+        });
+      }
+    }
+  }, [targetPercent, guardrailsData, portfolioBalance]);
+
+  // Phase 27.F.18: Save mutation with user_goals_audit logging
   const saveMutation = useMutation({
     mutationFn: async () => {
       const goals = [
@@ -63,14 +139,34 @@ export default function TargetDailyGoals() {
           actualValue: "0",
         }
       ];
+      
+      // Log to user_goals_audit if this is an override attempt
+      if (validationResult) {
+        try {
+          await apiRequest('POST', '/api/goals/audit', {
+            mode,
+            metricName: "Target Daily Avg Earning %",
+            attemptedValue: targetPercent,
+            feasibilityStatus: validationResult.status,
+            validationMessage: validationResult.message,
+            riskLimit: validationResult.limitValue,
+            exceedsBy: validationResult.status !== 'OK' ? 
+              (parseFloat(targetPercent) - (validationResult.limitValue || 0)).toFixed(2) : '0'
+          });
+        } catch (auditError) {
+          console.warn('[TargetDailyGoals] Failed to log audit:', auditError);
+        }
+      }
+      
       return apiRequest('POST', '/api/goals/update', { mode, goals });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] });
       setHasEdits(false);
+      setIsOverride(lattiTargets ? parseFloat(targetPercent) !== parseFloat(lattiTargets.target_daily_avg_earning_pct) : true);
       toast({
         title: "Target Saved",
-        description: `Target Daily Avg Earning % set to ${targetPercent}%`,
+        description: `Target Daily Avg Earning % set to ${targetPercent}%${isOverride ? ' (Override)' : ''}`,
       });
     },
     onError: (error: any) => {
@@ -82,139 +178,182 @@ export default function TargetDailyGoals() {
     },
   });
 
-  // Calculate projected balances using daily compounding
-  const calculateProjectedBalances = (): ProjectedBalance[] => {
-    const targetPct = parseFloat(targetPercent) || 0;
-    const balance = portfolioBalance;
-
-    return [
-      { label: "1 Day", days: 1, balance: balance * Math.pow(1 + targetPct / 100, 1) },
-      { label: "15 Days", days: 15, balance: balance * Math.pow(1 + targetPct / 100, 15) },
-      { label: "30 Days", days: 30, balance: balance * Math.pow(1 + targetPct / 100, 30) },
-      { label: "90 Days", days: 90, balance: balance * Math.pow(1 + targetPct / 100, 90) },
-      { label: "6 Months", days: 180, balance: balance * Math.pow(1 + targetPct / 100, 180) },
-      { label: "1 Year", days: 365, balance: balance * Math.pow(1 + targetPct / 100, 365) },
-    ];
+  const handleSave = () => {
+    if (validationResult?.status === 'BLOCK') {
+      toast({
+        title: "Cannot Save",
+        description: validationResult.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    saveMutation.mutate();
   };
 
-  const projectedBalances = calculateProjectedBalances();
-
-  const handleTargetChange = (value: string) => {
-    setTargetPercent(value);
-    setHasEdits(true);
+  const handleResetToLATTI = () => {
+    if (lattiTargets) {
+      setTargetPercent(lattiTargets.target_daily_avg_earning_pct);
+      setHasEdits(true);
+      setIsOverride(false);
+    }
   };
+
+  // Phase 27.F.18: Calculate projected balances using effectivePct
+  const effectivePct = parseFloat(targetPercent) || 0;
+  const projections: ProjectedBalance[] = [
+    { label: "Tomorrow", days: 1, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 1) },
+    { label: "1 Week", days: 7, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 7) },
+    { label: "1 Month", days: 30, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 30) },
+    { label: "3 Months", days: 90, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 90) },
+  ];
+
+  const isLoading = lattiLoading || goalsLoading || portfolioLoading;
 
   if (isLoading) {
     return (
-      <Card>
+      <Card data-testid="target-daily-goals">
         <CardHeader>
-          <CardTitle>Target Daily Goals</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Target Daily Goals
+            </div>
+            <ModeIndicator />
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <Skeleton className="h-96 w-full" />
+          <Skeleton className="h-64 w-full" />
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card>
+    <Card data-testid="target-daily-goals">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
             Target Daily Goals
-          </CardTitle>
+          </div>
           <ModeIndicator />
-        </div>
+        </CardTitle>
         <p className="text-sm text-muted-foreground mt-2">
-          Set your target daily return percentage and view projected portfolio growth over time
+          Set your target daily return percentage. LATTI calculates recommended values based on your trading pace and portfolio balance.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Target Input Section */}
-        <div className="space-y-4">
-          <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-            <Label htmlFor="target-percent" className="text-base font-semibold flex items-center gap-2 mb-3">
-              <Percent className="w-4 h-4" />
+        {/* Target Daily Avg Earning % Input */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="target-percent" className="text-sm font-semibold">
               Target Daily Average Earnings %
             </Label>
-            <div className="flex gap-3 items-end">
-              <div className="flex-1">
-                <Input
-                  id="target-percent"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  value={targetPercent}
-                  onChange={(e) => handleTargetChange(e.target.value)}
-                  className="text-2xl font-bold h-14"
-                  data-testid="input-target-percent"
-                />
+            {lattiTargets && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Percent className="w-3 h-3" />
+                LATTI Default: {lattiTargets.target_daily_avg_earning_pct}%
               </div>
-              <Button
-                onClick={() => saveMutation.mutate()}
-                disabled={!hasEdits || saveMutation.isPending}
-                className="h-14 px-6"
-                data-testid="button-save-target"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                Save
-              </Button>
+            )}
+          </div>
+          
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                id="target-percent"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={targetPercent}
+                onChange={(e) => {
+                  setTargetPercent(e.target.value);
+                  setHasEdits(true);
+                }}
+                className="pr-8"
+                data-testid="input-target-percent"
+              />
+              <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             </div>
+            {isOverride && (
+              <Button
+                onClick={handleResetToLATTI}
+                variant="outline"
+                size="sm"
+                data-testid="button-reset-to-latti"
+              >
+                Reset to LATTI
+              </Button>
+            )}
+            <Button
+              onClick={handleSave}
+              disabled={!hasEdits || saveMutation.isPending || validationResult?.status === 'BLOCK'}
+              size="sm"
+              data-testid="button-save-target"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save
+            </Button>
           </div>
 
-          {/* Current Portfolio Balance */}
-          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-            <span className="text-sm font-medium flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Current Portfolio Balance:
-            </span>
-            <span className="text-lg font-bold font-mono" data-testid="text-portfolio-balance">
-              ${portfolioBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
+          {/* Phase 27.F.18: Validation Status */}
+          {validationResult && (
+            <div className={cn(
+              "flex items-start gap-2 p-3 rounded-lg text-sm",
+              validationResult.status === 'OK' && "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 text-green-700 dark:text-green-200",
+              validationResult.status === 'WARN' && "bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900/50 text-yellow-700 dark:text-yellow-200",
+              validationResult.status === 'BLOCK' && "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-200"
+            )} data-testid={`validation-${validationResult.status.toLowerCase()}`}>
+              {validationResult.status === 'OK' ? (
+                <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              )}
+              <div>
+                <p className="font-semibold">{validationResult.status}</p>
+                <p className="text-xs opacity-90">{validationResult.message}</p>
+              </div>
+            </div>
+          )}
+
+          {isOverride && (
+            <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-lg text-sm">
+              <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <p className="text-blue-700 dark:text-blue-200">
+                You are using a custom override. LATTI recommends {lattiTargets?.target_daily_avg_earning_pct}% based on your current trading pace and guardrails.
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Projected Balances Table */}
+        {/* Projected Portfolio Growth */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-semibold">Estimated Portfolio Balances (based on Target %)</h3>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            Projections use daily compounding: future = balance × (1 + target%/100)^days
-          </p>
-          
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left p-3 font-semibold">Period</th>
-                  <th className="text-right p-3 font-semibold">Projected Balance</th>
-                  <th className="text-right p-3 font-semibold">Gain</th>
+          <h4 className="font-semibold text-sm text-muted-foreground flex items-center gap-2">
+            <DollarSign className="w-4 h-4" />
+            Projected Portfolio Growth
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="projections-table">
+              <thead>
+                <tr className="border-b border-muted">
+                  <th className="text-left py-2 font-semibold text-muted-foreground">Timeframe</th>
+                  <th className="text-right py-2 font-semibold text-muted-foreground">Projected Balance</th>
+                  <th className="text-right py-2 font-semibold text-muted-foreground">Total Gain</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
-                {projectedBalances.map((projection, index) => {
-                  const gain = projection.balance - portfolioBalance;
-                  const gainPercent = ((projection.balance - portfolioBalance) / portfolioBalance) * 100;
+              <tbody>
+                {projections.map((proj, index) => {
+                  const gain = proj.balance - portfolioBalance;
+                  const gainPercent = ((gain / portfolioBalance) * 100);
                   
                   return (
-                    <tr 
-                      key={projection.label} 
-                      className="hover:bg-muted/30 transition-colors"
-                      data-testid={`row-projection-${index}`}
-                    >
-                      <td className="p-3 font-medium">{projection.label}</td>
-                      <td className="p-3 text-right font-mono font-bold text-green-600 dark:text-green-400">
-                        ${projection.balance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    <tr key={index} className="border-b border-muted/50" data-testid={`projection-${proj.label.toLowerCase().replace(' ', '-')}`}>
+                      <td className="py-3 text-foreground">{proj.label}</td>
+                      <td className="text-right font-semibold text-foreground">
+                        ${proj.balance.toFixed(2)}
                       </td>
-                      <td className="p-3 text-right font-mono text-sm text-muted-foreground">
-                        +${gain.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        {" "}
-                        <span className="text-xs">({gainPercent.toFixed(1)}%)</span>
+                      <td className="text-right font-semibold text-green-600 dark:text-green-500">
+                        +${gain.toFixed(2)} ({gainPercent.toFixed(1)}%)
                       </td>
                     </tr>
                   );
@@ -224,12 +363,18 @@ export default function TargetDailyGoals() {
           </div>
         </div>
 
-        {/* Info Note */}
-        <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <p className="text-xs text-blue-900 dark:text-blue-300">
-            <strong>Note:</strong> Target % is user-editable but does not trigger AI tuning loops. 
-            LATTI reads it as a "goal bias" for reference only. Portfolio balance updates after each trade or daily summary.
-          </p>
+        {/* Current Portfolio Info */}
+        <div className="p-3 bg-muted/30 rounded-lg">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Current Portfolio Value:</span>
+            <span className="font-semibold text-foreground">${portfolioBalance.toLocaleString()}</span>
+          </div>
+          {lattiTargets && (
+            <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-muted">
+              <span className="text-muted-foreground">Trading Pace:</span>
+              <span className="font-semibold text-foreground capitalize">{lattiTargets.preset}</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

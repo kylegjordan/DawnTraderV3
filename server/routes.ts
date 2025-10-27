@@ -8261,6 +8261,33 @@ Provide specific, actionable recommendations.`,
     }
   });
 
+  // Phase 27.F.18: Log goal override attempts to user_goals_audit
+  apiRouter.post('/goals/audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { mode, metricName, attemptedValue, feasibilityStatus, validationMessage, riskLimit, exceedsBy } = req.body;
+
+      console.log(`[GoalsAudit] Logging ${metricName} override attempt: ${attemptedValue} (${feasibilityStatus})`);
+
+      await storage.createUserGoalsAudit({
+        userId,
+        mode: mode as 'live' | 'paper',
+        metricName,
+        attemptedValue,
+        feasibilityStatus,
+        feasibilityReason: validationMessage,
+        riskLimit: riskLimit ? riskLimit.toString() : null,
+        exceedsBy: exceedsBy ? exceedsBy.toString() : null,
+        exploratoryMode: false,
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error logging goal audit:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Analyze goals with AI (conversational goal-setting)
   apiRouter.post('/goals/analyze', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
