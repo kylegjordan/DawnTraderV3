@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,9 +56,19 @@ export default function TargetDailyGoals() {
   const [hasEdits, setHasEdits] = useState(false);
   const [isOverride, setIsOverride] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  
+  // Phase 27.F.19: Throttle updates to prevent flashing
+  const lastUpdateRef = useRef<number>(0);
 
   // Get portfolio balance from portfolio metrics
   const portfolioBalance = portfolioMetrics?.totalValue || 850;
+  
+  // Phase 27.F.19: Currency formatter
+  const currencyFormatter = new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD', 
+    maximumFractionDigits: 2 
+  });
 
   // Phase 27.F.18: Fetch LATTI-calculated target daily avg earning %
   const { data: lattiTargets, isLoading: lattiLoading } = useQuery<LATTITargets>({
@@ -79,32 +89,56 @@ export default function TargetDailyGoals() {
     queryFn: async () => apiRequest('GET', `/api/guardrails?mode=${mode}`),
   });
 
-  // Phase 27.F.18: Initialize target percent from LATTI or override
+  // Phase 27.F.18/19: Initialize target percent from LATTI or override
   useEffect(() => {
     if (goalsData?.goals && lattiTargets) {
       const savedGoal = goalsData.goals.find(g => g.metricName === "Target Daily Avg Earning %");
+      // Phase 27.F.19: Scale LATTI target by 100 for display (backend returns decimal 0-1)
+      const lattiTargetScaled = (parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2);
+      
+      let newValue: string | null = null;
+      let newIsOverride = false;
+      
       if (savedGoal && savedGoal.goalValue) {
-        // User has an override
-        setTargetPercent(savedGoal.goalValue);
-        setIsOverride(parseFloat(savedGoal.goalValue) !== parseFloat(lattiTargets.target_daily_avg_earning_pct));
+        // Phase 27.F.19: User has an override - scale it too since backend stores decimal (0-1)
+        const savedValueScaled = (parseFloat(savedGoal.goalValue) * 100).toFixed(2);
+        newValue = savedValueScaled;
+        newIsOverride = parseFloat(savedValueScaled) !== parseFloat(lattiTargetScaled);
       } else if (lattiTargets) {
-        // Use LATTI default
-        setTargetPercent(lattiTargets.target_daily_avg_earning_pct);
-        setIsOverride(false);
+        // Phase 27.F.19: Use LATTI default (populate on preset change, not reset to bad default)
+        newValue = lattiTargetScaled;
+        newIsOverride = false;
+      }
+      
+      // Phase 27.F.19: Intelligent throttle - only skip if value hasn't changed AND within throttle window
+      const now = Date.now();
+      const withinThrottleWindow = now - lastUpdateRef.current < 300000;
+      const valueUnchanged = newValue === targetPercent;
+      
+      if (withinThrottleWindow && valueUnchanged) {
+        return; // Skip redundant update
+      }
+      
+      // Value has changed or throttle window expired - update state
+      if (newValue !== null) {
+        setTargetPercent(newValue);
+        setIsOverride(newIsOverride);
+        lastUpdateRef.current = now;
       }
     }
   }, [goalsData, lattiTargets]);
 
-  // Phase 27.F.18: Validate target percent against guardrails
+  // Phase 27.F.18/19: Validate target percent against guardrails
   useEffect(() => {
     if (targetPercent && guardrailsData && portfolioBalance > 0) {
       const targetPct = parseFloat(targetPercent);
       const maxDailyLoss = parseFloat(guardrailsData.maxDailyLoss || '1000');
-      const maxDailyLossPct = (maxDailyLoss / portfolioBalance) * 100;
+      const dailyLossKillSwitch = parseFloat(guardrailsData.dailyLossKillSwitch || '5000');
       
-      // Safety threshold: Target should not exceed 2x the max daily loss %
-      const warnThreshold = maxDailyLossPct;
-      const blockThreshold = maxDailyLossPct * 2;
+      // Phase 27.F.19: Safe limit = daily_loss_kill_switch × 5
+      const safeLimit = (dailyLossKillSwitch / portfolioBalance) * 100 * 5;
+      const warnThreshold = safeLimit;
+      const blockThreshold = safeLimit * 2;
       
       if (targetPct <= warnThreshold) {
         setValidationResult({
@@ -128,14 +162,17 @@ export default function TargetDailyGoals() {
     }
   }, [targetPercent, guardrailsData, portfolioBalance]);
 
-  // Phase 27.F.18: Save mutation with user_goals_audit logging
+  // Phase 27.F.18/19: Save mutation with user_goals_audit logging
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // Phase 27.F.19: Convert percentage (1.5) back to decimal (0.015) for backend storage
+      const goalValueDecimal = (parseFloat(targetPercent) / 100).toString();
+      
       const goals = [
         {
           metricName: "Target Daily Avg Earning %",
           metricKey: "target_daily_avg_earning_pct",
-          goalValue: targetPercent,
+          goalValue: goalValueDecimal,
           actualValue: "0",
         }
       ];
@@ -163,7 +200,9 @@ export default function TargetDailyGoals() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] });
       setHasEdits(false);
-      setIsOverride(lattiTargets ? parseFloat(targetPercent) !== parseFloat(lattiTargets.target_daily_avg_earning_pct) : true);
+      // Phase 27.F.19: Check override using scaled LATTI value
+      const lattiTargetScaled = lattiTargets ? (parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2) : '0';
+      setIsOverride(lattiTargets ? parseFloat(targetPercent) !== parseFloat(lattiTargetScaled) : true);
       toast({
         title: "Target Saved",
         description: `Target Daily Avg Earning % set to ${targetPercent}%${isOverride ? ' (Override)' : ''}`,
@@ -192,19 +231,24 @@ export default function TargetDailyGoals() {
 
   const handleResetToLATTI = () => {
     if (lattiTargets) {
-      setTargetPercent(lattiTargets.target_daily_avg_earning_pct);
+      // Phase 27.F.19: Use scaled LATTI value
+      const lattiTargetScaled = (parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2);
+      setTargetPercent(lattiTargetScaled);
       setHasEdits(true);
       setIsOverride(false);
     }
   };
 
-  // Phase 27.F.18: Calculate projected balances using effectivePct
+  // Phase 27.F.18/19: Calculate projected balances using effectivePct
+  // Phase 27.F.19: targetPercent is already scaled (e.g., 1.5 for 1.5%), so divide by 100
   const effectivePct = parseFloat(targetPercent) || 0;
   const projections: ProjectedBalance[] = [
     { label: "Tomorrow", days: 1, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 1) },
     { label: "1 Week", days: 7, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 7) },
     { label: "1 Month", days: 30, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 30) },
     { label: "3 Months", days: 90, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 90) },
+    { label: "6 Months", days: 180, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 180) },
+    { label: "1 Year", days: 365, balance: portfolioBalance * Math.pow(1 + (effectivePct / 100), 365) },
   ];
 
   const isLoading = lattiLoading || goalsLoading || portfolioLoading;
@@ -252,7 +296,7 @@ export default function TargetDailyGoals() {
             {lattiTargets && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Percent className="w-3 h-3" />
-                LATTI Default: {lattiTargets.target_daily_avg_earning_pct}%
+                LATTI Default: {(parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2)}%
               </div>
             )}
           </div>
@@ -316,11 +360,11 @@ export default function TargetDailyGoals() {
             </div>
           )}
 
-          {isOverride && (
+          {isOverride && lattiTargets && (
             <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-lg text-sm">
               <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
               <p className="text-blue-700 dark:text-blue-200">
-                You are using a custom override. LATTI recommends {lattiTargets?.target_daily_avg_earning_pct}% based on your current trading pace and guardrails.
+                You are using a custom override. LATTI recommends {(parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2)}% based on your current trading pace and guardrails.
               </p>
             </div>
           )}
@@ -350,10 +394,10 @@ export default function TargetDailyGoals() {
                     <tr key={index} className="border-b border-muted/50" data-testid={`projection-${proj.label.toLowerCase().replace(' ', '-')}`}>
                       <td className="py-3 text-foreground">{proj.label}</td>
                       <td className="text-right font-semibold text-foreground">
-                        ${proj.balance.toFixed(2)}
+                        {currencyFormatter.format(proj.balance)}
                       </td>
                       <td className="text-right font-semibold text-green-600 dark:text-green-500">
-                        +${gain.toFixed(2)} ({gainPercent.toFixed(1)}%)
+                        +{currencyFormatter.format(gain)} ({gainPercent.toFixed(1)}%)
                       </td>
                     </tr>
                   );

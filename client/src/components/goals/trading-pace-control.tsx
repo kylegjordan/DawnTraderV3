@@ -50,9 +50,9 @@ const PACE_CONFIGS: PaceConfig[] = [
   {
     id: 'aggressive',
     label: 'Aggressive',
-    icon: <AlertTriangle className="w-5 h-5" />,
+    icon: <Zap className="w-5 h-5" />,
     color: 'red',
-    description: 'Highest risk, top earnings target, near safety limits. Use with caution.',
+    description: 'High intensity trading mode — higher reward and risk balance.',
   },
 ];
 
@@ -251,7 +251,7 @@ export default function TradingPaceControl() {
                         <span>Target Daily Avg Earning %</span>
                       </div>
                       <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                        +{lattiTargets.target_daily_avg_earning_pct}%
+                        +{(parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2)}%
                       </div>
                     </div>
                   </TooltipTrigger>
