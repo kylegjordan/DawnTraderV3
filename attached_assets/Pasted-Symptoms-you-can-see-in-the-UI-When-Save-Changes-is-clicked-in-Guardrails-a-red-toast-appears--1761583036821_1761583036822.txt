@@ -1,0 +1,90 @@
+Symptoms you can see in the UI
+
+When “Save Changes” is clicked in Guardrails, a red toast appears:
+
+Error cooldownValue is not defined
+
+The Tuning tab does update (backend + WebSocket fine).
+
+When you reload or navigate away, the Guardrails tab reverts to its old value (stale cache).
+
+What’s actually happening
+
+In client/src/components/goals/guardrails-tab.tsx, the handleSave or onSubmit handler references an undefined local variable named cooldownValue.
+
+This causes an exception before the mutation runs.
+
+The catch block then triggers the red toast message.
+
+Since no request is made, React Query never refreshes data, and the stale 15-minute value remains in cache.
+
+The cache isn’t refreshed after backend broadcasts because the query invalidation key mismatches the actual query used in useQuery.
+
+🧠 How to Fix It
+Step 1 — Fix the undefined variable
+
+Open client/src/components/goals/guardrails-tab.tsx
+Find the handleSave or equivalent mutation handler (around line 270-310).
+
+Replace any usage of cooldownValue with:
+
+const cooldownValue =
+  settings?.cooldownMinutes ?? rawInputValues?.cooldownMinutes ?? null;
+
+
+or remove it entirely if not used, and make sure the payload sent to the backend uses:
+
+payload.cooldown_minutes = Number(settings.cooldownMinutes);
+
+
+Do not refer to any variable that is not explicitly defined in that scope.
+
+Step 2 — Force correct data refresh after save
+
+Still in the same file, after a successful save, add:
+
+await queryClient.invalidateQueries(['/api/guardrails', mode]);
+await queryClient.invalidateQueries(['/api/tuning/policy', mode]);
+
+
+This guarantees both the Guardrails and Tuning tabs re-fetch from the backend rather than reading stale data.
+
+Step 3 — Fix optimistic UI rollback
+
+Before sending the mutation, copy the current state so it can roll back cleanly if an error occurs:
+
+const previousData = queryClient.getQueryData(['/api/guardrails', mode]);
+try {
+  await saveGuardrails(payload);
+  queryClient.invalidateQueries(['/api/guardrails', mode]);
+} catch (e) {
+  queryClient.setQueryData(['/api/guardrails', mode], previousData);
+  toast.error(e.message || 'Failed to update guardrails');
+}
+
+Step 4 — (Optional) Lock the schema from duplicate mode entries
+
+Run this SQL to prevent further duplicate drift:
+
+ALTER TABLE guardrails
+  ADD CONSTRAINT guardrails_mode_unique UNIQUE (mode);
+
+ALTER TABLE tuning_policy
+  ADD CONSTRAINT tuning_policy_user_mode_unique UNIQUE (user_id, mode);
+
+✅ Expected Behavior After Fix
+
+Clicking Save Changes triggers a green success toast.
+
+The new cooldown appears immediately on Guardrails and Tuning tabs.
+
+After refresh, both tabs still show the same saved value.
+
+No more cooldownValue error in the console.
+
+You can send this directly to Replit as:
+
+“The backend works; the issue is entirely in guardrails-tab.tsx.
+The UI still references an undefined variable (cooldownValue) inside the save handler.
+Please fix that variable reference, then invalidate both ['/api/guardrails', mode] and ['/api/tuning/policy', mode] after save so the UI refreshes.
+The red error toast and stale reload behavior will disappear once that’s fixed.”
