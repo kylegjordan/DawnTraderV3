@@ -1,0 +1,118 @@
+You said:
+This aligns.  Please create the directive for Replit.
+ChatGPT said:
+
+Excellent — here’s the finalized directive you can paste directly into Replit.
+It reflects your clarified logic: Goals tab = dynamic and editable, Dashboard = synced and read-only, plus the fixes for guardrails save and cooldown sync.
+
+⚙️ Phase 27.F.16.UI-SIMPLIFY (Revision 2) — Target Daily %-Based Goals + Guardrails Fix + Cooldown Sync
+
+(No-Code Implementation Directive)
+
+🎯 Objective
+
+Simplify the Goals Engine to use Target Daily Average Earnings % as the primary goal driver and replace the Performance Tracking Metrics section with Lottie’s projected portfolio growth view, while also:
+1️⃣ Fixing the Guardrails save error, and
+2️⃣ Ensuring the Symbol Cooldown value stays perfectly in sync across Guardrails, Tuning, and LATTI.
+
+🧱 Automated Tasks
+A. Guardrails Save Repair
+on PUT /api/guardrails:
+    remove(userId, lastUpdatedBy)
+    validate payload against guardrails schema
+    save guardrails record
+    tuning_policy.cooldown_period = guardrails.cooldown_minutes
+    broadcast("cooldown_synced", guardrails.cooldown_minutes)
+    log "[PolicySync] Cooldown unified → " + guardrails.cooldown_minutes
+
+
+✅ Removes deprecated fields causing the save failure.
+✅ Synchronizes cooldown value post-save and invalidates frontend cache.
+
+B. Unified Cooldown Defaults
+if tuning_policy.cooldown_period is null:
+    tuning_policy.cooldown_period = guardrails.cooldown_minutes or 15
+
+
+→ All tabs now display the same value (default 15 min) from a single source of truth.
+
+C. Simplified Goals Tab (UI Redesign)
+
+Replace <PerformanceTrackingMetrics /> with the following layout inside the Goals tab:
+
+🎯 Target Daily Average Earnings %
+[  1.5 % ]   ← User-editable field (or AI-suggested)
+
+💰 Current Portfolio Balance:  $ 834
+
+📈 Estimated Portfolio Balances (based on Target %)
+─────────────────────────────────────────────
+1 Day:        $ 846
+15 Days:      $ 960
+30 Days:      $ 1 106
+90 Days:      $ 1 465
+6 Months:     $ 2 283
+1 Year:       $ 4 319
+─────────────────────────────────────────────
+
+
+Rules
+
+Table auto-recomputes using daily compounding:
+future = balance × (1 + target%/100)^days
+
+Portfolio balance updates after each trade or daily summary.
+
+Target % is user-editable but does not trigger AI tuning loops.
+
+Lottie reads it as a “goal bias” for reference only.
+
+D. Trading Pace Behavior
+Context	Editable	Auto-Calc	Syncs With
+Goals Tab	✅ Yes	All values recalculate when preset changes (Conservative / Baseline / Optimistic / Aggressive)	Dashboard + LATTI
+Dashboard (LATTI Widget)	❌ Read-only	Reflects last saved Goals values	Goals Tab
+Lottie Model	⚙️ Internal	Uses Target % for risk planning	Guardrails
+
+Each preset update changes:
+
+Risk per Trade ($)
+
+Trades per Day
+
+Target Daily Avg Earnings %
+
+Estimated Portfolio Balances
+
+E. Dashboard / LATTI Integration
+
+Add target_daily_avg_earning_pct to the Trading Pace widget:
+
+LATTI Trading Pace
+──────────────────────────────
+Preset: Baseline
+Target Daily Avg Earning %:  1.5 %
+Risk per Trade:  $100
+Trades per Day:  4
+Projected Daily Profit:  +$12.50
+──────────────────────────────
+
+
+Displayed read-only and auto-updated when Goals are saved.
+
+🚀 Command for Replit
+
+Apply Phase 27.F.16.UI-SIMPLIFY (Revision 2) — Target Daily %-Based Goals + Guardrails Save Fix + Cooldown Sync (No-Code)
+
+✅ Expected Outcome
+
+Guardrails tab saves without error.
+
+Cooldown period is 15 min by default and stays identical across Guardrails, Tuning, and LATTI.
+
+Performance Tracking Metrics section removed.
+
+Goals tab now shows Target Daily % and Projected Balances.
+
+Dashboard Trading Pace widget mirrors Goals tab values (read-only).
+
+Lottie continues using percent-based optimization internally.

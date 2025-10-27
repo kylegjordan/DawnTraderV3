@@ -14900,12 +14900,18 @@ export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Re
     
     console.log(`[TradingPace-API] Updated trading pace to: ${tradingPace} (global for both modes)`);
     
-    // Phase 27.F.15.UI-SYNC.9: Sync Performance Metrics goals for both modes
+    // Phase 27.F.15.UI-SYNC.9 + Phase 27.F.16.UI-SIMPLIFY: Sync Performance Metrics + Target Daily % goals for both modes
     for (const mode of ['paper', 'live'] as const) {
-      // Fetch existing goals for this mode
-      const existingGoals = mode === 'live' 
-        ? await storage.getGoalsLive()
-        : await storage.getGoalsPaper();
+      // Fetch existing goals and portfolio balance for this mode
+      const [existingGoals, portfolioState] = await Promise.all([
+        mode === 'live' ? storage.getGoalsLive() : storage.getGoalsPaper(),
+        storage.getPortfolioState({ globalContextId: userId, mode })
+      ]);
+      
+      const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 850;
+      const targetDailyAvgEarningPct = portfolioBalance > 0 
+        ? ((selectedMetrics.dailyProfit / portfolioBalance) * 100).toFixed(2)
+        : '0';
       
       // Update only the goal values, preserving actualValue and percentAchieved
       const goalsToUpdate = [
@@ -14926,6 +14932,12 @@ export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Re
           goalValue: selectedMetrics.dailyProfit.toString(),
           actualValue: existingGoals.find(g => g.metricName === 'Earnings per Day')?.actualValue || '0',
           percentAchieved: existingGoals.find(g => g.metricName === 'Earnings per Day')?.percentAchieved || '0'
+        },
+        {
+          metricName: 'Target Daily Avg Earning %',
+          goalValue: targetDailyAvgEarningPct,
+          actualValue: existingGoals.find(g => g.metricName === 'Target Daily Avg Earning %')?.actualValue || '0',
+          percentAchieved: existingGoals.find(g => g.metricName === 'Target Daily Avg Earning %')?.percentAchieved || '0'
         }
       ];
 
@@ -14938,7 +14950,7 @@ export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Re
         }
       }
       
-      console.log(`[TradingPace-API] Synced Performance Metrics goals for ${mode} mode:`, goalsToUpdate.map(g => `${g.metricName}=${g.goalValue}`).join(', '));
+      console.log(`[TradingPace-API] Synced Performance Metrics + Target Daily % goals for ${mode} mode (balance: $${portfolioBalance}):`, goalsToUpdate.map(g => `${g.metricName}=${g.goalValue}`).join(', '));
     }
     
     res.json({

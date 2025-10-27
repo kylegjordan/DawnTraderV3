@@ -10,7 +10,7 @@ import { Save, Send, Sparkles, Mic, MicOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import PerformanceTrackingMetrics from "./performance-tracking-metrics";
+import TargetDailyGoals from "./target-daily-goals";
 import TradingPaceControl from "./trading-pace-control";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 
@@ -246,8 +246,8 @@ export default function GoalsEngineTab() {
       {/* Trading Pace Control - Global setting for trading aggressiveness */}
       <TradingPaceControl />
       
-      {/* Performance Tracking Metrics - Primary Goals Table */}
-      <PerformanceTrackingMetrics />
+      {/* Phase 27.F.16.UI-SIMPLIFY: Target Daily Goals - Simplified percentage-based goals */}
+      <TargetDailyGoals />
     </div>
   );
 }

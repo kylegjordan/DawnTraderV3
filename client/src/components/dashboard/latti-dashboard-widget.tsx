@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
+import { useTrading } from "@/hooks/use-trading";
 
 interface TradingPaceData {
   tradingPace: 'conservative' | 'baseline' | 'optimistic' | 'aggressive';
@@ -70,6 +71,7 @@ const PACE_CONFIGS = {
 
 export function LATTIDashboardWidget() {
   const { mode, isPaper } = useTradingMode();
+  const { portfolioMetrics, portfolioLoading } = useTrading();
   
   // Fetch trading pace
   const { data: paceData, isLoading: paceLoading } = useQuery<TradingPaceData>({
@@ -89,12 +91,6 @@ export function LATTIDashboardWidget() {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
     }).then(r => r.json()),
-  });
-
-  // Phase 27.F.15.UI-SYNC.9: Fetch portfolio balance for Target Daily Avg Earning %
-  const { data: portfolioData, isLoading: portfolioLoading } = useQuery<PortfolioData>({
-    queryKey: ['/api/portfolio/balance', mode],
-    queryFn: async () => apiRequest('GET', `/api/portfolio/balance?mode=${mode}`),
   });
 
   const isLoading = paceLoading || guardrailsLoading || portfolioLoading;
@@ -119,8 +115,8 @@ export function LATTIDashboardWidget() {
   const config = PACE_CONFIGS[pace];
   const riskPerTrade = guardrails?.riskPerTrade || 0;
 
-  // Phase 27.F.15.UI-SYNC.9: Calculate Target Daily Avg Earning %
-  const portfolioBalance = portfolioData?.balance || 0;
+  // Phase 27.F.15.UI-SYNC.9 + Phase 27.F.16.UI-SIMPLIFY: Calculate Target Daily Avg Earning % from portfolio metrics
+  const portfolioBalance = portfolioMetrics?.totalValue || 850;
   const targetDailyAvgEarningPct = portfolioBalance > 0 
     ? ((config.targetDailyProfit / portfolioBalance) * 100).toFixed(2)
     : '0.00';
