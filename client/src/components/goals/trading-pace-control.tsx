@@ -22,14 +22,9 @@ interface PaceConfig {
   icon: React.ReactNode;
   color: string;
   description: string;
-  metrics: {
-    riskPerTrade: number; // $
-    tradesPerDay: number;
-    earningsPerTrade: number; // $
-    dailyProfit: number; // $
-  };
 }
 
+// Phase 27.F.18: Removed hardcoded metrics - now fetched from LATTI API
 const PACE_CONFIGS: PaceConfig[] = [
   {
     id: 'conservative',
@@ -37,12 +32,6 @@ const PACE_CONFIGS: PaceConfig[] = [
     icon: <Shield className="w-5 h-5" />,
     color: 'blue',
     description: 'Lowest risk, smallest daily target. Prioritizes capital preservation.',
-    metrics: {
-      riskPerTrade: 50,
-      tradesPerDay: 2,
-      earningsPerTrade: 15,
-      dailyProfit: 30,
-    },
   },
   {
     id: 'baseline',
@@ -50,12 +39,6 @@ const PACE_CONFIGS: PaceConfig[] = [
     icon: <TrendingUp className="w-5 h-5" />,
     color: 'yellow',
     description: 'Steady-state balance of risk/reward. Default recommended setting.',
-    metrics: {
-      riskPerTrade: 100,
-      tradesPerDay: 4,
-      earningsPerTrade: 25,
-      dailyProfit: 100,
-    },
   },
   {
     id: 'optimistic',
@@ -63,12 +46,6 @@ const PACE_CONFIGS: PaceConfig[] = [
     icon: <Zap className="w-5 h-5" />,
     color: 'green',
     description: 'Higher risk, stronger daily earnings target. Aims for growth.',
-    metrics: {
-      riskPerTrade: 150,
-      tradesPerDay: 6,
-      earningsPerTrade: 35,
-      dailyProfit: 210,
-    },
   },
   {
     id: 'aggressive',
@@ -76,12 +53,6 @@ const PACE_CONFIGS: PaceConfig[] = [
     icon: <AlertTriangle className="w-5 h-5" />,
     color: 'red',
     description: 'Highest risk, top earnings target, near safety limits. Use with caution.',
-    metrics: {
-      riskPerTrade: 200,
-      tradesPerDay: 8,
-      earningsPerTrade: 45,
-      dailyProfit: 360,
-    },
   },
 ];
 
@@ -112,20 +83,34 @@ const COLOR_CLASSES = {
   },
 };
 
+interface LATTITargets {
+  mode: string;
+  preset: TradingPace;
+  portfolio_balance: number;
+  risk_per_trade: number;
+  trades_per_day: number;
+  earnings_per_trade: number;
+  daily_profit: number;
+  target_daily_avg_earning_pct: string;
+  max_risk_per_trade_limit: number;
+  calculated_at: string;
+}
+
 export default function TradingPaceControl() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
   const [selectedPace, setSelectedPace] = useState<TradingPace>('baseline');
 
   // Fetch current trading pace from system context
-  const { data: currentPace, isLoading } = useQuery<{ tradingPace: TradingPace }>({
+  const { data: currentPace, isLoading: paceLoading } = useQuery<{ tradingPace: TradingPace }>({
     queryKey: ['/api/system/trading-pace'],
   });
 
-  // Phase 27.F.15.UI-SYNC.9: Fetch portfolio balance for Target Daily Avg Earning %
-  const { data: portfolioData } = useQuery<{ balance: number }>({
-    queryKey: ['/api/portfolio/balance', mode],
-    queryFn: async () => apiRequest('GET', `/api/portfolio/balance?mode=${mode}`),
+  // Phase 27.F.18: Fetch LATTI-calculated targets for selected pace
+  const { data: lattiTargets, isLoading: targetsLoading } = useQuery<LATTITargets>({
+    queryKey: ['/api/latti/targets', mode, selectedPace],
+    queryFn: async () => apiRequest('GET', `/api/latti/targets?mode=${mode}&preset=${selectedPace}`),
+    enabled: !!selectedPace,
   });
 
   // Update selected pace when data loads
@@ -135,19 +120,19 @@ export default function TradingPaceControl() {
     }
   }, [currentPace]);
 
-  // Phase 27.F.15.UI-SYNC.9: Update trading pace mutation (backend handles Performance Metrics sync)
+  // Phase 27.F.18: Update trading pace mutation (triggers LATTI recalculation)
   const updatePaceMutation = useMutation({
     mutationFn: async (pace: TradingPace) => {
-      // Backend handles both trading pace update and Performance Metrics goal sync
       const result = await apiRequest('PUT', '/api/system/trading-pace', { tradingPace: pace });
       return result;
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/goals'] }); // Sync Performance Metrics
+      queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals'] });
       toast({
         title: "Trading Pace Updated",
-        description: `Trading pace set to ${PACE_CONFIGS.find(p => p.id === data.pace)?.label}. Performance Metrics goals updated for both modes.`,
+        description: `Trading pace set to ${PACE_CONFIGS.find(p => p.id === data.pace)?.label}. LATTI targets recalculated for both modes.`,
       });
     },
     onError: (error: any) => {
@@ -165,12 +150,7 @@ export default function TradingPaceControl() {
   };
 
   const selectedConfig = PACE_CONFIGS.find(p => p.id === selectedPace) || PACE_CONFIGS[1];
-
-  // Phase 27.F.15.UI-SYNC.9: Calculate Target Daily Avg Earning %
-  const portfolioBalance = portfolioData?.balance || 0;
-  const targetDailyAvgEarningPct = portfolioBalance > 0 
-    ? ((selectedConfig.metrics.dailyProfit / portfolioBalance) * 100).toFixed(2)
-    : '0.00';
+  const isLoading = paceLoading || targetsLoading;
 
   if (isLoading) {
     return (
@@ -240,68 +220,64 @@ export default function TradingPaceControl() {
           </p>
         </div>
 
-        {/* Dynamic Metrics */}
-        <div className="space-y-3">
-          <h4 className="font-semibold text-sm text-muted-foreground">Target Metrics</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-risk-per-trade">
-              <div className="text-xs text-muted-foreground mb-1">Risk per Trade</div>
-              <div className="text-lg font-bold text-foreground">
-                ${selectedConfig.metrics.riskPerTrade}
+        {/* Phase 27.F.18: Simplified Dynamic Metrics from LATTI */}
+        {lattiTargets && (
+          <div className="space-y-3">
+            <h4 className="font-semibold text-sm text-muted-foreground">LATTI Target Metrics</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Risk per Trade */}
+              <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-risk-per-trade">
+                <div className="text-xs text-muted-foreground mb-1">Risk per Trade ($)</div>
+                <div className="text-lg font-bold text-foreground">
+                  ${lattiTargets.risk_per_trade.toFixed(0)}
+                </div>
               </div>
-            </div>
-            <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-trades-per-day">
-              <div className="text-xs text-muted-foreground mb-1">Trades per Day</div>
-              <div className="text-lg font-bold text-foreground">
-                {selectedConfig.metrics.tradesPerDay}
+
+              {/* Trades per Day */}
+              <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-trades-per-day">
+                <div className="text-xs text-muted-foreground mb-1">Trades per Day</div>
+                <div className="text-lg font-bold text-foreground">
+                  {lattiTargets.trades_per_day}
+                </div>
               </div>
-            </div>
-            <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-earnings-per-trade">
-              <div className="text-xs text-muted-foreground mb-1">Target per Trade</div>
-              <div className="text-lg font-bold text-green-600 dark:text-green-500">
-                +${selectedConfig.metrics.earningsPerTrade}
-              </div>
-            </div>
-            <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-daily-profit">
-              <div className="text-xs text-muted-foreground mb-1">Target Daily Profit</div>
-              <div className="text-lg font-bold text-green-600 dark:text-green-500">
-                +${selectedConfig.metrics.dailyProfit}
-              </div>
+
+              {/* Target Daily Avg Earning % */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-lg" data-testid="metric-daily-avg-earning-pct">
+                      <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 mb-1">
+                        <Percent className="w-3 h-3" />
+                        <span>Target Daily Avg Earning %</span>
+                      </div>
+                      <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                        +{lattiTargets.target_daily_avg_earning_pct}%
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>LATTI-calculated daily return target based on portfolio size and risk tolerance.</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Formula: (Daily Profit / Portfolio Balance) × 100
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Portfolio: ${lattiTargets.portfolio_balance.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Max Risk Limit: ${lattiTargets.max_risk_per_trade_limit}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
-
-          {/* Phase 27.F.15.UI-SYNC.9: Target Daily Avg Earning % */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-lg" data-testid="metric-daily-avg-earning-pct">
-                  <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 mb-1">
-                    <Percent className="w-3 h-3" />
-                    <span>Target Daily Avg Earning %</span>
-                  </div>
-                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                    +{targetDailyAvgEarningPct}%
-                  </div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Expected average percent return per day based on portfolio size.</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Formula: (Target Daily Profit / Portfolio Balance) × 100
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Portfolio: ${portfolioBalance.toLocaleString()}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+        )}
 
         {/* Info Notice */}
         <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-lg">
           <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-blue-700 dark:text-blue-200/80">
-            LATTI will automatically adjust risk parameters to stay within your guardrails while targeting these metrics.
+            LATTI dynamically calculates these targets based on your guardrails and portfolio balance. All values stay within safety limits.
           </p>
         </div>
       </CardContent>
