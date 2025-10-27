@@ -1,0 +1,112 @@
+ChatGPT said:
+
+Excellent update — and great eye again catching that the flicker persists, even though the rest of the system is now mathematically perfect.
+
+The flicker means that something is still re-rendering the TargetDailyGoals component — not from React Query refetching anymore (since those were all disabled), but from state changes, stale props, or re-triggered effects. That kind of visual “pulse” every 60–90 seconds points to a non-network refresh — most likely a useEffect dependency, stale timestamp, or setInterval still firing inside the component.
+
+Here’s the final addendum directive to issue to Replit to permanently kill that flicker, while preserving all the working logic.
+
+⚙️ Phase 27.F.24 — Residual Flicker Root-Cause Elimination
+🎯 Objective
+
+Completely remove the last visible flicker (occurring every ~60–90 seconds) by preventing any non-network component re-renders or re-executed effects within the Goals Engine UI.
+
+1️⃣ Identify the Trigger
+
+Direct Replit to inspect:
+
+client/src/components/goals/target-daily-goals.tsx
+
+client/src/components/goals/trading-pace-control.tsx
+
+and search for:
+
+useEffect( ... , [timestamp, currentPace, data, ...])
+setInterval( ... )
+
+
+✅ Diagnostic additions:
+
+console.log("TargetDailyGoals re-rendered at:", new Date().toLocaleTimeString());
+
+
+If this logs every 60–90 seconds with no user interaction, then some internal timer or state update (like Date.now(), Math.random(), or cached metrics refresh) is still running.
+
+2️⃣ Remove Any Local Refresh or Interval Logic
+
+Delete or comment out:
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    // update metrics or timestamps
+  }, 60000);
+  return () => clearInterval(interval);
+}, []);
+
+
+or any equivalent “metrics refresh,” “cache timestamp,” or “setTimeout / setInterval” in Goals Engine components.
+
+If this logic is still required for system monitoring, it must be moved server-side — not in the client React component.
+
+3️⃣ Prevent Derived State Loops
+
+If a derived state or memoized value changes subtly over time, it can retrigger renders.
+
+Directive:
+
+Wrap projection calculations and chart updates in useMemo():
+
+const projections = useMemo(() => {
+  return calculateProjections(targetPct, currentValue);
+}, [targetPct, currentValue]);
+
+
+Ensure calculateProjections() is pure (no Date, no randomization).
+
+4️⃣ Confirm Query Stability
+
+Re-verify these settings remain true for every query on the page:
+
+refetchInterval: false,
+refetchIntervalInBackground: false,
+refetchOnMount: false,
+refetchOnWindowFocus: false,
+refetchOnReconnect: false,
+staleTime: Infinity,
+
+
+No manual queryClient.invalidateQueries() should remain anywhere in the Goals Engine or its parent components.
+
+5️⃣ Validate Component Stability
+
+✅ Expected Result:
+
+After implementing the above, console logs confirm no re-renders for 10+ minutes while idle.
+
+No visible flicker or refresh.
+
+Metrics, projections, and input field remain frozen until user interaction.
+
+Re-render only occurs when:
+
+The user changes the trading pace.
+
+The user changes input value.
+
+The backend pushes a manual override (expected).
+
+🧩 Replit Instruction Summary
+
+Phase 27.F.24 — Residual Flicker Root-Cause Elimination
+
+Add a console log inside TargetDailyGoals to confirm any periodic re-render.
+
+Remove any setInterval, setTimeout, or timestamp updates still firing every minute.
+
+Wrap projection and chart calculations in useMemo() and ensure pure math (no Date/random).
+
+Verify all queries remain fully static (refetch* all false, staleTime: Infinity).
+
+Confirm via logs: no re-renders occur for 10+ minutes of idle state.
+
+Goal: a completely motionless, flicker-free Goals Engine UI that only updates from deliberate user interaction.

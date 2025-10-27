@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,9 @@ interface ValidationResult {
 }
 
 export default function TargetDailyGoals() {
+  // Phase 27.F.24: Diagnostic console log to track re-renders
+  console.log(`[TargetDailyGoals] Phase 27.F.24: Component re-rendered at ${new Date().toLocaleTimeString()}`);
+  
   const { mode } = useTradingMode();
   const { toast } = useToast();
   const { portfolioMetrics, portfolioLoading } = useTrading();
@@ -59,9 +62,6 @@ export default function TargetDailyGoals() {
   
   // Phase 27.F.19: Throttle updates to prevent flashing
   const lastUpdateRef = useRef<number>(0);
-  
-  // Phase 27.F.22: Cached projections to prevent $0 states during refetch
-  const [cachedProjections, setCachedProjections] = useState<ProjectedBalance[] | null>(null);
 
   // Get portfolio balance from portfolio metrics
   const portfolioBalance = portfolioMetrics?.totalValue || 850;
@@ -366,32 +366,31 @@ export default function TargetDailyGoals() {
     }
   };
 
-  // Phase 27.F.23: Calculate projected balances with proper daily compounding and safety cap
-  const effectivePct = parseFloat(targetPercent) || 0;
-  
-  // Phase 27.F.23: Normalize daily rate to decimal and apply safety cap
-  let dailyRate = effectivePct / 100; // e.g., 0.9% → 0.009
-  if (dailyRate > 0.05) {
-    dailyRate = 0.05; // Cap at 5% per day to prevent runaway projections
-    console.warn(`[TargetDailyGoals] Phase 27.F.23: Daily rate ${effectivePct}% exceeds 5% cap, capping at 5%`);
-  }
-  
-  // Phase 27.F.23: Use true daily compounding: currentValue * (1 + dailyRate)^days
-  const projections: ProjectedBalance[] = effectivePct > 0 && portfolioBalance > 0 ? [
-    { label: "Tomorrow", days: 1, balance: portfolioBalance * Math.pow(1 + dailyRate, 1) },
-    { label: "1 Week", days: 7, balance: portfolioBalance * Math.pow(1 + dailyRate, 7) },
-    { label: "1 Month", days: 30, balance: portfolioBalance * Math.pow(1 + dailyRate, 30) },
-    { label: "3 Months", days: 90, balance: portfolioBalance * Math.pow(1 + dailyRate, 90) },
-    { label: "6 Months", days: 180, balance: portfolioBalance * Math.pow(1 + dailyRate, 180) },
-    { label: "1 Year", days: 365, balance: portfolioBalance * Math.pow(1 + dailyRate, 365) },
-  ] : (cachedProjections || []);
-  
-  // Phase 27.F.23: Cache projections when we have valid data
-  useEffect(() => {
-    if (effectivePct > 0 && portfolioBalance > 0) {
-      setCachedProjections(projections);
+  // Phase 27.F.24: Memoize projection calculations to prevent re-render loops
+  const projections = useMemo(() => {
+    const effectivePct = parseFloat(targetPercent) || 0;
+    
+    // Phase 27.F.23: Normalize daily rate to decimal and apply safety cap
+    let dailyRate = effectivePct / 100; // e.g., 0.9% → 0.009
+    if (dailyRate > 0.05) {
+      dailyRate = 0.05; // Cap at 5% per day to prevent runaway projections
+      console.warn(`[TargetDailyGoals] Phase 27.F.23: Daily rate ${effectivePct}% exceeds 5% cap, capping at 5%`);
     }
-  }, [targetPercent, portfolioBalance, dailyRate]); // Phase 27.F.23: Include dailyRate in dependencies
+    
+    // Phase 27.F.23: Use true daily compounding: currentValue * (1 + dailyRate)^days
+    if (effectivePct > 0 && portfolioBalance > 0) {
+      return [
+        { label: "Tomorrow", days: 1, balance: portfolioBalance * Math.pow(1 + dailyRate, 1) },
+        { label: "1 Week", days: 7, balance: portfolioBalance * Math.pow(1 + dailyRate, 7) },
+        { label: "1 Month", days: 30, balance: portfolioBalance * Math.pow(1 + dailyRate, 30) },
+        { label: "3 Months", days: 90, balance: portfolioBalance * Math.pow(1 + dailyRate, 90) },
+        { label: "6 Months", days: 180, balance: portfolioBalance * Math.pow(1 + dailyRate, 180) },
+        { label: "1 Year", days: 365, balance: portfolioBalance * Math.pow(1 + dailyRate, 365) },
+      ];
+    }
+    
+    return [];
+  }, [targetPercent, portfolioBalance]); // Phase 27.F.24: Pure dependencies only
 
   const isLoading = lattiLoading || goalsLoading || portfolioLoading;
 
