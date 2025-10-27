@@ -135,56 +135,14 @@ export default function TradingPaceControl() {
     }
   }, [currentPace]);
 
-  // Phase 27.F.15.UI-SYNC.9: Update trading pace mutation with Performance Metrics sync
+  // Phase 27.F.15.UI-SYNC.9: Update trading pace mutation (backend handles Performance Metrics sync)
   const updatePaceMutation = useMutation({
     mutationFn: async (pace: TradingPace) => {
-      const config = PACE_CONFIGS.find(p => p.id === pace);
-      if (!config) throw new Error('Invalid pace configuration');
-
-      // Update trading pace in system context
-      await apiRequest('PUT', '/api/system/trading-pace', { tradingPace: pace });
-
-      // Phase 27.F.15.UI-SYNC.9: Sync goalValue with Performance Metrics (both modes)
-      // Fetch existing goals to preserve actualValue and percentAchieved
-      const [paperGoals, liveGoals] = await Promise.all([
-        apiRequest('GET', '/api/goals?mode=paper') as Promise<{ goals: any[] }>,
-        apiRequest('GET', '/api/goals?mode=live') as Promise<{ goals: any[] }>,
-      ]);
-
-      const updateGoalsForMode = (existingGoals: any[], mode: string) => {
-        const metricsToUpdate = [
-          { metricName: 'Target per Trade ($)', goalValue: config.metrics.earningsPerTrade },
-          { metricName: 'Trades per Day', goalValue: config.metrics.tradesPerDay },
-          { metricName: 'Earnings per Day', goalValue: config.metrics.dailyProfit },
-        ];
-
-        return metricsToUpdate.map(metric => {
-          const existing = existingGoals.find(g => g.metricName === metric.metricName);
-          return {
-            metricName: metric.metricName,
-            goalValue: metric.goalValue,
-            // Preserve existing actualValue and percentAchieved
-            actualValue: existing ? parseFloat(existing.actualValue || '0') : 0,
-            percentAchieved: existing ? parseFloat(existing.percentAchieved || '0') : 0,
-          };
-        });
-      };
-
-      // Update for both paper and live modes (preserving actual tracking data)
-      await Promise.all([
-        apiRequest('POST', '/api/goals/update', { 
-          goals: updateGoalsForMode(paperGoals.goals, 'paper'), 
-          mode: 'paper' 
-        }),
-        apiRequest('POST', '/api/goals/update', { 
-          goals: updateGoalsForMode(liveGoals.goals, 'live'), 
-          mode: 'live' 
-        }),
-      ]);
-
-      return { pace };
+      // Backend handles both trading pace update and Performance Metrics goal sync
+      const result = await apiRequest('PUT', '/api/system/trading-pace', { tradingPace: pace });
+      return result;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       queryClient.invalidateQueries({ queryKey: ['/api/goals'] }); // Sync Performance Metrics
       toast({

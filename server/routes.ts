@@ -14869,10 +14869,12 @@ export async function handleGetTradingPace(req: AuthenticatedRequest, res: Respo
 /**
  * Update trading pace in system context (applies to both modes)
  * PUT /api/system/trading-pace
+ * Phase 27.F.15.UI-SYNC.9: Also syncs Performance Metrics goals for both modes
  */
 export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Response) {
   try {
     const { tradingPace } = req.body;
+    const userId = req.user!.id;
     
     // Validate trading pace value
     const validPaces = ['conservative', 'baseline', 'optimistic', 'aggressive'];
@@ -14882,15 +14884,66 @@ export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Re
       });
     }
     
+    // Define pace metrics (same as frontend PACE_CONFIGS)
+    const paceMetrics: Record<string, { riskPerTrade: number; tradesPerDay: number; earningsPerTrade: number; dailyProfit: number }> = {
+      conservative: { riskPerTrade: 50, tradesPerDay: 2, earningsPerTrade: 15, dailyProfit: 30 },
+      baseline: { riskPerTrade: 100, tradesPerDay: 4, earningsPerTrade: 25, dailyProfit: 100 },
+      optimistic: { riskPerTrade: 150, tradesPerDay: 6, earningsPerTrade: 35, dailyProfit: 210 },
+      aggressive: { riskPerTrade: 200, tradesPerDay: 8, earningsPerTrade: 45, dailyProfit: 360 }
+    };
+
+    const selectedMetrics = paceMetrics[tradingPace];
+    
     // Update trading pace for BOTH modes since it's a global setting
     await storage.updateSystemContext('paper', { tradingPace });
     await storage.updateSystemContext('live', { tradingPace });
     
     console.log(`[TradingPace-API] Updated trading pace to: ${tradingPace} (global for both modes)`);
     
+    // Phase 27.F.15.UI-SYNC.9: Sync Performance Metrics goals for both modes
+    for (const mode of ['paper', 'live'] as const) {
+      // Fetch existing goals for this mode
+      const existingGoals = mode === 'live' 
+        ? await storage.getGoalsLive()
+        : await storage.getGoalsPaper();
+      
+      // Update only the goal values, preserving actualValue and percentAchieved
+      const goalsToUpdate = [
+        {
+          metricName: 'Target per Trade ($)',
+          goalValue: selectedMetrics.earningsPerTrade.toString(),
+          actualValue: existingGoals.find(g => g.metricName === 'Target per Trade ($)')?.actualValue || '0',
+          percentAchieved: existingGoals.find(g => g.metricName === 'Target per Trade ($)')?.percentAchieved || '0'
+        },
+        {
+          metricName: 'Trades per Day',
+          goalValue: selectedMetrics.tradesPerDay.toString(),
+          actualValue: existingGoals.find(g => g.metricName === 'Trades per Day')?.actualValue || '0',
+          percentAchieved: existingGoals.find(g => g.metricName === 'Trades per Day')?.percentAchieved || '0'
+        },
+        {
+          metricName: 'Earnings per Day',
+          goalValue: selectedMetrics.dailyProfit.toString(),
+          actualValue: existingGoals.find(g => g.metricName === 'Earnings per Day')?.actualValue || '0',
+          percentAchieved: existingGoals.find(g => g.metricName === 'Earnings per Day')?.percentAchieved || '0'
+        }
+      ];
+
+      // Upsert goals
+      for (const goalData of goalsToUpdate) {
+        if (mode === 'live') {
+          await storage.upsertGoalLive(goalData);
+        } else {
+          await storage.upsertGoalPaper(goalData);
+        }
+      }
+      
+      console.log(`[TradingPace-API] Synced Performance Metrics goals for ${mode} mode:`, goalsToUpdate.map(g => `${g.metricName}=${g.goalValue}`).join(', '));
+    }
+    
     res.json({
       success: true,
-      tradingPace
+      pace: tradingPace
     });
   } catch (error: any) {
     console.error('[TradingPace-API] Error updating trading pace:', error.message);
