@@ -89,28 +89,28 @@ export default function TargetDailyGoals() {
     queryFn: async () => apiRequest('GET', `/api/guardrails?mode=${mode}`),
   });
 
-  // Phase 27.F.18/19: Initialize target percent from LATTI or override
+  // Phase 27.F.20: Initialize target percent from LATTI or override  
   useEffect(() => {
     if (goalsData?.goals && lattiTargets) {
       const savedGoal = goalsData.goals.find(g => g.metricName === "Target Daily Avg Earning %");
-      // Phase 27.F.19: Scale LATTI target by 100 for display (backend returns decimal 0-1)
-      const lattiTargetScaled = (parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2);
+      // Phase 27.F.20: Backend already multiplies by 100, so "0.15" = 0.15% (not decimal 0.0015)
+      const lattiTargetPct = parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2);
       
       let newValue: string | null = null;
       let newIsOverride = false;
       
       if (savedGoal && savedGoal.goalValue) {
-        // Phase 27.F.19: User has an override - scale it too since backend stores decimal (0-1)
-        const savedValueScaled = (parseFloat(savedGoal.goalValue) * 100).toFixed(2);
-        newValue = savedValueScaled;
-        newIsOverride = parseFloat(savedValueScaled) !== parseFloat(lattiTargetScaled);
+        // Phase 27.F.20: Saved goals are stored as decimals, so multiply by 100 to get percentage
+        const savedValuePct = (parseFloat(savedGoal.goalValue) * 100).toFixed(2);
+        newValue = savedValuePct;
+        newIsOverride = parseFloat(savedValuePct) !== parseFloat(lattiTargetPct);
       } else if (lattiTargets) {
-        // Phase 27.F.19: Use LATTI default (populate on preset change, not reset to bad default)
-        newValue = lattiTargetScaled;
+        // Phase 27.F.20: Use LATTI default (no scaling needed)
+        newValue = lattiTargetPct;
         newIsOverride = false;
       }
       
-      // Phase 27.F.19: Intelligent throttle - only skip if value hasn't changed AND within throttle window
+      // Phase 27.F.20: Intelligent throttle - only skip if value hasn't changed AND within throttle window
       const now = Date.now();
       const withinThrottleWindow = now - lastUpdateRef.current < 300000;
       const valueUnchanged = newValue === targetPercent;
@@ -200,9 +200,9 @@ export default function TargetDailyGoals() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] });
       setHasEdits(false);
-      // Phase 27.F.19: Check override using scaled LATTI value
-      const lattiTargetScaled = lattiTargets ? (parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2) : '0';
-      setIsOverride(lattiTargets ? parseFloat(targetPercent) !== parseFloat(lattiTargetScaled) : true);
+      // Phase 27.F.20: Backend already multiplies by 100
+      const lattiTargetPct = lattiTargets ? parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2) : '0';
+      setIsOverride(lattiTargets ? parseFloat(targetPercent) !== parseFloat(lattiTargetPct) : true);
       toast({
         title: "Target Saved",
         description: `Target Daily Avg Earning % set to ${targetPercent}%${isOverride ? ' (Override)' : ''}`,
@@ -231,9 +231,9 @@ export default function TargetDailyGoals() {
 
   const handleResetToLATTI = () => {
     if (lattiTargets) {
-      // Phase 27.F.19: Use scaled LATTI value
-      const lattiTargetScaled = (parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2);
-      setTargetPercent(lattiTargetScaled);
+      // Phase 27.F.20: Backend already multiplies by 100
+      const lattiTargetPct = parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2);
+      setTargetPercent(lattiTargetPct);
       setHasEdits(true);
       setIsOverride(false);
     }
@@ -296,7 +296,7 @@ export default function TargetDailyGoals() {
             {lattiTargets && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Percent className="w-3 h-3" />
-                LATTI Default: {(parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2)}%
+                LATTI Default: {parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2)}%
               </div>
             )}
           </div>
@@ -364,10 +364,18 @@ export default function TargetDailyGoals() {
             <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-lg text-sm">
               <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
               <p className="text-blue-700 dark:text-blue-200">
-                You are using a custom override. LATTI recommends {(parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2)}% based on your current trading pace and guardrails.
+                You are using a custom override. LATTI recommends {parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2)}% based on your current trading pace and guardrails.
               </p>
             </div>
           )}
+        </div>
+
+        {/* Current Portfolio Value */}
+        <div className="space-y-2">
+          <h4 className="font-semibold text-sm">Current Portfolio Value</h4>
+          <p className="text-lg text-gray-700 dark:text-gray-300 font-bold">
+            {currencyFormatter.format(portfolioBalance)}
+          </p>
         </div>
 
         {/* Projected Portfolio Growth */}
@@ -407,19 +415,15 @@ export default function TargetDailyGoals() {
           </div>
         </div>
 
-        {/* Current Portfolio Info */}
-        <div className="p-3 bg-muted/30 rounded-lg">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Current Portfolio Value:</span>
-            <span className="font-semibold text-foreground">${portfolioBalance.toLocaleString()}</span>
-          </div>
-          {lattiTargets && (
-            <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-muted">
+        {/* Trading Pace Info */}
+        {lattiTargets && (
+          <div className="p-3 bg-muted/30 rounded-lg">
+            <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Trading Pace:</span>
               <span className="font-semibold text-foreground capitalize">{lattiTargets.preset}</span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

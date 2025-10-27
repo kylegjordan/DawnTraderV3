@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Zap, TrendingUp, Shield, AlertTriangle, Percent } from "lucide-react";
+import { Zap, TrendingUp, Shield, AlertTriangle, Percent, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTradingMode } from "@/contexts/trading-mode-context";
@@ -37,22 +37,22 @@ const PACE_CONFIGS: PaceConfig[] = [
     id: 'baseline',
     label: 'Baseline',
     icon: <TrendingUp className="w-5 h-5" />,
-    color: 'yellow',
+    color: 'green',
     description: 'Steady-state balance of risk/reward. Default recommended setting.',
   },
   {
     id: 'optimistic',
     label: 'Optimistic',
-    icon: <Zap className="w-5 h-5" />,
-    color: 'green',
-    description: 'Higher risk, stronger daily earnings target. Aims for growth.',
+    icon: <Sun className="w-5 h-5" />,
+    color: 'yellow',
+    description: 'Growth-focused trading pace with balanced risk and reward.',
   },
   {
     id: 'aggressive',
     label: 'Aggressive',
     icon: <Zap className="w-5 h-5" />,
-    color: 'red',
-    description: 'High intensity trading mode — higher reward and risk balance.',
+    color: 'orange',
+    description: 'High-intensity trading pace. Max growth near guardrails.',
   },
 ];
 
@@ -75,11 +75,11 @@ const COLOR_CLASSES = {
     text: 'text-green-600',
     hoverBg: 'hover:bg-green-50 dark:hover:bg-green-950/20',
   },
-  red: {
-    bg: 'bg-red-100 dark:bg-red-950/30',
-    border: 'border-red-600',
-    text: 'text-red-600',
-    hoverBg: 'hover:bg-red-50 dark:hover:bg-red-950/20',
+  orange: {
+    bg: 'bg-orange-100 dark:bg-orange-950/30',
+    border: 'border-orange-600',
+    text: 'text-orange-600',
+    hoverBg: 'hover:bg-orange-50 dark:hover:bg-orange-950/20',
   },
 };
 
@@ -251,7 +251,7 @@ export default function TradingPaceControl() {
                         <span>Target Daily Avg Earning %</span>
                       </div>
                       <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                        +{(parseFloat(lattiTargets.target_daily_avg_earning_pct) * 100).toFixed(2)}%
+                        +{parseFloat(lattiTargets.target_daily_avg_earning_pct).toFixed(2)}%
                       </div>
                     </div>
                   </TooltipTrigger>

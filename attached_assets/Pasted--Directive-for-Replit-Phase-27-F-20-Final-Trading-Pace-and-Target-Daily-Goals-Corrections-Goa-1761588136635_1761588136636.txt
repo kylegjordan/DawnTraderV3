@@ -1,0 +1,118 @@
+🧭 Directive for Replit — Phase 27.F.20 (Final Trading Pace and Target Daily Goals Corrections)
+
+Goal:
+Correct percentage scaling, default behavior, layout order, flickering refresh, and icons for “Optimistic” and “Aggressive” presets.
+
+1️⃣ Fix the Percentage Scaling (Again)
+
+Current issue:
+LATTI’s default (decimal 0.015 → 1.5 %) is now displayed as 15 %.
+Manual entries default to 4235 because the field still multiplies by 100 twice.
+
+Required fix:
+
+LATTI API returns decimal (e.g., 0.015 = 1.5 %).
+
+Displayed value = lattiValue * 100.
+
+When user types in a manual value, divide by 100 before saving.
+
+✅ Code correction:
+
+// When rendering:
+displayValue = (lattiValue * 100).toFixed(2);
+
+// When saving:
+const saveValue = parseFloat(displayValue) / 100;
+
+
+Also ensure switching Trading Pace uses:
+
+setTargetPct(latti.target_daily_avg_earning_pct * 100);
+
+
+not * 10000 or * 1.
+
+2️⃣ Stop Defaulting to 4235 %
+
+When user switches paces, the input should auto-fill LATTI’s correct daily % (e.g., 1.5 %), not the last override.
+
+✅ Fix logic:
+
+if (!userOverride) {
+  setTargetPct(latti.target_daily_avg_earning_pct * 100);
+}
+
+3️⃣ Stabilize the Refresh Loop
+
+The projection table still flashes every 30–45 seconds.
+
+✅ Replace the current auto-refetch with this throttled check:
+
+const lastRefresh = useRef(0);
+useEffect(() => {
+  const now = Date.now();
+  if (now - lastRefresh.current > 300000) {
+    refetch();
+    lastRefresh.current = now;
+  }
+}, [targetPct]);
+
+
+This prevents updates unless at least 5 minutes or a manual change occurs.
+
+4️⃣ Reposition “Current Portfolio Value”
+
+Move it above the “Projected Portfolio Growth” table, styled as a small heading:
+
+<h4 className="font-semibold mb-1">Current Portfolio Value</h4>
+<p className="text-lg text-gray-700 mb-3">$850.00</p>
+
+5️⃣ Fix Iconography and Color Theme
+
+Aggressive preset:
+
+Keep 🔥 “Lightning Bolt” icon, use bright orange/red accent (#FF5A36).
+
+Tooltip: “High-intensity trading pace. Max growth near guardrails.”
+
+Optimistic preset:
+
+Replace with ☀️ “Sun” (Lucide Sun icon).
+
+Use golden yellow (#FFBF00).
+
+Tooltip: “Growth-focused trading pace with balanced risk and reward.”
+
+✅ Example:
+
+const icons = {
+  conservative: <Shield className="text-blue-500" />,
+  baseline: <Activity className="text-green-500" />,
+  optimistic: <Sun className="text-yellow-500" />,
+  aggressive: <Zap className="text-orange-500" />
+};
+
+6️⃣ Fix Unrealistic Portfolio Growth Values
+
+Values like $3,867,739,821,700,... indicate compounding is using the wrong scale (e.g., 15 % = 15 instead of 0.15).
+
+✅ Fix formula:
+
+const rate = targetPct / 100; // not / 10
+const future = balance * Math.pow(1 + rate, days);
+
+
+Then format with commas using:
+
+new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+
+✅ Expected Results
+Behavior	Correct Outcome
+LATTI default	1.5 % displays properly as 1.50 %
+Manual entry	Saves and reloads correctly as a decimal
+Switching paces	Uses LATTI’s recommended % for that pace
+Projection table	No flicker, smooth refresh
+Layout	Current Portfolio Value appears above projection
+Icons	Optimistic ☀️ yellow, Aggressive ⚡ orange/red
+Calculations	Realistic portfolio growth numbers with commas
