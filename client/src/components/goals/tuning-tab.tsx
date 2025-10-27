@@ -170,7 +170,7 @@ export default function TuningTab() {
     enabled: false,
     aggressiveness: "balanced",
     maxStepPercent: "10.00",
-    cooldownMinutes: 60,
+    cooldownMinutes: 15, // Match guardrails default
     maxDailyAdjustments: 10,
     currentCounters: { adjustmentsToday: 0, reverts: 0 },
     fieldBounds: {},

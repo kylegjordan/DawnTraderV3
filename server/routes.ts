@@ -2688,12 +2688,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const policy = await storage.getTuningPolicy({ userId, mode: mode as 'live' | 'paper' });
       
       if (!policy) {
-        // Return default policy if none exists
+        // Return default policy if none exists (cooldownMinutes matches guardrails default)
         return res.json({
           enabled: false,
           aggressiveness: 'balanced',
           maxStepPercent: '10.00',
-          cooldownMinutes: 60,
+          cooldownMinutes: 15,
           maxDailyAdjustments: 10,
           fieldBounds: {},
           currentCounters: { adjustmentsToday: 0, reverts: 0 }
