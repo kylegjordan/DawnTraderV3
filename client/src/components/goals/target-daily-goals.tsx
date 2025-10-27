@@ -100,8 +100,19 @@ export default function TargetDailyGoals() {
       let newIsOverride = false;
       
       if (savedGoal && savedGoal.goalValue) {
-        // Phase 27.F.20: Saved goals are stored as decimals, so multiply by 100 to get percentage
-        const savedValuePct = (parseFloat(savedGoal.goalValue) * 100).toFixed(2);
+        // Phase 27.F.20: Saved goals should be decimals (0.015 = 1.5%)
+        // Defensive: If value > 1.0, it's corrupted (already a percentage), don't multiply
+        const savedValueDecimal = parseFloat(savedGoal.goalValue);
+        let savedValuePct = savedValueDecimal > 1.0 
+          ? savedValueDecimal.toFixed(2)  // Already a percentage
+          : (savedValueDecimal * 100).toFixed(2);  // Convert decimal to percentage
+        
+        // Phase 27.F.20: If corrupted value > 20% (unrealistic), auto-reset to LATTI default
+        if (parseFloat(savedValuePct) > 20) {
+          console.warn(`[TargetDailyGoals] Corrupted goal value ${savedValuePct}% detected, resetting to LATTI default ${lattiTargetPct}%`);
+          savedValuePct = lattiTargetPct;
+        }
+        
         newValue = savedValuePct;
         newIsOverride = parseFloat(savedValuePct) !== parseFloat(lattiTargetPct);
       } else if (lattiTargets) {
