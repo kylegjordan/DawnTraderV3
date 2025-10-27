@@ -1,9 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Gauge, TrendingUp, Activity, Target, DollarSign } from "lucide-react";
+import { Gauge, TrendingUp, Activity, Target, DollarSign, Percent } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { apiRequest } from "@/lib/queryClient";
 
 interface TradingPaceData {
   tradingPace: 'conservative' | 'baseline' | 'optimistic' | 'aggressive';
@@ -12,6 +14,10 @@ interface TradingPaceData {
 interface GuardrailsData {
   riskPerTrade: number;
   maxOpenPositions: number;
+}
+
+interface PortfolioData {
+  balance: number;
 }
 
 // Pace targets as defined in HeuristicEngine Task 7
@@ -85,7 +91,13 @@ export function LATTIDashboardWidget() {
     }).then(r => r.json()),
   });
 
-  const isLoading = paceLoading || guardrailsLoading;
+  // Phase 27.F.15.UI-SYNC.9: Fetch portfolio balance for Target Daily Avg Earning %
+  const { data: portfolioData, isLoading: portfolioLoading } = useQuery<PortfolioData>({
+    queryKey: ['/api/portfolio/balance', mode],
+    queryFn: async () => apiRequest('GET', `/api/portfolio/balance?mode=${mode}`),
+  });
+
+  const isLoading = paceLoading || guardrailsLoading || portfolioLoading;
 
   if (isLoading) {
     return (
@@ -106,6 +118,12 @@ export function LATTIDashboardWidget() {
   const pace = paceData?.tradingPace || 'baseline';
   const config = PACE_CONFIGS[pace];
   const riskPerTrade = guardrails?.riskPerTrade || 0;
+
+  // Phase 27.F.15.UI-SYNC.9: Calculate Target Daily Avg Earning %
+  const portfolioBalance = portfolioData?.balance || 0;
+  const targetDailyAvgEarningPct = portfolioBalance > 0 
+    ? ((config.targetDailyProfit / portfolioBalance) * 100).toFixed(2)
+    : '0.00';
 
   return (
     <Card 
@@ -191,6 +209,37 @@ export function LATTIDashboardWidget() {
               ${config.targetDailyProfit.toFixed(2)}
             </span>
           </div>
+          
+          {/* Phase 27.F.15.UI-SYNC.9: Target Daily Avg Earning % */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex justify-between items-center cursor-help">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Percent className="w-3 h-3" />
+                    Target Daily Avg Earning %:
+                  </span>
+                  <span className={cn(
+                    "text-sm font-bold font-mono",
+                    parseFloat(targetDailyAvgEarningPct) > 0 
+                      ? "text-green-600 dark:text-green-400" 
+                      : "text-muted-foreground"
+                  )}>
+                    +{targetDailyAvgEarningPct}%
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">
+                  Expected average percent return per day
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Formula: (${config.targetDailyProfit} / ${portfolioBalance.toFixed(2)}) × 100
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
           <div className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">Yearly Target:</span>
             <span className="text-sm font-bold font-mono text-green-600 dark:text-green-400">
