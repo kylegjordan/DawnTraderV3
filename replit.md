@@ -41,6 +41,8 @@ The system includes comprehensive structured logging and WebSocket broadcasts at
 
 The Goals Engine UI has been refactored to include advanced universe and signal controls (Market Universe Size, Confidence Threshold, Quote Currencies, Active Timeframes), execution rhythm controls (Symbol Cool-Down), and simplified daily target goals with Trading Pace presets. A Goal Feasibility Validation & Audit System tracks goal change attempts and validates Target per Trade against guardrail limits, providing frontend feedback (OK, WARN, BLOCK) and logging all attempts. All validation rules and guardrail parameters are database-driven and integrated with LATTI for optimization.
 
+**Average Daily Earnings % (ADE%)**: The system calculates and displays a rolling average daily return as a percentage of portfolio value in the Earnings Widget. The metric is computed as (Daily Profit / Start of Day Portfolio) × 100, averaged across all recorded trading days. Data is persisted in the `daily_performance_summary` table with strict mode separation (paper/live). The `/api/earnings/summary` endpoint returns mode-scoped `avgDailyEarningsPct` values, displayed in the frontend with informative tooltips and color-coded formatting (green for positive, red for negative, gray for pending). The metric leverages the existing `MetricsCore` WebSocket broadcast infrastructure for real-time updates and integrates with LATTI for optimization.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
