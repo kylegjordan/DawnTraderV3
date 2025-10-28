@@ -18,6 +18,7 @@ import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel
 import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
 import { BaselineStatusWidget } from "@/components/dashboard/baseline-status-widget";
 import { LATTIDashboardWidget } from "@/components/dashboard/latti-dashboard-widget";
+import { LATTIGoalsMirror } from "@/components/dashboard/latti-goals-mirror";
 import AlertBanner from "@/components/alerts/alert-banner";
 import SystemHealthSummary from "@/components/system-health-summary";
 import { useSystemHealth } from "@/hooks/use-system-health";
@@ -81,9 +82,6 @@ export default function Dashboard() {
       {/* Daily Trading Brief (includes Market Insights) */}
       <DailyBriefCard />
 
-      {/* LATTI Trading Pace Widget - Phase 27.F.14.B Task 8 */}
-      <LATTIDashboardWidget />
-
       {/* Portfolio Charts */}
       <section className="space-y-4">
         <PortfolioChart />
@@ -104,6 +102,9 @@ export default function Dashboard() {
 
       {/* Filter Health Diagnostics */}
       <FilterHealthWidget />
+
+      {/* Phase 27.F.30: LATTI Target Daily Goals Mirror (Read-Only) */}
+      <LATTIGoalsMirror />
 
       {/* System Truth Synchronization Panel */}
       <SystemTruthPanel truthData={truthData} />
