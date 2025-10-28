@@ -50,6 +50,7 @@ const FILTER_CATEGORIES: Record<string, { icon: string; color: string }> = {
   'Technical Indicators': { icon: '📊', color: 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' },
   'Volatility': { icon: '📈', color: 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700' },
   'Asset Type': { icon: '🏷️', color: 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700' },
+  'Other': { icon: '⚙️', color: 'bg-gray-100 dark:bg-gray-900/30 border-gray-300 dark:border-gray-700' },
 };
 
 export function FiltersWithOverride() {
