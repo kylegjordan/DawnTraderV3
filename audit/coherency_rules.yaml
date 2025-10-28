@@ -87,7 +87,7 @@ rules:
     rationale: "Ensures clear ownership - either user controls or LATTI controls, not both"
     severity: "error"
     error_message: "Conflicting control flags: is_manual_override and tuned_by_latti cannot both be true"
-    notes: "Phase 3 feature - not enforced until Lottie Controls UI implemented"
+    notes: "Enforced in Phase 2 via /api/guardrails-v2 PUT endpoint validation. UI for manual override toggles planned for Phase 3."
     example_valid:
       - is_manual_override: true
         tuned_by_latti: false
