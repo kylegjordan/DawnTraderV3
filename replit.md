@@ -88,6 +88,44 @@ Implements toggle controls for switching between LATTi autonomous optimization a
 - API documentation embedded in endpoints
 - WebSocket event specifications documented
 
+### Phase 4: Dashboard Integration with Goals Presets (✅ COMPLETED)
+Integrates a unified dashboard widget and Goals Preset Grid implementing a 4+1 preset structure (Conservative, Baseline, Optimistic, Maximum, Custom) with coherency analytics.
+
+**Database Schema:**
+- Created `goals_presets` table with 4+1 presets per mode (Conservative, Baseline, Optimistic, Maximum, Custom)
+- Created `v_guardrails_compliance` SQL view for real-time coherency analytics (RULE_001 validation)
+- Manual SQL execution via `execute_sql_tool` due to drizzle-kit JSON parsing bug
+
+**Backend Implementation:**
+- Storage methods: `getGoalsPresets()`, `getActivePreset()`, `selectPreset()`, `getGuardrailsCompliance()`
+- API endpoints: GET/PUT `/api/goals-presets`, GET `/api/goals-presets/active`, GET `/api/analytics/guardrails-compliance`
+- Preset application applies values to `guardrails_v2` and broadcasts WebSocket events (`goals_preset_changed`, `guardrails_v2_updated`)
+- Sets `tunedByLatti = true` for standard presets, `isManualOverride = true` for Custom preset
+
+**Frontend Implementation:**
+- Created `DashboardLATTiWidget` component (`client/src/components/dashboard/dashboard-latti-widget.tsx`)
+  - Unified display of Core Four guardrails, coherency status, active preset, and control mode
+  - Real-time data from `/api/guardrails-v2`, `/api/goals-presets/active`, `/api/analytics/guardrails-compliance`
+  - Visual coherency badges: 🟢 PASS / 🟡 WARN / 🔴 FAIL
+  - Link to Goals Engine for configuration
+  - Error handling with user-friendly messages
+- Created `PresetsGrid` component (`client/src/components/goals/presets-grid.tsx`)
+  - 3-column responsive grid layout (1 col mobile, 2 cols tablet, 3 cols desktop)
+  - Color-coded preset badges (Conservative: Green, Baseline: Blue, Optimistic: Amber, Maximum: Red, Custom: Purple)
+  - Per-preset display of Core Four + Target Daily Goals
+  - "Apply Preset" button with mutation handling and defensive checks
+  - Error handling with user-friendly messages
+- Updated `dashboard.tsx` to use new `DashboardLATTiWidget` component
+- Updated `goals-engine.tsx` to integrate `PresetsGrid` at top of Goals tab
+
+**Default Presets:**
+- **Paper Mode**: Baseline preset active (Risk: 1.50%, Kill Switch: 7.00%, Cooldown: 15m, Max Pos: 5)
+- **Live Mode**: Conservative preset active (Risk: 0.50%, Kill Switch: 5.00%, Cooldown: 30m, Max Pos: 3)
+
+**Documentation:**
+- Comprehensive overview: `docs/dashboard_integration_overview.md`
+- Architecture details, API specifications, testing checklist, and user experience flow
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
