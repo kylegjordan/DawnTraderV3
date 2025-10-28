@@ -152,6 +152,39 @@ rules:
     enforcement: "Database unique constraint on mode column"
     notes: "Enforced via uniqueIndex('guardrails_v2_mode_idx') in schema"
 
+  - name: "Learning Expansion Safety Caps"
+    id: "RULE_010"
+    description: "Learning-adjusted preset values must not exceed global safety caps"
+    condition: |
+      portfolio_risk_per_trade_pct <= 5.00 AND
+      daily_loss_kill_switch_pct <= 20.00 AND
+      symbol_cooldown_minutes <= 90 AND
+      max_open_positions <= 20
+    rationale: "Phase 6 adaptive learning engine automatically expands preset boundaries by 5% when performance meets threshold. Safety caps prevent runaway expansion and ensure system remains within acceptable risk limits."
+    severity: "error"
+    error_message: "Learning-adjusted value exceeds safety cap: {parameter} = {value} (max: {cap})"
+    phase: "Phase 6"
+    enforcement: "GoalsLearningEngine service enforces caps during expansion calculations"
+    safety_caps:
+      portfolio_risk_per_trade_pct: 5.00
+      daily_loss_kill_switch_pct: 20.00
+      symbol_cooldown_minutes: 90
+      max_open_positions: 20
+    notes: |
+      - Learning engine expands presets by 5% when 30-day avg return >= 80% of target
+      - All expansions are capped at safety maximums to prevent excessive risk
+      - Caps apply to both manual presets and learning-adjusted presets
+      - Provides backstop against algorithmic over-optimization
+    example_valid:
+      - portfolio_risk_per_trade_pct: 4.95
+        daily_loss_kill_switch_pct: 19.50
+        result: "PASS (within caps)"
+    example_invalid:
+      - portfolio_risk_per_trade_pct: 5.50
+        result: "FAIL (exceeds 5.00% cap)"
+      - daily_loss_kill_switch_pct: 22.00
+        result: "FAIL (exceeds 20.00% cap)"
+
 # Migration-specific validation rules
 migration_rules:
   - name: "Legacy Data Preservation"
