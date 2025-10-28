@@ -17,6 +17,7 @@ import { formulaAuditService } from "./services/formula-audit";
 import { AlertsService } from "./services/alerts-service";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, semanticMemory, walterPurpose, walterMemory, insertWalterMemorySchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent } from "@shared/schema";
 import { z } from 'zod';
+import { validateGuardrails, validateFilters, validateNoLegacyKeys, LegacyFieldError } from "../types/config";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";
@@ -1077,6 +1078,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       const rawPayload = req.body;
+      
+      // Phase 27.G Audit: Reject legacy fields
+      try {
+        validateNoLegacyKeys(rawPayload);
+      } catch (error) {
+        if (error instanceof LegacyFieldError) {
+          console.error(`[GuardrailsV2:${requestId}] Legacy field blocked:`, error.fieldName);
+          return res.status(422).json({
+            ok: false,
+            code: 'LEGACY_FIELD_BLOCKED',
+            detail: error.message,
+            fieldName: error.fieldName,
+            replacement: error.replacement
+          });
+        }
+        throw error;
+      }
       
       // Field mapping (camelCase from frontend)
       const portfolioRiskPerTradePct = rawPayload.portfolioRiskPerTradePct !== undefined 
