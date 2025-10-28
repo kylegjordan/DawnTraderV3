@@ -183,3 +183,21 @@ Live   | 0.53  | 15 min   | 5         | 7.00%        | PASS ✓
 - Drop tuning_policy.cooldownMinutes column
 - Drop strategy_parameters table
 - Finalize analytics transition views
+
+---
+
+## Phase 5 Status Update
+
+**Phase 5 GuardrailPolicy Service active — runtime coherency enforced.**
+
+**Completion Date**: October 28, 2025  
+**Version**: v1.5-guardrail-policy
+
+The GuardrailPolicy service (`server/services/guardrail-policy.ts`) is now operational and provides:
+- Effective value resolution (Manual vs LATTI-managed)
+- All 8 coherency rules from `coherency_rules.yaml` v2.1 (RULE_001-RULE_008)
+- Kill switch circuit breaker management (per-mode)
+- Conflict detection for override attempts
+- Comprehensive telemetry and metrics
+
+All trading engines (RiskManager, StrategyEngine, LATTI Manager) now enforce guardrail policy at runtime.
