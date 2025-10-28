@@ -440,13 +440,15 @@ class GuardrailPolicyService {
   /**
    * Emit telemetry event (integrates with ContextBridge)
    */
-  private async emitEvent(type: string, payload: any): Promise<void> {
+  private async emitEvent(
+    type: 'guardrail.kill_switch.tripped' | 'guardrail.kill_switch.reset' | 'guardrail.override.conflict' | 'guardrail.policy.updated',
+    payload: any
+  ): Promise<void> {
     try {
       const { contextBridge } = await import('./context-bridge');
       contextBridge.broadcast({
         type,
-        payload,
-        timestamp: new Date().toISOString()
+        payload
       });
     } catch (error: any) {
       console.error(`[GuardrailPolicy] Failed to emit event ${type}:`, error.message);

@@ -1101,29 +1101,49 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         ? rawPayload.lockedByUser 
         : undefined;
 
-      // Validation: Coherency Rule 001 - Risk <= KillSwitch/10
-      if (portfolioRiskPerTradePct !== undefined && dailyLossKillSwitchPct !== undefined) {
-        const maxAllowedRisk = dailyLossKillSwitchPct / 10;
-        if (portfolioRiskPerTradePct > maxAllowedRisk) {
-          console.error(`[GuardrailsV2:${requestId}] RULE_001 violation: risk ${portfolioRiskPerTradePct}% > ${maxAllowedRisk}%`);
-          return res.status(400).json({
-            ok: false,
-            code: 'COHERENCY_VIOLATION',
-            rule: 'RULE_001',
-            detail: `Portfolio risk per trade (${portfolioRiskPerTradePct}%) cannot exceed 10% of daily loss kill switch (${dailyLossKillSwitchPct}%). Maximum allowed: ${maxAllowedRisk}%`
-          });
-        }
+      // Phase 5: Comprehensive coherency validation using GuardrailPolicy
+      const { guardrailPolicy } = await import('./services/guardrail-policy');
+      
+      // Build validation payload
+      const validationPayload: any = { mode };
+      if (portfolioRiskPerTradePct !== undefined) validationPayload.portfolioRiskPerTradePct = portfolioRiskPerTradePct;
+      if (symbolCooldownMinutes !== undefined) validationPayload.symbolCooldownMinutes = symbolCooldownMinutes;
+      if (maxOpenPositions !== undefined) validationPayload.maxOpenPositions = maxOpenPositions;
+      if (dailyLossKillSwitchPct !== undefined) validationPayload.dailyLossKillSwitchPct = dailyLossKillSwitchPct;
+      if (isManualOverride !== undefined || tunedByLatti !== undefined || lockedByUser !== undefined) {
+        validationPayload.management = {
+          isManualOverride: isManualOverride ?? false,
+          tunedByLatti: tunedByLatti ?? true,
+          lockedByUser: lockedByUser ?? {}
+        };
       }
 
-      // Validation: Coherency Rule 005 - Manual override exclusivity
-      if (isManualOverride === true && tunedByLatti === true) {
-        console.error(`[GuardrailsV2:${requestId}] RULE_005 violation: conflicting control flags`);
+      // Validate against all coherency rules
+      const coherencyResult = guardrailPolicy.validate(validationPayload);
+      
+      if (coherencyResult.status === 'FAIL') {
+        const errorFailures = coherencyResult.failures.filter(f => f.severity === 'error');
+        console.error(`[GuardrailsV2:${requestId}] Coherency validation FAILED:`, errorFailures);
+        
+        // Log policy event
+        guardrailPolicy.logPolicyEvent({
+          mode,
+          status: 'FAIL',
+          message: `Validation failed: ${errorFailures.map(f => f.ruleId).join(', ')}`
+        });
+
         return res.status(400).json({
           ok: false,
           code: 'COHERENCY_VIOLATION',
-          rule: 'RULE_005',
-          detail: 'Conflicting control flags: is_manual_override and tuned_by_latti cannot both be true'
+          failures: errorFailures,
+          detail: errorFailures.map(f => f.message).join('; ')
         });
+      }
+
+      // Log warnings if any
+      if (coherencyResult.status === 'WARN') {
+        const warnings = coherencyResult.failures.filter(f => f.severity === 'warn');
+        console.warn(`[GuardrailsV2:${requestId}] Coherency validation passed with WARNINGS:`, warnings);
       }
 
       // Build update payload
@@ -1178,6 +1198,115 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error: any) {
       console.error(`[GuardrailsV2:${requestId}] Unexpected error:`, error.message, error.stack);
       res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message || 'Internal server error' });
+    }
+  });
+
+  // Phase 5: GuardrailPolicy Service Endpoints
+  // GET /api/guardrails-v2/effective?mode=paper|live - Get computed effective guardrails
+  apiRouter.get('/guardrails-v2/effective', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      // Get raw guardrails from database
+      const guardrailsData = await storage.getGuardrailsV2({ mode });
+
+      if (!guardrailsData) {
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No guardrails found for mode: ${mode}` });
+      }
+
+      // Compute effective values using GuardrailPolicy
+      const { guardrailPolicy } = await import('./services/guardrail-policy');
+      const effectiveValues = guardrailPolicy.getEffective(guardrailsData);
+      
+      // Validate coherency
+      const coherencyResult = guardrailPolicy.validate(effectiveValues);
+
+      // Check kill switch status
+      const isKillSwitchTripped = guardrailPolicy.isKillSwitchTripped(mode);
+
+      res.json({ 
+        ok: true, 
+        data: {
+          ...effectiveValues,
+          coherency: coherencyResult,
+          killSwitchTripped: isKillSwitchTripped
+        }
+      });
+    } catch (error: any) {
+      console.error('[GuardrailsV2:Effective] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // POST /api/guardrails-v2/kill-switch/trip?mode=paper|live - Trip the kill switch
+  apiRouter.post('/guardrails-v2/kill-switch/trip', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper';
+      const { reason } = req.body;
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      if (!reason || typeof reason !== 'string') {
+        return res.status(400).json({ ok: false, code: 'MISSING_REASON', detail: 'Reason is required and must be a string' });
+      }
+
+      const { guardrailPolicy } = await import('./services/guardrail-policy');
+      
+      // Trip the kill switch
+      guardrailPolicy.tripKillSwitch(mode, reason);
+
+      console.log(`[GuardrailsV2:KillSwitch] Kill switch tripped for ${mode} by user ${userId}: ${reason}`);
+
+      res.json({ 
+        ok: true, 
+        data: { 
+          mode, 
+          tripped: true, 
+          reason, 
+          timestamp: new Date().toISOString()
+        } 
+      });
+    } catch (error: any) {
+      console.error('[GuardrailsV2:KillSwitch] POST error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // POST /api/guardrails-v2/kill-switch/reset?mode=paper|live - Reset the kill switch
+  apiRouter.post('/guardrails-v2/kill-switch/reset', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const { guardrailPolicy } = await import('./services/guardrail-policy');
+      
+      // Reset the kill switch
+      guardrailPolicy.resetKillSwitch(mode);
+
+      console.log(`[GuardrailsV2:KillSwitch] Kill switch reset for ${mode} by user ${userId}`);
+
+      res.json({ 
+        ok: true, 
+        data: { 
+          mode, 
+          tripped: false, 
+          timestamp: new Date().toISOString()
+        } 
+      });
+    } catch (error: any) {
+      console.error('[GuardrailsV2:KillSwitch] POST reset error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
     }
   });
 
