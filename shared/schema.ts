@@ -258,6 +258,36 @@ export const guardrails = pgTable("guardrails", {
   uniqueMode: uniqueIndex("guardrails_mode_idx").on(table.mode),
 }));
 
+// Phase 2: Guardrails V2 (Core Four - Single Source of Truth)
+// Consolidates guardrails + trading_settings risk params into percent-based, mode-global schema
+export const guardrailsV2 = pgTable("guardrails_v2", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: tradingModeEnum("mode").notNull(),
+  
+  // CORE FOUR GUARDRAILS (percent-based, portfolio-relative)
+  
+  // 1. Portfolio Risk per Trade (%) - Range: 0.10% - 5.00%
+  portfolioRiskPerTradePct: decimal("portfolio_risk_per_trade_pct", { precision: 5, scale: 2 }).notNull().default("1.50"),
+  
+  // 2. Symbol Cooldown (minutes) - Range: 1 - 90
+  symbolCooldownMinutes: integer("symbol_cooldown_minutes").notNull().default(15),
+  
+  // 3. Max Open Positions (count) - Range: 1 - 20
+  maxOpenPositions: integer("max_open_positions").notNull().default(5),
+  
+  // 4. Daily Loss Kill Switch (%) - Range: 1.00% - 20.00%
+  dailyLossKillSwitchPct: decimal("daily_loss_kill_switch_pct", { precision: 5, scale: 2 }).notNull().default("7.00"),
+  
+  // Phase 3: Manual Override Controls (Lottie vs User)
+  isManualOverride: boolean("is_manual_override").notNull().default(false), // true = user controls, false = LATTI controls
+  tunedByLatti: boolean("tuned_by_latti").notNull().default(true), // true = LATTI manages, false = manual
+  
+  // Metadata
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueMode: uniqueIndex("guardrails_v2_mode_idx").on(table.mode),
+}));
+
 // Screener Filters (mode-isolated screening criteria) - GLOBAL per mode
 export const screenerFilters = pgTable("screener_filters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1751,6 +1781,15 @@ export const insertGuardrailsSchema = createInsertSchema(guardrails).omit({
   maxRiskPerTradeLimit: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 });
 
+// Phase 2: Guardrails V2 Insert Schema
+export const insertGuardrailsV2Schema = createInsertSchema(guardrailsV2).omit({
+  id: true,
+  lastUpdated: true,
+}).extend({
+  portfolioRiskPerTradePct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  dailyLossKillSwitchPct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+});
+
 export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).omit({
   id: true,
   createdAt: true,
@@ -2125,6 +2164,10 @@ export type TradingSettings = typeof tradingSettings.$inferSelect;
 
 export type InsertGuardrails = z.infer<typeof insertGuardrailsSchema>;
 export type Guardrails = typeof guardrails.$inferSelect;
+
+// Phase 2: Guardrails V2 Types
+export type InsertGuardrailsV2 = z.infer<typeof insertGuardrailsV2Schema>;
+export type GuardrailsV2 = typeof guardrailsV2.$inferSelect;
 
 export type InsertScreenerFilters = z.infer<typeof insertScreenerFiltersSchema>;
 export type ScreenerFilters = typeof screenerFilters.$inferSelect;
