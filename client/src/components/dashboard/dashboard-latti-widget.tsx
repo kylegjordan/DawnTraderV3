@@ -52,20 +52,20 @@ export function DashboardLATTiWidget() {
   const [, setLocation] = useLocation();
 
   // Fetch guardrails
-  const { data: guardrailsData, isLoading: guardrailsLoading } = useQuery<{ ok: boolean; data: GuardrailsV2 }>({
-    queryKey: ['/api/guardrails-v2', mode],
+  const { data: guardrailsData, isLoading: guardrailsLoading, error: guardrailsError } = useQuery<{ ok: boolean; data: GuardrailsV2 }>({
+    queryKey: [`/api/guardrails-v2?mode=${mode}`],
     enabled: !!mode,
   });
 
   // Fetch active preset
-  const { data: presetData, isLoading: presetLoading } = useQuery<{ ok: boolean; data: GoalsPreset }>({
-    queryKey: ['/api/goals-presets/active', mode],
+  const { data: presetData, isLoading: presetLoading, error: presetError } = useQuery<{ ok: boolean; data: GoalsPreset }>({
+    queryKey: [`/api/goals-presets/active?mode=${mode}`],
     enabled: !!mode,
   });
 
   // Fetch coherency compliance
-  const { data: complianceData, isLoading: complianceLoading } = useQuery<{ ok: boolean; data: GuardrailsCompliance }>({
-    queryKey: ['/api/analytics/guardrails-compliance', mode],
+  const { data: complianceData, isLoading: complianceLoading, error: complianceError } = useQuery<{ ok: boolean; data: GuardrailsCompliance }>({
+    queryKey: [`/api/analytics/guardrails-compliance?mode=${mode}`],
     enabled: !!mode,
   });
 
@@ -74,6 +74,7 @@ export function DashboardLATTiWidget() {
   const compliance = complianceData?.data;
 
   const isLoading = guardrailsLoading || presetLoading || complianceLoading;
+  const hasError = guardrailsError || presetError || complianceError;
 
   const getCoherencyBadge = (status: string | undefined) => {
     if (!status) return <Badge variant="outline">Unknown</Badge>;
@@ -141,6 +142,15 @@ export function DashboardLATTiWidget() {
               <Skeleton className="h-6 w-full" />
               <Skeleton className="h-6 w-full" />
               <Skeleton className="h-6 w-full" />
+            </div>
+          ) : hasError ? (
+            <div className="text-center py-8 text-muted-foreground" data-testid="error-message">
+              <p className="text-sm">Failed to load guardrails data.</p>
+              <p className="text-xs mt-1">
+                {guardrailsError instanceof Error && guardrailsError.message}
+                {presetError instanceof Error && presetError.message}
+                {complianceError instanceof Error && complianceError.message}
+              </p>
             </div>
           ) : (
             <div className="space-y-6">

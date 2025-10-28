@@ -28,8 +28,8 @@ export function PresetsGrid() {
   const { toast } = useToast();
 
   // Fetch all presets
-  const { data: presetsData, isLoading } = useQuery<{ ok: boolean; data: GoalsPreset[] }>({
-    queryKey: ['/api/goals-presets', mode],
+  const { data: presetsData, isLoading, error } = useQuery<{ ok: boolean; data: GoalsPreset[] }>({
+    queryKey: [`/api/goals-presets?mode=${mode}`],
     enabled: !!mode,
   });
 
@@ -39,10 +39,10 @@ export function PresetsGrid() {
       return apiRequest('PUT', '/api/goals-presets/select', { mode, presetName });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/goals-presets', mode] });
-      queryClient.invalidateQueries({ queryKey: ['/api/goals-presets/active', mode] });
-      queryClient.invalidateQueries({ queryKey: ['/api/guardrails-v2', mode] });
-      queryClient.invalidateQueries({ queryKey: ['/api/analytics/guardrails-compliance', mode] });
+      queryClient.invalidateQueries({ queryKey: [`/api/goals-presets?mode=${mode}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/goals-presets/active?mode=${mode}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/guardrails-v2?mode=${mode}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/analytics/guardrails-compliance?mode=${mode}`] });
       toast({
         title: "Preset Applied",
         description: "Goals preset has been successfully applied to guardrails.",
@@ -103,6 +103,15 @@ export function PresetsGrid() {
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-64 w-full" />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8 text-muted-foreground" data-testid="error-message">
+        <p className="text-sm">Failed to load presets.</p>
+        <p className="text-xs mt-1">{error instanceof Error && error.message}</p>
       </div>
     );
   }
@@ -204,7 +213,7 @@ export function PresetsGrid() {
                 variant={preset.isActive ? "secondary" : "default"}
                 className="w-full"
                 onClick={() => selectPresetMutation.mutate(preset.name)}
-                disabled={preset.isActive || selectPresetMutation.isPending}
+                disabled={!mode || preset.isActive || selectPresetMutation.isPending}
                 data-testid={`button-apply-${preset.name}`}
               >
                 {preset.isActive ? "Active Preset" : "Apply Preset"}
