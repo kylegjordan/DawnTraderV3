@@ -1,0 +1,81 @@
+⚙️ Phase 27.F.25 — Integrate LATTi Goals Data into Dashboard Trading Pace Table
+🎯 Objective
+
+Display the current Target Daily Average Earnings % (from the Goals Engine) and related metrics inside the LATTi Trading Pace table on the Dashboard — in both Paper and Live modes.
+The data should automatically stay synchronized with the Goals Engine but never trigger any background refresh flicker.
+
+1️⃣ Data Source & Sync Logic
+
+Data to display:
+
+targetDailyAvgEarningPct (from Goals Engine / LATTI targets API)
+
+currentPace (Conservative / Baseline / Optimistic / Aggressive)
+
+Optional – targetPerTrade and tradesPerDay if already available in context
+
+Directive:
+
+Extend the existing lattiTargets query (used in Goals Engine) so the Dashboard’s LATTi Pace widget can reuse it via TanStack Query context.
+
+Do not duplicate calls; use useQueryClient().getQueryData(['lattiTargets', mode]) to read the cached data.
+
+If no cached data exist (e.g., fresh login), fetch once and then respect:
+
+refetchInterval: false,
+refetchOnMount: false,
+refetchOnWindowFocus: false,
+staleTime: Infinity,
+
+
+to preserve the no-flicker architecture.
+
+2️⃣ Dashboard UI Placement
+
+Where: Inside the “LATTi Trading Pace” table on the main Dashboard.
+
+Add a new column or row for:
+
+Target Daily Avg Earning %   →  +1.75 %
+
+
+Rules:
+
+In Paper mode → label it Target Daily Avg Earning (Paper)
+
+In Live mode → label it Target Daily Avg Earning (Live)
+
+Use 2 decimal precision (toFixed(2)) and a subtle blue text style consistent with other LATTi metrics.
+
+Include a small tooltip 🛈 showing the source: “Calculated from Goals Engine preset for [pace] mode.”
+
+3️⃣ Automatic Update Behavior
+
+When the user changes trading pace in the Goals Engine, the cached lattiTargets query updates, and the Dashboard table should reflect the new value immediately (React Query cache propagation).
+
+No polling / no setInterval — only cache invalidation from explicit user actions or Goals Engine saves.
+
+4️⃣ Performance & Safeguards
+
+Wrap the new Dashboard row component in React.memo to avoid unnecessary re-renders.
+
+Use select in the query hook to extract only the targetDailyAvgEarningPct field:
+
+const { data: targetPct } = useQuery(['lattiTargets', mode], fetchLattiTargets, {
+  select: d => d?.targetDailyAvgEarningPct,
+});
+
+
+Validate that the component re-renders only when this value changes.
+
+5️⃣ Acceptance Criteria
+
+✅ Dashboard’s LATTi Pace table displays:
+
+Mode	Target Daily Avg Earning %
+Paper	+ 1.25 % (default)
+Live	+ 1.75 % (default)
+
+✅ Values remain accurate and consistent with Goals Engine presets.
+✅ No flicker, no extra network requests, and no idle polling.
+✅ Changing trading pace in Goals Engine updates this Dashboard table immediately.

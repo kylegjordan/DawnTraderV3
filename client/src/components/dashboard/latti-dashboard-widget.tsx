@@ -1,12 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Gauge, TrendingUp, Activity, Target, DollarSign, Percent } from "lucide-react";
+import { Gauge, TrendingUp, Activity, Target, DollarSign, Percent, Info } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/queryClient";
 import { useTrading } from "@/hooks/use-trading";
+import { memo } from "react";
 
 interface TradingPaceData {
   tradingPace: 'conservative' | 'baseline' | 'optimistic' | 'aggressive';
@@ -19,6 +20,20 @@ interface GuardrailsData {
 
 interface PortfolioData {
   balance: number;
+}
+
+// Phase 27.F.27: LATTI Targets from API
+interface LATTITargets {
+  mode: string;
+  preset: string;
+  portfolio_balance: number;
+  risk_per_trade: number;
+  trades_per_day: number;
+  earnings_per_trade: number;
+  daily_profit: number;
+  target_daily_avg_earning_pct: string;
+  max_risk_per_trade_limit: number;
+  calculated_at: string;
 }
 
 // Phase 27.F.15.UI-SYNC.9: Updated to match trading-pace-control.tsx PACE_CONFIGS
@@ -69,31 +84,51 @@ const PACE_CONFIGS = {
   },
 };
 
-export function LATTIDashboardWidget() {
+// Phase 27.F.27: Wrap in memo to prevent unnecessary re-renders
+const LATTIDashboardWidgetComponent = () => {
   const { mode, isPaper } = useTradingMode();
   const { portfolioMetrics, portfolioLoading } = useTrading();
   
   // Fetch trading pace
   const { data: paceData, isLoading: paceLoading } = useQuery<TradingPaceData>({
-    queryKey: ['system', 'trading-pace', mode],
-    queryFn: () => fetch('/api/system/trading-pace', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+    queryKey: ['/api/system/trading-pace'],
+    refetchInterval: false,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
 
   // Fetch guardrails for risk per trade
   const { data: guardrails, isLoading: guardrailsLoading } = useQuery<GuardrailsData>({
     queryKey: ['guardrails', mode],
-    queryFn: () => fetch(`/api/guardrails?mode=${mode}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+    refetchInterval: false,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
 
-  const isLoading = paceLoading || guardrailsLoading || portfolioLoading;
+  // Phase 27.F.27: Fetch LATTI targets from API (same pattern as Goals Engine)
+  const currentPace = paceData?.tradingPace || 'baseline';
+  const { data: lattiTargets, isLoading: lattiLoading } = useQuery<LATTITargets>({
+    queryKey: ['/api/latti/targets', mode, currentPace],
+    queryFn: async () => {
+      return apiRequest('GET', `/api/latti/targets?mode=${mode}`);
+    },
+    // Phase 27.F.27: No flicker - strict no-refetch settings
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    refetchOnMount: true, // Allow mount refetch for preset changes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
+    // Phase 27.F.27: Use select to extract only target_daily_avg_earning_pct
+    select: (data) => ({
+      ...data,
+      targetDailyAvgEarningPct: data.target_daily_avg_earning_pct,
+    }),
+  });
+
+  const isLoading = paceLoading || guardrailsLoading || portfolioLoading || lattiLoading;
 
   if (isLoading) {
     return (
@@ -115,11 +150,9 @@ export function LATTIDashboardWidget() {
   const config = PACE_CONFIGS[pace];
   const riskPerTrade = guardrails?.riskPerTrade || 0;
 
-  // Phase 27.F.15.UI-SYNC.9 + Phase 27.F.16.UI-SIMPLIFY: Calculate Target Daily Avg Earning % from portfolio metrics
-  const portfolioBalance = portfolioMetrics?.totalValue || 850;
-  const targetDailyAvgEarningPct = portfolioBalance > 0 
-    ? ((config.targetDailyProfit / portfolioBalance) * 100).toFixed(2)
-    : '0.00';
+  // Phase 27.F.27: Use LATTI targets from API instead of hardcoded calculation
+  const targetDailyAvgEarningPct = lattiTargets?.targetDailyAvgEarningPct || '0.00';
+  const portfolioBalance = lattiTargets?.portfolio_balance || portfolioMetrics?.totalValue || 850;
 
   return (
     <Card 
@@ -206,19 +239,19 @@ export function LATTIDashboardWidget() {
             </span>
           </div>
           
-          {/* Phase 27.F.15.UI-SYNC.9: Target Daily Avg Earning % */}
+          {/* Phase 27.F.27: Target Daily Avg Earning % from LATTI API */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex justify-between items-center cursor-help">
+                <div className="flex justify-between items-center cursor-help" data-testid="latti-target-daily-earning">
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Percent className="w-3 h-3" />
-                    Target Daily Avg Earning %:
+                    <Info className="w-3 h-3" />
+                    {isPaper ? 'Target Daily Avg Earning (Paper)' : 'Target Daily Avg Earning (Live)'}:
                   </span>
                   <span className={cn(
                     "text-sm font-bold font-mono",
                     parseFloat(targetDailyAvgEarningPct) > 0 
-                      ? "text-green-600 dark:text-green-400" 
+                      ? "text-blue-600 dark:text-blue-400" 
                       : "text-muted-foreground"
                   )}>
                     +{targetDailyAvgEarningPct}%
@@ -226,11 +259,14 @@ export function LATTIDashboardWidget() {
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="text-xs">
-                  Expected average percent return per day
+                <p className="text-xs font-semibold">
+                  Calculated from Goals Engine preset
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Formula: (${config.targetDailyProfit} / ${portfolioBalance.toFixed(2)}) × 100
+                  Source: LATTI targets for {config.label} pace
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Changes when you adjust trading pace in Goals Engine
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -246,4 +282,7 @@ export function LATTIDashboardWidget() {
       </CardContent>
     </Card>
   );
-}
+};
+
+// Phase 27.F.27: Export memoized component to prevent unnecessary re-renders
+export const LATTIDashboardWidget = memo(LATTIDashboardWidgetComponent);
