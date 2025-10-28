@@ -1,0 +1,103 @@
+🧱 Replit-Ready Directive: Final UI Alignment + Cleanup
+Directive: Goals/Guardrails Phase 6.1 — Final UI Cohesion & Dashboard Sync
+A) Goals Engine — Remove Legacy Goals Input Section
+
+In client/src/components/goals/goals-engine-tab.tsx:
+
+Delete JSX for:
+
+<TargetDailyGoals ...>
+
+
+Remove related imports (TargetDailyGoals, ManualTargetSection, etc.).
+
+Replace with:
+
+<section className="projected-growth">
+  <h3>Projected Portfolio Growth</h3>
+  <div className="active-preset-header" style={{ borderColor: presetColor }}>
+    <span className="preset-name">{activePreset.name}</span>
+  </div>
+  <div className="preset-target">
+    Target Daily Average Earnings: {activePreset.target_daily_avg_earning_pct}%
+  </div>
+  <ProjectedGrowthChart preset={activePreset} />
+</section>
+
+
+Ensure ProjectedGrowthChart or its equivalent now calculates from activePreset.target_daily_avg_earning_pct.
+
+B) Preset Cards — Remove Duplicate Headings
+
+In client/src/components/goals/presets-grid.tsx, locate:
+
+<h4>{preset.name}</h4>
+
+
+beneath the colored badge.
+
+Delete or comment out that secondary header.
+Keep only the highlighted version styled by color.
+
+C) Guardrails — Remove Legacy Configuration
+
+In client/src/pages/goals-engine.tsx or any nested component:
+
+Search for <GuardrailsConfiguration />, <LegacyGuardrailsTab />, or similar.
+
+Remove those imports and JSX.
+
+Confirm only <CoreFourGuardrails /> remains.
+
+D) Screeners Tab — Fix Blank Page
+
+In client/src/components/goals/filters-with-override.tsx, add:
+
+if (!data) return <EmptyState text="Loading filters..." />;
+if (Array.isArray(data) && data.length === 0)
+    return <EmptyState text="No filters configured yet." />;
+
+
+In the backend (server/routes.ts):
+
+Ensure /api/filters-v2 returns:
+
+{ "data": [] }
+
+
+when no filters are found.
+
+Verify no 401 Unauthorized errors in console (use stored token fallback).
+
+E) Dashboard LATTi Widget — Final Layout Adjustment
+
+In client/src/components/dashboard/dashboard-latti-widget.tsx:
+
+Wrap the active preset name in a color-coded badge component.
+
+Move coherency and control badges to the footer row.
+
+Add metrics on same line:
+
+[Coherency: PASS] [Control: LATTi]   |   Target: 0.87%   Trades/Day: 12
+
+
+Add a small border accent to match preset color theme.
+
+F) Acceptance Checklist
+
+✅ No “Target Daily Goals” or manual input visible.
+✅ Preset name only appears once, color-highlighted.
+✅ Screeners tab loads with fallback state (no white page).
+✅ Guardrails Configuration section fully removed.
+✅ Dashboard shows preset with color, metrics, and badges aligned.
+
+G) Documentation
+
+Update audit/goals_ui_cleanup.md with:
+
+Removed section IDs and components.
+
+New component structure diagram.
+
+Screenshots of corrected Goals Engine and Dashboard layout.

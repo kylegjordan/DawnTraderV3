@@ -96,6 +96,25 @@ export function DashboardLATTiWidget() {
     return name.charAt(0).toUpperCase() + name.slice(1);
   };
 
+  const getPresetBadgeColor = (name: string | undefined) => {
+    if (!name) return 'bg-gray-600 dark:bg-gray-700 text-white';
+    
+    switch (name) {
+      case 'conservative':
+        return 'bg-green-600 dark:bg-green-700 text-white';
+      case 'baseline':
+        return 'bg-blue-600 dark:bg-blue-700 text-white';
+      case 'optimistic':
+        return 'bg-amber-600 dark:bg-amber-700 text-white';
+      case 'maximum':
+        return 'bg-red-600 dark:bg-red-700 text-white';
+      case 'custom':
+        return 'bg-purple-600 dark:bg-purple-700 text-white';
+      default:
+        return 'bg-gray-600 dark:bg-gray-700 text-white';
+    }
+  };
+
   const getControlModeBadge = () => {
     if (!guardrails) return null;
     
@@ -104,7 +123,7 @@ export function DashboardLATTiWidget() {
     }
     
     if (guardrails.tunedByLatti) {
-      return <Badge variant="default" className="bg-green-600 dark:bg-green-700" data-testid="badge-lotti-managed">LATTi Managed</Badge>;
+      return <Badge variant="default" className="bg-green-600 dark:bg-green-700" data-testid="badge-lotti-managed">LATTi</Badge>;
     }
     
     return <Badge variant="outline">Unknown</Badge>;
@@ -154,27 +173,13 @@ export function DashboardLATTiWidget() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Active Preset with Status Badges */}
-              <div className="pb-4 border-b border-border">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-2">Active Preset</div>
-                      <Badge variant="outline" className="text-lg font-bold px-4 py-2" data-testid="badge-active-preset">
-                        {getPresetDisplayName(preset?.name)}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Coherency:</span>
-                      {getCoherencyBadge(compliance?.coherency_status)}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Control:</span>
-                      {getControlModeBadge()}
-                    </div>
-                  </div>
+              {/* Active Preset with Color-Coded Badge */}
+              <div className="pb-4 border-b border-border" style={{ borderLeftColor: getPresetBadgeColor(preset?.name).split(' ')[0] }}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="text-sm text-muted-foreground font-semibold">Active Preset:</div>
+                  <Badge className={`text-lg font-bold px-4 py-2 ${getPresetBadgeColor(preset?.name)}`} data-testid="badge-active-preset">
+                    {getPresetDisplayName(preset?.name)}
+                  </Badge>
                 </div>
               </div>
 
@@ -252,6 +257,34 @@ export function DashboardLATTiWidget() {
                       {guardrails?.dailyLossKillSwitchPct || '—'}%
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Footer Row - Coherency, Control, and Metrics */}
+              <div className="pt-4 border-t border-border bg-muted/20 dark:bg-muted/20 p-4 rounded-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-semibold">Coherency:</span>
+                      {getCoherencyBadge(compliance?.coherency_status)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-semibold">Control:</span>
+                      {getControlModeBadge()}
+                    </div>
+                  </div>
+                  {preset && (
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted-foreground">Target:</span>
+                        <span className="font-bold text-green-600 dark:text-green-400">{preset.targetDailyAvgEarningPct}%</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted-foreground">Trades/Day:</span>
+                        <span className="font-bold">{preset.tradesPerDayEst}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

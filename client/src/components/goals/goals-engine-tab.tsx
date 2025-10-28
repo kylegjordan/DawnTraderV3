@@ -1,249 +1,195 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { useState, useEffect } from "react";
-import { Save, Send, Sparkles, Mic, MicOff, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { cn } from "@/lib/utils";
-import TargetDailyGoals from "./target-daily-goals";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { TrendingUp, DollarSign } from "lucide-react";
+import { usePortfolioBalance } from "@/hooks/use-portfolio-balance";
 
-interface Goal {
-  metric: string;
-  goal: number | null;
-  actual: number;
-  percentAchieved: number | null;
+interface ActivePreset {
+  id: string;
+  mode: string;
+  name: string;
+  targetDailyAvgEarningPct: string;
+  tradesPerDayEst: string;
+  isActive: boolean;
 }
 
-interface GoalsSummary {
-  goals: Goal[];
-  hasGoals: boolean;
-}
-
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
+interface ProjectedBalance {
+  label: string;
+  days: number;
+  balance: number;
 }
 
 export default function GoalsEngineTab() {
   const { mode } = useTradingMode();
-  const { toast } = useToast();
-  const [editedGoals, setEditedGoals] = useState<{ [metric: string]: number | null }>({});
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [isChatting, setIsChatting] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder();
+  const { balance: portfolioBalance, isLoading: portfolioLoading } = usePortfolioBalance();
 
-  // Phase 27.F.1: Fetch fresh goals data on every mount (no stale cache)
-  const { data, isLoading, refetch } = useQuery<GoalsSummary>({
-    queryKey: ['/api/goals', mode],
-    queryFn: async () => {
-      // Use proper query parameter format: /api/goals?mode=paper
-      return apiRequest('GET', `/api/goals?mode=${mode}`);
-    },
-    refetchOnMount: 'always', // Always fetch fresh data on mount
-    staleTime: 0, // Consider data stale immediately
-    gcTime: 0, // Don't cache unmounted queries
+  // Fetch active preset
+  const { data: activePresetData, isLoading: presetLoading } = useQuery<{ ok: boolean; data: ActivePreset }>({
+    queryKey: [`/api/goals-presets/active?mode=${mode}`],
+    enabled: !!mode,
   });
 
-  // Load chat history
-  const { data: chatHistory } = useQuery<ChatMessage[]>({
-    queryKey: [`/api/chats?context=goals`],
-  });
+  const activePreset = activePresetData?.data;
 
-  // Initialize chat messages from history
-  useEffect(() => {
-    if (chatHistory && chatHistory.length > 0 && chatMessages.length === 0) {
-      setChatMessages(chatHistory.map((msg: any) => ({
-        role: msg.role,
-        content: msg.content || msg.message // Handle both field names
-      })));
+  const getPresetBadgeColor = (name: string) => {
+    switch (name) {
+      case 'conservative':
+        return 'bg-green-600 dark:bg-green-700 text-white';
+      case 'baseline':
+        return 'bg-blue-600 dark:bg-blue-700 text-white';
+      case 'optimistic':
+        return 'bg-amber-600 dark:bg-amber-700 text-white';
+      case 'maximum':
+        return 'bg-red-600 dark:bg-red-700 text-white';
+      case 'custom':
+        return 'bg-purple-600 dark:bg-purple-700 text-white';
+      default:
+        return 'bg-gray-600 dark:bg-gray-700 text-white';
     }
-  }, [chatHistory]);
-
-  const updateMutation = useMutation({
-    mutationFn: async (goals: { metric: string; value: number | null }[]) => {
-      return apiRequest('POST', '/api/goals/update', { goals, mode });
-    },
-    onSuccess: async () => {
-      // Phase 27.F.1: Invalidate and immediately refetch to ensure UI updates
-      await queryClient.invalidateQueries({ queryKey: ['/api/goals', mode] });
-      await refetch(); // Force immediate refetch
-      toast({
-        title: "Goals updated",
-        description: "Your goals have been saved successfully.",
-      });
-      setEditedGoals({});
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update goals",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const analyzeMutation = useMutation({
-    mutationFn: async (message: string) => {
-      return apiRequest('POST', '/api/goals/analyze', { message, mode });
-    },
-    onSuccess: async (data: any) => {
-      const assistantMessage = { role: 'assistant' as const, content: data.response };
-      setChatMessages(prev => [...prev, assistantMessage]);
-      
-      // Save assistant message to database
-      await apiRequest('POST', '/api/chats/save', {
-        role: 'assistant',
-        message: data.response,
-        context: 'goals'
-      });
-      
-      setIsChatting(false);
-    },
-    onError: (error: any) => {
-      toast({
-        title: "AI Analysis Error",
-        description: error.message || "Failed to get AI analysis",
-        variant: "destructive",
-      });
-      setIsChatting(false);
-    },
-  });
-
-  const handleGoalChange = (metric: string, value: string) => {
-    const numValue = value === '' ? null : parseFloat(value);
-    setEditedGoals(prev => ({ ...prev, [metric]: numValue }));
   };
 
-  const handleSaveGoals = () => {
-    const goalsToUpdate = Object.entries(editedGoals).map(([metric, value]) => ({
-      metric,
-      value,
-    }));
+  const getProjections = (): ProjectedBalance[] => {
+    if (!activePreset || !portfolioBalance) return [];
     
-    if (goalsToUpdate.length === 0) {
-      toast({
-        title: "No changes",
-        description: "No goals have been modified.",
-      });
-      return;
-    }
+    const dailyRate = parseFloat(activePreset.targetDailyAvgEarningPct) / 100;
+    if (dailyRate <= 0) return [];
 
-    updateMutation.mutate(goalsToUpdate);
+    return [
+      { label: "Tomorrow", days: 1, balance: portfolioBalance * Math.pow(1 + dailyRate, 1) },
+      { label: "1 Week", days: 7, balance: portfolioBalance * Math.pow(1 + dailyRate, 7) },
+      { label: "1 Month", days: 30, balance: portfolioBalance * Math.pow(1 + dailyRate, 30) },
+      { label: "3 Months", days: 90, balance: portfolioBalance * Math.pow(1 + dailyRate, 90) },
+      { label: "6 Months", days: 180, balance: portfolioBalance * Math.pow(1 + dailyRate, 180) },
+      { label: "1 Year", days: 365, balance: portfolioBalance * Math.pow(1 + dailyRate, 365) },
+    ];
   };
 
-  const handleSendMessage = async () => {
-    if (!chatInput.trim()) return;
+  const currencyFormatter = new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD', 
+    maximumFractionDigits: 2 
+  });
 
-    const userMessage = chatInput;
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    
-    // Save user message to database
-    await apiRequest('POST', '/api/chats/save', {
-      role: 'user',
-      message: userMessage,
-      context: 'goals'
-    });
-    
-    setIsChatting(true);
-    analyzeMutation.mutate(userMessage);
-    setChatInput('');
-  };
-
-  const handleMicToggle = async () => {
-    if (isRecording) {
-      // Stop recording and transcribe
-      const audioBlob = await stopRecording();
-      if (audioBlob) {
-        await transcribeAudio(audioBlob);
-      }
-    } else {
-      // Start recording
-      const error = await startRecording();
-      if (error) {
-        toast({
-          title: "Microphone Error",
-          description: error,
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  const transcribeAudio = async (audioBlob: Blob) => {
-    setIsTranscribing(true);
-    try {
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/transcribe', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Transcription failed');
-      }
-
-      const data = await response.json();
-      setChatInput(data.text);
-      
-      // Silent success - no toast notification
-    } catch (error: any) {
-      console.error('Transcription error:', error);
-      toast({
-        title: "Transcription failed",
-        description: error.message || "Could not transcribe audio. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
-
-  const formatValue = (value: number | null) => {
-    if (value == null) return '';
-    return value.toString();
-  };
-
-  const getGoalValue = (metric: string, defaultValue: number | null) => {
-    return editedGoals.hasOwnProperty(metric) ? editedGoals[metric] : defaultValue;
-  };
-
-  if (isLoading && !data) {
+  if (presetLoading || portfolioLoading) {
     return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Performance Tracking Metrics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-64 w-full" />
-          </CardContent>
-        </Card>
-      </div>
+      <Card data-testid="projected-growth-card">
+        <CardHeader>
+          <CardTitle>Projected Portfolio Growth</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
     );
   }
 
-  const goals = data?.goals || [];
-  const hasEdits = Object.keys(editedGoals).length > 0;
+  if (!activePreset) {
+    return (
+      <Card data-testid="projected-growth-card">
+        <CardHeader>
+          <CardTitle>Projected Portfolio Growth</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">No active preset selected. Please select a preset above.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const projections = getProjections();
+  const presetColor = getPresetBadgeColor(activePreset.name);
 
   return (
-    <div className="space-y-6">
-      {/* Preset-based Target Daily Goals */}
-      <TargetDailyGoals />
-    </div>
+    <Card data-testid="projected-growth-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <TrendingUp className="w-5 h-5" />
+          Projected Portfolio Growth
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Active Preset Header */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-muted-foreground">Active Preset</h4>
+            <Badge className={presetColor} data-testid="badge-active-preset">
+              {activePreset.name.charAt(0).toUpperCase() + activePreset.name.slice(1)}
+            </Badge>
+          </div>
+          
+          <div className="p-4 bg-muted/50 rounded-lg border-l-4" style={{ borderLeftColor: presetColor.split(' ')[0].replace('bg-', '#') }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">Target Daily Average Earnings:</span>
+                <p className="font-bold text-lg text-green-600 dark:text-green-400" data-testid="text-target-earning">
+                  {activePreset.targetDailyAvgEarningPct}%
+                </p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Estimated Trades per Day:</span>
+                <p className="font-bold text-lg" data-testid="text-trades-per-day">
+                  {activePreset.tradesPerDayEst}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Current Portfolio Value */}
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold text-muted-foreground">Current Portfolio Value</h4>
+          <p className="text-2xl font-bold text-foreground" data-testid="text-current-balance">
+            {currencyFormatter.format(portfolioBalance)}
+          </p>
+        </div>
+
+        {/* Projected Growth Table */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+            <DollarSign className="w-4 h-4" />
+            Projected Balances
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="projections-table">
+              <thead>
+                <tr className="border-b border-muted">
+                  <th className="text-left py-2 font-semibold text-muted-foreground">Timeframe</th>
+                  <th className="text-right py-2 font-semibold text-muted-foreground">Projected Balance</th>
+                  <th className="text-right py-2 font-semibold text-muted-foreground">Total Gain</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projections.map((proj) => {
+                  const gain = proj.balance - portfolioBalance;
+                  const gainPercent = ((gain / portfolioBalance) * 100).toFixed(1);
+                  return (
+                    <tr key={proj.label} className="border-b border-muted/50">
+                      <td className="py-3 text-left font-medium" data-testid={`row-${proj.label.toLowerCase().replace(' ', '-')}`}>
+                        {proj.label}
+                      </td>
+                      <td className="py-3 text-right font-bold text-foreground">
+                        {currencyFormatter.format(proj.balance)}
+                      </td>
+                      <td className="py-3 text-right">
+                        <span className="text-green-600 dark:text-green-400 font-semibold">
+                          +{currencyFormatter.format(gain)} ({gainPercent}%)
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Disclaimer */}
+        <p className="text-xs text-muted-foreground italic">
+          * Projections are based on compound daily growth at the target rate. Actual results may vary.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

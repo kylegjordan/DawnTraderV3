@@ -84,10 +84,7 @@ export default function GoalsEnginePage() {
         </TabsContent>
 
         <TabsContent value="guardrails" className="mt-6">
-          <div className="space-y-6">
-            <CoreFourGuardrails />
-            <GuardrailsTab />
-          </div>
+          <CoreFourGuardrails />
         </TabsContent>
 
         <TabsContent value="screener" className="mt-6">

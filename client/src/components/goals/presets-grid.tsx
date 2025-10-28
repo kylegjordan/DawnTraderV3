@@ -154,8 +154,7 @@ export function PresetsGrid() {
                   />
                 )}
               </div>
-              <CardTitle className="text-lg mt-2">{getPresetDisplayName(preset.name)}</CardTitle>
-              <CardDescription className="text-xs">
+              <CardDescription className="text-xs mt-2">
                 {getPresetDescription(preset.name)}
               </CardDescription>
             </CardHeader>
