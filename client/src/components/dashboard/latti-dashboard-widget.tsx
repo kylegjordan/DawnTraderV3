@@ -109,10 +109,10 @@ const LATTIDashboardWidgetComponent = () => {
 
   // Phase 27.F.27: Fetch LATTI targets from API (same pattern as Goals Engine)
   const currentPace = paceData?.tradingPace || 'baseline';
-  const { data: lattiTargets, isLoading: lattiLoading } = useQuery<LATTITargets>({
+  const { data: lattiTargets, isLoading: lattiLoading } = useQuery({
     queryKey: ['/api/latti/targets', mode, currentPace],
     queryFn: async () => {
-      return apiRequest('GET', `/api/latti/targets?mode=${mode}`);
+      return apiRequest('GET', `/api/latti/targets?mode=${mode}`) as Promise<LATTITargets>;
     },
     // Phase 27.F.27: No flicker - strict no-refetch settings
     refetchInterval: false,
@@ -121,8 +121,8 @@ const LATTIDashboardWidgetComponent = () => {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     staleTime: Infinity,
-    // Phase 27.F.27: Use select to extract only target_daily_avg_earning_pct
-    select: (data) => ({
+    // Phase 27.F.27: Use select to extract and transform the target percentage
+    select: (data: LATTITargets) => ({
       ...data,
       targetDailyAvgEarningPct: data.target_daily_avg_earning_pct,
     }),
@@ -150,8 +150,28 @@ const LATTIDashboardWidgetComponent = () => {
   const config = PACE_CONFIGS[pace];
   const riskPerTrade = guardrails?.riskPerTrade || 0;
 
-  // Phase 27.F.27: Use LATTI targets from API instead of hardcoded calculation
-  const targetDailyAvgEarningPct = lattiTargets?.targetDailyAvgEarningPct || '0.00';
+  // Phase 27.F.27: Use LATTI targets from API and format with proper sign handling
+  const rawTargetPct = lattiTargets?.targetDailyAvgEarningPct || '0.00';
+  const targetPctValue = parseFloat(rawTargetPct);
+  
+  // Format the percentage with proper sign handling
+  const targetDailyAvgEarningPct = (() => {
+    if (isNaN(targetPctValue)) return '0.00';
+    // Phase 27.F.27: Handle negative zero edge case (e.g., parseFloat("-0.0004") → -0)
+    const isNegativeZero = Object.is(targetPctValue, -0);
+    const formattedValue = targetPctValue.toFixed(2);
+    // If value rounds to zero but was originally negative, preserve the sign
+    if (isNegativeZero || (formattedValue === '0.00' && rawTargetPct.trim().startsWith('-'))) {
+      return '-0.00';
+    }
+    const sign = targetPctValue > 0 ? '+' : targetPctValue < 0 ? '' : '';
+    return `${sign}${formattedValue}`;
+  })();
+  
+  // Determine color based on the formatted value (more reliable than parsed number)
+  const isPositive = targetDailyAvgEarningPct.startsWith('+');
+  const isNegative = targetDailyAvgEarningPct.startsWith('-');
+  
   const portfolioBalance = lattiTargets?.portfolio_balance || portfolioMetrics?.totalValue || 850;
 
   return (
@@ -248,13 +268,18 @@ const LATTIDashboardWidgetComponent = () => {
                     <Info className="w-3 h-3" />
                     {isPaper ? 'Target Daily Avg Earning (Paper)' : 'Target Daily Avg Earning (Live)'}:
                   </span>
-                  <span className={cn(
-                    "text-sm font-bold font-mono",
-                    parseFloat(targetDailyAvgEarningPct) > 0 
-                      ? "text-blue-600 dark:text-blue-400" 
-                      : "text-muted-foreground"
-                  )}>
-                    +{targetDailyAvgEarningPct}%
+                  <span 
+                    className={cn(
+                      "text-sm font-bold font-mono",
+                      {
+                        "text-blue-600 dark:text-blue-400": isPositive,
+                        "text-red-600 dark:text-red-400": isNegative,
+                        "text-muted-foreground": !isPositive && !isNegative,
+                      }
+                    )}
+                    data-testid="latti-target-value"
+                  >
+                    {targetDailyAvgEarningPct}%
                   </span>
                 </div>
               </TooltipTrigger>
