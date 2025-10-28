@@ -1,0 +1,127 @@
+⚙️ Replit Directive — Phase 1
+
+LATTi Goals + Guardrails Modernization — Comprehensive Audit & Mapping
+
+Credentials for this audit (read-only routes, basic auth UIs where applicable):
+username: testuser123
+password: SecurePass123!
+
+🎯 Objective
+
+Inventory and classify every guardrail and filter reference across DB, API, and Client so we understand overlaps, dependencies, and conflicts before simplification. This aligns with the current mode-based, global engine architecture (one engine per mode; Paper/Live), LATTI as the local optimization brain, and the Goals/Filters UI already in place.
+
+📦 Required Outputs (commit all under /audit/)
+
+audit/guardrails_inventory.csv
+
+audit/filters_inventory.csv
+
+audit/conflicts_matrix.csv
+
+audit/db_map.json
+
+audit/endpoints_map.json
+
+audit/Phase1_recommendations.md (written recommendations)
+
+Goal: clearly label what stays, what merges, and what deprecates (to prep Phase 2 schema + rules).
+
+🔭 Scope (what to include)
+
+Database (mode-scoped, global settings first):
+
+Guardrails, Filters/Screener, Strategy/Parameters, Trading/State, LATTI context. Respect today’s global-per-mode design and dual-mode telemetry.
+
+API & Services:
+
+All routes beneath /api that read/write guardrails, filters, strategy settings, scanner inputs, and engine state; plus status/health endpoints that surface “truth” to the UI.
+
+Client (UI):
+
+Goals Engine (Guardrails tab, Filters tab), Filter Insights, Filtered Pairs, LATTI dashboard mirror, any toggle/lock UI (managed vs manual).
+
+Out of scope for Phase 1: rewriting logic, DB migrations, or UI changes (that’s Phase 2+).
+
+🧪 Method — Exact Work Packages
+A) Repository Mapping (DB → API → Client)
+
+Database Map → audit/db_map.json
+For each relevant table (examples): guardrails, screener_filters, strategy_settings/parameters, system_context, paper_sim_* (for current behavior references), trading_settings (if any legacy remnants), and LATTI-related config. Capture: table, columns, types, constraints, mode scoping, default sources. Note any per-user columns that still exist and whether they should be global-per-mode per the current architecture.
+
+Endpoint Map → audit/endpoints_map.json
+Enumerate all GET/PUT/POST routes that read or write guardrails/filters/strategy settings, scanner, and engine state. For each endpoint record: path, method, service/file owner, mode derivation, source-of-truth (DB table), returns, and known subscribers (WebSocket broadcasts).
+
+Client Map (UI)
+Catalog the components/containers that display or edit guardrails/filters/goals (e.g., guardrails-tab, filters-tab, Goals Engine panes, LATTI widget, Filter Insights/Filtered Pairs). Note read-only vs editable states, existing “Managed by Lottie” toggles, and any disabled controls tied to Live mode. Output a section inside audit/Phase1_recommendations.md.
+
+B) Inventories (authoritative CSVs)
+
+Guardrails Inventory → audit/guardrails_inventory.csv
+Columns: name, description, unit, scope (mode/global), default_source (DB/env), client_surface (Y/N), api_endpoint(s), db_table.column, used_by (service).
+Include current “core four” candidates you plan to keep visible: Portfolio Risk per Trade (%), Symbol Cooldown (minutes), Max Open Positions (count), Daily Loss Kill Switch (%) — plus all legacy items encountered. (Phase 2 will collapse to the core four and mark redundancies like max_drawdown, max_risk_$, max_position_size_cap for deprecation.)
+
+Filters Inventory → audit/filters_inventory.csv
+Columns: name, category, type (range/list/boolean), scope (mode/global), db_table.column, default_source, api_endpoint(s), used_by (scanner/strategy).
+Include active inputs used by MarketScanner, as well as any newer behavioral knobs surfaced/planned on the Filters tab (universe/timeframes, confidence threshold, quotes list) so we know exactly where they bind in backend services.
+
+C) Conflict & Overlap Analysis
+
+Conflicts Matrix → audit/conflicts_matrix.csv
+Rows = parameters; Columns = clash_with, clash_type (duplicate/contradict), effective_priority (today), recommended_resolution.
+Examples: duplicated risk caps across guardrails vs trading_settings; volume thresholds specified in both “filters” and “strategy pre-checks”; cooldown in two places. Mark each with a Phase 2 action: merge → guardrails, merge → filters, deprecate, or rename + normalize (percent-based).
+
+D) Coherency Baseline & SoT (Source-of-Truth)
+
+Effective-Value Rules — draft for Phase 2
+In audit/Phase1_recommendations.md, draft coherency constraints you’ll enforce later, e.g.:
+
+risk_per_trade_pct ≤ daily_loss_kill_switch_pct / 10
+
+max_open_positions * risk_per_trade_pct ≤ portfolio_exposure_cap_pct
+
+symbol_cooldown_minutes ≥ strategy_min_cooldown_minutes (if both exist)
+
+All risk magnitudes are percent-based and portfolio-relative (no absolute $)
+
+Source-of-Truth callouts
+For each parameter, state the single DB field that should authoritatively drive backend enforcement and UI display (Phase 2 migration input).
+
+✅ Acceptance Criteria (Phase 1 Done = PASS)
+
+db_map.json comprehensively lists all relevant tables/columns & identifies any user-scoped stragglers (should be none for settings under the global-per-mode design).
+
+endpoints_map.json covers every guardrails/filters/settings route, with mode derivation documented.
+
+guardrails_inventory.csv & filters_inventory.csv include all live references used by MarketScanner, RiskManager, StrategyEngine, LATTI manager, and current UI.
+
+conflicts_matrix.csv highlights duplicates/contradictions and proposes a merge/deprecate path.
+
+Phase1_recommendations.md states the core four guardrails to keep and flags fields to deprecate in Phase 2, plus a draft coherency_rules list.
+
+🧱 Guardrails for the Audit Itself (Do/Don’t)
+
+Do treat mode as the primary key for settings (Paper/Live), not user — consistent with the current architecture.
+
+Do not modify schemas, endpoints, or UI in Phase 1 (inventory only).
+
+Do record where UI already presents read-only vs editable states for Live vs Paper; this feeds Phase 3–4 “Lottie-managed + manual override” work.
+
+📝 Handover to Phase 2 (what this unlocks)
+
+Generating schema_guardrails_v2.sql (core-four only, percent-based) and coherency_rules.yaml from Phase 1 outputs.
+
+Marking redundancies for deprecation and wiring a transitional view for analytics.
+
+Locking “Lottie Controls Filters/Guardrails by default” with manual override that persists an is_manual_override flag (to be implemented in Phase 3–5).
+
+📚 Filing & Documentation
+
+Place everything under /audit/ with a short README.md summarizing method + findings.
+
+In replit.md, add a Phase 1 section that links each artifact and lists open questions (if any) that block Phase 2 simplification.
+
+🔎 Notes tied to current system reality
+
+The codebase already runs a mode-based global engine and LATTI as the local optimizer; ensure the audit respects that SoT and does not re-introduce user-scoped settings.
+
+Filters/Insights and trading tabs exist; inventory must capture their current inputs and any managed/manual toggles you intend to unify in later phases.

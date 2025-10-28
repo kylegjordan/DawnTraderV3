@@ -1,0 +1,247 @@
+{
+  "audit_metadata": {
+    "created": "2025-10-28",
+    "phase": "Phase 1 - Audit & Mapping",
+    "architecture": "Mode-based global engine (one engine per mode: paper/live)",
+    "scope": "Guardrails, Filters, Strategy Settings, LATTI, Trading State",
+    "notes": "All settings are GLOBAL per mode, NO user-scoped parameters in current architecture"
+  },
+  "tables": [
+    {
+      "table_name": "guardrails",
+      "description": "Core risk management parameters - GLOBAL per mode",
+      "mode_scoping": "mode column (paper/live)",
+      "isolation_key": "mode",
+      "unique_constraint": "guardrails_mode_idx (mode)",
+      "columns": [
+        {"name": "id", "type": "varchar", "primary_key": true, "default": "gen_random_uuid()"},
+        {"name": "mode", "type": "trading_mode_enum", "nullable": false, "values": ["live", "paper"]},
+        {"name": "maxDailyLoss", "type": "decimal(10,2)", "default": "1000.00", "unit": "USD", "category": "risk_limit"},
+        {"name": "maxDrawdown", "type": "decimal(5,2)", "default": "10.00", "unit": "percent", "category": "risk_limit"},
+        {"name": "maxPositionSize", "type": "decimal(10,2)", "default": "5000.00", "unit": "USD", "category": "position_sizing"},
+        {"name": "maxOpenPositions", "type": "integer", "default": 5, "unit": "count", "category": "position_sizing"},
+        {"name": "riskPerTrade", "type": "decimal(5,2)", "default": "1.5", "unit": "percent", "category": "risk_per_trade", "notes": "Stored as %, displayed as % of portfolio"},
+        {"name": "maxRequiredCapital", "type": "decimal(12,2)", "default": "100000.00", "unit": "USD", "category": "capital_requirement"},
+        {"name": "maxRiskPerTradeLimit", "type": "decimal(10,2)", "default": "1000.00", "unit": "USD", "category": "risk_limit"},
+        {"name": "cooldownMinutes", "type": "integer", "default": 15, "unit": "minutes", "category": "execution_rhythm", "range": "0-90"},
+        {"name": "microLoopInterval", "type": "integer", "default": 8, "unit": "seconds", "category": "micro_execution", "range": "5-15"},
+        {"name": "priceDeltaTrigger", "type": "decimal(5,2)", "default": "0.30", "unit": "percent", "category": "micro_execution", "range": "0.20-0.60"},
+        {"name": "aiCanAdjust", "type": "boolean", "default": false, "category": "ai_control"},
+        {"name": "createdAt", "type": "timestamp", "default": "now()"},
+        {"name": "updatedAt", "type": "timestamp", "default": "now()"}
+      ],
+      "ui_surfaces": ["Goals Engine > Guardrails Tab", "Dashboard LATTI widget (read-only)"],
+      "api_endpoints": ["/api/guardrails (GET/PUT)"],
+      "services_using": ["RiskManager", "TradingEngine", "StrategyEngine", "LATTI Manager", "HeuristicTraderService"],
+      "legacy_issues": ["userId column removed in global migration", "Absolute dollar values mixed with percentages"]
+    },
+    {
+      "table_name": "screener_filters",
+      "description": "Market scanning and pair filtering criteria - GLOBAL per mode",
+      "mode_scoping": "mode column (paper/live)",
+      "isolation_key": "mode",
+      "unique_constraint": "screener_filters_mode_idx (mode)",
+      "columns": [
+        {"name": "id", "type": "varchar", "primary_key": true, "default": "gen_random_uuid()"},
+        {"name": "mode", "type": "trading_mode_enum", "nullable": false, "values": ["live", "paper"]},
+        {"name": "minVolume", "type": "decimal(15,2)", "default": "1000000.00", "unit": "USD", "category": "volume_filter"},
+        {"name": "minPrice", "type": "decimal(10,8)", "default": "0.01", "unit": "USD", "category": "price_filter"},
+        {"name": "maxPrice", "type": "decimal(10,2)", "default": "10000.00", "unit": "USD", "category": "price_filter"},
+        {"name": "minMarketCap", "type": "decimal(15,2)", "default": "100000000.00", "unit": "USD", "category": "market_cap_filter"},
+        {"name": "maxBidAskSpread", "type": "decimal(5,2)", "default": "1.00", "unit": "percent", "category": "spread_filter"},
+        {"name": "rsiMin", "type": "integer", "default": 30, "unit": "index", "category": "technical_indicator", "range": "0-100"},
+        {"name": "rsiMax", "type": "integer", "default": 70, "unit": "index", "category": "technical_indicator", "range": "0-100"},
+        {"name": "volatilityMin", "type": "decimal(5,2)", "default": "0.50", "unit": "percent", "category": "volatility_filter"},
+        {"name": "volatilityMax", "type": "decimal(5,2)", "default": "5.00", "unit": "percent", "category": "volatility_filter"},
+        {"name": "excludeStablecoins", "type": "boolean", "default": true, "category": "exclusion_filter"},
+        {"name": "minLiquidity", "type": "decimal(15,2)", "default": "500000.00", "unit": "USD", "category": "liquidity_filter"},
+        {"name": "allowRegulatedOnly", "type": "boolean", "default": false, "category": "regulatory_filter"},
+        {"name": "universeSize", "type": "integer", "default": 100, "unit": "count", "category": "universe_control", "range": "25-150"},
+        {"name": "quoteCurrencies", "type": "jsonb", "default": "[\"USD\"]", "category": "universe_control", "notes": "Array of quote currencies"},
+        {"name": "activeTimeframes", "type": "jsonb", "default": "[\"5m\", \"15m\", \"1h\"]", "category": "signal_control", "notes": "Array of timeframes"},
+        {"name": "confidenceThreshold", "type": "integer", "default": 60, "unit": "percent", "category": "signal_control", "range": "40-90"},
+        {"name": "createdAt", "type": "timestamp", "default": "now()"},
+        {"name": "updatedAt", "type": "timestamp", "default": "now()"}
+      ],
+      "ui_surfaces": ["Goals Engine > Screeners Tab", "Filter Insights tab", "Filtered Pairs widget"],
+      "api_endpoints": ["/api/screeners (GET/PUT)", "/api/filters/diagnostics (GET)"],
+      "services_using": ["MarketScanner", "FilteredPairsService", "PaperSimDiagnosticService"],
+      "legacy_issues": ["userId column removed in global migration"]
+    },
+    {
+      "table_name": "strategy_settings",
+      "description": "Per-strategy configuration parameters - Mode-scoped, supports multi-user with globalContextId",
+      "mode_scoping": "mode column (paper/live)",
+      "isolation_key": "globalContextId + mode + strategy",
+      "unique_constraint": "strategy_settings_global_context_mode_strategy_idx",
+      "columns": [
+        {"name": "id", "type": "varchar", "primary_key": true, "default": "gen_random_uuid()"},
+        {"name": "globalContextId", "type": "varchar(50)", "default": "default", "nullable": false},
+        {"name": "userId", "type": "varchar", "references": "users.id", "notes": "Audit only, not used for business logic"},
+        {"name": "mode", "type": "trading_mode_enum", "nullable": false, "values": ["live", "paper"]},
+        {"name": "strategy", "type": "strategy_type_enum", "nullable": false, "values": ["vwap_pullback", "abcd_long", "sma_trend_ride", "breakout", "mean_reversion", "range_trading", "vwap_bounce", "liquidity_trap"]},
+        {"name": "enabled", "type": "boolean", "default": true, "nullable": false},
+        {"name": "params", "type": "jsonb", "nullable": false, "notes": "Strategy-specific parameters JSON"},
+        {"name": "version", "type": "integer", "default": 1, "nullable": false},
+        {"name": "createdAt", "type": "timestamp", "default": "now()"},
+        {"name": "updatedAt", "type": "timestamp", "default": "now()"}
+      ],
+      "ui_surfaces": ["Goals Engine > Strategies Tab", "Trading Panel"],
+      "api_endpoints": ["/api/strategies/settings (GET/PUT)", "/api/strategies/settings/all (GET)"],
+      "services_using": ["StrategyEngine", "TradingEngine", "StrategyBob"],
+      "legacy_issues": ["params as JSONB makes querying difficult", "No schema validation on params"]
+    },
+    {
+      "table_name": "strategy_parameters",
+      "description": "Shared global strategy parameters (NO mode column) - DEPRECATED pattern",
+      "mode_scoping": "NONE - global across all modes",
+      "isolation_key": "parameterName",
+      "unique_constraint": "strategy_parameters_param_idx (parameterName)",
+      "columns": [
+        {"name": "id", "type": "varchar", "primary_key": true, "default": "gen_random_uuid()"},
+        {"name": "globalContextId", "type": "varchar(50)", "default": "default", "nullable": false},
+        {"name": "parameterName", "type": "varchar(100)", "nullable": false, "unique": true},
+        {"name": "parameterValue", "type": "decimal(20,8)", "nullable": false},
+        {"name": "description", "type": "text"},
+        {"name": "category", "type": "varchar(50)"},
+        {"name": "updatedBy", "type": "varchar(20)", "default": "user"},
+        {"name": "updatedAt", "type": "timestamp", "default": "now()"}
+      ],
+      "ui_surfaces": ["NONE - backend only"],
+      "api_endpoints": ["NONE - direct storage access only"],
+      "services_using": ["StrategyEngine (legacy)"],
+      "legacy_issues": ["No mode scoping - conflicts with mode-based architecture", "Candidate for deprecation"]
+    },
+    {
+      "table_name": "tuning_policy",
+      "description": "LATTI auto-tuning policy configuration - Per user + mode",
+      "mode_scoping": "mode column (paper/live)",
+      "isolation_key": "userId + mode",
+      "unique_constraint": "NONE (index only)",
+      "columns": [
+        {"name": "id", "type": "varchar", "primary_key": true, "default": "gen_random_uuid()"},
+        {"name": "userId", "type": "varchar", "references": "users.id", "nullable": false},
+        {"name": "mode", "type": "trading_mode_enum", "nullable": false, "values": ["live", "paper"]},
+        {"name": "enabled", "type": "boolean", "default": true, "nullable": false},
+        {"name": "aggressiveness", "type": "tuning_aggressiveness_enum", "default": "balanced", "values": ["conservative", "balanced", "aggressive"]},
+        {"name": "policyVersion", "type": "integer", "default": 1, "nullable": false},
+        {"name": "maxStepPercent", "type": "decimal(5,2)", "default": "10.00", "unit": "percent", "notes": "Max % change per adjustment"},
+        {"name": "cooldownMinutes", "type": "integer", "default": 60, "unit": "minutes", "notes": "SYNC with guardrails.cooldownMinutes"},
+        {"name": "maxDailyAdjustments", "type": "integer", "default": 10, "unit": "count"},
+        {"name": "fieldBounds", "type": "jsonb", "nullable": false, "notes": "{ riskPerTrade: { min, max }, ... }"},
+        {"name": "currentCounters", "type": "jsonb", "default": "{\"adjustmentsToday\":0,\"reverts\":0}", "nullable": false},
+        {"name": "lastUpdated", "type": "timestamp", "default": "now()", "nullable": false},
+        {"name": "createdAt", "type": "timestamp", "default": "now()", "nullable": false}
+      ],
+      "ui_surfaces": ["Goals Engine > Tuning Tab (future)", "LATTI Dashboard widget"],
+      "api_endpoints": ["/api/tuning/policy (GET)", "/api/tuning/enable (POST)", "/api/tuning/disable (POST)", "/api/tuning/rollback (POST)"],
+      "services_using": ["LATTIManager", "HeuristicTraderService"],
+      "legacy_issues": ["userId scoping conflicts with global mode-based architecture", "cooldownMinutes duplicates guardrails.cooldownMinutes"]
+    },
+    {
+      "table_name": "system_context",
+      "description": "Global engine state per mode - 2 rows total (paper + live)",
+      "mode_scoping": "tradingMode column (paper/live)",
+      "isolation_key": "tradingMode",
+      "unique_constraint": "NONE - enforced at application level (exactly 2 rows)",
+      "columns": [
+        {"name": "id", "type": "varchar", "primary_key": true, "default": "gen_random_uuid()"},
+        {"name": "userId", "type": "varchar", "references": "users.id", "notes": "LEGACY audit only, NOT unique"},
+        {"name": "tradingMode", "type": "trading_mode_enum", "default": "paper", "nullable": false, "values": ["live", "paper"]},
+        {"name": "lastSafeState", "type": "jsonb", "default": "{}", "nullable": false},
+        {"name": "isEngineActive", "type": "boolean", "default": false, "nullable": false},
+        {"name": "lastModeChange", "type": "timestamp"},
+        {"name": "changedBy", "type": "varchar(50)", "values": ["user", "walter", "recovery", "admin"]},
+        {"name": "changeReason", "type": "text"},
+        {"name": "lastStartedBy", "type": "varchar", "notes": "UUID of user who started engine"},
+        {"name": "lastStoppedBy", "type": "varchar", "notes": "UUID of user who stopped engine"},
+        {"name": "lastHeartbeat", "type": "timestamp", "notes": "Engine health monitoring"},
+        {"name": "lhtsEnabled", "type": "boolean", "default": false, "notes": "LHTS (deprecated) enabled flag"},
+        {"name": "lhtsLastRun", "type": "timestamp"},
+        {"name": "lhtsAdjustmentsCount", "type": "integer", "default": 0},
+        {"name": "lattiEnabled", "type": "boolean", "default": false, "notes": "LATTI enabled flag"},
+        {"name": "lattiLastCycle", "type": "timestamp"},
+        {"name": "lattiVersion", "type": "varchar(10)"}
+      ],
+      "ui_surfaces": ["Dashboard Top Bar (LIVE/PAPER toggle)", "Trading Panel"],
+      "api_endpoints": ["/api/trading/status (GET)", "/api/trading/start (POST)", "/api/trading/stop (POST)"],
+      "services_using": ["TradingEngine", "EngineManager", "ModeRegistry", "StateSync"],
+      "legacy_issues": ["userId preserved for audit only - NO LONGER business logic key"]
+    },
+    {
+      "table_name": "trading_settings",
+      "description": "User preferences and display settings - Per user, NOT mode-scoped",
+      "mode_scoping": "NONE - per user only",
+      "isolation_key": "userId",
+      "unique_constraint": "trading_settings_user_id_idx (userId)",
+      "columns": [
+        {"name": "id", "type": "varchar", "primary_key": true, "default": "gen_random_uuid()"},
+        {"name": "userId", "type": "varchar", "references": "users.id", "unique": true, "nullable": false},
+        {"name": "defaultMode", "type": "trading_mode_enum", "default": "paper", "notes": "User's default trading mode preference"},
+        {"name": "walterEnabled", "type": "boolean", "default": true},
+        {"name": "notificationsEnabled", "type": "boolean", "default": true},
+        {"name": "confirmTrades", "type": "boolean", "default": true},
+        {"name": "autoStartPaperTrading", "type": "boolean", "default": false},
+        {"name": "dailyLossKillSwitch", "type": "decimal(5,2)", "default": "7.0", "unit": "percent", "notes": "GLOBAL setting, should not be per-user"},
+        {"name": "maxPositionPercent", "type": "decimal(5,2)", "default": "10.0", "unit": "percent", "notes": "GLOBAL setting, should not be per-user"},
+        {"name": "updatedAt", "type": "timestamp", "default": "now()"}
+      ],
+      "ui_surfaces": ["Settings page", "Guardrails Tab (dailyLossKillSwitch, maxPositionPercent)"],
+      "api_endpoints": ["/api/settings (GET/PUT)"],
+      "services_using": ["RiskManager", "TradingEngine"],
+      "legacy_issues": ["dailyLossKillSwitch and maxPositionPercent should be in guardrails table, not per-user", "Mixed UI preferences with risk parameters"]
+    },
+    {
+      "table_name": "watchlist_pairs",
+      "description": "Active trading pairs being monitored - GLOBAL per mode",
+      "mode_scoping": "mode column (paper/live)",
+      "isolation_key": "mode + symbol",
+      "unique_constraint": "watchlist_pairs_mode_symbol_idx (mode, symbol)",
+      "columns": [
+        {"name": "id", "type": "varchar", "primary_key": true, "default": "gen_random_uuid()"},
+        {"name": "mode", "type": "trading_mode_enum", "default": "paper", "nullable": false, "values": ["live", "paper"]},
+        {"name": "symbol", "type": "varchar(20)", "nullable": false},
+        {"name": "baseCurrency", "type": "varchar(10)", "nullable": false},
+        {"name": "quoteCurrency", "type": "varchar(10)", "nullable": false},
+        {"name": "marketCap", "type": "decimal(20,2)"},
+        {"name": "volume24h", "type": "decimal(20,2)"},
+        {"name": "currentPrice", "type": "decimal(20,8)"},
+        {"name": "vwap", "type": "decimal(20,8)"},
+        {"name": "sma", "type": "decimal(20,8)"},
+        {"name": "dailyRange", "type": "decimal(5,2)"},
+        {"name": "lastScanned", "type": "timestamp"},
+        {"name": "isActive", "type": "boolean", "default": true},
+        {"name": "addedAt", "type": "timestamp", "default": "now()"}
+      ],
+      "ui_surfaces": ["Watchlist page", "Trading Panel"],
+      "api_endpoints": ["/api/watchlist (GET/POST/DELETE)"],
+      "services_using": ["MarketScanner", "FilteredPairsService"],
+      "legacy_issues": ["NONE - properly mode-scoped"]
+    }
+  ],
+  "deprecation_candidates": [
+    {
+      "table": "strategy_parameters",
+      "reason": "No mode scoping - conflicts with mode-based architecture",
+      "replacement": "Move to strategy_settings.params JSONB or mode-scoped table"
+    },
+    {
+      "table": "trading_settings",
+      "columns": ["dailyLossKillSwitch", "maxPositionPercent"],
+      "reason": "Risk parameters should be in guardrails table (mode-scoped), not user preferences",
+      "replacement": "Migrate to guardrails table"
+    },
+    {
+      "table": "tuning_policy",
+      "column": "cooldownMinutes",
+      "reason": "Duplicates guardrails.cooldownMinutes - creates sync conflicts",
+      "replacement": "Read from guardrails.cooldownMinutes only"
+    }
+  ],
+  "coherency_requirements": [
+    "riskPerTrade (%) <= dailyLossKillSwitch (%) / 10",
+    "maxOpenPositions * riskPerTrade (%) <= maxPositionPercent (%)",
+    "cooldownMinutes must be unified across guardrails and tuningPolicy",
+    "All risk magnitudes should be percent-based and portfolio-relative (no absolute $)"
+  ]
+}

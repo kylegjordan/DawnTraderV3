@@ -1,0 +1,17 @@
+name,category,type,scope,db_table.column,default_source,api_endpoint,used_by,notes,phase2_action
+minVolume,Volume Filter,range (decimal),mode-global,screener_filters.minVolume,DB default: 1000000.00,/api/screeners,MarketScanner,Minimum 24h volume in USD,KEEP - normalize units
+minPrice,Price Filter,range (decimal),mode-global,screener_filters.minPrice,DB default: 0.01,/api/screeners,MarketScanner,Minimum price per unit (USD),KEEP
+maxPrice,Price Filter,range (decimal),mode-global,screener_filters.maxPrice,DB default: 10000.00,/api/screeners,MarketScanner,Maximum price per unit (USD),KEEP
+minMarketCap,Market Cap Filter,range (decimal),mode-global,screener_filters.minMarketCap,DB default: 100000000.00,/api/screeners,MarketScanner,Minimum market capitalization (USD),KEEP - normalize units
+maxBidAskSpread,Spread Filter,range (decimal),mode-global,screener_filters.maxBidAskSpread,DB default: 1.00,/api/screeners,MarketScanner,Maximum bid-ask spread percentage,KEEP
+rsiMin,Technical Indicator,range (integer),mode-global,screener_filters.rsiMin,DB default: 30,/api/screeners,MarketScanner|StrategyEngine,RSI lower bound (0-100),KEEP
+rsiMax,Technical Indicator,range (integer),mode-global,screener_filters.rsiMax,DB default: 70,/api/screeners,MarketScanner|StrategyEngine,RSI upper bound (0-100),KEEP
+volatilityMin,Volatility Filter,range (decimal),mode-global,screener_filters.volatilityMin,DB default: 0.50,/api/screeners,MarketScanner,Minimum volatility percentage,KEEP
+volatilityMax,Volatility Filter,range (decimal),mode-global,screener_filters.volatilityMax,DB default: 5.00,/api/screeners,MarketScanner,Maximum volatility percentage,KEEP
+excludeStablecoins,Exclusion Filter,boolean,mode-global,screener_filters.excludeStablecoins,DB default: true,/api/screeners,MarketScanner,Exclude stablecoin pairs,KEEP
+minLiquidity,Liquidity Filter,range (decimal),mode-global,screener_filters.minLiquidity,DB default: 500000.00,/api/screeners,MarketScanner,Minimum liquidity in USD,KEEP - normalize units
+allowRegulatedOnly,Regulatory Filter,boolean,mode-global,screener_filters.allowRegulatedOnly,DB default: false,/api/screeners,MarketScanner,Only allow regulated assets,KEEP
+universeSize,Universe Control,range (integer),mode-global,screener_filters.universeSize,DB default: 100,/api/screeners,MarketScanner,Market universe size limit (25-150),KEEP
+quoteCurrencies,Universe Control,list (jsonb),mode-global,screener_filters.quoteCurrencies,DB default: ["USD"],/api/screeners,MarketScanner,Allowed quote currencies array,KEEP
+activeTimeframes,Signal Control,list (jsonb),mode-global,screener_filters.activeTimeframes,"DB default: [""5m"",""15m"",""1h""]",/api/screeners,MarketScanner|StrategyEngine,"Active timeframe windows (5m,15m,1h,4h)",KEEP
+confidenceThreshold,Signal Control,range (integer),mode-global,screener_filters.confidenceThreshold,DB default: 60,/api/screeners,MarketScanner|StrategyEngine,Minimum signal confidence % (40-90),KEEP
