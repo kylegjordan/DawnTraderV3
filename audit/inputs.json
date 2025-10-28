@@ -100,6 +100,33 @@
       "replacement": "portfolioRiskPerTradePct",
       "migration_status": "soft_blocked",
       "description": "OLD: Dollar-based risk per trade (replaced by percent-based)"
+    },
+    "LEGACY_maxPositionSize": {
+      "status": "deprecated",
+      "db_table": "guardrails",
+      "db_column": "max_position_size",
+      "deprecation_date": "2025-10-15",
+      "replacement": "maxOpenPositions",
+      "migration_status": "soft_blocked",
+      "description": "OLD: Maximum position size field (consolidated into maxOpenPositions)"
+    },
+    "LEGACY_cooldownMinutes": {
+      "status": "deprecated",
+      "db_table": "guardrails",
+      "db_column": "cooldown_minutes",
+      "deprecation_date": "2025-10-15",
+      "replacement": "symbolCooldownMinutes",
+      "migration_status": "soft_blocked",
+      "description": "OLD: Cooldown minutes (renamed to symbolCooldownMinutes for clarity)"
+    },
+    "LEGACY_priceDeltaTrigger": {
+      "status": "deprecated",
+      "db_table": "guardrails",
+      "db_column": "price_delta_trigger",
+      "deprecation_date": "2025-10-28",
+      "replacement": "none",
+      "migration_status": "soft_blocked",
+      "description": "OLD: Price delta trigger (removed from unified config, no longer a guardrail parameter)"
     }
   },
   
@@ -470,14 +497,15 @@
   
   "metadata": {
     "total_current_fields": 27,
-    "total_deprecated_fields": 6,
+    "total_deprecated_fields": 9,
     "guardrails_current": 4,
-    "guardrails_deprecated": 3,
+    "guardrails_deprecated": 6,
     "filters_current": 16,
-    "filters_deprecated": 4,
+    "filters_deprecated": 3,
     "goals_current": 4,
     "goals_deprecated": 0,
     "phase_27_f_34_completed": true,
-    "last_major_cleanup": "2025-10-28"
+    "last_major_cleanup": "2025-10-28",
+    "notes": "currentPortfolioValue is included as read-only in ConfigSnapshot but not in GoalsSchema since it's derived from portfolio_balances table"
   }
 }
