@@ -1225,8 +1225,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Validate coherency
       const coherencyResult = guardrailPolicy.validate(effectiveValues);
 
-      // Check kill switch status
-      const isKillSwitchTripped = guardrailPolicy.isKillSwitchTripped(mode);
+      // Check kill switch status (now async for database persistence)
+      const isKillSwitchTripped = await guardrailPolicy.isKillSwitchTripped(mode);
 
       res.json({ 
         ok: true, 
@@ -1259,8 +1259,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       const { guardrailPolicy } = await import('./services/guardrail-policy');
       
-      // Trip the kill switch
-      guardrailPolicy.tripKillSwitch(mode, reason);
+      // Trip the kill switch (now async for database persistence)
+      await guardrailPolicy.tripKillSwitch(mode, reason);
 
       console.log(`[GuardrailsV2:KillSwitch] Kill switch tripped for ${mode} by user ${userId}: ${reason}`);
 
@@ -1291,8 +1291,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       const { guardrailPolicy } = await import('./services/guardrail-policy');
       
-      // Reset the kill switch
-      guardrailPolicy.resetKillSwitch(mode);
+      // Reset the kill switch (now async for database persistence)
+      await guardrailPolicy.resetKillSwitch(mode);
 
       console.log(`[GuardrailsV2:KillSwitch] Kill switch reset for ${mode} by user ${userId}`);
 

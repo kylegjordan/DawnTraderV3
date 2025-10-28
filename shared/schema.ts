@@ -286,6 +286,11 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   tunedByLatti: boolean("tuned_by_latti").notNull().default(true), // true = LATTI manages, false = manual
   lockedByUser: jsonb("locked_by_user").default(sql`'{}'::jsonb`), // Per-parameter lock status: {portfolioRisk: true, cooldown: false, ...}
   
+  // Phase 5: Kill Switch Persistence (Circuit Breaker State)
+  killSwitchTripped: boolean("kill_switch_tripped").notNull().default(false), // true = circuit breaker is tripped
+  killSwitchReason: text("kill_switch_reason"), // Reason for kill switch activation
+  killSwitchTrippedAt: timestamp("kill_switch_tripped_at", { withTimezone: true }), // When it was tripped
+  
   // Metadata
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
 }, (table) => ({

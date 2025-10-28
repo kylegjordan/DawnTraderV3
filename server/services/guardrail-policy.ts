@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
 import type { GuardrailsV2 } from '@shared/schema';
+import { storage } from '../storage';
 
 /**
  * Phase 5: GuardrailPolicy Service
@@ -71,12 +72,8 @@ interface CoherencyRulesConfig {
 
 class GuardrailPolicyService {
   private rulesConfig: CoherencyRulesConfig | null = null;
-  private killSwitchState: Map<TradingMode, boolean> = new Map([
-    ['paper', false],
-    ['live', false]
-  ]);
   
-  // Metrics counters
+  // Metrics counters (kill switch trips tracked in DB, not in-memory)
   private metrics = {
     ruleFailures: new Map<string, number>(),
     ruleWarnings: new Map<string, number>(),
@@ -92,6 +89,7 @@ class GuardrailPolicyService {
 
   constructor() {
     this.loadCoherencyRules();
+    console.log('[GuardrailPolicy] Service initialized with persistent kill switch state');
   }
 
   // ============================================================================
@@ -326,16 +324,28 @@ class GuardrailPolicyService {
   /**
    * Trip the circuit breaker for a specific mode.
    * This immediately blocks all new trades and can trigger position closure.
+   * State is persisted to database for restart resilience.
    */
-  public tripKillSwitch(mode: TradingMode, reason: string): void {
+  public async tripKillSwitch(mode: TradingMode, reason: string): Promise<void> {
     console.log(`[GuardrailPolicy] ⚠️ KILL SWITCH TRIPPED for ${mode}: ${reason}`);
-    this.killSwitchState.set(mode, true);
+    
+    // Persist to database
+    const guardrails = await storage.getGuardrailsV2({ mode });
+    const {  lockedByUser, ...rest } = guardrails;
+    await storage.upsertGuardrailsV2({
+      ...rest,
+      mode,
+      lockedByUser: lockedByUser as any,
+      killSwitchTripped: true,
+      killSwitchReason: reason,
+      killSwitchTrippedAt: new Date()
+    });
     
     const current = this.metrics.killSwitchTrips.get(mode) || 0;
     this.metrics.killSwitchTrips.set(mode, current + 1);
     
     // Emit telemetry event
-    this.emitEvent('guardrail.kill_switch.tripped', {
+    await this.emitEvent('guardrail.kill_switch.tripped', {
       mode,
       reason,
       timestamp: new Date().toISOString(),
@@ -345,12 +355,24 @@ class GuardrailPolicyService {
 
   /**
    * Reset the kill switch for a specific mode.
+   * State is persisted to database for restart resilience.
    */
-  public resetKillSwitch(mode: TradingMode): void {
+  public async resetKillSwitch(mode: TradingMode): Promise<void> {
     console.log(`[GuardrailPolicy] ✅ Kill switch reset for ${mode}`);
-    this.killSwitchState.set(mode, false);
     
-    this.emitEvent('guardrail.kill_switch.reset', {
+    // Persist to database
+    const guardrails = await storage.getGuardrailsV2({ mode });
+    const { lockedByUser, ...rest } = guardrails;
+    await storage.upsertGuardrailsV2({
+      ...rest,
+      mode,
+      lockedByUser: lockedByUser as any,
+      killSwitchTripped: false,
+      killSwitchReason: null,
+      killSwitchTrippedAt: null
+    });
+    
+    await this.emitEvent('guardrail.kill_switch.reset', {
       mode,
       timestamp: new Date().toISOString()
     });
@@ -358,9 +380,17 @@ class GuardrailPolicyService {
 
   /**
    * Check if kill switch is currently tripped for a mode.
+   * Reads from database for restart-safe state.
    */
-  public isKillSwitchTripped(mode: TradingMode): boolean {
-    return this.killSwitchState.get(mode) || false;
+  public async isKillSwitchTripped(mode: TradingMode): Promise<boolean> {
+    try {
+      const guardrails = await storage.getGuardrailsV2({ mode });
+      return guardrails?.killSwitchTripped || false;
+    } catch (error) {
+      console.error(`[GuardrailPolicy] Error checking kill switch for ${mode}:`, error);
+      // Fail-safe: assume tripped on error for safety
+      return true;
+    }
   }
 
   // ============================================================================
