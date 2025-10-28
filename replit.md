@@ -46,31 +46,45 @@ Migrated from legacy `guardrails` table to modern `guardrails_v2` schema with th
 - Migration checklist: `audit/migration_checklist.md`
 - Coherency rules: `audit/coherency_rules.yaml`
 
-### Phase 3: Lottie-Managed vs Manual Override UI (✅ BACKEND COMPLETED)
+### Phase 3: Lottie-Managed vs Manual Override UI (✅ COMPLETED)
 Implements toggle controls for switching between LATTi autonomous optimization and manual user control.
 
-**Backend Implementation (Phase 3a - Completed):**
+**Backend Implementation (Phase 3a - ✅ Completed):**
 - Added `locked_by_user` JSONB column to `guardrails_v2` table for per-parameter override tracking
 - Created `filters_v2` TypeScript schema with `managed_by_lottie` and `manual_override_enabled` metadata flags
 - Implemented GET `/api/filters-v2?mode=paper|live` endpoint returning 16 filter parameters with control metadata
-- Implemented PUT `/api/filters-v2?mode=paper|live` stub endpoint (metadata updates deferred to Phase 3b)
+- Implemented PUT `/api/filters-v2?mode=paper|live` endpoint for metadata updates
 - Enhanced PUT `/api/guardrails-v2?mode=paper|live` to support `lockedByUser` partial updates
-- Added telemetry event `guardrail.override.changed` broadcasted when override state changes
+- Added telemetry events `guardrail.override.changed` and `filters.override.changed` broadcasted when override state changes
 - Coherency validation enforced for all guardrail updates (RULE_001, RULE_005)
+
+**Frontend Implementation (Phase 3b - ✅ Completed):**
+- Created `CoreFourGuardrails` component (`client/src/components/goals/core-four-guardrails.tsx`)
+  - Displays Core Four parameters with Switch toggles for per-parameter Lottie/Manual control
+  - Visual badges: "Auto-tuned by LATTi" (green) vs "Manual Override Active" (amber)
+  - Lock/Unlock icons indicating current control mode
+  - Integrated with `/api/guardrails-v2` endpoint
+- Created `FiltersWithOverride` component (`client/src/components/goals/filters-with-override.tsx`)
+  - Displays all 16 filter parameters grouped by category (Volume, Price, Quality, etc.)
+  - Checkbox toggles for "Managed by LATTi" per filter
+  - Status badges: "🟢 Auto (LATTi)" vs "🟡 Manual"
+  - Integrated with `/api/filters-v2` endpoint
+- Created `useOverrideState` hook (`client/src/hooks/use-override-state.tsx`)
+  - WebSocket subscription for real-time sync (<1 second latency)
+  - Automatic React Query cache invalidation on override state changes
+  - Listens for `guardrail.override.changed` and `filters.override.changed` events
+- Integrated both components into Goals Engine page
+  - CoreFourGuardrails displayed at top of Guardrails tab
+  - FiltersWithOverride displayed at top of Screeners tab
 
 **Control Hierarchy:**
 1. **Global Manual Override**: User disables LATTi entirely (`is_manual_override = true`)
 2. **Per-Parameter Locks**: User locks specific parameters via `locked_by_user` JSONB (e.g., `{"symbolCooldownMinutes": true}`)
 3. **Lottie-Managed (default)**: LATTi has full control over unlocked parameters (`tuned_by_latti = true`)
 
-**Frontend Implementation (Phase 3b - Deferred):**
-- UI toggle switches in `guardrails-tab.tsx` (global override + per-parameter locks)
-- Filter toggle switches for 16 filter parameters
-- Real-time WebSocket subscriptions for config updates
-- Visual badges showing "Auto-tuned by LATTi" vs "Manual Override Active"
-
 **Documentation:**
-- Behavior guide: `docs/manual_override_behavior.md`
+- Backend behavior: `docs/manual_override_behavior.md`
+- Frontend UI behavior: `docs/ui_override_behavior.md`
 - API documentation embedded in endpoints
 - WebSocket event specifications documented
 
