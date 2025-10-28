@@ -61,12 +61,13 @@ export function FiltersWithOverride() {
   useOverrideState();
 
   // Fetch Filters from filters_v2 endpoint
-  const { data: filtersData, isLoading } = useQuery<FiltersV2Response>({
+  const { data: filtersData, isLoading, error } = useQuery<FiltersV2Response>({
     queryKey: ['/api/filters-v2', mode],
     queryFn: async () => {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`/api/filters-v2?mode=${mode}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
       if (!response.ok) {
@@ -135,8 +136,50 @@ export function FiltersWithOverride() {
     );
   }
 
-  if (!filtersData?.data) {
-    return null;
+  // Handle errors
+  if (error) {
+    return (
+      <Card className="border-2 border-red-200 dark:border-red-900">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <Filter className="w-5 h-5" />
+            Filter Automation Control
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <p className="text-red-600 dark:text-red-400 font-semibold">Failed to load filters</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              {error instanceof Error ? error.message : 'An error occurred while fetching filter data'}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Handle empty/missing data
+  if (!filtersData?.data?.filters || filtersData.data.filters.length === 0) {
+    return (
+      <Card className="border-2 border-purple-200 dark:border-purple-900">
+        <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30">
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            Filter Automation Control
+            <ModeIndicator />
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-12">
+            <Filter className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-lg font-semibold text-foreground">No filters configured yet</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Filters will appear here once they are set up for {mode} mode
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   // Group filters by category

@@ -1,0 +1,96 @@
+2) Replit-ready prompt: cleanup, re-wire, and fix the Screeners blank page
+
+Copy/paste this as a single task for Replit to execute.
+
+Directive: Goals/Guardrails Cleanup + Preset Wiring + Screeners Fix
+
+Credentials:
+username: testuser123
+password: SecurePass123!
+
+A) Remove legacy “Trading Pace” + manual target inputs
+
+Delete or disable components & imports
+
+Search and remove:
+
+client/src/components/goals/trading-pace*.tsx
+
+client/src/components/goals/manual-target*.tsx
+
+In client/src/pages/goals-engine.tsx, remove JSX that renders the above.
+
+Grep & replace any use of targetDailyAvgEarning* to use activePreset.target_daily_avg_earning_pct.
+
+Projected growth source of truth
+
+Ensure the projected growth panel reads exclusively from active preset:
+
+risk_per_trade%, trades_per_day, edge, kill_switch%.
+
+Compute target as in the linkage model above (or simply show the preset’s target_daily_avg_earning_pct when learning is disabled).
+
+B) Replace preset seed values with realistic computed targets
+
+Update seed SQL for goals_presets
+Set targets to: Conservative 0.17%, Baseline 0.87%, Optimistic 2.53%, Maximum 3.50% (capped).
+Keep your existing risk/cooldown/positions as in the table above to preserve coherence.
+
+Server: preset application
+
+When a preset is applied, set Core Four + write filter knobs appropriate for the preset’s throughput (volume/ATR bands).
+
+Mark preset as active; switch Goals Engine to Custom if the user edits any Core Four.
+
+C) Dashboard LATTi widget reorder
+
+In client/src/components/dashboard/dashboard-latti-widget.tsx:
+
+Top: Active Preset badge (color by preset; include Coherency PASS/WARN/FAIL chip).
+
+Middle: Target Daily Goals: target daily %, trades/day est, risk_per_trade%.
+
+Bottom: Core Four Guardrails with Lottie/Manual badges.
+
+Color map (consistent with Goals tab):
+Conservative = Blue, Baseline = Green, Optimistic = Orange, Maximum = Red, Custom = Purple.
+
+D) Remove legacy guardrails block (duplicates)
+
+Find and remove any “Guardrails Configuration” legacy component (max drawdown %, max daily loss $, position $ caps, etc.).
+
+Verify no reads/writes remain to deprecated fields (Phase 2 deprecations).
+
+E) Fix Screeners tab (blank white page)
+
+Check component: client/src/components/goals/filters-with-override.tsx (and the page that renders it).
+
+Likely issues & fixes:
+
+Mode parameter missing on fetch → ensure GET /api/filters-v2?mode=${mode}.
+
+Empty/undefined guards:
+
+If response is empty, render “No filters yet” state instead of crashing.
+
+Ensure category mapping has an “Other” fallback (you already added this in 3b; confirm it’s still in place).
+
+React error boundary: Wrap Screeners tab in a boundary to show a friendly error if fetch fails.
+
+Backend: Confirm /api/filters-v2 returns { data: Filter[] } for the selected mode, even if empty.
+
+F) Acceptance tests
+
+Goals Engine page: no “Trading Pace” or manual target input anywhere.
+
+Preset cards present; Apply Preset updates projected growth and Core Four; dashboard mirrors it.
+
+Dashboard LATTi Widget shows Active Preset → Targets → Core Four, with preset color and coherency chip.
+
+Screeners tab loads; toggles are visible; no blank white screen even with empty filters.
+
+Coherency: PASS when risk% ≤ kill_switch/10, WARN when ≤ /5, FAIL otherwise.
+
+G) Create audit note
+
+audit/goals_ui_cleanup.md: list removed files, updated bindings, and final screenshot of Goals Engine without Trading Pace.
