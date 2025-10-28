@@ -43,12 +43,14 @@ UPDATE goals_presets SET target_daily_avg_earning_pct = '3.50' WHERE name = 'max
 **Changes:**
 - Added comprehensive error handling with error state display
 - Added empty state guard when no filters are available
-- Fixed auth token retrieval to check both `accessToken` and `token` in localStorage
+- Fixed auth token retrieval to check both `accessToken` and `token` in localStorage (both GET and PUT operations)
 - Added proper TypeScript error typing
 - Improved user feedback with descriptive error messages
 
 **Before:** Component returned `null` when data was unavailable, causing blank page  
 **After:** Component displays appropriate error or empty state message
+
+**Critical Fix:** Applied token fallback logic to both query fetch AND mutation to prevent 401 errors when toggling manual overrides. This ensures users with only `accessToken` (current default) can successfully update filter controls.
 
 ### 4. Dashboard LATTi Widget Reorganization
 **Files Modified:**
