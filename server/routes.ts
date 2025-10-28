@@ -1525,124 +1525,140 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
       }
 
-      // Convert to FiltersV2 format with control metadata
+      // Convert to FiltersV2 format with control metadata as ARRAY
       // For Phase 3, all filters default to managed_by_lottie=true, manual_override_enabled=false
       const filtersV2 = {
         mode,
-        filters: {
-          minVolume: {
+        filters: [
+          {
+            name: "minVolume",
             value: parseFloat(screenerData.minVolume),
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Min Volume ($)",
             category: "Volume & Liquidity"
           },
-          minLiquidity: {
+          {
+            name: "minLiquidity",
             value: parseFloat(screenerData.minLiquidity),
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Min Liquidity ($)",
             category: "Volume & Liquidity"
           },
-          minPrice: {
+          {
+            name: "minPrice",
             value: parseFloat(screenerData.minPrice),
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Min Price ($)",
             category: "Price Range"
           },
-          maxPrice: {
+          {
+            name: "maxPrice",
             value: parseFloat(screenerData.maxPrice),
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Max Price ($)",
             category: "Price Range"
           },
-          maxBidAskSpread: {
+          {
+            name: "maxBidAskSpread",
             value: parseFloat(screenerData.maxBidAskSpread),
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Max Bid-Ask Spread (%)",
             category: "Risk & Volatility"
           },
-          volatilityMin: {
+          {
+            name: "volatilityMin",
             value: parseFloat(screenerData.volatilityMin),
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Min Volatility (%)",
             category: "Risk & Volatility"
           },
-          volatilityMax: {
+          {
+            name: "volatilityMax",
             value: parseFloat(screenerData.volatilityMax),
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Max Volatility (%)",
             category: "Risk & Volatility"
           },
-          minMarketCap: {
+          {
+            name: "minMarketCap",
             value: parseFloat(screenerData.minMarketCap),
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Min Market Cap ($)",
             category: "Market Filters"
           },
-          excludeStablecoins: {
+          {
+            name: "excludeStablecoins",
             value: screenerData.excludeStablecoins,
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Exclude Stablecoins",
             category: "Market Filters"
           },
-          allowRegulatedOnly: {
+          {
+            name: "allowRegulatedOnly",
             value: screenerData.allowRegulatedOnly,
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Regulated Only",
             category: "Market Filters"
           },
-          rsiMin: {
+          {
+            name: "rsiMin",
             value: screenerData.rsiMin,
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Min RSI",
             category: "Technical Indicators"
           },
-          rsiMax: {
+          {
+            name: "rsiMax",
             value: screenerData.rsiMax,
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Max RSI",
             category: "Technical Indicators"
           },
-          universeSize: {
+          {
+            name: "universeSize",
             value: screenerData.universeSize,
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Market Universe Size",
             category: "Universe & Signal Controls"
           },
-          quoteCurrencies: {
+          {
+            name: "quoteCurrencies",
             value: screenerData.quoteCurrencies,
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Quote Currencies",
             category: "Universe & Signal Controls"
           },
-          activeTimeframes: {
+          {
+            name: "activeTimeframes",
             value: screenerData.activeTimeframes,
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Active Timeframes",
             category: "Universe & Signal Controls"
           },
-          confidenceThreshold: {
+          {
+            name: "confidenceThreshold",
             value: screenerData.confidenceThreshold,
             managedByLottie: true,
             manualOverrideEnabled: false,
             displayName: "Confidence Threshold (%)",
             category: "Universe & Signal Controls"
           }
-        },
+        ],
         lastUpdated: screenerData.updatedAt
       };
 
