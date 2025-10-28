@@ -1,0 +1,80 @@
+⚙️ Phase 27.F.32 — Convert “Risk per Trade ($)” to “Portfolio Risk per Trade (%)”
+🎯 Objective
+
+Replace all instances of Risk per Trade ($) with Portfolio Risk per Trade (%) across the Goals Engine and Dashboard.
+Display it as a percentage of the total portfolio value risked on each trade, not as a dollar value.
+
+1️⃣ Calculation Logic
+
+Formula:
+
+Portfolio Risk per Trade (%) = (riskPerTrade / currentPortfolioBalance) * 100
+
+
+Example:
+Portfolio balance = $10,000
+Dollar risk per trade = $100
+→ Portfolio Risk per Trade = 1.00%
+
+Rounded to two decimals.
+
+No “+” or “–” sign (always positive).
+
+Keep underlying backend data (riskPerTrade) in dollars for consistency — only convert in the frontend display.
+
+2️⃣ UI & Label Updates
+Goals Engine → Goals Tab
+
+Replace label text:
+“Risk per Trade ($)” → “Portfolio Risk per Trade (%)”
+
+Tooltip text:
+“Percentage of your total portfolio value risked on each trade. Calculated dynamically from your current balance and guardrails.”
+
+Use percentage formatting, no dollar symbol.
+
+Dynamically updates as portfolio balance changes.
+
+Dashboard → LATTi Target Daily Goals Widget
+
+Replace label text:
+“Risk per Trade ($)” → “Portfolio Risk per Trade (%)”
+
+Tooltip text (same as above).
+
+Include in the same horizontal metric row with:
+
+Portfolio Risk per Trade (%) | Trades per Day | Target Daily Avg Earnings (%)
+
+
+Consistent alignment, border dividers, and spacing.
+
+3️⃣ Data Synchronization
+
+Continue sourcing riskPerTrade from LATTi’s targets API.
+
+Compute percentage display value locally using the current portfolio balance (usePortfolioBalance()).
+
+Update automatically when:
+
+Portfolio balance changes
+
+Trading pace changes
+
+4️⃣ Layout & Styling
+
+Match all percentage font sizing, colors, and typography to the “Target Daily Avg Earnings (%)” display style.
+
+Neutral text color (not green/blue/red).
+
+Maintain same horizontal metric alignment.
+
+5️⃣ Testing & Acceptance Criteria
+
+✅ Label updated everywhere to “Portfolio Risk per Trade (%)”.
+✅ Formula (riskPerTrade / currentPortfolioBalance) * 100 applied.
+✅ Values update dynamically with balance or pace changes.
+✅ Tooltip text correct and consistent.
+✅ Color, formatting, and layout consistent across both components.
+✅ No flicker or layout shift during idle state.
+✅ Backend remains unchanged — computation performed on client side.
