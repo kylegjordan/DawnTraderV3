@@ -39,6 +39,43 @@ The system calculates and displays a rolling **Average Daily Earnings % (ADE%)**
 
 The Dashboard LATTI widget now mirrors Goals Engine Target Daily Goals, displaying LATTI-calculated values only: Risk per Trade ($), Trades per Day, Target Daily Average Earnings %, Current Portfolio Value ($), and a Projected Portfolio Growth table. Projections use compound daily growth. "Risk per Trade ($)" is converted to "Portfolio Risk per Trade (%)" across the Goals Engine and Dashboard LATTI widget, displayed as a percentage of total portfolio value.
 
+## Phase 1 Audit: LATTi Goals + Guardrails Modernization
+
+**Status**: Complete (October 28, 2025)  
+**Objective**: Comprehensive inventory and mapping of all guardrails, filters, strategy settings, and trading parameters across database → API → client to establish coherency baseline before Phase 2+ simplification.
+
+### Audit Deliverables
+All deliverables located in `/audit` directory:
+
+1. **db_map.json**: Comprehensive database schema mapping for 19 tables (guardrails, screener_filters, strategy_settings, tuning_policy, system_context, trading_settings, watchlist_pairs, etc.) with columns, types, constraints, mode scoping, and architectural notes.
+
+2. **endpoints_map.json**: Documentation of 20+ API endpoints handling guardrails/filters/settings with mode derivation, auth requirements, source-of-truth tables, cache invalidation, sync operations, and WebSocket broadcasts.
+
+3. **guardrails_inventory.csv**: Complete inventory of 17 guardrail parameters with scope, defaults, API endpoints, database columns, usage by services, and Phase 2 action recommendations.
+
+4. **filters_inventory.csv**: Complete inventory of 16 filter parameters with categories, types, scope, defaults, and usage by MarketScanner/StrategyEngine.
+
+5. **conflicts_matrix.csv**: Analysis of 14 parameter duplication/contradiction scenarios with impact assessment and recommended resolutions.
+
+6. **Phase1_recommendations.md**: Strategic recommendations including:
+   - **Core Four Guardrails**: Portfolio Risk per Trade (%), Symbol Cooldown (minutes), Max Open Positions (count), Daily Loss Kill Switch (%)
+   - **Deprecation Candidates**: 7 immediate deprecations (maxDailyLoss, maxDrawdown, maxPositionSize, maxRiskPerTradeLimit, maxRequiredCapital, aiCanAdjust, tuningPolicy.cooldownMinutes) + 1 table-level deprecation (strategy_parameters)
+   - **Coherency Rules**: 5 draft coherency rules for backend validation
+   - **Source-of-Truth Assignments**: Definitive SoT for all guardrails, filters, strategy settings, LATTI tuning, and trading state
+   - **Phase 2 Migration Plan**: SQL schema changes to consolidate Core Four and eliminate duplicates
+   - **Phase 3-4 "Lottie Controls" UI Pattern**: Toggle-based manual override for Core Four guardrails
+
+### Critical Findings
+1. **Architectural Violations**: Risk parameters (`dailyLossKillSwitch`, `maxPositionPercent`) stored in `trading_settings` table (per-user) instead of `guardrails` table (mode-global), violating mode-based architecture.
+2. **Parameter Duplication**: `cooldownMinutes` exists in both `guardrails` and `tuningPolicy` tables, creating sync conflicts (currently synced on PUT but fragile).
+3. **Mixed Units**: Risk parameters use both absolute dollars and percentages inconsistently (e.g., `maxDailyLoss` in USD vs `dailyLossKillSwitch` in %).
+4. **Legacy Tables**: `strategy_parameters` table has NO mode scoping, conflicts with mode-based architecture.
+
+### Next Phases (Planned)
+- **Phase 2**: Schema consolidation to Core Four guardrails, migrate risk params to guardrails table, deprecate redundant fields
+- **Phase 3**: Implement "Lottie Controls with Manual Override" UI pattern for Core Four
+- **Phase 4**: Deprecate redundant fields, create analytics transition views
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
