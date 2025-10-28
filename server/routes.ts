@@ -1419,6 +1419,73 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 6: Goals Learning Engine API Endpoints
+  // GET /api/goals-learning/summary?mode=paper|live - Get 30-day learning metrics
+  apiRouter.get('/goals-learning/summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const summary = await storage.getLearningSummary({ mode });
+      
+      if (!summary) {
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No learning metrics found for mode: ${mode}` });
+      }
+
+      res.json({ ok: true, data: summary });
+    } catch (error: any) {
+      console.error('[GoalsLearning] GET summary error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // POST /api/goals-learning/trigger?mode=paper|live - Manually trigger learning engine
+  apiRouter.post('/goals-learning/trigger', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const { goalsLearningEngine } = await import('./services/goals-learning-engine');
+      
+      // Check if already running
+      if (goalsLearningEngine.isRunning(mode)) {
+        return res.status(409).json({ 
+          ok: false, 
+          code: 'ALREADY_RUNNING', 
+          detail: `Learning engine is already running for ${mode}` 
+        });
+      }
+
+      console.log(`[GoalsLearning] Manual trigger for ${mode} by user ${userId}`);
+
+      // Run the learning engine
+      const results = await goalsLearningEngine.run(mode);
+
+      console.log(`[GoalsLearning] Learning cycle complete for ${mode} - ${results.length} presets evaluated`);
+
+      res.json({ 
+        ok: true, 
+        data: {
+          mode,
+          results,
+          adjustedCount: results.filter(r => r.adjusted).length,
+          totalPresets: results.length,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error: any) {
+      console.error('[GoalsLearning] POST trigger error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // GET /api/analytics/guardrails-compliance?mode=paper|live - Get coherency status
   apiRouter.get('/analytics/guardrails-compliance', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
