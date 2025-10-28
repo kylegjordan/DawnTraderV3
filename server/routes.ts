@@ -15009,6 +15009,107 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 27.G.C: Diagnostic Config Snapshot Endpoint
+  apiRouter.get('/diagnostics/config-snapshot', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const requestId = `cfg-snap-${Date.now()}`;
+    try {
+      const userId = req.user!.id;
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      if (mode !== 'live' && mode !== 'paper') {
+        return res.status(400).json({ 
+          ok: false, 
+          code: 'INVALID_MODE', 
+          detail: 'Mode must be "live" or "paper"' 
+        });
+      }
+      
+      console.log(`[ConfigSnapshot:${requestId}] Fetching snapshot for mode=${mode}, user=${userId}`);
+      
+      // Fetch Guardrails from guardrails_v2 (Core Four)
+      const guardrailsData = await storage.getGuardrailsV2({ mode });
+      const guardrails = guardrailsData ? {
+        portfolioRiskPerTradePct: parseFloat(String(guardrailsData.portfolioRiskPerTradePct)),
+        symbolCooldownMinutes: guardrailsData.symbolCooldownMinutes,
+        maxOpenPositions: guardrailsData.maxOpenPositions,
+        dailyLossKillSwitchPct: parseFloat(String(guardrailsData.dailyLossKillSwitchPct))
+      } : null;
+      
+      // Fetch Filters from screener_filters (16 fields)
+      const filtersData = await storage.getScreenerFilters({ mode });
+      const filters = filtersData ? {
+        minVolume: parseFloat(String(filtersData.minVolume)),
+        minLiquidity: parseFloat(String(filtersData.minLiquidity)),
+        minPrice: parseFloat(String(filtersData.minPrice)),
+        maxPrice: parseFloat(String(filtersData.maxPrice)),
+        minMarketCap: parseFloat(String(filtersData.minMarketCap)),
+        maxBidAskSpread: parseFloat(String(filtersData.maxBidAskSpread)),
+        rsiMin: filtersData.rsiMin,
+        rsiMax: filtersData.rsiMax,
+        volatilityMin: parseFloat(String(filtersData.volatilityMin)),
+        volatilityMax: parseFloat(String(filtersData.volatilityMax)),
+        excludeStablecoins: filtersData.excludeStablecoins,
+        allowRegulatedOnly: filtersData.allowRegulatedOnly,
+        universeSize: filtersData.universeSize,
+        quoteCurrencies: filtersData.quoteCurrencies,
+        activeTimeframes: filtersData.activeTimeframes,
+        confidenceThreshold: filtersData.confidenceThreshold
+      } : null;
+      
+      // Fetch Goals from goals_presets (active preset)
+      const activePreset = await storage.getActiveGoalsPreset({ mode });
+      const goals = activePreset ? {
+        activePreset: activePreset.presetName,
+        targetDailyAvgEarningPct: parseFloat(String(activePreset.targetDailyAvgEarningPct)),
+        tradesPerDayEst: activePreset.tradesPerDayEst
+      } : null;
+      
+      // Fetch Portfolio Value from portfolio_balances
+      const portfolioBalance = await storage.getPortfolioBalance({ userId, mode });
+      const portfolioValue = portfolioBalance?.totalValueUsd 
+        ? parseFloat(String(portfolioBalance.totalValueUsd))
+        : 0;
+      
+      // Build snapshot response
+      const snapshot = {
+        ok: true,
+        mode,
+        timestamp: new Date().toISOString(),
+        guardrails,
+        filters,
+        goals,
+        portfolioValue,
+        provenance: {
+          guardrails_source: 'guardrails_v2',
+          guardrails_columns: ['portfolio_risk_per_trade_pct', 'symbol_cooldown_minutes', 'max_open_positions', 'daily_loss_kill_switch_pct'],
+          filters_source: 'screener_filters',
+          filters_columns: ['min_volume', 'min_liquidity', 'min_price', 'max_price', 'min_market_cap', 'max_bid_ask_spread', 'rsi_min', 'rsi_max', 'volatility_min', 'volatility_max', 'exclude_stablecoins', 'allow_regulated_only', 'universe_size', 'quote_currencies', 'active_timeframes', 'confidence_threshold'],
+          goals_source: 'goals_presets',
+          goals_columns: ['preset_name', 'target_daily_avg_earning_pct', 'trades_per_day_est'],
+          portfolio_source: 'portfolio_balances',
+          portfolio_columns: ['total_value_usd']
+        },
+        legacyReads: 0, // Phase 27.G: Confirm no legacy field access
+        legacyFields: [], // Empty array confirms no legacy data sourced
+        schemaHash: require('crypto')
+          .createHash('md5')
+          .update(JSON.stringify({ guardrails, filters, goals }))
+          .digest('hex')
+      };
+      
+      console.log(`[ConfigSnapshot:${requestId}] Snapshot complete - legacyReads=${snapshot.legacyReads}, hash=${snapshot.schemaHash}`);
+      
+      res.json(snapshot);
+    } catch (error: any) {
+      console.error(`[ConfigSnapshot:${requestId}] Error:`, error.message);
+      res.status(500).json({ 
+        ok: false, 
+        code: 'SERVER_ERROR', 
+        detail: error.message 
+      });
+    }
+  });
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

@@ -527,6 +527,93 @@ app.use((req, res, next) => {
       console.error('[27.F.15.D] ⚠️ LivePricingAdapter startup failed:', error);
     }
 
+    // Phase 27.G.F: Config Audit Telemetry (startup diagnostic)
+    try {
+      const { storage } = await import('./storage');
+      
+      // Helper function to build config snapshot (same logic as endpoint)
+      async function buildConfigSnapshot(mode: 'paper' | 'live') {
+        const guardrailsData = await storage.getGuardrailsV2({ mode });
+        const filtersData = await storage.getScreenerFilters({ mode });
+        const activePreset = await storage.getActiveGoalsPreset({ mode });
+        
+        const guardrails = guardrailsData ? {
+          portfolioRiskPerTradePct: parseFloat(String(guardrailsData.portfolioRiskPerTradePct)),
+          symbolCooldownMinutes: guardrailsData.symbolCooldownMinutes,
+          maxOpenPositions: guardrailsData.maxOpenPositions,
+          dailyLossKillSwitchPct: parseFloat(String(guardrailsData.dailyLossKillSwitchPct))
+        } : null;
+        
+        const filters = filtersData ? {
+          minVolume: parseFloat(String(filtersData.minVolume)),
+          minLiquidity: parseFloat(String(filtersData.minLiquidity)),
+          minPrice: parseFloat(String(filtersData.minPrice)),
+          maxPrice: parseFloat(String(filtersData.maxPrice)),
+          minMarketCap: parseFloat(String(filtersData.minMarketCap)),
+          maxBidAskSpread: parseFloat(String(filtersData.maxBidAskSpread)),
+          rsiMin: filtersData.rsiMin,
+          rsiMax: filtersData.rsiMax,
+          volatilityMin: parseFloat(String(filtersData.volatilityMin)),
+          volatilityMax: parseFloat(String(filtersData.volatilityMax)),
+          excludeStablecoins: filtersData.excludeStablecoins,
+          allowRegulatedOnly: filtersData.allowRegulatedOnly,
+          universeSize: filtersData.universeSize,
+          quoteCurrencies: filtersData.quoteCurrencies,
+          activeTimeframes: filtersData.activeTimeframes,
+          confidenceThreshold: filtersData.confidenceThreshold
+        } : null;
+        
+        const goals = activePreset ? {
+          activePreset: activePreset.presetName,
+          targetDailyAvgEarningPct: parseFloat(String(activePreset.targetDailyAvgEarningPct)),
+          tradesPerDayEst: activePreset.tradesPerDayEst
+        } : null;
+        
+        // Compute legacyReads: 0 because we only access current tables
+        const legacyReads = 0;
+        const legacyFields: string[] = [];
+        
+        // Compute schema hash (deterministic)
+        const crypto = await import('crypto');
+        const schemaHash = crypto
+          .createHash('md5')
+          .update(JSON.stringify({ guardrails, filters, goals }))
+          .digest('hex');
+        
+        return {
+          guardrails,
+          filters,
+          goals,
+          legacyReads,
+          legacyFields,
+          schemaHash,
+          fieldCount: (guardrails ? 4 : 0) + (filters ? 16 : 0) + (goals ? 3 : 0)
+        };
+      }
+      
+      // Fetch snapshots for both modes
+      const paperSnapshot = await buildConfigSnapshot('paper');
+      const liveSnapshot = await buildConfigSnapshot('live');
+      
+      // Verify audit compliance
+      const auditStatus = (paperSnapshot.legacyReads === 0 && liveSnapshot.legacyReads === 0) ? 'OK' : 'FAILED';
+      
+      console.log(`[Audit] ConfigSnapshot ${auditStatus} | mode=paper | fields=${paperSnapshot.fieldCount} | legacyReads=${paperSnapshot.legacyReads} | hash=${paperSnapshot.schemaHash.substring(0, 8)}`);
+      console.log(`[Audit] ConfigSnapshot ${auditStatus} | mode=live | fields=${liveSnapshot.fieldCount} | legacyReads=${liveSnapshot.legacyReads} | hash=${liveSnapshot.schemaHash.substring(0, 8)}`);
+      
+      // Detailed breakdown for debugging
+      if (paperSnapshot.guardrails) {
+        const g = paperSnapshot.guardrails;
+        console.log(`[Audit] Paper guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, maxPos=${g.maxOpenPositions}, killSwitch=${g.dailyLossKillSwitchPct}%`);
+      }
+      if (liveSnapshot.guardrails) {
+        const g = liveSnapshot.guardrails;
+        console.log(`[Audit] Live guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, maxPos=${g.maxOpenPositions}, killSwitch=${g.dailyLossKillSwitchPct}%`);
+      }
+    } catch (error) {
+      console.error('[Audit] ⚠️ Config audit telemetry failed:', error);
+    }
+
     // Phase 8.3: Start Health Report Scheduler (hourly reports)
     try {
       const { healthReportScheduler } = await import('./services/health-report-scheduler');

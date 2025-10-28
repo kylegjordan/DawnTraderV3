@@ -44,16 +44,23 @@ export type Goals = z.infer<typeof GoalsSchema>;
 export const ConfigSnapshotSchema = z.object({
   mode: TradingMode,
   timestamp: z.string(),
-  guardrails: GuardrailsSchema,
-  filters: FiltersSchema,
-  goals: GoalsSchema,
+  guardrails: GuardrailsSchema.nullable(),
+  filters: FiltersSchema.nullable(),
+  goals: GoalsSchema.nullable(),
   portfolioValue: z.number(),
   provenance: z.object({
     guardrails_source: z.literal('guardrails_v2'),
+    guardrails_columns: z.array(z.string()),
     filters_source: z.literal('screener_filters'),
+    filters_columns: z.array(z.string()),
     goals_source: z.literal('goals_presets'),
-    portfolio_source: z.literal('portfolio_balances')
-  })
+    goals_columns: z.array(z.string()),
+    portfolio_source: z.literal('portfolio_balances'),
+    portfolio_columns: z.array(z.string())
+  }),
+  legacyReads: z.number(),
+  legacyFields: z.array(z.string()),
+  schemaHash: z.string()
 });
 
 export type ConfigSnapshot = z.infer<typeof ConfigSnapshotSchema>;

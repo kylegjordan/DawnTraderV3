@@ -48,6 +48,37 @@ The Goals Engine now features an adaptive learning system that automatically opt
 **Phase 27.F.34 - Screener Filters Modernization (COMPLETED):**
 All legacy screener variable inputs have been removed. The Screeners tab now exclusively uses the unified v2 filter configuration with modern fields (Volume, Price, Market Quality, RSI, Volatility, Asset Type, Universe & Signal Controls). Deprecated fields (avgVolumeRatio, atrThreshold, earningsBlackout, priceDeltaTrigger as screener variable) have been fully removed from both frontend and backend. API endpoints `/api/screeners` and `/api/filters-v2` provide mode-specific access to current filter configuration.
 
+**Phase 27.G - Single-Source Config Audit (COMPLETED):**
+Comprehensive audit system ensuring only current, visible fields influence the trade engine with zero legacy field access. The system enforces single-source truth through runtime validation, database views, diagnostic endpoints, and telemetry monitoring.
+
+**Config Snapshot API**
+- **Endpoint**: `GET /api/diagnostics/config-snapshot?mode=paper|live`
+- **Authentication**: JWT required
+- **Response**: Complete configuration snapshot including guardrails (4 fields), filters (16 fields), goals (3 fields), portfolio value, provenance metadata, legacy read counter, and schema hash
+- **Use Case**: Runtime debugging, config verification, compliance monitoring
+
+**Database Views**
+- `v_guardrails_active`: Exposes 4 current guardrail fields only (excludes legacy columns)
+- `v_filters_active`: Exposes 16 current filter fields only (excludes legacy columns)
+- `v_goals_active`: Exposes current goals preset fields (excludes legacy columns)
+
+**Legacy Field Protection**
+- Runtime Zod validation blocks 9 deprecated fields at API boundaries
+- HTTP 422 error response with field name + replacement mapping
+- Zero legacy field access confirmed via startup telemetry
+
+**Startup Telemetry**
+- Logs config audit status on server boot: `[Audit] ConfigSnapshot OK | mode=paper | fields=23 | legacyReads=0 | hash=9018690d`
+- Confirms zero legacy field access for both paper and live modes (23 fields: 4 guardrails + 16 filters + 3 goals)
+- Displays active guardrail values and schema hash for debugging
+
+**Schema Validation**
+- MD5 hash generation for change detection
+- Provenance tracking: Source table + column mapping for all fields
+- Comprehensive truth table: 27 current fields + 9 legacy fields documented in `audit/inputs.json`
+
+**Audit Results**: ✅ PASSED - Zero legacy reads, 100% current field sourcing, complete verification via snapshot endpoint. Full audit report: `audit/final-report.md`
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

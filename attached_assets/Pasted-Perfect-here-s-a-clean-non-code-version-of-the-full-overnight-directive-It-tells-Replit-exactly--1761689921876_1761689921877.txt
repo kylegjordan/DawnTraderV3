@@ -1,0 +1,130 @@
+Perfect — here’s a clean, non-code version of the full overnight directive.
+It tells Replit exactly what to do, step-by-step, without embedding code — fully ready to paste straight into the Replit chat.
+
+🧭 Directive: Phase 27.G.C–F — “Single-Source Config” Hardening
+
+Instruction to Agent:
+Execute this directive continuously from start to finish without pausing for checkpoints or asking for confirmation.
+Use the credentials below for all test logins and validations.
+All four parts (C → F) must complete in one uninterrupted session.
+
+Test User Credentials
+username = testuser123
+password = SecurePass123!
+mode     = paper
+
+
+Use this user for all API calls, Playwright tests, and snapshot verification.
+
+Objective
+
+Complete the system-wide audit ensuring that only current, visible fields feed into trading logic.
+This includes Guardrails, Filters, and Goals tabs.
+By the end of this directive:
+
+No legacy variables or tables will influence trading.
+
+The system will have a read-only snapshot endpoint showing exactly what the engine uses.
+
+All data will come from a single, verified set of database views.
+
+Full test coverage, telemetry, and a final report will confirm this state.
+
+Phase 27.G.C — Config Snapshot Endpoint
+
+Create a secure, read-only API endpoint returning a JSON snapshot of all current configuration data (Guardrails, Filters, Goals).
+
+The snapshot must show values for both paper and live modes and list their data sources (e.g., table, column).
+
+The endpoint must include empty arrays confirming that no legacy fields were accessed.
+
+Add a developer-only option on the Dashboard to view or copy this snapshot.
+
+Confirm that snapshot values exactly match the visible UI inputs across all tabs.
+
+Phase 27.G.D — Database Views and Migrations
+
+Create dedicated SQL views exposing only the current fields used by the engine:
+
+v_guardrails_active
+
+v_filters_active
+
+v_goals_active
+
+Refactor all queries in the application to pull data only from these views.
+
+Ensure all legacy columns are either archived, renamed, or ignored.
+
+Run migrations and confirm that no engine query directly references legacy tables or fields.
+
+Validate that both Paper and Live modes read from the same view definitions.
+
+Phase 27.G.E — Test Coverage
+
+Implement Playwright end-to-end tests to confirm:
+
+Snapshot values match UI values for each preset.
+
+Changing Guardrails or Filters updates the snapshot immediately.
+
+No legacy*Read values appear in any snapshot responses.
+
+Implement Jest API tests verifying:
+
+Snapshot endpoint passes schema validation.
+
+Legacy field submissions trigger a 422 error.
+
+Provenance correctly lists the table and column of each field.
+
+Achieve at least 90 % coverage for the snapshot and validation logic.
+
+All tests must pass before this phase completes.
+
+Phase 27.G.F — Telemetry and Final Audit Report
+
+Add telemetry logging so that, at every startup or trade-engine cycle, the console prints a single audit line showing:
+
+[Audit] ConfigSnapshot OK | mode=paper | legacyReads=0
+
+
+Generate an automated final report saved to
+audit/final-report.md, containing:
+
+Timestamps for paper and live snapshots.
+
+Count of current fields in Guardrails, Filters, and Goals.
+
+Confirmation that legacy reads = 0.
+
+Schema hash for each mode.
+
+Update replit.md with:
+
+Snapshot endpoint details.
+
+Schema validation summary.
+
+Test coverage and last audit timestamp.
+
+Completion Criteria
+
+The implementation is complete when:
+
+/api/audit/config-snapshot returns valid data with legacyReads = 0.
+
+All engine queries reference only v_*_active views.
+
+Playwright and Jest test suites pass with full coverage.
+
+The startup telemetry log confirms “ConfigSnapshot OK”.
+
+The file audit/final-report.md exists and includes schema hashes for both modes.
+
+No console or CI errors remain.
+
+Instruction to Agent (final):
+Run all four parts of this directive — C, D, E, and F — continuously.
+Do not pause for architect review or checkpoints.
+Confirm completion only when all success criteria above are met, the report is written, and test logs are green.
