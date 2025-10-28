@@ -3,6 +3,7 @@ import {
   tradingSettings,
   guardrails,
   guardrailsV2,
+  goalsPresets,
   screenerFilters,
   screenerResults,
   filterCalibrationLog,
@@ -52,6 +53,8 @@ import {
   type InsertGuardrails,
   type GuardrailsV2,
   type InsertGuardrailsV2,
+  type GoalsPresets,
+  type InsertGoalsPresets,
   type ScreenerFilters,
   type InsertScreenerFilters,
   type ScreenerResult,
@@ -222,6 +225,12 @@ export interface IStorage {
   // Phase 2: Guardrails V2 methods (Core Four - Single Source of Truth)
   getGuardrailsV2(params: { mode: 'live' | 'paper' }): Promise<GuardrailsV2 | null>;
   upsertGuardrailsV2(data: InsertGuardrailsV2): Promise<GuardrailsV2>;
+
+  // Phase 4: Goals Presets methods
+  getGoalsPresets(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets[]>;
+  getActiveGoalsPreset(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets | null>;
+  selectGoalsPreset(params: { mode: 'live' | 'paper'; presetName: string }): Promise<{ preset: GoalsPresets; guardrails: GuardrailsV2 }>;
+  getGuardrailsCompliance(params: { mode: 'live' | 'paper' }): Promise<any>;
 
   // Screener filters methods (global settings per mode)
   getScreenerFilters(params: { mode: 'live' | 'paper' }): Promise<ScreenerFilters | null>;
@@ -738,6 +747,80 @@ export class DatabaseStorage implements IStorage {
       const [result] = await db.insert(guardrailsV2).values(updateData).returning();
       return result;
     }
+  }
+
+  // Phase 4: Goals Presets methods
+  async getGoalsPresets(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets[]> {
+    const results = await db
+      .select()
+      .from(goalsPresets)
+      .where(eq(goalsPresets.mode, params.mode))
+      .orderBy(
+        sql`CASE name 
+          WHEN 'conservative' THEN 1 
+          WHEN 'baseline' THEN 2 
+          WHEN 'optimistic' THEN 3 
+          WHEN 'maximum' THEN 4 
+          WHEN 'custom' THEN 5 
+          END`
+      );
+    return results;
+  }
+
+  async getActiveGoalsPreset(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets | null> {
+    const [result] = await db
+      .select()
+      .from(goalsPresets)
+      .where(and(
+        eq(goalsPresets.mode, params.mode),
+        eq(goalsPresets.isActive, true)
+      ));
+    return result || null;
+  }
+
+  async selectGoalsPreset(params: { mode: 'live' | 'paper'; presetName: string }): Promise<{ preset: GoalsPresets; guardrails: GuardrailsV2 }> {
+    // Step 1: Deactivate all presets for this mode
+    await db
+      .update(goalsPresets)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(goalsPresets.mode, params.mode));
+
+    // Step 2: Activate the selected preset
+    const [preset] = await db
+      .update(goalsPresets)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(and(
+        eq(goalsPresets.mode, params.mode),
+        eq(goalsPresets.name, params.presetName as any)
+      ))
+      .returning();
+
+    if (!preset) {
+      throw new Error(`Preset ${params.presetName} not found for mode ${params.mode}`);
+    }
+
+    // Step 3: Apply preset values to guardrails_v2
+    const guardrailsUpdate: InsertGuardrailsV2 = {
+      mode: params.mode,
+      portfolioRiskPerTradePct: preset.portfolioRiskPerTradePct,
+      dailyLossKillSwitchPct: preset.dailyLossKillSwitchPct,
+      symbolCooldownMinutes: preset.symbolCooldownMinutes,
+      maxOpenPositions: preset.maxOpenPositions,
+      tunedByLatti: params.presetName !== 'custom',
+      isManualOverride: params.presetName === 'custom'
+    };
+
+    const guardrails = await this.upsertGuardrailsV2(guardrailsUpdate);
+
+    return { preset, guardrails };
+  }
+
+  async getGuardrailsCompliance(params: { mode: 'live' | 'paper' }): Promise<any> {
+    const queryResult = await db.execute(
+      sql`SELECT * FROM v_guardrails_compliance WHERE mode = ${params.mode}`
+    );
+    const result = queryResult.rows?.[0];
+    return result || null;
   }
 
   // Screener filters methods (global settings per mode - Phase 27.F.15.A)

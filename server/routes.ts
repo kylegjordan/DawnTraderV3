@@ -1181,6 +1181,137 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 4: Goals Presets API Endpoints
+  // GET /api/goals-presets?mode=paper|live - Fetch all presets for the mode
+  apiRouter.get('/goals-presets', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const presets = await storage.getGoalsPresets({ mode });
+      res.json({ ok: true, data: presets });
+    } catch (error: any) {
+      console.error('[GoalsPresets] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // GET /api/goals-presets/active?mode=paper|live - Fetch the active preset
+  apiRouter.get('/goals-presets/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const activePreset = await storage.getActiveGoalsPreset({ mode });
+      
+      if (!activePreset) {
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No active preset found for mode: ${mode}` });
+      }
+
+      res.json({ ok: true, data: activePreset });
+    } catch (error: any) {
+      console.error('[GoalsPresets] GET active error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // PUT /api/goals-presets/select - Apply a preset
+  apiRouter.put('/goals-presets/select', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    const requestId = `gp-select-${Date.now()}`;
+    try {
+      const userId = req.user!.id;
+      const { mode, presetName } = req.body;
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        console.error(`[GoalsPresets:${requestId}] Invalid mode parameter`);
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      if (!presetName) {
+        console.error(`[GoalsPresets:${requestId}] Missing presetName parameter`);
+        return res.status(400).json({ ok: false, code: 'MISSING_PRESET_NAME', detail: 'Preset name is required' });
+      }
+
+      const validPresetNames = ['conservative', 'baseline', 'optimistic', 'maximum', 'custom'];
+      if (!validPresetNames.includes(presetName)) {
+        console.error(`[GoalsPresets:${requestId}] Invalid preset name: ${presetName}`);
+        return res.status(400).json({ 
+          ok: false, 
+          code: 'INVALID_PRESET_NAME', 
+          detail: `Preset name must be one of: ${validPresetNames.join(', ')}` 
+        });
+      }
+
+      console.log(`[GoalsPresets:${requestId}] Selecting preset ${presetName} for mode ${mode}`);
+
+      // Apply the preset (sets is_active flag and updates guardrails_v2)
+      const result = await storage.selectGoalsPreset({ mode, presetName });
+
+      // Broadcast preset change event
+      contextBridge.broadcast({
+        type: 'goals_preset_changed',
+        mode,
+        payload: {
+          presetName,
+          preset: result.preset,
+          guardrails: result.guardrails,
+          changedBy: userId,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      // Also broadcast guardrails update
+      contextBridge.broadcast({
+        type: 'guardrails_v2_updated',
+        mode,
+        payload: result.guardrails
+      });
+
+      // Invalidate caches
+      const { configChangeHandler } = await import('./services/config-change-handler');
+      await configChangeHandler.handleConfigChange({
+        userId,
+        mode,
+        configType: 'goals_preset',
+        source: 'api'
+      });
+
+      console.log(`[GoalsPresets:${requestId}] Preset applied successfully + broadcasts sent`);
+      res.json({ ok: true, data: result });
+    } catch (error: any) {
+      console.error(`[GoalsPresets:${requestId}] Unexpected error:`, error.message, error.stack);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message || 'Internal server error' });
+    }
+  });
+
+  // GET /api/analytics/guardrails-compliance?mode=paper|live - Get coherency status
+  apiRouter.get('/analytics/guardrails-compliance', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const compliance = await storage.getGuardrailsCompliance({ mode });
+      
+      if (!compliance) {
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No compliance data found for mode: ${mode}` });
+      }
+
+      res.json({ ok: true, data: compliance });
+    } catch (error: any) {
+      console.error('[GuardrailsCompliance] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // Phase 3: Filters V2 API Endpoints (with Manual Override metadata)
   // GET /api/filters-v2?mode=paper|live
   apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {
