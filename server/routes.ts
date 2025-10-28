@@ -1097,6 +1097,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const tunedByLatti = rawPayload.tunedByLatti !== undefined 
         ? Boolean(rawPayload.tunedByLatti) 
         : undefined;
+      const lockedByUser = rawPayload.lockedByUser !== undefined 
+        ? rawPayload.lockedByUser 
+        : undefined;
 
       // Validation: Coherency Rule 001 - Risk <= KillSwitch/10
       if (portfolioRiskPerTradePct !== undefined && dailyLossKillSwitchPct !== undefined) {
@@ -1131,11 +1134,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (dailyLossKillSwitchPct !== undefined) updatePayload.dailyLossKillSwitchPct = String(dailyLossKillSwitchPct);
       if (isManualOverride !== undefined) updatePayload.isManualOverride = isManualOverride;
       if (tunedByLatti !== undefined) updatePayload.tunedByLatti = tunedByLatti;
+      if (lockedByUser !== undefined) updatePayload.lockedByUser = lockedByUser;
 
       console.log(`[GuardrailsV2:${requestId}] Upserting guardrails for mode: ${mode}`, updatePayload);
 
       // Upsert guardrails_v2
       const guardrailsData = await storage.upsertGuardrailsV2(updatePayload);
+
+      // Phase 3: Emit telemetry event if manual override state changed
+      if (isManualOverride !== undefined || lockedByUser !== undefined) {
+        contextBridge.broadcast({
+          type: 'guardrail.override.changed',
+          mode,
+          payload: {
+            isManualOverride: guardrailsData.isManualOverride,
+            tunedByLatti: guardrailsData.tunedByLatti,
+            lockedByUser: guardrailsData.lockedByUser,
+            changedBy: userId,
+            timestamp: new Date().toISOString()
+          }
+        });
+        console.log(`[GuardrailsV2:${requestId}] Override state changed - broadcasted telemetry event`);
+      }
 
       // Broadcast config change
       contextBridge.broadcast({
