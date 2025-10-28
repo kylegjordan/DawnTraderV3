@@ -5,6 +5,8 @@ import ScreenerFiltersTab from "@/components/goals/screener-filters-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
 import WalterPurposeTab from "@/components/goals/walter-purpose-tab";
 import TuningTab from "@/components/goals/tuning-tab";
+import { CoreFourGuardrails } from "@/components/goals/core-four-guardrails";
+import { FiltersWithOverride } from "@/components/goals/filters-with-override";
 import ModeBanner from "@/components/mode-banner";
 import { Target, Shield, Filter, Layers, Lightbulb, Settings } from "lucide-react";
 
@@ -78,11 +80,17 @@ export default function GoalsEnginePage() {
         </TabsContent>
 
         <TabsContent value="guardrails" className="mt-6">
-          <GuardrailsTab />
+          <div className="space-y-6">
+            <CoreFourGuardrails />
+            <GuardrailsTab />
+          </div>
         </TabsContent>
 
         <TabsContent value="screener" className="mt-6">
-          <ScreenerFiltersTab />
+          <div className="space-y-6">
+            <FiltersWithOverride />
+            <ScreenerFiltersTab />
+          </div>
         </TabsContent>
 
         <TabsContent value="strategies" className="mt-6">
