@@ -4,6 +4,7 @@ import {
   guardrails,
   guardrailsV2,
   goalsPresets,
+  goalsLearningMetrics,
   screenerFilters,
   screenerResults,
   filterCalibrationLog,
@@ -55,6 +56,8 @@ import {
   type InsertGuardrailsV2,
   type GoalsPresets,
   type InsertGoalsPresets,
+  type GoalsLearningMetrics,
+  type InsertGoalsLearningMetrics,
   type ScreenerFilters,
   type InsertScreenerFilters,
   type ScreenerResult,
@@ -231,6 +234,11 @@ export interface IStorage {
   getActiveGoalsPreset(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets | null>;
   selectGoalsPreset(params: { mode: 'live' | 'paper'; presetName: string }): Promise<{ preset: GoalsPresets; guardrails: GuardrailsV2 }>;
   getGuardrailsCompliance(params: { mode: 'live' | 'paper' }): Promise<any>;
+
+  // Phase 6: Goals Learning Metrics methods
+  getLearningSummary(params: { mode: 'live' | 'paper' }): Promise<any>;
+  upsertLearningMetric(data: InsertGoalsLearningMetrics): Promise<GoalsLearningMetrics>;
+  updatePresetLearningStatus(params: { mode: 'live' | 'paper'; presetName: string; lastAdjustedAt: Date; learningActive: boolean }): Promise<GoalsPresets>;
 
   // Screener filters methods (global settings per mode)
   getScreenerFilters(params: { mode: 'live' | 'paper' }): Promise<ScreenerFilters | null>;
@@ -821,6 +829,64 @@ export class DatabaseStorage implements IStorage {
     );
     const result = queryResult.rows?.[0];
     return result || null;
+  }
+
+  // Phase 6: Goals Learning Metrics methods
+  async getLearningSummary(params: { mode: 'live' | 'paper' }): Promise<any> {
+    const queryResult = await db.execute(
+      sql`SELECT * FROM v_goals_learning_summary WHERE mode = ${params.mode}`
+    );
+    const result = queryResult.rows?.[0];
+    return result || null;
+  }
+
+  async upsertLearningMetric(data: InsertGoalsLearningMetrics): Promise<GoalsLearningMetrics> {
+    // Check if metric exists for this mode and date
+    const [existing] = await db
+      .select()
+      .from(goalsLearningMetrics)
+      .where(and(
+        eq(goalsLearningMetrics.mode, data.mode),
+        eq(goalsLearningMetrics.date, data.date || sql`CURRENT_DATE`)
+      ));
+
+    const updateData = {
+      ...data,
+      updatedAt: new Date()
+    };
+
+    if (existing) {
+      const [result] = await db
+        .update(goalsLearningMetrics)
+        .set(updateData)
+        .where(eq(goalsLearningMetrics.id, existing.id))
+        .returning();
+      return result;
+    } else {
+      const [result] = await db.insert(goalsLearningMetrics).values(updateData).returning();
+      return result;
+    }
+  }
+
+  async updatePresetLearningStatus(params: { mode: 'live' | 'paper'; presetName: string; lastAdjustedAt: Date; learningActive: boolean }): Promise<GoalsPresets> {
+    const [result] = await db
+      .update(goalsPresets)
+      .set({
+        lastAdjustedAt: params.lastAdjustedAt,
+        learningActive: params.learningActive,
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(goalsPresets.mode, params.mode),
+        eq(goalsPresets.name, params.presetName as any)
+      ))
+      .returning();
+
+    if (!result) {
+      throw new Error(`Preset ${params.presetName} not found for mode ${params.mode}`);
+    }
+
+    return result;
   }
 
   // Screener filters methods (global settings per mode - Phase 27.F.15.A)
