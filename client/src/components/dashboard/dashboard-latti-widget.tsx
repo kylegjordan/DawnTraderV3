@@ -173,39 +173,38 @@ export function DashboardLATTiWidget() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Active Preset with Color-Coded Badge */}
-              <div className="pb-4 border-b border-border" style={{ borderLeftColor: getPresetBadgeColor(preset?.name).split(' ')[0] }}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="text-sm text-muted-foreground font-semibold">Active Preset:</div>
-                  <Badge className={`text-lg font-bold px-4 py-2 ${getPresetBadgeColor(preset?.name)}`} data-testid="badge-active-preset">
-                    {getPresetDisplayName(preset?.name)}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Target Daily Goals */}
-              {preset && (
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    Target Daily Goals
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Active Preset with Target Goals in Same Row */}
+              <div className="pb-4 border-b border-border">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                  {/* Active Preset Badge */}
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-muted-foreground font-semibold">Active Preset:</div>
+                    <Badge className={`text-lg font-bold px-4 py-2 ${getPresetBadgeColor(preset?.name)}`} data-testid="badge-active-preset">
+                      {getPresetDisplayName(preset?.name)}
+                    </Badge>
+                  </div>
+                  
+                  {/* Target Daily Avg Earning % */}
+                  {preset && (
                     <div className="bg-muted/30 dark:bg-muted/30 p-3 rounded-lg">
                       <div className="text-xs text-muted-foreground mb-1">Target Daily Avg Earning %</div>
                       <div className="text-2xl font-bold text-foreground" data-testid="text-target-earning">
                         {preset.targetDailyAvgEarningPct}%
                       </div>
                     </div>
+                  )}
+                  
+                  {/* Trades per Day (Est) */}
+                  {preset && (
                     <div className="bg-muted/30 dark:bg-muted/30 p-3 rounded-lg">
                       <div className="text-xs text-muted-foreground mb-1">Trades per Day (Est)</div>
                       <div className="text-2xl font-bold text-foreground" data-testid="text-trades-per-day">
                         {preset.tradesPerDayEst}
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
 
               {/* Core Four Guardrails */}
               <div>
