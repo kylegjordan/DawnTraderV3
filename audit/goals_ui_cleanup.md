@@ -171,6 +171,51 @@ Columns: target_daily_avg_earning_pct
 Rows Updated: 8 (4 presets × 2 modes)
 ```
 
+## Phase 6.2: Portfolio Balance API & Error Handling (Completed 2025-10-28)
+
+### 10. Fixed Portfolio Overview API Endpoint
+**Files Modified:**
+- `server/routes.ts`
+
+**Changes:**
+- Updated `/api/portfolio/overview` endpoint to accept `mode` query parameter (paper/live)
+- Added mode-specific balance fetching:
+  - Paper mode: Uses `storage.getPortfolioState({ mode: 'paper' })`
+  - Live mode: Uses `riskManager.getLiveKrakenBalance(userId)`
+- Fixed RiskManager method calls to use correct signatures:
+  - `getPortfolioMetrics(mode)` instead of `getPortfolioMetrics(userId, mode)`
+  - `getWinRate(mode, 30)` instead of `getWinRate(userId, 30, mode)`
+
+**Before:** Endpoint hardcoded to live mode, causing 500 errors when frontend requested paper mode data  
+**After:** Endpoint correctly branches on mode parameter and returns appropriate balance (200 status with totalValue: 850 for paper mode)
+
+### 11. Improved Portfolio Balance Hook Error Handling
+**Files Modified:**
+- `client/src/hooks/use-portfolio-balance.tsx`
+
+**Changes:**
+- Added better error handling in `select` function to handle missing `totalValue`
+- Added `throwOnError: false` to prevent unhandled exceptions
+- Added `retry: false` to use fallback immediately instead of retrying failed requests
+- Added console warnings when API errors occur or data is malformed
+- Improved fallback logic with clear logging for debugging
+
+**Before:** Hook would crash or show blank UI when API failed  
+**After:** Hook gracefully falls back to 850 balance with clear console warnings
+
+### 12. Enhanced Goals Engine Tab Empty States
+**Files Modified:**
+- `client/src/components/goals/goals-engine-tab.tsx`
+
+**Changes:**
+- Added informative empty state when projections can't be calculated
+- Displays current portfolio balance, daily target %, and loading status
+- Shows helpful message when waiting for portfolio data to load
+- Removed debug console.log statements for cleaner production code
+
+**Before:** Component showed blank table when data unavailable  
+**After:** Component shows clear feedback about what's missing and current state
+
 ## Testing Recommendations
 
 ### Manual Testing Checklist
@@ -183,8 +228,10 @@ Rows Updated: 8 (4 presets × 2 modes)
 - [x] Preset changes update all dependent widgets correctly
 - [x] All preset targets display updated values (Conservative 0.17%, Baseline 0.87%, etc.)
 - [x] Guardrails tab shows only CoreFourGuardrails (no duplicate legacy tab)
-- [ ] Projected Growth table calculates correctly for all presets
-- [ ] Color-coded preset badges consistent across all views
+- [x] Projected Growth table calculates correctly for all presets (Phase 6.2)
+- [x] Color-coded preset badges consistent across all views
+- [x] Portfolio overview API returns 200 for both paper and live modes (Phase 6.2)
+- [x] Goals Engine shows informative empty states when data unavailable (Phase 6.2)
 
 ### Playwright Test Coverage
 ```typescript
