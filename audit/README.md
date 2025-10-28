@@ -52,12 +52,134 @@ Written recommendations including:
 - **Password**: SecurePass123!
 
 ## Status
-**Phase**: 1 of 4 (Audit & Mapping)  
+**Phase**: 2 of 4 (Schema Consolidation)  
 **Status**: Complete  
 **Date**: October 28, 2025
 
-## Next Steps (Phase 2+)
-1. Generate `schema_guardrails_v2.sql` (core-four only, percent-based)
-2. Create `coherency_rules.yaml` enforcement
-3. Implement "Lottie Controls with Manual Override" UI pattern
-4. Deprecate redundant fields (mark for analytics transition)
+---
+
+## Phase 2: Schema Simplification & Source-of-Truth Definition
+
+### Objective
+Translate the Phase 1 audit results into a clean, coherent schema and rule set for guardrails. Remove redundancy, enforce percent-based/portfolio-relative metrics, and establish a single source of truth (SoT) for the Core Four Guardrails.
+
+### Phase 2 Deliverables
+
+#### 1. `coherency_rules.yaml`
+Comprehensive validation rules for Core Four guardrails including:
+- 8 runtime validation rules (RULE_001 through RULE_008)
+- Migration-specific validation rules
+- Testing matrix with valid/invalid scenarios
+- Enforcement strategy (backend + database constraints)
+
+#### 2. `migration_checklist.md`
+Step-by-step migration guide including:
+- Pre-migration verification steps
+- Data migration SQL scripts
+- Coherency validation queries
+- Rollback plan
+- Success criteria
+
+#### 3. `schema_guardrails_v2.sql`
+Reference SQL schema documentation for guardrails_v2 table:
+- Core Four columns (percent-based, portfolio-relative)
+- CHECK constraints for range validation
+- Unique index on mode (one record per mode)
+- Phase 3 control flags (manual override, LATTI-tuned)
+
+#### 4. `transitional_view_guardrails_v1.sql`
+Analytics view for legacy comparison:
+- Side-by-side comparison of v2 vs legacy values
+- Built-in coherency checks
+- Migration status indicators
+
+#### 5. `docs/schema_guardrails_v2_overview.md`
+Comprehensive schema documentation including:
+- Column definitions and rationale
+- Coherency rules with examples
+- Migration logic and data flow
+- Service integration points
+- API request/response schemas
+
+### Implementation Summary
+
+#### Database Changes
+- ✅ Created `guardrails_v2` table with Core Four columns
+- ✅ Applied CHECK constraints for range validation
+- ✅ Created unique index on mode (ensures one record per mode)
+- ✅ Created transitional view `v_guardrails_transitional`
+- ✅ Migrated data from legacy tables (paper + live modes)
+- ✅ All coherency rules PASS validation
+
+#### Code Changes
+- ✅ Updated `shared/schema.ts` with guardrails_v2 table definition
+- ✅ Created Zod insert schema and TypeScript types
+- ✅ Updated `server/storage.ts` with guardrails_v2 methods
+- ✅ Added new API endpoints `/api/guardrails-v2` (GET/PUT)
+- ✅ Implemented coherency validation in PUT endpoint (RULE_001, RULE_005)
+
+#### Coherency Validation Results
+All migrated data passes validation:
+```
+Mode   | Risk% | Cooldown | Positions | Kill Switch% | All Rules
+-------|-------|----------|-----------|--------------|----------
+Paper  | 0.53  | 7 min    | 6         | 7.00%        | PASS ✓
+Live   | 0.53  | 15 min   | 5         | 7.00%        | PASS ✓
+```
+
+### Core Four Guardrails
+
+1. **Portfolio Risk per Trade (%)**: 0.10% - 5.00%  
+   Percentage of total portfolio value risked on each trade
+
+2. **Symbol Cooldown (minutes)**: 1 - 90  
+   Minimum time before re-trading the same symbol
+
+3. **Max Open Positions (count)**: 1 - 20  
+   Maximum number of concurrent open trades
+
+4. **Daily Loss Kill Switch (%)**: 1.00% - 20.00%  
+   Portfolio loss percentage triggering automatic shutdown
+
+### Deprecated Fields (Phase 1 Findings)
+- `maxDailyLoss` (absolute $) → Use `daily_loss_kill_switch_pct`
+- `maxDrawdown` (%) → Redundant with kill switch
+- `maxPositionSize` (absolute $) → Compute from risk %
+- `maxRiskPerTradeLimit` (absolute $) → Use `portfolio_risk_per_trade_pct`
+- `maxRequiredCapital` (absolute $) → Unused
+- `aiCanAdjust` (boolean) → Use `tuned_by_latti`
+- `tuningPolicy.cooldownMinutes` → Duplicate of `guardrails_v2.symbol_cooldown_minutes`
+
+### API Endpoints
+
+**GET /api/guardrails-v2?mode=paper|live**
+- Returns Core Four guardrails for specified mode
+- Includes control flags (isManualOverride, tunedByLatti)
+
+**PUT /api/guardrails-v2?mode=paper|live**
+- Updates Core Four guardrails with coherency validation
+- Validates RULE_001 (risk ≤ kill switch / 10)
+- Validates RULE_005 (manual override exclusivity)
+- Broadcasts config change events
+- Invalidates caches
+
+### Phase 2 Status
+**Status**: COMPLETE ✅  
+**Migration Date**: October 28, 2025  
+**Validation**: All coherency rules PASS
+
+---
+
+## Next Steps (Phase 3+)
+
+### Phase 3: Lottie Controls UI with Manual Override
+- Add toggle switches to Goals Engine > Guardrails Tab
+- Implement per-parameter manual override tracking
+- Update LATTI to respect `is_manual_override` flag
+- WebSocket broadcasts for LATTI auto-adjustments
+
+### Phase 4: Legacy Deprecation & Analytics Transition
+- Drop deprecated columns from guardrails table
+- Drop tuning_policy.cooldownMinutes column
+- Drop strategy_parameters table
+- Finalize analytics transition views

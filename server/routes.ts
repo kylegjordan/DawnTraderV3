@@ -1041,6 +1041,126 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 2: Guardrails V2 API Endpoints (Core Four - Single Source of Truth)
+  // GET /api/guardrails-v2?mode=paper|live
+  apiRouter.get('/guardrails-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const guardrailsData = await storage.getGuardrailsV2({ mode });
+
+      if (!guardrailsData) {
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No guardrails found for mode: ${mode}` });
+      }
+
+      res.json({ ok: true, data: guardrailsData });
+    } catch (error: any) {
+      console.error('[GuardrailsV2] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // PUT /api/guardrails-v2?mode=paper|live
+  apiRouter.put('/guardrails-v2', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    const requestId = `grv2-${Date.now()}`;
+    try {
+      const userId = req.user!.id;
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        console.error(`[GuardrailsV2:${requestId}] Invalid mode parameter`);
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      const rawPayload = req.body;
+      
+      // Field mapping (camelCase from frontend)
+      const portfolioRiskPerTradePct = rawPayload.portfolioRiskPerTradePct !== undefined 
+        ? parseFloat(String(rawPayload.portfolioRiskPerTradePct)) 
+        : undefined;
+      const symbolCooldownMinutes = rawPayload.symbolCooldownMinutes !== undefined 
+        ? parseInt(String(rawPayload.symbolCooldownMinutes), 10) 
+        : undefined;
+      const maxOpenPositions = rawPayload.maxOpenPositions !== undefined 
+        ? parseInt(String(rawPayload.maxOpenPositions), 10) 
+        : undefined;
+      const dailyLossKillSwitchPct = rawPayload.dailyLossKillSwitchPct !== undefined 
+        ? parseFloat(String(rawPayload.dailyLossKillSwitchPct)) 
+        : undefined;
+      const isManualOverride = rawPayload.isManualOverride !== undefined 
+        ? Boolean(rawPayload.isManualOverride) 
+        : undefined;
+      const tunedByLatti = rawPayload.tunedByLatti !== undefined 
+        ? Boolean(rawPayload.tunedByLatti) 
+        : undefined;
+
+      // Validation: Coherency Rule 001 - Risk <= KillSwitch/10
+      if (portfolioRiskPerTradePct !== undefined && dailyLossKillSwitchPct !== undefined) {
+        const maxAllowedRisk = dailyLossKillSwitchPct / 10;
+        if (portfolioRiskPerTradePct > maxAllowedRisk) {
+          console.error(`[GuardrailsV2:${requestId}] RULE_001 violation: risk ${portfolioRiskPerTradePct}% > ${maxAllowedRisk}%`);
+          return res.status(400).json({
+            ok: false,
+            code: 'COHERENCY_VIOLATION',
+            rule: 'RULE_001',
+            detail: `Portfolio risk per trade (${portfolioRiskPerTradePct}%) cannot exceed 10% of daily loss kill switch (${dailyLossKillSwitchPct}%). Maximum allowed: ${maxAllowedRisk}%`
+          });
+        }
+      }
+
+      // Validation: Coherency Rule 005 - Manual override exclusivity
+      if (isManualOverride === true && tunedByLatti === true) {
+        console.error(`[GuardrailsV2:${requestId}] RULE_005 violation: conflicting control flags`);
+        return res.status(400).json({
+          ok: false,
+          code: 'COHERENCY_VIOLATION',
+          rule: 'RULE_005',
+          detail: 'Conflicting control flags: is_manual_override and tuned_by_latti cannot both be true'
+        });
+      }
+
+      // Build update payload
+      const updatePayload: any = { mode };
+      if (portfolioRiskPerTradePct !== undefined) updatePayload.portfolioRiskPerTradePct = String(portfolioRiskPerTradePct);
+      if (symbolCooldownMinutes !== undefined) updatePayload.symbolCooldownMinutes = symbolCooldownMinutes;
+      if (maxOpenPositions !== undefined) updatePayload.maxOpenPositions = maxOpenPositions;
+      if (dailyLossKillSwitchPct !== undefined) updatePayload.dailyLossKillSwitchPct = String(dailyLossKillSwitchPct);
+      if (isManualOverride !== undefined) updatePayload.isManualOverride = isManualOverride;
+      if (tunedByLatti !== undefined) updatePayload.tunedByLatti = tunedByLatti;
+
+      console.log(`[GuardrailsV2:${requestId}] Upserting guardrails for mode: ${mode}`, updatePayload);
+
+      // Upsert guardrails_v2
+      const guardrailsData = await storage.upsertGuardrailsV2(updatePayload);
+
+      // Broadcast config change
+      contextBridge.broadcast({
+        type: 'guardrails_v2_updated',
+        mode,
+        payload: guardrailsData
+      });
+
+      // Invalidate caches
+      const { configChangeHandler } = await import('./services/config-change-handler');
+      await configChangeHandler.handleConfigChange({
+        userId,
+        mode,
+        configType: 'guardrails_v2',
+        source: 'api'
+      });
+
+      console.log(`[GuardrailsV2:${requestId}] Save successful + broadcasts sent`);
+      res.json({ ok: true, data: guardrailsData });
+    } catch (error: any) {
+      console.error(`[GuardrailsV2:${requestId}] Unexpected error:`, error.message, error.stack);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message || 'Internal server error' });
+    }
+  });
+
   // Filter diagnostics endpoint - fetches LIVE metrics from diagnostic service
   // Phase 27.F.21: Migrated from legacy filter_diagnostics table to live diagnostic service
   // This ensures FilterHealthWidget shows same data as Filter Insights tab

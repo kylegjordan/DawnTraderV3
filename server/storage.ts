@@ -2,6 +2,7 @@ import {
   users, 
   tradingSettings,
   guardrails,
+  guardrailsV2,
   screenerFilters,
   screenerResults,
   filterCalibrationLog,
@@ -49,6 +50,8 @@ import {
   type InsertTradingSettings,
   type Guardrails,
   type InsertGuardrails,
+  type GuardrailsV2,
+  type InsertGuardrailsV2,
   type ScreenerFilters,
   type InsertScreenerFilters,
   type ScreenerResult,
@@ -215,6 +218,10 @@ export interface IStorage {
   // Guardrails methods (global settings per mode)
   getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null>;
   upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails>;
+  
+  // Phase 2: Guardrails V2 methods (Core Four - Single Source of Truth)
+  getGuardrailsV2(params: { mode: 'live' | 'paper' }): Promise<GuardrailsV2 | null>;
+  upsertGuardrailsV2(data: InsertGuardrailsV2): Promise<GuardrailsV2>;
 
   // Screener filters methods (global settings per mode)
   getScreenerFilters(params: { mode: 'live' | 'paper' }): Promise<ScreenerFilters | null>;
@@ -699,6 +706,36 @@ export class DatabaseStorage implements IStorage {
       return result;
     } else {
       const [result] = await db.insert(guardrails).values(updateData).returning();
+      return result;
+    }
+  }
+
+  // Phase 2: Guardrails V2 methods (Core Four - Single Source of Truth)
+  async getGuardrailsV2(params: { mode: 'live' | 'paper' }): Promise<GuardrailsV2 | null> {
+    const [result] = await db
+      .select()
+      .from(guardrailsV2)
+      .where(eq(guardrailsV2.mode, params.mode));
+    return result || null;
+  }
+
+  async upsertGuardrailsV2(data: InsertGuardrailsV2): Promise<GuardrailsV2> {
+    const existing = await this.getGuardrailsV2({ mode: data.mode });
+    
+    const updateData = {
+      ...data,
+      lastUpdated: new Date()
+    };
+    
+    if (existing) {
+      const [result] = await db
+        .update(guardrailsV2)
+        .set(updateData)
+        .where(eq(guardrailsV2.mode, data.mode))
+        .returning();
+      return result;
+    } else {
+      const [result] = await db.insert(guardrailsV2).values(updateData).returning();
       return result;
     }
   }
