@@ -14,7 +14,7 @@ import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import AveragesWidget from "@/components/goals/averages-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 import { BaselineStatusWidget } from "@/components/dashboard/baseline-status-widget";
-import { LATTIGoalsMirror } from "@/components/dashboard/latti-goals-mirror";
+import { DashboardLATTiWidget } from "@/components/dashboard/dashboard-latti-widget";
 import AlertBanner from "@/components/alerts/alert-banner";
 import { useSystemHealth } from "@/hooks/use-system-health";
 
@@ -47,8 +47,8 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Phase 27.F.31: LATTI Target Daily Goals Mirror (Position 2) */}
-      <LATTIGoalsMirror />
+      {/* Phase 4: Unified LATTi Goals & Guardrails Widget */}
+      <DashboardLATTiWidget />
 
       {/* Daily Trading Brief (includes Market Insights) */}
       <DailyBriefCard />
