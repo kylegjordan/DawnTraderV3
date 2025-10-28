@@ -1,0 +1,158 @@
+⚙️ Replit Directive — Phase 3b
+
+LATTi Goals + Guardrails Modernization — Frontend Integration: Lottie-Managed Mode + Manual Override UI
+
+Credentials (dev environment):
+username: testuser123
+password: SecurePass123!
+
+🎯 Objective
+
+Implement all frontend user-facing components for the new Lottie-Managed / Manual Override system built in Phase 3a.
+Expose toggles, indicators, and metadata for both Guardrails and Filters, binding directly to the upgraded backend endpoints.
+
+Inputs:
+
+guardrails_v2 (with locked_by_user)
+
+/api/guardrails-v2, /api/filters-v2 endpoints
+
+docs/manual_override_behavior.md
+
+Phase 2 + 3a audit outputs
+
+Outputs:
+
+Updated guardrails-tab.tsx and filters-tab.tsx
+
+New React hook useOverrideState.ts
+
+WebSocket subscription for override events
+
+Jest & Playwright UI tests
+
+docs/ui_override_behavior.md
+
+Replit task log (mark Phase 3b Complete)
+
+🧱 Work Packages
+A) Branch Setup (Initialization)
+
+Create frontend integration branch
+
+git checkout -b phase3b-frontend-lottie-controls
+
+
+Confirm Phase 3a backend merged into main branch.
+
+Ensure local API (/api/guardrails-v2, /api/filters-v2) is running with test credentials.
+
+B) Guardrails Tab Enhancement → Toggle UI
+
+Locate file client/src/components/goals/guardrails-tab.tsx.
+
+For each Core Four parameter, add a toggle control above the input field:
+
+Default: “Controlled by Lottie 🔒” (read-only)
+
+Unlocked: “Manual Override 🔓” (editable)
+
+Bind each toggle to:
+
+guardrail.isManualOverride
+guardrail.lockedByUser[param]
+
+
+When user unlocks:
+
+Enable input editing.
+
+On save, PUT to /api/guardrails-v2 with updated lockedByUser JSON.
+
+Display toast confirmation “Manual override activated”.
+
+When user locks again:
+
+Disable field.
+
+Send isManualOverride:false to API.
+
+Show toast “Returned to Lottie control”.
+
+Add tooltip text: “Switch between Lottie autotuning and manual override for this guardrail”.
+
+C) Filters Tab Enhancement → Lottie Managed Metadata
+
+Locate client/src/components/goals/filters-tab.tsx.
+
+Extend each filter row with:
+
+A checkbox toggle “Managed by Lottie”.
+
+Read-only if manualOverrideEnabled === false.
+
+When unchecked, POST update to /api/filters-v2 with manualOverrideEnabled:true.
+
+Display status badge: 🟢 Auto (Lottie) | 🟡 Manual.
+
+Add small sub-header “Filter Automation Control” with help icon → link to docs/manual_override_behavior.md.
+
+D) WebSocket Integration → Real-Time Sync
+
+In client/src/hooks/, create useOverrideState.ts:
+
+Subscribe to guardrail.override.changed and filters.override.changed.
+
+When event received, update UI state via React query invalidate (staleTime = Infinity).
+
+Integrate this hook into GuardrailsTab and FiltersTab.
+
+Ensure UI reflects updated state within 1 second of event broadcast.
+
+E) Documentation & Testing
+
+Create docs/ui_override_behavior.md covering:
+
+Toggle flow (locked/unlocked)
+
+Error handling (RULE_005 conflict)
+
+Realtime sync mechanism
+
+Manual vs Lottie visual language icons
+
+Add tests:
+
+tests/ui/guardrails_controls.test.tsx
+
+tests/ui/filters_controls.test.tsx
+
+Validate UI toggles and API round-trip.
+
+Playwright test for real-time update on WebSocket event.
+
+✅ Acceptance Criteria
+
+Guardrails tab shows Lottie/Manual toggle per Core Four parameter.
+
+Toggles persist to DB (locked_by_user updated).
+
+Filters tab shows Lottie/Manual state with metadata.
+
+WebSocket events update UI within 1 second.
+
+RULE_005 violations return error toast + disabled toggle.
+
+All tests PASS.
+
+Phase 3b marked complete in replit.md.
+
+📅 Implementation Checklist (for Replit Task Panel)
+[ ] git checkout -b phase3b-frontend-lottie-controls
+[ ] Add Lottie/Manual toggles to guardrails-tab.tsx
+[ ] Extend filters-tab.tsx with Managed/Manual UI
+[ ] Implement useOverrideState.ts hook
+[ ] Integrate WebSocket update handling
+[ ] Create docs/ui_override_behavior.md
+[ ] Write Jest + Playwright tests
+[ ] Update replit.md (Phase 3b Complete)
