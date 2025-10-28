@@ -15176,7 +15176,8 @@ export async function handleLATTITargets(req: AuthenticatedRequest, res: Respons
         trades_per_day,
         earnings_per_trade: parseFloat(earnings_per_trade.toFixed(2)),
         daily_profit: parseFloat(daily_profit.toFixed(2)),
-        target_daily_avg_earning_pct: ((daily_profit / portfolioBalance) * 100).toFixed(2)
+        // Phase 27.F.25: Use original targetPct directly to preserve decimal precision (e.g., 1.75%)
+        target_daily_avg_earning_pct: (targetPct * 100).toFixed(2)
       };
     }
     
