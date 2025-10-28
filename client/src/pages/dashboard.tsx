@@ -76,8 +76,8 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* LATTI Baseline Status Widget - Paper Mode Only */}
-      <BaselineStatusWidget />
+      {/* Phase 27.F.31: LATTI Target Daily Goals Mirror (Position 2) */}
+      <LATTIGoalsMirror />
 
       {/* Daily Trading Brief (includes Market Insights) */}
       <DailyBriefCard />
@@ -103,8 +103,8 @@ export default function Dashboard() {
       {/* Filter Health Diagnostics */}
       <FilterHealthWidget />
 
-      {/* Phase 27.F.30: LATTI Target Daily Goals Mirror (Read-Only) */}
-      <LATTIGoalsMirror />
+      {/* Phase 27.F.31: LATTI Baseline Status Widget (moved from position 2) */}
+      <BaselineStatusWidget />
 
       {/* System Truth Synchronization Panel */}
       <SystemTruthPanel truthData={truthData} />
