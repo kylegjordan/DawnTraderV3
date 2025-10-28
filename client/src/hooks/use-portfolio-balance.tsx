@@ -18,6 +18,8 @@ export function usePortfolioBalance() {
   
   const { data: balance = 850, isLoading, error } = useQuery({
     queryKey: ['/api/portfolio/overview', mode],
+    // Wait for mode to be available before executing query
+    enabled: !!mode,
     // Phase 27.F.24: Extract only the totalValue to prevent object reference changes
     select: (data: any) => {
       // Handle API errors gracefully - use fallback balance
