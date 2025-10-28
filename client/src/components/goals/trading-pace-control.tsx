@@ -7,6 +7,7 @@ import { Zap, TrendingUp, Shield, AlertTriangle, Percent, Sun } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { usePortfolioBalance } from "@/hooks/use-portfolio-balance";
 import {
   Tooltip,
   TooltipContent,
@@ -100,6 +101,9 @@ export default function TradingPaceControl() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
   const [selectedPace, setSelectedPace] = useState<TradingPace>('baseline');
+  
+  // Phase 27.F.32: Get portfolio balance for percentage calculation
+  const { balance: portfolioBalance } = usePortfolioBalance();
 
   // Fetch current trading pace from system context
   const { data: currentPace, isLoading: paceLoading } = useQuery<{ tradingPace: TradingPace }>({
@@ -225,13 +229,27 @@ export default function TradingPaceControl() {
           <div className="space-y-3">
             <h4 className="font-semibold text-sm text-muted-foreground">LATTI Target Metrics</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Risk per Trade */}
-              <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-risk-per-trade">
-                <div className="text-xs text-muted-foreground mb-1">Risk per Trade ($)</div>
-                <div className="text-lg font-bold text-foreground">
-                  ${lattiTargets.risk_per_trade.toFixed(0)}
-                </div>
-              </div>
+              {/* Phase 27.F.32: Portfolio Risk per Trade (%) */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-risk-per-trade">
+                      <div className="text-xs text-muted-foreground mb-1">Portfolio Risk per Trade (%)</div>
+                      <div className="text-lg font-bold text-foreground">
+                        {portfolioBalance > 0 
+                          ? ((lattiTargets.risk_per_trade / portfolioBalance) * 100).toFixed(2)
+                          : '0.00'}%
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Percentage of your total portfolio value risked on each trade.</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Calculated dynamically from your current balance and guardrails.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
 
               {/* Trades per Day */}
               <div className="p-3 bg-muted/30 rounded-lg" data-testid="metric-trades-per-day">

@@ -139,6 +139,11 @@ const LATTIGoalsMirrorComponent = () => {
 
   const riskPerTrade = lattiTargets?.risk_per_trade || 0;
   const tradesPerDay = lattiTargets?.trades_per_day || 0;
+  
+  // Phase 27.F.32: Calculate Portfolio Risk per Trade (%)
+  const portfolioRiskPct = portfolioBalance > 0 
+    ? ((riskPerTrade / portfolioBalance) * 100).toFixed(2)
+    : '0.00';
 
   // Phase 27.F.31: Pace color mapping
   const paceColors = {
@@ -194,13 +199,25 @@ const LATTIGoalsMirrorComponent = () => {
 
         {/* Phase 27.F.31: Consolidated Metrics Row */}
         <div className="grid grid-cols-3 gap-0 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-          {/* Risk per Trade */}
-          <div className="p-4 text-center border-r border-gray-200 dark:border-gray-700">
-            <p className="text-xs text-muted-foreground mb-1">Risk per Trade</p>
-            <p className="text-lg font-bold">
-              {currencyFormatter.format(riskPerTrade)}
-            </p>
-          </div>
+          {/* Phase 27.F.32: Portfolio Risk per Trade (%) */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="p-4 text-center border-r border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-muted-foreground mb-1">Portfolio Risk per Trade (%)</p>
+                  <p className="text-lg font-bold text-foreground">
+                    {portfolioRiskPct}%
+                  </p>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Percentage of your total portfolio value risked on each trade.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Calculated dynamically from your current balance and guardrails.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
           {/* Trades per Day */}
           <div className="p-4 text-center border-r border-gray-200 dark:border-gray-700">
