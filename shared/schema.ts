@@ -116,6 +116,9 @@ export const walterActionTypeEnum = pgEnum("walter_action_type", ["feed_reconnec
 export const walterActionStatusEnum = pgEnum("walter_action_status", ["pending", "in_progress", "completed", "failed", "acknowledged", "approved", "rejected"]);
 export const walterActionCategoryEnum = pgEnum("walter_action_category", ["feed", "formula", "system", "risk", "performance"]);
 
+// Phase 4: Goals Presets enums
+export const goalsPresetNameEnum = pgEnum("goals_preset_name", ["conservative", "baseline", "optimistic", "maximum", "custom"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -287,6 +290,30 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   uniqueMode: uniqueIndex("guardrails_v2_mode_idx").on(table.mode),
+}));
+
+// Phase 4: Goals Presets (Predefined risk profiles for quick configuration)
+export const goalsPresets = pgTable("goals_presets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: tradingModeEnum("mode").notNull(),
+  name: goalsPresetNameEnum("name").notNull(),
+  
+  // Guardrail values for this preset
+  portfolioRiskPerTradePct: decimal("portfolio_risk_per_trade_pct", { precision: 5, scale: 2 }).notNull(),
+  dailyLossKillSwitchPct: decimal("daily_loss_kill_switch_pct", { precision: 5, scale: 2 }).notNull(),
+  symbolCooldownMinutes: integer("symbol_cooldown_minutes").notNull(),
+  maxOpenPositions: integer("max_open_positions").notNull(),
+  
+  // Analytics (estimated performance)
+  tradesPerDayEst: decimal("trades_per_day_est", { precision: 5, scale: 2 }).notNull(),
+  targetDailyAvgEarningPct: decimal("target_daily_avg_earning_pct", { precision: 5, scale: 2 }).notNull(),
+  
+  // Metadata
+  isActive: boolean("is_active").notNull().default(false), // Only one preset active per mode
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueModeAndName: uniqueIndex("goals_presets_mode_name_idx").on(table.mode, table.name),
 }));
 
 // Screener Filters (mode-isolated screening criteria) - GLOBAL per mode
@@ -1791,6 +1818,18 @@ export const insertGuardrailsV2Schema = createInsertSchema(guardrailsV2).omit({
   dailyLossKillSwitchPct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 });
 
+// Phase 4: Goals Presets Insert Schema
+export const insertGoalsPresetsSchema = createInsertSchema(goalsPresets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  portfolioRiskPerTradePct: z.union([z.string(), z.number()]).transform(val => String(val)),
+  dailyLossKillSwitchPct: z.union([z.string(), z.number()]).transform(val => String(val)),
+  tradesPerDayEst: z.union([z.string(), z.number()]).transform(val => String(val)),
+  targetDailyAvgEarningPct: z.union([z.string(), z.number()]).transform(val => String(val)),
+});
+
 export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).omit({
   id: true,
   createdAt: true,
@@ -2169,6 +2208,10 @@ export type Guardrails = typeof guardrails.$inferSelect;
 // Phase 2: Guardrails V2 Types
 export type InsertGuardrailsV2 = z.infer<typeof insertGuardrailsV2Schema>;
 export type GuardrailsV2 = typeof guardrailsV2.$inferSelect;
+
+// Phase 4: Goals Presets Types
+export type InsertGoalsPresets = z.infer<typeof insertGoalsPresetsSchema>;
+export type GoalsPresets = typeof goalsPresets.$inferSelect;
 
 export type InsertScreenerFilters = z.infer<typeof insertScreenerFiltersSchema>;
 export type ScreenerFilters = typeof screenerFilters.$inferSelect;

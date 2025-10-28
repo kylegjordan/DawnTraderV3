@@ -1,0 +1,191 @@
+🎯 Objective
+
+Integrate Lottie-Managed Mode and Manual Override visibility directly into the Dashboard and Goals Engine.
+Unify guardrails, filters, and goals data streams into a single coherent UI layer.
+Replace the legacy LATTI Goals Mirror with a dynamic dashboard widget that reflects live guardrail states, preset goals, and override analytics.
+
+Inputs:
+
+guardrails_v2 + filters_v2 schemas (from Phases 2 & 3)
+
+CoreFourGuardrails, FiltersWithOverride components
+
+useOverrideState WebSocket hook
+
+coherency_rules.yaml and live API endpoints
+
+Outputs:
+
+dashboard-latti-widget.tsx (refactored unified dashboard component)
+
+client/components/goals/presets-grid.tsx (Goals Preset Grid UI)
+
+Updated layout config (layout.json / dashboard ordering)
+
+Analytics view: v_guardrails_compliance.sql
+
+docs/dashboard_integration_overview.md
+
+Updated replit.md → Phase 4 complete
+
+🧱 Work Packages
+A) Dashboard Widget Refactor → Unified LATTi Mirror
+
+Locate and remove legacy LATTI Goals Mirror widget.
+
+File: client/components/dashboard/latti-goals-mirror.tsx (deprecate)
+
+Also remove redundant “System Truth Sync” and “Data Flow Trace” panels.
+
+Create new widget:
+client/components/dashboard/dashboard-latti-widget.tsx
+
+This component must:
+
+Display the four core guardrails (Risk %, Cooldown, Positions, Kill Switch %).
+
+Indicate each guardrail’s control state (🟢 Auto / Lottie, 🟡 Manual).
+
+Include quick badges for coherency status (“PASS”, “WARN”, “FAIL”).
+
+Summarize current Goals Preset (Conservative, Baseline, Optimistic, Maximum, Custom).
+
+Use real-time updates from the useOverrideState hook.
+
+Add compact visual indicators:
+
+🔒 for Lottie-controlled
+
+🔓 for Manual override
+
+⚙️ for Lottie tuning active
+
+⚠️ for coherency warning
+
+B) Goals Presets Grid → Comparative View
+
+Create client/components/goals/presets-grid.tsx
+Displays 4+1 preset “paces”: Conservative, Baseline, Optimistic, Maximum, and Custom.
+
+Each preset shows expected values for:
+
+Portfolio Risk per Trade (%)
+
+Daily Loss Kill Switch (%)
+
+Symbol Cooldown (min)
+
+Trades per Day (est.)
+
+Selecting a preset updates guardrails and filters via API (PUT /api/goals-preset?mode=paper|live).
+
+Add preset metadata table in backend:
+
+File: /server/db/tables/goals_presets.sql
+
+Columns: id, mode, name, risk_pct, kill_switch_pct, cooldown_min, trades_per_day_est, created_at.
+
+Add new GET/PUT endpoints:
+
+/api/goals-presets → fetch current presets
+
+/api/goals-presets/select → apply preset to current mode
+
+Bind UI grid to selected preset and auto-switch guardrails to Custom when user edits any parameter.
+
+C) Coherency Analytics View → v_guardrails_compliance.sql
+
+Create SQL view /server/db/views/v_guardrails_compliance.sql:
+
+CREATE OR REPLACE VIEW v_guardrails_compliance AS
+SELECT
+  mode,
+  portfolio_risk_per_trade_pct,
+  daily_loss_kill_switch_pct,
+  max_open_positions,
+  symbol_cooldown_minutes,
+  CASE
+    WHEN portfolio_risk_per_trade_pct <= daily_loss_kill_switch_pct / 10 THEN 'PASS'
+    WHEN portfolio_risk_per_trade_pct <= daily_loss_kill_switch_pct / 5 THEN 'WARN'
+    ELSE 'FAIL'
+  END AS coherency_status,
+  is_manual_override,
+  tuned_by_latti,
+  locked_by_user,
+  last_updated
+FROM guardrails_v2;
+
+
+Use this view to feed coherency analytics in the dashboard widget.
+
+Add corresponding API endpoint /api/analytics/guardrails-compliance returning the aggregated status for display.
+
+D) Layout & Documentation Updates
+
+Update dashboard layout JSON:
+
+Place the Unified LATTi Widget directly below the top four widgets.
+
+Move “Walter System Activity” to the System Monitoring section.
+
+Ensure zero flicker (staleTime = Infinity, memoized data).
+
+Create docs/dashboard_integration_overview.md:
+
+Architecture diagram of new dashboard data flow.
+
+Widget hierarchy and refresh cycle.
+
+Coherency logic reference (linked to coherency_rules.yaml).
+
+Guide for extending the Goals Preset system.
+
+E) Testing & QA
+
+Unit Tests:
+
+dashboard-latti-widget.test.tsx – confirm correct icon + status mapping.
+
+presets-grid.test.tsx – validate preset application triggers correct guardrail sync.
+
+analytics/guardrails-compliance.test.ts – API consistency validation.
+
+Integration Tests:
+
+Verify guardrails UI → Dashboard reflection.
+
+Confirm WebSocket-triggered updates appear live (<1 s).
+
+Check coherency color states across all modes.
+
+Visual QA:
+
+Use responsive design mode → confirm layout integrity on 1080p and 4K screens.
+
+Verify “Custom” preset auto-activation when manual overrides occur.
+
+✅ Acceptance Criteria
+
+Legacy LATTI Goals Mirror removed.
+
+New Dashboard LATTi Widget displays live guardrails + coherency analytics.
+
+Preset Grid functional with real-time updates and Custom mode switching.
+
+Coherency View (v_guardrails_compliance) correctly returns PASS/WARN/FAIL statuses.
+
+WebSocket + React Query integration stable.
+
+Documentation and tests complete.
+
+📅 Implementation Checklist (for Replit Task Panel)
+[ ] Remove legacy LATTI Goals Mirror
+[ ] Create dashboard-latti-widget.tsx
+[ ] Create goals-presets-grid.tsx
+[ ] Build v_guardrails_compliance.sql view
+[ ] Add /api/goals-presets endpoints
+[ ] Add /api/analytics/guardrails-compliance endpoint
+[ ] Update dashboard layout JSON
+[ ] Write dashboard_integration_overview.md
+[ ] Validate coherency color mapping & WebSocket sync
+[ ] Mark Phase 4 complete in replit.md
