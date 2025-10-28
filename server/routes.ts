@@ -1161,6 +1161,175 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 3: Filters V2 API Endpoints (with Manual Override metadata)
+  // GET /api/filters-v2?mode=paper|live
+  apiRouter.get('/filters-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      // Get screener filters from storage
+      const screenerData = await storage.getScreenerFilters({ mode });
+
+      if (!screenerData) {
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
+      }
+
+      // Convert to FiltersV2 format with control metadata
+      // For Phase 3, all filters default to managed_by_lottie=true, manual_override_enabled=false
+      const filtersV2 = {
+        mode,
+        filters: {
+          minVolume: {
+            value: parseFloat(screenerData.minVolume),
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Min Volume ($)",
+            category: "Volume & Liquidity"
+          },
+          minLiquidity: {
+            value: parseFloat(screenerData.minLiquidity),
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Min Liquidity ($)",
+            category: "Volume & Liquidity"
+          },
+          minPrice: {
+            value: parseFloat(screenerData.minPrice),
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Min Price ($)",
+            category: "Price Range"
+          },
+          maxPrice: {
+            value: parseFloat(screenerData.maxPrice),
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Max Price ($)",
+            category: "Price Range"
+          },
+          maxBidAskSpread: {
+            value: parseFloat(screenerData.maxBidAskSpread),
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Max Bid-Ask Spread (%)",
+            category: "Risk & Volatility"
+          },
+          volatilityMin: {
+            value: parseFloat(screenerData.volatilityMin),
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Min Volatility (%)",
+            category: "Risk & Volatility"
+          },
+          volatilityMax: {
+            value: parseFloat(screenerData.volatilityMax),
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Max Volatility (%)",
+            category: "Risk & Volatility"
+          },
+          minMarketCap: {
+            value: parseFloat(screenerData.minMarketCap),
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Min Market Cap ($)",
+            category: "Market Filters"
+          },
+          excludeStablecoins: {
+            value: screenerData.excludeStablecoins,
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Exclude Stablecoins",
+            category: "Market Filters"
+          },
+          allowRegulatedOnly: {
+            value: screenerData.allowRegulatedOnly,
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Regulated Only",
+            category: "Market Filters"
+          },
+          rsiMin: {
+            value: screenerData.rsiMin,
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Min RSI",
+            category: "Technical Indicators"
+          },
+          rsiMax: {
+            value: screenerData.rsiMax,
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Max RSI",
+            category: "Technical Indicators"
+          },
+          universeSize: {
+            value: screenerData.universeSize,
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Market Universe Size",
+            category: "Universe & Signal Controls"
+          },
+          quoteCurrencies: {
+            value: screenerData.quoteCurrencies,
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Quote Currencies",
+            category: "Universe & Signal Controls"
+          },
+          activeTimeframes: {
+            value: screenerData.activeTimeframes,
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Active Timeframes",
+            category: "Universe & Signal Controls"
+          },
+          confidenceThreshold: {
+            value: screenerData.confidenceThreshold,
+            managedByLottie: true,
+            manualOverrideEnabled: false,
+            displayName: "Confidence Threshold (%)",
+            category: "Universe & Signal Controls"
+          }
+        },
+        lastUpdated: screenerData.updatedAt
+      };
+
+      res.json({ ok: true, data: filtersV2 });
+    } catch (error: any) {
+      console.error('[FiltersV2] GET error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
+  // PUT /api/filters-v2?mode=paper|live
+  // Phase 3: Currently read-only (metadata only) - filter value updates still use /api/screeners
+  // This endpoint will support manual override flag changes in future phases
+  apiRouter.put('/filters-v2', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'live' | 'paper';
+
+      if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
+      }
+
+      // Phase 3: Metadata-only update (manual override flags)
+      // Actual filter value updates still go through /api/screeners endpoint
+      console.log('[FiltersV2] PUT endpoint - metadata-only mode (Phase 3)');
+      
+      // For Phase 3, return success but don't persist changes yet
+      // This will be implemented when UI components are ready
+      res.json({ ok: true, message: 'Filter metadata updates will be implemented in Phase 3 UI integration' });
+    } catch (error: any) {
+      console.error('[FiltersV2] PUT error:', error.message);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
+    }
+  });
+
   // Filter diagnostics endpoint - fetches LIVE metrics from diagnostic service
   // Phase 27.F.21: Migrated from legacy filter_diagnostics table to live diagnostic service
   // This ensures FilterHealthWidget shows same data as Filter Insights tab
