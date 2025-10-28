@@ -1,0 +1,139 @@
+🎯 Objective
+
+Redesign the LATTi Trading Pace table on the Dashboard so that it:
+
+Mirrors the layout and calculations of the Goals Engine “Target Daily Goals” section.
+
+Displays LATTi-calculated values only (no manual or override input).
+
+Uses the currently selected Trading Pace preset (Conservative, Baseline, Optimistic, or Aggressive).
+
+Shows portfolio growth projections that are based exclusively on LATTi’s calculated daily target for that pace.
+
+Is flicker-free and positioned just below the “Filter Health” table and above the “System Truth Sync” table.
+
+1️⃣ Data Source & Logic
+
+Use:
+The same backend endpoints and cached queries the Goals Engine already uses for:
+
+lattiTargets
+
+portfolioBalance
+
+projectionData
+
+Do not include:
+
+Manual input field
+
+Save/reset buttons
+
+Override or custom goal logic
+
+Display only LATTi’s current calculated values:
+
+Risk per Trade ($) — from lattiTargets.riskPerTrade
+
+Trades per Day — from lattiTargets.tradesPerDay
+
+Target Daily Average Earnings % — from lattiTargets.targetDailyAvgEarningPct
+
+Current Portfolio Value ($) — from current balance hook (usePortfolioBalance)
+
+Projected Portfolio Growth Table — computed from LATTi’s target percentage only:
+
+balance * (1 + targetDailyPct)^days
+
+
+for 1, 7, 30, 90, 180, and 365-day projections
+(Tomorrow, 1 Week, 1 Month, 3 Months, 6 Months, 1 Year).
+
+Notes:
+
+Ignore any user-entered custom targets — always use lattiTargets.targetDailyAvgEarningPct.
+
+Match the numeric formatting of the Goals tab (two decimals for %, commas for $).
+
+Include color logic for positive/negative %s (blue = positive, red = negative).
+
+Include the existing LATTi tooltip (“Values dynamically calculated within safety limits”).
+
+2️⃣ Component Behavior
+
+Read-only — no editable fields.
+
+Auto-sync when the user changes trading pace in the Goals Engine.
+
+Uses cached data only (no extra API calls).
+
+Never refetches in the background.
+
+refetchInterval: false
+refetchOnWindowFocus: false
+refetchOnReconnect: false
+staleTime: Infinity
+
+
+Wrapped in React.memo() to prevent unnecessary renders.
+
+Use the same memoized portfolio balance hook from Phase 27.F.24 to avoid flicker.
+
+3️⃣ UI Placement
+
+Move this table to:
+
+Below the “Filter Health” table and above “System Truth Sync” on the Dashboard.
+
+Maintain the same section padding, title style (SectionHeader), and card border radius as the adjacent widgets.
+
+4️⃣ Layout and Styling
+
+Match the Goals Engine table layout, with these minor dashboard-specific adjustments:
+
+Remove the input and save/reset buttons row.
+
+Replace the manual input area with a simple display line:
+
+Target Daily Avg Earnings (Goals Engine): +1.25 %
+
+
+Keep all numerical alignment and column headers identical to the Goals Engine for visual consistency.
+
+Use the same background tone and typography as the other dashboard tables.
+
+5️⃣ Acceptance Criteria
+
+✅ Dashboard LATTi table now displays:
+
+Risk per Trade ($)
+
+Trades per Day
+
+Target Daily Avg Earnings (%) — LATTi’s computed value only
+
+Current Portfolio Value ($)
+
+Six-row Projected Portfolio Growth table
+
+✅ No manual input box or save/reset buttons.
+✅ Projections recalc automatically if pace changes in Goals Engine.
+✅ No flicker or re-renders during idle periods.
+✅ Table positioned below “Filter Health” and above “System Truth Sync”.
+✅ All styling and number formatting match the Goals tab exactly.
+
+🧩 Replit Instruction Summary
+
+Phase 27.F.30 — Read-Only LATTi Goals Mirror for Dashboard
+
+Replace current Dashboard LATTi Trading Pace widget with a read-only mirror of Goals Engine → Target Daily Goals.
+
+Include: Risk/Trade, Trades/Day, Target Daily Avg Earning %, Current Portfolio Value, and the full projection table.
+
+Use only LATTi-calculated values — ignore any manual/override input.
+
+Disable all background refetches; wrap in React.memo() for zero flicker.
+
+Place it directly below “Filter Health” and above “System Truth Sync” on the Dashboard.
+
+Goal: unify the Dashboard and Goals Engine views while keeping the Dashboard read-only, flicker-free, and always driven by LATTi’s calculated metrics.
