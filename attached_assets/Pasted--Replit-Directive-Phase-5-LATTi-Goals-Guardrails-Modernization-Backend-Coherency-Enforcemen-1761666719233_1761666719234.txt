@@ -1,0 +1,203 @@
+⚙️ Replit Directive — Phase 5
+
+LATTi Goals + Guardrails Modernization — Backend Coherency Enforcement & GuardrailPolicy Service
+
+Credentials (dev environment):
+username: testuser123
+password: SecurePass123!
+
+🎯 Objective
+
+Create a single backend source of truth for guardrail values and enforce coherency at runtime.
+Introduce a GuardrailPolicy service that resolves effective values (Lottie vs Manual), validates them against coherency_rules.yaml, and exposes a clean API for RiskManager, StrategyEngine, LATTI, and the UI.
+
+Inputs:
+
+guardrails_v2 (+ locked_by_user, is_manual_override, tuned_by_latti)
+
+coherency_rules.yaml (Phase 2)
+
+Phase 3 endpoints: /api/guardrails-v2, /api/filters-v2
+
+Phase 4 analytics view: v_guardrails_compliance
+
+Outputs:
+
+server/services/guardrail-policy.ts (new)
+
+Integration: RiskManager, StrategyEngine, LATTI Manager
+
+Middleware: request-time validation & conflict logging
+
+Telemetry events & metrics
+
+Tests & docs
+
+🧱 Work Packages
+A) Core Service — GuardrailPolicy
+
+Create server/services/guardrail-policy.ts with:
+
+Effective Value Resolution
+
+Inputs: mode, raw DB row from guardrails_v2, optional manual payload.
+
+Resolution: if is_manual_override = true OR locked_by_user[param] = true → prefer manual value; else use Lottie value.
+
+Return a normalized object:
+
+{
+  mode: 'paper'|'live',
+  portfolioRiskPerTradePct: number,
+  symbolCooldownMinutes: number,
+  maxOpenPositions: number,
+  dailyLossKillSwitchPct: number,
+  management: { isManualOverride: boolean, tunedByLatti: boolean, lockedByUser: Record<string, boolean> }
+}
+
+
+Coherency Validation
+
+Load coherency_rules.yaml once; cache & hot-reload on file change.
+
+Validate RULE_001 (risk ≤ kill/10), cooldown ≥ 1, positions ≥ 1, etc.
+
+Produce {status: 'PASS'|'WARN'|'FAIL', failures?: RuleFailure[]}.
+
+Conflict Detection
+
+If both is_manual_override and tuned_by_latti true → emit RULE_005 error & block.
+
+If incoming payload attempts to set manual values while Lottie owns field → emit guardrail.override.conflict.
+
+Circuit Breakers
+
+Add in-memory “daily kill switch” tripped state per mode; expose tripKillSwitch(mode) and isKillSwitchTripped(mode).
+
+B) API Layer — Enforcement & Surfacing
+
+PUT /api/guardrails-v2
+
+Wrap updates with GuardrailPolicy.validate().
+
+On FAIL → 400 with rule details.
+
+On PASS → persist and emit guardrail.policy.updated with coherency status.
+
+GET /api/guardrails-v2/effective?mode=
+
+New route returning computed effective values + coherency (PASS/WARN/FAIL).
+
+POST /api/guardrails-v2/kill-switch/trip?mode=
+
+Trip the circuit breaker and broadcast guardrail.kill_switch.tripped.
+
+C) Engine Integration (Runtime)
+
+RiskManager
+
+Replace direct DB reads with GuardrailPolicy.getEffective(mode).
+
+Respect kill switch: abort new trades and close open ones if configured.
+
+StrategyEngine / HeuristicTrader
+
+Before order sizing: pull riskPct from policy.
+
+Respect symbolCooldownMinutes and maxOpenPositions from policy only.
+
+Remove use of any legacy fields.
+
+LATTI Manager
+
+When autotuning: refuse to adjust locked parameters; log latti.autotune.skipped_locked.
+
+If coherency = FAIL: halt autotuning for mode and emit latti.autotune.blocked_by_policy.
+
+D) Telemetry & Logs
+
+Emit JSON logs with: ruleId, mode, param, oldValue, newValue, status.
+
+Metrics counters:
+
+policy_rule_fail_total{ruleId,mode}
+
+policy_rule_warn_total{ruleId,mode}
+
+kill_switch_trips_total{mode}
+
+override_conflicts_total{mode}
+
+E) Deprecation & Cleanup
+
+Remove duplicate reads/writes from old endpoints/services touching legacy guardrail fields.
+
+Document the removed touchpoints in docs/guardrail_policy_migration.md.
+
+Ensure the dashboard now reads only from:
+
+/api/guardrails-v2/effective?mode= (live values)
+
+/api/analytics/guardrails-compliance?mode= (summary)
+
+🧪 Testing Plan
+Unit Tests (/tests/policy/guardrail-policy.test.ts)
+
+Effective value resolution (manual vs Lottie) per-param.
+
+RULE_001, cooldown min, positions min, RULE_005 exclusivity.
+
+Kill switch tripping & readback.
+
+API Tests (/tests/api/guardrails_policy_api.test.ts)
+
+PUT reject on FAIL with rule details array.
+
+GET /effective returns coherent structure & status.
+
+Kill switch POST triggers state and event.
+
+Integration Tests (/tests/integration/engines_policy_integration.test.ts)
+
+Strategy sizing respects riskPct.
+
+New trades blocked when kill switch tripped.
+
+LATTI autotune skips locked params.
+
+📘 Documentation
+
+docs/guardrail_policy_overview.md — service diagram, lifecycle, examples.
+
+docs/guardrail_policy_migration.md — old → new call sites, removed endpoints.
+
+Update coherency_rules.yaml version header to version: 2.1 with any new rules or clarifications.
+
+✅ Acceptance Criteria
+
+GuardrailPolicy service returns effective values and validates coherency.
+
+/api/guardrails-v2/effective live and consumed by engines/UI.
+
+PUT updates blocked on coherency FAIL with clear rule feedback.
+
+Kill switch operable via API and enforced by engines.
+
+Legacy guardrail reads removed; engines use policy only.
+
+Telemetry present for policy events and rule outcomes.
+
+All tests passing; docs updated; Phase 5 marked complete in replit.md.
+
+📅 Implementation Checklist (Replit Task Panel)
+[ ] Create server/services/guardrail-policy.ts
+[ ] Add GET /api/guardrails-v2/effective
+[ ] Enforce validation on PUT /api/guardrails-v2
+[ ] Add POST /api/guardrails-v2/kill-switch/trip
+[ ] Wire RiskManager & StrategyEngine to GuardrailPolicy
+[ ] Block LATTI autotune on locked/FAIL states
+[ ] Emit telemetry + counters for rules & conflicts
+[ ] Remove legacy reads / write-throughs
+[ ] Write policy unit + API + integration tests
+[ ] Add docs: policy_overview & policy_migration
+[ ] Update replit.md — Phase 5 complete
