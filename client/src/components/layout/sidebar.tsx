@@ -19,6 +19,7 @@ import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
 import { clearTokens } from "@/lib/auth";
 import { useUserRole } from "@/hooks/useUserRole";
+import { queryClient } from "@/lib/queryClient";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -48,6 +49,8 @@ export default function Sidebar({ isOpen, onClose, className }: SidebarProps) {
   
   const handleLogout = () => {
     clearTokens();
+    // Clear all React Query cache to ensure fresh data on next login
+    queryClient.clear();
     setLocation("/login");
   };
 

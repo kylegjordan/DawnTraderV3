@@ -107,7 +107,7 @@ const LATTIGoalsMirrorComponent = () => {
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
-              LATTI Target Daily Goals
+              LATTI Target Goals
             </div>
           </CardTitle>
         </CardHeader>
@@ -172,7 +172,7 @@ const LATTIGoalsMirrorComponent = () => {
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
-            LATTI Target Daily Goals
+            LATTI Target Goals
           </div>
           {isPaper && (
             <span className="px-2 py-1 text-xs font-semibold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">
