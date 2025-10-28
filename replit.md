@@ -23,6 +23,57 @@ The system calculates and displays a rolling **Average Daily Earnings % (ADE%)**
 
 The Dashboard LATTI widget now mirrors Goals Engine Target Daily Goals, displaying LATTI-calculated values only: Risk per Trade ($), Trades per Day, Target Daily Average Earnings %, Current Portfolio Value ($), and a Projected Portfolio Growth table. Projections use compound daily growth. "Risk per Trade ($)" is converted to "Portfolio Risk per Trade (%)" across the Goals Engine and Dashboard LATTI widget, displayed as a percentage of total portfolio value.
 
+## LATTi Goals + Guardrails Modernization
+
+### Phase 2: Guardrails V2 Schema (✅ COMPLETED)
+Migrated from legacy `guardrails` table to modern `guardrails_v2` schema with the Core Four guardrail parameters:
+- **Portfolio Risk per Trade %**: Percentage of portfolio value at risk per trade (mode-global)
+- **Symbol Cooldown (minutes)**: Minimum time between trades on the same symbol (mode-global)
+- **Max Open Positions**: Maximum concurrent open positions (mode-global)
+- **Daily Loss Kill Switch %**: Portfolio loss threshold that triggers emergency shutdown (mode-global)
+
+**Key Features:**
+- Dual-mode operation (paper/live) with independent guardrail sets
+- Coherency validation enforced via 8 validation rules (documented in `audit/coherency_rules.yaml`)
+- RULE_001: Portfolio Risk ≤ Kill Switch / 10
+- RULE_005: Manual Override exclusivity (`is_manual_override` and `tuned_by_latti` cannot both be true)
+- Backend API endpoints: GET/PUT `/api/guardrails-v2?mode=paper|live`
+- Real-time WebSocket broadcasts for config changes
+- Integrated with Goals Engine, LATTI, and LiquiditySentry
+
+**Documentation:**
+- Schema: `audit/schema_guardrails_v2.sql`, `docs/schema_guardrails_v2_overview.md`
+- Migration checklist: `audit/migration_checklist.md`
+- Coherency rules: `audit/coherency_rules.yaml`
+
+### Phase 3: Lottie-Managed vs Manual Override UI (✅ BACKEND COMPLETED)
+Implements toggle controls for switching between LATTi autonomous optimization and manual user control.
+
+**Backend Implementation (Phase 3a - Completed):**
+- Added `locked_by_user` JSONB column to `guardrails_v2` table for per-parameter override tracking
+- Created `filters_v2` TypeScript schema with `managed_by_lottie` and `manual_override_enabled` metadata flags
+- Implemented GET `/api/filters-v2?mode=paper|live` endpoint returning 16 filter parameters with control metadata
+- Implemented PUT `/api/filters-v2?mode=paper|live` stub endpoint (metadata updates deferred to Phase 3b)
+- Enhanced PUT `/api/guardrails-v2?mode=paper|live` to support `lockedByUser` partial updates
+- Added telemetry event `guardrail.override.changed` broadcasted when override state changes
+- Coherency validation enforced for all guardrail updates (RULE_001, RULE_005)
+
+**Control Hierarchy:**
+1. **Global Manual Override**: User disables LATTi entirely (`is_manual_override = true`)
+2. **Per-Parameter Locks**: User locks specific parameters via `locked_by_user` JSONB (e.g., `{"symbolCooldownMinutes": true}`)
+3. **Lottie-Managed (default)**: LATTi has full control over unlocked parameters (`tuned_by_latti = true`)
+
+**Frontend Implementation (Phase 3b - Deferred):**
+- UI toggle switches in `guardrails-tab.tsx` (global override + per-parameter locks)
+- Filter toggle switches for 16 filter parameters
+- Real-time WebSocket subscriptions for config updates
+- Visual badges showing "Auto-tuned by LATTi" vs "Manual Override Active"
+
+**Documentation:**
+- Behavior guide: `docs/manual_override_behavior.md`
+- API documentation embedded in endpoints
+- WebSocket event specifications documented
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
