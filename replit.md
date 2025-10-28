@@ -122,11 +122,6 @@ Integrates a unified dashboard widget and Goals Preset Grid implementing a 4+1 p
 - **Paper Mode**: Baseline preset active (Risk: 1.50%, Kill Switch: 7.00%, Cooldown: 15m, Max Pos: 5)
 - **Live Mode**: Conservative preset active (Risk: 0.50%, Kill Switch: 5.00%, Cooldown: 30m, Max Pos: 3)
 
-**Documentation:**
-- Comprehensive overview: `docs/dashboard_integration_overview.md`
-- Architecture details, API specifications, testing checklist, and user experience flow
-
-## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
 -   **Neon Database**: Serverless PostgreSQL database.
