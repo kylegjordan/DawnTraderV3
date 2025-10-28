@@ -26,9 +26,10 @@ export default function GoalsEngineTab() {
   const { balance: portfolioBalance, isLoading: portfolioLoading } = usePortfolioBalance();
 
   // Fetch active preset
-  const { data: activePresetData, isLoading: presetLoading } = useQuery<{ ok: boolean; data: ActivePreset }>({
+  const { data: activePresetData, isLoading: presetLoading, error: presetError } = useQuery<{ ok: boolean; data: ActivePreset }>({
     queryKey: [`/api/goals-presets/active?mode=${mode}`],
     enabled: !!mode,
+    retry: 2,
   });
 
   const activePreset = activePresetData?.data;
@@ -51,10 +52,15 @@ export default function GoalsEngineTab() {
   };
 
   const getProjections = (): ProjectedBalance[] => {
-    if (!activePreset || !portfolioBalance) return [];
+    if (!activePreset || !portfolioBalance || portfolioBalance <= 0) {
+      return [];
+    }
     
     const dailyRate = parseFloat(activePreset.targetDailyAvgEarningPct) / 100;
-    if (dailyRate <= 0) return [];
+    
+    if (isNaN(dailyRate) || dailyRate <= 0) {
+      return [];
+    }
 
     return [
       { label: "Tomorrow", days: 1, balance: portfolioBalance * Math.pow(1 + dailyRate, 1) },
@@ -89,10 +95,23 @@ export default function GoalsEngineTab() {
     return (
       <Card data-testid="projected-growth-card">
         <CardHeader>
-          <CardTitle>Projected Portfolio Growth</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Projected Portfolio Growth
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No active preset selected. Please select a preset above.</p>
+          <div className="text-center py-8 space-y-3">
+            <p className="text-sm text-muted-foreground">No active preset selected</p>
+            <p className="text-xs text-muted-foreground">
+              Please select and activate a preset above to view portfolio projections.
+            </p>
+            {presetError && (
+              <p className="text-xs text-red-500 dark:text-red-400">
+                Error loading preset: {presetError.message}
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
     );
@@ -100,6 +119,36 @@ export default function GoalsEngineTab() {
 
   const projections = getProjections();
   const presetColor = getPresetBadgeColor(activePreset.name);
+  
+  // Show helpful message if projections can't be calculated
+  if (projections.length === 0) {
+    return (
+      <Card data-testid="projected-growth-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Projected Portfolio Growth
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 space-y-3">
+            <p className="text-sm text-muted-foreground">Unable to calculate projections</p>
+            <p className="text-xs text-muted-foreground">
+              Portfolio balance: {portfolioBalance ? currencyFormatter.format(portfolioBalance) : 'Loading...'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Daily target: {activePreset?.targetDailyAvgEarningPct || 'N/A'}%
+            </p>
+            {!portfolioBalance && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Waiting for portfolio data to load...
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card data-testid="projected-growth-card">

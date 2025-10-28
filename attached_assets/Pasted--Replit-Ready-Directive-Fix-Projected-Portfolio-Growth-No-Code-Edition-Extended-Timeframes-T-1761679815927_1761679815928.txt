@@ -1,0 +1,114 @@
+🧱 Replit-Ready Directive: Fix Projected Portfolio Growth (No-Code Edition — Extended Timeframes)
+
+Task Name:
+Finalize and connect Projected Portfolio Growth section with full time horizon data.
+
+Credentials:
+username: testuser123
+password: SecurePass123!
+
+Objective
+
+Ensure the “Projected Portfolio Growth” section dynamically displays realistic portfolio growth projections based on:
+
+The active preset’s target_daily_avg_earning_pct, and
+
+The user’s current portfolio balance (from live data or paper mode).
+
+No placeholders, no manual input — this section must be fully data-driven and reflect compounding results for multiple timeframes.
+
+Instructions for Replit (No-Code)
+1️⃣ Connect Data Sources
+
+Link the Projected Portfolio Growth section to:
+
+The active preset object (providing target_daily_avg_earning_pct).
+
+The current portfolio balance displayed elsewhere in the Goals Engine.
+
+Ensure both values are available to this section at render time.
+
+Remove any remaining placeholder or static content in this box.
+
+2️⃣ Display Dynamic Projections
+
+Under the header Projected Portfolio Growth, show six future timeframes:
+
+Tomorrow
+
+1 Week
+
+1 Month
+
+3 Months
+
+6 Months
+
+1 Year
+
+For each timeframe, calculate:
+
+Projected Balance — compounding from the current balance using the preset’s target daily % over the specified number of days.
+
+Gain ($) — projected balance minus current balance.
+
+Gain (%) — gain as a percentage of current balance.
+
+3️⃣ Layout & Style
+
+Use the same visual style as other dashboard cards:
+
+Light card background.
+
+Bold section title: Projected Portfolio Growth.
+
+Clean table or grid with the following columns:
+
+Timeframe
+
+Projected Balance
+
+Gain ($ / %)
+
+Show positive gains in green text.
+
+Match typography and padding to the preset cards and Core Four sections for consistent UI flow.
+
+4️⃣ Behavior & Validation
+
+Projections must:
+
+Update immediately when a new preset is selected.
+
+Adjust automatically when the user’s portfolio value changes.
+
+Display without delay, empty state, or console errors.
+
+The projected balances should:
+
+Use compounding growth:
+(Balance × (1 + target_daily_avg_earning_pct / 100) ^ days)
+
+Round values cleanly to 2 decimal places.
+
+Display as currency and percentage consistently with system locale.
+
+5️⃣ Acceptance Checks
+
+✅ The “Projected Portfolio Growth” section is fully populated (no longer blank).
+✅ All six timeframes (Tomorrow → 1 Year) are shown with values.
+✅ Numbers are grounded in preset target %, not hard-coded.
+✅ Layout matches surrounding UI (Goals Engine style).
+✅ No console warnings, errors, or missing data.
+
+6️⃣ Documentation
+
+Update audit/goals_ui_cleanup.md with:
+
+Connection summary of the growth box.
+
+Data lineage: preset → projection → display.
+
+Screenshots showing correct six-timeframe display.
+
+Short note verifying preset switch recalculations.
