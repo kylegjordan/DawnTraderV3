@@ -79,11 +79,12 @@ export function FiltersWithOverride() {
 
   const updateMutation = useMutation({
     mutationFn: async (updates: { filterName: string; manualOverrideEnabled: boolean }) => {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`/api/filters-v2?mode=${mode}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(updates)
       });
