@@ -1,0 +1,109 @@
+⚙️ Phase 27.F.31 — Finalize Dashboard LATTi Target Daily Goals Table Design & Layout
+🎯 Objective
+
+Refine the Dashboard LATTi Target Daily Goals widget to:
+
+Include the current trading pace name (with color coding).
+
+Display pace-colored header bar and rearranged metrics (all in one row).
+
+Remove the blue footer notice line.
+
+Swap table positions so this widget sits directly beneath the top four summary widgets, and move LATTi Baseline below it.
+
+Hide or remove developer/system-level tables (System Truth Sync, Data Flow Trace, Walter Activity Today) and move their content into System Monitoring.
+
+1️⃣ Visual Header & Color Coding
+
+Add Trading Pace Label:
+Place directly above “Risk per Trade” / “Trades per Day.”
+Example text:
+
+Trading Pace: Baseline
+
+
+Header Color:
+Match the pace color scheme used elsewhere in the app:
+
+Conservative → bg-blue-50 border-blue-200 text-blue-700
+
+Baseline → bg-green-50 border-green-200 text-green-700
+
+Optimistic → bg-yellow-50 border-yellow-200 text-yellow-700
+
+Aggressive → bg-red-50 border-red-200 text-red-700
+
+Header row text centered and bold.
+
+2️⃣ Metric Row Consolidation
+
+Combine the three key metrics on a single line to save vertical space:
+
+Risk per Trade ($7.65) | Trades per Day (4) | Target Daily Avg Earnings (+0.90 %)
+
+
+Use light dividers (border-x border-gray-200) between columns.
+
+Maintain the same color logic for positive/negative earnings (%).
+
+3️⃣ Remove Footer Notice
+
+Delete the entire blue bar reading:
+
+“Values dynamically calculated within safety limits. Changes to trading pace in Goals Engine will automatically update these targets.”
+The widget will remain self-contained without that notice.
+
+4️⃣ Widget Placement
+
+Re-order dashboard sections as follows:
+
+Top 4 Summary Widgets
+
+LATTi Target Daily Goals (Goals Mirror)
+
+LATTi Baseline Table (move down to the current mirror location)
+
+All other widgets after that
+
+Maintain existing padding/margin standards between sections.
+
+5️⃣ System Widget Cleanup
+
+Hide or remove from Dashboard:
+
+System Truth Sync Table
+
+Data Flow Trace (Dev Only)
+
+Walter System Activity Today Metrics
+
+Instead:
+
+Move their components under System Monitoring.
+
+Create a new sub-tab or section there called “Diagnostics & Telemetry” and render those tables there.
+
+Keep their backend data feeds unchanged — just move the frontend render location.
+
+6️⃣ Flicker & Performance Integrity
+
+Maintain the no-refetch configuration and memoization from Phase 27.F.30:
+
+refetchInterval: false;
+refetchIntervalInBackground: false;
+refetchOnWindowFocus: false;
+refetchOnReconnect: false;
+staleTime: Infinity;
+
+
+and wrap in React.memo() to ensure zero re-renders during idle periods.
+
+7️⃣ Acceptance Checklist
+
+✅ Trading pace label and color appear at top.
+✅ Risk / Trades / Target Daily % in one row.
+✅ No blue footer bar.
+✅ Widget now sits directly below top four widgets.
+✅ LATTi Baseline moved down one position.
+✅ System Truth Sync, Data Flow Trace, and Walter Activity removed from Dashboard and visible under System Monitoring → Diagnostics & Telemetry.
+✅ No flicker or layout shift on idle.

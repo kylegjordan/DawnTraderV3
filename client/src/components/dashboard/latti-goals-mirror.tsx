@@ -140,6 +140,32 @@ const LATTIGoalsMirrorComponent = () => {
   const riskPerTrade = lattiTargets?.risk_per_trade || 0;
   const tradesPerDay = lattiTargets?.trades_per_day || 0;
 
+  // Phase 27.F.31: Pace color mapping
+  const paceColors = {
+    conservative: {
+      bg: "bg-blue-50 dark:bg-blue-950/20",
+      border: "border-blue-200 dark:border-blue-900/50",
+      text: "text-blue-700 dark:text-blue-300",
+    },
+    baseline: {
+      bg: "bg-green-50 dark:bg-green-950/20",
+      border: "border-green-200 dark:border-green-900/50",
+      text: "text-green-700 dark:text-green-300",
+    },
+    optimistic: {
+      bg: "bg-yellow-50 dark:bg-yellow-950/20",
+      border: "border-yellow-200 dark:border-yellow-900/50",
+      text: "text-yellow-700 dark:text-yellow-300",
+    },
+    aggressive: {
+      bg: "bg-red-50 dark:bg-red-950/20",
+      border: "border-red-200 dark:border-red-900/50",
+      text: "text-red-700 dark:text-red-300",
+    },
+  };
+
+  const paceColor = paceColors[currentPace as keyof typeof paceColors] || paceColors.baseline;
+
   return (
     <Card data-testid="latti-goals-mirror">
       <CardHeader>
@@ -154,73 +180,53 @@ const LATTIGoalsMirrorComponent = () => {
             </span>
           )}
         </CardTitle>
-        <p className="text-sm text-muted-foreground mt-2">
-          Read-only view of LATTI-calculated targets. Values update automatically based on your trading pace and portfolio balance.
-        </p>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* LATTI Calculated Metrics */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Phase 27.F.31: Color-coded Trading Pace Header */}
+        <div className={cn(
+          "p-3 rounded-lg border text-center font-semibold",
+          paceColor.bg,
+          paceColor.border,
+          paceColor.text
+        )}>
+          Trading Pace: {currentPace.charAt(0).toUpperCase() + currentPace.slice(1)}
+        </div>
+
+        {/* Phase 27.F.31: Consolidated Metrics Row */}
+        <div className="grid grid-cols-3 gap-0 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           {/* Risk per Trade */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <Target className="w-4 h-4" />
-              Risk per Trade
-            </div>
+          <div className="p-4 text-center border-r border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-muted-foreground mb-1">Risk per Trade</p>
             <p className="text-lg font-bold">
               {currencyFormatter.format(riskPerTrade)}
             </p>
           </div>
 
           {/* Trades per Day */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <Activity className="w-4 h-4" />
-              Trades per Day
-            </div>
+          <div className="p-4 text-center border-r border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-muted-foreground mb-1">Trades per Day</p>
             <p className="text-lg font-bold">
               {tradesPerDay}
             </p>
           </div>
-        </div>
 
-        {/* Target Daily Average Earnings % */}
-        <div className="space-y-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground cursor-help">
-                  <Percent className="w-4 h-4" />
-                  Target Daily Average Earnings %
-                  <Info className="w-3 h-3" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs font-semibold">
-                  Calculated from Goals Engine preset
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Source: LATTI targets for {currentPace} pace
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Changes when you adjust trading pace in Goals Engine
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <p 
-            className={cn(
-              "text-2xl font-bold font-mono",
-              {
-                "text-blue-600 dark:text-blue-400": isPositive,
-                "text-red-600 dark:text-red-400": isNegative,
-                "text-muted-foreground": !isPositive && !isNegative,
-              }
-            )}
-            data-testid="latti-mirror-target-value"
-          >
-            {targetDailyAvgEarningPct}%
-          </p>
+          {/* Target Daily Avg Earnings % */}
+          <div className="p-4 text-center">
+            <p className="text-xs text-muted-foreground mb-1">Target Daily Avg Earnings</p>
+            <p 
+              className={cn(
+                "text-lg font-bold font-mono",
+                {
+                  "text-blue-600 dark:text-blue-400": isPositive,
+                  "text-red-600 dark:text-red-400": isNegative,
+                  "text-muted-foreground": !isPositive && !isNegative,
+                }
+              )}
+              data-testid="latti-mirror-target-value"
+            >
+              {targetDailyAvgEarningPct}%
+            </p>
+          </div>
         </div>
 
         {/* Current Portfolio Value */}
@@ -269,14 +275,6 @@ const LATTIGoalsMirrorComponent = () => {
               </tbody>
             </table>
           </div>
-        </div>
-
-        {/* LATTI Notice */}
-        <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-lg text-sm">
-          <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-          <p className="text-blue-700 dark:text-blue-200">
-            Values dynamically calculated within safety limits. Changes to trading pace in Goals Engine will automatically update these targets.
-          </p>
         </div>
       </CardContent>
     </Card>
