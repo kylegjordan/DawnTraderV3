@@ -1,0 +1,483 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2025-10-28T21:40:00Z",
+  "phase": "27.G.Audit",
+  "description": "Single-Source Inputs Truth Table - Mapping all current fields from UI to Engine",
+  
+  "guardrails": {
+    "portfolioRiskPerTradePct": {
+      "status": "required",
+      "ui_component": "CoreFourGuardrails.tsx",
+      "api_endpoint": "/api/guardrails-v2",
+      "db_table": "guardrails_v2",
+      "db_column": "portfolio_risk_per_trade_pct",
+      "type": "decimal(5,2)",
+      "unit": "percent",
+      "range": "0.10 - 5.00",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/risk-manager.ts",
+        "server/services/trading-engine.ts",
+        "server/services/guardrail-policy.ts"
+      ],
+      "description": "Percentage of portfolio value at risk per trade"
+    },
+    "dailyLossKillSwitchPct": {
+      "status": "required",
+      "ui_component": "CoreFourGuardrails.tsx",
+      "api_endpoint": "/api/guardrails-v2",
+      "db_table": "guardrails_v2",
+      "db_column": "daily_loss_kill_switch_pct",
+      "type": "decimal(5,2)",
+      "unit": "percent",
+      "range": "1.00 - 20.00",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/risk-manager.ts",
+        "server/services/guardrail-policy.ts"
+      ],
+      "description": "Maximum daily portfolio loss before emergency shutdown"
+    },
+    "symbolCooldownMinutes": {
+      "status": "required",
+      "ui_component": "CoreFourGuardrails.tsx",
+      "api_endpoint": "/api/guardrails-v2",
+      "db_table": "guardrails_v2",
+      "db_column": "symbol_cooldown_minutes",
+      "type": "integer",
+      "unit": "minutes",
+      "range": "1 - 90",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/trading-engine.ts",
+        "server/services/strategy-engine.ts"
+      ],
+      "description": "Minimum time between trades on the same symbol"
+    },
+    "maxOpenPositions": {
+      "status": "required",
+      "ui_component": "CoreFourGuardrails.tsx",
+      "api_endpoint": "/api/guardrails-v2",
+      "db_table": "guardrails_v2",
+      "db_column": "max_open_positions",
+      "type": "integer",
+      "unit": "count",
+      "range": "1 - 20",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/trading-engine.ts",
+        "server/services/risk-manager.ts"
+      ],
+      "description": "Maximum number of concurrent open positions"
+    },
+    "LEGACY_maxDailyLoss": {
+      "status": "deprecated",
+      "db_table": "guardrails",
+      "db_column": "max_daily_loss",
+      "deprecation_date": "2025-10-15",
+      "replacement": "dailyLossKillSwitchPct (percent-based)",
+      "migration_status": "soft_blocked",
+      "description": "OLD: Dollar-based daily loss limit (replaced by percent-based)"
+    },
+    "LEGACY_maxDrawdown": {
+      "status": "deprecated",
+      "db_table": "guardrails",
+      "db_column": "max_drawdown",
+      "deprecation_date": "2025-10-15",
+      "replacement": "dailyLossKillSwitchPct",
+      "migration_status": "soft_blocked",
+      "description": "OLD: Drawdown percentage (consolidated into daily loss kill switch)"
+    },
+    "LEGACY_riskPerTrade": {
+      "status": "deprecated",
+      "db_table": "guardrails",
+      "db_column": "risk_per_trade",
+      "deprecation_date": "2025-10-15",
+      "replacement": "portfolioRiskPerTradePct",
+      "migration_status": "soft_blocked",
+      "description": "OLD: Dollar-based risk per trade (replaced by percent-based)"
+    }
+  },
+  
+  "filters": {
+    "minVolume": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "min_volume",
+      "type": "decimal(15,2)",
+      "unit": "dollars",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts",
+        "server/services/strategy-engine.ts"
+      ],
+      "description": "Minimum 24h trading volume in USD",
+      "category": "Volume & Liquidity"
+    },
+    "minLiquidity": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "min_liquidity",
+      "type": "decimal(15,2)",
+      "unit": "dollars",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Minimum liquidity threshold",
+      "category": "Volume & Liquidity"
+    },
+    "minPrice": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "min_price",
+      "type": "decimal(10,8)",
+      "unit": "dollars",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Minimum asset price threshold",
+      "category": "Price Range"
+    },
+    "maxPrice": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "max_price",
+      "type": "decimal(10,2)",
+      "unit": "dollars",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Maximum asset price threshold",
+      "category": "Price Range"
+    },
+    "minMarketCap": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "min_market_cap",
+      "type": "decimal(15,2)",
+      "unit": "dollars",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Minimum market capitalization",
+      "category": "Market Quality"
+    },
+    "maxBidAskSpread": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "max_bid_ask_spread",
+      "type": "decimal(5,2)",
+      "unit": "percent",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Maximum bid-ask spread percentage",
+      "category": "Market Quality"
+    },
+    "rsiMin": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "rsi_min",
+      "type": "integer",
+      "unit": "rsi_value",
+      "range": "0 - 100",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts",
+        "server/services/strategy-engine.ts"
+      ],
+      "description": "Minimum RSI technical indicator value",
+      "category": "Technical Indicators"
+    },
+    "rsiMax": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "rsi_max",
+      "type": "integer",
+      "unit": "rsi_value",
+      "range": "0 - 100",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts",
+        "server/services/strategy-engine.ts"
+      ],
+      "description": "Maximum RSI technical indicator value",
+      "category": "Technical Indicators"
+    },
+    "volatilityMin": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "volatility_min",
+      "type": "decimal(5,2)",
+      "unit": "percent",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts",
+        "server/services/strategy-engine.ts"
+      ],
+      "description": "Minimum volatility threshold",
+      "category": "Volatility"
+    },
+    "volatilityMax": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "volatility_max",
+      "type": "decimal(5,2)",
+      "unit": "percent",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts",
+        "server/services/strategy-engine.ts"
+      ],
+      "description": "Maximum volatility threshold",
+      "category": "Volatility"
+    },
+    "excludeStablecoins": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "exclude_stablecoins",
+      "type": "boolean",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Exclude stablecoins from screening",
+      "category": "Asset Type"
+    },
+    "allowRegulatedOnly": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "allow_regulated_only",
+      "type": "boolean",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Only allow regulated assets",
+      "category": "Asset Type"
+    },
+    "universeSize": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "universe_size",
+      "type": "integer",
+      "unit": "count",
+      "range": "25 - 150",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Market universe size (number of assets to scan)",
+      "category": "Universe & Signal Controls"
+    },
+    "quoteCurrencies": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "quote_currencies",
+      "type": "jsonb",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/market-scanner.ts"
+      ],
+      "description": "Array of accepted quote currencies (e.g., USD, USDT)",
+      "category": "Universe & Signal Controls"
+    },
+    "activeTimeframes": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "active_timeframes",
+      "type": "jsonb",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/strategy-engine.ts"
+      ],
+      "description": "Active timeframes for signal detection (e.g., 5m, 15m, 1h)",
+      "category": "Universe & Signal Controls"
+    },
+    "confidenceThreshold": {
+      "status": "required",
+      "ui_component": "FiltersWithOverride.tsx",
+      "api_endpoint": "/api/filters-v2",
+      "db_table": "screener_filters",
+      "db_column": "confidence_threshold",
+      "type": "integer",
+      "unit": "percent",
+      "range": "40 - 90",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/strategy-engine.ts"
+      ],
+      "description": "Minimum confidence threshold for signal acceptance",
+      "category": "Universe & Signal Controls"
+    },
+    "LEGACY_avgVolumeRatio": {
+      "status": "deprecated",
+      "deprecation_date": "2025-10-25",
+      "replacement": "minVolume (direct threshold)",
+      "migration_status": "removed",
+      "description": "OLD: Volume ratio multiplier (removed in Phase 27.F.34)"
+    },
+    "LEGACY_atrThreshold": {
+      "status": "deprecated",
+      "deprecation_date": "2025-10-25",
+      "replacement": "volatilityMin/volatilityMax",
+      "migration_status": "removed",
+      "description": "OLD: ATR-based volatility threshold (replaced by volatility range)"
+    },
+    "LEGACY_earningsBlackout": {
+      "status": "deprecated",
+      "deprecation_date": "2025-10-25",
+      "replacement": "none (removed)",
+      "migration_status": "removed",
+      "description": "OLD: Earnings blackout period (not applicable to crypto)"
+    },
+    "LEGACY_priceDeltaTrigger": {
+      "status": "deprecated",
+      "db_table": "guardrails",
+      "db_column": "price_delta_trigger",
+      "deprecation_date": "2025-10-28",
+      "replacement": "none (removed as screener variable)",
+      "migration_status": "soft_blocked",
+      "description": "OLD: Price delta trigger for micro-execution (moved out of screener context)"
+    }
+  },
+  
+  "goals": {
+    "targetDailyAvgEarningPct": {
+      "status": "required",
+      "ui_component": "PresetsGrid.tsx, DashboardLATTiWidget.tsx",
+      "api_endpoint": "/api/goals-presets/active",
+      "db_table": "goals_presets",
+      "db_column": "target_daily_avg_earning_pct",
+      "type": "decimal(5,2)",
+      "unit": "percent",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/latti-manager.ts",
+        "server/services/goals-learning-engine.ts"
+      ],
+      "description": "Target daily average earnings as percentage of portfolio",
+      "read_only": false,
+      "source": "latti_calculation"
+    },
+    "tradesPerDayEst": {
+      "status": "required",
+      "ui_component": "PresetsGrid.tsx, DashboardLATTiWidget.tsx",
+      "api_endpoint": "/api/goals-presets/active",
+      "db_table": "goals_presets",
+      "db_column": "trades_per_day_est",
+      "type": "decimal(5,2)",
+      "unit": "count",
+      "mode_scoping": "per_mode",
+      "owner": "latti",
+      "engine_consumer": [
+        "server/services/latti-manager.ts"
+      ],
+      "description": "Estimated trades per day (derived from guardrails)",
+      "read_only": false,
+      "source": "latti_calculation"
+    },
+    "currentPortfolioValue": {
+      "status": "required",
+      "ui_component": "DashboardLATTiWidget.tsx, PortfolioOverview.tsx",
+      "api_endpoint": "/api/portfolio/overview",
+      "db_table": "portfolio_balances",
+      "db_column": "total_value",
+      "type": "decimal(15,2)",
+      "unit": "dollars",
+      "mode_scoping": "per_mode",
+      "owner": "system",
+      "engine_consumer": [
+        "server/services/risk-manager.ts",
+        "server/services/metrics-core.ts"
+      ],
+      "description": "Current portfolio value (read-only source of truth for calculations)",
+      "read_only": true,
+      "source": "portfolio_balance_calculation"
+    },
+    "activePreset": {
+      "status": "required",
+      "ui_component": "PresetsGrid.tsx, DashboardLATTiWidget.tsx",
+      "api_endpoint": "/api/goals-presets/active",
+      "db_table": "goals_presets",
+      "db_column": "name",
+      "type": "goals_preset_name_enum",
+      "mode_scoping": "per_mode",
+      "owner": "user",
+      "engine_consumer": [
+        "server/services/latti-manager.ts"
+      ],
+      "description": "Active preset selection (conservative, baseline, optimistic, maximum, custom)",
+      "read_only": false
+    }
+  },
+  
+  "metadata": {
+    "total_current_fields": 27,
+    "total_deprecated_fields": 6,
+    "guardrails_current": 4,
+    "guardrails_deprecated": 3,
+    "filters_current": 16,
+    "filters_deprecated": 4,
+    "goals_current": 4,
+    "goals_deprecated": 0,
+    "phase_27_f_34_completed": true,
+    "last_major_cleanup": "2025-10-28"
+  }
+}

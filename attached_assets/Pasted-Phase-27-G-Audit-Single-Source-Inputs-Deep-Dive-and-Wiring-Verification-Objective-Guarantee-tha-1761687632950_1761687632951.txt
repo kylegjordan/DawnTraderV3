@@ -1,0 +1,213 @@
+Phase 27.G.Audit — “Single-Source Inputs” Deep Dive and Wiring Verification
+Objective
+
+Guarantee that only the current, visible fields in:
+
+Guardrails (4 core)
+
+Screeners/Filters (current schema)
+
+Goals (preset + LATTI targets)
+
+are the sole inputs used by the trade engine (paper/live) and any strategies, and that no legacy/removed fields influence calculations, storage, or execution paths.
+
+Deliverables: a green build with automated proof, a human-readable audit report, and hard safeguards preventing regressions.
+
+Scope & Ground Rules
+
+Modes: paper and live (namespaced and independently testable).
+
+Surfaces: UI → API → storage → compute (engine/strategies) → reporting/dashboard.
+
+“Legacy” means any field/column/DTO/prop not shown in the new UI.
+
+This phase must be non-destructive to data; deprecations are first soft-blocked, then migrated safely.
+
+Part A — Inventory & Mapping (Truth Table)
+
+Generate a mapping sheet (JSON + markdown):
+
+inputs.json structure:
+
+{
+  "guardrails": {
+    "portfolio_risk_per_trade_pct": "required",
+    "max_daily_loss_pct": "required",
+    "max_drawdown_pct": "derived|deprecated?",
+    "max_open_positions": "required"
+  },
+  "filters": {
+    "min_volume": "required",
+    "min_price": "required",
+    "...": "..."
+  },
+  "goals": {
+    "target_daily_avg_earn_pct": "required (LATTI)",
+    "trades_per_day": "required (derived|constraint)",
+    "current_portfolio_value": "read-only source of truth"
+  }
+}
+
+
+For each key include: UI component, API endpoint, DB table/column, engine/strategy consumer, unit of measure, mode scoping, owner.
+
+Repo-wide grep (commit to audit/scan.log):
+
+Search terms (case-insensitive):
+riskPerTrade, risk_per_trade, position_size, max_position, daily_loss, kill, drawdown, filters, screener, goal, target_daily, earning, latti, override, cooldown, calibration, legacy, deprecated.
+
+Record file, line, snippet, and whether it maps to a current or legacy field per the table.
+
+Part B — Hard Guards & Type Safety
+
+Introduce canonical config types in types/config.ts:
+
+export type GuardrailsConfig = {
+  portfolioRiskPerTradePct: number; // 0.00–5.00
+  maxDailyLossPct: number;          // 0–100
+  maxOpenPositions: number;         // integer >= 1
+  // drawdownPct?: number; // mark deprecated if applicable
+};
+
+export type FiltersConfig = { /* only current filters with explicit units */ };
+
+export type GoalsConfig = {
+  targetDailyAvgEarnPct: number; // percent (not decimal)
+  tradesPerDay: number;
+};
+
+
+Runtime schema validation at all API boundaries using Zod/Yup:
+
+Reject unknown keys with HTTP 422 and log caller & payload.
+
+Convert/normalize units once (e.g., percent vs decimal) and freeze shape.
+
+Legacy field kill-switch:
+
+Add LEGACY_FIELDS_BLOCKED=true gate (default true in all envs).
+
+Any attempt to read/compute with legacy keys throws a typed error with a remediation hint.
+
+Part C — Engine & Strategy Wiring Verification
+
+Introduce a diagnostic snapshot endpoint:
+
+GET /api/diagnostics/config-snapshot?mode=paper|live
+
+Returns the exact effective config used by the engine:
+
+{
+  "mode":"paper",
+  "sources":{
+    "guardrails":"db:v2.guardrails",
+    "filters":"db:v2.filters",
+    "goals":"latti:targets"
+  },
+  "guardrails":{...},
+  "filters":{...},
+  "goals":{...},
+  "hash":"sha256:…"
+}
+
+
+Include provenance per field: value, source, lastUpdatedAt.
+
+Strategy input audit:
+
+For each strategy module:
+
+Replace freeform config reads with typed selectors:
+getPortfolioRiskPct(state) etc.
+
+Add unit tests that fail if a legacy key is referenced.
+
+Paper vs Live namespacing
+
+Ensure selectors read mode-scoped records.
+
+Add Playwright tests toggling mode and asserting different snapshots.
+
+Part D — Data & DB Hygiene
+
+DB views:
+
+Create v_active_guardrails, v_active_filters, v_active_goals that exclude legacy columns.
+
+Engine reads via views, not raw tables.
+
+Migration plan (non-destructive):
+
+Step 1: add deprecated_* aliases that always null.
+
+Step 2: backfill final values into new columns where needed.
+
+Step 3 (later): drop legacy columns behind feature flag.
+
+Part E — Tests (must pass to ship)
+
+Unit tests (Jest):
+
+Schema validation: rejects payloads with any legacy key.
+
+Unit conversion: % ↔ decimal round-trip.
+
+Strategy selectors: reference only canonical types.
+
+Integration tests (API + Engine):
+
+POST new Guardrails/Filters/Goals → config-snapshot reflects exact values.
+
+Flip to Live vs Paper → snapshots differ accordingly.
+
+Force-set a legacy key via API: expect 422 and no change in snapshot.
+
+E2E (Playwright):
+
+Modify values in UI for Guardrails/Filters/Goals (current fields only).
+
+Navigate to Dashboard → values exhibited correctly (widgets/tables).
+
+Call /api/diagnostics/config-snapshot and assert it matches UI & dashboard.
+
+Remove old fields from the DOM: assert they do not exist.
+
+Part F — Cleanup & Reporting
+
+Remove/Hide legacy UI:
+
+Ensure no old inputs exist in Guardrails, Screeners, Goals pages (mobile/desktop).
+
+Delete dead components and exports.
+
+Add visual regression screenshots for the 3 tabs.
+
+Telemetry + Logs:
+
+Add counter: config.legacy_key_blocked (should remain zero).
+
+Add gauge: config.snapshot_mismatch (UI vs backend); must be zero.
+
+Final report (audit/final-report.md):
+
+Truth table, grep results, removed fields list, before/after diagrams.
+
+Links to PRs, test run screenshots, and a one-page “How to add a new field safely”.
+
+Acceptance Criteria (ship/no-ship)
+
+config-snapshot exactly mirrors only current fields for Guardrails, Filters, Goals.
+
+All tests in Part E pass in CI for paper and live.
+
+No legacy inputs remain in UI, API, DB views, strategy selectors, or engine.
+
+Telemetry shows zero legacy access and zero UI/backend mismatches for 48h.
+
+Notes & Conventions
+
+Percent fields are stored/displayed as percent (e.g., 0.80); engine converts to decimal internally.
+
+Goals (LATTI) is the only source for Target Daily Avg Earnings %. Manual overrides are namespaced by preset and mode.
+
+Document any unavoidable exceptions with a clear expiry date.
