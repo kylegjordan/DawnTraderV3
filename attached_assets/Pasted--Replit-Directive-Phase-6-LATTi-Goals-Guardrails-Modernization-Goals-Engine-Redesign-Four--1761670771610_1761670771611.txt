@@ -1,0 +1,178 @@
+⚙️ Replit Directive — Phase 6
+
+LATTi Goals + Guardrails Modernization — Goals Engine Redesign: Four Presets + Adaptive Learning Mode
+
+Credentials (dev environment):
+username: testuser123
+password: SecurePass123!
+
+🎯 Objective
+
+Redesign the Goals Engine into a flexible, adaptive system using four preset trading profiles + one dynamic “Custom” mode.
+Enable automatic performance tracking and self-adjustment over time through the Learning Hook, allowing LATTI to fine-tune preset boundaries as user performance improves.
+
+Inputs:
+
+goals_presets table (Phase 4)
+
+guardrails_v2 + filters_v2 (Phase 5)
+
+v_guardrails_compliance analytics view
+
+GuardrailPolicy service + coherency telemetry
+
+Outputs:
+
+Updated database schema: goals_learning_metrics.sql
+
+Backend: Learning engine + preset auto-adjustment service
+
+Frontend: Expanded Goals Preset Grid with learning indicators
+
+Documentation: docs/goals_engine_redesign_overview.md
+
+Replit updates marking Phase 6 completion
+
+🧱 Work Packages
+A) Database Layer → Performance Tracking
+
+Create new table: goals_learning_metrics
+
+CREATE TABLE goals_learning_metrics (
+  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+  mode trading_mode NOT NULL,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  avg_daily_return DECIMAL(6,3),
+  avg_risk_per_trade DECIMAL(5,3),
+  avg_drawdown DECIMAL(5,3),
+  trades_count INT DEFAULT 0,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS goals_learning_mode_date_idx ON goals_learning_metrics(mode, date);
+
+
+Purpose: record rolling 30-day averages per mode to assess performance vs preset ceilings.
+
+Add SQL view: v_goals_learning_summary aggregating last 30 days per mode:
+
+CREATE OR REPLACE VIEW v_goals_learning_summary AS
+SELECT
+  mode,
+  ROUND(AVG(avg_daily_return),3) AS avg_daily_return_30d,
+  ROUND(AVG(avg_risk_per_trade),3) AS avg_risk_per_trade_30d,
+  ROUND(AVG(avg_drawdown),3) AS avg_drawdown_30d
+FROM goals_learning_metrics
+WHERE date >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY mode;
+
+B) Backend Service → GoalsLearningEngine
+
+Create new file server/services/goals-learning-engine.ts that:
+
+Reads v_goals_learning_summary + goals_presets.
+
+For each preset, if avg_daily_return_30d ≥ 0.8 × preset target ceiling, expand preset range upward by 5 %.
+
+Updates corresponding goals_presets values and emits telemetry event goals.learning.expanded.
+
+Prevents expansion beyond a hardcoded global safety cap (e.g., risk ≤ 5 %, kill switch ≤ 20 %).
+
+Runs once per day via cron or scheduled task.
+
+Example pseudocode:
+
+if (metrics.avg_daily_return_30d >= preset.target_daily_avg_earning_pct * 0.8)
+  preset.portfolio_risk_per_trade_pct *= 1.05;
+
+C) Frontend → Goals Preset Grid Expansion
+
+Extend PresetsGrid component:
+
+Add small badge for each preset:
+🧠 Learning Active if the engine has modified the preset in the last 30 days.
+
+Hover tooltip: “Preset boundaries auto-adjust as performance improves.”
+
+Add sub-panel “Learning Metrics” below the grid:
+
+Display 30-day averages from /api/goals-learning/summary.
+
+Color-code metrics (🟢 above target, 🟡 near target, 🔴 below).
+
+Modify active preset display in DashboardLATTiWidget to include a ⚙️ “Adaptive” label when learning mode affects the preset.
+
+D) API Layer
+
+GET /api/goals-learning/summary?mode=
+
+Returns latest 30-day averages + current preset adjustment state.
+
+POST /api/goals-learning/trigger?mode=
+
+Manually invokes recalculation for testing or admin override.
+
+Integration:
+
+Update /api/goals-presets GET to include last_adjusted_at and learning_active fields.
+
+E) Documentation
+
+Create docs/goals_engine_redesign_overview.md detailing:
+
+New data flow (presets → learning metrics → auto-adjustment).
+
+Safety caps and coherency interaction.
+
+UI/UX behavior for learning indicators.
+
+Telemetry events and log structure.
+
+Update coherency_rules.yaml to add informational rule:
+
+- name: Learning Expansion Cap
+  condition: portfolio_risk_per_trade_pct <= 5.0
+  severity: info
+
+F) Testing & QA
+
+Unit Tests
+
+Validate learning engine expands presets only when thresholds met.
+
+Confirm no violations of coherency caps.
+
+API Tests
+
+Verify summary endpoint outputs correct 30-day aggregates.
+
+POST trigger runs engine safely and emits telemetry.
+
+UI Tests
+
+Ensure “Learning Active” badge displays correctly.
+
+Validate metrics colors and tooltips.
+
+✅ Acceptance Criteria
+
+goals_learning_metrics table created and populated.
+
+GoalsLearningEngine runs daily and adjusts presets when conditions met.
+
+PresetsGrid and dashboard show learning state and metrics.
+
+All coherency caps respected; no rule violations logged.
+
+Documentation and tests updated; Phase 6 marked complete in replit.md.
+
+📅 Implementation Checklist (Replit Task Panel)
+[ ] Create goals_learning_metrics table + summary view
+[ ] Build server/services/goals-learning-engine.ts
+[ ] Add /api/goals-learning endpoints
+[ ] Expand PresetsGrid with Learning Active badges
+[ ] Display learning metrics summary panel
+[ ] Integrate adaptive labels in dashboard widget
+[ ] Write goals_engine_redesign_overview.md
+[ ] Update coherency_rules.yaml (version 2.2)
+[ ] Run tests and finalize docs
+[ ] Mark Phase 6 complete in replit.md

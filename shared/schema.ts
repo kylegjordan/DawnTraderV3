@@ -313,12 +313,30 @@ export const goalsPresets = pgTable("goals_presets", {
   tradesPerDayEst: decimal("trades_per_day_est", { precision: 5, scale: 2 }).notNull(),
   targetDailyAvgEarningPct: decimal("target_daily_avg_earning_pct", { precision: 5, scale: 2 }).notNull(),
   
+  // Phase 6: Adaptive Learning Fields
+  lastAdjustedAt: timestamp("last_adjusted_at", { withTimezone: true }), // When learning engine last adjusted this preset
+  learningActive: boolean("learning_active").notNull().default(false), // Whether learning engine is actively managing this preset
+  
   // Metadata
   isActive: boolean("is_active").notNull().default(false), // Only one preset active per mode
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   uniqueModeAndName: uniqueIndex("goals_presets_mode_name_idx").on(table.mode, table.name),
+}));
+
+// Phase 6: Goals Learning Metrics (Performance tracking for adaptive learning)
+export const goalsLearningMetrics = pgTable("goals_learning_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: tradingModeEnum("mode").notNull(),
+  date: date("date").notNull().default(sql`CURRENT_DATE`),
+  avgDailyReturn: decimal("avg_daily_return", { precision: 6, scale: 3 }),
+  avgRiskPerTrade: decimal("avg_risk_per_trade", { precision: 5, scale: 3 }),
+  avgDrawdown: decimal("avg_drawdown", { precision: 5, scale: 3 }),
+  tradesCount: integer("trades_count").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  modeDateIdx: index("goals_learning_mode_date_idx").on(table.mode, table.date),
 }));
 
 // Screener Filters (mode-isolated screening criteria) - GLOBAL per mode
@@ -1828,11 +1846,22 @@ export const insertGoalsPresetsSchema = createInsertSchema(goalsPresets).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  lastAdjustedAt: true,
 }).extend({
   portfolioRiskPerTradePct: z.union([z.string(), z.number()]).transform(val => String(val)),
   dailyLossKillSwitchPct: z.union([z.string(), z.number()]).transform(val => String(val)),
   tradesPerDayEst: z.union([z.string(), z.number()]).transform(val => String(val)),
   targetDailyAvgEarningPct: z.union([z.string(), z.number()]).transform(val => String(val)),
+});
+
+// Phase 6: Goals Learning Metrics Insert Schema
+export const insertGoalsLearningMetricsSchema = createInsertSchema(goalsLearningMetrics).omit({
+  id: true,
+  updatedAt: true,
+}).extend({
+  avgDailyReturn: z.union([z.string(), z.number(), z.null()]).transform(val => val === null ? null : String(val)).optional(),
+  avgRiskPerTrade: z.union([z.string(), z.number(), z.null()]).transform(val => val === null ? null : String(val)).optional(),
+  avgDrawdown: z.union([z.string(), z.number(), z.null()]).transform(val => val === null ? null : String(val)).optional(),
 });
 
 export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).omit({
@@ -2217,6 +2246,10 @@ export type GuardrailsV2 = typeof guardrailsV2.$inferSelect;
 // Phase 4: Goals Presets Types
 export type InsertGoalsPresets = z.infer<typeof insertGoalsPresetsSchema>;
 export type GoalsPresets = typeof goalsPresets.$inferSelect;
+
+// Phase 6: Goals Learning Metrics Types
+export type InsertGoalsLearningMetrics = z.infer<typeof insertGoalsLearningMetricsSchema>;
+export type GoalsLearningMetrics = typeof goalsLearningMetrics.$inferSelect;
 
 export type InsertScreenerFilters = z.infer<typeof insertScreenerFiltersSchema>;
 export type ScreenerFilters = typeof screenerFilters.$inferSelect;
