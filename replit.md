@@ -28,7 +28,7 @@ The system uses a modern `guardrails_v2` schema with four core guardrail paramet
 - **Max Open Positions**: Maximum concurrent open positions
 - **Daily Loss Kill Switch %**: Portfolio loss threshold that triggers emergency shutdown
 
-Key features include dual-mode operation (paper/live) with independent guardrail sets, coherency validation enforced via 8 validation rules, backend API endpoints for GET/PUT guardrails, and real-time WebSocket broadcasts for config changes.
+Key features include dual-mode operation (paper/live) with independent guardrail sets, coherency validation enforced via 10 validation rules (including learning expansion caps), backend API endpoints for GET/PUT guardrails, and real-time WebSocket broadcasts for config changes.
 
 The system implements toggle controls for switching between LATTi autonomous optimization and manual user control for individual parameters. This is managed via `locked_by_user` flags in the `guardrails_v2` table and `managed_by_lottie`/`manual_override_enabled` metadata flags for filters. Dedicated frontend components (`CoreFourGuardrails`, `FiltersWithOverride`) and a `useOverrideState` hook manage this functionality with real-time WebSocket synchronization.
 
@@ -36,11 +36,14 @@ A unified dashboard widget and Goals Preset Grid implements a 4+1 preset structu
 
 A **GuardrailPolicy Service** (`server/services/guardrail-policy.ts`) acts as a single backend source of truth for guardrail values with runtime coherency enforcement. It handles:
 - **Effective Value Resolution**: Determines values based on manual vs. LATTi management.
-- **Coherency Validation**: Validates all 8 rules, returning errors or warnings.
+- **Coherency Validation**: Validates all 10 rules (including Phase 6 learning expansion caps), returning errors or warnings.
 - **Kill Switch Management**: Implements a circuit breaker pattern with per-mode state to activate/reset emergency trading halts.
 - **Conflict Detection**: Identifies attempts to override LATTi-managed parameters without proper locking.
 - **Metrics & Telemetry**: Tracks rule failures, kill switch trips, and override conflicts.
 The API layer exposes endpoints for effective guardrails, updating guardrails with full coherency validation, and managing the kill switch state. New WebSocket events are broadcast for kill switch status and policy updates. The GuardrailPolicy Service is integrated into the `RiskManager`, `StrategyEngine`, and `LATTI Manager` to ensure consistent and safe operation.
+
+**Phase 6 - Adaptive Learning Mode (COMPLETED):**
+The Goals Engine now features an adaptive learning system that automatically optimizes preset boundaries based on 30-day performance metrics. When a preset achieves ≥80% of its target daily return over a 30-day rolling window, the system automatically expands all guardrail parameters by 5% to capitalize on proven performance. Global safety caps prevent runaway expansion: portfolio risk capped at 5.0%, kill switch at 20.0%, cooldown at 90 minutes, max positions at 20. The `goals_learning_metrics` table stores daily performance snapshots, and the `v_goals_learning_summary` view provides 30-day rolling averages. The `GoalsLearningEngine` service (`server/services/goals-learning-engine.ts`) handles auto-adjustment logic with safety cap enforcement. API endpoints include GET `/api/goals-learning/summary` for metrics and POST `/api/goals-learning/trigger` for manual learning cycles. Each preset tracks `last_adjusted_at` timestamp and `learning_active` boolean flag. WebSocket events (`goals.learning.expanded`, `goals.learning.completed`) broadcast learning actions in real-time. Designed for daily cron execution with manual trigger capability for testing. Full documentation in `docs/goals_engine_redesign_overview.md`. Safety rule RULE_010 added to `audit/coherency_rules.yaml`.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
