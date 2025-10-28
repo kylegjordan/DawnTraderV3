@@ -281,6 +281,7 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   // Phase 3: Manual Override Controls (Lottie vs User)
   isManualOverride: boolean("is_manual_override").notNull().default(false), // true = user controls, false = LATTI controls
   tunedByLatti: boolean("tuned_by_latti").notNull().default(true), // true = LATTI manages, false = manual
+  lockedByUser: jsonb("locked_by_user").default(sql`'{}'::jsonb`), // Per-parameter lock status: {portfolioRisk: true, cooldown: false, ...}
   
   // Metadata
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),

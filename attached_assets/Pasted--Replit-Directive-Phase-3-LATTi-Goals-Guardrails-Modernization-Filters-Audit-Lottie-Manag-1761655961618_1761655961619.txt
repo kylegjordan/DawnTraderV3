@@ -1,0 +1,152 @@
+⚙️ Replit Directive — Phase 3
+
+LATTi Goals + Guardrails Modernization — Filters Audit → Lottie-Managed Mode + Manual Override UI
+
+Credentials (standard development mode):
+username: testuser123
+password: SecurePass123!
+
+🎯 Objective
+
+Standardize all Filters and Guardrails control states and introduce a unified “Managed by Lottie / Manual Override” toggle system across the UI and API.
+No algorithmic or risk-logic changes — only control and visibility improvements built on top of the Phase 2 guardrails_v2 schema.
+
+Inputs:
+
+/audit/guardrails_inventory.csv
+
+/audit/filters_inventory.csv
+
+/audit/coherency_rules.yaml
+
+/server/db/guardrails_v2 schema
+
+Outputs:
+
+filters_v2.ts (schema + metadata)
+
+Updated UI components (filters-tab.tsx, guardrails-tab.tsx)
+
+Extended API (GET/PUT /api/filters-v2, update to /api/guardrails-v2)
+
+docs/manual_override_behavior.md
+
+Unit tests verifying lock/unlock logic
+
+🧱 Work Packages
+A) Filters Audit → Standardization
+
+Create filters_v2 schema in TypeScript (client/schemas/filters_v2.ts).
+ Each filter param includes:
+
+{
+  name: string;
+  value: number | string | boolean;
+  managed_by_lottie: boolean;
+  manual_override_enabled: boolean;
+}
+
+
+Tag existing filters from Phase 1 inventory with metadata:
+ - managed_by_lottie = true (default)
+ - manual_override_enabled = false until unlocked in UI
+
+Add API endpoints:
+ - GET /api/filters-v2 → returns filters with control metadata
+ - PUT /api/filters-v2 → accepts manual overrides and updates flags
+
+Keep existing filter behavior unchanged — this is a metadata upgrade only.
+
+B) Guardrails UI Enhancement → Manual Override Controls
+
+Update client/components/goals/guardrails-tab.tsx:
+ - Add toggle switch above each Core Four parameter:
+  Default: “Controlled by Lottie 🔒” (read-only)
+  Unlocked: “Manual Override 🔓” (editable)
+ - Bind each toggle to the corresponding flag in guardrails_v2:
+  is_manual_override (boolean)
+  locked_by_user (JSONB per-parameter, Phase 4 expansion)
+
+Update component state flow:
+ - On toggle → call PUT /api/guardrails-v2 with is_manual_override updated.
+ - On form submit → persist values and broadcast to LATTI via WebSocket.
+ - When locked → disable inputs and display live read-only values.
+
+Add UX elements:
+ - Tooltips explaining Lottie vs Manual modes.
+ - Status icons on each field to show management state.
+ - Live-mode confirmation dialog before unlock in production.
+
+C) Backend Integration → Control Flags
+
+Extend guardrails_v2 table (add if not already present):
+
+ALTER TABLE guardrails_v2
+  ADD COLUMN locked_by_user JSONB DEFAULT '{}'::jsonb;
+
+
+Update /api/guardrails-v2 PUT endpoint:
+ - Support partial updates of is_manual_override and locked_by_user.
+ - Validate RULE_005 (NOT (is_manual_override AND tuned_by_latti)).
+ - Emit telemetry event guardrail.override.changed.
+
+Add two new API tests:
+ - Toggle Manual → reject if tuned_by_latti = true.
+ - Toggle Lottie → reset manual flags successfully.
+
+D) Documentation → Behavior Guide
+
+Create docs/manual_override_behavior.md with:
+
+Overview of Lottie-managed vs Manual override states
+
+Field-level UX rules and coherency implications
+
+API examples (GET/PUT requests and expected responses)
+
+Error codes: RULE_005, RULE_006 (new for toggle validation)
+
+Audit logging and telemetry naming conventions
+
+E) Testing & Validation
+
+Create unit tests (/tests/ui/guardrails_controls.test.tsx and /tests/api/guardrails_v2_override.test.ts):
+
+Ensure lock/unlock UI reflects DB state
+
+PUT request fails if both Lottie and Manual active
+
+UI disables fields correctly in locked state
+
+Filter metadata (managed_by_lottie) round-trips through API
+
+✅ Acceptance Criteria
+
+All Core Four guardrails display a working Lottie/Manual toggle.
+
+Manual edits persist and flag is_manual_override = true.
+
+API enforces mutual exclusion (RULE_005).
+
+Filters return metadata and respond to lock/unlock.
+
+All tests pass with Phase 2 coherency rules intact.
+
+Docs updated and linked in replit.md.
+
+🧭 Handover to Phase 4
+
+When Phase 3 UI and API are merged and tested:
+
+Proceed to Phase 4: Guardrails UI Refinement + Coherency Analytics View,
+ focusing on persisted override history and UI sync with dashboard widgets.
+
+📅 Implementation Checklist (for Replit Task Panel)
+[ ] Create filters_v2 schema (metadata only)
+[ ] Add managed_by_lottie + manual_override_enabled flags
+[ ] Add /api/filters-v2 endpoints
+[ ] Update guardrails-tab.tsx with Lottie/Manual toggles
+[ ] Extend /api/guardrails-v2 to persist override state
+[ ] Create docs/manual_override_behavior.md
+[ ] Implement RULE_005 + RULE_006 validation tests
+[ ] Mark Phase 3 complete in replit.md
