@@ -154,29 +154,53 @@ export function DashboardLATTiWidget() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Status Row */}
-              <div className="flex flex-col sm:flex-row gap-4 pb-4 border-b border-border">
-                <div className="flex-1">
-                  <div className="text-sm text-muted-foreground mb-1">Active Preset</div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-base font-semibold" data-testid="badge-active-preset">
-                      {getPresetDisplayName(preset?.name)}
-                    </Badge>
+              {/* Active Preset with Status Badges */}
+              <div className="pb-4 border-b border-border">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-2">Active Preset</div>
+                      <Badge variant="outline" className="text-lg font-bold px-4 py-2" data-testid="badge-active-preset">
+                        {getPresetDisplayName(preset?.name)}
+                      </Badge>
+                    </div>
                   </div>
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm text-muted-foreground mb-1">Coherency Status</div>
-                  <div className="flex items-center gap-2">
-                    {getCoherencyBadge(compliance?.coherency_status)}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm text-muted-foreground mb-1">Control Mode</div>
-                  <div className="flex items-center gap-2">
-                    {getControlModeBadge()}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Coherency:</span>
+                      {getCoherencyBadge(compliance?.coherency_status)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Control:</span>
+                      {getControlModeBadge()}
+                    </div>
                   </div>
                 </div>
               </div>
+
+              {/* Target Daily Goals */}
+              {preset && (
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" />
+                    Target Daily Goals
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-muted/30 dark:bg-muted/30 p-3 rounded-lg">
+                      <div className="text-xs text-muted-foreground mb-1">Target Daily Avg Earning %</div>
+                      <div className="text-2xl font-bold text-foreground" data-testid="text-target-earning">
+                        {preset.targetDailyAvgEarningPct}%
+                      </div>
+                    </div>
+                    <div className="bg-muted/30 dark:bg-muted/30 p-3 rounded-lg">
+                      <div className="text-xs text-muted-foreground mb-1">Trades per Day (Est)</div>
+                      <div className="text-2xl font-bold text-foreground" data-testid="text-trades-per-day">
+                        {preset.tradesPerDayEst}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Core Four Guardrails */}
               <div>
@@ -213,7 +237,7 @@ export function DashboardLATTiWidget() {
                       <Users className="h-3 w-3" />
                       Max Open Positions
                     </div>
-                    <div className="text-2xl font-bold text-foreground" data-testid="text-max-positions">
+                    <div className="text-2xl font-bold text-foreground" data-testid="text-text-max-positions">
                       {guardrails?.maxOpenPositions || '—'}
                     </div>
                   </div>
@@ -230,30 +254,6 @@ export function DashboardLATTiWidget() {
                   </div>
                 </div>
               </div>
-
-              {/* Target Daily Goals */}
-              {preset && (
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    Target Daily Goals
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="bg-muted/30 dark:bg-muted/30 p-3 rounded-lg">
-                      <div className="text-xs text-muted-foreground mb-1">Target Daily Avg Earning %</div>
-                      <div className="text-2xl font-bold text-foreground" data-testid="text-target-earning">
-                        {preset.targetDailyAvgEarningPct}%
-                      </div>
-                    </div>
-                    <div className="bg-muted/30 dark:bg-muted/30 p-3 rounded-lg">
-                      <div className="text-xs text-muted-foreground mb-1">Trades per Day (Est)</div>
-                      <div className="text-2xl font-bold text-foreground" data-testid="text-trades-per-day">
-                        {preset.tradesPerDayEst}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </CardContent>
