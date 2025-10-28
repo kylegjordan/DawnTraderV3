@@ -1759,10 +1759,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Filter calibration endpoint - fetches latest with Paper→Live fallback
   apiRouter.get('/screeners/calibration', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
       const mode = req.mode!;
 
-      const calibration = await storage.getCalibrationWithFallback(userId, mode, 24);
+      const calibration = await storage.getCalibrationWithFallback(mode, 24);
 
       if (!calibration) {
         return res.status(404).json({ error: 'No calibration data found' });
