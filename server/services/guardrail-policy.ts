@@ -1,0 +1,479 @@
+import fs from 'fs';
+import path from 'path';
+import yaml from 'yaml';
+import type { GuardrailsV2 } from '@shared/schema';
+
+/**
+ * Phase 5: GuardrailPolicy Service
+ * 
+ * Single backend source of truth for guardrail values with coherency enforcement.
+ * Resolves effective values (Lottie vs Manual), validates against coherency_rules.yaml,
+ * and provides runtime enforcement for RiskManager, StrategyEngine, and LATTI.
+ */
+
+// ============================================================================
+// Types & Interfaces
+// ============================================================================
+
+export type TradingMode = 'paper' | 'live';
+export type CoherencyStatus = 'PASS' | 'WARN' | 'FAIL';
+
+export interface EffectiveGuardrails {
+  mode: TradingMode;
+  portfolioRiskPerTradePct: number;
+  symbolCooldownMinutes: number;
+  maxOpenPositions: number;
+  dailyLossKillSwitchPct: number;
+  management: {
+    isManualOverride: boolean;
+    tunedByLatti: boolean;
+    lockedByUser: Record<string, boolean>;
+  };
+}
+
+export interface RuleFailure {
+  ruleId: string;
+  ruleName: string;
+  severity: 'error' | 'warn';
+  message: string;
+  param?: string;
+  value?: number | string;
+  expected?: string;
+}
+
+export interface CoherencyValidationResult {
+  status: CoherencyStatus;
+  failures: RuleFailure[];
+  timestamp: string;
+}
+
+interface CoherencyRule {
+  name: string;
+  id: string;
+  description: string;
+  condition: string;
+  severity: 'error' | 'warn';
+  error_message: string;
+  rationale?: string;
+}
+
+interface CoherencyRulesConfig {
+  metadata: {
+    version: string;
+    purpose: string;
+  };
+  rules: CoherencyRule[];
+}
+
+// ============================================================================
+// GuardrailPolicy Service Class
+// ============================================================================
+
+class GuardrailPolicyService {
+  private rulesConfig: CoherencyRulesConfig | null = null;
+  private killSwitchState: Map<TradingMode, boolean> = new Map([
+    ['paper', false],
+    ['live', false]
+  ]);
+  
+  // Metrics counters
+  private metrics = {
+    ruleFailures: new Map<string, number>(),
+    ruleWarnings: new Map<string, number>(),
+    killSwitchTrips: new Map<TradingMode, number>([
+      ['paper', 0],
+      ['live', 0]
+    ]),
+    overrideConflicts: new Map<TradingMode, number>([
+      ['paper', 0],
+      ['live', 0]
+    ])
+  };
+
+  constructor() {
+    this.loadCoherencyRules();
+  }
+
+  // ============================================================================
+  // Coherency Rules Loading
+  // ============================================================================
+
+  private loadCoherencyRules(): void {
+    try {
+      const rulesPath = path.join(process.cwd(), 'audit', 'coherency_rules.yaml');
+      const fileContent = fs.readFileSync(rulesPath, 'utf8');
+      this.rulesConfig = yaml.parse(fileContent) as CoherencyRulesConfig;
+      console.log(`[GuardrailPolicy] Loaded coherency rules v${this.rulesConfig.metadata.version}`);
+    } catch (error: any) {
+      console.error('[GuardrailPolicy] Failed to load coherency_rules.yaml:', error.message);
+      throw new Error('Cannot initialize GuardrailPolicy without coherency rules');
+    }
+  }
+
+  /**
+   * Hot-reload coherency rules from file (for runtime updates)
+   */
+  public reloadRules(): void {
+    console.log('[GuardrailPolicy] Hot-reloading coherency rules...');
+    this.loadCoherencyRules();
+  }
+
+  // ============================================================================
+  // Effective Value Resolution
+  // ============================================================================
+
+  /**
+   * Resolves effective guardrail values based on manual override vs LATTI management.
+   * 
+   * Resolution logic:
+   * 1. If is_manual_override = true OR locked_by_user[param] = true → use DB value (manual)
+   * 2. Else use DB value (LATTI-managed)
+   * 
+   * Note: The DB row already contains the effective values. This method primarily
+   * structures the response and resolves per-parameter lock states.
+   */
+  public getEffective(guardrail: GuardrailsV2): EffectiveGuardrails {
+    const lockedByUser = (guardrail.lockedByUser as Record<string, boolean>) || {};
+    
+    return {
+      mode: guardrail.mode as TradingMode,
+      portfolioRiskPerTradePct: parseFloat(String(guardrail.portfolioRiskPerTradePct)),
+      symbolCooldownMinutes: guardrail.symbolCooldownMinutes,
+      maxOpenPositions: guardrail.maxOpenPositions,
+      dailyLossKillSwitchPct: parseFloat(String(guardrail.dailyLossKillSwitchPct)),
+      management: {
+        isManualOverride: guardrail.isManualOverride,
+        tunedByLatti: guardrail.tunedByLatti,
+        lockedByUser
+      }
+    };
+  }
+
+  // ============================================================================
+  // Coherency Validation
+  // ============================================================================
+
+  /**
+   * Validates guardrail values against all coherency rules.
+   * Returns structured validation result with failures array.
+   */
+  public validate(guardrail: EffectiveGuardrails | Partial<EffectiveGuardrails>): CoherencyValidationResult {
+    const failures: RuleFailure[] = [];
+    
+    if (!this.rulesConfig) {
+      throw new Error('Coherency rules not loaded');
+    }
+
+    const risk = guardrail.portfolioRiskPerTradePct;
+    const cooldown = guardrail.symbolCooldownMinutes;
+    const positions = guardrail.maxOpenPositions;
+    const killSwitch = guardrail.dailyLossKillSwitchPct;
+    const isManualOverride = guardrail.management?.isManualOverride;
+    const tunedByLatti = guardrail.management?.tunedByLatti;
+
+    // RULE_001: Risk ≤ KillSwitch/10
+    if (risk !== undefined && killSwitch !== undefined) {
+      const maxAllowedRisk = killSwitch / 10;
+      if (risk > maxAllowedRisk) {
+        const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_001')!;
+        failures.push({
+          ruleId: 'RULE_001',
+          ruleName: rule.name,
+          severity: 'error',
+          message: rule.error_message
+            .replace('{value}', risk.toFixed(2))
+            .replace('{kill_switch}', killSwitch.toFixed(2))
+            .replace('{max_allowed}', maxAllowedRisk.toFixed(2)),
+          param: 'portfolioRiskPerTradePct',
+          value: risk,
+          expected: `<= ${maxAllowedRisk.toFixed(2)}%`
+        });
+        this.incrementMetric('ruleFailures', 'RULE_001');
+      }
+    }
+
+    // RULE_002: Total Exposure Cap (WARNING)
+    if (positions !== undefined && risk !== undefined) {
+      const totalExposure = positions * risk;
+      if (totalExposure > 100) {
+        const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_002')!;
+        failures.push({
+          ruleId: 'RULE_002',
+          ruleName: rule.name,
+          severity: 'warn',
+          message: rule.error_message.replace('{total}', totalExposure.toFixed(2)),
+          param: 'maxOpenPositions',
+          value: totalExposure,
+          expected: '<= 100%'
+        });
+        this.incrementMetric('ruleWarnings', 'RULE_002');
+      }
+    }
+
+    // RULE_003: Cooldown Minimum
+    if (cooldown !== undefined && cooldown < 1) {
+      const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_003')!;
+      failures.push({
+        ruleId: 'RULE_003',
+        ruleName: rule.name,
+        severity: 'error',
+        message: rule.error_message.replace('{value}', String(cooldown)),
+        param: 'symbolCooldownMinutes',
+        value: cooldown,
+        expected: '>= 1 minute'
+      });
+      this.incrementMetric('ruleFailures', 'RULE_003');
+    }
+
+    // RULE_004: Cooldown Maximum (WARNING)
+    if (cooldown !== undefined && cooldown > 90) {
+      const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_004')!;
+      failures.push({
+        ruleId: 'RULE_004',
+        ruleName: rule.name,
+        severity: 'warn',
+        message: rule.error_message.replace('{value}', String(cooldown)),
+        param: 'symbolCooldownMinutes',
+        value: cooldown,
+        expected: '<= 90 minutes'
+      });
+      this.incrementMetric('ruleWarnings', 'RULE_004');
+    }
+
+    // RULE_005: Manual Override Exclusivity
+    if (isManualOverride === true && tunedByLatti === true) {
+      const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_005')!;
+      failures.push({
+        ruleId: 'RULE_005',
+        ruleName: rule.name,
+        severity: 'error',
+        message: rule.error_message,
+        param: 'management',
+        value: 'conflicting flags'
+      });
+      this.incrementMetric('ruleFailures', 'RULE_005');
+      
+      // Track override conflict
+      const mode = guardrail.mode as TradingMode;
+      if (mode) {
+        const current = this.metrics.overrideConflicts.get(mode) || 0;
+        this.metrics.overrideConflicts.set(mode, current + 1);
+      }
+    }
+
+    // RULE_006: Portfolio Risk Range
+    if (risk !== undefined && (risk < 0.10 || risk > 5.00)) {
+      const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_006')!;
+      failures.push({
+        ruleId: 'RULE_006',
+        ruleName: rule.name,
+        severity: 'error',
+        message: rule.error_message.replace('{value}', risk.toFixed(2)),
+        param: 'portfolioRiskPerTradePct',
+        value: risk,
+        expected: '0.10% - 5.00%'
+      });
+      this.incrementMetric('ruleFailures', 'RULE_006');
+    }
+
+    // RULE_007: Kill Switch Range
+    if (killSwitch !== undefined && (killSwitch < 1.00 || killSwitch > 20.00)) {
+      const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_007')!;
+      failures.push({
+        ruleId: 'RULE_007',
+        ruleName: rule.name,
+        severity: 'error',
+        message: rule.error_message.replace('{value}', killSwitch.toFixed(2)),
+        param: 'dailyLossKillSwitchPct',
+        value: killSwitch,
+        expected: '1.00% - 20.00%'
+      });
+      this.incrementMetric('ruleFailures', 'RULE_007');
+    }
+
+    // RULE_008: Max Positions Range
+    if (positions !== undefined && (positions < 1 || positions > 20)) {
+      const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_008')!;
+      failures.push({
+        ruleId: 'RULE_008',
+        ruleName: rule.name,
+        severity: 'error',
+        message: rule.error_message.replace('{value}', String(positions)),
+        param: 'maxOpenPositions',
+        value: positions,
+        expected: '1 - 20'
+      });
+      this.incrementMetric('ruleFailures', 'RULE_008');
+    }
+
+    // Determine overall status
+    const hasErrors = failures.some(f => f.severity === 'error');
+    const hasWarnings = failures.some(f => f.severity === 'warn');
+    
+    const status: CoherencyStatus = hasErrors ? 'FAIL' : hasWarnings ? 'WARN' : 'PASS';
+
+    return {
+      status,
+      failures,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // ============================================================================
+  // Kill Switch Management
+  // ============================================================================
+
+  /**
+   * Trip the circuit breaker for a specific mode.
+   * This immediately blocks all new trades and can trigger position closure.
+   */
+  public tripKillSwitch(mode: TradingMode, reason: string): void {
+    console.log(`[GuardrailPolicy] ⚠️ KILL SWITCH TRIPPED for ${mode}: ${reason}`);
+    this.killSwitchState.set(mode, true);
+    
+    const current = this.metrics.killSwitchTrips.get(mode) || 0;
+    this.metrics.killSwitchTrips.set(mode, current + 1);
+    
+    // Emit telemetry event
+    this.emitEvent('guardrail.kill_switch.tripped', {
+      mode,
+      reason,
+      timestamp: new Date().toISOString(),
+      tripCount: current + 1
+    });
+  }
+
+  /**
+   * Reset the kill switch for a specific mode.
+   */
+  public resetKillSwitch(mode: TradingMode): void {
+    console.log(`[GuardrailPolicy] ✅ Kill switch reset for ${mode}`);
+    this.killSwitchState.set(mode, false);
+    
+    this.emitEvent('guardrail.kill_switch.reset', {
+      mode,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Check if kill switch is currently tripped for a mode.
+   */
+  public isKillSwitchTripped(mode: TradingMode): boolean {
+    return this.killSwitchState.get(mode) || false;
+  }
+
+  // ============================================================================
+  // Conflict Detection
+  // ============================================================================
+
+  /**
+   * Detects conflicts when trying to set manual values while LATTI owns the field.
+   * Returns true if conflict detected.
+   */
+  public detectOverrideConflict(
+    currentGuardrail: GuardrailsV2,
+    incomingPayload: Partial<EffectiveGuardrails>
+  ): { hasConflict: boolean; conflicts: string[] } {
+    const lockedByUser = (currentGuardrail.lockedByUser as Record<string, boolean>) || {};
+    const conflicts: string[] = [];
+
+    // If system is LATTI-managed and user tries to override without locking
+    if (currentGuardrail.tunedByLatti && !currentGuardrail.isManualOverride) {
+      const paramMap: Record<string, keyof EffectiveGuardrails> = {
+        portfolioRiskPerTradePct: 'portfolioRiskPerTradePct',
+        symbolCooldownMinutes: 'symbolCooldownMinutes',
+        maxOpenPositions: 'maxOpenPositions',
+        dailyLossKillSwitchPct: 'dailyLossKillSwitchPct'
+      };
+
+      for (const [param, payloadKey] of Object.entries(paramMap)) {
+        if (incomingPayload[payloadKey] !== undefined && !lockedByUser[param]) {
+          conflicts.push(param);
+        }
+      }
+    }
+
+    if (conflicts.length > 0) {
+      console.warn(`[GuardrailPolicy] Override conflict detected: ${conflicts.join(', ')}`);
+      this.emitEvent('guardrail.override.conflict', {
+        mode: currentGuardrail.mode,
+        conflicts,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return {
+      hasConflict: conflicts.length > 0,
+      conflicts
+    };
+  }
+
+  // ============================================================================
+  // Metrics & Telemetry
+  // ============================================================================
+
+  private incrementMetric(category: 'ruleFailures' | 'ruleWarnings', ruleId: string): void {
+    const map = this.metrics[category];
+    const current = map.get(ruleId) || 0;
+    map.set(ruleId, current + 1);
+  }
+
+  /**
+   * Get current metrics snapshot
+   */
+  public getMetrics() {
+    return {
+      ruleFailures: Object.fromEntries(this.metrics.ruleFailures),
+      ruleWarnings: Object.fromEntries(this.metrics.ruleWarnings),
+      killSwitchTrips: {
+        paper: this.metrics.killSwitchTrips.get('paper') || 0,
+        live: this.metrics.killSwitchTrips.get('live') || 0
+      },
+      overrideConflicts: {
+        paper: this.metrics.overrideConflicts.get('paper') || 0,
+        live: this.metrics.overrideConflicts.get('live') || 0
+      }
+    };
+  }
+
+  /**
+   * Emit telemetry event (integrates with ContextBridge)
+   */
+  private async emitEvent(type: string, payload: any): Promise<void> {
+    try {
+      const { contextBridge } = await import('./context-bridge');
+      contextBridge.broadcast({
+        type,
+        payload,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error(`[GuardrailPolicy] Failed to emit event ${type}:`, error.message);
+    }
+  }
+
+  /**
+   * Log structured JSON for policy events
+   */
+  public logPolicyEvent(data: {
+    ruleId?: string;
+    mode: TradingMode;
+    param?: string;
+    oldValue?: any;
+    newValue?: any;
+    status: CoherencyStatus;
+    message?: string;
+  }): void {
+    console.log('[GuardrailPolicy:Event]', JSON.stringify({
+      timestamp: new Date().toISOString(),
+      ...data
+    }));
+  }
+}
+
+// ============================================================================
+// Singleton Export
+// ============================================================================
+
+export const guardrailPolicy = new GuardrailPolicyService();
