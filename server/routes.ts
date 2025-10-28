@@ -2508,30 +2508,67 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Portfolio and Metrics
+  // Portfolio and Metrics - Mode-aware endpoint
   apiRouter.get('/portfolio/overview', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
-      const liveBalance = await riskManager.getLiveKrakenBalance(userId);
-      const metrics = await riskManager.getPortfolioMetrics(userId);
-      const cashCrypto = await riskManager.getCashVsCrypto(userId);
-      const winRateData = await riskManager.getWinRate(userId, 30);
+      // Get mode-specific balance
+      let totalValue: number;
+      let cash: number;
+      let crypto: number;
+      let syncTimestamp: Date | undefined;
+      let balanceSource: string;
+      let balanceError: string | undefined;
+      
+      if (mode === 'paper') {
+        // Paper mode - get simulated portfolio state
+        const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
+        
+        if (!portfolioState) {
+          return res.status(404).json({ error: 'Paper portfolio state not found' });
+        }
+        
+        const balance = parseFloat(portfolioState.balance || '850');
+        const cryptoValue = parseFloat(portfolioState.cryptoValue || '0');
+        const cashValue = parseFloat(portfolioState.cash || balance.toString());
+        
+        totalValue = balance;
+        cash = cashValue;
+        crypto = cryptoValue;
+        syncTimestamp = undefined;
+        balanceSource = 'paper-sim';
+        balanceError = undefined;
+      } else {
+        // Live mode - get Kraken balance
+        const liveBalance = await riskManager.getLiveKrakenBalance(userId);
+        totalValue = liveBalance.totalValueUSD;
+        cash = liveBalance.cashUSD;
+        crypto = liveBalance.cryptoUSD;
+        syncTimestamp = liveBalance.syncTimestamp;
+        balanceSource = liveBalance.source;
+        balanceError = liveBalance.error;
+      }
+      
+      // Get mode-specific metrics
+      const metrics = await riskManager.getPortfolioMetrics(mode);
+      const winRateData = await riskManager.getWinRate(mode, 30);
       
       res.json({
-        totalValue: liveBalance.totalValueUSD,
+        totalValue,
         unrealizedPL: metrics.unrealizedPL,
         realizedPL: metrics.realizedPL,
         currentExposure: metrics.currentExposure,
         openTradesCount: metrics.openTradesCount,
         ...winRateData,
-        cash: liveBalance.cashUSD,
-        crypto: liveBalance.cryptoUSD,
-        cashPercent: liveBalance.totalValueUSD > 0 ? (liveBalance.cashUSD / liveBalance.totalValueUSD) * 100 : 0,
-        cryptoPercent: liveBalance.totalValueUSD > 0 ? (liveBalance.cryptoUSD / liveBalance.totalValueUSD) * 100 : 0,
-        syncTimestamp: liveBalance.syncTimestamp,
-        balanceSource: liveBalance.source,
-        balanceError: liveBalance.error
+        cash,
+        crypto,
+        cashPercent: totalValue > 0 ? (cash / totalValue) * 100 : 0,
+        cryptoPercent: totalValue > 0 ? (crypto / totalValue) * 100 : 0,
+        syncTimestamp,
+        balanceSource,
+        balanceError
       });
     } catch (error) {
       console.error('Error fetching portfolio overview:', error);
