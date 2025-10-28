@@ -12,44 +12,15 @@ import PortfolioValueWidget from "@/components/goals/portfolio-value-widget";
 import EarningsWidget from "@/components/goals/earnings-widget";
 import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import AveragesWidget from "@/components/goals/averages-widget";
-import GoalsSummaryWidget from "@/components/goals/goals-summary-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
-import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
-import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
 import { BaselineStatusWidget } from "@/components/dashboard/baseline-status-widget";
-import { LATTIDashboardWidget } from "@/components/dashboard/latti-dashboard-widget";
 import { LATTIGoalsMirror } from "@/components/dashboard/latti-goals-mirror";
 import AlertBanner from "@/components/alerts/alert-banner";
-import SystemHealthSummary from "@/components/system-health-summary";
 import { useSystemHealth } from "@/hooks/use-system-health";
-import { useState, useEffect } from "react";
-import { apiRequest } from "@/lib/queryClient";
 
 export default function Dashboard() {
   // Enable auto-resync polling every 12s (detects backend changes and auto-refreshes widgets)
   useSystemHealth();
-
-  // Phase 8.5 Addendum K: System Truth telemetry polling
-  const [truthData, setTruthData] = useState<any>(null);
-
-  useEffect(() => {
-    const fetchTruthData = async () => {
-      try {
-        const response = await apiRequest('GET', '/api/system/truth-check');
-        setTruthData(response);
-      } catch (error) {
-        console.error('[Dashboard] Error fetching truth data:', error);
-      }
-    };
-
-    // Initial fetch
-    fetchTruthData();
-
-    // Poll every 30 seconds
-    const timer = setInterval(fetchTruthData, 30000);
-
-    return () => clearInterval(timer);
-  }, []);
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-testid="dashboard-page">
@@ -105,15 +76,6 @@ export default function Dashboard() {
 
       {/* Phase 27.F.31: LATTI Baseline Status Widget (moved from position 2) */}
       <BaselineStatusWidget />
-
-      {/* System Truth Synchronization Panel */}
-      <SystemTruthPanel truthData={truthData} />
-
-      {/* Developer-Only Data Flow Trace */}
-      <DataFlowTracePanel />
-
-      {/* System Health Summary - Walter Activity (Feed/Formula Monitoring) */}
-      <SystemHealthSummary />
     </div>
   );
 }

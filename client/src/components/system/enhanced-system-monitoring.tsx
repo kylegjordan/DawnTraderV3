@@ -39,6 +39,9 @@ import {
 import ClusterTab from "./cluster-tab";
 import LearningNetworkTab from "./learning-network-tab";
 import { LATTISafetyMonitor } from "./latti-safety-monitor";
+import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
+import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
+import SystemHealthSummary from "@/components/system-health-summary";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SystemMetrics {
@@ -151,6 +154,9 @@ export default function EnhancedSystemMonitoring() {
   const { toast } = useToast();
   const logEndRef = useRef<HTMLDivElement>(null);
   
+  // Phase 27.F.31: System Truth telemetry for Diagnostics tab
+  const [truthData, setTruthData] = useState<any>(null);
+  
   // Enable auto-refresh every 10 seconds
   const refetchInterval = 10000;
   
@@ -163,6 +169,22 @@ export default function EnhancedSystemMonitoring() {
       logEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, activeTab]);
+
+  // Phase 27.F.31: Fetch truth data for Diagnostics tab
+  useEffect(() => {
+    const fetchTruthData = async () => {
+      try {
+        const response = await apiRequest('GET', '/api/system/truth-check');
+        setTruthData(response);
+      } catch (error) {
+        console.error('[SystemMonitoring] Error fetching truth data:', error);
+      }
+    };
+
+    fetchTruthData();
+    const timer = setInterval(fetchTruthData, 30000); // Poll every 30 seconds
+    return () => clearInterval(timer);
+  }, []);
   
   // Acknowledge alert mutation
   const acknowledgeMutation = useMutation({
@@ -549,6 +571,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="learning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-learning" title="Learning Network">
             <Brain className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Learning Network</span>
+          </TabsTrigger>
+          <TabsTrigger value="diagnostics" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-diagnostics" title="Diagnostics & Telemetry">
+            <Monitor className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Diagnostics & Telemetry</span>
           </TabsTrigger>
         </TabsList>
         </div>
@@ -1069,6 +1095,25 @@ export default function EnhancedSystemMonitoring() {
         {/* Learning Network Tab - Phase 18.0 */}
         <TabsContent value="learning" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-learning">
           <LearningNetworkTab />
+        </TabsContent>
+
+        {/* Phase 27.F.31: Diagnostics & Telemetry Tab */}
+        <TabsContent value="diagnostics" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-diagnostics">
+          <div className="space-y-6">
+            <h3 className="text-xl font-bold text-foreground">System Diagnostics & Telemetry</h3>
+            <p className="text-sm text-muted-foreground">
+              Real-time system truth synchronization, data flow diagnostics, and Walter activity monitoring
+            </p>
+            
+            {/* System Truth Synchronization Panel */}
+            <SystemTruthPanel truthData={truthData} />
+            
+            {/* Developer-Only Data Flow Trace */}
+            <DataFlowTracePanel />
+            
+            {/* System Health Summary - Walter Activity (Feed/Formula Monitoring) */}
+            <SystemHealthSummary />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
