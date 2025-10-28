@@ -78,28 +78,90 @@ All components correctly use preset-based or LATTI-computed values:
 
 **No manual target inputs found** - All references properly use active preset or LATTI API values.
 
-## Legacy Components Identified (Deferred Cleanup)
+## Phase 6.1: Final UI Alignment (Completed 2025-10-28)
 
-### Duplicate Guardrails Components
-**Modern (Keep):**
-- `client/src/components/goals/core-four-guardrails.tsx` - Uses `/api/guardrails-v2`, manages modern Core Four parameters
+### 6. Replaced TargetDailyGoals with Simplified Projected Growth Section
+**Files Modified:**
+- `client/src/components/goals/goals-engine-tab.tsx`
 
-**Legacy (Future Removal):**
-- `client/src/components/goals/guardrails-tab.tsx` - Uses `/api/guardrails` (old endpoint), manages deprecated parameters
+**Changes:**
+- Removed complex 500+ line `TargetDailyGoals` component with manual inputs
+- Replaced with simplified "Projected Portfolio Growth" section
+- Displays active preset name with color-coded badge
+- Shows target daily avg earning % and trades per day directly from active preset
+- Projects compound growth table (Tomorrow, 1 Week, 1 Month, 3 Months, 6 Months, 1 Year)
 
-**Decision:** Both components are currently displayed in the Guardrails tab (`client/src/pages/goals-engine.tsx` line 86-90). Removal of legacy GuardrailsTab requires careful migration to ensure no functionality is lost. **Deferred to future phase.**
+**Before:** Complex manual input form with validation, LATTI sync logic, and override tracking  
+**After:** Read-only display of preset values with automatic projections
+
+### 7. Removed Duplicate Preset Name Headings
+**Files Modified:**
+- `client/src/components/goals/presets-grid.tsx`
+
+**Changes:**
+- Removed duplicate `<CardTitle>{preset.name}</CardTitle>` that appeared below colored badge
+- Preset name now appears only once in the colored badge
+
+**Before:** Preset name shown twice (badge + heading)  
+**After:** Preset name shown once in color-coded badge only
+
+### 8. Removed Legacy GuardrailsTab Component
+**Files Modified:**
+- `client/src/pages/goals-engine.tsx`
+
+**Changes:**
+- Removed `<GuardrailsTab />` from Guardrails tab content
+- Kept only `<CoreFourGuardrails />` component
+- Guardrails tab now shows single, modern component using `/api/guardrails-v2`
+
+**Before:** Duplicate guardrails UI (CoreFourGuardrails + GuardrailsTab)  
+**After:** Single modern guardrails UI (CoreFourGuardrails only)
+
+### 9. Dashboard LATTi Widget Final Layout
+**Files Modified:**
+- `client/src/components/dashboard/dashboard-latti-widget.tsx`
+
+**Changes:**
+- Active preset name wrapped in color-coded badge (green/blue/amber/red/purple)
+- Added `getPresetBadgeColor()` function for consistent preset colors
+- Moved coherency and control badges to footer row
+- Added metrics inline with badges: `Target: 0.87% | Trades/Day: 12`
+- Footer row has light background with rounded corners
+- Control badge text shortened from "LATTi Managed" to "LATTi"
+
+**New Layout:**
+1. **Active Preset**: Color-coded badge at top
+2. **Target Daily Goals**: Two-column grid
+3. **Core Four Guardrails**: Four-column grid
+4. **Footer Row**: Coherency badge | Control badge | Target % | Trades/Day
+
+**Before:** Status badges inline with preset, separate from metrics  
+**After:** Cohesive footer row combining badges and key metrics
+
+## Legacy Components Removed
+- `client/src/components/goals/trading-pace-control.tsx` - **DELETED**
+- `client/src/components/goals/guardrails-tab.tsx` - **REMOVED from page** (file still exists but unused)
 
 ## Files Modified Summary
 ```
-client/src/components/goals/goals-engine-tab.tsx
-client/src/components/goals/filters-with-override.tsx
-client/src/components/dashboard/dashboard-latti-widget.tsx
+client/src/components/goals/goals-engine-tab.tsx (Phases 1 & 6)
+client/src/components/goals/presets-grid.tsx (Phase 6.1)
+client/src/components/goals/filters-with-override.tsx (Phase 3)
+client/src/components/dashboard/dashboard-latti-widget.tsx (Phases 4 & 9)
+client/src/pages/goals-engine.tsx (Phase 8)
 audit/goals_ui_cleanup.md (NEW)
 ```
 
 ## Files Deleted
 ```
-client/src/components/goals/trading-pace-control.tsx
+client/src/components/goals/trading-pace-control.tsx (Phase 1)
+```
+
+## Components Removed from UI
+```
+<TradingPaceControl /> (deleted)
+<TargetDailyGoals /> (replaced with simplified version)
+<GuardrailsTab /> (removed from goals-engine page)
 ```
 
 ## Database Changes
@@ -112,12 +174,17 @@ Rows Updated: 8 (4 presets × 2 modes)
 ## Testing Recommendations
 
 ### Manual Testing Checklist
-- [ ] Goals Engine tab loads without Trading Pace component
-- [ ] TargetDailyGoals displays preset-based values
-- [ ] Screeners tab shows error/empty state instead of blank page
-- [ ] Dashboard LATTi widget displays in correct order: Preset → Goals → Guardrails
-- [ ] Preset changes update all dependent widgets correctly
-- [ ] All preset targets display updated values (Conservative 0.17%, Baseline 0.87%, etc.)
+- [x] Goals Engine tab loads without Trading Pace component
+- [x] Goals Engine shows simplified Projected Growth section
+- [x] Preset cards show name only once (in colored badge)
+- [x] Screeners tab shows error/empty state instead of blank page
+- [x] Dashboard LATTi widget displays in correct order: Preset → Goals → Guardrails → Footer
+- [x] Dashboard footer row shows: Coherency | Control | Target % | Trades/Day
+- [x] Preset changes update all dependent widgets correctly
+- [x] All preset targets display updated values (Conservative 0.17%, Baseline 0.87%, etc.)
+- [x] Guardrails tab shows only CoreFourGuardrails (no duplicate legacy tab)
+- [ ] Projected Growth table calculates correctly for all presets
+- [ ] Color-coded preset badges consistent across all views
 
 ### Playwright Test Coverage
 ```typescript
