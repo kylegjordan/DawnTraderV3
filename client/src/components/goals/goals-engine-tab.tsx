@@ -161,7 +161,7 @@ export default function GoalsEngineTab() {
       <CardContent className="space-y-6">
         {/* Active Preset Header */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
             <h4 className="text-sm font-semibold text-muted-foreground">Active Preset</h4>
             <Badge className={presetColor} data-testid="badge-active-preset">
               {activePreset.name.charAt(0).toUpperCase() + activePreset.name.slice(1)}
