@@ -1,0 +1,108 @@
+🧭 Directive: Phase 27.F.34 — Remove Deprecated Screener Variable Inputs
+Objective
+
+Hide and deprecate the legacy Screener variable input fields still appearing at the bottom of the Screeners tab, ensuring only the new unified “Screener Filters Configuration” panel remains visible.
+This should not delete data yet—just remove or conditionally hide the legacy components from the UI and ensure backend compatibility.
+
+Implementation Steps
+Frontend Changes
+
+Locate client/src/components/goals/screener-filters-tab.tsx and identify the following:
+
+The new section begins with <div className="screener-filters-container"> (showing Volume, Price, Market Quality, etc.).
+
+The deprecated section appears below, referencing legacy variables such as:
+
+avgVolumeRatio
+
+atrThreshold
+
+volatilityMax
+
+rsiMin / rsiMax
+
+priceDeltaTrigger
+
+earningsBlackout
+
+and other outdated fields no longer present in the current schema.
+
+Remove or hide legacy form groups:
+
+Wrap the entire deprecated JSX block in a conditional that checks an environment variable:
+
+{process.env.SCREENERS_V2_ENABLED && (
+   <NewFiltersComponent />
+)}
+
+
+and remove any legacy groups not covered by this.
+
+Alternatively, comment out or delete the old <section> or <FormFieldGroup> components referencing obsolete variables.
+
+Clean imports
+
+Remove any imports for legacy subcomponents (e.g., ScreenerAdvancedFilters, ATRRange, RSIInputs) if they are now unused.
+
+Ensure there are no dangling imports from client/src/components/goals/filters-old.tsx.
+
+Adjust layout
+
+Confirm that Screener Filters Configuration is visually complete with:
+
+Volume & Liquidity
+
+Price Range
+
+Market Quality
+
+Trading Windows
+
+Confidence Threshold
+
+Timeframes
+
+Remove redundant spacing or horizontal dividers left by deleted content.
+
+Backend Changes
+
+No schema or endpoint changes needed—/api/filters-v2 already provides the valid new fields.
+
+If the legacy endpoint /api/screeners/filters still exists:
+
+Keep it temporarily for backward compatibility but tag it with:
+
+console.warn('[DEPRECATED] /api/screeners/filters endpoint accessed')
+
+
+Add a comment at the top of the handler: // TODO: remove after SCREENERS_V2 rollout complete.
+
+Testing
+
+Verify the Screeners tab loads only the new unified layout.
+
+Confirm that all sections:
+
+“Volume & Liquidity,” “Price Range,” “Market Quality,” “Active Timeframes,” and “Confidence Threshold” render correctly.
+
+No old variable inputs (ATR, RSI, AvgVolumeRatio, etc.) appear.
+
+Ensure the Save Screener and Reset Defaults buttons work normally.
+
+Documentation Update
+
+Update replit.md and CHANGELOG.md:
+
+Phase 27.F.34 – Removed legacy Screener variable input fields and consolidated layout.
+All Screeners now reference unified v2 filters (Volume, Price, Market, and Confidence).
+No data migration required.
+
+✅ Success Criteria
+
+The bottom “old variable inputs” section no longer appears.
+
+Only modern filter inputs are displayed.
+
+No console warnings or React render errors.
+
+API /api/filters-v2 continues functioning as before.
