@@ -22,6 +22,7 @@ import {
   InsertLearningHistory
 } from "@shared/schema";
 import { eq, and, desc, gte, sql } from "drizzle-orm";
+import { guardrailPolicy } from "./guardrail-policy";
 
 type TradingMode = "paper" | "live";
 type BehavioralTriggerType = "adaptive_change" | "user_override" | "risk_trigger" | "performance_feedback" | "coherency_violation";
@@ -208,11 +209,172 @@ export class AdaptiveGuardrailsService {
 
     const adjustments: AdaptiveAdjustment[] = [];
 
-    console.log(`[AdaptiveGuardrails] Analyzed parameters for ${mode} (no adjustments needed at this time)`);
+    // Get current guardrails
+    const currentGuardrails = await db
+      .select()
+      .from(guardrailsV2)
+      .where(eq(guardrailsV2.mode, mode))
+      .limit(1);
 
-    // Create snapshot if changes were made
+    if (!currentGuardrails.length) {
+      console.log(`[AdaptiveGuardrails] No guardrails found for ${mode}`);
+      return [];
+    }
+
+    const guardrail = currentGuardrails[0];
+
+    // Analyze each adjustable parameter
+    const parametersToAnalyze = [
+      { key: 'portfolioRiskPerTradePct', current: Number(guardrail.portfolioRiskPerTradePct) },
+      { key: 'maxOpenPositions', current: guardrail.maxOpenPositions }
+    ];
+
+    for (const param of parametersToAnalyze) {
+      const stats = await this.analyzeBehavior(mode, param.key);
+      
+      if (!stats) {
+        console.log(`[AdaptiveGuardrails] Insufficient data for ${param.key} analysis`);
+        continue;
+      }
+
+      // High variance indicates need for adjustment
+      if (stats.variance > 5 && stats.confidence >= config.minConfidence) {
+        // Calculate micro-adjustment (±1-3%)
+        const direction = stats.meanDelta > 0 ? 1 : -1;
+        const adjustmentPct = Math.min(
+          Math.abs(stats.meanDelta) * stats.confidence,
+          config.maxAdjustmentPercent
+        );
+        
+        let newValue = param.current * (1 + (direction * adjustmentPct / 100));
+        newValue = Math.max(0.1, Math.min(20, newValue)); // Safety bounds
+
+        // For integer parameters (maxOpenPositions), check if rounding changes the value
+        if (param.key === 'maxOpenPositions') {
+          const roundedValue = Math.round(newValue);
+          if (roundedValue === param.current) {
+            console.log(`[AdaptiveGuardrails] Skipping ${param.key}: rounded value (${roundedValue}) equals current (${param.current})`);
+            continue; // Skip this adjustment - no real change after rounding
+          }
+          newValue = roundedValue;
+        }
+
+        if (Math.abs(newValue - param.current) > 0.01) {
+          adjustments.push({
+            parameter: param.key,
+            oldValue: param.current.toString(),
+            newValue: param.key === 'maxOpenPositions' ? newValue.toString() : newValue.toFixed(2),
+            adjustmentPercent: adjustmentPct,
+            confidence: stats.confidence
+          });
+        }
+      }
+    }
+
+    // Apply adjustments if any
     if (adjustments.length > 0) {
-      await this.createSnapshot(mode, adjustments.length);
+      // Build proposed guardrails state for coherency validation
+      const proposedGuardrails: any = {
+        mode,
+        portfolioRiskPerTradePct: Number(guardrail.portfolioRiskPerTradePct),
+        symbolCooldownMinutes: guardrail.symbolCooldownMinutes,
+        maxOpenPositions: guardrail.maxOpenPositions,
+        dailyLossKillSwitchPct: Number(guardrail.dailyLossKillSwitchPct),
+        management: {
+          isManualOverride: guardrail.isManualOverride,
+          tunedByLatti: guardrail.tunedByLatti,
+          lockedByUser: guardrail.lockedByUser || {}
+        }
+      };
+
+      // Apply proposed changes to the test object
+      for (const adj of adjustments) {
+        if (adj.parameter === 'portfolioRiskPerTradePct') {
+          proposedGuardrails.portfolioRiskPerTradePct = parseFloat(adj.newValue);
+        } else if (adj.parameter === 'maxOpenPositions') {
+          proposedGuardrails.maxOpenPositions = Math.round(parseFloat(adj.newValue));
+        }
+      }
+
+      // Validate coherency before applying
+      const validationResult = guardrailPolicy.validate(proposedGuardrails);
+
+      if (validationResult.status === 'FAIL') {
+        console.log(`[AdaptiveGuardrails] ⛔ Coherency validation FAILED for ${mode} - adjustments blocked:`);
+        validationResult.failures.forEach(f => {
+          console.log(`  - ${f.ruleId}: ${f.message}`);
+        });
+
+        // Log coherency violation
+        await this.logBehavior({
+          tradingMode: mode,
+          parameter: 'coherency_check',
+          oldValue: 'proposed_changes',
+          newValue: 'blocked',
+          triggerType: "coherency_violation",
+          confidence: 1.0,
+          metadata: {
+            failures: validationResult.failures,
+            attemptedAdjustments: adjustments
+          }
+        });
+
+        return []; // Abort all adjustments
+      }
+
+      console.log(`[AdaptiveGuardrails] ✅ Coherency validation PASSED - applying ${adjustments.length} adjustments for ${mode}`);
+
+      // Apply validated adjustments
+      for (const adj of adjustments) {
+        // Update guardrails table
+        if (adj.parameter === 'portfolioRiskPerTradePct') {
+          await db
+            .update(guardrailsV2)
+            .set({ 
+              portfolioRiskPerTradePct: adj.newValue,
+              lastUpdatedBy: 'LATTI_ADAPTIVE'
+            })
+            .where(eq(guardrailsV2.mode, mode));
+        } else if (adj.parameter === 'maxOpenPositions') {
+          // Round and ensure it matches the logged value
+          const roundedValue = Math.round(parseFloat(adj.newValue));
+          adj.newValue = roundedValue.toString(); // Update to match persisted value
+          
+          await db
+            .update(guardrailsV2)
+            .set({ 
+              maxOpenPositions: roundedValue,
+              lastUpdatedBy: 'LATTI_ADAPTIVE'
+            })
+            .where(eq(guardrailsV2.mode, mode));
+        }
+
+        // Log to behavioral_log with the actual persisted value
+        await this.logBehavior({
+          tradingMode: mode,
+          parameter: adj.parameter,
+          oldValue: adj.oldValue,
+          newValue: adj.newValue,
+          triggerType: "adaptive_change",
+          confidence: adj.confidence,
+          metadata: {
+            adjustmentPercent: adj.adjustmentPercent,
+            learningMode: config.mode,
+            coherencyValidated: true
+          }
+        });
+
+        console.log(`[AdaptiveGuardrails] ${mode}: ${adj.parameter} ${adj.oldValue} → ${adj.newValue} (${adj.adjustmentPercent.toFixed(1)}% change, confidence: ${(adj.confidence * 100).toFixed(0)}%)`);
+      }
+
+      // Create snapshot after changes
+      await this.createSnapshot(mode, adjustments.length, {
+        reason: 'adaptive_adjustments',
+        adjustments: adjustments.map(a => ({ parameter: a.parameter, change: a.adjustmentPercent })),
+        coherencyValidated: true
+      });
+    } else {
+      console.log(`[AdaptiveGuardrails] Analyzed parameters for ${mode} (no adjustments needed at this time)`);
     }
 
     return adjustments;
