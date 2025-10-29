@@ -15479,6 +15479,120 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 30: DHMA Strategy Telemetry ====================
+  
+  // Get DHMA telemetry for a mode
+  apiRouter.get('/strategy/dhma/telemetry', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.query.mode as 'paper' | 'live' || 'paper';
+      if (mode !== 'paper' && mode !== 'live') {
+        return res.status(400).json({ error: 'Invalid mode. Must be paper or live.' });
+      }
+
+      // Get DHMA trades from the last 24 hours
+      const oneDayAgo = new Date();
+      oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+      
+      const allTrades = mode === 'live' 
+        ? await storage.getTrades({ limit: 10000 })
+        : await storage.getAllPaperTrades();
+      
+      // Filter for DHMA strategy in the last 24 hours
+      const dhmaTrades = allTrades.filter((t: any) => 
+        t.strategy === 'dhma' && 
+        t.entryTime && 
+        new Date(t.entryTime) >= oneDayAgo
+      );
+      
+      // Calculate metrics
+      const entries = dhmaTrades.length;
+      const exits = dhmaTrades.filter((t: any) => t.status === 'closed').length;
+      const closedTrades = dhmaTrades.filter((t: any) => t.status === 'closed' && t.exitTime);
+      
+      const winningTrades = closedTrades.filter((t: any) => 
+        parseFloat(t.realizedPL || '0') > 0
+      );
+      const hitRate = closedTrades.length > 0 
+        ? (winningTrades.length / closedTrades.length) * 100 
+        : 0;
+      
+      const totalPL = closedTrades.reduce((sum: number, t: any) => 
+        sum + parseFloat(t.realizedPL || '0'), 0
+      );
+      const avgPLPerTrade = closedTrades.length > 0 
+        ? totalPL / closedTrades.length 
+        : 0;
+      
+      // Calculate average hold time (in minutes)
+      let totalHoldTime = 0;
+      for (const trade of closedTrades) {
+        if (trade.entryTime && trade.exitTime) {
+          const entryTime = new Date(trade.entryTime).getTime();
+          const exitTime = new Date(trade.exitTime).getTime();
+          totalHoldTime += (exitTime - entryTime) / 60000; // Convert to minutes
+        }
+      }
+      const avgHoldTimeMinutes = closedTrades.length > 0 
+        ? totalHoldTime / closedTrades.length 
+        : 0;
+      
+      // Extract metadata averages (spread, toxicity)
+      let totalSpread = 0;
+      let totalToxicity = 0;
+      let spreadCount = 0;
+      let toxicityCount = 0;
+      
+      for (const trade of dhmaTrades) {
+        if (trade.metadata) {
+          const metadata = typeof trade.metadata === 'string' 
+            ? JSON.parse(trade.metadata) 
+            : trade.metadata;
+          
+          if (metadata.spreadTicks !== undefined) {
+            totalSpread += metadata.spreadTicks;
+            spreadCount++;
+          }
+          if (metadata.toxicity !== undefined) {
+            totalToxicity += metadata.toxicity;
+            toxicityCount++;
+          }
+        }
+      }
+      
+      const avgSpread = spreadCount > 0 ? totalSpread / spreadCount : 0;
+      const avgToxicity = toxicityCount > 0 ? totalToxicity / toxicityCount : 0;
+      
+      // Skip reasons (would be tracked separately in a real implementation)
+      const skipReasons = {
+        highToxicity: 0,
+        wideSpread: 0,
+        noRegimeAlignment: 0,
+        coherencyFail: 0
+      };
+      
+      const telemetry = {
+        mode,
+        period: '24h',
+        entries,
+        exits,
+        hitRate: parseFloat(hitRate.toFixed(2)),
+        avgPLPerTrade: parseFloat(avgPLPerTrade.toFixed(2)),
+        avgHoldTimeMinutes: parseFloat(avgHoldTimeMinutes.toFixed(1)),
+        avgSpreadTicks: parseFloat(avgSpread.toFixed(2)),
+        avgToxicity: parseFloat(avgToxicity.toFixed(2)),
+        skipReasons,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log(`[DHMA] Telemetry | mode=${mode} | entries=${entries} | exits=${exits} | hitRate=${hitRate.toFixed(1)}%`);
+      
+      res.json(telemetry);
+    } catch (error: any) {
+      console.error('[DHMA] Telemetry error:', error);
+      res.status(500).json({ error: 'Failed to fetch DHMA telemetry' });
+    }
+  });
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)
