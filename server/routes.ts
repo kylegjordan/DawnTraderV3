@@ -1176,8 +1176,76 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       console.log(`[GuardrailsV2:${requestId}] Upserting guardrails for mode: ${mode}`, updatePayload);
 
+      // Phase 28.C: Get old values for audit logging
+      const oldGuardrails = await storage.getGuardrailsV2({ mode });
+
       // Upsert guardrails_v2
       const guardrailsData = await storage.upsertGuardrailsV2(updatePayload);
+
+      // Phase 28.C: Log changes to audit_log
+      if (oldGuardrails) {
+        const auditPromises = [];
+        
+        if (portfolioRiskPerTradePct !== undefined && oldGuardrails.portfolioRiskPerTradePct !== String(portfolioRiskPerTradePct)) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'portfolioRiskPerTradePct',
+            oldValue: oldGuardrails.portfolioRiskPerTradePct,
+            newValue: String(portfolioRiskPerTradePct),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        if (symbolCooldownMinutes !== undefined && oldGuardrails.symbolCooldownMinutes !== symbolCooldownMinutes) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'symbolCooldownMinutes',
+            oldValue: String(oldGuardrails.symbolCooldownMinutes),
+            newValue: String(symbolCooldownMinutes),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        if (maxOpenPositions !== undefined && oldGuardrails.maxOpenPositions !== maxOpenPositions) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'maxOpenPositions',
+            oldValue: String(oldGuardrails.maxOpenPositions),
+            newValue: String(maxOpenPositions),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        if (dailyLossKillSwitchPct !== undefined && oldGuardrails.dailyLossKillSwitchPct !== String(dailyLossKillSwitchPct)) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'dailyLossKillSwitchPct',
+            oldValue: oldGuardrails.dailyLossKillSwitchPct,
+            newValue: String(dailyLossKillSwitchPct),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        if (lockedByUser !== undefined && JSON.stringify(oldGuardrails.lockedByUser) !== JSON.stringify(lockedByUser)) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'guardrails',
+            field: 'lockedByUser',
+            oldValue: JSON.stringify(oldGuardrails.lockedByUser),
+            newValue: JSON.stringify(lockedByUser),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+        
+        await Promise.all(auditPromises);
+        if (auditPromises.length > 0) {
+          console.log(`[GuardrailsV2:${requestId}] Logged ${auditPromises.length} audit entries`);
+        }
+      }
 
       // Phase 3: Emit telemetry event if manual override state changed
       if (isManualOverride !== undefined || lockedByUser !== undefined) {
@@ -1741,6 +1809,36 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         manualOverrideEnabled: manualOverrideEnabled ?? currentManualOverrideEnabled,
         lastUpdatedBy: userId
       });
+      
+      // Phase 28.C: Log changes to audit_log
+      const auditPromises = [];
+      
+      if (managedByLottie !== undefined && currentManagedByLottie !== managedByLottie) {
+        auditPromises.push(storage.addAuditLog({
+          entityType: 'filters',
+          field: 'managedByLottie',
+          oldValue: String(currentManagedByLottie),
+          newValue: String(managedByLottie),
+          changedBy: userId,
+          tradingMode: mode
+        }));
+      }
+      
+      if (manualOverrideEnabled !== undefined && currentManualOverrideEnabled !== manualOverrideEnabled) {
+        auditPromises.push(storage.addAuditLog({
+          entityType: 'filters',
+          field: 'manualOverrideEnabled',
+          oldValue: String(currentManualOverrideEnabled),
+          newValue: String(manualOverrideEnabled),
+          changedBy: userId,
+          tradingMode: mode
+        }));
+      }
+      
+      await Promise.all(auditPromises);
+      if (auditPromises.length > 0) {
+        console.log(`[FiltersV2:${requestId}] Logged ${auditPromises.length} audit entries`);
+      }
       
       console.log(`[FiltersV2:${requestId}] Override flags updated successfully`);
       
