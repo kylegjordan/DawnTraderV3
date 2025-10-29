@@ -164,7 +164,7 @@ export default function CoherencyRulesTab() {
       {/* Rules Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Coherency Rules (v2.1-phase28e)</CardTitle>
+          <CardTitle className="text-lg">Coherency Rules (v2.2-phase28efinal)</CardTitle>
           <CardDescription>
             These rules validate guardrail configurations to ensure safe trading parameters
           </CardDescription>
@@ -262,7 +262,106 @@ export default function CoherencyRulesTab() {
           </div>
           <div>
             <p className="font-medium text-foreground mb-1">Telemetry:</p>
-            <p>Startup logs display coherency policy status: <code className="px-1 py-0.5 bg-muted rounded">[Audit] CoherencyPolicy | activeRules=X | warningRules=Y | disabledRules=Z | version=2.1-phase28e</code></p>
+            <p>Startup logs display coherency policy status: <code className="px-1 py-0.5 bg-muted rounded">[Audit] CoherencyPolicy | activeRules=X | warningRules=Y | disabledRules=Z | version=v2.2-phase28efinal</code></p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Control Modes Reference */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-lg">Control Modes Reference</CardTitle>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-4 h-4 text-muted-foreground cursor-help" data-testid="info-control-modes" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-sm">Full rule specifications in audit/coherency_rules.yaml</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <CardDescription>
+            How LATTI and manual control modes work together (Phase 28.E Final)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <p className="text-muted-foreground">
+            The Goals Engine supports flexible control over each Core Four parameter. 
+            You can choose between LATTI autonomous management and manual control for each parameter independently.
+          </p>
+          
+          <div className="space-y-3">
+            <div className="border-l-2 border-primary pl-4">
+              <p className="font-medium text-foreground mb-1">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                  LATTI Controlled
+                </span>
+              </p>
+              <p className="text-muted-foreground">
+                LATTI dynamically adjusts this value during trading based on performance metrics and learning algorithms. 
+                User can view but not edit the value.
+              </p>
+            </div>
+
+            <div className="border-l-2 border-orange-500 pl-4">
+              <p className="font-medium text-foreground mb-1">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                  Manual Control
+                </span>
+              </p>
+              <p className="text-muted-foreground">
+                User sets the value manually through the UI. LATTI cannot override it. 
+                The parameter is locked from autonomous adjustments.
+              </p>
+            </div>
+
+            <div className="border-l-2 border-purple-500 pl-4">
+              <p className="font-medium text-foreground mb-1">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                  Mixed Custom Mode
+                </span>
+              </p>
+              <p className="text-muted-foreground">
+                Combination of Manual + LATTI controls across different parameters. 
+                Only LATTI-managed fields are adjusted by the learning engine.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+            <p className="font-medium text-foreground text-xs uppercase tracking-wide">Behavior Rules</p>
+            <ul className="space-y-2 text-muted-foreground">
+              <li className="flex gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong className="text-foreground">Switching from Manual to LATTI:</strong> Retains the user's last manual value as LATTI's new baseline for future adjustments</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong className="text-foreground">Switching from LATTI to Manual:</strong> Locks the current LATTI value until the user explicitly edits it</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong className="text-foreground">Changing Core Four Values:</strong> Any manual edit to a Core Four parameter changes the active preset to "Custom"</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong className="text-foreground">Control Mode Toggle Only:</strong> Switching control mode without changing the value keeps the current preset active</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong className="text-foreground">Presets:</strong> Remain active unless a Core Four value is changed; then automatically switch to "Custom"</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong className="text-foreground">Paper vs Live Independence:</strong> Each mode maintains completely independent configuration states. Paper tests never affect Live trading parameters</span>
+              </li>
+            </ul>
           </div>
         </CardContent>
       </Card>

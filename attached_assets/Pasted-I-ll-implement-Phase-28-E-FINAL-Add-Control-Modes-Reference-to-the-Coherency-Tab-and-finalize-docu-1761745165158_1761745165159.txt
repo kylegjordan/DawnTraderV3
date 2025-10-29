@@ -1,0 +1,38 @@
+I'll implement Phase 28.E.FINAL – Add Control Modes Reference to the Coherency Tab and finalize documentation.
+
+Objectives:
+1. Add a “Control Modes Reference” section at the bottom of the Coherency tab (below “Implementation Notes”).
+2. Clearly document how Lottie vs Manual control modes behave.
+3. Ensure this section updates dynamically based on mode (Paper/Live).
+4. Confirm all coherency telemetry and rule status tracking remain functional.
+5. Update replit.md and audit/coherency_rules.yaml to version v2.2-phase28efinal.
+
+Implementation Details:
+- File: client/src/components/goals/coherency-rules-tab.tsx  
+  ➤ Add new expandable section labeled “Control Modes Reference”.
+  ➤ Content should include a short paragraph and a bullet list:
+    - **Lottie Controlled:** LATTI dynamically adjusts this value during trading. User can view but not edit.
+    - **Manual:** User sets the value manually. LATTI cannot override it.
+    - **Mixed Custom Mode:** Combination of Manual + Lottie controls. Only LATTI-managed fields are adjusted.
+    - **Switching from Manual to Lottie:** Retains the user’s last manual value as LATTI’s new baseline.
+    - **Switching from Lottie to Manual:** Locks the current LATTI value until the user edits it.
+    - **Presets:** Stay active unless a core value is changed; then preset becomes “Custom”.
+    - **Paper vs Live:** Independent configuration states. Paper tests never affect Live trading.
+  ➤ Include small info icon linking to audit/coherency_rules.yaml for full rule details.
+
+- File: server/services/guardrail-policy.ts  
+  ➤ Update startup telemetry to include policy version string:
+    [Audit] CoherencyPolicy | version=v2.2-phase28efinal | activeRules=5 | disabledRules=5
+
+- File: replit.md  
+  ➤ Add a final Phase 28.E Final section summarizing these changes.
+
+Testing:
+✅ Confirm the new section appears correctly under Coherency tab.
+✅ Validate tooltip links open the rule reference file.
+✅ Verify startup telemetry reports correct version.
+
+Please execute continuously without checkpoints until all tasks are complete and verified. 
+Use credentials:
+username = testuser123
+password = SecurePass123!
