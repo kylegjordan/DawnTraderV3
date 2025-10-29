@@ -1435,6 +1435,7 @@ export const strategyParameters = pgTable("strategy_parameters", {
 export const strategyParamSchema = pgTable("strategy_param_schema", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   strategyType: strategyTypeEnum("strategy_type").notNull(),
+  tradingMode: tradingModeEnum("trading_mode").notNull(),
   key: varchar("key", { length: 100 }).notNull(),
   label: varchar("label", { length: 200 }).notNull(),
   value: decimal("value", { precision: 20, scale: 8 }).notNull(),
@@ -1445,7 +1446,7 @@ export const strategyParamSchema = pgTable("strategy_param_schema", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueStrategyParam: uniqueIndex("strategy_param_schema_strategy_key_idx").on(table.strategyType, table.key),
+  uniqueStrategyParam: uniqueIndex("strategy_param_schema_strategy_mode_key_idx").on(table.strategyType, table.tradingMode, table.key),
 }));
 
 // AI Transparency Log (scheduler and automation activity logs)

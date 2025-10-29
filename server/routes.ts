@@ -15485,16 +15485,27 @@ Important: Extract the exact field names and numeric values from the user's requ
   apiRouter.get('/strategy/parameters', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const strategy = req.query.strategy as string;
+      const mode = req.query.mode as 'paper' | 'live';
+      
       if (!strategy) {
         return res.status(400).json({ error: 'Strategy parameter is required' });
+      }
+      
+      if (!mode || (mode !== 'paper' && mode !== 'live')) {
+        return res.status(400).json({ error: 'Invalid mode. Must be paper or live.' });
       }
 
       const params = await db
         .select()
         .from(strategyParamSchema)
-        .where(eq(strategyParamSchema.strategyType, strategy as any));
+        .where(
+          and(
+            eq(strategyParamSchema.strategyType, strategy as any),
+            eq(strategyParamSchema.tradingMode, mode)
+          )
+        );
       
-      console.log(`[Phase-30.FX.1] Fetched ${params.length} parameters for strategy: ${strategy}`);
+      console.log(`[Phase-30.FX.1] Fetched ${params.length} parameters for strategy: ${strategy}, mode: ${mode}`);
       
       res.json(params);
     } catch (error: any) {
