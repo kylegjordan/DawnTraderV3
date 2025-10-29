@@ -634,3 +634,23 @@ export function getDefaultDHMAParams(): Omit<DHMAParams, 'portfolioRiskPerTradeP
     maxHoldMinutes: 30
   };
 }
+
+// ==========================================================================
+// Phase 30.FX.A: EMA Smoothing for Telemetry
+// ==========================================================================
+
+/**
+ * Exponential Moving Average (EMA) smoothing function
+ * Used to smooth telemetry metrics and reduce noise
+ * 
+ * @param prev Previous EMA value
+ * @param next New observation
+ * @param alpha Smoothing factor (0-1), default 0.2 for 20% weight on new value
+ * @returns Smoothed value
+ */
+export function ema(prev: number, next: number, alpha: number = 0.2): number {
+  if (prev === 0 || isNaN(prev)) {
+    return next; // Bootstrap with first value
+  }
+  return prev * (1 - alpha) + next * alpha;
+}
