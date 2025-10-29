@@ -669,6 +669,66 @@ app.use((req, res, next) => {
         console.error('[Audit] ⚠️ FilterCoherence telemetry failed:', error);
       }
       
+      // Phase 28.B: GuardrailsCoherence Telemetry (with database-persisted override flags)
+      try {
+        const validateGuardrailsCoherence = async (mode: 'paper' | 'live') => {
+          // Fetch guardrails data from database
+          const guardrailsData = await storage.getGuardrailsV2({ mode });
+          
+          if (!guardrailsData) {
+            return {
+              status: 'MISSING',
+              paramCount: 0,
+              lattiManaged: 0,
+              manualOverride: 0,
+              coherent: false,
+              note: 'Guardrails data not found in database'
+            };
+          }
+          
+          // Core four guardrail parameters
+          const coreParams = [
+            'portfolioRiskPerTradePct',
+            'symbolCooldownMinutes',
+            'maxOpenPositions',
+            'dailyLossKillSwitchPct'
+          ];
+          
+          // Count how many params are locked by user (manual override)
+          const lockedByUser = (guardrailsData as any).lockedByUser || {};
+          const manualOverrideCount = coreParams.filter(param => lockedByUser[param] === true).length;
+          const lattiManagedCount = coreParams.length - manualOverrideCount;
+          
+          const coherent = (lattiManagedCount + manualOverrideCount) === coreParams.length;
+          
+          return {
+            status: coherent ? 'PASS' : 'WARN',
+            paramCount: coreParams.length,
+            lattiManaged: lattiManagedCount,
+            manualOverride: manualOverrideCount,
+            coherent,
+            lockedParams: Object.keys(lockedByUser).filter(k => lockedByUser[k] === true)
+          };
+        };
+        
+        const paperGuardrailsStatus = await validateGuardrailsCoherence('paper');
+        const liveGuardrailsStatus = await validateGuardrailsCoherence('live');
+        
+        console.log(`[Audit] GuardrailsCoherence ${paperGuardrailsStatus.status} | mode=paper | total=${paperGuardrailsStatus.paramCount} | lattiManaged=${paperGuardrailsStatus.lattiManaged} | manualOverride=${paperGuardrailsStatus.manualOverride} | coherent=${paperGuardrailsStatus.coherent}`);
+        
+        console.log(`[Audit] GuardrailsCoherence ${liveGuardrailsStatus.status} | mode=live | total=${liveGuardrailsStatus.paramCount} | lattiManaged=${liveGuardrailsStatus.lattiManaged} | manualOverride=${liveGuardrailsStatus.manualOverride} | coherent=${liveGuardrailsStatus.coherent}`);
+        
+        // If any params are manually locked, log which ones
+        if (paperGuardrailsStatus.manualOverride > 0) {
+          console.log(`[Audit]   Paper locked params: ${paperGuardrailsStatus.lockedParams.join(', ')}`);
+        }
+        if (liveGuardrailsStatus.manualOverride > 0) {
+          console.log(`[Audit]   Live locked params: ${liveGuardrailsStatus.lockedParams.join(', ')}`);
+        }
+      } catch (error) {
+        console.error('[Audit] ⚠️ GuardrailsCoherence telemetry failed:', error);
+      }
+      
       // Phase 27.H: Cross-Mode Configuration Audit
       try {
         const compareConfigs = (paper: any, live: any) => {
