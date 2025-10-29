@@ -203,7 +203,10 @@ import {
   executionConfig,
   type SystemAlert,
   type InsertSystemAlert,
-  systemAlerts
+  systemAlerts,
+  type AuditLog,
+  type InsertAuditLog,
+  auditLog
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
@@ -636,6 +639,10 @@ export interface IStorage {
   
   // System Alert methods (OpenAI Rate Limiter)
   createSystemAlert(alert: InsertSystemAlert): Promise<SystemAlert>;
+  
+  // Phase 28.C: Override Audit History methods
+  addAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number }): Promise<AuditLog[]>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -3838,6 +3845,40 @@ export class DatabaseStorage implements IStorage {
     
     console.log(`[SystemAlert] Created ${alert.severity} alert for user ${alert.userId}: ${alert.alertType}`);
     return created;
+  }
+  
+  // Phase 28.C: Override Audit History methods
+  async addAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [created] = await db
+      .insert(auditLog)
+      .values(log)
+      .returning();
+    
+    return created;
+  }
+  
+  async getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number }): Promise<AuditLog[]> {
+    const { mode, entityType, limit = 50 } = params;
+    
+    let query = db
+      .select()
+      .from(auditLog)
+      .orderBy(desc(auditLog.timestamp))
+      .limit(limit);
+    
+    const conditions = [];
+    if (mode) {
+      conditions.push(eq(auditLog.tradingMode, mode));
+    }
+    if (entityType) {
+      conditions.push(eq(auditLog.entityType, entityType as any));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query;
   }
 }
 
