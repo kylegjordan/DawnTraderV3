@@ -98,7 +98,7 @@ class StrategyBobModule {
 
         strategyMetrics.push({
           strategy,
-          strategyName: strategy.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+          strategyName: strategy === 'dhma' ? 'DHMA' : strategy.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
           winRate,
           avgRMultiple,
           totalPL,

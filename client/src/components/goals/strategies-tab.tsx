@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Layers, Save, RotateCcw, Check, X, Download, Loader2 } from "lucide-react";
+import { Layers, Save, RotateCcw, Check, X, Download, Loader2, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumberWithCommas, parseCommaFormattedNumber } from "@/lib/utils";
 
@@ -172,6 +172,83 @@ const PARAM_DESCRIPTIONS: Record<string, string> = {
 interface StrategySettings {
   enabled?: boolean;
   params?: Record<string, any>;
+}
+
+interface DHMAParameter {
+  id: number;
+  strategyName: string;
+  mode: string;
+  parameterKey: string;
+  parameterValue: number;
+  label: string;
+  description: string;
+}
+
+function DHMAParametersSection({ mode }: { mode: string }) {
+  const { data: paramsData, isLoading, isError } = useQuery<{ ok: boolean; parameters: DHMAParameter[] }>({
+    queryKey: [`/api/strategy/parameters?mode=${mode}&strategy=dhma`],
+    staleTime: 60000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="mt-6 pt-6 border-t">
+        <Skeleton className="h-6 w-48 mb-4" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <Skeleton key={i} className="h-20" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !paramsData?.ok) {
+    return (
+      <div className="mt-6 pt-6 border-t">
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="text-sm font-semibold">DHMA Parameters</h3>
+          <Settings className="w-4 h-4 text-muted-foreground" />
+        </div>
+        <p className="text-sm text-muted-foreground">Unable to load DHMA parameters</p>
+      </div>
+    );
+  }
+
+  if (!paramsData.parameters || paramsData.parameters.length === 0) {
+    return (
+      <div className="mt-6 pt-6 border-t">
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="text-sm font-semibold">DHMA Parameters</h3>
+          <Settings className="w-4 h-4 text-muted-foreground" />
+        </div>
+        <p className="text-sm text-muted-foreground">No DHMA parameters configured for {mode} mode</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 pt-6 border-t">
+      <div className="flex items-center gap-2 mb-4">
+        <h3 className="text-sm font-semibold">DHMA Parameters</h3>
+        <Settings className="w-4 h-4 text-muted-foreground" />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {paramsData.parameters.map((param) => (
+          <Card key={param.id} className="p-3" data-testid={`dhma-param-${param.parameterKey}`}>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground" title={param.description}>
+                {param.label}
+              </p>
+              <p className="text-base font-mono font-semibold text-foreground">
+                {param.parameterValue ?? 'N/A'}
+              </p>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
@@ -598,6 +675,10 @@ function StrategyCard({ strategy }: { strategy: typeof STRATEGIES[0] }) {
             </div>
           ))}
         </div>
+
+        {/* DHMA Parameters Section */}
+        {strategy.id === 'dhma' && <DHMAParametersSection mode={mode} />}
+
         {editing && (
           <div className="mt-4 pt-4 border-t space-y-4">
             {Object.keys(presets).length > 0 && (

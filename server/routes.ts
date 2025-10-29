@@ -8511,7 +8511,7 @@ Provide specific, actionable recommendations.`,
 
         strategyMetrics.push({
           strategy,
-          strategyName: strategy.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+          strategyName: strategy === 'dhma' ? 'DHMA' : strategy.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
           winRate,
           avgRMultiple,
           totalPL,
@@ -8604,7 +8604,7 @@ Provide specific, actionable recommendations.`,
 
         strategyMetrics.push({
           strategy,
-          strategyName: strategy.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+          strategyName: strategy === 'dhma' ? 'DHMA' : strategy.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
           winRate,
           avgRMultiple,
           totalPL,
@@ -15505,9 +15505,20 @@ Important: Extract the exact field names and numeric values from the user's requ
           )
         );
       
+      // Map database columns to frontend interface
+      const mappedParams = params.map(p => ({
+        id: p.id,
+        strategyName: p.strategyType,
+        mode: p.tradingMode,
+        parameterKey: p.key,
+        parameterValue: parseFloat(p.value),
+        label: p.label,
+        description: p.description || '',
+      }));
+      
       console.log(`[Phase-30.FX.1] Fetched ${params.length} parameters for strategy: ${strategy}, mode: ${mode}`);
       
-      res.json({ ok: true, parameters: params });
+      res.json({ ok: true, parameters: mappedParams });
     } catch (error: any) {
       console.error('[Phase-30.FX.1] Error fetching strategy parameters:', error);
       res.status(500).json({ error: 'Failed to fetch strategy parameters' });
