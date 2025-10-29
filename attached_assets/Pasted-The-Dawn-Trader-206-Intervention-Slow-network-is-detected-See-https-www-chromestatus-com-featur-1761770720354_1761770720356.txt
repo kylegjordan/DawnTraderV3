@@ -1,0 +1,1403 @@
+The-Dawn-Trader:206 [Intervention] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: https://replit.com/public/fonts/ibm-plex-sans-v8-latin-regular.woff2
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+The-Dawn-Trader:1 The source list for the Content Security Policy directive 'default-src' contains an invalid source: ''unsafe-dynamic''. It will be ignored.
+The-Dawn-Trader:1 The Content-Security-Policy directive 'default-src' contains 'report-uri' as a source expression. Did you want to add it as a directive and forget a semicolon?
+The-Dawn-Trader:1 The source list for Content Security Policy directive 'default-src' contains a source with an invalid path: '/api/4509669501698048/security/?sentry_key=7eb3d90eb4660416caf507087367e67e'. The query component, including the '?', will be ignored.
+_app-377c9e5b971f8bba.js:13 
+      /////////////////////
+   ///////////////////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////        Curious and driven?
+  ///////////////@@@@@@@///////        Work with us!
+  ///////////////@@@@@@@///////
+  ///////////////@@@@@@@///////        https://join.replit.com/hack.with.us
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@#//////////////
+   ///////////////////////////
+      /////////////////////
+      
+_app-377c9e5b971f8bba.js:13 [LaunchDarkly] LaunchDarkly client initialized
+4238-a3a2c56d2e55abe6.js:1 [Intervention] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: https://replit.com/public/fonts/replit-icons.woff
+framework-feb12df8fd4c4694.js:1 Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'ambient-light-sensor'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'battery'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'execution-while-not-rendered'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'execution-while-out-of-viewport'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'layout-animations'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'legacy-image-formats'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'navigation-override'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'oversized-images'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'publickey-credentials'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'speaker-selection'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'unoptimized-images'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'unsized-media'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Unrecognized feature: 'pointer-lock'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Allow attribute will take precedence over 'allowfullscreen'.
+_ @ framework-feb12df8fd4c4694.js:1
+framework-feb12df8fd4c4694.js:1 Allow attribute will take precedence over 'allowpaymentrequest'.
+_ @ framework-feb12df8fd4c4694.js:1
+jquery.js:1040 [Violation] Permissions policy violation: unload is not allowed in this document.
+Sizzle.setDocument @ jquery.js:1040
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'ambient-light-sensor'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'battery'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'execution-while-not-rendered'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'execution-while-out-of-viewport'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'layout-animations'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'legacy-image-formats'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'navigation-override'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'oversized-images'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'publickey-credentials'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'speaker-selection'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'unoptimized-images'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Unrecognized feature: 'unsized-media'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Allow attribute will take precedence over 'allowfullscreen'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar22%3A:32 Allow attribute will take precedence over 'allowpaymentrequest'.
+client:536 WebSocket connection to 'wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/?token=Urhnu2kRHKDM' failed: 
+setupWebSocket @ client:536
+injected.js:27 [HMR] Suppressed Vite WebSocket error - app continues running
+(anonymous) @ injected.js:27
+injected.js:27 [MAIN] Starting application...
+injected.js:27 [MAIN] Imports loaded successfully
+injected.js:27 [MAIN] About to mount React app...
+injected.js:27 [MAIN] Root element: div#root
+injected.js:27 [MAIN] React app mounted successfully
+injected.js:27 [Phase 27.F.24][TradingModeContext] Creating new context value for mode: live
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+The-Dawn-Trader:1 Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.
+summary?mode=live:1  Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+activity?mode=live&period=1d:1  Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+earnings-chart?days=7:1  Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+earnings-widget.tsx:249 Uncaught TypeError: sparklineData.map is not a function
+    at renderSparkline (earnings-widget.tsx:249:34)
+    at EarningsWidget (earnings-widget.tsx:476:9)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=99f35674:11548:26)
+    at updateFunctionComponent (chunk-RPCDYKBN.js?v=99f35674:14582:28)
+    at beginWork (chunk-RPCDYKBN.js?v=99f35674:15924:22)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=99f35674:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=99f35674:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=99f35674:3733:39)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=99f35674:19765:15)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=99f35674:19198:20)
+earnings-widget.tsx:249 Uncaught TypeError: sparklineData.map is not a function
+    at renderSparkline (earnings-widget.tsx:249:34)
+    at EarningsWidget (earnings-widget.tsx:476:9)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=99f35674:11548:26)
+    at updateFunctionComponent (chunk-RPCDYKBN.js?v=99f35674:14582:28)
+    at beginWork (chunk-RPCDYKBN.js?v=99f35674:15924:22)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=99f35674:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=99f35674:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=99f35674:3733:39)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=99f35674:19765:15)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=99f35674:19198:20)
+injected.js:27 The above error occurred in the <EarningsWidget> component:
+
+    at EarningsWidget (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/components/goals/earnings-widget.tsx:27:29)
+    at div
+    at section
+    at div
+    at Dashboard (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/pages/dashboard.tsx:39:3)
+    at Route (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=99f35674:323:16)
+    at Switch (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=99f35674:379:17)
+    at Suspense
+    at main
+    at div
+    at RequireAuth (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/App.tsx?v=1nrC8S99A3zX_Vrhpid3U:83:24)
+    at Router (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/App.tsx?v=1nrC8S99A3zX_Vrhpid3U:150:41)
+    at div
+    at Provider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=99f35674:38:15)
+    at TooltipProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=99f35674:63:5)
+    at RequestTraceProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/hooks/use-request-trace.tsx:21:40)
+    at TradingModeProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/contexts/trading-mode-context.tsx:23:39)
+    at QueryClientProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=99f35674:2805:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+(anonymous) @ injected.js:27
+chunk-RPCDYKBN.js?v=99f35674:9129 Uncaught TypeError: sparklineData.map is not a function
+    at renderSparkline (earnings-widget.tsx:249:34)
+    at EarningsWidget (earnings-widget.tsx:476:9)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=99f35674:11548:26)
+    at updateFunctionComponent (chunk-RPCDYKBN.js?v=99f35674:14582:28)
+    at beginWork (chunk-RPCDYKBN.js?v=99f35674:15924:22)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=99f35674:19753:22)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=99f35674:19198:20)
+    at workLoopSync (chunk-RPCDYKBN.js?v=99f35674:19137:13)
+    at renderRootSync (chunk-RPCDYKBN.js?v=99f35674:19116:15)
+    at recoverFromConcurrentError (chunk-RPCDYKBN.js?v=99f35674:18736:28)
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+WebSocket connection to '<URL>' failed: WebSocket is closed before the connection is established.
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event
+(anonymous) @ VM10 injected.js:27
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/portfolio/earnings-chart?days=30:1  Failed to load resource: the server responded with a status of 401 (Unauthorized)
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/portfolio/history?period=1M:1  Failed to load resource: the server responded with a status of 401 (Unauthorized)
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/trades?status=closed&limit=10:1  Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+attached_assets/image_1761769473327.png:1  Failed to load resource: the server responded with a status of 404 ()
+image_1761769900858.png:1  Failed to load resource: the server responded with a status of 404 ()
+image_1761770109076.png:1  Failed to load resource: the server responded with a status of 404 ()
+framework-feb12df8fd4c4694.js:1 Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+_ @ framework-feb12df8fd4c4694.js:1
+(anonymous) @ framework-feb12df8fd4c4694.js:1
+uD @ framework-feb12df8fd4c4694.js:1
+uI @ framework-feb12df8fd4c4694.js:1
+uM @ framework-feb12df8fd4c4694.js:1
+uS @ framework-feb12df8fd4c4694.js:1
+C @ framework-feb12df8fd4c4694.js:1
+z @ framework-feb12df8fd4c4694.js:1
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'ambient-light-sensor'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'battery'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'execution-while-not-rendered'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'execution-while-out-of-viewport'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'layout-animations'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'legacy-image-formats'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'navigation-override'.
+66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'oversized-images'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'publickey-credentials'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'speaker-selection'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'unoptimized-images'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Unrecognized feature: 'unsized-media'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Allow attribute will take precedence over 'allowfullscreen'.
+workspace_iframe.html?initialPath=%2F&id=%3Ar74%3A:32 Allow attribute will take precedence over 'allowpaymentrequest'.
+client:536 WebSocket connection to 'wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/?token=Urhnu2kRHKDM' failed: 
+setupWebSocket @ client:536
+(anonymous) @ client:531
+injected.js:27 [HMR] Suppressed Vite WebSocket error - app continues running
+(anonymous) @ injected.js:27
+(anonymous) @ (index):43
+injected.js:27 [MAIN] Starting application...
+injected.js:27 [MAIN] Imports loaded successfully
+injected.js:27 [MAIN] About to mount React app...
+injected.js:27 [MAIN] Root element: <div id=​"root">​…​</div>​
+injected.js:27 [MAIN] React app mounted successfully
+injected.js:27 [Phase 27.F.24][TradingModeContext] Creating new context value for mode: live
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:204  GET https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/portfolio/earnings-chart?days=7 500 (Internal Server Error)
+apply @ injected.js:204
+queryFn @ earnings-widget.tsx:41
+fetchFn @ @tanstack_react-query.js?v=99f35674:840
+run @ @tanstack_react-query.js?v=99f35674:494
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+injected.js:204  GET https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/trading/activity?mode=live&period=1d 500 (Internal Server Error)
+apply @ injected.js:204
+queryFn @ trading-activity-widget.tsx:42
+fetchFn @ @tanstack_react-query.js?v=99f35674:840
+run @ @tanstack_react-query.js?v=99f35674:494
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+injected.js:204  GET https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/earnings/summary?mode=live 500 (Internal Server Error)
+apply @ injected.js:204
+queryFn @ earnings-widget.tsx:31
+fetchFn @ @tanstack_react-query.js?v=99f35674:840
+run @ @tanstack_react-query.js?v=99f35674:494
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+earnings-widget.tsx:135 Uncaught TypeError: sparklineData.map is not a function
+    at renderSparkline (earnings-widget.tsx:135:34)
+    at EarningsWidget (earnings-widget.tsx:261:12)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=99f35674:11548:26)
+    at updateFunctionComponent (chunk-RPCDYKBN.js?v=99f35674:14582:28)
+    at beginWork (chunk-RPCDYKBN.js?v=99f35674:15924:22)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=99f35674:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=99f35674:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=99f35674:3733:39)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=99f35674:19765:15)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=99f35674:19198:20)
+renderSparkline @ earnings-widget.tsx:135
+EarningsWidget @ earnings-widget.tsx:261
+renderWithHooks @ chunk-RPCDYKBN.js?v=99f35674:11548
+updateFunctionComponent @ chunk-RPCDYKBN.js?v=99f35674:14582
+beginWork @ chunk-RPCDYKBN.js?v=99f35674:15924
+callCallback2 @ chunk-RPCDYKBN.js?v=99f35674:3674
+invokeGuardedCallbackDev @ chunk-RPCDYKBN.js?v=99f35674:3699
+invokeGuardedCallback @ chunk-RPCDYKBN.js?v=99f35674:3733
+beginWork$1 @ chunk-RPCDYKBN.js?v=99f35674:19765
+performUnitOfWork @ chunk-RPCDYKBN.js?v=99f35674:19198
+workLoopSync @ chunk-RPCDYKBN.js?v=99f35674:19137
+renderRootSync @ chunk-RPCDYKBN.js?v=99f35674:19116
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18874
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=99f35674:18627
+setTimeout
+scheduleFn @ @tanstack_react-query.js?v=99f35674:555
+flush @ @tanstack_react-query.js?v=99f35674:569
+batch @ @tanstack_react-query.js?v=99f35674:587
+dispatch_fn @ @tanstack_react-query.js?v=99f35674:996
+setData @ @tanstack_react-query.js?v=99f35674:696
+onSuccess @ @tanstack_react-query.js?v=99f35674:897
+resolve @ @tanstack_react-query.js?v=99f35674:456
+Promise.then
+run @ @tanstack_react-query.js?v=99f35674:498
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+earnings-widget.tsx:135 Uncaught TypeError: sparklineData.map is not a function
+    at renderSparkline (earnings-widget.tsx:135:34)
+    at EarningsWidget (earnings-widget.tsx:261:12)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=99f35674:11548:26)
+    at updateFunctionComponent (chunk-RPCDYKBN.js?v=99f35674:14582:28)
+    at beginWork (chunk-RPCDYKBN.js?v=99f35674:15924:22)
+    at HTMLUnknownElement.callCallback2 (chunk-RPCDYKBN.js?v=99f35674:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-RPCDYKBN.js?v=99f35674:3699:24)
+    at invokeGuardedCallback (chunk-RPCDYKBN.js?v=99f35674:3733:39)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=99f35674:19765:15)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=99f35674:19198:20)
+renderSparkline @ earnings-widget.tsx:135
+EarningsWidget @ earnings-widget.tsx:261
+renderWithHooks @ chunk-RPCDYKBN.js?v=99f35674:11548
+updateFunctionComponent @ chunk-RPCDYKBN.js?v=99f35674:14582
+beginWork @ chunk-RPCDYKBN.js?v=99f35674:15924
+callCallback2 @ chunk-RPCDYKBN.js?v=99f35674:3674
+invokeGuardedCallbackDev @ chunk-RPCDYKBN.js?v=99f35674:3699
+invokeGuardedCallback @ chunk-RPCDYKBN.js?v=99f35674:3733
+beginWork$1 @ chunk-RPCDYKBN.js?v=99f35674:19765
+performUnitOfWork @ chunk-RPCDYKBN.js?v=99f35674:19198
+workLoopSync @ chunk-RPCDYKBN.js?v=99f35674:19137
+renderRootSync @ chunk-RPCDYKBN.js?v=99f35674:19116
+recoverFromConcurrentError @ chunk-RPCDYKBN.js?v=99f35674:18736
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18879
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=99f35674:18627
+setTimeout
+scheduleFn @ @tanstack_react-query.js?v=99f35674:555
+flush @ @tanstack_react-query.js?v=99f35674:569
+batch @ @tanstack_react-query.js?v=99f35674:587
+dispatch_fn @ @tanstack_react-query.js?v=99f35674:996
+setData @ @tanstack_react-query.js?v=99f35674:696
+onSuccess @ @tanstack_react-query.js?v=99f35674:897
+resolve @ @tanstack_react-query.js?v=99f35674:456
+Promise.then
+run @ @tanstack_react-query.js?v=99f35674:498
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+injected.js:27 The above error occurred in the <EarningsWidget> component:
+
+    at EarningsWidget (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/components/goals/earnings-widget.tsx:27:29)
+    at div
+    at section
+    at div
+    at Dashboard (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/pages/dashboard.tsx:39:3)
+    at Route (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=99f35674:323:16)
+    at Switch (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=99f35674:379:17)
+    at Suspense
+    at main
+    at div
+    at RequireAuth (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/App.tsx?v=FsZ8-HPhDXeVgTmcN5Asf:83:24)
+    at Router (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/App.tsx?v=FsZ8-HPhDXeVgTmcN5Asf:150:41)
+    at div
+    at Provider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=99f35674:38:15)
+    at TooltipProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=99f35674:63:5)
+    at RequestTraceProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/hooks/use-request-trace.tsx:21:40)
+    at TradingModeProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/contexts/trading-mode-context.tsx:23:39)
+    at QueryClientProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=99f35674:2805:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+logCapturedError @ chunk-RPCDYKBN.js?v=99f35674:14032
+update.callback @ chunk-RPCDYKBN.js?v=99f35674:14052
+callCallback @ chunk-RPCDYKBN.js?v=99f35674:11248
+commitUpdateQueue @ chunk-RPCDYKBN.js?v=99f35674:11265
+commitLayoutEffectOnFiber @ chunk-RPCDYKBN.js?v=99f35674:17093
+commitLayoutMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:17980
+commitLayoutEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:17969
+commitLayoutEffects @ chunk-RPCDYKBN.js?v=99f35674:17920
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19353
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18895
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=99f35674:18627
+setTimeout
+scheduleFn @ @tanstack_react-query.js?v=99f35674:555
+flush @ @tanstack_react-query.js?v=99f35674:569
+batch @ @tanstack_react-query.js?v=99f35674:587
+dispatch_fn @ @tanstack_react-query.js?v=99f35674:996
+setData @ @tanstack_react-query.js?v=99f35674:696
+onSuccess @ @tanstack_react-query.js?v=99f35674:897
+resolve @ @tanstack_react-query.js?v=99f35674:456
+Promise.then
+run @ @tanstack_react-query.js?v=99f35674:498
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+chunk-RPCDYKBN.js?v=99f35674:9129 Uncaught TypeError: sparklineData.map is not a function
+    at renderSparkline (earnings-widget.tsx:135:34)
+    at EarningsWidget (earnings-widget.tsx:261:12)
+    at renderWithHooks (chunk-RPCDYKBN.js?v=99f35674:11548:26)
+    at updateFunctionComponent (chunk-RPCDYKBN.js?v=99f35674:14582:28)
+    at beginWork (chunk-RPCDYKBN.js?v=99f35674:15924:22)
+    at beginWork$1 (chunk-RPCDYKBN.js?v=99f35674:19753:22)
+    at performUnitOfWork (chunk-RPCDYKBN.js?v=99f35674:19198:20)
+    at workLoopSync (chunk-RPCDYKBN.js?v=99f35674:19137:13)
+    at renderRootSync (chunk-RPCDYKBN.js?v=99f35674:19116:15)
+    at recoverFromConcurrentError (chunk-RPCDYKBN.js?v=99f35674:18736:28)
+renderSparkline @ earnings-widget.tsx:135
+EarningsWidget @ earnings-widget.tsx:261
+renderWithHooks @ chunk-RPCDYKBN.js?v=99f35674:11548
+updateFunctionComponent @ chunk-RPCDYKBN.js?v=99f35674:14582
+beginWork @ chunk-RPCDYKBN.js?v=99f35674:15924
+beginWork$1 @ chunk-RPCDYKBN.js?v=99f35674:19753
+performUnitOfWork @ chunk-RPCDYKBN.js?v=99f35674:19198
+workLoopSync @ chunk-RPCDYKBN.js?v=99f35674:19137
+renderRootSync @ chunk-RPCDYKBN.js?v=99f35674:19116
+recoverFromConcurrentError @ chunk-RPCDYKBN.js?v=99f35674:18736
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18879
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=99f35674:18627
+setTimeout
+scheduleFn @ @tanstack_react-query.js?v=99f35674:555
+flush @ @tanstack_react-query.js?v=99f35674:569
+batch @ @tanstack_react-query.js?v=99f35674:587
+dispatch_fn @ @tanstack_react-query.js?v=99f35674:996
+setData @ @tanstack_react-query.js?v=99f35674:696
+onSuccess @ @tanstack_react-query.js?v=99f35674:897
+resolve @ @tanstack_react-query.js?v=99f35674:456
+Promise.then
+run @ @tanstack_react-query.js?v=99f35674:498
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [ContextBridge] WebSocket error: Event {isTrusted: true, type: 'error', target: WebSocket, currentTarget: WebSocket, eventPhase: 2, …}
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+(anonymous) @ injected.js:27
+ws.current.onerror @ use-websocket.tsx:76
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:204  GET https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/portfolio/earnings-chart?days=30 401 (Unauthorized)
+apply @ injected.js:204
+queryFn @ earnings-chart.tsx:34
+fetchFn @ @tanstack_react-query.js?v=99f35674:840
+run @ @tanstack_react-query.js?v=99f35674:494
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+injected.js:204  GET https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/portfolio/history?period=1M 401 (Unauthorized)
+apply @ injected.js:204
+queryFn @ portfolio-chart.tsx:28
+fetchFn @ @tanstack_react-query.js?v=99f35674:840
+run @ @tanstack_react-query.js?v=99f35674:494
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+injected.js:204  GET https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/api/trades?status=closed&limit=10 500 (Internal Server Error)
+apply @ injected.js:204
+(anonymous) @ queryClient.ts:116
+await in (anonymous)
+fetchFn @ @tanstack_react-query.js?v=99f35674:840
+run @ @tanstack_react-query.js?v=99f35674:494
+start @ @tanstack_react-query.js?v=99f35674:536
+fetch @ @tanstack_react-query.js?v=99f35674:926
+executeFetch_fn @ @tanstack_react-query.js?v=99f35674:2211
+onSubscribe @ @tanstack_react-query.js?v=99f35674:1898
+subscribe @ @tanstack_react-query.js?v=99f35674:24
+(anonymous) @ @tanstack_react-query.js?v=99f35674:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=99f35674:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=99f35674:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=99f35674:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=99f35674:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=99f35674:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=99f35674:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=99f35674:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=99f35674:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=99f35674:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=99f35674:19432
+commitRoot @ chunk-RPCDYKBN.js?v=99f35674:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=99f35674:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=99f35674:18718
+workLoop @ chunk-RPCDYKBN.js?v=99f35674:197
+flushWork @ chunk-RPCDYKBN.js?v=99f35674:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=99f35674:384
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+image_1761770513501.png:1  GET https://replit.com/@kylegjordan/attached_assets/image_1761770513501.png 404 (Not Found)
+Image
+_ @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+attached_assets/image_1761770285586.png:1  GET https://replit.com/@kylegjordan/attached_assets/image_1761770285586.png 404 (Not Found)
+Image
+_ @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+oq @ framework-feb12df8fd4c4694.js:1
+oQ @ framework-feb12df8fd4c4694.js:1
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)

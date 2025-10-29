@@ -1,0 +1,112 @@
+🧭 Directive: Phase 30.FX.2a – Backend Parameter Fix + Dashboard Stability Patch
+
+Objective:
+Resolve backend 500 errors, restore dashboard rendering, and stabilize WebSocket connections by fixing incorrect API parameter calls and adding frontend guards in the EarningsWidget.
+
+Phase Steps
+
+Part A – Backend Parameter Order Fix
+
+Locate file: server/routes.ts
+
+Find and replace incorrect API calls:
+
+Change all instances like:
+
+await storage.getTrades({});
+
+
+to:
+
+await storage.getTrades(mode, {});
+
+
+And for other routes:
+
+await storage.getEarningsSummary({});
+await storage.getActivity({});
+
+
+→ Replace with:
+
+await storage.getEarningsSummary(mode);
+await storage.getActivity(mode, { period });
+
+
+✅ These updates ensure the correct mode ("paper" or "live") is passed as the first parameter to each call.
+
+Part B – Frontend Render Guard for EarningsWidget
+
+Locate file: client/src/components/goals/earnings-widget.tsx
+
+Add array validation to prevent render crash:
+
+Replace the start of the renderSparkline function with:
+
+const renderSparkline = (sparklineData: any) => {
+  if (!Array.isArray(sparklineData)) {
+    console.warn("[EarningsWidget] Invalid sparklineData, skipping render", sparklineData);
+    return null;
+  }
+  return (
+    <Sparkline data={sparklineData.map(v => parseFloat(v))} />
+  );
+};
+
+
+✅ This prevents .map() errors when backend returns invalid or empty data.
+
+Part C – WebSocket Stabilization Validation
+No direct code change is needed here — the backend fixes above will stop the 500-loop that’s causing the repeated WebSocket reconnects.
+
+After applying and saving all changes:
+
+Restart the workflow
+
+Open the browser console
+
+Verify that:
+
+You see [ContextBridge] WebSocket connected (userId: …)
+
+No “reconnecting in 1000ms” messages appear
+
+Part D – Post-Run Verification
+
+Run this quick validation from the console:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+for ep in earnings/summary trading/activity trades; do
+  echo "=== Testing $ep ==="
+  curl -s -X GET "http://localhost:5000/api/$ep?mode=live&period=1d" \
+    -H "Authorization: Bearer $TOKEN" | jq .
+done
+
+
+✅ Expect:
+
+HTTP 200 responses for all endpoints
+
+JSON with arrays or objects, not error messages
+
+Dashboard and Earnings widgets to load normally again
+
+Expected Console After Fix
+
+[MAIN] Starting application...
+[TradingModeContext] Creating new context value for mode: live
+[ContextBridge] WebSocket connected (userId: ...)
+[API] /api/earnings/summary (200)
+[API] /api/trading/activity (200)
+[API] /api/trades (200)
+[EarningsWidget] Sparkline loaded successfully
+
+
+Completion Criteria:
+✅ All 500 and 401 errors resolved
+✅ Dashboard no longer blank
+✅ WebSocket reconnect spam eliminated
+✅ Earnings and Activity widgets render normally

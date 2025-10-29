@@ -2810,7 +2810,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           break;
       }
       
-      const allTrades = await storage.getTrades({});
+      const mode = (req.query.mode as string) || 'live';
+      const allTrades = await storage.getTrades(mode, {});
       console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/history → mode-based only');
       const closedTrades = allTrades.filter(t => 
         t.status === 'closed' && 
@@ -2891,7 +2892,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           break;
       }
       
-      const allTrades = await storage.getTrades({});
+      const mode = (req.query.mode as string) || 'live';
+      const allTrades = await storage.getTrades(mode, {});
       console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/value-history → mode-based only');
       const closedTrades = allTrades.filter(t => 
         t.status === 'closed' && 
@@ -2950,7 +2952,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       const initialBalance = 800;
       
-      const allTrades = await storage.getTrades({});
+      const mode = (req.query.mode as string) || 'live';
+      const allTrades = await storage.getTrades(mode, {});
       console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/stats → mode-based only');
       const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
       
@@ -2987,9 +2990,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { status, symbol, strategy, limit } = req.query;
+      const { status, symbol, strategy, limit, mode } = req.query;
+      const tradeMode = (mode as 'live' | 'paper') || 'live';
       
-      const trades = await storage.getTrades({
+      const trades = await storage.getTrades(tradeMode, {
         status: status as string,
         symbol: symbol as string,
         strategy: strategy as string,
@@ -9351,7 +9355,7 @@ Please:
       fromDate.setDate(fromDate.getDate() - days);
 
       const trades = mode === 'live'
-        ? await storage.getTrades({})
+        ? await storage.getTrades('live', {})
         : await storage.getAllPaperTrades();
       console.log('[Phase-27.F.15.B.1] Updated route /api/trading/activity → mode-based only');
       const periodTrades = trades.filter(t => 
@@ -9595,7 +9599,7 @@ Please:
       const mode = (req.query.mode as string) || 'live';
 
       const trades = mode === 'live'
-        ? await storage.getTrades({})
+        ? await storage.getTrades('live', {})
         : await storage.getAllPaperTrades();
       console.log('[Phase-27.F.15.B.1] Updated route /api/earnings/summary → mode-based only');
       const closedTrades = trades.filter(t => t.status === 'closed' && t.exitTime);

@@ -128,7 +128,8 @@ export default function EarningsWidget() {
   };
   
   const renderSparkline = () => {
-    if (!sparklineData || sparklineData.length === 0) {
+    if (!Array.isArray(sparklineData) || sparklineData.length === 0) {
+      console.warn("[EarningsWidget] Invalid sparklineData, skipping render", sparklineData);
       return <div className="h-12 bg-muted/30 rounded animate-pulse" />;
     }
     
