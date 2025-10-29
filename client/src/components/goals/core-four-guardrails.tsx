@@ -153,18 +153,13 @@ export function CoreFourGuardrails() {
       }
     };
     
-    console.log('[CoreFourGuardrails] Toggle lock:', { paramKey, currentLocked, newLockedState, updates });
-    
     try {
-      console.log('[CoreFourGuardrails] Calling mutation...', updates);
       await updateMutation.mutateAsync(updates);
-      console.log('[CoreFourGuardrails] Mutation succeeded');
       toast({
-        title: newLockedState ? "Saved ✅" : "Saved ✅",
+        title: "Saved",
         description: `${CORE_FOUR_PARAMS.find(p => p.key === paramKey)?.label} is now ${newLockedState ? 'manually controlled' : 'managed by LATTi'}`,
       });
     } catch (error: any) {
-      console.error('[CoreFourGuardrails] Mutation failed:', error);
       toast({
         title: "Save failed ❌",
         description: error?.message || "Failed to save guardrail override",
