@@ -4117,6 +4117,49 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 30.FX.A: System Health with Oversight & Strategy Mix
+  apiRouter.get('/system/health-30fx', async (_, res) => {
+    try {
+      const { lottieOversightLog, strategyMixLog } = await import('@shared/schema');
+      
+      const audits = await db
+        .select({
+          event: lottieOversightLog.event,
+          status: lottieOversightLog.status,
+          createdAt: lottieOversightLog.createdAt,
+        })
+        .from(lottieOversightLog)
+        .orderBy(desc(lottieOversightLog.createdAt))
+        .limit(3);
+
+      const mix = await db
+        .select({
+          strategy: strategyMixLog.strategy,
+          newWeight: strategyMixLog.newWeight,
+          createdAt: strategyMixLog.createdAt,
+        })
+        .from(strategyMixLog)
+        .orderBy(desc(strategyMixLog.createdAt))
+        .limit(3);
+
+      res.json({
+        uptime: process.uptime(),
+        lastAuditEvents: audits,
+        lastStrategyRebalances: mix,
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[HealthEndpoint-30FX] Error:", error.message);
+      res.status(500).json({
+        uptime: process.uptime(),
+        status: "error",
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   // Phase 8.3: Manual System Recovery Trigger
   apiRouter.post('/system/recover', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
