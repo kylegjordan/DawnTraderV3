@@ -1543,136 +1543,139 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
       }
 
+      // Phase 28: Read actual override flags from database instead of hardcoding
+      const managedByLottie = screenerData.managedByLottie ?? true;
+      const manualOverrideEnabled = screenerData.manualOverrideEnabled ?? false;
+      
       // Convert to FiltersV2 format with control metadata as ARRAY
-      // For Phase 3, all filters default to managed_by_lottie=true, manual_override_enabled=false
       const filtersV2 = {
         mode,
         filters: [
           {
             name: "minVolume",
             value: parseFloat(screenerData.minVolume),
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Min Volume ($)",
             category: "Volume & Liquidity"
           },
           {
             name: "minLiquidity",
             value: parseFloat(screenerData.minLiquidity),
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Min Liquidity ($)",
             category: "Volume & Liquidity"
           },
           {
             name: "minPrice",
             value: parseFloat(screenerData.minPrice),
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Min Price ($)",
             category: "Price Range"
           },
           {
             name: "maxPrice",
             value: parseFloat(screenerData.maxPrice),
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Max Price ($)",
             category: "Price Range"
           },
           {
             name: "maxBidAskSpread",
             value: parseFloat(screenerData.maxBidAskSpread),
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Max Bid-Ask Spread (%)",
             category: "Risk & Volatility"
           },
           {
             name: "volatilityMin",
             value: parseFloat(screenerData.volatilityMin),
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Min Volatility (%)",
             category: "Risk & Volatility"
           },
           {
             name: "volatilityMax",
             value: parseFloat(screenerData.volatilityMax),
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Max Volatility (%)",
             category: "Risk & Volatility"
           },
           {
             name: "minMarketCap",
             value: parseFloat(screenerData.minMarketCap),
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Min Market Cap ($)",
             category: "Market Filters"
           },
           {
             name: "excludeStablecoins",
             value: screenerData.excludeStablecoins,
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Exclude Stablecoins",
             category: "Market Filters"
           },
           {
             name: "allowRegulatedOnly",
             value: screenerData.allowRegulatedOnly,
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Regulated Only",
             category: "Market Filters"
           },
           {
             name: "rsiMin",
             value: screenerData.rsiMin,
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Min RSI",
             category: "Technical Indicators"
           },
           {
             name: "rsiMax",
             value: screenerData.rsiMax,
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Max RSI",
             category: "Technical Indicators"
           },
           {
             name: "universeSize",
             value: screenerData.universeSize,
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Market Universe Size",
             category: "Universe & Signal Controls"
           },
           {
             name: "quoteCurrencies",
             value: screenerData.quoteCurrencies,
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Quote Currencies",
             category: "Universe & Signal Controls"
           },
           {
             name: "activeTimeframes",
             value: screenerData.activeTimeframes,
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Active Timeframes",
             category: "Universe & Signal Controls"
           },
           {
             name: "confidenceThreshold",
             value: screenerData.confidenceThreshold,
-            managedByLottie: true,
-            manualOverrideEnabled: false,
+            managedByLottie,
+            manualOverrideEnabled,
             displayName: "Confidence Threshold (%)",
             category: "Universe & Signal Controls"
           }
@@ -1688,25 +1691,61 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // PUT /api/filters-v2?mode=paper|live
-  // Phase 3: Currently read-only (metadata only) - filter value updates still use /api/screeners
-  // This endpoint will support manual override flag changes in future phases
+  // Phase 28: Persist override flag changes to database
+  // Actual filter value updates still use /api/screeners endpoint
   apiRouter.put('/filters-v2', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
+    const requestId = `fltv2-${Date.now()}`;
     try {
+      const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
 
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
         return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
-      // Phase 3: Metadata-only update (manual override flags)
-      // Actual filter value updates still go through /api/screeners endpoint
-      console.log('[FiltersV2] PUT endpoint - metadata-only mode (Phase 3)');
+      const { managedByLottie, manualOverrideEnabled } = req.body;
       
-      // For Phase 3, return success but don't persist changes yet
-      // This will be implemented when UI components are ready
-      res.json({ ok: true, message: 'Filter metadata updates will be implemented in Phase 3 UI integration' });
+      // Validate override flags
+      if (typeof managedByLottie !== 'boolean' && managedByLottie !== undefined) {
+        return res.status(400).json({ ok: false, code: 'INVALID_INPUT', detail: 'managedByLottie must be a boolean' });
+      }
+      
+      if (typeof manualOverrideEnabled !== 'boolean' && manualOverrideEnabled !== undefined) {
+        return res.status(400).json({ ok: false, code: 'INVALID_INPUT', detail: 'manualOverrideEnabled must be a boolean' });
+      }
+      
+      console.log(`[FiltersV2:${requestId}] Updating override flags: managedByLottie=${managedByLottie}, manualOverrideEnabled=${manualOverrideEnabled}`);
+      
+      // Get current filters
+      const current = await storage.getScreenerFilters({ mode });
+      
+      if (!current) {
+        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
+      }
+      
+      // Update override flags
+      const updated = await storage.upsertScreenerFilters({
+        mode,
+        ...current,
+        managedByLottie: managedByLottie ?? current.managedByLottie,
+        manualOverrideEnabled: manualOverrideEnabled ?? current.manualOverrideEnabled,
+        lastUpdatedBy: userId
+      });
+      
+      console.log(`[FiltersV2:${requestId}] Override flags updated successfully`);
+      
+      // Broadcast config update via WebSocket
+      const contextBridge = await import('./services/context-bridge.js');
+      await contextBridge.ContextBridge.broadcast('config_updated', {
+        userId,
+        mode,
+        configType: 'filters_v2',
+        source: 'api'
+      });
+      
+      res.json({ ok: true, data: updated });
     } catch (error: any) {
-      console.error('[FiltersV2] PUT error:', error.message);
+      console.error(`[FiltersV2:${requestId}] PUT error:`, error.message);
       res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
     }
   });

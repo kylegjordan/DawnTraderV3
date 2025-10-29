@@ -611,7 +611,7 @@ app.use((req, res, next) => {
         console.log(`[Audit] Live guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, maxPos=${g.maxOpenPositions}, killSwitch=${g.dailyLossKillSwitchPct}%`);
       }
       
-      // Phase 27.H: FilterCoherence Telemetry
+      // Phase 28: FilterCoherence Telemetry (with database-persisted override flags)
       try {
         const validateFilterCoherence = async (mode: 'paper' | 'live') => {
           // Fetch filter data from database
@@ -641,41 +641,21 @@ app.use((req, res, next) => {
             filtersData.hasOwnProperty(field)
           ).length;
           
-          // Check for override metadata in the database
-          // NOTE: Phase 3 not yet implemented - these fields do NOT exist in screeners table
-          const hasOverrideFlags = 
-            filtersData.hasOwnProperty('managedByLottie') || 
-            filtersData.hasOwnProperty('manualOverrideEnabled') ||
-            filtersData.hasOwnProperty('lockedByUser');
-          
-          if (!hasOverrideFlags) {
-            // Phase 3 incomplete - override flags not persisted in database
-            // Assume all filters are LATTI-managed by default (no way to override)
-            return {
-              status: 'WARN',
-              filterCount,
-              lattiManaged: filterCount,
-              manualOverride: 0,
-              coherent: true,
-              note: 'Phase 3 incomplete - override flags not persisted in database (assumed all LATTI-managed)'
-            };
-          }
-          
-          // If override flags exist (Phase 3 complete), read actual values
+          // Phase 28: Read actual override flags from database
           const managedByLottie = (filtersData as any).managedByLottie ?? true;
           const manualOverrideEnabled = (filtersData as any).manualOverrideEnabled ?? false;
           
+          // Calculate counts based on override flags
           const lattiManaged = managedByLottie && !manualOverrideEnabled ? filterCount : 0;
           const manualOverride = manualOverrideEnabled ? filterCount : 0;
-          const coherent = lattiManaged === filterCount;
+          const coherent = (lattiManaged + manualOverride) === filterCount;
           
           return {
             status: coherent ? 'PASS' : 'WARN',
             filterCount,
             lattiManaged,
             manualOverride,
-            coherent,
-            note: hasOverrideFlags ? undefined : 'Override flags available in database'
+            coherent
           };
         };
         
@@ -683,10 +663,8 @@ app.use((req, res, next) => {
         const liveFiltersStatus = await validateFilterCoherence('live');
         
         console.log(`[Audit] FilterCoherence ${paperFiltersStatus.status} | mode=paper | total=${paperFiltersStatus.filterCount} | lattiManaged=${paperFiltersStatus.lattiManaged} | manualOverride=${paperFiltersStatus.manualOverride} | coherent=${paperFiltersStatus.coherent}`);
-        if (paperFiltersStatus.note) console.log(`[Audit]   Note: ${paperFiltersStatus.note}`);
         
         console.log(`[Audit] FilterCoherence ${liveFiltersStatus.status} | mode=live | total=${liveFiltersStatus.filterCount} | lattiManaged=${liveFiltersStatus.lattiManaged} | manualOverride=${liveFiltersStatus.manualOverride} | coherent=${liveFiltersStatus.coherent}`);
-        if (liveFiltersStatus.note) console.log(`[Audit]   Note: ${liveFiltersStatus.note}`);
       } catch (error) {
         console.error('[Audit] ⚠️ FilterCoherence telemetry failed:', error);
       }
