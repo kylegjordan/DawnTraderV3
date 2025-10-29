@@ -90,6 +90,36 @@ class GuardrailPolicyService {
   constructor() {
     this.loadCoherencyRules();
     console.log('[GuardrailPolicy] Service initialized with persistent kill switch state');
+    this.logStartupTelemetry();
+  }
+  
+  /**
+   * Phase 28.E: Log startup telemetry for coherency policy status
+   */
+  private logStartupTelemetry(): void {
+    if (!this.rulesConfig) {
+      console.warn('[GuardrailPolicy] Cannot log telemetry - rules not loaded');
+      return;
+    }
+    
+    const activeRules = this.rulesConfig.rules.filter(r => r.severity === 'error');
+    const warningRules = this.rulesConfig.rules.filter(r => r.severity === 'warn');
+    const totalRules = this.rulesConfig.rules.length;
+    const disabledRules = 0; // TODO: Track disabled rules when admin UI is implemented
+    
+    console.log(
+      `[Audit] CoherencyPolicy | ` +
+      `activeRules=${activeRules.length} | ` +
+      `warningRules=${warningRules.length} | ` +
+      `disabledRules=${disabledRules} | ` +
+      `version=${this.rulesConfig.metadata.version}`
+    );
+    
+    // Log individual rule status
+    console.log('[GuardrailPolicy] Loaded coherency rules:');
+    this.rulesConfig.rules.forEach(rule => {
+      console.log(`  - ${rule.id}: ${rule.name} (${rule.severity})`);
+    });
   }
 
   // ============================================================================
@@ -169,9 +199,9 @@ class GuardrailPolicyService {
     const isManualOverride = guardrail.management?.isManualOverride;
     const tunedByLatti = guardrail.management?.tunedByLatti;
 
-    // RULE_001: Risk ≤ KillSwitch/10
+    // RULE_001: Risk ≤ 50% × KillSwitch (Phase 28.E)
     if (risk !== undefined && killSwitch !== undefined) {
-      const maxAllowedRisk = killSwitch / 10;
+      const maxAllowedRisk = killSwitch * 0.5;
       if (risk > maxAllowedRisk) {
         const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_001')!;
         failures.push({
@@ -190,26 +220,26 @@ class GuardrailPolicyService {
       }
     }
 
-    // RULE_002: Total Exposure Cap (WARNING)
+    // RULE_002: Total Exposure ≤ 50% Cap (Phase 28.E)
     if (positions !== undefined && risk !== undefined) {
       const totalExposure = positions * risk;
-      if (totalExposure > 100) {
+      if (totalExposure > 50) {
         const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_002')!;
         failures.push({
           ruleId: 'RULE_002',
           ruleName: rule.name,
-          severity: 'warn',
+          severity: 'error',
           message: rule.error_message.replace('{total}', totalExposure.toFixed(2)),
           param: 'maxOpenPositions',
           value: totalExposure,
-          expected: '<= 100%'
+          expected: '<= 50%'
         });
-        this.incrementMetric('ruleWarnings', 'RULE_002');
+        this.incrementMetric('ruleFailures', 'RULE_002');
       }
     }
 
-    // RULE_003: Cooldown Minimum
-    if (cooldown !== undefined && cooldown < 1) {
+    // RULE_003: Cooldown ≥ 0 minutes (Phase 28.E)
+    if (cooldown !== undefined && cooldown < 0) {
       const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_003')!;
       failures.push({
         ruleId: 'RULE_003',
@@ -218,7 +248,7 @@ class GuardrailPolicyService {
         message: rule.error_message.replace('{value}', String(cooldown)),
         param: 'symbolCooldownMinutes',
         value: cooldown,
-        expected: '>= 1 minute'
+        expected: '>= 0 minutes'
       });
       this.incrementMetric('ruleFailures', 'RULE_003');
     }
@@ -274,8 +304,8 @@ class GuardrailPolicyService {
       this.incrementMetric('ruleFailures', 'RULE_006');
     }
 
-    // RULE_007: Kill Switch Range
-    if (killSwitch !== undefined && (killSwitch < 1.00 || killSwitch > 20.00)) {
+    // RULE_007: Kill Switch ≤ 25% of Portfolio (Phase 28.E)
+    if (killSwitch !== undefined && (killSwitch < 1.00 || killSwitch > 25.00)) {
       const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_007')!;
       failures.push({
         ruleId: 'RULE_007',
@@ -284,7 +314,7 @@ class GuardrailPolicyService {
         message: rule.error_message.replace('{value}', killSwitch.toFixed(2)),
         param: 'dailyLossKillSwitchPct',
         value: killSwitch,
-        expected: '1.00% - 20.00%'
+        expected: '1.00% - 25.00%'
       });
       this.incrementMetric('ruleFailures', 'RULE_007');
     }

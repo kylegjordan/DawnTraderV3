@@ -79,6 +79,26 @@ Comprehensive audit system ensuring only current, visible fields influence the t
 
 **Audit Results**: ✅ PASSED - Zero legacy reads, 100% current field sourcing, complete verification via snapshot endpoint. Full audit report: `audit/final-report.md`
 
+**Phase 28.D - Predictive Insights & Anomaly Detection (COMPLETED):**
+Automated anomaly detection system for override configuration changes. The `AuditAnomalyDetectionService` analyzes audit logs for unusual patterns using frequency spike detection (>5 changes/hour with warn/critical thresholds) and value reversion detection (<10 minutes). A nightly scheduled task runs at 2:00 AM UTC daily using timestamp-precision scheduling. The `OverrideFrequencyChart` component displays 24-hour override trends with mode breakdown, real-time anomaly alerts, and auto-refresh. API endpoints include GET `/api/diagnostics/audit-anomalies` for anomaly results and GET `/api/diagnostics/override-frequency` for hourly frequency data. Storage interface extends with `since` parameter for timestamp-based query filtering. Phase 28.D report: `audit/phase28d-report.md`.
+
+**Phase 28.E - Guardrail Policy Rationalization (COMPLETED):**
+Simplified coherency rules to act as extreme fail-safes only. Updated coherency_rules.yaml (version 2.1-phase28e) with rationalized thresholds:
+- **RULE_001**: Portfolio Risk ≤ 50% × Daily Loss Kill Switch (relaxed from 10%)
+- **RULE_002**: Total Exposure ≤ 50% of Portfolio (changed from 100%, now severity=error)
+- **RULE_003**: Cooldown ≥ 0 minutes (relaxed from ≥ 1 minute, allows zero cooldown)
+- **RULE_007**: Kill Switch ≤ 25% of Portfolio (expanded from 20%)
+
+Preserved rules: RULE_004 (Cooldown Maximum), RULE_005 (Manual Override Exclusivity), RULE_006 (Portfolio Risk Range 0.10%-5.00%), RULE_008 (Max Positions Range 1-20), RULE_009 (Mode Isolation), RULE_010 (Learning Expansion Safety Caps).
+
+GuardrailPolicy Service updated with Phase 28.E validation logic. New `coherency_rule_status` table tracks individual rule status (enabled/disabled), last validation result (PASS/WARN/FAIL), failure counts, and metadata. Startup telemetry logs coherency policy status: `[Audit] CoherencyPolicy | activeRules=X | warningRules=Y | disabledRules=Z | version=2.1-phase28e`.
+
+Control behavior refined:
+- Changing any Core Four value from preset baseline → activePreset = "Custom"
+- Switching control from Lottie → Manual without value change → Preset remains active
+- Switching back to Lottie after manual change → Value stays at new number; LATTI treats as new baseline
+- Mixed custom configs (manual + Lottie controls) fully supported
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

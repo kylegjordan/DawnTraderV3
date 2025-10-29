@@ -347,6 +347,22 @@ export const goalsLearningMetrics = pgTable("goals_learning_metrics", {
   modeDateIdx: index("goals_learning_mode_date_idx").on(table.mode, table.date),
 }));
 
+// Phase 28.E: Coherency Rule Status (Admin control for coherency validation rules)
+export const coherencyRuleStatus = pgTable("coherency_rule_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ruleId: varchar("rule_id", { length: 50 }).notNull(), // e.g., "RULE_001"
+  enabled: boolean("enabled").notNull().default(true), // Admin can disable individual rules
+  lastResult: varchar("last_result", { length: 20 }), // "PASS", "WARN", "FAIL", null
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  failureCount: integer("failure_count").notNull().default(0), // Number of times this rule has failed
+  description: text("description"), // Human-readable description from coherency_rules.yaml
+  threshold: text("threshold"), // Threshold description (e.g., "≤ 50% × KillSwitch")
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueRuleId: uniqueIndex("coherency_rule_status_rule_id_idx").on(table.ruleId),
+}));
+
 // Screener Filters (mode-isolated screening criteria) - GLOBAL per mode
 export const screenerFilters = pgTable("screener_filters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1878,6 +1894,14 @@ export const insertGoalsLearningMetricsSchema = createInsertSchema(goalsLearning
   avgDrawdown: z.union([z.string(), z.number(), z.null()]).transform(val => val === null ? null : String(val)).optional(),
 });
 
+// Phase 28.E: Coherency Rule Status Insert Schema
+export const insertCoherencyRuleStatusSchema = createInsertSchema(coherencyRuleStatus).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastCheckedAt: true,
+});
+
 export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).omit({
   id: true,
   createdAt: true,
@@ -2264,6 +2288,10 @@ export type GoalsPresets = typeof goalsPresets.$inferSelect;
 // Phase 6: Goals Learning Metrics Types
 export type InsertGoalsLearningMetrics = z.infer<typeof insertGoalsLearningMetricsSchema>;
 export type GoalsLearningMetrics = typeof goalsLearningMetrics.$inferSelect;
+
+// Phase 28.E: Coherency Rule Status Types
+export type InsertCoherencyRuleStatus = z.infer<typeof insertCoherencyRuleStatusSchema>;
+export type CoherencyRuleStatus = typeof coherencyRuleStatus.$inferSelect;
 
 export type InsertScreenerFilters = z.infer<typeof insertScreenerFiltersSchema>;
 export type ScreenerFilters = typeof screenerFilters.$inferSelect;

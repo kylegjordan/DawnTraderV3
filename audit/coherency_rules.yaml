@@ -3,12 +3,14 @@
 # Generated from Phase 1 audit findings
 
 metadata:
-  version: "2.0"
+  version: "2.1-phase28e"
   generated_from_audit: true
   author: "Architect"
-  timestamp: "2025-10-28T16:18+04:00"
+  timestamp: "2025-10-29T11:30+00:00"
   purpose: "Define validation rules for Core Four guardrails to ensure coherent risk management"
   enforcement: "Backend validation on PUT /api/guardrails, migration validation"
+  phase: "Phase 28.E - Guardrail Policy Rationalization"
+  changelog: "Simplified rules to extreme fail-safes: R001 (50% cap), R002 (50% exposure), R003 (≥0 min), R007 (≤25%)"
 
 # Core Four Guardrails:
 # 1. portfolio_risk_per_trade_pct - Percentage of portfolio risked per trade
@@ -17,53 +19,57 @@ metadata:
 # 4. daily_loss_kill_switch_pct - Portfolio loss % triggering auto-shutdown
 
 rules:
-  - name: "Risk ≤ KillSwitch/10"
+  - name: "Risk ≤ 50% × KillSwitch"
     id: "RULE_001"
-    description: "Portfolio risk per trade must not exceed 10% of daily loss kill switch"
-    condition: "portfolio_risk_per_trade_pct <= daily_loss_kill_switch_pct / 10"
-    rationale: "Ensures at least 10 consecutive losing trades needed to hit kill switch"
+    description: "Portfolio risk per trade must not exceed 50% of daily loss kill switch (extreme fail-safe)"
+    condition: "portfolio_risk_per_trade_pct <= daily_loss_kill_switch_pct * 0.5"
+    rationale: "Phase 28.E: Simplified extreme fail-safe ensuring at least 2x buffer between risk per trade and kill switch threshold"
     severity: "error"
-    error_message: "Portfolio risk per trade ({value}%) cannot exceed 10% of daily loss kill switch ({kill_switch}%). Maximum allowed: {max_allowed}%"
+    error_message: "Portfolio risk per trade ({value}%) cannot exceed 50% of daily loss kill switch ({kill_switch}%). Maximum allowed: {max_allowed}%"
+    phase: "Phase 28.E"
     example_valid:
-      - portfolio_risk_per_trade_pct: 0.70
+      - portfolio_risk_per_trade_pct: 3.50
         daily_loss_kill_switch_pct: 7.00
-        result: "PASS (0.70 <= 7.00/10)"
+        result: "PASS (3.50 <= 7.00 * 0.5)"
     example_invalid:
-      - portfolio_risk_per_trade_pct: 1.50
+      - portfolio_risk_per_trade_pct: 4.00
         daily_loss_kill_switch_pct: 7.00
-        result: "FAIL (1.50 > 0.70)"
+        result: "FAIL (4.00 > 3.50)"
 
-  - name: "Total Exposure Cap"
+  - name: "Total Exposure ≤ 50% Cap"
     id: "RULE_002"
-    description: "Total portfolio exposure (positions * risk) must not exceed 100%"
-    condition: "max_open_positions * portfolio_risk_per_trade_pct <= 100"
-    rationale: "Prevents aggregate risk from exceeding entire portfolio value"
-    severity: "warn"
-    error_message: "Total exposure ({total}%) exceeds 100% of portfolio. Reduce max positions or risk per trade."
-    notes: "Warning level - allows temporary exceedance for flexibility, but should be addressed"
+    description: "Total portfolio exposure (positions * risk) must not exceed 50%"
+    condition: "max_open_positions * portfolio_risk_per_trade_pct <= 50"
+    rationale: "Phase 28.E: Simplified fail-safe preventing aggregate risk from exceeding half of portfolio value"
+    severity: "error"
+    error_message: "Total exposure ({total}%) exceeds 50% of portfolio. Reduce max positions or risk per trade."
+    phase: "Phase 28.E"
     example_valid:
       - max_open_positions: 5
         portfolio_risk_per_trade_pct: 1.50
         total_exposure: 7.50
-        result: "PASS (7.50 <= 100)"
+        result: "PASS (7.50 <= 50)"
     example_invalid:
       - max_open_positions: 100
         portfolio_risk_per_trade_pct: 1.50
         total_exposure: 150.00
-        result: "WARN (150.00 > 100)"
+        result: "FAIL (150.00 > 50)"
 
-  - name: "Cooldown Minimum"
+  - name: "Cooldown ≥ 0 minutes"
     id: "RULE_003"
-    description: "Symbol cooldown must be at least 1 minute"
-    condition: "symbol_cooldown_minutes >= 1"
-    rationale: "Prevents excessive trading frequency and ensures breathing room between trades"
+    description: "Symbol cooldown must be at least 0 minutes (default allowed)"
+    condition: "symbol_cooldown_minutes >= 0"
+    rationale: "Phase 28.E: Simplified fail-safe allowing zero cooldown for maximum flexibility"
     severity: "error"
-    error_message: "Symbol cooldown ({value} minutes) must be at least 1 minute"
+    error_message: "Symbol cooldown ({value} minutes) cannot be negative"
+    phase: "Phase 28.E"
     example_valid:
+      - symbol_cooldown_minutes: 0
+        result: "PASS"
       - symbol_cooldown_minutes: 15
         result: "PASS"
     example_invalid:
-      - symbol_cooldown_minutes: 0
+      - symbol_cooldown_minutes: -5
         result: "FAIL"
 
   - name: "Cooldown Maximum"
@@ -114,19 +120,22 @@ rules:
       - portfolio_risk_per_trade_pct: 6.00
         result: "FAIL (exceeds 5.00%)"
 
-  - name: "Kill Switch Range"
+  - name: "Kill Switch ≤ 25% of Portfolio"
     id: "RULE_007"
-    description: "Daily loss kill switch must be between 1.00% and 20.00%"
-    condition: "daily_loss_kill_switch_pct >= 1.00 and daily_loss_kill_switch_pct <= 20.00"
-    rationale: "Too low (< 1%) triggers false positives, too high (> 20%) defeats purpose of safety mechanism"
+    description: "Daily loss kill switch must be between 1.00% and 25.00%"
+    condition: "daily_loss_kill_switch_pct >= 1.00 and daily_loss_kill_switch_pct <= 25.00"
+    rationale: "Phase 28.E: Fail-safe ensuring kill switch stays within reasonable bounds (1-25%)"
     severity: "error"
-    error_message: "Daily loss kill switch ({value}%) must be between 1.00% and 20.00%"
+    error_message: "Daily loss kill switch ({value}%) must be between 1.00% and 25.00%"
+    phase: "Phase 28.E"
     example_valid:
       - daily_loss_kill_switch_pct: 7.00
         result: "PASS"
-    example_invalid:
       - daily_loss_kill_switch_pct: 25.00
-        result: "FAIL (exceeds 20.00%)"
+        result: "PASS"
+    example_invalid:
+      - daily_loss_kill_switch_pct: 30.00
+        result: "FAIL (exceeds 25.00%)"
 
   - name: "Max Positions Range"
     id: "RULE_008"
@@ -157,17 +166,17 @@ rules:
     description: "Learning-adjusted preset values must not exceed global safety caps"
     condition: |
       portfolio_risk_per_trade_pct <= 5.00 AND
-      daily_loss_kill_switch_pct <= 20.00 AND
+      daily_loss_kill_switch_pct <= 25.00 AND
       symbol_cooldown_minutes <= 90 AND
       max_open_positions <= 20
-    rationale: "Phase 6 adaptive learning engine automatically expands preset boundaries by 5% when performance meets threshold. Safety caps prevent runaway expansion and ensure system remains within acceptable risk limits."
+    rationale: "Phase 6 adaptive learning engine automatically expands preset boundaries by 5% when performance meets threshold. Safety caps prevent runaway expansion and ensure system remains within acceptable risk limits. Phase 28.E: Updated kill switch cap to 25% to align with RULE_007."
     severity: "error"
     error_message: "Learning-adjusted value exceeds safety cap: {parameter} = {value} (max: {cap})"
-    phase: "Phase 6"
+    phase: "Phase 6 / Phase 28.E"
     enforcement: "GoalsLearningEngine service enforces caps during expansion calculations"
     safety_caps:
       portfolio_risk_per_trade_pct: 5.00
-      daily_loss_kill_switch_pct: 20.00
+      daily_loss_kill_switch_pct: 25.00
       symbol_cooldown_minutes: 90
       max_open_positions: 20
     notes: |
@@ -177,13 +186,13 @@ rules:
       - Provides backstop against algorithmic over-optimization
     example_valid:
       - portfolio_risk_per_trade_pct: 4.95
-        daily_loss_kill_switch_pct: 19.50
+        daily_loss_kill_switch_pct: 24.50
         result: "PASS (within caps)"
     example_invalid:
       - portfolio_risk_per_trade_pct: 5.50
         result: "FAIL (exceeds 5.00% cap)"
-      - daily_loss_kill_switch_pct: 22.00
-        result: "FAIL (exceeds 20.00% cap)"
+      - daily_loss_kill_switch_pct: 26.00
+        result: "FAIL (exceeds 25.00% cap)"
 
 # Migration-specific validation rules
 migration_rules:

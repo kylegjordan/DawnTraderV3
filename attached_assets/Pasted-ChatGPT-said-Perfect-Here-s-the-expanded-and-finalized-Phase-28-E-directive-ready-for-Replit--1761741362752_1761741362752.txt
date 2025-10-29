@@ -1,0 +1,82 @@
+ChatGPT said:
+
+Perfect ✅
+
+Here’s the expanded and finalized Phase 28.E directive — ready for Replit.
+It combines your rationalized coherency policy, the new Coherency Rules tab, and this new “Control Modes Reference” documentation section explaining how Manual vs Lottie control works.
+
+Directive: Phase 28.E – Guardrail Policy Rationalization + Control Modes Reference
+
+Objectives
+
+Refactor and simplify coherency rules so they act only as extreme fail-safes.
+
+Display all coherency rules transparently in the Goals Engine UI.
+
+Refine preset / custom / manual / Lottie control logic.
+
+Add permanent documentation of control-mode behavior within the new Coherency Rules tab.
+
+Update telemetry and documentation accordingly.
+
+Rule Set Adjustments
+Rule ID	Action	New Definition	Status
+R001	Modify	Portfolio Risk ≤ 50 % × Daily Loss Kill Switch	✅ Keep
+R002	Modify	Max Open Positions × Risk ≤ 50 % of Portfolio Value	✅ Keep
+R003	Modify	Cooldown ≥ 0 min (default 0 allowed)	✅ Keep
+R004	Keep	Daily Loss Kill Switch ≤ 25 % of Portfolio	✅ Keep
+R005	Remove	Delete Paper/Live symmetry check	❌ Remove
+R006	Remove	Delete override-parity rule (limit on manual fields)	❌ Remove
+R007	Keep	Data Completeness Rule (FAIL on missing Core Four values)	✅ Keep
+Preset and Control Behavior Refinements
+Scenario	Result
+Changing any Core Four value from its preset baseline	activePreset = "Custom"
+Switching a control from Lottie → Manual without value change	Preset remains active
+Switching a control back to Lottie after manual change	Value stays at new number; LATTI treats as new baseline
+Custom config mixing Manual and Lottie controls	Fully supported
+Control Modes Reference (Documentation Section)
+
+Add this content to the new Coherency Rules tab under “Control Modes Reference.”
+
+Control Flags
+Each Core Four guardrail and filter stores a control flag in the database:
+
+{ "controlledBy": "lottie" | "manual" }
+
+
+Behavior
+
+Mode	Lottie Authority	User Authority	Description
+Lottie-Controlled	✅	⚠️	LATTI may auto-tune the value in real time. User may switch to manual at any time.
+Manual	❌	✅	Value is locked and cannot be changed by LATTI until switched back.
+
+Key Principles
+
+Manual = Frozen. LATTI must work around locked values.
+
+Switching back to Lottie does not revert the value — LATTI inherits your manual baseline.
+
+Mixed Custom configs (manual + Lottie) are fully supported.
+
+Presets stay active until any value changes.
+
+UI Updates
+
+Add “Coherency Rules” tab in Goals Engine (after Strategies).
+
+Table columns: Rule ID | Description | Threshold | Status | Last Result.
+
+Admin-only toggle to enable/disable rules.
+
+Include two info sections: Coherency Policy Reference and Control Modes Reference.
+
+Tooltips link from preset coherency warnings to this tab.
+
+Telemetry
+
+Add startup log line:
+
+[Audit] CoherencyPolicy | activeRules=5 | disabledRules=2 | version=28.E
+
+
+and show current ratios in phase audit reports.
