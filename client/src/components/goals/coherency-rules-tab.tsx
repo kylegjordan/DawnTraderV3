@@ -100,7 +100,7 @@ const coherencyRules: CoherencyRule[] = [
 ];
 
 export default function CoherencyRulesTab() {
-  const activeRules = coherencyRules.filter(r => r.status !== "FAIL");
+  const activeRules = coherencyRules.filter(r => r.status === "PASS");
   const warningRules = coherencyRules.filter(r => r.status === "WARN");
   const failedRules = coherencyRules.filter(r => r.status === "FAIL");
 
