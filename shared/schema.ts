@@ -122,6 +122,10 @@ export const goalsPresetNameEnum = pgEnum("goals_preset_name", ["conservative", 
 // Phase 28.C: Override Audit History
 export const auditEntityTypeEnum = pgEnum("audit_entity_type", ["guardrails", "filters"]);
 
+// Phase 29: Behavioral Feedback & Adaptive Guardrails
+export const behavioralTriggerTypeEnum = pgEnum("behavioral_trigger_type", ["adaptive_change", "user_override", "risk_trigger", "performance_feedback", "coherency_violation"]);
+export const learningModeEnum = pgEnum("learning_mode", ["slow", "normal", "aggressive", "disabled"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -4238,3 +4242,58 @@ export const insertAuditLogSchema = createInsertSchema(auditLog).omit({
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLog.$inferSelect;
 export type AuditEntityType = typeof auditEntityTypeEnum.enumValues[number];
+
+// Phase 29: Behavioral Feedback Log
+export const behavioralLog = pgTable("behavioral_log", {
+  id: serial("id").primaryKey(),
+  tradingMode: tradingModeEnum("trading_mode").notNull(),
+  parameter: varchar("parameter", { length: 100 }).notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value").notNull(),
+  triggerType: behavioralTriggerTypeEnum("trigger_type").notNull(),
+  confidence: doublePrecision("confidence").notNull().default(0.5), // 0.0-1.0 scale
+  metadata: jsonb("metadata"),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  modeIdx: index("behavioral_log_mode_idx").on(table.tradingMode),
+  parameterIdx: index("behavioral_log_parameter_idx").on(table.parameter),
+  triggerIdx: index("behavioral_log_trigger_idx").on(table.triggerType),
+  timestampIdx: index("behavioral_log_timestamp_idx").on(table.timestamp),
+}));
+
+export const insertBehavioralLogSchema = createInsertSchema(behavioralLog).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertBehavioralLog = z.infer<typeof insertBehavioralLogSchema>;
+export type BehavioralLog = typeof behavioralLog.$inferSelect;
+export type BehavioralTriggerType = typeof behavioralTriggerTypeEnum.enumValues[number];
+
+// Phase 29: Learning History (Versioned Snapshots)
+export const learningHistory = pgTable("learning_history", {
+  id: serial("id").primaryKey(),
+  tradingMode: tradingModeEnum("trading_mode").notNull(),
+  snapshotVersion: integer("snapshot_version").notNull(),
+  guardrailsSnapshot: jsonb("guardrails_snapshot").notNull(), // Full guardrails_v2 state
+  filtersSnapshot: jsonb("filters_snapshot").notNull(), // Full filters_v2 state
+  learningMode: learningModeEnum("learning_mode").notNull(),
+  changeCount: integer("change_count").notNull().default(0), // # of changes in this snapshot
+  isStable: boolean("is_stable").notNull().default(true), // Marked stable after validation
+  metadata: jsonb("metadata"), // Additional context (e.g., performance metrics at snapshot time)
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  modeIdx: index("learning_history_mode_idx").on(table.tradingMode),
+  versionIdx: index("learning_history_version_idx").on(table.snapshotVersion),
+  stableIdx: index("learning_history_stable_idx").on(table.isStable),
+  createdAtIdx: index("learning_history_created_at_idx").on(table.createdAt),
+}));
+
+export const insertLearningHistorySchema = createInsertSchema(learningHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertLearningHistory = z.infer<typeof insertLearningHistorySchema>;
+export type LearningHistory = typeof learningHistory.$inferSelect;
+export type LearningMode = typeof learningModeEnum.enumValues[number];

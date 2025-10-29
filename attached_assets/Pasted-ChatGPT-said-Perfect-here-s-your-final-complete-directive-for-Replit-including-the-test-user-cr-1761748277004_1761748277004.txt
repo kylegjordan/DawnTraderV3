@@ -1,0 +1,150 @@
+ChatGPT said:
+
+Perfect — here’s your final complete directive for Replit, including the test user credentials, audit verification, deliverables, and continuous run instructions.
+
+You can copy and paste this directly into your Replit chat.
+
+🚀 Directive: Phase 29 – Behavioral Feedback & Adaptive Guardrails (Full Implementation + Verification)
+
+Objective:
+Enable LATTI to learn from trade outcomes and user behavior, dynamically tuning guardrails and filters within coherency limits — with full transparency, safety, and rollback.
+
+Implementation Tasks (Continuous Execution)
+29A – Behavioral Feedback Logging
+
+Create behavioral_log table:
+id, mode, parameter, old_value, new_value, trigger_type, confidence, timestamp.
+
+Log every adaptive change, user override, and risk-trigger event.
+
+29B – Adaptive Guardrails Engine
+
+Add lightweight, local feedback algorithm (no OpenAI or external AI).
+
+For the last 50 entries in behavioral_log, compute mean Δ and variance; apply micro-adjustments (±1–3%) within coherency limits.
+
+Store each adaptive change in learning_history for audit tracking.
+
+29C – User Override Influence Weighting
+
+Add override_weight field to track how strongly user manual changes influence future tuning.
+
+Persist and display in telemetry:
+[Learning] OverrideInfluence | active=n | avgWeight=x.xx | bias=moderate.
+
+29D – Feedback Telemetry & Visualization
+
+Add Tuning tab in the Goals Engine (after Coherency tab).
+
+Show:
+
+Current Learning Mode (Slow / Normal / Aggressive).
+
+Guardrail Drift Chart (7-day trend).
+
+Rollback to Last Stable Config button.
+
+29E – Adaptive Coherency Validation
+
+Update GuardrailPolicy to treat LATTI-initiated adjustments as coherent if they remain within 5% of preset.
+
+Add telemetry:
+[Audit] AdaptiveCoherency | deviations<=5% | withinLimits=true.
+
+29F – Learning Throttles & Rollback Controls
+
+Limit to 3 adaptive updates per 24 hours (learning_throttle).
+
+Add rollback endpoint → restore previous snapshot from learning_history.
+
+Telemetry confirmation:
+[Learning] RollbackAvailable | lastStable=<timestamp>.
+
+29G – Audit Trail & Documentation
+
+Create learning_history table (versioned snapshots).
+
+Add Learning History Viewer to Developer tab in Settings.
+
+Generate audit/phase29-report.md and update replit.md to v2.3-phase29.
+
+🧪 Testing & Verification
+
+1️⃣ Automated Telemetry Checks (Paper + Live)
+Replit must confirm the following appear in startup logs:
+
+[Audit] ConfigSnapshot OK | fields=23 | legacyReads=0
+[Audit] FilterCoherence PASS | total=16 | coherent=true
+[Audit] GuardrailsCoherence PASS | total=4 | coherent=true
+[Learning] AdaptiveGuardrails PASS | changes<=3 | stability=PASS
+[Learning] OverrideInfluence PASS | avgWeight<=0.5 | bias=moderate
+[Learning] AdaptiveCoherency PASS | deviations<=5% | withinLimits=true
+[Learning] RollbackAvailable | lastStable=<timestamp>
+
+
+2️⃣ End-to-End UI Verification
+After completion:
+
+Navigate to Goals Engine → Tuning Tab
+
+Verify drift chart displays historical adjustments.
+
+Verify rollback button restores previous configuration instantly.
+
+Navigate to Settings → Developer → Learning History
+
+Confirm entries for each adaptive event show correct timestamps, modes, and values.
+
+3️⃣ Database Verification
+Replit must validate:
+
+behavioral_log has > 0 rows after test.
+
+learning_history has > 0 rows.
+
+20 unique parameters (4 guardrails + 16 filters) logged.
+
+4️⃣ Audit Report Deliverables
+Replit will automatically generate:
+
+📄 audit/phase29-report.md
+Includes:
+
+Summary of Adaptive Guardrails Engine performance.
+
+Table of all adjusted parameters (24-hour window).
+
+Statistical summary: mean Δ %, variance, coherency score.
+
+Paper + Live telemetry comparison.
+
+Rollback validation confirmation.
+
+5️⃣ Manual Verification (test user)
+Using the credentials below:
+
+username = testuser123
+password = SecurePass123!
+
+
+Perform the following:
+
+Log in and switch between Paper and Live modes.
+
+On the Tuning tab, confirm LATTI adjustments display differently per mode.
+
+Test rollback and confirm values revert correctly within 2 seconds.
+
+Execution Instruction
+
+“Execute Phase 29 – Behavioral Feedback & Adaptive Guardrails continuously, without checkpoints, until all telemetry and verification steps pass for both Paper and Live modes, and audit/phase29-report.md confirms adaptive learning stability and rollback functionality.”
+
+Expected Deliverables
+Deliverable	Description
+✅ behavioral_log table	Active, populated with adaptive changes
+✅ learning_history table	Versioned guardrail/filter snapshots
+✅ Tuning tab	Visible in Goals Engine, fully functional
+✅ Learning History Viewer	Visible in Developer tab
+✅ Telemetry PASS	All adaptive audits report success
+✅ audit/phase29-report.md	Generated with summary + validation
+✅ replit.md	Updated to v2.3-phase29
