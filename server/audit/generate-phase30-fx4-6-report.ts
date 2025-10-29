@@ -78,10 +78,3 @@ function getStatusBreakdown(oversight: any[]): string {
     .map(([status, count]) => `  - ${status}: ${count}`)
     .join("\n") || "  - No data";
 }
-
-// Auto-trigger on module import
-if (require.main === module) {
-  generatePhase30Report()
-    .then(path => console.log(`Report saved to: ${path}`))
-    .catch(err => console.error("Failed to generate report:", err));
-}

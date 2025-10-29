@@ -1,6 +1,5 @@
 import { db } from "../db";
 import { lottieOversightLog } from "../../shared/schema";
-import axios from "axios";
 
 export class LottieOversightService {
   private checkInterval: NodeJS.Timeout | null = null;
@@ -32,6 +31,7 @@ export class LottieOversightService {
 
   private async checkDHMAHealth() {
     try {
+      const axios = (await import("axios")).default;
       const token = await this.getAuthToken();
       
       const res = await axios.get("http://localhost:5000/api/strategy/dhma/telemetry?mode=live", {
@@ -88,6 +88,7 @@ export class LottieOversightService {
   }
 
   private async getAuthToken(): Promise<string> {
+    const axios = (await import("axios")).default;
     const response = await axios.post("http://localhost:5000/api/auth/login", {
       username: this.username,
       password: this.password,
