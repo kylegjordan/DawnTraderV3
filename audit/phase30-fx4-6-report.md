@@ -1,11 +1,14 @@
 # Phase 30.FX.4–6 Report
-Generated: 2025-10-29T21:27:31.809Z
+Generated: 2025-10-29T21:40:53.854Z
 
 ## Overview
 This report summarizes the Lottie Oversight and Cross-Strategy Optimization activities.
 
 ## Lottie Oversight Log (Last 20 Events)
 
+- 2025-10-29T21:40:53.630Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T21:37:31.745Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
+- 2025-10-29T21:32:31.698Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 - 2025-10-29T21:27:31.621Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 - 2025-10-29T21:25:26.615Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 
@@ -16,10 +19,10 @@ No strategy mix changes recorded yet.
 ## Summary Statistics
 
 ### Lottie Oversight
-- Total events: 2
+- Total events: 5
 - Active strategies: 1
 - Status breakdown:
-  - error: 2
+  - error: 5
 
 ### Strategy Mix
 - Total changes: 0
