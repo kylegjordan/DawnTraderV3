@@ -1,67 +1,67 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-29T10:32:48.142Z",
+    "timestamp": "2025-10-29T10:33:48.172Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-29T10:32:48.114Z",
+        "lastUpdate": "2025-10-29T10:33:48.170Z",
         "stale": false,
         "hitRate": "0.0%",
-        "cacheSize": 2,
+        "cacheSize": 0,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-29T10:32:48.114Z",
+        "lastUpdate": "2025-10-29T10:33:48.170Z",
         "stale": false,
         "hitRate": "0.0%",
-        "cacheSize": 2,
+        "cacheSize": 0,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-29T10:32:48.114Z",
+        "lastUpdate": "2025-10-29T10:33:48.170Z",
         "stale": false,
         "hitRate": "0.0%",
-        "cacheSize": 2,
+        "cacheSize": 0,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-29T10:32:48.114Z",
+        "lastUpdate": "2025-10-29T10:33:48.170Z",
         "stale": false,
         "hitRate": "0.0%",
-        "cacheSize": 2,
+        "cacheSize": 0,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-29T10:32:48.114Z",
+        "lastUpdate": "2025-10-29T10:33:48.170Z",
         "stale": false,
         "hitRate": "0.0%",
-        "cacheSize": 2,
+        "cacheSize": 0,
         "ttl": 30
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-10-29T10:32:48.114Z",
+        "lastUpdate": "2025-10-29T10:33:48.170Z",
         "stale": false,
         "hitRate": "0.0%",
-        "cacheSize": 2,
+        "cacheSize": 0,
         "ttl": 30
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-10-29T10:32:48.114Z",
+        "lastUpdate": "2025-10-29T10:33:48.170Z",
         "stale": false,
         "hitRate": "0.0%",
-        "cacheSize": 2,
+        "cacheSize": 0,
         "ttl": 30
       }
     },
     "overallStats": {
       "modulesActive": 7,
-      "totalCacheSize": 2,
+      "totalCacheSize": 0,
       "overallHitRate": "0.0%",
       "totalHits": 0,
       "totalMisses": 2
@@ -71,7 +71,7 @@
     "analytics": {
       "paper": {
         "strategy_analytics": {
-          "timestamp": "2025-10-29T10:31:02.392Z",
+          "timestamp": "2025-10-29T10:32:48.301Z",
           "strategies": [],
           "totalStrategies": 0,
           "averageSharpe": 0,
@@ -80,7 +80,7 @@
           "worstPerformer": null
         },
         "portfolio_summary": {
-          "timestamp": "2025-10-29T10:31:02.530Z",
+          "timestamp": "2025-10-29T10:32:48.841Z",
           "totalEquity": 850,
           "totalPL": 0,
           "totalPLPercent": 0,
@@ -92,7 +92,7 @@
           "strategyCount": 0,
           "activeStrategies": 0
         },
-        "computed_at": "2025-10-29T10:31:02.531Z",
+        "computed_at": "2025-10-29T10:32:48.841Z",
         "user_id": "1",
         "mode": "paper"
       }
@@ -102,16 +102,16 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-10-29T10:32:48.141Z",
+        "timestamp": "2025-10-29T10:33:48.171Z",
         "system": {
           "cpuUsage": 50.4,
           "memoryUsage": {
             "total": 67433574400,
-            "used": 36296757248,
-            "free": 31136817152,
+            "used": 36190117888,
+            "free": 31243456512,
             "percentUsed": 54
           },
-          "uptime": 8
+          "uptime": 68
         },
         "cache": {
           "hitRate": 0,
@@ -127,19 +127,19 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 8,
-            "lastRun": null
+            "uptime": 68,
+            "lastRun": "2025-10-29T10:33:18.177Z"
           },
           "analytics": {
-            "uptime": 8,
-            "lastRun": null
+            "uptime": 68,
+            "lastRun": "2025-10-29T10:32:48.847Z"
           }
         },
         "filePersistence": {
-          "successCount": 0,
+          "successCount": 1,
           "failureCount": 0,
           "timeoutCount": 0,
-          "avgLatencyMs": 0,
+          "avgLatencyMs": 2,
           "byCategory": {
             "report": {
               "success": 0,
@@ -147,9 +147,9 @@
               "avgLatencyMs": 0
             },
             "log": {
-              "success": 0,
+              "success": 1,
               "failed": 0,
-              "avgLatencyMs": 0
+              "avgLatencyMs": 2
             },
             "export": {
               "success": 0,
@@ -164,8 +164,8 @@
           }
         },
         "execution": {
-          "marketDataSource": "ws",
-          "lastTickAgeMs": -1,
+          "marketDataSource": "rest_fallback",
+          "lastTickAgeMs": 6419,
           "avgSubmitAckMs": 0,
           "avgSlippageBps": 0,
           "avgFeesPerTrade": 0,
@@ -187,15 +187,15 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-29T10:32:48.118Z"
+      "timestamp": "2025-10-29T10:33:48.170Z"
     }
   },
-  "last_sync": "2025-10-29T10:32:48.142Z",
+  "last_sync": "2025-10-29T10:33:48.172Z",
   "memory": {
     "analytics_paper_1": {
       "value": {
         "strategy_analytics": {
-          "timestamp": "2025-10-29T10:31:02.392Z",
+          "timestamp": "2025-10-29T10:32:48.301Z",
           "strategies": [],
           "totalStrategies": 0,
           "averageSharpe": 0,
@@ -204,7 +204,7 @@
           "worstPerformer": null
         },
         "portfolio_summary": {
-          "timestamp": "2025-10-29T10:31:02.530Z",
+          "timestamp": "2025-10-29T10:32:48.841Z",
           "totalEquity": 850,
           "totalPL": 0,
           "totalPLPercent": 0,
@@ -216,13 +216,13 @@
           "strategyCount": 0,
           "activeStrategies": 0
         },
-        "computed_at": "2025-10-29T10:31:02.531Z",
+        "computed_at": "2025-10-29T10:32:48.841Z",
         "user_id": "1",
         "mode": "paper"
       },
       "ttl": 900,
-      "expires_at": 1761734762531,
-      "traceId": "trace_0X2zFi8dDwmPNGpc",
+      "expires_at": 1761734868841,
+      "traceId": "trace_pQeZT6eGqjb0DCqN",
       "mode": "paper",
       "sourceTable": "strategy_settings"
     }

@@ -729,6 +729,35 @@ app.use((req, res, next) => {
         console.error('[Audit] ⚠️ GuardrailsCoherence telemetry failed:', error);
       }
       
+      // Phase 28.C: Override Audit History Telemetry
+      try {
+        const recentChanges = await storage.getRecentAuditLogs({ limit: 10 });
+        
+        if (recentChanges.length > 0) {
+          console.log(`[Audit] OverridesHistory | recentChanges=${recentChanges.length} (last 10)`);
+          
+          // Group by mode
+          const paperChanges = recentChanges.filter(c => c.tradingMode === 'paper').length;
+          const liveChanges = recentChanges.filter(c => c.tradingMode === 'live').length;
+          
+          // Group by entity type
+          const guardrailChanges = recentChanges.filter(c => c.entityType === 'guardrails').length;
+          const filterChanges = recentChanges.filter(c => c.entityType === 'filters').length;
+          
+          console.log(`[Audit]   By mode: paper=${paperChanges}, live=${liveChanges}`);
+          console.log(`[Audit]   By type: guardrails=${guardrailChanges}, filters=${filterChanges}`);
+          
+          // Show most recent change
+          const mostRecent = recentChanges[0];
+          const timestamp = new Date(mostRecent.timestamp).toISOString();
+          console.log(`[Audit]   Latest: ${mostRecent.entityType}.${mostRecent.field} (${mostRecent.tradingMode}) at ${timestamp}`);
+        } else {
+          console.log(`[Audit] OverridesHistory | recentChanges=0 (no override changes yet)`);
+        }
+      } catch (error) {
+        console.error('[Audit] ⚠️ OverridesHistory telemetry failed:', error);
+      }
+      
       // Phase 27.H: Cross-Mode Configuration Audit
       try {
         const compareConfigs = (paper: any, live: any) => {
