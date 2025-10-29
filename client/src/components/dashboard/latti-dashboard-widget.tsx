@@ -304,6 +304,57 @@ const LATTIDashboardWidgetComponent = () => {
             </span>
           </div>
         </div>
+
+        {/* Portfolio Projected Growth Table */}
+        <div className="space-y-2 pt-3 border-t">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-semibold">Projected Portfolio Growth</h3>
+          </div>
+          <div className="space-y-1.5">
+            {/* Current Portfolio */}
+            <div className="flex justify-between items-center p-2 bg-muted/20 rounded">
+              <span className="text-xs font-medium">Current Portfolio:</span>
+              <span className="text-sm font-bold font-mono" data-testid="portfolio-current">
+                ${portfolioBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            
+            {/* Projected values using compound daily growth */}
+            {[
+              { label: 'After 7 Days', days: 7, testId: 'portfolio-7d' },
+              { label: 'After 30 Days', days: 30, testId: 'portfolio-30d' },
+              { label: 'After 90 Days', days: 90, testId: 'portfolio-90d' },
+              { label: 'After 365 Days', days: 365, testId: 'portfolio-365d' }
+            ].map(({ label, days, testId }) => {
+              // Calculate compound growth: FV = PV × (1 + r)^n
+              const dailyReturnDecimal = targetPctValue / 100;
+              const projectedValue = portfolioBalance * Math.pow(1 + dailyReturnDecimal, days);
+              const growthAmount = projectedValue - portfolioBalance;
+              const growthPct = ((projectedValue - portfolioBalance) / portfolioBalance) * 100;
+              
+              return (
+                <div key={days} className="flex justify-between items-center p-2 hover:bg-muted/30 rounded transition-colors">
+                  <span className="text-xs text-muted-foreground">{label}:</span>
+                  <div className="flex flex-col items-end">
+                    <span className="text-sm font-bold font-mono" data-testid={testId}>
+                      ${projectedValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span 
+                      className={cn(
+                        "text-[10px] font-mono",
+                        growthAmount >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                      )}
+                      data-testid={`${testId}-growth`}
+                    >
+                      {growthAmount >= 0 ? '+' : ''}{growthAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({growthPct >= 0 ? '+' : ''}{growthPct.toFixed(1)}%)
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
