@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -9,10 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Download, RotateCcw, Power, PowerOff, TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { Download, RotateCcw, Power, PowerOff, TrendingUp, TrendingDown, Activity, Brain, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { format } from "date-fns";
 import PaperSimDiagnostic from "@/components/goals/paper-sim-diagnostic";
 import { useWebSocket, WebSocketMessage } from "@/hooks/use-websocket";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface TuningEvent {
   id: string;
@@ -42,6 +43,20 @@ interface TuningPolicy {
     adjustmentsToday: number;
     reverts: number;
   };
+}
+
+// Phase 29: Learning Telemetry
+interface LearningTelemetry {
+  mode: string;
+  changes24h: number;
+  overrides24h: number;
+  maxChanges: number;
+  throttleStatus: string;
+  lastStableSnapshot: number | null;
+  lastSnapshotTime: string | null;
+  coherencyThreshold: number;
+  overrideWeight: number;
+  bias: string;
 }
 
 export default function TuningTab() {
@@ -75,6 +90,21 @@ export default function TuningTab() {
         }
       });
       if (!res.ok) throw new Error("Failed to fetch tuning policy");
+      return res.json();
+    },
+    refetchInterval: autoRefreshActive ? 30000 : 120000,
+  });
+
+  // Phase 29: Fetch learning telemetry
+  const { data: learningTelemetry, isLoading: learningLoading } = useQuery<LearningTelemetry>({
+    queryKey: ["/api/learning/telemetry", selectedMode],
+    queryFn: async () => {
+      const res = await fetch(`/api/learning/telemetry/${selectedMode}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!res.ok) throw new Error("Failed to fetch learning telemetry");
       return res.json();
     },
     refetchInterval: autoRefreshActive ? 30000 : 120000,
@@ -127,6 +157,22 @@ export default function TuningTab() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Phase 29: Rollback to last stable snapshot
+  const snapshotRollbackMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/learning/rollback/${selectedMode}`, {});
+    },
+    onSuccess: () => {
+      toast({ title: "Snapshot rollback successful", description: "Configuration restored to last stable state." });
+      queryClient.invalidateQueries({ queryKey: ["/api/learning/telemetry", selectedMode] });
+      queryClient.invalidateQueries({ queryKey: ["/api/guardrails", selectedMode] });
+      queryClient.invalidateQueries({ queryKey: ["/api/filters-v2", selectedMode] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Rollback failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -259,6 +305,111 @@ export default function TuningTab() {
             </Button>
           </div>
         </div>
+      </Card>
+
+      {/* Phase 29: Learning & Adaptive Guardrails */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="w-5 h-5 text-purple-500" />
+            Learning & Adaptive Guardrails
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="w-4 h-4 text-muted-foreground" data-testid="info-learning" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">Phase 29: Behavioral feedback and adaptive parameter tuning within coherency limits</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {learningLoading ? (
+            <div className="text-center py-4 text-muted-foreground">Loading learning telemetry...</div>
+          ) : learningTelemetry ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label className="text-sm text-muted-foreground">Learning Mode</Label>
+                  <Badge variant="outline" className="w-fit capitalize text-base" data-testid="badge-learning-mode">
+                    {learningTelemetry.mode}
+                  </Badge>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-sm text-muted-foreground">Adaptive Changes (24h)</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold" data-testid="text-changes-24h">{learningTelemetry.changes24h}</span>
+                    <span className="text-sm text-muted-foreground">/ {learningTelemetry.maxChanges}</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-sm text-muted-foreground">User Overrides (24h)</Label>
+                  <span className="text-lg font-bold" data-testid="text-overrides-24h">{learningTelemetry.overrides24h}</span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-sm text-muted-foreground">Override Influence</Label>
+                  <Badge 
+                    variant={learningTelemetry.bias === "strong" ? "destructive" : learningTelemetry.bias === "moderate" ? "default" : "secondary"}
+                    data-testid="badge-bias"
+                  >
+                    {learningTelemetry.bias} ({(learningTelemetry.overrideWeight * 100).toFixed(0)}%)
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-sm font-semibold">Throttle Status</Label>
+                  <div className="flex items-center gap-2">
+                    {learningTelemetry.throttleStatus === "PASS" ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <span className="text-sm text-green-600 dark:text-green-400" data-testid="text-throttle-status">Active</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-orange-500" />
+                        <span className="text-sm text-orange-600 dark:text-orange-400" data-testid="text-throttle-status">Throttled</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-1">
+                  <Label className="text-sm font-semibold">Coherency Threshold</Label>
+                  <span className="text-sm" data-testid="text-coherency-threshold">±{learningTelemetry.coherencyThreshold}%</span>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <Label className="text-sm font-semibold">Last Stable Snapshot</Label>
+                  <div className="flex items-center gap-2">
+                    {learningTelemetry.lastStableSnapshot ? (
+                      <>
+                        <span className="text-sm font-mono" data-testid="text-last-snapshot">v{learningTelemetry.lastStableSnapshot}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => snapshotRollbackMutation.mutate()}
+                          disabled={snapshotRollbackMutation.isPending}
+                          data-testid="button-rollback-snapshot"
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1" />
+                          Rollback
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">No snapshots</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">No learning telemetry available</div>
+          )}
+        </CardContent>
       </Card>
 
       {/* Summary Stats */}
