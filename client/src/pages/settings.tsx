@@ -48,6 +48,7 @@ import {
 import { timezones } from "@/lib/timezone";
 import { ConfigSnapshotViewer } from "@/components/ConfigSnapshotViewer";
 import { AuditLogViewer } from "@/components/AuditLogViewer";
+import { OverrideFrequencyChart } from "@/components/OverrideFrequencyChart";
 
 const SETTINGS_TAB_KEY = "settings_active_tab";
 
@@ -1040,6 +1041,7 @@ export default function Settings() {
         {/* Developer Tab (Admin Only) */}
         {currentUser.isAdmin && (
           <TabsContent value="developer" className="space-y-6">
+            <OverrideFrequencyChart />
             <ConfigSnapshotViewer />
             <AuditLogViewer />
           </TabsContent>
