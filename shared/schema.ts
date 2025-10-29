@@ -4325,3 +4325,48 @@ export const insertLearningHistorySchema = createInsertSchema(learningHistory).o
 export type InsertLearningHistory = z.infer<typeof insertLearningHistorySchema>;
 export type LearningHistory = typeof learningHistory.$inferSelect;
 export type LearningMode = typeof learningModeEnum.enumValues[number];
+
+// Phase 30.FX.4: Lottie Oversight Log (Strategy Health Monitoring)
+export const lottieOversightLog = pgTable("lottie_oversight_log", {
+  id: serial("id").primaryKey(),
+  event: varchar("event", { length: 100 }).notNull(),
+  strategy: varchar("strategy", { length: 50 }),
+  status: varchar("status", { length: 50 }).notNull(),
+  reason: text("reason"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  eventIdx: index("lottie_oversight_log_event_idx").on(table.event),
+  strategyIdx: index("lottie_oversight_log_strategy_idx").on(table.strategy),
+  createdAtIdx: index("lottie_oversight_log_created_at_idx").on(table.createdAt),
+}));
+
+export const insertLottieOversightLogSchema = createInsertSchema(lottieOversightLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertLottieOversightLog = z.infer<typeof insertLottieOversightLogSchema>;
+export type LottieOversightLog = typeof lottieOversightLog.$inferSelect;
+
+// Phase 30.FX.6: Strategy Mix Log (Cross-Strategy Optimization)
+export const strategyMixLog = pgTable("strategy_mix_log", {
+  id: serial("id").primaryKey(),
+  strategy: varchar("strategy", { length: 50 }).notNull(),
+  oldWeight: doublePrecision("old_weight"),
+  newWeight: doublePrecision("new_weight").notNull(),
+  reason: text("reason"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  strategyIdx: index("strategy_mix_log_strategy_idx").on(table.strategy),
+  createdAtIdx: index("strategy_mix_log_created_at_idx").on(table.createdAt),
+}));
+
+export const insertStrategyMixLogSchema = createInsertSchema(strategyMixLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertStrategyMixLog = z.infer<typeof insertStrategyMixLogSchema>;
+export type StrategyMixLog = typeof strategyMixLog.$inferSelect;
