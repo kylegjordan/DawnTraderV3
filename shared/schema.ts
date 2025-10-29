@@ -119,6 +119,9 @@ export const walterActionCategoryEnum = pgEnum("walter_action_category", ["feed"
 // Phase 4: Goals Presets enums
 export const goalsPresetNameEnum = pgEnum("goals_preset_name", ["conservative", "baseline", "optimistic", "maximum", "custom"]);
 
+// Phase 28.C: Override Audit History
+export const auditEntityTypeEnum = pgEnum("audit_entity_type", ["guardrails", "filters"]);
+
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -4181,3 +4184,29 @@ export const insertSystemSettingsSchema = createInsertSchema(systemSettings).omi
 
 export type InsertSystemSettings = z.infer<typeof insertSystemSettingsSchema>;
 export type SystemSettings = typeof systemSettings.$inferSelect;
+
+// Phase 28.C: Override Audit History Table
+export const auditLog = pgTable("audit_log", {
+  id: serial("id").primaryKey(),
+  entityType: auditEntityTypeEnum("entity_type").notNull(),
+  field: varchar("field", { length: 100 }).notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  changedBy: varchar("changed_by").references(() => users.id).notNull(),
+  tradingMode: tradingModeEnum("trading_mode").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  entityTypeIdx: index("audit_log_entity_type_idx").on(table.entityType),
+  tradingModeIdx: index("audit_log_trading_mode_idx").on(table.tradingMode),
+  timestampIdx: index("audit_log_timestamp_idx").on(table.timestamp),
+  changedByIdx: index("audit_log_changed_by_idx").on(table.changedBy),
+}));
+
+export const insertAuditLogSchema = createInsertSchema(auditLog).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLog.$inferSelect;
+export type AuditEntityType = typeof auditEntityTypeEnum.enumValues[number];
