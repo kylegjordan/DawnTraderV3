@@ -9,8 +9,8 @@ function msUntilNext2AMUTC(): number {
   const next2AM = new Date();
   next2AM.setUTCHours(2, 0, 0, 0);
   
-  // If we've passed 2 AM today, schedule for tomorrow
-  if (now.getUTCHours() >= 2 || (now.getUTCHours() === 2 && now.getUTCMinutes() > 0)) {
+  // If we've passed 2 AM today (using full timestamp precision), schedule for tomorrow
+  if (now.getTime() >= next2AM.getTime()) {
     next2AM.setUTCDate(next2AM.getUTCDate() + 1);
   }
   
