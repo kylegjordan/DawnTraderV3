@@ -133,5 +133,124 @@ export class LATTIManager {
     }, thirtyMinutes);
 
     console.log('[LATTIManager] Periodic telemetry processing started (every 30 minutes)');
+    
+    // Start hourly cross-strategy optimization
+    this.startCrossStrategyOptimization();
+  }
+
+  /**
+   * Phase 30.FX.6 - Cross-Strategy Optimization
+   * Analyzes performance across all strategies and rebalances weights
+   */
+  static startCrossStrategyOptimization(): void {
+    const oneHour = 60 * 60 * 1000;
+    
+    setInterval(async () => {
+      await this.optimizeStrategyMix();
+    }, oneHour);
+    
+    console.log('[30.FX.6][LATTIManager] Cross-strategy optimization started (hourly)');
+  }
+
+  /**
+   * Optimize strategy mix based on recent performance
+   */
+  private static async optimizeStrategyMix(): Promise<void> {
+    try {
+      console.log("[30.FX.6][LATTIManager] Running hourly optimization...");
+      
+      const { db } = await import("../db");
+      const { strategyMixLog } = await import("../../shared/schema");
+      const axios = (await import("axios")).default;
+      
+      const strategies = ["dhma", "quantflow", "trendpulse", "volsurf", "momentumx"];
+      const username = "testuser123";
+      const password = "SecurePass123!";
+      
+      let token: string;
+      try {
+        const auth = await axios.post("http://localhost:5000/api/auth/login", {
+          username,
+          password,
+        }, { timeout: 5000 });
+        token = auth.data.accessToken;
+      } catch (authErr: any) {
+        console.warn("[30.FX.6][LATTIManager] Auth failed, skipping optimization:", authErr.message);
+        return;
+      }
+
+      const telemetry: Array<{name: string; pnl: number; winRate: number}> = [];
+      
+      for (const strategy of strategies) {
+        try {
+          const { data } = await axios.get(
+            `http://localhost:5000/api/strategy/${strategy}/telemetry?mode=live`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+              timeout: 10000,
+            }
+          );
+          
+          telemetry.push({
+            name: strategy,
+            pnl: data.avgPLPerTrade || 0,
+            winRate: data.hitRate || 0,
+          });
+        } catch (err: any) {
+          console.warn(`[30.FX.6][LATTIManager] Skipped ${strategy}: telemetry unavailable (${err.message})`);
+        }
+      }
+
+      if (telemetry.length === 0) {
+        console.log("[30.FX.6][LATTIManager] No strategy telemetry available");
+        return;
+      }
+
+      telemetry.sort((a, b) => b.pnl - a.pnl);
+      
+      const top = telemetry.slice(0, Math.min(2, telemetry.length));
+      const bottom = telemetry.slice(-Math.min(2, telemetry.length));
+
+      for (const s of top) {
+        await db.insert(strategyMixLog).values({
+          strategy: s.name,
+          oldWeight: null,
+          newWeight: 1.1,
+          reason: "top_performer",
+          metadata: {
+            pnl: s.pnl,
+            winRate: s.winRate,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      for (const s of bottom) {
+        if (s.pnl < 0) {
+          await db.insert(strategyMixLog).values({
+            strategy: s.name,
+            oldWeight: null,
+            newWeight: 0.9,
+            reason: "underperformer",
+            metadata: {
+              pnl: s.pnl,
+              winRate: s.winRate,
+              timestamp: new Date().toISOString(),
+            },
+          });
+        }
+      }
+
+      console.log(`[30.FX.6][LATTIManager] Mix updated:`);
+      if (top.length > 0) {
+        console.log(`  ↑ +10% for ${top.map(t => t.name).join(", ")}`);
+      }
+      if (bottom.some(b => b.pnl < 0)) {
+        const underperformers = bottom.filter(b => b.pnl < 0);
+        console.log(`  ↓ -10% for ${underperformers.map(b => b.name).join(", ")}`);
+      }
+    } catch (error: any) {
+      console.error("[30.FX.6][LATTIManager] Error in strategy optimization:", error.message);
+    }
   }
 }
