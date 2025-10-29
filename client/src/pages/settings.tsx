@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { timezones } from "@/lib/timezone";
 import { ConfigSnapshotViewer } from "@/components/ConfigSnapshotViewer";
+import { AuditLogViewer } from "@/components/AuditLogViewer";
 
 const SETTINGS_TAB_KEY = "settings_active_tab";
 
@@ -1040,6 +1041,7 @@ export default function Settings() {
         {currentUser.isAdmin && (
           <TabsContent value="developer" className="space-y-6">
             <ConfigSnapshotViewer />
+            <AuditLogViewer />
           </TabsContent>
         )}
       </Tabs>

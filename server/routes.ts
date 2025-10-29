@@ -15260,6 +15260,38 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 28.C: Audit Log History Endpoint
+  apiRouter.get('/diagnostics/audit-logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const requestId = `audit-log-${Date.now()}`;
+    try {
+      const mode = req.query.mode as 'live' | 'paper' | undefined;
+      const entityType = req.query.entityType as 'guardrails' | 'filters' | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      console.log(`[AuditLogs:${requestId}] Fetching audit logs - mode=${mode}, entityType=${entityType}, limit=${limit}`);
+      
+      const logs = await storage.getRecentAuditLogs({
+        mode,
+        entityType,
+        limit
+      });
+      
+      res.json({
+        ok: true,
+        data: logs,
+        count: logs.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error(`[AuditLogs:${requestId}] Error:`, error.message);
+      res.status(500).json({
+        ok: false,
+        code: 'SERVER_ERROR',
+        detail: error.message
+      });
+    }
+  });
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)
