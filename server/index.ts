@@ -564,7 +564,7 @@ app.use((req, res, next) => {
         } : null;
         
         const goals = activePreset ? {
-          activePreset: activePreset.presetName,
+          activePreset: activePreset.name,
           targetDailyAvgEarningPct: parseFloat(String(activePreset.targetDailyAvgEarningPct)),
           tradesPerDayEst: activePreset.tradesPerDayEst
         } : null;
@@ -609,6 +609,137 @@ app.use((req, res, next) => {
       if (liveSnapshot.guardrails) {
         const g = liveSnapshot.guardrails;
         console.log(`[Audit] Live guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, maxPos=${g.maxOpenPositions}, killSwitch=${g.dailyLossKillSwitchPct}%`);
+      }
+      
+      // Phase 27.H: FilterCoherence Telemetry
+      try {
+        const validateFilterCoherence = async (mode: 'paper' | 'live') => {
+          // Fetch filter data from database
+          const filtersData = await storage.getScreenerFilters({ mode });
+          
+          if (!filtersData) {
+            return { 
+              status: 'MISSING', 
+              filterCount: 0, 
+              lattiManaged: 0, 
+              manualOverride: 0, 
+              coherent: false,
+              note: 'Filter data not found in database'
+            };
+          }
+          
+          // Count actual filter value fields from the payload
+          const filterValueFields = [
+            'minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'minMarketCap', 'maxBidAskSpread',
+            'rsiMin', 'rsiMax', 'volatilityMin', 'volatilityMax',
+            'excludeStablecoins', 'allowRegulatedOnly', 'universeSize',
+            'quoteCurrencies', 'activeTimeframes', 'confidenceThreshold'
+          ];
+          
+          // Derive filter count from actual data (check which fields exist)
+          const filterCount = filterValueFields.filter(field => 
+            filtersData.hasOwnProperty(field)
+          ).length;
+          
+          // Check for override metadata in the database
+          // NOTE: Phase 3 not yet implemented - these fields do NOT exist in screeners table
+          const hasOverrideFlags = 
+            filtersData.hasOwnProperty('managedByLottie') || 
+            filtersData.hasOwnProperty('manualOverrideEnabled') ||
+            filtersData.hasOwnProperty('lockedByUser');
+          
+          if (!hasOverrideFlags) {
+            // Phase 3 incomplete - override flags not persisted in database
+            // Assume all filters are LATTI-managed by default (no way to override)
+            return {
+              status: 'WARN',
+              filterCount,
+              lattiManaged: filterCount,
+              manualOverride: 0,
+              coherent: true,
+              note: 'Phase 3 incomplete - override flags not persisted in database (assumed all LATTI-managed)'
+            };
+          }
+          
+          // If override flags exist (Phase 3 complete), read actual values
+          const managedByLottie = (filtersData as any).managedByLottie ?? true;
+          const manualOverrideEnabled = (filtersData as any).manualOverrideEnabled ?? false;
+          
+          const lattiManaged = managedByLottie && !manualOverrideEnabled ? filterCount : 0;
+          const manualOverride = manualOverrideEnabled ? filterCount : 0;
+          const coherent = lattiManaged === filterCount;
+          
+          return {
+            status: coherent ? 'PASS' : 'WARN',
+            filterCount,
+            lattiManaged,
+            manualOverride,
+            coherent,
+            note: hasOverrideFlags ? undefined : 'Override flags available in database'
+          };
+        };
+        
+        const paperFiltersStatus = await validateFilterCoherence('paper');
+        const liveFiltersStatus = await validateFilterCoherence('live');
+        
+        console.log(`[Audit] FilterCoherence ${paperFiltersStatus.status} | mode=paper | total=${paperFiltersStatus.filterCount} | lattiManaged=${paperFiltersStatus.lattiManaged} | manualOverride=${paperFiltersStatus.manualOverride} | coherent=${paperFiltersStatus.coherent}`);
+        if (paperFiltersStatus.note) console.log(`[Audit]   Note: ${paperFiltersStatus.note}`);
+        
+        console.log(`[Audit] FilterCoherence ${liveFiltersStatus.status} | mode=live | total=${liveFiltersStatus.filterCount} | lattiManaged=${liveFiltersStatus.lattiManaged} | manualOverride=${liveFiltersStatus.manualOverride} | coherent=${liveFiltersStatus.coherent}`);
+        if (liveFiltersStatus.note) console.log(`[Audit]   Note: ${liveFiltersStatus.note}`);
+      } catch (error) {
+        console.error('[Audit] ⚠️ FilterCoherence telemetry failed:', error);
+      }
+      
+      // Phase 27.H: Cross-Mode Configuration Audit
+      try {
+        const compareConfigs = (paper: any, live: any) => {
+          const discrepancies = [];
+          
+          // Compare field counts
+          if (paper.fieldCount !== live.fieldCount) {
+            discrepancies.push(`Field count mismatch: paper=${paper.fieldCount} vs live=${live.fieldCount}`);
+          }
+          
+          // Compare schema structure (not values, just presence of fields)
+          const paperHasGuardrails = !!paper.guardrails;
+          const liveHasGuardrails = !!live.guardrails;
+          const paperHasFilters = !!paper.filters;
+          const liveHasFilters = !!live.filters;
+          const paperHasGoals = !!paper.goals;
+          const liveHasGoals = !!live.goals;
+          
+          if (paperHasGuardrails !== liveHasGuardrails) {
+            discrepancies.push(`Guardrails presence mismatch: paper=${paperHasGuardrails} vs live=${liveHasGuardrails}`);
+          }
+          if (paperHasFilters !== liveHasFilters) {
+            discrepancies.push(`Filters presence mismatch: paper=${paperHasFilters} vs live=${liveHasFilters}`);
+          }
+          if (paperHasGoals !== liveHasGoals) {
+            discrepancies.push(`Goals presence mismatch: paper=${paperHasGoals} vs live=${liveHasGoals}`);
+          }
+          
+          return {
+            status: discrepancies.length === 0 ? 'PASS' : 'WARN',
+            discrepancies,
+            paperHash: paper.schemaHash.substring(0, 8),
+            liveHash: live.schemaHash.substring(0, 8),
+            hashesMatch: paper.schemaHash === live.schemaHash // Values will differ, but structure should be same
+          };
+        };
+        
+        const crossModeAudit = compareConfigs(paperSnapshot, liveSnapshot);
+        
+        if (crossModeAudit.status === 'PASS') {
+          console.log(`[Audit] CrossMode ${crossModeAudit.status} | paperHash=${crossModeAudit.paperHash} | liveHash=${crossModeAudit.liveHash} | structureCoherent=true`);
+        } else {
+          console.log(`[Audit] CrossMode ${crossModeAudit.status} | paperHash=${crossModeAudit.paperHash} | liveHash=${crossModeAudit.liveHash} | discrepancies=${crossModeAudit.discrepancies.length}`);
+          crossModeAudit.discrepancies.forEach((d, i) => {
+            console.log(`[Audit]   ${i + 1}. ${d}`);
+          });
+        }
+      } catch (error) {
+        console.error('[Audit] ⚠️ CrossMode audit failed:', error);
       }
     } catch (error) {
       console.error('[Audit] ⚠️ Config audit telemetry failed:', error);
