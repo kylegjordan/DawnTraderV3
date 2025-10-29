@@ -824,11 +824,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGuardrailsCompliance(params: { mode: 'live' | 'paper' }): Promise<any> {
-    const queryResult = await db.execute(
-      sql`SELECT * FROM v_guardrails_compliance WHERE mode = ${params.mode}`
-    );
-    const result = queryResult.rows?.[0];
-    return result || null;
+    // Get active preset
+    const activePreset = await this.getActiveGoalsPreset(params);
+    
+    // Get current guardrails
+    const guardrails = await this.getGuardrailsV2(params);
+    
+    if (!guardrails) {
+      return null;
+    }
+
+    // Validate coherency using guardrail policy
+    const { guardrailPolicy } = await import('./services/guardrail-policy');
+    const effectiveValues = guardrailPolicy.getEffective(guardrails);
+    const coherencyResult = guardrailPolicy.validate(effectiveValues);
+    const isKillSwitchTripped = await guardrailPolicy.isKillSwitchTripped(params.mode);
+
+    return {
+      mode: params.mode,
+      activePreset: activePreset?.name || 'custom',
+      coherency: coherencyResult,
+      killSwitchTripped: isKillSwitchTripped
+    };
   }
 
   // Phase 6: Goals Learning Metrics methods

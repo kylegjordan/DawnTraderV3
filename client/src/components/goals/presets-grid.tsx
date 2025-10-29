@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, TrendingUp, Shield, Clock, Users } from "lucide-react";
+import { CheckCircle2, TrendingUp, Shield, Clock, Users, Gauge, Zap } from "lucide-react";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -84,17 +84,35 @@ export function PresetsGrid() {
   const getPresetBadgeColor = (name: string) => {
     switch (name) {
       case 'conservative':
-        return 'bg-green-600 dark:bg-green-700';
+        return 'bg-green-600 dark:bg-green-700 text-white';
       case 'baseline':
-        return 'bg-blue-600 dark:bg-blue-700';
+        return 'bg-blue-600 dark:bg-blue-700 text-white';
       case 'optimistic':
-        return 'bg-amber-600 dark:bg-amber-700';
+        return 'bg-amber-600 dark:bg-amber-700 text-white';
       case 'maximum':
-        return 'bg-red-600 dark:bg-red-700';
+        return 'bg-red-600 dark:bg-red-700 text-white';
       case 'custom':
-        return 'bg-purple-600 dark:bg-purple-700';
+        return 'bg-purple-600 dark:bg-purple-700 text-white';
       default:
-        return 'bg-gray-600 dark:bg-gray-700';
+        return 'bg-gray-600 dark:bg-gray-700 text-white';
+    }
+  };
+
+  const getPresetIcon = (name: string) => {
+    const iconClass = "h-4 w-4";
+    switch (name) {
+      case 'conservative':
+        return <Shield className={iconClass} />;
+      case 'baseline':
+        return <Gauge className={iconClass} />;
+      case 'optimistic':
+        return <TrendingUp className={iconClass} />;
+      case 'maximum':
+        return <Zap className={iconClass} />;
+      case 'custom':
+        return <Users className={iconClass} />;
+      default:
+        return null;
     }
   };
 
@@ -149,9 +167,10 @@ export function PresetsGrid() {
               <div className="flex items-center justify-between">
                 <Badge
                   variant="default"
-                  className={getPresetBadgeColor(preset.name)}
+                  className={`${getPresetBadgeColor(preset.name)} px-3 py-1.5 text-base font-semibold flex items-center gap-2`}
                   data-testid={`badge-preset-${preset.name}`}
                 >
+                  {getPresetIcon(preset.name)}
                   {getPresetDisplayName(preset.name)}
                 </Badge>
                 {preset.isActive && (
