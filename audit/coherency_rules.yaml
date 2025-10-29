@@ -3,14 +3,14 @@
 # Generated from Phase 1 audit findings
 
 metadata:
-  version: "2.1-phase28e"
+  version: "2.2-phase28efinal"
   generated_from_audit: true
   author: "Architect"
-  timestamp: "2025-10-29T11:30+00:00"
+  timestamp: "2025-10-29T13:30+00:00"
   purpose: "Define validation rules for Core Four guardrails to ensure coherent risk management"
   enforcement: "Backend validation on PUT /api/guardrails, migration validation"
-  phase: "Phase 28.E - Guardrail Policy Rationalization"
-  changelog: "Simplified rules to extreme fail-safes: R001 (50% cap), R002 (50% exposure), R003 (≥0 min), R007 (≤25%)"
+  phase: "Phase 28.E Final - Control Modes Reference & Documentation"
+  changelog: "Phase 28.E Final: Added Control Modes Reference to UI, finalized documentation, version updated to v2.2-phase28efinal"
 
 # Core Four Guardrails:
 # 1. portfolio_risk_per_trade_pct - Percentage of portfolio risked per trade

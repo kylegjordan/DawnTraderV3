@@ -13,91 +13,27 @@ Core services include `KrakenService`, `TradingEngine`, `StrategyEngine`, `Marke
 
 An AI Orchestrator & Command Center, powered by GPT-4o, includes an AI SysAdmin Co-Pilot named Walter. Walter's architecture features a Unified Command & Conversation Layer, Semantic Memory Layer, Intelligence Refinement Layer, Real-Time Execution Layer, and a Unified Portfolio & Strategy State. It incorporates a Hybrid Cognitive-Operational design with an Intent Gateway, `SecureCoreService`, Continuous Learning Pipeline, `StateAwarenessService`, Intent Execution Framework with a `Pre-Execution Validator`, and an Autonomy Layer, with Safety Guardrails & Operational Kill Switch. The system supports paper trading simulation with a database-first architecture and multi-intent command processing. Live trading includes voice/chat activation with manual approval workflows.
 
-The architecture uses a global mode-based engine, with one engine per mode (live/paper) shared by all users. `ModeRegistry` service provides production telemetry with WebSocket broadcasts for real-time mode status updates. `/api/system/health` returns comprehensive dual-mode telemetry.
+The architecture uses a global mode-based engine, with one engine per mode (live/paper) shared by all users. `ModeRegistry` provides production telemetry with WebSocket broadcasts. `/api/system/health` returns comprehensive dual-mode telemetry. `MetricsCore` provides centralized metrics calculation with strict mode isolation for portfolio, risk, and execution KPIs, with real-time WebSocket broadcasts. Live pricing is handled by a `LivePricingAdapter` providing external market price feeds with dual-source integration and WebSocket broadcasts.
 
-`MetricsCore` service provides centralized metrics calculation with strict mode isolation for portfolio, risk, and execution KPIs, with mode-based APIs and real-time WebSocket broadcasts. Live pricing integration is handled by a `LivePricingAdapter` service providing external market price feeds with dual-source integration, a 15-second refresh cycle, and WebSocket broadcasts. `MetricsCore` consumes live pricing data for live mode unrealized P/L calculations.
+The Goals Engine UI includes advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with Trading Pace presets. A Goal Feasibility Validation & Audit System tracks and validates goal change attempts against guardrail limits. It calculates and displays a rolling **Average Daily Earnings % (ADE%)**. The Dashboard LATTI widget mirrors Goals Engine Target Daily Goals, displaying calculated values like Risk per Trade ($), Trades per Day, and Projected Portfolio Growth. "Risk per Trade ($)" is converted to "Portfolio Risk per Trade (%)" across the Goals Engine and Dashboard LATTI widget.
 
-The Goals Engine UI includes advanced universe and signal controls, execution rhythm controls, and simplified daily target goals with Trading Pace presets. A Goal Feasibility Validation & Audit System tracks and validates goal change attempts against guardrail limits. The system calculates and displays a rolling **Average Daily Earnings % (ADE%)** as a percentage of portfolio value. It implements bidirectional synchronization between Trading Pace presets and Performance Metrics.
+The system uses a modern `guardrails_v2` schema with four core guardrail parameters: Portfolio Risk per Trade %, Symbol Cooldown (minutes), Max Open Positions, and Daily Loss Kill Switch %. Key features include dual-mode operation with independent guardrail sets, coherency validation enforced via 10 validation rules, backend API endpoints for GET/PUT guardrails, and real-time WebSocket broadcasts for config changes.
 
-The Dashboard LATTI widget mirrors Goals Engine Target Daily Goals, displaying LATTI-calculated values: Risk per Trade ($), Trades per Day, Target Daily Average Earnings %, Current Portfolio Value ($), and a Projected Portfolio Growth table using compound daily growth. "Risk per Trade ($)" is converted to "Portfolio Risk per Trade (%)" across the Goals Engine and Dashboard LATTI widget.
+Toggle controls allow switching between LATTi autonomous optimization and manual user control for individual parameters, managed via `locked_by_user` flags in the `guardrails_v2` table. Dedicated frontend components manage this functionality with real-time WebSocket synchronization.
 
-### LATTi Goals + Guardrails Modernization
-The system uses a modern `guardrails_v2` schema with four core guardrail parameters:
-- **Portfolio Risk per Trade %**: Percentage of portfolio value at risk per trade
-- **Symbol Cooldown (minutes)**: Minimum time between trades on the same symbol
-- **Max Open Positions**: Maximum concurrent open positions
-- **Daily Loss Kill Switch %**: Portfolio loss threshold that triggers emergency shutdown
+A unified dashboard widget and Goals Preset Grid implements a 4+1 preset structure (Conservative, Baseline, Optimistic, Maximum, Custom) with coherency analytics, stored in a `goals_presets` table. Presets can be applied via API, triggering updates and broadcasting WebSocket events. The Goals Engine includes a real-time Coherency Status Widget displaying the active preset name, coherency validation status, and detailed descriptions of any conflicts.
 
-Key features include dual-mode operation (paper/live) with independent guardrail sets, coherency validation enforced via 10 validation rules (including learning expansion caps), backend API endpoints for GET/PUT guardrails, and real-time WebSocket broadcasts for config changes.
+A **GuardrailPolicy Service** (`server/services/guardrail-policy.ts`) acts as a single backend source of truth for guardrail values with runtime coherency enforcement. It handles effective value resolution, coherency validation (all 10 rules including learning expansion caps), kill switch management, and conflict detection. The API layer exposes endpoints for effective guardrails, updating guardrails with full coherency validation, and managing the kill switch state. New WebSocket events are broadcast for kill switch status and policy updates.
 
-The system implements toggle controls for switching between LATTi autonomous optimization and manual user control for individual parameters. This is managed via `locked_by_user` flags in the `guardrails_v2` table and `managed_by_lottie`/`manual_override_enabled` metadata flags for filters. Dedicated frontend components (`CoreFourGuardrails`, `FiltersWithOverride`) and a `useOverrideState` hook manage this functionality with real-time WebSocket synchronization.
+The Goals Engine features an adaptive learning system that automatically optimizes preset boundaries based on 30-day performance metrics. When a preset achieves ≥80% of its target daily return, guardrail parameters automatically expand by 5% up to global safety caps. The `GoalsLearningEngine` service handles this logic. API endpoints include GET `/api/goals-learning/summary` and POST `/api/goals-learning/trigger`.
 
-A unified dashboard widget and Goals Preset Grid implements a 4+1 preset structure (Conservative, Baseline, Optimistic, Maximum, Custom) with coherency analytics, stored in a `goals_presets` table. Presets can be applied via API, triggering updates to `guardrails_v2` and broadcasting WebSocket events. The Goals Engine includes a real-time Coherency Status Widget that displays the active preset name, coherency validation status (PASS/WARN/FAIL), and detailed descriptions of any conflicts or issues detected by the GuardrailPolicy Service. This widget auto-refreshes every 10 seconds and provides visual feedback with color-coded badges and error/warning messages.
+All legacy screener variable inputs have been removed. The Screeners tab now exclusively uses the unified v2 filter configuration with modern fields (Volume, Price, Market Quality, RSI, Volatility, Asset Type, Universe & Signal Controls). API endpoints `/api/screeners` and `/api/filters-v2` provide mode-specific access.
 
-A **GuardrailPolicy Service** (`server/services/guardrail-policy.ts`) acts as a single backend source of truth for guardrail values with runtime coherency enforcement. It handles:
-- **Effective Value Resolution**: Determines values based on manual vs. LATTi management.
-- **Coherency Validation**: Validates all 10 rules (including Phase 6 learning expansion caps), returning errors or warnings.
-- **Kill Switch Management**: Implements a circuit breaker pattern with per-mode state to activate/reset emergency trading halts.
-- **Conflict Detection**: Identifies attempts to override LATTi-managed parameters without proper locking.
-- **Metrics & Telemetry**: Tracks rule failures, kill switch trips, and override conflicts.
-The API layer exposes endpoints for effective guardrails, updating guardrails with full coherency validation, and managing the kill switch state. New WebSocket events are broadcast for kill switch status and policy updates. The GuardrailPolicy Service is integrated into the `RiskManager`, `StrategyEngine`, and `LATTI Manager` to ensure consistent and safe operation.
+A comprehensive audit system ensures only current, visible fields influence the trade engine with zero legacy field access. This is enforced through runtime validation, database views (`v_guardrails_active`, `v_filters_active`, `v_goals_active`), diagnostic endpoints (`GET /api/diagnostics/config-snapshot`), and startup telemetry.
 
-**Phase 6 - Adaptive Learning Mode (COMPLETED):**
-The Goals Engine now features an adaptive learning system that automatically optimizes preset boundaries based on 30-day performance metrics. When a preset achieves ≥80% of its target daily return over a 30-day rolling window, the system automatically expands all guardrail parameters by 5% to capitalize on proven performance. Global safety caps prevent runaway expansion: portfolio risk capped at 5.0%, kill switch at 20.0%, cooldown at 90 minutes, max positions at 20. The `goals_learning_metrics` table stores daily performance snapshots, and the `v_goals_learning_summary` view provides 30-day rolling averages. The `GoalsLearningEngine` service (`server/services/goals-learning-engine.ts`) handles auto-adjustment logic with safety cap enforcement. API endpoints include GET `/api/goals-learning/summary` for metrics and POST `/api/goals-learning/trigger` for manual learning cycles. Each preset tracks `last_adjusted_at` timestamp and `learning_active` boolean flag. WebSocket events (`goals.learning.expanded`, `goals.learning.completed`) broadcast learning actions in real-time. Designed for daily cron execution with manual trigger capability for testing. Full documentation in `docs/goals_engine_redesign_overview.md`. Safety rule RULE_010 added to `audit/coherency_rules.yaml`.
+An automated anomaly detection system for override configuration changes, `AuditAnomalyDetectionService`, analyzes audit logs for unusual patterns using frequency spike detection and value reversion detection. The `OverrideFrequencyChart` component displays 24-hour override trends and real-time anomaly alerts.
 
-**Phase 27.F.34 - Screener Filters Modernization (COMPLETED):**
-All legacy screener variable inputs have been removed. The Screeners tab now exclusively uses the unified v2 filter configuration with modern fields (Volume, Price, Market Quality, RSI, Volatility, Asset Type, Universe & Signal Controls). Deprecated fields (avgVolumeRatio, atrThreshold, earningsBlackout, priceDeltaTrigger as screener variable) have been fully removed from both frontend and backend. API endpoints `/api/screeners` and `/api/filters-v2` provide mode-specific access to current filter configuration.
-
-**Phase 27.G - Single-Source Config Audit (COMPLETED):**
-Comprehensive audit system ensuring only current, visible fields influence the trade engine with zero legacy field access. The system enforces single-source truth through runtime validation, database views, diagnostic endpoints, and telemetry monitoring.
-
-**Config Snapshot API**
-- **Endpoint**: `GET /api/diagnostics/config-snapshot?mode=paper|live`
-- **Authentication**: JWT required
-- **Response**: Complete configuration snapshot including guardrails (4 fields), filters (16 fields), goals (3 fields), portfolio value, provenance metadata, legacy read counter, and schema hash
-- **Use Case**: Runtime debugging, config verification, compliance monitoring
-
-**Database Views**
-- `v_guardrails_active`: Exposes 4 current guardrail fields only (excludes legacy columns)
-- `v_filters_active`: Exposes 16 current filter fields only (excludes legacy columns)
-- `v_goals_active`: Exposes current goals preset fields (excludes legacy columns)
-
-**Legacy Field Protection**
-- Runtime Zod validation blocks 9 deprecated fields at API boundaries
-- HTTP 422 error response with field name + replacement mapping
-- Zero legacy field access confirmed via startup telemetry
-
-**Startup Telemetry**
-- Logs config audit status on server boot: `[Audit] ConfigSnapshot OK | mode=paper | fields=23 | legacyReads=0 | hash=9018690d`
-- Confirms zero legacy field access for both paper and live modes (23 fields: 4 guardrails + 16 filters + 3 goals)
-- Displays active guardrail values and schema hash for debugging
-
-**Schema Validation**
-- MD5 hash generation for change detection
-- Provenance tracking: Source table + column mapping for all fields
-- Comprehensive truth table: 27 current fields + 9 legacy fields documented in `audit/inputs.json`
-
-**Audit Results**: ✅ PASSED - Zero legacy reads, 100% current field sourcing, complete verification via snapshot endpoint. Full audit report: `audit/final-report.md`
-
-**Phase 28.D - Predictive Insights & Anomaly Detection (COMPLETED):**
-Automated anomaly detection system for override configuration changes. The `AuditAnomalyDetectionService` analyzes audit logs for unusual patterns using frequency spike detection (>5 changes/hour with warn/critical thresholds) and value reversion detection (<10 minutes). A nightly scheduled task runs at 2:00 AM UTC daily using timestamp-precision scheduling. The `OverrideFrequencyChart` component displays 24-hour override trends with mode breakdown, real-time anomaly alerts, and auto-refresh. API endpoints include GET `/api/diagnostics/audit-anomalies` for anomaly results and GET `/api/diagnostics/override-frequency` for hourly frequency data. Storage interface extends with `since` parameter for timestamp-based query filtering. Phase 28.D report: `audit/phase28d-report.md`.
-
-**Phase 28.E - Guardrail Policy Rationalization (COMPLETED):**
-Simplified coherency rules to act as extreme fail-safes only. Updated coherency_rules.yaml (version 2.1-phase28e) with rationalized thresholds:
-- **RULE_001**: Portfolio Risk ≤ 50% × Daily Loss Kill Switch (relaxed from 10%)
-- **RULE_002**: Total Exposure ≤ 50% of Portfolio (changed from 100%, now severity=error)
-- **RULE_003**: Cooldown ≥ 0 minutes (relaxed from ≥ 1 minute, allows zero cooldown)
-- **RULE_007**: Kill Switch ≤ 25% of Portfolio (expanded from 20%)
-
-Preserved rules: RULE_004 (Cooldown Maximum), RULE_005 (Manual Override Exclusivity), RULE_006 (Portfolio Risk Range 0.10%-5.00%), RULE_008 (Max Positions Range 1-20), RULE_009 (Mode Isolation), RULE_010 (Learning Expansion Safety Caps).
-
-GuardrailPolicy Service updated with Phase 28.E validation logic. New `coherency_rule_status` table tracks individual rule status (enabled/disabled), last validation result (PASS/WARN/FAIL), failure counts, and metadata. Startup telemetry logs coherency policy status: `[Audit] CoherencyPolicy | activeRules=X | warningRules=Y | disabledRules=Z | version=2.1-phase28e`.
-
-Control behavior refined:
-- Changing any Core Four value from preset baseline → activePreset = "Custom"
-- Switching control from Lottie → Manual without value change → Preset remains active
-- Switching back to Lottie after manual change → Value stays at new number; LATTI treats as new baseline
-- Mixed custom configs (manual + Lottie controls) fully supported
+The coherency rules have been rationalized to act as extreme fail-safes only, updating `coherency_rules.yaml` with relaxed thresholds for rules like Portfolio Risk and Daily Loss Kill Switch, while preserving critical rules. The `GuardrailPolicy Service` has been updated with this new validation logic. A `coherency_rule_status` table tracks individual rule status. Control behavior has been refined for switching between LATTi and manual control, allowing mixed custom configurations. Comprehensive Control Modes Reference documentation is integrated into the Goals Engine UI.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.

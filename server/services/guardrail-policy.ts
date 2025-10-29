@@ -115,8 +115,8 @@ class GuardrailPolicyService {
       `version=${this.rulesConfig.metadata.version}`
     );
     
-    // Log individual rule status
-    console.log('[GuardrailPolicy] Loaded coherency rules:');
+    // Log individual rule status (Phase 28.E Final)
+    console.log(`[GuardrailPolicy] Loaded coherency rules v${this.rulesConfig.metadata.version}`);
     this.rulesConfig.rules.forEach(rule => {
       console.log(`  - ${rule.id}: ${rule.name} (${rule.severity})`);
     });
