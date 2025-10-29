@@ -42,9 +42,11 @@ import {
   Loader2,
   AlertCircle,
   HelpCircle,
-  Key
+  Key,
+  FileJson
 } from "lucide-react";
 import { timezones } from "@/lib/timezone";
+import { ConfigSnapshotViewer } from "@/components/ConfigSnapshotViewer";
 
 const SETTINGS_TAB_KEY = "settings_active_tab";
 
@@ -398,7 +400,10 @@ export default function Settings() {
                   <li><strong>General:</strong> Notifications and regional preferences</li>
                   <li><strong>Walter Approvals:</strong> Automation permissions and threshold rules</li>
                   {currentUser.isAdmin && (
-                    <li><strong>Users:</strong> System user management (admin only)</li>
+                    <>
+                      <li><strong>Users:</strong> System user management (admin only)</li>
+                      <li><strong>Developer:</strong> Config snapshot viewer and audit verification (admin only)</li>
+                    </>
                   )}
                 </ul>
               </div>
@@ -408,11 +413,17 @@ export default function Settings() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList className="grid w-full" style={{ gridTemplateColumns: currentUser.isAdmin ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)' }}>
+        <TabsList className="grid w-full" style={{ gridTemplateColumns: currentUser.isAdmin ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)' }}>
           <TabsTrigger value="general" data-testid="tab-general">General Settings</TabsTrigger>
           <TabsTrigger value="walter" data-testid="tab-walter">Walter Approvals</TabsTrigger>
           {currentUser.isAdmin && (
-            <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
+            <>
+              <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
+              <TabsTrigger value="developer" data-testid="tab-developer">
+                <FileJson className="h-4 w-4 mr-2" />
+                Developer
+              </TabsTrigger>
+            </>
           )}
         </TabsList>
 
@@ -1022,6 +1033,13 @@ export default function Settings() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+        )}
+
+        {/* Developer Tab (Admin Only) */}
+        {currentUser.isAdmin && (
+          <TabsContent value="developer" className="space-y-6">
+            <ConfigSnapshotViewer />
           </TabsContent>
         )}
       </Tabs>
