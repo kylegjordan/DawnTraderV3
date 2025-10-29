@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, TrendingDown, Activity, ChevronRight, BarChart3 } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, ChevronRight, BarChart3, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { Link } from "wouter";
@@ -28,6 +28,69 @@ interface StrategyMetricsResponse {
   success: boolean;
   data: StrategyMetric[];
   period: string;
+}
+
+interface StrategyParameter {
+  key: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  label: string;
+  description: string;
+}
+
+interface StrategyParametersResponse {
+  ok: boolean;
+  parameters: StrategyParameter[];
+}
+
+function DHMAParametersSection({ mode }: { mode: 'paper' | 'live' }) {
+  const { data: paramsData, isLoading } = useQuery<StrategyParametersResponse>({
+    queryKey: [`/api/strategy/parameters?mode=${mode}&strategy=dhma`],
+    staleTime: 60000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="pt-3 border-t border-border">
+        <div className="flex items-center gap-2 mb-2">
+          <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">DHMA Parameters</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-8 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!paramsData || !paramsData.ok || !paramsData.parameters || paramsData.parameters.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="pt-3 border-t border-border">
+      <div className="flex items-center gap-2 mb-2">
+        <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium text-muted-foreground">DHMA Parameters</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+        {paramsData.parameters.map((param) => (
+          <div 
+            key={param.key}
+            className="bg-muted/50 rounded-md px-2 py-1.5"
+            title={param.description}
+          >
+            <div className="text-muted-foreground truncate">{param.label}</div>
+            <div className="font-semibold text-foreground">{param.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function StrategyPerformanceWidget() {
@@ -225,6 +288,9 @@ export default function StrategyPerformanceWidget() {
                       </div>
                     </div>
                   </div>
+
+                  {/* DHMA-specific parameters */}
+                  {strategy.strategy === 'dhma' && <DHMAParametersSection mode={mode} />}
 
                   {/* Trend and Detail Button */}
                   <div className="flex items-center justify-between pt-2 border-t border-border">
