@@ -1723,24 +1723,37 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No filters found for mode: ${mode}` });
       }
       
-      // Update override flags
+      // Extract only the filter value fields (exclude id, createdAt, updatedAt, etc.)
+      const {
+        id, createdAt, updatedAt,
+        managedByLottie: currentManagedByLottie,
+        manualOverrideEnabled: currentManualOverrideEnabled,
+        lastUpdatedBy: currentLastUpdatedBy,
+        lockedByUser: currentLockedByUser,
+        ...filterValues
+      } = current;
+      
+      // Update override flags while preserving all filter values
       const updated = await storage.upsertScreenerFilters({
-        mode,
-        ...current,
-        managedByLottie: managedByLottie ?? current.managedByLottie,
-        manualOverrideEnabled: manualOverrideEnabled ?? current.manualOverrideEnabled,
+        mode: current.mode,
+        ...filterValues,
+        managedByLottie: managedByLottie ?? currentManagedByLottie,
+        manualOverrideEnabled: manualOverrideEnabled ?? currentManualOverrideEnabled,
         lastUpdatedBy: userId
       });
       
       console.log(`[FiltersV2:${requestId}] Override flags updated successfully`);
       
       // Broadcast config update via WebSocket
-      const contextBridge = await import('./services/context-bridge.js');
-      await contextBridge.ContextBridge.broadcast('config_updated', {
-        userId,
+      const { contextBridge } = await import('./services/context-bridge.js');
+      contextBridge.broadcast({
+        type: 'config_updated',
         mode,
-        configType: 'filters_v2',
-        source: 'api'
+        payload: {
+          userId,
+          configType: 'filters_v2',
+          source: 'api'
+        }
       });
       
       res.json({ ok: true, data: updated });

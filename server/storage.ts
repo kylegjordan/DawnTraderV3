@@ -739,12 +739,22 @@ export class DatabaseStorage implements IStorage {
   async upsertGuardrailsV2(data: InsertGuardrailsV2): Promise<GuardrailsV2> {
     const existing = await this.getGuardrailsV2({ mode: data.mode });
     
-    const updateData = {
-      ...data,
-      lastUpdated: new Date()
-    };
-    
     if (existing) {
+      // For updates, merge with existing values to preserve unmodified fields
+      const updateData = {
+        portfolioRiskPerTradePct: data.portfolioRiskPerTradePct ?? existing.portfolioRiskPerTradePct,
+        symbolCooldownMinutes: data.symbolCooldownMinutes ?? existing.symbolCooldownMinutes,
+        maxOpenPositions: data.maxOpenPositions ?? existing.maxOpenPositions,
+        dailyLossKillSwitchPct: data.dailyLossKillSwitchPct ?? existing.dailyLossKillSwitchPct,
+        isManualOverride: data.isManualOverride ?? existing.isManualOverride,
+        tunedByLatti: data.tunedByLatti ?? existing.tunedByLatti,
+        lockedByUser: data.lockedByUser ?? existing.lockedByUser,
+        managedByLottie: data.managedByLottie ?? existing.managedByLottie,
+        manualOverrideEnabled: data.manualOverrideEnabled ?? existing.manualOverrideEnabled,
+        lastUpdatedBy: data.lastUpdatedBy ?? existing.lastUpdatedBy,
+        lastUpdated: new Date()
+      };
+      
       const [result] = await db
         .update(guardrailsV2)
         .set(updateData)
@@ -752,7 +762,11 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result;
     } else {
-      const [result] = await db.insert(guardrailsV2).values(updateData).returning();
+      const insertData = {
+        ...data,
+        lastUpdated: new Date()
+      };
+      const [result] = await db.insert(guardrailsV2).values(insertData).returning();
       return result;
     }
   }
