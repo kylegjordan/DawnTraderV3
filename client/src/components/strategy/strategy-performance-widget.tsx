@@ -289,9 +289,6 @@ export default function StrategyPerformanceWidget() {
                     </div>
                   </div>
 
-                  {/* DHMA-specific parameters */}
-                  {strategy.strategy === 'dhma' && <DHMAParametersSection mode={mode} />}
-
                   {/* Trend and Detail Button */}
                   <div className="flex items-center justify-between pt-2 border-t border-border">
                     <div className="flex items-center gap-2">
