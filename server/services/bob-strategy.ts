@@ -55,7 +55,7 @@ class StrategyBobModule {
         t.entryTime && new Date(t.entryTime) >= fromDate
       );
 
-      const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout', 'mean_reversion', 'range_trading', 'vwap_bounce', 'liquidity_trap'] as const;
+      const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout', 'mean_reversion', 'range_trading', 'vwap_bounce', 'liquidity_trap', 'dhma'] as const;
       const strategyMetrics = [];
 
       for (const strategy of strategies) {

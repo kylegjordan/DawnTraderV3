@@ -8466,7 +8466,7 @@ Provide specific, actionable recommendations.`,
         t.entryTime && new Date(t.entryTime) >= fromDate
       );
 
-      const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'] as const;
+      const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout', 'mean_reversion', 'range_trading', 'vwap_bounce', 'liquidity_trap', 'dhma'] as const;
       const strategyMetrics = [];
 
       for (const strategy of strategies) {
@@ -8563,7 +8563,7 @@ Provide specific, actionable recommendations.`,
         t.entryTime && new Date(t.entryTime) >= fromDate
       );
 
-      const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride'] as const;
+      const strategies = ['vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout', 'mean_reversion', 'range_trading', 'vwap_bounce', 'liquidity_trap', 'dhma'] as const;
       const strategyMetrics = [];
 
       for (const strategy of strategies) {
