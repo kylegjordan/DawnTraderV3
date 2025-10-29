@@ -15479,6 +15479,30 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // ==================== Phase 30.FX.1: Strategy Parameter Schema ====================
+  
+  // Get parameter schema for a strategy
+  apiRouter.get('/strategy/parameters', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const strategy = req.query.strategy as string;
+      if (!strategy) {
+        return res.status(400).json({ error: 'Strategy parameter is required' });
+      }
+
+      const params = await db
+        .select()
+        .from(strategyParamSchema)
+        .where(eq(strategyParamSchema.strategyType, strategy as any));
+      
+      console.log(`[Phase-30.FX.1] Fetched ${params.length} parameters for strategy: ${strategy}`);
+      
+      res.json(params);
+    } catch (error: any) {
+      console.error('[Phase-30.FX.1] Error fetching strategy parameters:', error);
+      res.status(500).json({ error: 'Failed to fetch strategy parameters' });
+    }
+  });
+
   // ==================== Phase 30: DHMA Strategy Telemetry ====================
   
   // Get DHMA telemetry for a mode
