@@ -4,7 +4,7 @@ import { detectRange, detectStopZone, type RangeDetectionResult, type StopZoneRe
 
 export interface StrategySignal {
   symbol: string;
-  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap';
+  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -867,5 +867,205 @@ export class StrategyEngine {
     }
     
     return filtered;
+  }
+
+  // Phase 30: DHMA (Dual-Horizon Microstructure Alpha) Strategy
+  detectDHMA(
+    indicators: TechnicalIndicators,
+    priceHistory: PriceData[],
+    params: any
+  ): StrategySignal | null {
+    const theta_OBI = params.theta_OBI || 0.3;
+    const epsilon_micro = params.epsilon_micro || 0.2;
+    const tau_toxicity = params.tau_toxicity || 0.7;
+    const maxSpread = params.maxSpread || 5;
+    const k_tp = params.k_tp || 1.5;
+    const N_flow = params.N_flow || 50;
+    const N_burst = params.N_burst || 10; // Candles for burst regime
+    const window_session = params.window_session || 20; // Candles for session regime
+    
+    if (!priceHistory || priceHistory.length < window_session) {
+      console.log('[DHMA] Insufficient price history');
+      return null;
+    }
+    
+    const { currentPrice, vwap, volume } = indicators;
+    
+    // Simplified microstructure features using OHLCV data
+    // In production, these would use real order book + print data
+    
+    // 1. Order Book Imbalance (simulated from volume and price action)
+    const recentCandles = priceHistory.slice(-5);
+    let buyPressure = 0;
+    let sellPressure = 0;
+    
+    for (const candle of recentCandles) {
+      const close = parseFloat(candle.close);
+      const open = parseFloat(candle.open);
+      const vol = parseFloat(candle.volume);
+      
+      if (close > open) {
+        buyPressure += vol;
+      } else {
+        sellPressure += vol;
+      }
+    }
+    
+    const totalPressure = buyPressure + sellPressure;
+    const obi = totalPressure > 0 ? (buyPressure - sellPressure) / totalPressure : 0;
+    
+    // 2. Microprice tilt (simulated as deviation from mid-range)
+    const recentHigh = Math.max(...recentCandles.map(c => parseFloat(c.high)));
+    const recentLow = Math.min(...recentCandles.map(c => parseFloat(c.low)));
+    const mid = (recentHigh + recentLow) / 2;
+    const micropriceTilt = (currentPrice - mid) / (recentHigh - recentLow) * 10; // Normalized
+    
+    // 3. Signed flow ratio (simulated from volume-weighted price movement)
+    let signedFlow = 0;
+    const flowCandles = priceHistory.slice(-N_flow);
+    
+    for (const candle of flowCandles) {
+      const close = parseFloat(candle.close);
+      const open = parseFloat(candle.open);
+      const vol = parseFloat(candle.volume);
+      
+      if (close > open) {
+        signedFlow += vol;
+      } else if (close < open) {
+        signedFlow -= vol;
+      }
+    }
+    
+    const totalFlowVol = flowCandles.reduce((sum, c) => sum + parseFloat(c.volume), 0);
+    const signedFlowRatio = totalFlowVol > 0 ? signedFlow / totalFlowVol : 0;
+    
+    // 4. Toxicity (simulated as volatility ratio - higher vol = higher toxicity)
+    const recentVolatility = this.calculateVolatility(priceHistory.slice(-10));
+    const baselineVolatility = this.calculateVolatility(priceHistory.slice(-window_session));
+    const toxicity = baselineVolatility > 0 ? Math.min(1, recentVolatility / baselineVolatility) : 0.5;
+    
+    // 5. Spread (simulated as percentage of price)
+    const spread = (recentHigh - recentLow) / mid;
+    const spreadTicks = spread * 100; // Approximate ticks
+    
+    // 6. Burst regime (short-term: last N_burst candles)
+    const burstCandles = priceHistory.slice(-N_burst);
+    const burstStart = parseFloat(burstCandles[0].close);
+    const burstEnd = parseFloat(burstCandles[burstCandles.length - 1].close);
+    const burstReturn = (burstEnd - burstStart) / burstStart;
+    
+    let burstRegime: 'long' | 'short' | 'neutral';
+    if (burstReturn > 0.01) burstRegime = 'long';
+    else if (burstReturn < -0.01) burstRegime = 'short';
+    else burstRegime = 'neutral';
+    
+    // 7. Session regime (longer-term: last window_session candles)
+    const sessionCandles = priceHistory.slice(-window_session);
+    const sessionVWAP = this.calculateVWAP(sessionCandles);
+    const sessionStart = parseFloat(sessionCandles[0].close);
+    const sessionEnd = parseFloat(sessionCandles[sessionCandles.length - 1].close);
+    const sessionSlope = (sessionEnd - sessionStart) / sessionStart;
+    const sessionVolSlope = this.calculateVolatility(sessionCandles.slice(-10)) - 
+                            this.calculateVolatility(sessionCandles.slice(0, 10));
+    
+    let sessionRegime: 'up' | 'down' | 'chop';
+    if (sessionSlope > 0.02 && currentPrice > sessionVWAP) sessionRegime = 'up';
+    else if (sessionSlope < -0.02 && currentPrice < sessionVWAP) sessionRegime = 'down';
+    else sessionRegime = 'chop';
+    
+    console.log(`[DHMA] Features: OBI=${obi.toFixed(2)}, microTilt=${micropriceTilt.toFixed(2)}, flow=${signedFlowRatio.toFixed(2)}, tox=${toxicity.toFixed(2)}, burst=${burstRegime}, session=${sessionRegime}`);
+    
+    // Entry rules: block if toxicity too high or spread too wide
+    if (toxicity > tau_toxicity) {
+      console.log(`[DHMA] ❌ High toxicity ${toxicity.toFixed(2)} > ${tau_toxicity}`);
+      return null;
+    }
+    
+    if (spreadTicks > maxSpread) {
+      console.log(`[DHMA] ❌ Wide spread ${spreadTicks.toFixed(1)}t > ${maxSpread}t`);
+      return null;
+    }
+    
+    // Long entry: burst & session agree, OBI positive, microprice tilt positive
+    const longSignal = (
+      burstRegime === 'long' &&
+      sessionRegime === 'up' &&
+      obi > theta_OBI &&
+      micropriceTilt > epsilon_micro &&
+      signedFlowRatio > 0.2
+    );
+    
+    // Short entry: burst & session agree, OBI negative, microprice tilt negative
+    const shortSignal = (
+      burstRegime === 'short' &&
+      sessionRegime === 'down' &&
+      obi < -theta_OBI &&
+      micropriceTilt < -epsilon_micro &&
+      signedFlowRatio < -0.2
+    );
+    
+    if (!longSignal && !shortSignal) {
+      console.log('[DHMA] ❌ No regime alignment or insufficient OBI/tilt');
+      return null;
+    }
+    
+    // Calculate entry/stop/target
+    const realizedVol = recentVolatility;
+    let entryPrice: number;
+    let stopPrice: number;
+    let targetPrice: number;
+    
+    if (longSignal) {
+      entryPrice = currentPrice * 1.001;
+      stopPrice = currentPrice - k_tp * realizedVol;
+      targetPrice = currentPrice + k_tp * realizedVol;
+    } else {
+      entryPrice = currentPrice * 0.999;
+      stopPrice = currentPrice + k_tp * realizedVol;
+      targetPrice = currentPrice - k_tp * realizedVol;
+    }
+    
+    // Confidence calculation
+    let confidence = 0.6;
+    confidence += Math.abs(obi) * 0.15;
+    confidence += Math.abs(signedFlowRatio) * 0.1;
+    confidence -= toxicity * 0.15;
+    confidence = Math.max(0.3, Math.min(0.9, confidence));
+    
+    console.log(`[DHMA] ✅ Signal ${longSignal ? 'long' : 'short'} - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}, Confidence: ${(confidence * 100).toFixed(0)}%`);
+    
+    return {
+      symbol: '',
+      strategy: 'dhma',
+      entryPrice,
+      stopPrice,
+      targetPrice,
+      confidence,
+      metadata: {
+        obi,
+        micropriceTilt,
+        signedFlowRatio,
+        toxicity,
+        spreadTicks,
+        burstRegime,
+        sessionRegime,
+        k_tp,
+        realizedVolatility: realizedVol
+      }
+    };
+  }
+
+  private calculateVolatility(data: PriceData[]): number {
+    if (data.length < 2) return 0;
+    
+    const returns = [];
+    for (let i = 1; i < data.length; i++) {
+      const r = (parseFloat(data[i].close) - parseFloat(data[i-1].close)) / parseFloat(data[i-1].close);
+      returns.push(r);
+    }
+    
+    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+    return Math.sqrt(variance);
   }
 }

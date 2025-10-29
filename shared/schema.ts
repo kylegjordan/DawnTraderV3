@@ -32,7 +32,8 @@ export const strategyTypeEnum = pgEnum("strategy_type", [
   "mean_reversion",
   "range_trading",
   "vwap_bounce",
-  "liquidity_trap"
+  "liquidity_trap",
+  "dhma"
 ]);
 export const tradeStatusEnum = pgEnum("trade_status", ["open", "closed", "cancelled"]);
 export const tradeTypeEnum = pgEnum("trade_type", ["buy", "sell"]);
