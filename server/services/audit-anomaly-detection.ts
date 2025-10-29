@@ -50,15 +50,11 @@ export class AuditAnomalyDetectionService {
     const anomalies: AnomalyDetectionResult[] = [];
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // Get all audit logs from last 24 hours
-    const recentLogs = await this.storage.getRecentAuditLogs({
-      limit: 10000,
+    // Get all audit logs from last 24 hours using timestamp filter
+    const last24Hours = await this.storage.getRecentAuditLogs({
+      since: oneDayAgo,
+      limit: 100000, // High limit to ensure we get all records in window
     });
-
-    // Filter to last 24 hours
-    const last24Hours = recentLogs.filter(
-      (log) => new Date(log.timestamp) >= oneDayAgo
-    );
 
     // Group by user and hour
     const userHourMap = new Map<string, Map<string, number>>();
@@ -103,15 +99,11 @@ export class AuditAnomalyDetectionService {
     const anomalies: AnomalyDetectionResult[] = [];
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-    // Get recent audit logs
-    const recentLogs = await this.storage.getRecentAuditLogs({
-      limit: 1000,
+    // Get audit logs from last hour using timestamp filter
+    const lastHour = await this.storage.getRecentAuditLogs({
+      since: oneHourAgo,
+      limit: 10000, // High limit to ensure we get all records in window
     });
-
-    // Filter to last hour for reversion detection
-    const lastHour = recentLogs.filter(
-      (log) => new Date(log.timestamp) >= oneHourAgo
-    );
 
     // Group by entity type + field + mode
     const fieldMap = new Map<string, typeof lastHour>();
@@ -172,15 +164,11 @@ export class AuditAnomalyDetectionService {
   async getOverrideFrequencyData(): Promise<OverrideFrequencyData[]> {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
-    // Get all audit logs from last 24 hours
-    const recentLogs = await this.storage.getRecentAuditLogs({
-      limit: 10000,
+    // Get all audit logs from last 24 hours using timestamp filter
+    const last24Hours = await this.storage.getRecentAuditLogs({
+      since: oneDayAgo,
+      limit: 100000, // High limit to ensure we get all records in window
     });
-
-    // Filter to last 24 hours
-    const last24Hours = recentLogs.filter(
-      (log) => new Date(log.timestamp) >= oneDayAgo
-    );
 
     // Create hourly buckets
     const hourlyData = new Map<string, { paper: number; live: number }>();

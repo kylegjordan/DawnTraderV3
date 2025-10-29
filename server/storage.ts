@@ -642,7 +642,7 @@ export interface IStorage {
   
   // Phase 28.C: Override Audit History methods
   addAuditLog(log: InsertAuditLog): Promise<AuditLog>;
-  getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number }): Promise<AuditLog[]>;
+  getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number; since?: Date }): Promise<AuditLog[]>;
 }
 
 // Phase 27.F: Canonical metric key generator for goals engine
@@ -3857,8 +3857,8 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
   
-  async getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number }): Promise<AuditLog[]> {
-    const { mode, entityType, limit = 50 } = params;
+  async getRecentAuditLogs(params: { mode?: 'live' | 'paper'; entityType?: string; limit?: number; since?: Date }): Promise<AuditLog[]> {
+    const { mode, entityType, limit = 50, since } = params;
     
     let query = db
       .select()
@@ -3872,6 +3872,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (entityType) {
       conditions.push(eq(auditLog.entityType, entityType as any));
+    }
+    if (since) {
+      conditions.push(gte(auditLog.timestamp, since));
     }
     
     if (conditions.length > 0) {

@@ -12,6 +12,7 @@ export interface ScheduledTask {
   status: 'running' | 'idle' | 'error';
   intervalMs: number;
   run: () => Promise<void>;
+  getInitialDelay?: () => number; // Optional: calculate custom initial delay (ms)
 }
 
 export class SchedulerRegistry {
@@ -28,18 +29,19 @@ export class SchedulerRegistry {
       throw new Error(`Task ${taskName} not found in registry`);
     }
 
-    // Schedule first run (immediate or delayed)
-    if (runImmediately) {
-      // Run in background without blocking
-      this.executeTask(taskName).catch(err => {
-        console.error(`[SchedulerRegistry] Error in initial run of ${taskName}:`, err);
-      });
-    } else {
-      // Delay first run by the interval duration
-      setTimeout(async () => {
-        await this.executeTask(taskName);
-      }, task.intervalMs);
+    // Calculate initial delay
+    const initialDelay = runImmediately ? 0 : (task.getInitialDelay?.() ?? task.intervalMs);
+    
+    // Log initial delay for tasks with custom scheduling
+    if (task.getInitialDelay && !runImmediately) {
+      const nextRunTime = new Date(Date.now() + initialDelay);
+      console.log(`[SchedulerRegistry] ${taskName} scheduled for ${nextRunTime.toISOString()} (${Math.round(initialDelay / 1000 / 60)} minutes)`);
     }
+
+    // Schedule first run
+    setTimeout(async () => {
+      await this.executeTask(taskName);
+    }, initialDelay);
 
     // Schedule recurring execution
     const intervalId = setInterval(async () => {
