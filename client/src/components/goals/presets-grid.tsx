@@ -7,6 +7,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { CoherencyStatusWidget } from "./coherency-status-widget";
 
 interface GoalsPreset {
   id: string;
@@ -128,6 +129,12 @@ export function PresetsGrid() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Coherency Status Widget - Placed before presets */}
+        <div className="md:col-span-2 lg:col-span-3">
+          <CoherencyStatusWidget />
+        </div>
+
+        {/* Preset Cards */}
         {presets.map((preset) => (
           <Card
             key={preset.id}
