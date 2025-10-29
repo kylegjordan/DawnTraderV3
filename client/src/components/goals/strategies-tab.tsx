@@ -79,6 +79,14 @@ const PARAM_LABELS: Record<string, string> = {
   minStopZoneSize: "Min Stop Zone Size",
   minLevelTouches: "Min Level Touches",
   volumeRatio: "Volume Ratio (x)",
+  // DHMA (Dual-Horizon Microstructure Alpha)
+  orderBookImbalanceThreshold: "Order Book Imbalance Threshold",
+  micropriceDeviation: "Microprice Deviation",
+  signedFlowRatio: "Signed Flow Ratio",
+  toxicityLimit: "Toxicity Limit",
+  spreadMaxTicks: "Maximum Spread (ticks)",
+  burstWindow: "Burst Regime Window",
+  sessionWindow: "Session Regime Window",
 };
 
 // Parameters that are percentages in the UI but decimal fractions in the backend
@@ -151,6 +159,14 @@ const PARAM_DESCRIPTIONS: Record<string, string> = {
   minStopZoneSize: "Minimum liquidity cluster size: small, medium, or large",
   minLevelTouches: "Minimum touches of trap level (2-5)",
   volumeRatio: "Return volume vs breakout volume ratio (1.2-2x)",
+  // DHMA (Dual-Horizon Microstructure Alpha)
+  orderBookImbalanceThreshold: "Volume-weighted buy/sell imbalance threshold (0.3-0.9)",
+  micropriceDeviation: "Deviation from mid-range to trigger entry (0.05-0.5)",
+  signedFlowRatio: "Aggressive order flow ratio (0.1-0.5)",
+  toxicityLimit: "Volatility ratio above which entries are blocked (0.3-0.9)",
+  spreadMaxTicks: "Widest spread allowed for entry (1-10 ticks)",
+  burstWindow: "Short-term regime alignment window (5-30 candles)",
+  sessionWindow: "Long-term regime alignment window (10-60 candles)",
 };
 
 interface StrategySettings {

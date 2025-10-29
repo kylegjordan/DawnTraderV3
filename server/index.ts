@@ -540,6 +540,15 @@ app.use((req, res, next) => {
       console.error('[27.F.15.D] ⚠️ LivePricingAdapter startup failed:', error);
     }
 
+    // Phase 30.FX.3: LATTI Manager - Adaptive parameter tuning
+    try {
+      const { LATTIManager } = await import('./services/latti-manager');
+      LATTIManager.startPeriodicProcessing();
+      console.log('[30.FX.3] ✅ LATTI Manager adaptive tuning started (30-min cycle)');
+    } catch (error) {
+      console.error('[30.FX.3] ⚠️ LATTI Manager startup failed:', error);
+    }
+
     // Phase 27.G.F: Config Audit Telemetry (startup diagnostic)
     try {
       const { storage } = await import('./storage');
