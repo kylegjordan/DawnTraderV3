@@ -242,6 +242,7 @@ app.use((req, res, next) => {
       const { optimizationAnalysisTask } = await import('./services/optimization-analysis-task');
       const { weeklyExpertInsightsTask } = await import('./services/weekly-expert-insights-task');
       const { tradingSignalsCleanupTask } = await import('./services/trading-signals-cleanup');
+      const { auditAnomalyTask } = await import('./services/audit-anomaly-task');
       const { registerLearningFeedbackJob } = await import('./jobs/learning-feedback');
       const { registerCognitiveTuningJob } = await import('./jobs/cognitive-tuning-job');
       const { registerFormulaAuditJob } = await import('./jobs/formula-auto-audit');
@@ -379,6 +380,18 @@ app.use((req, res, next) => {
         frequency: tradingSignalsCleanupTask.frequency,
         intervalMs: tradingSignalsCleanupTask.intervalMs,
         run: tradingSignalsCleanupTask.run.bind(tradingSignalsCleanupTask),
+        lastRun: null,
+        nextRun: null,
+        status: 'idle'
+      });
+
+      // Phase 28.D: Audit Anomaly Detection Task
+      schedulerRegistry.registerTask({
+        name: auditAnomalyTask.name,
+        description: auditAnomalyTask.description,
+        frequency: auditAnomalyTask.frequency,
+        intervalMs: auditAnomalyTask.intervalMs,
+        run: auditAnomalyTask.run.bind(auditAnomalyTask),
         lastRun: null,
         nextRun: null,
         status: 'idle'

@@ -15292,6 +15292,59 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 28.D: Audit Anomaly Detection Endpoint
+  apiRouter.get('/diagnostics/audit-anomalies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const requestId = `audit-anomalies-${Date.now()}`;
+    try {
+      console.log(`[AuditAnomalies:${requestId}] Running anomaly detection...`);
+      
+      const { AuditAnomalyDetectionService } = await import('./services/audit-anomaly-detection');
+      const anomalyService = new AuditAnomalyDetectionService(storage);
+      
+      const anomalies = await anomalyService.detectAnomalies();
+      
+      res.json({
+        ok: true,
+        data: anomalies,
+        count: anomalies.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error(`[AuditAnomalies:${requestId}] Error:`, error.message);
+      res.status(500).json({
+        ok: false,
+        code: 'SERVER_ERROR',
+        detail: error.message
+      });
+    }
+  });
+
+  // Phase 28.D: Override Frequency Data Endpoint
+  apiRouter.get('/diagnostics/override-frequency', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const requestId = `override-freq-${Date.now()}`;
+    try {
+      console.log(`[OverrideFrequency:${requestId}] Fetching hourly frequency data...`);
+      
+      const { AuditAnomalyDetectionService } = await import('./services/audit-anomaly-detection');
+      const anomalyService = new AuditAnomalyDetectionService(storage);
+      
+      const frequencyData = await anomalyService.getOverrideFrequencyData();
+      
+      res.json({
+        ok: true,
+        data: frequencyData,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error(`[OverrideFrequency:${requestId}] Error:`, error.message);
+      res.status(500).json({
+        ok: false,
+        code: 'SERVER_ERROR',
+        detail: error.message
+      });
+    }
+  });
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)
