@@ -277,8 +277,18 @@ export class TradingStateSync {
       const isEngineActivePaper = paperContext?.isEngineActive || false;
       const isEngineActiveLive = liveContext?.isEngineActive || false;
       
-      // Determine current mode from user's last action (defaulting to paper)
-      const currentMode = paperContext?.tradingMode || 'paper';
+      // Determine current mode from user's actual selection
+      // For real users, use their in-memory mode; for system reconciliation, read from context timestamps
+      let currentMode: TradingMode;
+      if (userId === 'system-reconciliation') {
+        // For system reconciliation, determine mode by checking which context was updated most recently
+        const paperTime = paperContext?.lastModeChange?.getTime() || 0;
+        const liveTime = liveContext?.lastModeChange?.getTime() || 0;
+        currentMode = liveTime > paperTime ? 'live' : 'paper';
+      } else {
+        // For real users, use their actual selected mode from in-memory map
+        currentMode = this.getTradingMode(userId);
+      }
       
       // Phase 27.F.17b: Add explicit status field (RUNNING/STOPPED)
       const status = (currentMode === 'paper' ? isEngineActivePaper : isEngineActiveLive) 
