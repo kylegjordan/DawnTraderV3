@@ -1,0 +1,111 @@
+⚙️ Combined Replit Directive — Phase 30.FX.1 (DHMA Parameter Registration + Verification)
+
+Credentials:
+username=testuser123
+password=SecurePass123!
+
+🧩 Step 1 — Create Migration File
+
+File path:
+
+drizzle/migrations/20251029_add_dhma_parameters.ts
+
+
+Content:
+
+import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+
+// --- Update connection string if different in your environment ---
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL!,
+});
+
+const db = drizzle(pool);
+
+export async function up(): Promise<void> {
+  console.log("🧠  Adding DHMA strategy default parameters...");
+
+  await db.execute(sql`
+    INSERT INTO strategy_parameters (strategy_type, key, label, value, min, max, step, description)
+    VALUES
+      ('dhma', 'orderBookImbalanceThreshold', 'Order Book Imbalance Threshold', 0.65, 0.3, 0.9, 0.05, 'Volume-weighted buy/sell imbalance threshold'),
+      ('dhma', 'micropriceDeviation', 'Microprice Deviation', 0.15, 0.05, 0.5, 0.05, 'Deviation from mid-range to trigger entry'),
+      ('dhma', 'signedFlowRatio', 'Signed Flow Ratio', 0.2, 0.1, 0.5, 0.05, 'Aggressive order flow ratio'),
+      ('dhma', 'toxicityLimit', 'Toxicity Limit', 0.7, 0.3, 0.9, 0.05, 'Volatility ratio above which entries are blocked'),
+      ('dhma', 'spreadMaxTicks', 'Maximum Spread (ticks)', 5, 1, 10, 1, 'Widest spread allowed for entry'),
+      ('dhma', 'burstWindow', 'Burst Regime Window', 10, 5, 30, 5, 'Short-term regime alignment window'),
+      ('dhma', 'sessionWindow', 'Session Regime Window', 20, 10, 60, 5, 'Long-term regime alignment window')
+    ON CONFLICT (strategy_type, key) DO NOTHING;
+  `);
+
+  console.log("✅  DHMA parameters inserted successfully!");
+}
+
+export async function down(): Promise<void> {
+  console.log("🧹  Removing DHMA parameters...");
+  await db.execute(sql`
+    DELETE FROM strategy_parameters WHERE strategy_type = 'dhma';
+  `);
+  console.log("✅  DHMA parameters removed.");
+}
+
+🧱 Step 2 — Run the Migration
+
+In the Replit shell, run:
+
+npm run db:push
+
+🧪 Step 3 — Verify via API (curl + jq)
+
+Once migration completes, paste this verification block into the Replit Shell window:
+
+# DHMA Parameter Verification Script
+TEST_USER_USERNAME="testuser123"
+TEST_USER_PASSWORD="SecurePass123!"
+
+echo "🔐 Logging in..."
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$TEST_USER_USERNAME"'","password":"'"$TEST_USER_PASSWORD"'"}' | jq -r '.accessToken')
+
+echo "📡 Fetching DHMA Parameters via API..."
+curl -s -X GET "http://localhost:5000/api/strategy/parameters?mode=paper&strategy=dhma" \
+  -H "Authorization: Bearer $TOKEN" | jq '.[] | {key, value, min, max, step, description}'
+
+
+✅ Expected Output:
+You should see a JSON list of seven parameter objects like:
+
+{
+  "key": "orderBookImbalanceThreshold",
+  "value": 0.65,
+  "min": 0.3,
+  "max": 0.9,
+  "step": 0.05,
+  "description": "Volume-weighted buy/sell imbalance threshold"
+}
+
+
+(repeated for all seven DHMA parameters)
+
+🧾 Step 4 — Confirmation
+
+If all seven appear correctly:
+
+Restart your app (npm run start or npm run dev).
+
+Open Goals Engine → Strategies → DHMA.
+
+You’ll now see the full editable parameter list under the DHMA card.
+
+🧠 Documentation (Auto Summary)
+
+After verification, Replit will update replit.md with:
+
+Phase 30.FX.1 — DHMA Parameter Schema Registration
+✅ 7 DHMA parameters inserted via Drizzle migration
+✅ API verified: /api/strategy/parameters?strategy=dhma returns valid data
+✅ UI renders DHMA parameter fields correctly
+✅ Architect review recommended: mark DHMA fully configurable

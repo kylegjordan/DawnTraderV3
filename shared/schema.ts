@@ -1431,6 +1431,23 @@ export const strategyParameters = pgTable("strategy_parameters", {
   uniqueParam: uniqueIndex("strategy_parameters_param_idx").on(table.parameterName),
 }));
 
+// Strategy Parameter Schema (metadata for per-strategy configurable parameters) - Phase 30.FX.1
+export const strategyParamSchema = pgTable("strategy_param_schema", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  strategyType: strategyTypeEnum("strategy_type").notNull(),
+  key: varchar("key", { length: 100 }).notNull(),
+  label: varchar("label", { length: 200 }).notNull(),
+  value: decimal("value", { precision: 20, scale: 8 }).notNull(),
+  min: decimal("min", { precision: 20, scale: 8 }).notNull(),
+  max: decimal("max", { precision: 20, scale: 8 }).notNull(),
+  step: decimal("step", { precision: 20, scale: 8 }).notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueStrategyParam: uniqueIndex("strategy_param_schema_strategy_key_idx").on(table.strategyType, table.key),
+}));
+
 // AI Transparency Log (scheduler and automation activity logs)
 export const aiTransparencyLog = pgTable("ai_transparency_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2149,6 +2166,12 @@ export const insertStrategyParameterSchema = createInsertSchema(strategyParamete
   updatedAt: true,
 });
 
+export const insertStrategyParamSchemaSchema = createInsertSchema(strategyParamSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertAITransparencyLogSchema = createInsertSchema(aiTransparencyLog).omit({
   id: true,
   executedAt: true,
@@ -2426,6 +2449,9 @@ export type SystemAlert = typeof systemAlerts.$inferSelect;
 
 export type InsertStrategyParameter = z.infer<typeof insertStrategyParameterSchema>;
 export type StrategyParameter = typeof strategyParameters.$inferSelect;
+
+export type InsertStrategyParamSchema = z.infer<typeof insertStrategyParamSchemaSchema>;
+export type StrategyParamSchema = typeof strategyParamSchema.$inferSelect;
 
 export type InsertAITransparencyLog = z.infer<typeof insertAITransparencyLogSchema>;
 export type AITransparencyLog = typeof aiTransparencyLog.$inferSelect;
