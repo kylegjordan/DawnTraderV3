@@ -25,6 +25,7 @@ const STRATEGIES = [
   { id: 'range_trading', name: 'Range Trading', description: 'Systematically trades within identified ranges, buying support and selling resistance' },
   { id: 'vwap_bounce', name: 'VWAP Bounce', description: 'Trades bounces from VWAP in trending markets using dynamic support/resistance' },
   { id: 'liquidity_trap', name: 'Liquidity Trap', description: 'Advanced strategy trading false breakouts where stops are triggered then reversed' },
+  { id: 'dhma', name: 'DHMA – Dual-Horizon Microstructure Alpha', description: 'Microstructure-based strategy using order flow imbalance, toxicity detection, and dual-horizon regime alignment' },
 ];
 
 const PARAM_LABELS: Record<string, string> = {
