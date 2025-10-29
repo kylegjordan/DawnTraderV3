@@ -549,6 +549,24 @@ app.use((req, res, next) => {
       console.error('[30.FX.3] ⚠️ LATTI Manager startup failed:', error);
     }
 
+    // Phase 30.FX.4: Lottie Oversight Service - DHMA Safety Monitoring
+    try {
+      const { lottieOversightService } = await import('./services/lottie-oversight-service');
+      await lottieOversightService.start();
+      console.log('[30.FX.4] ✅ Lottie Oversight Service started (5-min checks)');
+    } catch (error) {
+      console.error('[30.FX.4] ⚠️ Lottie Oversight Service startup failed:', error);
+    }
+
+    // Phase 30.FX.A: Generate initial audit report
+    try {
+      const { generatePhase30Report } = await import('./audit/generate-phase30-fx4-6-report');
+      await generatePhase30Report();
+      console.log('[30.FX.A] ✅ Phase 30 audit report generated');
+    } catch (error) {
+      console.error('[30.FX.A] ⚠️ Audit report generation failed:', error);
+    }
+
     // Phase 27.G.F: Config Audit Telemetry (startup diagnostic)
     try {
       const { storage } = await import('./storage');
