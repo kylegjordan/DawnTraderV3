@@ -15507,7 +15507,7 @@ Important: Extract the exact field names and numeric values from the user's requ
       
       console.log(`[Phase-30.FX.1] Fetched ${params.length} parameters for strategy: ${strategy}, mode: ${mode}`);
       
-      res.json(params);
+      res.json({ ok: true, parameters: params });
     } catch (error: any) {
       console.error('[Phase-30.FX.1] Error fetching strategy parameters:', error);
       res.status(500).json({ error: 'Failed to fetch strategy parameters' });
