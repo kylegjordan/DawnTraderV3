@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,7 +12,6 @@ import TopBar from "@/components/layout/top-bar";
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
 import { RequestTraceProvider } from "@/hooks/use-request-trace";
@@ -163,7 +162,9 @@ function Router() {
               <Route path="/ai-transparency" component={AITransparencyPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/kill-switch" component={KillSwitchScreen} />
-              <Route component={NotFound} />
+              <Route path="/:rest*">
+                <Redirect to="/" />
+              </Route>
             </Switch>
           </Suspense>
         </main>
