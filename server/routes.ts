@@ -4182,6 +4182,56 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 31.C: Strategic Drive Trend - Historical SDI Data (Last 10 Snapshots)
+  apiRouter.get('/system/drive-trend', async (_, res) => {
+    try {
+      const { strategyDriveSummary } = await import('@shared/schema');
+      const records = await db
+        .select()
+        .from(strategyDriveSummary)
+        .orderBy(desc(strategyDriveSummary.createdAt))
+        .limit(10);
+      
+      res.json(records);
+    } catch (error: any) {
+      console.error("[31.C] Drive trend error:", error);
+      res.status(500).json({ 
+        error: "Unable to retrieve trend",
+        message: error.message 
+      });
+    }
+  });
+
+  // Phase 31.C: Strategic Drive Forecast - Predicted Strategy Performance
+  apiRouter.get('/system/drive-forecast', async (_, res) => {
+    try {
+      const { strategyDriveSummary } = await import('@shared/schema');
+      const [latest] = await db
+        .select()
+        .from(strategyDriveSummary)
+        .orderBy(desc(strategyDriveSummary.createdAt))
+        .limit(1);
+      
+      if (!latest) {
+        return res.status(404).json({ error: "No forecast data available" });
+      }
+      
+      res.json({
+        forecastBest: latest.forecastBest,
+        forecastWeakest: latest.forecastWeakest,
+        confidence: latest.forecastConfidence,
+        sdiSmoothed: latest.sdiSmoothed,
+        timestamp: latest.createdAt,
+      });
+    } catch (error: any) {
+      console.error("[31.C] Forecast endpoint error:", error);
+      res.status(500).json({ 
+        error: "Unable to retrieve forecast",
+        message: error.message 
+      });
+    }
+  });
+
   // Phase 8.3: Manual System Recovery Trigger
   apiRouter.post('/system/recover', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
