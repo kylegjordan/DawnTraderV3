@@ -72,7 +72,7 @@ export default function LottieTuningTab() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading Lottie tuning metrics...</div>
+        <div className="text-muted-foreground">Loading LATTI tuning metrics...</div>
       </div>
     );
   }
@@ -109,7 +109,7 @@ export default function LottieTuningTab() {
     <div className="space-y-4" data-testid="lottie-tuning-tab">
       {/* Header with Mode Badge */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Lottie Tuning Overview</h2>
+        <h2 className="text-2xl font-bold">LATTI Tuning Overview</h2>
         {data.passiveLearning && (
           <div 
             className="px-3 py-1.5 text-xs bg-sky-600 dark:bg-sky-700 text-white rounded-md font-medium flex flex-col items-center gap-1"
@@ -117,7 +117,7 @@ export default function LottieTuningTab() {
           >
             <span>🔍 Observation Mode Active</span>
             <span className="text-xs text-sky-100 dark:text-sky-200 italic font-normal">
-              Lottie is observing real-time data and testing parameter hypotheses internally.
+              LATTI is observing real-time data and testing parameter hypotheses internally.
             </span>
           </div>
         )}
@@ -134,7 +134,7 @@ export default function LottieTuningTab() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-last-run">
+            <div className="text-base font-bold" data-testid="text-last-run">
               {formattedLastRun}
             </div>
             <p className="text-xs text-muted-foreground mt-1">

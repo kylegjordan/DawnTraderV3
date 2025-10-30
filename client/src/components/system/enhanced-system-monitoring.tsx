@@ -363,9 +363,9 @@ export default function EnhancedSystemMonitoring() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap gap-2 justify-start w-full h-auto p-2" data-testid="tabs-system-monitoring">
-          <TabsTrigger value="lottie-tuning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-lottie-tuning" title="Lottie Tuning">
+          <TabsTrigger value="lottie-tuning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-lottie-tuning" title="LATTI Tuning">
             <Gauge className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Lottie Tuning</span>
+            <span className="hidden sm:inline">LATTI Tuning</span>
           </TabsTrigger>
           <TabsTrigger value="system-ai" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-system-ai" title="System & AI">
             <Activity className="w-4 h-4 sm:mr-2" />
