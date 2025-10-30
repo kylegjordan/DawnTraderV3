@@ -216,9 +216,23 @@ export function useTrading() {
     }
   });
 
-  // Phase 32.D-Fix.3: Derived flag for unified trading active state
-  const isTradingActivePaper = tradingStatus?.isEngineActivePaper || paperSimStatus?.isRunning || false;
-  const isTradingActiveLive = tradingStatus?.isEngineActiveLive || false;
+  // Phase 32.D-Fix.Final: Helper to derive active state from authoritative source
+  function deriveIsActive(state?: TradingStatus, paperSimStatus?: { isRunning?: boolean }) {
+    // Authoritative boolean first (from server's active field)
+    if (state && typeof state.active === 'boolean') return state.active;
+    
+    // Best-effort on first paint before server data arrives
+    if (!state) return !!paperSimStatus?.isRunning;
+    
+    // Fallback to mode-specific flags if active field not present
+    if (state.mode === 'paper') return !!(state.isEngineActivePaper || paperSimStatus?.isRunning);
+    return !!state.isEngineActiveLive;
+  }
+
+  // Phase 32.D-Fix.Final: Single source of truth for trading active state
+  const isTradingActive = deriveIsActive(tradingStatus, paperSimStatus);
+  const isTradingActivePaper = deriveIsActive(tradingStatus, paperSimStatus);
+  const isTradingActiveLive = deriveIsActive(tradingStatus, undefined);
 
   return {
     // Status and control
@@ -226,6 +240,7 @@ export function useTrading() {
     statusLoading,
     paperSimStatus,
     paperSimStatusLoading,
+    isTradingActive,  // Phase 32.D-Fix.Final: Single authoritative active state
     isTradingActivePaper,
     isTradingActiveLive,
     startTrading: startTradingMutation.mutateAsync,
