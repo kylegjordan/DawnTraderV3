@@ -3,24 +3,45 @@ import { systemConfig } from '@shared/schema';
 import { sql } from 'drizzle-orm';
 
 /**
- * Phase 31.H: System Configuration Service
+ * Phase 31.H/32.BS: System Configuration Service
  * 
  * Manages global system flags including passive learning mode.
  * Uses singleton pattern - only one system_config row exists.
+ * Phase 32.BS: Passive mode is now the default idle state.
  */
 export class SystemConfigService {
   private static instance: SystemConfigService;
   private configCache: {
     passiveLearning: boolean;
   } | null = null;
+  private initPromise: Promise<void> | null = null;
 
   private constructor() {
     console.log('[31.H][SystemConfig] Service initialized');
   }
 
+  /**
+   * Phase 32.BS: Initialize passive mode as default
+   * Ensures continuous learning even when trading is paused
+   */
+  private async initializePassiveMode(): Promise<void> {
+    try {
+      const config = await this.getConfig();
+      if (!config.passiveLearning) {
+        await this.updateConfig({ passiveLearning: true }, 'system');
+        console.log('[32.BS][PassiveMode] Activated by default — continuous learning enabled');
+      }
+    } catch (error: any) {
+      console.error('[32.BS][PassiveMode] Failed to initialize:', error.message);
+    }
+  }
+
   static getInstance(): SystemConfigService {
     if (!SystemConfigService.instance) {
       SystemConfigService.instance = new SystemConfigService();
+      // Phase 32.BS: Initialize passive mode on first getInstance call
+      // Fire and forget initialization (errors are logged internally)
+      SystemConfigService.instance.initPromise = SystemConfigService.instance.initializePassiveMode();
     }
     return SystemConfigService.instance;
   }
@@ -35,15 +56,16 @@ export class SystemConfigService {
       
       if (!config) {
         // Initialize default config if none exists
+        // Phase 32.BS: Passive mode is now the default
         const [created] = await db.insert(systemConfig).values({
-          systemFlags: { passiveLearning: false },
+          systemFlags: { passiveLearning: true },
         }).returning();
         
         this.configCache = {
-          passiveLearning: false,
+          passiveLearning: true,
         };
         
-        console.log('[31.H][SystemConfig] Initialized default configuration');
+        console.log('[32.BS][SystemConfig] Initialized with passive learning enabled (default)');
         return this.configCache;
       }
       
@@ -54,7 +76,8 @@ export class SystemConfigService {
       return this.configCache;
     } catch (error: any) {
       console.error('[31.H][SystemConfig] Error fetching config:', error);
-      return { passiveLearning: false };
+      // Phase 32.BS: Return passive mode as default even on error
+      return { passiveLearning: true };
     }
   }
 
@@ -101,6 +124,21 @@ export class SystemConfigService {
       if (flags.passiveLearning !== undefined) {
         const state = flags.passiveLearning ? 'ENABLED' : 'DISABLED';
         console.log(`[31.H][PassiveLearning] ${state} by ${updatedBy || 'system'}`);
+        
+        // Phase 32.BS: Broadcast mode change via WebSocket for cross-user sync
+        try {
+          const { contextBridge } = await import('./context-bridge');
+          const mode = flags.passiveLearning ? 'passive' : 'active';
+          await contextBridge.broadcast({
+            type: 'MODE_CHANGE',
+            payload: { mode, passiveLearning: flags.passiveLearning },
+            userId: 'system',
+            mode: 'paper'
+          });
+          console.log(`[32.BS][SystemSync] Mode changed → ${mode} (broadcast OK)`);
+        } catch (error: any) {
+          console.error('[32.BS][SystemSync] Failed to broadcast mode change:', error.message);
+        }
       }
       
       return newFlags;

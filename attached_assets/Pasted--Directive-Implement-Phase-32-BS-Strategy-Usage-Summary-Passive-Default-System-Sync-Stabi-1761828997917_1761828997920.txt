@@ -1,0 +1,147 @@
+🧭 Directive: Implement Phase 32.BS — Strategy Usage Summary + Passive Default + System Sync + Stability Enhancements
+Purpose
+
+To complete the transition from observation to controlled paper trading by:
+
+Adding the Strategy Usage Summary Card (for clarity on Lottie’s real-time decision accuracy).
+
+Setting Passive Mode as the system’s default idle state whenever trading is paused.
+
+Ensuring Cross-User Synchronization for all mode toggles.
+
+Adding small stability and observability upgrades so paper testing and later live trading start cleanly.
+
+🧱 Implementation Breakdown
+1️⃣ Strategy Usage Summary Card
+
+Goal: Show how often each of the eight strategies is evaluated, recommended, selected, and wins in simulation.
+
+Additions
+
+New API endpoint: /api/system/latti-strategy-usage
+
+Aggregates from:
+
+telemetry_cache/context_evaluations.json
+
+sdpoe_cycle_metrics
+
+Returns 24-hour backfill + rolling updates every 30 min.
+
+JSON fields:
+
+{
+  "strategy": "DHMA",
+  "timesRecommended": 42,
+  "timesSelected": 31,
+  "winPercent": 74.2,
+  "confidenceAverage": 0.67
+}
+
+
+Client:
+
+Add “Strategy Usage Summary” table under Cross-Strategy Learning in the Lottie Tuning tab.
+
+Refresh automatically every 90 s.
+
+Verification
+
+Run with test credentials
+
+username: testuser123
+password: SecurePass123!
+
+
+Confirm endpoint returns populated data.
+
+Verify table appears and updates per SDPOE cycle.
+
+Audit file: /audit/phase32bs-strategy-usage-report.md.
+
+2️⃣ Passive Mode Default Behavior
+
+Goal: Keep data flowing and models warm whenever trading is paused.
+
+Changes
+
+Modify SystemConfigService:
+
+On startup, if mode ≠ live or paper, automatically set mode = passive.
+
+Add daily auto-refresh of telemetry cache to prevent memory accumulation.
+
+Update /api/system/config to persist and expose defaultMode = "passive".
+
+Add log entry [PassiveMode] Activated by default — continuous learning enabled.
+
+Benefits
+
+Prevents cold-start gaps.
+
+Maintains Lottie’s rolling context and SDPOE coherence.
+
+3️⃣ Cross-User Mode Synchronization
+
+Goal: Guarantee that toggling Paper/Live/Passive on one user session syncs to all connected users.
+
+Additions
+
+WebSocket broadcast from SystemConfigService → all active sessions.
+Event payload:
+
+{ "event": "MODE_CHANGE", "mode": "paper" }
+
+
+UI auto-update across sessions within 2 s.
+
+Add server-side audit line: [SystemSync] Mode changed → paper (broadcast OK).
+
+Verification
+
+Open two sessions (testuser123 + secondary test account if available).
+
+Toggle Paper ↔ Passive ↔ Live and confirm synchronized UI status.
+
+4️⃣ Stability & Observability Add-ons
+Add-on	Description	Purpose
+Trade Execution Verifier	Adds a lightweight monitor to confirm order generation every 15 min; logs [TradeExec] 0 trades / expected > 0 when silent.	Detects stalled trade pipeline early.
+Telemetry Heartbeat	Emits [Heartbeat] Passive learning active every 10 min.	Confirms data still flowing.
+Error Digest	Aggregates any LSP/runtime errors daily → /audit/runtime-digest.log.	Easier debugging post-paper-test.
+SDPOE Health Ping	Adds /api/system/health-sdpoe returning SDPOE status, last cycle timestamp.	Quick manual health check.
+🧪 Post-Run Verification
+
+After implementation, Replit should:
+
+Log in as testuser123.
+
+Hit:
+
+/api/system/latti-strategy-usage
+
+/api/system/config
+
+/api/system/health-sdpoe
+
+Confirm:
+
+Strategy Usage Summary card visible.
+
+Passive mode auto-enabled when idle.
+
+WebSocket sync works across sessions.
+
+Telemetry heartbeat & trade execution verifier logs appear.
+
+Generate audit file:
+/audit/phase32bs-verification-report.md
+
+🧠 Expected Outcome
+
+Continuous learning even when idle.
+
+Immediate visibility into which strategies Lottie is recommending and how effective they are.
+
+Seamless transition between Passive ↔ Paper ↔ Live.
+
+Self-auditing safeguards for execution and telemetry stability.

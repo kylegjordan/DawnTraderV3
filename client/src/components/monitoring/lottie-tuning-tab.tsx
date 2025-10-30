@@ -51,6 +51,20 @@ interface CrossStrategyData {
   correlations: CrossStrategyCorrelation[];
 }
 
+interface StrategyUsage {
+  strategy: string;
+  timesRecommended: number;
+  timesSelected: number;
+  winPercent: number;
+  confidenceAverage: number;
+}
+
+interface StrategyUsageData {
+  timestamp: string;
+  period: string;
+  strategies: StrategyUsage[];
+}
+
 export default function LottieTuningTab() {
   const { data, isLoading, isError, error } = useQuery<LATTIMetrics>({
     queryKey: ['/api/system/latti-tuning'],
@@ -66,6 +80,12 @@ export default function LottieTuningTab() {
   // Phase 31.L - Fetch Cross-Strategy Learning Correlations
   const { data: crossData } = useQuery<CrossStrategyData>({
     queryKey: ['/api/system/latti-cross-strategy'],
+    refetchInterval: 90000, // Update every 90 seconds
+  });
+
+  // Phase 32.BS - Fetch Strategy Usage Summary
+  const { data: usageData } = useQuery<StrategyUsageData>({
+    queryKey: ['/api/system/latti-strategy-usage'],
     refetchInterval: 90000, // Update every 90 seconds
   });
 
@@ -367,6 +387,66 @@ export default function LottieTuningTab() {
           ) : (
             <div className="text-center py-8 text-muted-foreground italic">
               Gathering cross-strategy learning data...
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Phase 32.BS - Strategy Usage Summary */}
+      <Card data-testid="card-strategy-usage">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-indigo-500" />
+            Strategy Usage Summary (24h)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {usageData && usageData.strategies.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700">
+                    <th className="text-left py-2 px-3 font-semibold text-foreground">Strategy</th>
+                    <th className="text-right py-2 px-3 font-semibold text-foreground">Recommended</th>
+                    <th className="text-right py-2 px-3 font-semibold text-foreground">Selected</th>
+                    <th className="text-right py-2 px-3 font-semibold text-foreground">Win %</th>
+                    <th className="text-right py-2 px-3 font-semibold text-foreground">Avg Confidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageData.strategies.map((s, idx) => (
+                    <tr 
+                      key={idx} 
+                      className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                      data-testid={`usage-row-${idx}`}
+                    >
+                      <td className="py-2 px-3 font-medium text-foreground" data-testid={`usage-strategy-${idx}`}>
+                        {s.strategy}
+                      </td>
+                      <td className="py-2 px-3 text-right text-muted-foreground" data-testid={`usage-recommended-${idx}`}>
+                        {s.timesRecommended}
+                      </td>
+                      <td className="py-2 px-3 text-right text-muted-foreground" data-testid={`usage-selected-${idx}`}>
+                        {s.timesSelected}
+                      </td>
+                      <td className="py-2 px-3 text-right font-medium" data-testid={`usage-win-${idx}`}>
+                        <span className={s.winPercent >= 55 ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}>
+                          {s.winPercent.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right font-medium" data-testid={`usage-confidence-${idx}`}>
+                        <span className={s.confidenceAverage >= 0.65 ? "text-sky-600 dark:text-sky-400" : "text-muted-foreground"}>
+                          {(s.confidenceAverage * 100).toFixed(0)}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground italic">
+              Collecting strategy usage data...
             </div>
           )}
         </CardContent>

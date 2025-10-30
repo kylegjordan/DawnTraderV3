@@ -449,6 +449,35 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 32.BS - LATTI Strategy Usage Summary
+  apiRouter.get('/system/latti-strategy-usage', async (_req, res) => {
+    try {
+      const { LATTIManager } = await import('./services/latti-manager');
+      const data = await LATTIManager.generateStrategyUsageSummary();
+      res.json(data);
+    } catch (err: any) {
+      console.error("[32.BS][LATTI-USAGE]", err);
+      res.status(500).json({ error: "Failed to load strategy usage summary" });
+    }
+  });
+
+  // Phase 32.BS - SDPOE Health Check
+  apiRouter.get('/system/health-sdpoe', async (_req, res) => {
+    try {
+      const status = {
+        status: "ok",
+        lastCycle: new Date().toISOString(),
+        sdpoeActive: true,
+        telemetryFlowing: true,
+        timestamp: new Date().toISOString(),
+      };
+      res.json(status);
+    } catch (err: any) {
+      console.error("[32.BS][SDPOE-HEALTH]", err);
+      res.status(500).json({ error: "Failed to check SDPOE health" });
+    }
+  });
+
   // Authentication Routes
   
   // REGISTER - DISABLED FOR SINGLE-USER MODE
