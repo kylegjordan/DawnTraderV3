@@ -88,7 +88,7 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
   
   try {
     // Check watchlist and add screener-filtered pairs if empty
-    const watchlist = await storage.getWatchlist({ userId, mode });
+    const watchlist = await storage.getWatchlist({ mode });
     if (watchlist && watchlist.length > 0) {
       console.log(`[32.D-Fix.6] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
       return;
@@ -108,18 +108,18 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
     // Initialize KrakenService
     const krakenService = new KrakenService();
     
-    // Query eligible pairs
+    // Query eligible pairs with safe defaults for nullable fields
     const eligiblePairs = await krakenService.getEligiblePairs({
-      minVolume: filters.minVolume,
-      minDailyRange: tradingSettings.minDailyRange,
-      minPrice: filters.minPrice,
+      minVolume: filters.minVolume ?? '1000000',
+      minDailyRange: tradingSettings.minDailyRange ?? '0.02',
+      minPrice: filters.minPrice ?? '0.01',
       maxPrice: filters.maxPrice || undefined,
-      maxBidAskSpread: filters.maxBidAskSpread,
+      maxBidAskSpread: filters.maxBidAskSpread ?? '0.05',
       excludeStablecoins: filters.excludeStablecoins ?? true,
       allowedTradingPairs: [],
       blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
       whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
-      minHistoryDays: tradingSettings.minDataHistoryDays,
+      minHistoryDays: tradingSettings.minDataHistoryDays ?? 30,
       rsiMin: filters.rsiMin || undefined,
       rsiMax: filters.rsiMax || undefined,
       volatilityMin: filters.volatilityMin || undefined,
@@ -141,7 +141,6 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
     for (const pair of pairsToAdd) {
       try {
         await storage.addWatchlistPair({
-          userId,
           mode,
           symbol: pair.symbol,
           baseCurrency: pair.baseCurrency,
