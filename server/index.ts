@@ -567,6 +567,32 @@ app.use((req, res, next) => {
       console.error('[30.FX.A] ⚠️ Audit report generation failed:', error);
     }
 
+    // Phase 31.0: Strategic Drive & Profit Optimization Engine
+    try {
+      const { strategicDriveService } = await import('./services/strategic-drive-service');
+      
+      // Run initial computation on startup
+      console.log('[31.0][SDPOE] Strategic Drive Service initializing...');
+      await strategicDriveService.computeDriveMetrics('paper');
+      await strategicDriveService.summarizeDriveMetrics();
+      console.log('[31.0][SDPOE] ✅ Initial drive metrics computed');
+      
+      // Schedule hourly computation
+      setInterval(async () => {
+        try {
+          await strategicDriveService.computeDriveMetrics('paper');
+          await strategicDriveService.summarizeDriveMetrics();
+          console.log('[31.0][SDPOE] Hourly drive metrics updated');
+        } catch (error) {
+          console.error('[31.0][SDPOE] Error in scheduled computation:', error);
+        }
+      }, 60 * 60 * 1000); // 60 minutes
+      
+      console.log('[31.0][SDPOE] ✅ Strategic Drive Engine started (hourly cycle)');
+    } catch (error) {
+      console.error('[31.0][SDPOE] ⚠️ Strategic Drive Engine startup failed:', error);
+    }
+
     // Phase 27.G.F: Config Audit Telemetry (startup diagnostic)
     try {
       const { storage } = await import('./storage');

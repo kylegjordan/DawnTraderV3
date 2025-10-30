@@ -4160,6 +4160,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 31.0: Strategic Drive Status - SDI and Strategy Weights
+  apiRouter.get('/system/drive-status', async (_, res) => {
+    try {
+      const { strategicDriveService } = await import('./services/strategic-drive-service');
+      const latest = await strategicDriveService.getLatestSummary();
+      
+      res.json({
+        status: "ok",
+        latest: latest || null,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[31.0][SDPOE] Health endpoint error:", error);
+      res.status(500).json({
+        status: "error",
+        error: "Drive status unavailable",
+        message: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   // Phase 8.3: Manual System Recovery Trigger
   apiRouter.post('/system/recover', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

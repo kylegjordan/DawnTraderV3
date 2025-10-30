@@ -1,16 +1,31 @@
 # Phase 30.FX.4–6 Report
-Generated: 2025-10-29T21:40:53.854Z
+Generated: 2025-10-30T02:35:09.022Z
 
 ## Overview
 This report summarizes the Lottie Oversight and Cross-Strategy Optimization activities.
 
 ## Lottie Oversight Log (Last 20 Events)
 
-- 2025-10-29T21:40:53.630Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-29T21:37:31.745Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-10-29T21:32:31.698Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-10-29T21:27:31.621Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-10-29T21:25:26.615Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
+- 2025-10-30T02:35:08.784Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T02:34:53.140Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T02:32:27.363Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T02:32:10.161Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T02:28:38.946Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T02:26:45.318Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T02:21:44.916Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:45:54.043Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:40:54.139Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:35:54.080Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:30:54.097Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:25:54.046Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:20:54.038Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:15:54.085Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:10:54.060Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:05:54.034Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T22:00:54.025Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T21:55:54.121Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T21:50:54.126Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-29T21:45:54.112Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 
 ## Strategy Mix Changes (Last 20)
 No strategy mix changes recorded yet.
@@ -19,10 +34,10 @@ No strategy mix changes recorded yet.
 ## Summary Statistics
 
 ### Lottie Oversight
-- Total events: 5
+- Total events: 20
 - Active strategies: 1
 - Status breakdown:
-  - error: 5
+  - error: 20
 
 ### Strategy Mix
 - Total changes: 0

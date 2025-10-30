@@ -4370,3 +4370,53 @@ export const insertStrategyMixLogSchema = createInsertSchema(strategyMixLog).omi
 
 export type InsertStrategyMixLog = z.infer<typeof insertStrategyMixLogSchema>;
 export type StrategyMixLog = typeof strategyMixLog.$inferSelect;
+
+// Phase 31.0: Strategic Drive & Profit Optimization Engine
+export const strategyDriveMetrics = pgTable("strategy_drive_metrics", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  strategy: varchar("strategy", { length: 50 }).notNull(),
+  mode: varchar("mode", { length: 10 }).notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  totalProfitUSD: doublePrecision("total_profit_usd").notNull().default(0),
+  totalTrades: integer("total_trades").notNull().default(0),
+  winRate: doublePrecision("win_rate").notNull().default(0),
+  avgRMultiple: doublePrecision("avg_r_multiple").notNull().default(0),
+  alphaStrength: doublePrecision("alpha_strength").notNull().default(0),
+  riskExposure: doublePrecision("risk_exposure").notNull().default(0),
+  driveScore: doublePrecision("drive_score").notNull().default(0),
+}, (table) => ({
+  strategyIdx: index("strategy_drive_metrics_strategy_idx").on(table.strategy),
+  modeIdx: index("strategy_drive_metrics_mode_idx").on(table.mode),
+  timestampIdx: index("strategy_drive_metrics_timestamp_idx").on(table.timestamp),
+}));
+
+export const insertStrategyDriveMetricsSchema = createInsertSchema(strategyDriveMetrics).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertStrategyDriveMetrics = z.infer<typeof insertStrategyDriveMetricsSchema>;
+export type StrategyDriveMetrics = typeof strategyDriveMetrics.$inferSelect;
+
+export const strategyDriveSummary = pgTable("strategy_drive_summary", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  globalSDI: doublePrecision("global_sdi").notNull(),
+  bestStrategy: varchar("best_strategy", { length: 50 }).notNull(),
+  weakestStrategy: varchar("weakest_strategy", { length: 50 }).notNull(),
+  dhmaWeight: doublePrecision("dhma_weight").notNull().default(1),
+  quantflowWeight: doublePrecision("quantflow_weight").notNull().default(1),
+  trendpulseWeight: doublePrecision("trendpulse_weight").notNull().default(1),
+  volsurfWeight: doublePrecision("volsurf_weight").notNull().default(1),
+  momentumxWeight: doublePrecision("momentumx_weight").notNull().default(1),
+}, (table) => ({
+  createdAtIdx: index("strategy_drive_summary_created_at_idx").on(table.createdAt),
+}));
+
+export const insertStrategyDriveSummarySchema = createInsertSchema(strategyDriveSummary).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertStrategyDriveSummary = z.infer<typeof insertStrategyDriveSummarySchema>;
+export type StrategyDriveSummary = typeof strategyDriveSummary.$inferSelect;
