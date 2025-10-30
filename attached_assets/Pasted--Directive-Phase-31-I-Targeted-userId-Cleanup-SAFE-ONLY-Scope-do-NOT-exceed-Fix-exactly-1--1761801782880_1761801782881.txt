@@ -1,0 +1,152 @@
+🔧 Directive: Phase 31.I — Targeted userId Cleanup (SAFE ONLY)
+Scope (do NOT exceed)
+
+Fix exactly 1 hardcoded test userId in code.
+
+Remove exactly 3 documentation-only files with stale userId examples.
+
+Add lint/test guardrails to prevent future hardcoded IDs.
+
+No blanket search/replace. No schema/key renames. No API/route changes.
+
+0) Pre-flight
+
+Create checkpoint: “31.I-start”.
+
+Confirm app runs: /api/system/health returns 200.
+
+1) Inventory (evidence before changes)
+
+Run and save to artifacts:
+
+# Inventory by filetype
+rg -n --stats --colors=never "userId\b" > audit/userId_inventory_raw.txt
+rg -n "userId\b" --type ts --type tsx > audit/userId_inventory_ts.txt
+rg -n "userId\b" --type sql > audit/userId_inventory_sql.txt
+rg -n "userId\b" --type md > audit/userId_inventory_md.txt
+
+# Summaries
+echo "TOTAL:" $(rg -o "userId\b" -N | wc -l) | tee audit/userId_counts.txt
+
+
+Output the four files and the count in the run log.
+
+2) Code fix — replace the one hardcoded test userId
+
+File: server/schedulers/analytics-scheduler.ts (line ~83; the one flagged in the earlier audit)
+
+Replace hardcoded userId = "<uuid>" with:
+
+// New helper
+function resolveSchedulerUserId(): string {
+  // Prefer authenticated context if available
+  const ctx = (global as any).__REQUEST_CONTEXT__?.userId;
+  if (typeof ctx === 'string' && ctx.length > 0) return ctx;
+
+  // Allow runtime override for tests
+  if (process.env.TEST_USER_ID) return process.env.TEST_USER_ID;
+
+  // Fall back to test account username lookup once at startup (cached)
+  return SystemUserCache.getOrResolve('testuser123'); // resolves to ID via DB once, caches
+}
+
+// Usage
+const userId = resolveSchedulerUserId();
+
+
+Add a tiny cache utility if missing (in server/utils/system-user-cache.ts) that resolves testuser123 → UUID once and memoizes.
+
+3) Docs cleanup — remove only stale example files
+
+Delete these 3 doc files (no others):
+
+docs/examples/user-audit-example.md
+docs/playbooks/user-session-walkthrough.md
+docs/scratch/legacy-userid-notes.md
+
+
+(If filenames differ, remove the three MD files previously flagged by the 31.I pre-analysis; keep a note of exact paths in the PR description.)
+
+4) Guardrails to prevent regressions
+4.1 ESLint rule (ban hardcoded UUIDs in TS/TSX)
+
+Add to .eslintrc.*:
+
+"no-restricted-syntax": [
+  "error",
+  {
+    "selector": "Literal[value=/\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b/i]",
+    "message": "Do not hardcode UUIDs (including userId). Use resolvers/env/config."
+  }
+]
+
+4.2 CI grep check (fail build on new hardcoded UUIDs)
+
+Add script scripts/check-no-hardcoded-uuids.sh:
+
+#!/usr/bin/env bash
+set -euo pipefail
+if rg -n "\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b" \
+  --type ts --type tsx --type js --type jsx --ignore-file .gitignore \
+  | rg -v "fixtures|seeds|testdata|migrations" | tee /dev/stderr | grep .
+then
+  echo "❌ Hardcoded UUIDs detected. See matches above."
+  exit 1
+fi
+echo "✅ No hardcoded UUIDs."
+
+
+Wire into CI (or pre-commit) and npm run lint.
+
+5) Post-run Verification (must paste output in chat)
+echo "=== 31.I POST-VERIFY: COUNTS ==="
+echo "Counts BEFORE:" && cat audit/userId_counts.txt || true
+echo "Counts AFTER:"
+echo "TOTAL:" $(rg -o "userId\b" -N | wc -l)
+
+echo "=== 31.I POST-VERIFY: DIFF in TS/TSX ==="
+git diff --name-only | rg "\.(ts|tsx)$" || true
+
+echo "=== 31.I POST-VERIFY: RUNTIME SMOKE ==="
+# Auth
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+[ "$TOKEN" = "null" -o -z "$TOKEN" ] && echo "❌ Login failed" && exit 1 || echo "✅ Login ok"
+
+# Health & passive learning continuity
+curl -fsS http://localhost:5000/api/system/health-30fx >/dev/null && echo "✅ Health-30fx ok"
+curl -s http://localhost:5000/api/system/config | jq '.systemFlags.passiveLearning'
+
+# Trading mode unaffected
+curl -fsS -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:5000/api/trading/activity?mode=paper&period=1d" >/dev/null && echo "✅ Trading activity endpoint ok"
+
+# No scheduler breakage
+rg -n "\[Scheduler\].*(error|fail|exception)" /tmp/logs/Start_application_* | tail -5 || echo "✅ No scheduler errors"
+
+echo "=== 31.I DONE ==="
+
+6) Rollback plan
+
+If any runtime check fails, revert the commit and restore the three doc files from checkpoint “31.I-start”.
+
+Report findings with BEFORE/AFTER counts and exact file changes.
+
+Test User (for any auth in this step)
+
+Username: testuser123
+
+Password: SecurePass123!
+
+(Optional) Set TEST_USER_ID env var if needed for the scheduler fallback.
+
+Acceptance Criteria
+
+App builds & runs; health endpoints 200.
+
+Paper/passive learning continues uninterrupted.
+
+Only the specified files change; no functional userId usage altered.
+
+New lint/CI guardrails active and passing.

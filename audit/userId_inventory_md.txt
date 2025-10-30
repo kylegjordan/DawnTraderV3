@@ -1,0 +1,24 @@
+server/diagnostics/README.md:40:[TRACE-IN] req.id=<uuid> endpoint=/api/goals/update user=<userId> mode=paper
+server/diagnostics/README.md:42:[DX-GOALS] Request payload: { userId, mode, goals: [...] }
+server/diagnostics/README.md:52:[TRACE-IN] req.id=<uuid> endpoint=/api/trading/set-mode user=<userId> mode=paper
+server/diagnostics/README.md:54:[DX-TRADING] Request payload: { userId, username, mode, reason }
+server/services/mode-independence-verification.md:37:  - `emitTradeEvent(userId, mode, ...)` (line 79)
+server/services/mode-independence-verification.md:38:  - `emitBalanceUpdate(userId, mode, ...)` (line 108)
+server/services/mode-independence-verification.md:39:  - `emitRiskReport(userId, mode, ...)` (line 132)
+server/services/mode-independence-verification.md:40:  - `emitEngineEvent(userId, mode, ...)` (line 156)
+server/services/mode-independence-verification.md:41:  - `emitStrategySignal(userId, mode, ...)` (line 178)
+server/services/mode-independence-verification.md:42:  - `emitAnomaly(userId, mode, ...)` (line 202)
+server/services/mode-independence-verification.md:53:  userId
+server/services/mode-independence-verification.md:68:const user = await storage.getUser(userId);
+server/services/mode-independence-verification.md:72:const refreshResult = await contextRefreshCoordinator.refresh(userId, mode, 'direct');
+server/services/mode-independence-verification.md:119:   - tradingEngine.emitTradeEvent(userId, MODE, data)
+server/services/mode-independence-verification.md:122:   - event = { type, MODE, data, timestamp, userId }
+server/services/mode-independence-verification.md:140:   - refresh(userId, MODE, 'direct')
+server/services/event-broker-integration.md:32:    this.userId,
+server/services/event-broker-integration.md:63:async triggerKillSwitch(userId: string, reason: string): Promise<void> {
+server/services/event-broker-integration.md:68:    userId,
+server/services/event-broker-integration.md:90:async updateBalance(userId: string, mode: 'live' | 'paper', newBalance: number): Promise<void> {
+server/services/event-broker-integration.md:91:  const oldBalance = await this.getCurrentBalance(userId, mode);
+server/services/event-broker-integration.md:97:    userId,
+server/services/event-broker-integration.md:108:      activeStrategies: await this.getActiveStrategies(userId, mode)
+server/services/event-broker-integration.md:125:      this.userId,
