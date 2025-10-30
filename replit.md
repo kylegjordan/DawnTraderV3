@@ -47,6 +47,8 @@ The coherency rules have been rationalized to act as extreme fail-safes only, wi
 
 **Phase 32.D-Fix.4: Trading State Broadcast Sync** adds unified `trading_state_changed` WebSocket broadcasts to `/api/paper-sim/start` and `/api/paper-sim/stop` routes, ensuring immediate real-time state synchronization across all UI components when paper trading starts or stops. Enhanced the reconciliation guard in `trading-state-sync.ts` to send an immediate sync broadcast when active paper sessions are detected during server startup, eliminating polling delays and ensuring the frontend receives instant WebSocket notifications for all trading state changes.
 
+**Phase 32.D-Fix.5: Frontend State Rehydration & Forced UI Refresh** enhances the WebSocket handler in `use-trading.tsx` with comprehensive query invalidations for `/api/trading/status`, `/api/paper-sim/status`, `/api/system/config`, `/api/goals/summary`, and `/api/dashboard/overview` upon receiving `trading_state_changed` events. Implements immediate refetch for critical queries to bypass the 5-second polling delay. Adds a reactive useEffect in `top-bar.tsx` that automatically refreshes dashboard and goals widgets when active state flags change, ensuring all UI components (blue bar, toggle, passive badge, portfolio values, Goals Engine) instantly reflect trading state changes with <100ms latency.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

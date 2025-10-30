@@ -1,0 +1,102 @@
+✅ Fix: Phase 32.D-Fix.5 — Frontend State Rehydration & Forced UI Refresh
+
+We’ll make sure that whenever a trading_state_changed event is received, all relevant queries are refreshed and the dependent widgets (blue bar, toggle, portfolio table, goals engine) instantly reflect the live state.
+
+🧱 1️⃣ Update the WebSocket Handler
+
+File: client/src/hooks/use-trading.tsx
+
+Inside the existing listener for msg.type === 'trading_state_changed',
+replace this block 👇
+
+// Always invalidate trading status (contains mode info)
+queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+
+
+with this 👇
+
+// Phase 32.D-Fix.5 — Comprehensive front-end rehydration
+console.log('[32.D-Fix.5] Trading state update received → forcing UI refresh');
+
+await Promise.all([
+  queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] }),
+  queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] }),
+  queryClient.invalidateQueries({ queryKey: ['/api/system/config'] }),
+  queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] }),
+  queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] }),
+]);
+
+// Optional: trigger immediate fetch to bypass 5 s polling delay
+queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
+queryClient.refetchQueries({ queryKey: ['/api/system/config'] });
+
+
+This guarantees all live-state data sources refresh the moment a start/stop event arrives.
+
+🧱 2️⃣ Force UI Re-render on Active Flag Change
+
+File: client/src/components/layout/top-bar.tsx
+
+Add this new useEffect below your existing one that listens for WebSocket messages:
+
+// Phase 32.D-Fix.5 — Force UI re-render when active state changes
+useEffect(() => {
+  if (tradingStatus?.isEngineActivePaper || paperSimStatus?.isRunning) {
+    console.log('[32.D-Fix.5] Detected active trading → refreshing dependent widgets');
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] });
+  }
+}, [tradingStatus?.isEngineActivePaper, paperSimStatus?.isRunning]);
+
+
+That tells React Query to refresh your dashboard and goals engine any time paper trading goes active.
+
+🧱 3️⃣ Restart → Test → Confirm
+
+Credentials
+
+username: testuser123
+password: SecurePass123!
+
+
+Run:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+# Start PaperSim
+curl -s -X POST http://localhost:5000/api/paper-sim/start -H "Authorization: Bearer $TOKEN"
+
+# Verify logs
+grep "32.D-Fix.5" /tmp/logs/Start_application_* | tail -5
+
+
+✅ Expected UI Behavior
+
+Blue bar → “Paper Trading Mode — Active (Simulated Trades Executing)”
+
+Toggle → 🟢 ACTIVE
+
+Passive badge → hidden
+
+Portfolio Value and Goals Engine “Current Portfolio” update instantly
+
+🧾 Deliverables for Audit
+
+/audit/phase32d-fix5-frontend-state-rehydration.md
+Include:
+
+Console logs showing [32.D-Fix.5] Trading state update received
+
+Screenshots proving live → stopped transitions
+
+Snapshot of updated portfolio/goal values
+
+Summary
+
+Fix 4 ensured backend broadcasts.
+
+Fix 5 forces the frontend to refresh every cache and re-render.
+
+After this, all indicators (blue bar, toggle, portfolio growth table) will finally stay synchronized with the real trading engine state.

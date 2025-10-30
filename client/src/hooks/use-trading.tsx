@@ -35,13 +35,23 @@ export function useTrading() {
       
       console.log('[SYNC][Phase-27.F.10] Trading state changed:', payload?.mode, payload?.active || payload?.isEngineActive);
       
-      // Phase 27.F.10: Mode-scoped invalidation to prevent cross-mode pollution
-      // Always invalidate trading status (contains mode info)
-      queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      // Phase 32.D-Fix.5: Comprehensive front-end rehydration
+      console.log('[32.D-Fix.5] Trading state update received → forcing UI refresh');
       
-      // Only invalidate paper-sim queries if this is a paper mode update
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/system/config'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] }),
+      ]);
+      
+      // Optional: trigger immediate fetch to bypass 5s polling delay
+      queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
+      queryClient.refetchQueries({ queryKey: ['/api/system/config'] });
+      
+      // Phase 27.F.10: Mode-specific invalidations
       if (payload?.mode === 'paper') {
-        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
         queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
       }
       
