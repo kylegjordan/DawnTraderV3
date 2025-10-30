@@ -2,6 +2,7 @@ import { cortexCore } from './cortex-core';
 import { strategyAnalytics } from '../strategy-analytics';
 import { portfolioAggregator } from '../portfolio-aggregator';
 import { provenanceLogger } from '../provenance-logger'; // Phase 8.6.4
+import { SystemUserCache } from '../../utils/system-user-cache'; // Phase 31.I
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -71,6 +72,26 @@ class AnalyticsScheduler {
   }
 
   /**
+   * Phase 31.I: Resolve scheduler user ID dynamically
+   * Prefers: request context → TEST_USER_ID env → testuser123 DB lookup
+   */
+  private async resolveSchedulerUserId(): Promise<string> {
+    // Check for request context (if available)
+    const ctx = (global as any).__REQUEST_CONTEXT__?.userId;
+    if (typeof ctx === 'string' && ctx.length > 0) {
+      return ctx;
+    }
+
+    // Allow runtime override for tests
+    if (process.env.TEST_USER_ID) {
+      return process.env.TEST_USER_ID;
+    }
+
+    // Fall back to test account username lookup (cached)
+    return await SystemUserCache.getOrResolve('testuser123');
+  }
+
+  /**
    * Run a complete analytics cycle
    */
   private async runAnalyticsCycle(): Promise<void> {
@@ -78,9 +99,8 @@ class AnalyticsScheduler {
     const cycleStart = Date.now();
 
     try {
-      // For demo purposes, we'll compute for a test user
-      // In production, this would iterate through all active users
-      const userId = '1'; // Default test user
+      // Phase 31.I: Use dynamic user ID resolution (no hardcoded UUIDs)
+      const userId = await this.resolveSchedulerUserId();
       const modes: ('live' | 'paper')[] = ['live', 'paper'];
 
       for (const mode of modes) {

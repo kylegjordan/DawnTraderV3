@@ -1,11 +1,12 @@
 import { storage } from './storage';
+import { SystemUserCache } from './utils/system-user-cache'; // Phase 31.I
 
 async function stopPaperTrading() {
   try {
     console.log('🛑 Stopping Paper Trading Simulation...\n');
 
-    // Get user ID from environment or use test user
-    const userId = process.env.PAPER_TRADING_USER_ID || '6c591801-3072-431d-b192-30aaf426f15e';
+    // Phase 31.I: Get user ID dynamically (no hardcoded UUIDs)
+    const userId = process.env.PAPER_TRADING_USER_ID || await SystemUserCache.getOrResolve('testuser123');
 
     // Make API call to stop endpoint
     const baseUrl = process.env.API_URL || 'http://localhost:5000';

@@ -1,5 +1,6 @@
 import { Paper48HrSimulation } from './services/paper-48hr-simulation';
 import { storage } from './storage';
+import { SystemUserCache } from './utils/system-user-cache'; // Phase 31.I
 
 async function startPaperTrading() {
   try {
@@ -10,8 +11,8 @@ async function startPaperTrading() {
       ? parseFloat(process.env.STARTING_BALANCE_USD)
       : 800;
 
-    // Get user ID from environment or use test user
-    const userId = process.env.PAPER_TRADING_USER_ID || '6c591801-3072-431d-b192-30aaf426f15e';
+    // Phase 31.I: Get user ID dynamically (no hardcoded UUIDs)
+    const userId = process.env.PAPER_TRADING_USER_ID || await SystemUserCache.getOrResolve('testuser123');
 
     // Verify user exists and has trading settings
     let settings = await storage.getTradingSettings(userId);
