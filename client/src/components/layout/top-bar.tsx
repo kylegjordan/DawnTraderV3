@@ -278,6 +278,12 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const handleContinueSimulation = async () => {
     console.log('[Phase-27.F.14.I] Continue previous simulation');
     
+    // Phase 32.D-Fix.6 Fix #4: Immediate toast feedback for instant user response
+    toast({
+      title: "Starting Paper Trading...",
+      description: "Activating simulation engine and loading market data",
+    });
+    
     try {
       const result = await apiRequest('POST', '/api/paper-sim/start', { mode: 'continue' });
       
@@ -306,6 +312,12 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   // Phase 27.F.14.I: Handle Start New Simulation
   const handleStartNewSimulation = async (balance: number) => {
     console.log('[Phase-27.F.14.I] Start new simulation with balance:', balance);
+    
+    // Phase 32.D-Fix.6 Fix #4: Immediate toast feedback for instant user response
+    toast({
+      title: "Starting Paper Trading...",
+      description: `Activating new simulation with $${balance.toFixed(2)} balance`,
+    });
     
     try {
       await apiRequest('POST', '/api/paper-sim/start', { 
