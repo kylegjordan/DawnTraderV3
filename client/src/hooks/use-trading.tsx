@@ -37,6 +37,8 @@ export function useTrading() {
     if (payload) {
       // Phase 32.D-Fix.Final: HYDRATE the authoritative query immediately so UI flips without waiting
       queryClient.setQueryData(['/api/trading/status'], payload);
+      // Force notify subscribers (TopBar) that cache changed
+      queryClient.invalidateQueries({ queryKey: ['/api/trading/status'], exact: true });
     }
 
     // Invalidate dependent queries after hydrating the truth
@@ -230,7 +232,11 @@ export function useTrading() {
   }
 
   // Phase 32.D-Fix.Final: Single source of truth for trading active state
-  const isTradingActive = deriveIsActive(tradingStatus, paperSimStatus);
+  // Prefer authoritative 'active' boolean if present
+  const isTradingActive =
+    typeof tradingStatus?.active === 'boolean'
+      ? tradingStatus.active
+      : deriveIsActive(tradingStatus, paperSimStatus);
   const isTradingActivePaper = deriveIsActive(tradingStatus, paperSimStatus);
   const isTradingActiveLive = deriveIsActive(tradingStatus, undefined);
 

@@ -535,6 +535,14 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   // Phase 32.D-Fix.Final: Use authoritative isTradingActive from hook
   const isActive = isTradingActive;
   
+  // Debug: Visual check for state synchronization
+  console.log('[DEBUG][TopBar]', {
+    mode: tradingStatus?.mode,
+    active: tradingStatus?.active,
+    isTradingActive,
+    passiveLearning: tradingStatus?.passiveLearning
+  });
+  
   // Phase 32.D-Fix.Final: Compute banner text based on mode and active state
   const bannerText = currentMode === 'paper'
     ? (isActive

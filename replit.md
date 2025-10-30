@@ -6,6 +6,11 @@ This project is a long-only, spot-trading cryptocurrency day trading web applica
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Test Credentials
+- **Username**: testuser123
+- **Password**: SecurePass123!
+- **Note**: Do NOT use email for login authentication
+
 ## System Architecture
 The application features a React, TypeScript, Vite frontend with a mobile-first, responsive design, and a Node.js/Express backend providing a RESTful API and WebSocket support. PostgreSQL, utilizing Neon serverless driver and Drizzle ORM, handles data persistence.
 
@@ -31,7 +36,7 @@ All legacy screener variable inputs have been removed, with the Screeners tab no
 
 Phase 32.BS implements comprehensive monitoring and default operational state enhancements. Strategy Usage Summary displays 8 strategies with recommendation/selection/win rates. Passive learning mode is now the system default. Cross-user mode synchronization broadcasts `MODE_CHANGE` events via WebSocket. Stability enhancements include a `/api/system/health-sdpoe` endpoint, telemetry heartbeat logging, and a trade execution verifier. Recent fixes (Phase 32.D.1-9) address critical issues related to paper trading reconciliation, UI synchronization, state rehydration, watchlist population, and portfolio balance authority, ensuring sub-100ms UI update latency and robust state management.
 
-**Phase 32.D-Fix.Final** resolves the STOPPED/ACTIVE desync issue by implementing an authoritative trading state contract. The `/api/trading/status` endpoint and `trading_state_changed` WebSocket events now share a unified schema with `mode`, `active` (authoritative boolean), `isEngineActivePaper`, `isEngineActiveLive`, `passiveLearning`, and `ts` fields. Client-side state hydration uses `setQueryData` for instant UI updates instead of invalidation-based polling. The `deriveIsActive` helper function provides a single source of truth for active state computation, eliminating race conditions and stale data issues. The passive learning badge (fixed from `passiveMode` to `passiveLearning`) displays as FYI only and never gates the active/stopped state. This ensures sub-100ms UI update latency and perfect state synchronization between backend and frontend.
+**Phase 32.D-Fix.Final** resolves the STOPPED/ACTIVE desync issue by implementing an authoritative trading state contract. The `/api/trading/status` endpoint and `trading_state_changed` WebSocket events now share a unified schema with `mode`, `active` (authoritative boolean), `isEngineActivePaper`, `isEngineActiveLive`, `passiveLearning`, and `ts` fields. Client-side state hydration uses `setQueryData` for instant cache updates, followed by `invalidateQueries` with `exact: true` to force immediate subscriber re-renders. The `isTradingActive` field explicitly prefers the authoritative `active` boolean from the server before falling back to derived state, ensuring TopBar and all UI components see the correct state instantly. The `deriveIsActive` helper function provides fallback logic for initial paint scenarios. The passive learning badge (fixed from `passiveMode` to `passiveLearning`) displays as FYI only and never gates the active/stopped state. Debug logging in TopBar tracks state synchronization. This ensures sub-100ms UI update latency and perfect state synchronization between backend and frontend.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.

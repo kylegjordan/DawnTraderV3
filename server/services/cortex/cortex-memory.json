@@ -1,97 +1,98 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-10-30T19:48:43.717Z",
+    "timestamp": "2025-10-30T19:53:49.258Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-10-30T19:48:43.716Z",
+        "lastUpdate": "2025-10-30T19:53:49.255Z",
         "stale": false,
-        "hitRate": "89.5%",
-        "cacheSize": 4,
+        "hitRate": "54.2%",
+        "cacheSize": 5,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-10-30T19:48:43.716Z",
+        "lastUpdate": "2025-10-30T19:53:49.255Z",
         "stale": false,
-        "hitRate": "89.5%",
-        "cacheSize": 4,
+        "hitRate": "54.2%",
+        "cacheSize": 5,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-10-30T19:48:43.716Z",
+        "lastUpdate": "2025-10-30T19:53:49.255Z",
         "stale": false,
-        "hitRate": "89.5%",
-        "cacheSize": 4,
+        "hitRate": "54.2%",
+        "cacheSize": 5,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-10-30T19:48:43.716Z",
+        "lastUpdate": "2025-10-30T19:53:49.255Z",
         "stale": false,
-        "hitRate": "89.5%",
-        "cacheSize": 4,
+        "hitRate": "54.2%",
+        "cacheSize": 5,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-10-30T19:48:43.716Z",
+        "lastUpdate": "2025-10-30T19:53:49.255Z",
         "stale": false,
-        "hitRate": "89.5%",
-        "cacheSize": 4,
+        "hitRate": "54.2%",
+        "cacheSize": 5,
         "ttl": 30
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-10-30T19:48:43.716Z",
+        "lastUpdate": "2025-10-30T19:53:49.255Z",
         "stale": false,
-        "hitRate": "89.5%",
-        "cacheSize": 4,
+        "hitRate": "54.2%",
+        "cacheSize": 5,
         "ttl": 30
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-10-30T19:48:43.716Z",
+        "lastUpdate": "2025-10-30T19:53:49.255Z",
         "stale": false,
-        "hitRate": "89.5%",
-        "cacheSize": 4,
+        "hitRate": "54.2%",
+        "cacheSize": 5,
         "ttl": 30
       }
     },
     "overallStats": {
       "modulesActive": 7,
-      "totalCacheSize": 4,
-      "overallHitRate": "89.5%",
-      "totalHits": 2414,
-      "totalMisses": 282
+      "totalCacheSize": 5,
+      "overallHitRate": "54.2%",
+      "totalHits": 13,
+      "totalMisses": 11
     },
     "recentChanges": [],
-    "systemHealth": "healthy",
+    "systemHealth": "degraded",
     "healthMetrics": {
       "status": "degraded",
       "warnings": [
-        "Analytics scheduler inactive: last run 13m ago"
+        "Cache hit rate low: 59% (threshold: 60%)",
+        "Cache miss rate elevated: 41% (threshold: 40%)"
       ],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-10-30T19:48:43.717Z",
+        "timestamp": "2025-10-30T19:53:49.257Z",
         "system": {
           "cpuUsage": 51.3,
           "memoryUsage": {
             "total": 67433570304,
-            "used": 22410817536,
-            "free": 45022752768,
-            "percentUsed": 33
+            "used": 24992563200,
+            "free": 42441007104,
+            "percentUsed": 37
           },
-          "uptime": 820
+          "uptime": 39
         },
         "cache": {
-          "hitRate": 90,
-          "missRate": 10,
-          "totalRequests": 2694,
-          "hits": 2414,
-          "misses": 280
+          "hitRate": 59,
+          "missRate": 41,
+          "totalRequests": 22,
+          "hits": 13,
+          "misses": 9
         },
         "latency": {
           "cortex": null,
@@ -100,12 +101,12 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 820,
-            "lastRun": "2025-10-30T19:48:13.718Z"
+            "uptime": 39,
+            "lastRun": "2025-10-30T19:53:19.255Z"
           },
           "analytics": {
-            "uptime": 820,
-            "lastRun": "2025-10-30T19:35:14.833Z"
+            "uptime": 39,
+            "lastRun": "2025-10-30T19:53:21.863Z"
           }
         },
         "filePersistence": {
@@ -138,7 +139,7 @@
         },
         "execution": {
           "marketDataSource": "rest_fallback",
-          "lastTickAgeMs": 9147,
+          "lastTickAgeMs": 7966,
           "avgSubmitAckMs": 0,
           "avgSlippageBps": 0,
           "avgFeesPerTrade": 0,
@@ -160,15 +161,15 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-10-30T19:48:43.716Z"
+      "timestamp": "2025-10-30T19:53:49.256Z"
     }
   },
-  "last_sync": "2025-10-30T19:48:43.717Z",
+  "last_sync": "2025-10-30T19:53:49.258Z",
   "memory": {
     "analytics_paper_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
         "strategy_analytics": {
-          "timestamp": "2025-10-30T19:35:14.642Z",
+          "timestamp": "2025-10-30T19:53:21.484Z",
           "strategies": [],
           "totalStrategies": 0,
           "averageSharpe": 0,
@@ -177,8 +178,8 @@
           "worstPerformer": null
         },
         "portfolio_summary": {
-          "timestamp": "2025-10-30T19:35:14.830Z",
-          "totalEquity": 1000,
+          "timestamp": "2025-10-30T19:53:21.841Z",
+          "totalEquity": 827,
           "totalPL": 0,
           "totalPLPercent": 0,
           "portfolioVolatility": 0,
@@ -189,13 +190,13 @@
           "strategyCount": 0,
           "activeStrategies": 0
         },
-        "computed_at": "2025-10-30T19:35:14.830Z",
+        "computed_at": "2025-10-30T19:53:21.841Z",
         "user_id": "6c591801-3072-431d-b192-30aaf426f15e",
         "mode": "paper"
       },
       "ttl": 900,
-      "expires_at": 1761853814830,
-      "traceId": "trace_1E6sIHEDOxSRV9n5",
+      "expires_at": 1761854901841,
+      "traceId": "trace_iieQkMI72kK7uAyU",
       "mode": "paper",
       "sourceTable": "strategy_settings"
     }

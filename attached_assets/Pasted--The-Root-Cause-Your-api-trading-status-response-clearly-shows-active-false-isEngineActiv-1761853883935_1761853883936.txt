@@ -1,0 +1,76 @@
+🔍 The Root Cause
+
+Your /api/trading/status response clearly shows:
+
+"active": false,
+"isEngineActivePaper": false
+
+
+…but when you start trading, the WS payload sets active: true, and the toggle immediately flips.
+That tells us:
+
+The toggle uses the fresh WS-fed value (payload.active: true).
+
+The TopBar banner gets the next REST fetch result (which still says active:false because the DB hasn’t updated yet).
+
+This means your React Query hydration works only in memory for the hook, but the TopBar is still subscribing to the old query cache instance — likely due to a stale staleTime or because isTradingActive is being recomputed before setQueryData fully resolves.
+
+✅ The Fix (2 Small Changes)
+1️⃣ Force TopBar to re-render immediately after WS update
+
+In client/src/hooks/use-trading.tsx, right after your queryClient.setQueryData line, add this:
+
+// Force notify subscribers (TopBar) that cache changed
+queryClient.invalidateQueries({ queryKey: ['/api/trading/status'], exact: true });
+
+
+Full snippet:
+
+if (payload) {
+  console.log('[SYNC] trading_state_changed:', payload);
+  queryClient.setQueryData(['/api/trading/status'], payload);
+  // 👇 ensure all subscribers re-render
+  queryClient.invalidateQueries({ queryKey: ['/api/trading/status'], exact: true });
+}
+
+
+That guarantees useQuery hooks (like the one in TopBar) immediately re-render with the hydrated payload before waiting for the REST polling refresh.
+
+2️⃣ Fix how isTradingActive is derived inside useTrading
+
+Check inside your use-trading.tsx (where you export isTradingActive).
+Replace this line:
+
+const isTradingActive = deriveIsActive(tradingStatus, paperSimStatus);
+
+
+with:
+
+// Prefer authoritative 'active' boolean if present
+const isTradingActive =
+  typeof tradingStatus?.active === 'boolean'
+    ? tradingStatus.active
+    : deriveIsActive(tradingStatus, paperSimStatus);
+
+
+That ensures the hook doesn’t wait for isEngineActivePaper or paperSimStatus.isRunning fallbacks — it trusts the server’s truth first.
+
+🧪 Optional (but highly recommended)
+
+Add a visual debug check to TopBar so you can confirm what field it’s reading from.
+
+Right under the banner text definition, temporarily log this:
+
+console.log('[DEBUG][TopBar]', {
+  mode: tradingStatus?.mode,
+  active: tradingStatus?.active,
+  isTradingActive,
+  passiveLearning: tradingStatus?.passiveLearning
+});
+
+
+Then when you start/stop, look at the console:
+
+When toast says Started, you should see { active: true, isTradingActive: true }
+
+When stopped, both should read false.
