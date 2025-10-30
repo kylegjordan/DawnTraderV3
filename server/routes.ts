@@ -4409,12 +4409,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const isEngineActivePaper = paperContext?.isEngineActive || false;
       const isEngineActiveLive = liveContext?.isEngineActive || false;
       
-      // Phase 32.D-Fix.2: Force passive mode off when paper trading is active
-      let passiveMode = config.passiveLearning;
-      if (currentMode === 'paper' && isEngineActivePaper) {
-        console.log('[32.D-Fix.2] Passive flag detected during active paper mode — overriding to false');
-        passiveMode = false;
-      }
+      // Phase 32.D-Fix.2: Compute passive mode based on engine state alone
+      // Show passive badge only when passive learning enabled AND neither engine is active
+      const passiveMode = config.passiveLearning && !isEngineActivePaper && !isEngineActiveLive;
       
       res.json({
         ok: true,

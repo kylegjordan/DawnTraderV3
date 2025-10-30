@@ -45,7 +45,7 @@ apiRouter.get('/system/config', async (_, res) => {
 });
 ```
 
-**After (Phase 32.D-Fix.2)**:
+**After (Phase 32.D-Fix.2)** (Architect-Reviewed):
 ```typescript
 apiRouter.get('/system/config', async (_, res) => {
   const { systemConfigService } = await import('./services/system-config');
@@ -60,18 +60,15 @@ apiRouter.get('/system/config', async (_, res) => {
   const isEngineActivePaper = paperContext?.isEngineActive || false;
   const isEngineActiveLive = liveContext?.isEngineActive || false;
   
-  // Force passive mode off when paper trading is active
-  let passiveMode = config.passiveLearning;
-  if (currentMode === 'paper' && isEngineActivePaper) {
-    console.log('[32.D-Fix.2] Passive flag detected during active paper mode — overriding to false');
-    passiveMode = false;
-  }
+  // Compute passive mode based on engine state alone (not trading mode)
+  // Show passive badge only when passive learning enabled AND neither engine is active
+  const passiveMode = config.passiveLearning && !isEngineActivePaper && !isEngineActiveLive;
   
   res.json({
     ok: true,
     systemFlags: {
       passiveLearning: config.passiveLearning, // Original flag
-      passiveMode, // Computed flag (respects paper mode override)
+      passiveMode, // Computed flag (respects engine state)
       activeMode: currentMode,
       isEngineActivePaper,
       isEngineActiveLive,
@@ -212,14 +209,24 @@ curl -s http://localhost:5000/api/system/config -H "Authorization: Bearer $TOKEN
 
 ## 🔍 Technical Details
 
-### Override Logic
+### Override Logic (Architect-Reviewed)
 
-The `passiveMode` field is computed server-side with the following priority:
+The `passiveMode` field is computed server-side based on **authoritative engine state alone**:
 
-1. **Check Current Mode**: `tradingStateSync.getTradingMode('system-reconciliation')`
-2. **Check Engine State**: `paperContext?.isEngineActive`
-3. **Apply Override**: If `mode === 'paper' && engineActive`, force `passiveMode = false`
-4. **Return Both Flags**: Preserve original `passiveLearning`, add computed `passiveMode`
+```typescript
+const passiveMode = config.passiveLearning && !isEngineActivePaper && !isEngineActiveLive;
+```
+
+**Logic**:
+1. **Check Passive Learning Flag**: `config.passiveLearning` (from system_config table)
+2. **Check Paper Engine State**: `!isEngineActivePaper` (from system_context.is_engine_active)
+3. **Check Live Engine State**: `!isEngineActiveLive` (from system_context.is_engine_active)
+4. **Compute Passive Mode**: `true` only when passive learning is enabled AND neither engine is active
+
+**Key Improvement** (from Architect feedback):
+- **Original approach** relied on `tradingStateSync.getTradingMode()` which can lag behind actual engine state
+- **Revised approach** uses authoritative engine state directly from database context
+- **Result**: `passiveMode` correctly reflects execution state regardless of mode changes
 
 ### Frontend Derivation
 
