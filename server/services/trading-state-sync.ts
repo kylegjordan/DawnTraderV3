@@ -99,9 +99,10 @@ export class TradingStateSync {
   private async resetStaleEngineFlagsOnStartup(): Promise<void> {
     try {
       // Check if engines are actually running (not just database flags)
-      const { modeRegistry } = await import('./mode-registry.js');
-      const paperEngineRunning = modeRegistry.getExecutionEngine('paper') !== null;
-      const liveEngineRunning = modeRegistry.getExecutionEngine('live') !== null;
+      const { getEngine } = await import('./mode-registry.js');
+      
+      const paperEngineRunning = getEngine('paper') !== null;
+      const liveEngineRunning = getEngine('live') !== null;
       
       // Get current contexts
       const paperContext = await storage.getSystemContext('paper');
