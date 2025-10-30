@@ -35,16 +35,34 @@ export function useTrading() {
     console.log('[SYNC][32.D-Fix.Final] trading_state_changed:', payload);
 
     if (payload) {
-      // Phase 32.D-Fix.Final: HYDRATE the authoritative query immediately so UI flips without waiting
+      // Phase 32.D-Fix.Final: HYDRATE both trading/status AND paper-sim/status so TopBar blue bar updates instantly
       queryClient.setQueryData(['/api/trading/status'], payload);
-      // Force notify subscribers (TopBar) that cache changed
+      queryClient.setQueryData(['/api/paper-sim/status'], {
+        isRunning: payload.active, // ensures blue bar updates immediately
+        sessionInfo: payload.active ? { sessionId: 'active', startTime: new Date() } : null,
+        balance: null,
+        totalTrades: null,
+        winRate: null,
+        profitLoss: null
+      });
+      
+      // Also hydrate system config for passive learning badge
+      queryClient.setQueryData(['/api/system/config'], (old: any) => ({
+        ...old,
+        systemFlags: {
+          ...(old?.systemFlags || {}),
+          passiveLearning: payload.passiveLearning ?? !payload.active
+        }
+      }));
+      
+      // Force re-renders for all updated caches
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'], exact: true });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'], exact: true });
+      queryClient.invalidateQueries({ queryKey: ['/api/system/config'], exact: true });
     }
 
     // Invalidate dependent queries after hydrating the truth
     Promise.allSettled([
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] }),
-      queryClient.invalidateQueries({ queryKey: ['/api/system/config'] }),
       queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] }),
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] }),
     ]);

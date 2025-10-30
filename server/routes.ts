@@ -2694,11 +2694,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       const lastTickISO = new Date().toISOString();
       
-      // Phase 32.D-Fix.Final: Fetch passiveLearning from system config
-      const { systemConfigService } = await import('./services/system-config');
-      const systemConfig = await systemConfigService.getConfig();
-      const passiveLearning = systemConfig.passiveLearning || false;
-      
       // Phase 32.D-Fix.Final: Compute authoritative active state
       // Active = true if EITHER engine is running (paper OR live)
       const active = !!(isPaperSimRunning || isLiveEngineRunning);
@@ -2733,7 +2728,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Phase 27.F.12 + 32.D-Fix.Final: Mode-specific engine status
         isEngineActivePaper: !!isPaperSimRunning,
         isEngineActiveLive: !!isLiveEngineRunning,
-        passiveLearning,  // Phase 32.D-Fix.Final: FYI field for passive badge
+        passiveLearning: !active,  // Phase 32.D-Fix.Final: Passive learning when stopped
         ts: lastTickISO,  // Phase 32.D-Fix.Final: timestamp
         dataSource: 'system_context',
         live: {
@@ -5087,11 +5082,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             active: true,
             isEngineActivePaper: true,
             isEngineActiveLive: false,
+            passiveLearning: false, // Active trading = no passive learning
             timestamp: new Date().toISOString(),
           },
           mode: 'paper'
         });
-        console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true, new simulation)');
+        console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true, passiveLearning = false, new simulation)');
         
         return res.json({ success: true, message: `New simulation started with $${balance.toFixed(2)}` });
       }
@@ -5155,11 +5151,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           active: true,
           isEngineActivePaper: true,
           isEngineActiveLive: false,
+          passiveLearning: false, // Active trading = no passive learning
           timestamp: new Date().toISOString(),
         },
         mode: 'paper'
       });
-      console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true)');
+      console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true, passiveLearning = false)');
       
       res.json({ success: true, message: result.message });
     } catch (error: any) {
@@ -5195,11 +5192,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           active: false,
           isEngineActivePaper: false,
           isEngineActiveLive: false,
+          passiveLearning: true, // Stopped = passive learning mode
           timestamp: new Date().toISOString(),
         },
         mode: 'paper'
       });
-      console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = false)');
+      console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = false, passiveLearning = true)');
       
       res.json({ success: true, message: result.message });
     } catch (error: any) {
