@@ -288,6 +288,21 @@ export class TradingStateSync {
           // Active paper trading session(s) exist - force paper mode
           currentMode = 'paper';
           console.log(`[32.D-Fix.1] Active paper session(s) detected (${activePaperSessions.length}), forcing paper mode broadcast`);
+          
+          // Phase 32.D-Fix.4: Force immediate sync on server start for active paper sessions
+          await contextBridge.broadcast({
+            type: 'trading_state_changed',
+            payload: {
+              userId: 'system-reconciliation',
+              mode: 'paper',
+              active: true,
+              isEngineActivePaper: true,
+              isEngineActiveLive: false,
+              timestamp: new Date().toISOString(),
+            },
+            mode: 'paper'
+          });
+          console.log('[32.D-Fix.4] Immediate sync broadcast sent for active paper session');
         } else {
           // No active paper session - determine by context timestamps
           const paperTime = paperContext?.lastModeChange?.getTime() || 0;

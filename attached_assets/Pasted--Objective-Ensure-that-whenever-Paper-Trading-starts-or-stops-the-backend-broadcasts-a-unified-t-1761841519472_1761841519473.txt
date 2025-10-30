@@ -1,0 +1,125 @@
+🎯 Objective
+
+Ensure that whenever Paper Trading starts or stops, the backend broadcasts a unified trading_state_changed WebSocket event so all connected clients immediately show the correct “ACTIVE / STOPPED” state in the top bar and toggle.
+
+🧱 1️⃣ Update Paper Sim Start Route
+
+File: server/routes/paper-sim.ts
+
+Find the handler for
+
+router.post('/start', async (req, res) => {
+
+
+and immediately after the log line confirming the simulation started (for example console.log('Paper simulation started')), add 👇
+
+// Phase 32.D-Fix.4 — Broadcast unified trading_state_changed event on Paper Start
+contextBridge.broadcast({
+  type: 'trading_state_changed',
+  payload: {
+    mode: 'paper',
+    active: true,
+    isEngineActivePaper: true,
+    timestamp: new Date().toISOString(),
+  },
+});
+console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true)');
+
+🧱 2️⃣ Update Paper Sim Stop Route
+
+Still in server/routes/paper-sim.ts, inside the /stop handler, add 👇 right after you log that the simulation stopped:
+
+// Phase 32.D-Fix.4 — Broadcast unified trading_state_changed event on Paper Stop
+contextBridge.broadcast({
+  type: 'trading_state_changed',
+  payload: {
+    mode: 'paper',
+    active: false,
+    isEngineActivePaper: false,
+    timestamp: new Date().toISOString(),
+  },
+});
+console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = false)');
+
+🧱 3️⃣ Ensure the Event Uses payload (not data)
+
+All frontend listeners expect:
+
+msg.payload.mode
+msg.payload.active
+
+
+If your existing broadcast utility sends { type, data }, change data → payload to match this schema.
+
+🧱 4️⃣ (Recommended) Force Sync on Server Start
+
+File: server/services/trading-state-sync.ts
+
+Inside the reconciliation block where you log
+[32.D-Fix.1] Active paper session(s) detected,
+append 👇
+
+contextBridge.broadcast({
+  type: 'trading_state_changed',
+  payload: {
+    mode: 'paper',
+    active: true,
+    isEngineActivePaper: true,
+    timestamp: new Date().toISOString(),
+  },
+});
+
+
+This guarantees clients always resync to the correct state within seconds of connection.
+
+🔄 Restart Server
+
+Save all files → npm run start (or use the Replit Run button).
+
+🧪 Verification Script
+
+Run in the Replit Shell:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+echo "=== Start Paper Trading ==="
+curl -s -X POST http://localhost:5000/api/paper-sim/start -H "Authorization: Bearer $TOKEN"
+
+sleep 5
+echo "=== Check Broadcast Logs ==="
+grep "Broadcasted paper trading_state_changed" /tmp/logs/Start_application_* | tail -5
+
+echo "=== Verify Mode ==="
+curl -s http://localhost:5000/api/system/config -H "Authorization: Bearer $TOKEN" | jq '.systemFlags.activeMode,.systemFlags.passiveMode'
+
+echo "=== Verify Engine Status ==="
+curl -s http://localhost:5000/api/paper-sim/status -H "Authorization: Bearer $TOKEN" | jq '.isRunning'
+
+
+✅ Expected Results
+
+[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true)
+"paper"
+false
+true
+
+
+Then in the UI:
+
+Blue bar → Paper Trading Mode — Active (Simulated Trades Executing)
+
+Toggle → 🟢 ACTIVE
+
+Toast → “Paper Trading Started”
+
+🧾 Deliverables for Audit
+
+/audit/phase32d-fix4-trading-state-broadcast-sync.md containing:
+
+Before / After log diffs
+
+Screenshots showing blue bar and toggle active
+
+Confirmation of broadcast payload with timestamp

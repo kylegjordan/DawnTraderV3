@@ -5063,6 +5063,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           return res.status(400).json({ error: result.message || result.error });
         }
         
+        // Phase 32.D-Fix.4: Broadcast unified trading_state_changed event on Paper Start (new simulation)
+        contextBridge.broadcast({
+          type: 'trading_state_changed',
+          payload: {
+            userId,
+            mode: 'paper',
+            active: true,
+            isEngineActivePaper: true,
+            isEngineActiveLive: false,
+            timestamp: new Date().toISOString(),
+          },
+          mode: 'paper'
+        });
+        console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true, new simulation)');
+        
         return res.json({ success: true, message: `New simulation started with $${balance.toFixed(2)}` });
       }
       
@@ -5116,6 +5131,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: result.message || result.error });
       }
       
+      // Phase 32.D-Fix.4: Broadcast unified trading_state_changed event on Paper Start
+      contextBridge.broadcast({
+        type: 'trading_state_changed',
+        payload: {
+          userId,
+          mode: 'paper',
+          active: true,
+          isEngineActivePaper: true,
+          isEngineActiveLive: false,
+          timestamp: new Date().toISOString(),
+        },
+        mode: 'paper'
+      });
+      console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true)');
+      
       res.json({ success: true, message: result.message });
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
@@ -5140,6 +5170,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (!result.success) {
         return res.status(400).json({ error: result.message || result.error });
       }
+      
+      // Phase 32.D-Fix.4: Broadcast unified trading_state_changed event on Paper Stop
+      contextBridge.broadcast({
+        type: 'trading_state_changed',
+        payload: {
+          userId,
+          mode: 'paper',
+          active: false,
+          isEngineActivePaper: false,
+          isEngineActiveLive: false,
+          timestamp: new Date().toISOString(),
+        },
+        mode: 'paper'
+      });
+      console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = false)');
       
       res.json({ success: true, message: result.message });
     } catch (error: any) {
