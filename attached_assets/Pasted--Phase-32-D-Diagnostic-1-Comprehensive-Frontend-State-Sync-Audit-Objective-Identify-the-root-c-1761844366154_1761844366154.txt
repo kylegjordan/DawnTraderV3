@@ -1,0 +1,139 @@
+🧾 Phase 32.D-Diagnostic.1 — Comprehensive Frontend/State Sync Audit
+
+Objective:
+Identify the root causes behind continued state desynchronization and incorrect UI behavior after Phases 32.D-Fix.4 and 32.D-Fix.5.
+Replit should perform a full investigation and provide a written report describing (a) the source of each issue, (b) logs or traces proving the cause, and (c) a proposed corrective plan for each.
+
+⚠️ Observed Issues (as of current build)
+1️⃣ Passive Mode Missing on Startup
+
+When the app is restarted and the user logs back in:
+
+Trading = Stopped (correct)
+
+But Passive Mode indicator is not showing even though the system should always default to passive when no trading is active.
+
+Expected:
+
+Passive Mode = true whenever both engines are inactive (live & paper).
+
+The blue badge “PASSIVE LEARNING” must appear by default.
+
+/api/system/config → systemFlags.passiveMode should be true.
+
+2️⃣ Portfolio Value Not Updating After New Session Start
+
+When starting a new paper session and entering a balance:
+
+Toast (“Trading Started”) appears 10–15 seconds late.
+
+Dashboard → Portfolio Value remains old value (e.g., $824 instead of new $850).
+
+Lottie Goals & Guardrails → Projected Portfolio Growth still shows the previous value.
+
+Expected:
+
+Portfolio Value should update immediately once the /api/paper-sim/start call succeeds.
+
+Goals Engine and Dashboard widgets should re-render within a second.
+
+3️⃣ Blue Bar and Toggle Still Show “Stopped”
+
+Even after the backend broadcasts trading_state_changed (active = true):
+
+Blue bar → “Paper Trading Mode — Stopped”
+
+Toggle → “Stopped” (red)
+
+Expected:
+
+Both should turn green and read “Paper Trading Mode — Active (Simulated Trades Executing)” immediately.
+
+4️⃣ Backend Broadcast Confirmed but Frontend Not Reacting
+
+Logs show:
+
+[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true)
+
+
+and the browser console receives the event.
+
+However, React Query caches (/api/trading/status, /api/system/config, /api/paper-sim/status) remain stale.
+
+Expected:
+
+React Query should invalidate → refetch → re-render UI instantly.
+
+Console should show [32.D-Fix.5] Trading state update received → forcing UI refresh (confirm it runs).
+
+5️⃣ Cross-Component Desync Between Dashboard and Goals Engine
+
+Dashboard Portfolio Value ≠ Goals Engine Current Portfolio.
+
+Both should be sourced from the same portfolio_balance field in the database or context.
+
+Indicates one of:
+
+Duplicate local state,
+
+Missing query invalidation,
+
+Or stale React Query cache on one component.
+
+6️⃣ Toast Timing Delay and Duplicate Triggers
+
+Toast fires 10–15 seconds after confirmation.
+
+Possible cause: event fired after latency from backend broadcast queue.
+
+Needs inspection of:
+
+handleTradingToggle timing,
+
+Whether /api/paper-sim/start resolves only after broadcast confirmation.
+
+📋 Replit Diagnostic Tasks Required
+
+Trace lifecycle of PaperSim start/stop calls from:
+
+API request → backend response → broadcast → WebSocket listener → React Query update → UI render.
+Include timestamps (backend log + frontend console).
+
+Dump current values for:
+/api/trading/status, /api/paper-sim/status, /api/system/config, and any portfolio/goal endpoints immediately after PaperSim start.
+
+Identify why systemFlags.passiveMode is not true on startup.
+Check default initialization in system-config.ts and trading-state-sync.ts.
+
+Locate stale cache source preventing portfolio and goals widgets from refreshing.
+Verify React Query keys and dependencies.
+
+Produce a written summary (Markdown file) containing:
+
+Each issue’s root cause (backend vs frontend vs state cache).
+
+Evidence (logs, code lines, console snippets).
+
+A proposed Phase 32.D-Fix.6 plan for corrective actions.
+
+✅ Expected Deliverables
+
+audit/phase32d-diagnostic1-frontend-state-sync.md
+
+Table of issues → root cause → recommended fix.
+
+Code references (file + line numbers).
+
+Verification plan for each fix.
+
+🧠 Summary of Symptoms to Reproduce
+
+Restart the app → login → observe that Passive Mode is missing.
+
+Start new paper session ($850) → toast after ~10 s → UI still shows old balance and “Stopped”.
+
+Confirm backend broadcast appears in logs.
+
+Observe that dashboard and goals engine values differ.
+
+Stop paper trading → verify UI still out of sync.
