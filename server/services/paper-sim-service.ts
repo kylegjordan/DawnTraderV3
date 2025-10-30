@@ -319,6 +319,10 @@ export async function startPaperSimulation(
         await tradingStateSync.setEngineActive(userId, true, mode);
         console.log('[ENGINE_CHECKPOINT_5] Engine active state set successfully');
         
+        // Phase 32.D-Fix.1: Explicitly set trading mode to paper to ensure global state consistency
+        await tradingStateSync.setTradingMode(userId, 'paper', userId, 'Paper simulation started');
+        console.log('[32.D-Fix.1] ✅ Paper trading mode activated globally');
+        
         // Verify system_context status and log with [StateSync] prefix
         console.log('[ENGINE_CHECKPOINT_6] Verifying system context...');
         const context = await storage.getSystemContext(mode);

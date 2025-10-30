@@ -277,14 +277,23 @@ export class TradingStateSync {
       const isEngineActivePaper = paperContext?.isEngineActive || false;
       const isEngineActiveLive = liveContext?.isEngineActive || false;
       
-      // Determine current mode from user's actual selection
-      // For real users, use their in-memory mode; for system reconciliation, read from context timestamps
+      // Phase 32.D-Fix.1: Determine current mode with paper-sim-aware logic
+      // Priority: Active paper sim > in-memory mode > context timestamps
       let currentMode: TradingMode;
       if (userId === 'system-reconciliation') {
-        // For system reconciliation, determine mode by checking which context was updated most recently
-        const paperTime = paperContext?.lastModeChange?.getTime() || 0;
-        const liveTime = liveContext?.lastModeChange?.getTime() || 0;
-        currentMode = liveTime > paperTime ? 'live' : 'paper';
+        // For system reconciliation, check if paper simulation is actively running
+        // Use global query to detect any active paper sessions across all users
+        const activePaperSessions = await storage.getActivePaperSimSessions().catch(() => []);
+        if (activePaperSessions.length > 0) {
+          // Active paper trading session(s) exist - force paper mode
+          currentMode = 'paper';
+          console.log(`[32.D-Fix.1] Active paper session(s) detected (${activePaperSessions.length}), forcing paper mode broadcast`);
+        } else {
+          // No active paper session - determine by context timestamps
+          const paperTime = paperContext?.lastModeChange?.getTime() || 0;
+          const liveTime = liveContext?.lastModeChange?.getTime() || 0;
+          currentMode = liveTime > paperTime ? 'live' : 'paper';
+        }
       } else {
         // For real users, use their actual selected mode from in-memory map
         currentMode = this.getTradingMode(userId);

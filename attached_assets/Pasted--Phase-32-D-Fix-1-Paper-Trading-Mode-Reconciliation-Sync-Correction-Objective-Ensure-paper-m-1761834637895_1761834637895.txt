@@ -1,0 +1,101 @@
+⚙️ Phase 32.D-Fix.1 — Paper Trading Mode Reconciliation & Sync Correction
+
+Objective:
+Ensure paper mode trading activates correctly, updates all connected sessions, and prevents live-mode broadcasts from overriding the state.
+
+🔧 Implementation Steps
+
+Test Credentials:
+
+username: testuser123
+password: SecurePass123!
+
+🧱 1️⃣ Fix the Broadcast Logic
+
+File: server/services/trading-state-sync.ts
+
+Find and Replace:
+
+const mode = paperContext.tradingMode || "live";
+
+
+Replace With:
+
+const mode =
+  globalState?.activeMode ||
+  (paperContext.tradingMode === "paper" ? "paper" : "live");
+
+🧱 2️⃣ Update Global Mode Assignment
+
+File: server/routes/paper-sim.ts (or wherever POST /api/paper-sim/start is handled)
+
+Add immediately after the portfolio initialization:
+
+// Ensure global state consistency for paper trading
+globalState.activeMode = "paper";
+await broadcastUserUpdate(userId, "mode-change", { mode: "paper" });
+console.log("[32.D-Fix.1] ✅ Paper trading mode activated globally");
+
+🧱 3️⃣ Confirm Passive Mode Toggle Behavior
+
+File: server/services/system-config.ts
+
+Ensure setSystemFlags() does not automatically revert activeMode to passive during an ongoing paper run.
+If necessary, wrap the assignment with:
+
+if (newFlags.activeMode !== "paper") {
+  systemFlags.activeMode = newFlags.activeMode;
+}
+
+🧱 4️⃣ Restart the Server
+
+Once files are saved, restart workflow and check logs.
+Expect:
+
+[TradingSync] Broadcasting trading_state_changed (mode: paper)
+[LATTI][Paper] Simulation started
+
+🧪 5️⃣ Verification Script
+
+Execute:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+echo "=== Paper Mode Status ==="
+curl -s http://localhost:5000/api/system/config -H "Authorization: Bearer $TOKEN" | jq '.systemFlags.activeMode'
+
+echo "=== LATTI Paper Simulation ==="
+curl -s http://localhost:5000/api/paper-sim/status -H "Authorization: Bearer $TOKEN" | jq '.status'
+
+
+✅ Expected Output:
+
+"paper"
+"active"
+
+🧾 6️⃣ UI Confirmation
+
+After successful fix:
+
+The blue top bar shows
+Paper Trading Mode — Active (Simulated Trades Executing)
+
+The Passive Learning badge disappears.
+
+The Trade toggle shows “Running”.
+
+The Strategy Usage Table begins showing live increments under Queued (Ready-to-Buy).
+
+🧱 7️⃣ Post-Run Report
+
+Replit should generate:
+/audit/phase32d-fix1-paper-reconciliation.md
+containing:
+
+Old vs. new broadcast mode comparison
+
+Log excerpts confirming correct sync events
+
+Validation output from /api/paper-sim/status and /api/system/config
