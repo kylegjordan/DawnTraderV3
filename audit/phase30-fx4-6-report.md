@@ -1,11 +1,12 @@
 # Phase 30.FX.4–6 Report
-Generated: 2025-10-30T07:23:06.119Z
+Generated: 2025-10-30T07:24:32.616Z
 
 ## Overview
 This report summarizes the Lottie Oversight and Cross-Strategy Optimization activities.
 
 ## Lottie Oversight Log (Last 20 Events)
 
+- 2025-10-30T07:24:32.351Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-10-30T07:23:05.884Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-10-30T07:19:08.164Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-10-30T07:14:08.390Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
@@ -25,7 +26,6 @@ This report summarizes the Lottie Oversight and Cross-Strategy Optimization acti
 - 2025-10-30T06:16:53.052Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 - 2025-10-30T06:15:14.250Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 - 2025-10-30T06:14:48.164Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T06:12:13.445Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 
 ## Strategy Mix Changes (Last 20)
 No strategy mix changes recorded yet.
@@ -37,8 +37,8 @@ No strategy mix changes recorded yet.
 - Total events: 20
 - Active strategies: 1
 - Status breakdown:
-  - suspended: 14
-  - error: 6
+  - suspended: 15
+  - error: 5
 
 ### Strategy Mix
 - Total changes: 0
