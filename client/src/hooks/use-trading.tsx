@@ -25,54 +25,31 @@ export function useTrading() {
     refetchOnWindowFocus: true
   });
 
-  // Phase 27.F.3 + 27.F.10: Subscribe to WebSocket trading_state_changed events for immediate sync
+  // Phase 27.F.3 + 27.F.10 + 32.D-Fix.Final: Subscribe to WebSocket trading_state_changed events for immediate sync
+  // Phase 32.D-Fix.Final: Hydrate cache with setQueryData for instant UI updates
   useEffect(() => {
-    const tradingStateUpdates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
-    if (tradingStateUpdates.length > 0) {
-      const latestUpdate = tradingStateUpdates[tradingStateUpdates.length - 1];
-      // Phase 27.F.14.I: Fix #2 - Extract payload from correct field
-      const payload = latestUpdate.payload;
-      
-      console.log('[SYNC][Phase-27.F.10] Trading state changed:', payload?.mode, payload?.active || payload?.isEngineActive);
-      
-      // Phase 32.D-Fix.5: Comprehensive front-end rehydration
-      console.log('[32.D-Fix.5] Trading state update received → forcing UI refresh');
-      
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/system/config'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] }),
-      ]);
-      
-      // Optional: trigger immediate fetch to bypass 5s polling delay
-      queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
-      queryClient.refetchQueries({ queryKey: ['/api/system/config'] });
-      
-      // Phase 27.F.10: Mode-specific invalidations
-      if (payload?.mode === 'paper') {
-        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
-      }
-      
-      // Phase 27.F.3: Force reconciliation after 3 seconds if state still mismatches
-      setTimeout(async () => {
-        const currentStatus = queryClient.getQueryData<TradingStatus>(['/api/trading/status']);
-        const currentPaperStatus = queryClient.getQueryData<{ isRunning: boolean }>(['/api/paper-sim/status']);
-        
-        if (currentStatus && payload) {
-          const expectedActive = payload.active ?? payload.isEngineActive;
-          const actualActive = payload.mode === 'paper' ? currentPaperStatus?.isRunning : currentStatus.engineActive;
-          
-          if (actualActive !== expectedActive || currentStatus.mode !== payload.mode) {
-            console.log('[SYNC][Phase-27.F.3] State mismatch detected, forcing reconciliation...', 
-              { expected: { mode: payload.mode, active: expectedActive }, 
-                actual: { mode: currentStatus.mode, active: actualActive } });
-            queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-            queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-          }
-        }
-      }, 3000);
+    const updates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
+    if (!updates.length) return;
+
+    const payload = updates[updates.length - 1]?.payload;
+    console.log('[SYNC][32.D-Fix.Final] trading_state_changed:', payload);
+
+    if (payload) {
+      // Phase 32.D-Fix.Final: HYDRATE the authoritative query immediately so UI flips without waiting
+      queryClient.setQueryData(['/api/trading/status'], payload);
+    }
+
+    // Invalidate dependent queries after hydrating the truth
+    Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] }),
+      queryClient.invalidateQueries({ queryKey: ['/api/system/config'] }),
+      queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] }),
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] }),
+    ]);
+    
+    // Phase 27.F.10: Mode-specific invalidations
+    if (payload?.mode === 'paper') {
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
     }
   }, [wsMessages, queryClient]);
 
