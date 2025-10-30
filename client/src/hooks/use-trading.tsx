@@ -76,6 +76,27 @@ export function useTrading() {
     }
   }, [wsMessages, queryClient]);
 
+  // Phase 32.D-Fix.6 Fix #1: Listen for portfolio_balance_updated events
+  useEffect(() => {
+    const balanceUpdates = wsMessages.filter((msg: any) => msg.type === 'portfolio_balance_updated');
+    if (balanceUpdates.length > 0) {
+      const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
+      console.log('[32.D-Fix.6] Portfolio balance updated → invalidating queries', latestUpdate.payload);
+      
+      // Invalidate all portfolio-dependent queries for instant UI sync
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] }),
+      ]);
+      
+      // Force immediate refetch for critical portfolio data
+      queryClient.refetchQueries({ queryKey: ['/api/dashboard/overview'] });
+      queryClient.refetchQueries({ queryKey: ['/api/goals/summary'] });
+    }
+  }, [wsMessages, queryClient]);
+
   // Paper trading simulation status (SYSTEM-WIDE - all users see the same status)
   const { data: paperSimStatus, isLoading: paperSimStatusLoading } = useQuery<{ 
     isRunning: boolean;

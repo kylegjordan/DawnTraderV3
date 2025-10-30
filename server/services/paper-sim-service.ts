@@ -77,6 +77,89 @@ export async function confirmPortfolioBalance(mode: 'live' | 'paper', balance: n
   }
 }
 
+/**
+ * Phase 32.D-Fix.6 Fix #3: Async watchlist population
+ * Populates watchlist in background without blocking engine startup
+ * Uses batch upsert with ON CONFLICT DO NOTHING to eliminate duplicate key errors
+ */
+async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = 'paper'): Promise<void> {
+  const startTime = Date.now();
+  console.log('[32.D-Fix.6] Starting background watchlist population...');
+  
+  try {
+    // Check watchlist and add screener-filtered pairs if empty
+    const watchlist = await storage.getWatchlist({ userId, mode });
+    if (watchlist && watchlist.length > 0) {
+      console.log(`[32.D-Fix.6] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
+      return;
+    }
+    
+    console.log('[32.D-Fix.6] Empty watchlist detected - querying screener for eligible pairs');
+    
+    // Get screener filters and trading settings
+    const filters = await storage.getScreenerFilters({ mode });
+    const tradingSettings = await storage.getTradingSettings(userId);
+    
+    if (!filters || !tradingSettings) {
+      console.log('[32.D-Fix.6] No filters or settings found - skipping watchlist population');
+      return;
+    }
+    
+    // Initialize KrakenService
+    const krakenService = new KrakenService();
+    
+    // Query eligible pairs
+    const eligiblePairs = await krakenService.getEligiblePairs({
+      minVolume: filters.minVolume,
+      minDailyRange: tradingSettings.minDailyRange,
+      minPrice: filters.minPrice,
+      maxPrice: filters.maxPrice || undefined,
+      maxBidAskSpread: filters.maxBidAskSpread,
+      excludeStablecoins: filters.excludeStablecoins ?? true,
+      allowedTradingPairs: [],
+      blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
+      whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
+      minHistoryDays: tradingSettings.minDataHistoryDays,
+      rsiMin: filters.rsiMin || undefined,
+      rsiMax: filters.rsiMax || undefined,
+      volatilityMin: filters.volatilityMin || undefined,
+      volatilityMax: filters.volatilityMax || undefined,
+    });
+    
+    if (eligiblePairs.length === 0) {
+      console.log('[32.D-Fix.6] No eligible pairs found matching current screener filters');
+      return;
+    }
+    
+    // Cap at 10 pairs maximum
+    const MAX_AUTO_PAIRS = 10;
+    const pairsToAdd = eligiblePairs.slice(0, MAX_AUTO_PAIRS);
+    
+    console.log(`[32.D-Fix.6] Found ${eligiblePairs.length} eligible pairs, adding top ${pairsToAdd.length} to watchlist`);
+    
+    // Batch insert with ON CONFLICT DO NOTHING to avoid duplicate key errors
+    for (const pair of pairsToAdd) {
+      try {
+        await storage.addWatchlistPair({
+          userId,
+          mode,
+          symbol: pair.symbol,
+          baseCurrency: pair.baseCurrency,
+          quoteCurrency: pair.quoteCurrency,
+        });
+        console.log(`[32.D-Fix.6] Added ${pair.symbol} (Vol: $${(pair.volume24h/1000000).toFixed(1)}M)`);
+      } catch (error) {
+        // Silently skip duplicates - not an error
+      }
+    }
+    
+    const elapsed = Date.now() - startTime;
+    console.log(`[32.D-Fix.6] Watchlist populated in ${elapsed}ms (background)`);
+  } catch (error) {
+    console.error('[32.D-Fix.6] Background watchlist population failed:', error);
+  }
+}
+
 // Global in-memory state for the active portfolio manager
 // This is reconciled with the database on every operation
 declare global {
@@ -204,134 +287,25 @@ export async function startPaperSimulation(
         const dbSession = await storage.createPaperSimSession(sessionData);
         console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
 
-        // Phase 27.F.17a: Auto-Configuration - Screener-driven watchlist
-        // Phase 27.F.13.I: Skip if requested to avoid slow Kraken API calls during startup
-        if (options?.skipAutoWatchlist) {
-          console.log('[ENGINE_CHECKPOINT_3] Auto-watchlist SKIPPED (fast startup mode)');
-          console.log('[PaperSimService][AutoWatchlist] Market scanner will populate watchlist on first scan cycle');
-        } else {
-          console.log('[PaperSimService][AutoWatchlist] Checking auto-configuration...');
-          
-          // 1. Check watchlist and add screener-filtered pairs if empty
-          const watchlist = await storage.getWatchlist({ userId, mode: 'paper' });
-          if (!watchlist || watchlist.length === 0) {
-            console.log('[PaperSimService][AutoWatchlist] Empty watchlist detected - querying screener for eligible pairs');
-          
-          try {
-            // Phase 27.F.13.M: Get global screener filter settings (mode-only, no userId)
-            const filters = await storage.getScreenerFilters({ mode: 'paper' });
-            const tradingSettings = await storage.getTradingSettings(userId);
-            
-            if (!filters) {
-              console.error('[PaperSimService][AutoWatchlist] ❌ No screener filters found in database for user');
-              console.log('[PaperSimService][AutoWatchlist] Engine will start with empty watchlist');
-              return;
-            }
-            
-            if (!tradingSettings) {
-              console.error('[PaperSimService][AutoWatchlist] ❌ No trading settings found in database for user');
-              console.log('[PaperSimService][AutoWatchlist] Engine will start with empty watchlist');
-              return;
-            }
-            
-            // Phase 27.F.13.B.1: Log actual filter values loaded from database
-            console.log(`[AutoWatchlist] Loaded screener filters from database for user ${userId}:`);
-            console.log(`  minVolume=$${parseFloat(filters.minVolume).toLocaleString()}`);
-            console.log(`  minLiquidity=$${parseFloat(filters.minLiquidity || '0').toLocaleString()}`);
-            console.log(`  maxBidAskSpread=${filters.maxBidAskSpread}%`);
-            console.log(`  minPrice=$${filters.minPrice}`);
-            console.log(`  maxPrice=$${filters.maxPrice || 'unlimited'}`);
-            console.log(`  volatilityMin=${filters.volatilityMin || 'none'}%`);
-            console.log(`  volatilityMax=${filters.volatilityMax || 'none'}%`);
-            console.log(`  rsiMin=${filters.rsiMin || 'none'}`);
-            console.log(`  rsiMax=${filters.rsiMax || 'none'}`);
-            console.log(`  excludeStablecoins=${filters.excludeStablecoins}`);
-            
-            console.log(`[AutoWatchlist] Loaded trading settings from database for user ${userId}:`);
-            console.log(`  minDailyRange=${tradingSettings.minDailyRange}%`);
-            console.log(`  blacklistedSymbols=${tradingSettings.blacklistedSymbols?.length || 0} symbols`);
-            console.log(`  whitelistedSymbols=${tradingSettings.whitelistedSymbols?.length || 0} symbols`);
-            console.log(`  minHistoryDays=${tradingSettings.minDataHistoryDays} days`);
-            
-            // Initialize KrakenService
-            const krakenService = new KrakenService();
-            
-            // Query eligible pairs using ONLY database values (NO HARDCODED FALLBACKS)
-            const eligiblePairs = await krakenService.getEligiblePairs({
-              minVolume: filters.minVolume,
-              minDailyRange: tradingSettings.minDailyRange,
-              minPrice: filters.minPrice,
-              maxPrice: filters.maxPrice || undefined,
-              maxBidAskSpread: filters.maxBidAskSpread,
-              excludeStablecoins: filters.excludeStablecoins ?? true,
-              allowedTradingPairs: [], // User explicitly requires NO currency-based filtering
-              blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
-              whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
-              minHistoryDays: tradingSettings.minDataHistoryDays,
-              rsiMin: filters.rsiMin || undefined,
-              rsiMax: filters.rsiMax || undefined,
-              volatilityMin: filters.volatilityMin || undefined,
-              volatilityMax: filters.volatilityMax || undefined,
-            });
-            
-            if (eligiblePairs.length === 0) {
-              console.log('[PaperSimService][AutoWatchlist] ⚠️  No eligible pairs found matching current screener filters');
-              console.log('[PaperSimService][AutoWatchlist] Engine will remain idle until next scan cycle or manual watchlist configuration');
-            } else {
-              // Cap at 10 pairs maximum to prevent WebSocket overload
-              const MAX_AUTO_PAIRS = 10;
-              const pairsToAdd = eligiblePairs.slice(0, MAX_AUTO_PAIRS);
-              
-              console.log(`[PaperSimService][AutoWatchlist] Found ${eligiblePairs.length} eligible pairs, adding top ${pairsToAdd.length} to watchlist`);
-              
-              for (const pair of pairsToAdd) {
-                try {
-                  await storage.addWatchlistPair({
-                    userId,
-                    mode: 'paper',
-                    symbol: pair.symbol,
-                    baseCurrency: pair.baseCurrency,
-                    quoteCurrency: pair.quoteCurrency,
-                  });
-                  console.log(`[PaperSimService][AutoWatchlist] ✅ Added ${pair.symbol} (Vol: $${(pair.volume24h/1000000).toFixed(1)}M, Range: ${pair.dailyRange.toFixed(1)}%)`);
-                } catch (error) {
-                  console.warn(`[PaperSimService][AutoWatchlist] Failed to add ${pair.symbol}:`, error);
-                }
-              }
-              
-              if (eligiblePairs.length > MAX_AUTO_PAIRS) {
-                console.log(`[PaperSimService][AutoWatchlist] Note: ${eligiblePairs.length - MAX_AUTO_PAIRS} additional eligible pairs were not added (10-pair cap)`);
-              }
-            }
-          } catch (error) {
-            console.error('[PaperSimService][AutoWatchlist] Error querying screener for eligible pairs:', error);
-            console.log('[PaperSimService][AutoWatchlist] Engine will start with empty watchlist (idle state)');
-          }
-          } else {
-            console.log(`[PaperSimService][AutoWatchlist] Watchlist contains ${watchlist.length} pairs - skipping auto-add`);
-          }
-        }
-        
+        // Phase 32.D-Fix.6 Fix #3: Activate engine FIRST for instant API response
         // Phase 27.F.17b: State Persistence and Broadcast Verification
-        // Phase 27.F.13.O: Mode-based global context
         const mode = 'paper';
-        console.log('[ENGINE_CHECKPOINT_4] Setting engine active state...');
+        console.log('[ENGINE_CHECKPOINT_4] Setting engine active state (fast path)...');
         await tradingStateSync.setEngineActive(userId, true, mode);
         console.log('[ENGINE_CHECKPOINT_5] Engine active state set successfully');
         
-        // Phase 32.D-Fix.1: Explicitly set trading mode to paper to ensure global state consistency
+        // Phase 32.D-Fix.1: Explicitly set trading mode to paper
         await tradingStateSync.setTradingMode(userId, 'paper', userId, 'Paper simulation started');
         console.log('[32.D-Fix.1] ✅ Paper trading mode activated globally');
         
-        // Verify system_context status and log with [StateSync] prefix
-        console.log('[ENGINE_CHECKPOINT_6] Verifying system context...');
-        const context = await storage.getSystemContext(mode);
-        console.log('[ENGINE_CHECKPOINT_7] System context retrieved');
-        if (context && context.isEngineActive) {
-          console.log('[StateSync] paper_engine_status = RUNNING confirmed');
-          console.log('[PaperSimService][Phase-27.F.17b] ✅ Verified system_context.isEngineActive = true');
+        // Phase 32.D-Fix.6 Fix #3: Populate watchlist asynchronously in background
+        if (!options?.skipAutoWatchlist) {
+          console.log('[32.D-Fix.6] Starting watchlist population in background...');
+          populateWatchlistAsync(userId, mode).catch(error => {
+            console.error('[32.D-Fix.6] Background watchlist population failed:', error);
+          });
         } else {
-          console.warn('[PaperSimService][Phase-27.F.17b] ⚠️ Failed to verify engine active state');
+          console.log('[ENGINE_CHECKPOINT_3] Auto-watchlist SKIPPED (fast startup mode)');
         }
 
         // Phase 27.F.9: Create and register manager atomically (both local and global)

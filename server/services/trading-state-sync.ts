@@ -82,10 +82,45 @@ export class TradingStateSync {
       }
       
       this.initialized = true;
+      
+      // Phase 32.D-Fix.6 Fix #2: Reset stale engine active flags on startup
+      await this.resetStaleEngineFlagsOnStartup();
     } catch (error) {
       console.error(`[TradingStateSync] Error initializing:`, error);
       // Fail-safe: default to paper mode
       this.currentMode.set(userId, 'paper');
+    }
+  }
+
+  /**
+   * Phase 32.D-Fix.6 Fix #2: Reset stale isEngineActive flags on startup
+   * Ensures passive mode shows correctly when engines aren't actually running
+   */
+  private async resetStaleEngineFlagsOnStartup(): Promise<void> {
+    try {
+      // Check if engines are actually running (not just database flags)
+      const { modeRegistry } = await import('./mode-registry.js');
+      const paperEngineRunning = modeRegistry.getExecutionEngine('paper') !== null;
+      const liveEngineRunning = modeRegistry.getExecutionEngine('live') !== null;
+      
+      // Get current contexts
+      const paperContext = await storage.getSystemContext('paper');
+      const liveContext = await storage.getSystemContext('live');
+      
+      // Reset stale flags if DB says active but engine not running
+      if (paperContext?.isEngineActive && !paperEngineRunning) {
+        console.log('[32.D-Fix.6] Resetting stale paper engine active flag (DB says active, but engine not running)');
+        await storage.updateSystemContext('paper', { isEngineActive: false });
+      }
+      
+      if (liveContext?.isEngineActive && !liveEngineRunning) {
+        console.log('[32.D-Fix.6] Resetting stale live engine active flag (DB says active, but engine not running)');
+        await storage.updateSystemContext('live', { isEngineActive: false });
+      }
+      
+      console.log('[32.D-Fix.6] Startup reconciliation complete (paper engine:', paperEngineRunning, ', live engine:', liveEngineRunning, ')');
+    } catch (error: any) {
+      console.error('[32.D-Fix.6] Reconciliation error:', error.message);
     }
   }
 
