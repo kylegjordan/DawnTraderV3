@@ -36,6 +36,21 @@ interface LATTIInsights {
   };
 }
 
+interface CrossStrategyCorrelation {
+  strategy: string;
+  correlation: number;
+  insight: string;
+}
+
+interface CrossStrategyData {
+  summary: {
+    bestStrategy: string;
+    weakestStrategy: string;
+    timestamp: string;
+  };
+  correlations: CrossStrategyCorrelation[];
+}
+
 export default function LottieTuningTab() {
   const { data, isLoading, isError, error } = useQuery<LATTIMetrics>({
     queryKey: ['/api/system/latti-tuning'],
@@ -46,6 +61,12 @@ export default function LottieTuningTab() {
   const { data: insights } = useQuery<LATTIInsights>({
     queryKey: ['/api/system/latti-insights'],
     refetchInterval: 60000, // Update every 60 seconds
+  });
+
+  // Phase 31.L - Fetch Cross-Strategy Learning Correlations
+  const { data: crossData } = useQuery<CrossStrategyData>({
+    queryKey: ['/api/system/latti-cross-strategy'],
+    refetchInterval: 90000, // Update every 90 seconds
   });
 
   if (isLoading) {
@@ -300,6 +321,52 @@ export default function LottieTuningTab() {
           ) : (
             <div className="text-center py-8 text-muted-foreground italic">
               Collecting insights...
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Phase 31.L - Cross-Strategy Learning Panel */}
+      <Card data-testid="card-cross-strategy">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-emerald-500" />
+            Cross-Strategy Learning
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {crossData ? (
+            <>
+              <p className="text-sm text-muted-foreground mb-4" data-testid="text-strategy-summary">
+                Best Strategy: <strong className="text-emerald-600 dark:text-emerald-400">{crossData.summary.bestStrategy}</strong> | 
+                Weakest: <strong className="text-amber-600 dark:text-amber-400">{crossData.summary.weakestStrategy}</strong>
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {crossData.correlations.map((s, idx) => (
+                  <div 
+                    key={idx} 
+                    className="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700"
+                    data-testid={`strategy-card-${idx}`}
+                  >
+                    <p className="font-semibold text-sm text-foreground mb-1" data-testid={`strategy-name-${idx}`}>
+                      {s.strategy}
+                    </p>
+                    <p className="text-xs italic text-muted-foreground mb-2 min-h-[2.5rem]">
+                      {s.insight}
+                    </p>
+                    <p 
+                      className={`text-sm font-bold ${s.correlation > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
+                      data-testid={`strategy-correlation-${idx}`}
+                    >
+                      Corr: {(s.correlation * 100).toFixed(0)}%
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground italic">
+              Gathering cross-strategy learning data...
             </div>
           )}
         </CardContent>

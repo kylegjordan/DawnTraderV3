@@ -437,6 +437,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 31.L - LATTI Cross-Strategy Learning Correlations
+  apiRouter.get('/system/latti-cross-strategy', async (_req, res) => {
+    try {
+      const { LATTIManager } = await import('./services/latti-manager');
+      const data = await LATTIManager.generateCrossStrategyInsights();
+      res.json(data);
+    } catch (err: any) {
+      console.error("[31.L][LATTI-CROSS-STRATEGY]", err);
+      res.status(500).json({ error: "Failed to load cross-strategy insights" });
+    }
+  });
+
   // Authentication Routes
   
   // REGISTER - DISABLED FOR SINGLE-USER MODE
