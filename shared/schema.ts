@@ -4409,6 +4409,10 @@ export const strategyDriveSummary = pgTable("strategy_drive_summary", {
   trendpulseWeight: doublePrecision("trendpulse_weight").notNull().default(1),
   volsurfWeight: doublePrecision("volsurf_weight").notNull().default(1),
   momentumxWeight: doublePrecision("momentumx_weight").notNull().default(1),
+  sdiSmoothed: doublePrecision("sdi_smoothed").notNull().default(0),
+  forecastBest: varchar("forecast_best", { length: 100 }),
+  forecastWeakest: varchar("forecast_weakest", { length: 100 }),
+  forecastConfidence: doublePrecision("forecast_confidence").notNull().default(0),
 }, (table) => ({
   createdAtIdx: index("strategy_drive_summary_created_at_idx").on(table.createdAt),
 }));

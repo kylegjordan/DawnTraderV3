@@ -1,0 +1,162 @@
+⚙️ Directive: Implement Phases 31.A – 31.C – SDPOE Enhancements
+# ===============================================================
+#  PHASE 31.A–31.C – STRATEGIC DRIVE & PROFIT OPTIMIZATION ENGINE UPGRADES
+# ===============================================================
+#  Purpose:
+#    - Smooth SDI with exponential moving average (EMA)
+#    - Add trend and forecast endpoints
+#    - Enable dashboard widget data feed
+#
+#  Test User Account
+#    username : testuser123
+#    password : SecurePass123!
+# ===============================================================
+
+
+# ---------------------------------------------------------------
+#  STEP 1 – Extend Database Schema
+# ---------------------------------------------------------------
+#  Adds columns for smoothed SDI and predicted allocations.
+cat >> shared/schema.ts <<'EOF'
+
+ALTER TABLE strategy_drive_summary
+ADD COLUMN sdi_smoothed NUMERIC(8,4) DEFAULT 0,
+ADD COLUMN forecast_best VARCHAR(100),
+ADD COLUMN forecast_weakest VARCHAR(100),
+ADD COLUMN forecast_confidence NUMERIC(8,4) DEFAULT 0;
+EOF
+
+npm run db:push -- --force
+
+
+# ---------------------------------------------------------------
+#  STEP 2 – Add EMA Smoothing Utility
+# ---------------------------------------------------------------
+cat >> server/services/strategic-drive-service.ts <<'EOF'
+
+// === Phase 31.A – EMA Utility ===
+function emaSmooth(values: number[], period: number = 5): number {
+  if (values.length === 0) return 0;
+  const k = 2 / (period + 1);
+  return values.reduce(
+    (prev, curr, idx) => idx === 0 ? curr : curr * k + prev * (1 - k),
+    values[0]
+  );
+}
+EOF
+
+
+# ---------------------------------------------------------------
+#  STEP 3 – Enhance summarizeDriveMetrics to store EMA + Forecast
+# ---------------------------------------------------------------
+#  Append inside StrategicDriveService.summarizeDriveMetrics()
+cat >> server/services/strategic-drive-service.ts <<'EOF'
+
+// === Phase 31.B – Add Smoothed SDI and Forecast ===
+const recent = await prisma.strategy_drive_summary.findMany({
+  orderBy: { createdAt: "desc" },
+  take: 10,
+});
+const recentValues = recent.map(r => Number(r.globalSDI));
+const sdiSmoothed = emaSmooth([...recentValues, globalSDI]);
+
+// Simple forecast logic – trend based prediction
+const delta = globalSDI - (recentValues[0] || globalSDI);
+const forecastConfidence = Math.min(Math.abs(delta) * 10, 1);
+const forecastBest = best[0];
+const forecastWeakest = worst[0];
+
+// Save smoothed + forecast fields
+await prisma.strategy_drive_summary.updateMany({
+  where: { id: summary.id },
+  data: {
+    sdi_smoothed: sdiSmoothed,
+    forecast_best: forecastBest,
+    forecast_weakest: forecastWeakest,
+    forecast_confidence: forecastConfidence,
+  },
+});
+console.log(
+  `[31.A/B] Smoothed SDI: ${sdiSmoothed.toFixed(3)} | Forecast Best: ${forecastBest}`
+);
+EOF
+
+
+# ---------------------------------------------------------------
+#  STEP 4 – Expose Trend and Forecast Endpoints
+# ---------------------------------------------------------------
+cat >> server/routes.ts <<'EOF'
+
+// === Phase 31.C – Strategic Drive Trend & Forecast Endpoints ===
+apiRouter.get("/system/drive-trend", async (req, res) => {
+  try {
+    const records = await prisma.strategy_drive_summary.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    res.json(records);
+  } catch (e) {
+    console.error("[31.C] Drive trend error", e);
+    res.status(500).json({ error: "Unable to retrieve trend" });
+  }
+});
+
+apiRouter.get("/system/drive-forecast", async (req, res) => {
+  try {
+    const latest = await prisma.strategy_drive_summary.findFirst({
+      orderBy: { createdAt: "desc" },
+    });
+    if (!latest) return res.status(404).json({ error: "No data" });
+    res.json({
+      forecastBest: latest.forecast_best,
+      forecastWeakest: latest.forecast_weakest,
+      confidence: latest.forecast_confidence,
+      sdiSmoothed: latest.sdi_smoothed,
+    });
+  } catch (e) {
+    console.error("[31.C] Forecast endpoint error", e);
+    res.status(500).json({ error: "Unable to retrieve forecast" });
+  }
+});
+EOF
+
+
+# ---------------------------------------------------------------
+#  STEP 5 – Restart and Verify
+# ---------------------------------------------------------------
+npm run dev & 
+sleep 8
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+echo "=== Strategic Drive Trend (Last 10 SDI Snapshots) ===";
+curl -s -X GET "http://localhost:5000/api/system/drive-trend" \
+  -H "Authorization: Bearer $TOKEN" | jq '.[0:3] | .[] | {createdAt, globalSDI, sdi_smoothed}';
+
+echo "=== Strategic Drive Forecast ===";
+curl -s -X GET "http://localhost:5000/api/system/drive-forecast" \
+  -H "Authorization: Bearer $TOKEN" | jq '.';
+
+✅ Expected Verification Output
+[31.A/B] Smoothed SDI: 0.788 | Forecast Best: TrendPulse
+[31.C] Forecast endpoint responding (200 OK)
+{
+ "sdiSmoothed": 0.788,
+ "forecastBest": "TrendPulse",
+ "forecastWeakest": "VolSurf",
+ "confidence": 0.64
+}
+
+📊 Result
+
+After this directive:
+
+SDI trend + EMA smoothing stored each hour.
+
+/api/system/drive-trend returns data for a dashboard line chart.
+
+/api/system/drive-forecast provides predicted lead strategy and confidence.
+
+System remains fully compatible with Lottie and LATTI processes.
