@@ -1,0 +1,83 @@
+🛠 Phase 32.D-Fix.2 — Passive Flag Isolation & UI Sync
+1️⃣ Lock Passive Flag During Active Paper Mode
+
+File: server/services/system-config.ts
+
+Right after your existing if (newFlags.activeMode !== "paper") … block, add:
+
+// Prevent passive mode override while paper trading is active
+if (systemFlags.activeMode === "paper" && systemFlags.passiveMode) {
+  console.log("[32.D-Fix.2] Passive flag detected during paper mode — overriding to false");
+  systemFlags.passiveMode = false;
+  await broadcastSystemFlags(systemFlags);
+}
+
+
+This ensures that if paper mode is on, the passive flag is force-off, so the UI won’t stay frozen.
+
+2️⃣ Confirm Frontend Derivation
+
+File: client/src/components/layout/top-bar.tsx
+or whichever renders the blue bar.
+
+Locate something like:
+
+const isActive = systemFlags?.isEngineActivePaper;
+const isPassive = systemFlags?.passiveMode;
+
+
+Make sure the render condition prioritizes active trading:
+
+const tradingStatus = isActive && !isPassive ? "active" : "stopped";
+
+
+and not the inverse (some builds use if (isPassive || !isActive)).
+If needed, flip the logic to ensure passive cannot override active in paper mode.
+
+3️⃣ Verification After Fix
+
+Run:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+echo "=== System Flags ==="
+curl -s http://localhost:5000/api/system/config -H "Authorization: Bearer $TOKEN" | jq '.systemFlags'
+
+
+✅ Expected:
+
+{
+  "activeMode": "paper",
+  "passiveMode": false,
+  "isEngineActivePaper": true
+}
+
+
+Then start Paper Sim again.
+You should now see:
+
+Top bar: “Paper Trading Mode — Active (Simulated Trades Executing)”
+
+Toggle: green / Running
+
+Toast: “Paper Trading Started” (no “Passive Learning” badge)
+
+Logs will show:
+
+[32.D-Fix.2] Passive flag detected during paper mode — overriding to false
+[TradingSync] Broadcasting trading_state_changed (mode: paper, status: running)
+
+4️⃣ Documentation
+
+Replit should automatically append:
+
+/audit/phase32d-fix2-passive-flag-isolation.md
+containing:
+
+Before/after systemFlags snapshot
+
+Log lines proving override
+
+UI state screenshots

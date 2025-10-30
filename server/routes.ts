@@ -4394,15 +4394,37 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 31.H: Get System Configuration
+  // Phase 31.H/32.D-Fix.2: Get System Configuration
   apiRouter.get('/system/config', async (_, res) => {
     try {
       const { systemConfigService } = await import('./services/system-config');
+      const { tradingStateSync } = await import('./services/trading-state-sync');
       const config = await systemConfigService.getConfig();
+      
+      // Phase 32.D-Fix.2: Get current trading mode and engine states
+      const currentMode = tradingStateSync.getTradingMode('system-reconciliation');
+      const paperContext = await storage.getSystemContext('paper');
+      const liveContext = await storage.getSystemContext('live');
+      
+      const isEngineActivePaper = paperContext?.isEngineActive || false;
+      const isEngineActiveLive = liveContext?.isEngineActive || false;
+      
+      // Phase 32.D-Fix.2: Force passive mode off when paper trading is active
+      let passiveMode = config.passiveLearning;
+      if (currentMode === 'paper' && isEngineActivePaper) {
+        console.log('[32.D-Fix.2] Passive flag detected during active paper mode — overriding to false');
+        passiveMode = false;
+      }
       
       res.json({
         ok: true,
-        systemFlags: config,
+        systemFlags: {
+          passiveLearning: config.passiveLearning, // Original flag
+          passiveMode, // Computed flag (respects paper mode override)
+          activeMode: currentMode,
+          isEngineActivePaper,
+          isEngineActiveLive,
+        },
       });
     } catch (error: any) {
       console.error("[31.H] System config GET error:", error);
