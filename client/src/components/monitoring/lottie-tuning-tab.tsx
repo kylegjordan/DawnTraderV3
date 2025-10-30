@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Activity, TrendingUp, Target, Clock } from "lucide-react";
+import { Activity, TrendingUp, Target, Clock, Brain } from "lucide-react";
 
 interface LATTIMetrics {
   lastRun: string;
@@ -18,10 +18,34 @@ interface LATTIMetrics {
   };
 }
 
+interface LearningInsight {
+  metric: string;
+  correlation: number;
+  insight: string;
+}
+
+interface LATTIInsights {
+  timestamp: string;
+  mode: string;
+  passiveLearning: boolean;
+  topInsights: LearningInsight[];
+  simulatedAdjustments: {
+    deltaAlpha: number;
+    deltaBeta: number;
+    expectedPLChange: number;
+  };
+}
+
 export default function LottieTuningTab() {
   const { data, isLoading, isError, error } = useQuery<LATTIMetrics>({
     queryKey: ['/api/system/latti-tuning'],
     refetchInterval: 30000, // Update every 30 seconds
+  });
+
+  // Phase 31.K - Fetch Learning Insights
+  const { data: insights } = useQuery<LATTIInsights>({
+    queryKey: ['/api/system/latti-insights'],
+    refetchInterval: 60000, // Update every 60 seconds
   });
 
   if (isLoading) {
@@ -67,10 +91,13 @@ export default function LottieTuningTab() {
         <h2 className="text-2xl font-bold">Lottie Tuning Overview</h2>
         {data.passiveLearning && (
           <div 
-            className="px-3 py-1.5 text-xs bg-sky-600 dark:bg-sky-700 text-white rounded-md font-medium"
+            className="px-3 py-1.5 text-xs bg-sky-600 dark:bg-sky-700 text-white rounded-md font-medium flex flex-col items-center gap-1"
             data-testid="badge-passive-learning"
           >
-            🔍 Observation Mode Active
+            <span>🔍 Observation Mode Active</span>
+            <span className="text-xs text-sky-100 dark:text-sky-200 italic font-normal">
+              Lottie is observing real-time data and testing parameter hypotheses internally.
+            </span>
           </div>
         )}
       </div>
@@ -204,6 +231,79 @@ export default function LottieTuningTab() {
           </CardContent>
         </Card>
       )}
+
+      {/* Phase 31.K - Learning Insights Panel */}
+      <Card data-testid="card-learning-insights">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-purple-500" />
+            Learning Insights
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {insights ? (
+            <div className="space-y-4">
+              {/* Top Insights Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {insights.topInsights.map((insight, idx) => (
+                  <div 
+                    key={idx} 
+                    className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+                    data-testid={`insight-card-${idx}`}
+                  >
+                    <p className="text-sm font-semibold text-foreground mb-2">
+                      {insight.metric}
+                    </p>
+                    <p className="text-xs text-muted-foreground italic mb-3 min-h-[3rem]">
+                      {insight.insight}
+                    </p>
+                    <p className="text-sm font-bold" data-testid={`insight-correlation-${idx}`}>
+                      <span className={insight.correlation > 0 ? "text-sky-600 dark:text-sky-400" : "text-amber-600 dark:text-amber-400"}>
+                        Correlation: {(insight.correlation * 100).toFixed(0)}%
+                      </span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Simulated Adjustments */}
+              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                <h3 className="text-sm font-semibold mb-2 text-foreground">
+                  Simulated Adjustments
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div data-testid="text-delta-alpha">
+                    <span className="text-muted-foreground">Δα:</span>{" "}
+                    <span className="font-mono font-bold text-foreground">
+                      {insights.simulatedAdjustments.deltaAlpha.toFixed(3)}
+                    </span>
+                  </div>
+                  <div data-testid="text-delta-beta">
+                    <span className="text-muted-foreground">Δβ:</span>{" "}
+                    <span className="font-mono font-bold text-foreground">
+                      {insights.simulatedAdjustments.deltaBeta.toFixed(3)}
+                    </span>
+                  </div>
+                  <div data-testid="text-expected-pl">
+                    <span className="text-muted-foreground">Expected P&L Impact:</span>{" "}
+                    <span className={`font-mono font-bold ${
+                      insights.simulatedAdjustments.expectedPLChange > 0 
+                        ? 'text-green-600 dark:text-green-400' 
+                        : 'text-red-600 dark:text-red-400'
+                    }`}>
+                      {(insights.simulatedAdjustments.expectedPLChange * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground italic">
+              Collecting insights...
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Telemetry Details */}
       {data.telemetry && (

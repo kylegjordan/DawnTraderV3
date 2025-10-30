@@ -425,6 +425,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 31.K - LATTI Learning Insights Endpoint
+  apiRouter.get('/system/latti-insights', async (_req, res) => {
+    try {
+      const { LATTIManager } = await import('./services/latti-manager');
+      const data = await LATTIManager.generateInsightSnapshot();
+      res.json(data);
+    } catch (err: any) {
+      console.error("[31.K][LATTI-INSIGHTS]", err);
+      res.status(500).json({ error: "Failed to load Lottie learning insights" });
+    }
+  });
+
   // Authentication Routes
   
   // REGISTER - DISABLED FOR SINGLE-USER MODE
