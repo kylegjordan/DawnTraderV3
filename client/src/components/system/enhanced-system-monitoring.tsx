@@ -151,7 +151,7 @@ interface ConfidenceDrift {
 }
 
 export default function EnhancedSystemMonitoring() {
-  const [activeTab, setActiveTab] = useState("performance");
+  const [activeTab, setActiveTab] = useState("system-ai");
   const { toast } = useToast();
   const logEndRef = useRef<HTMLDivElement>(null);
   
@@ -359,123 +359,14 @@ export default function EnhancedSystemMonitoring() {
   const statusColor = getSystemStatusColor();
 
   return (
-    <div className="min-h-screen overflow-y-auto space-y-6">
-      {/* Header with Status Badge and Export Button */}
-      <div className="flex items-center justify-between relative z-20">
-        <div className="flex items-center gap-4">
-          <Badge 
-            variant={statusColor === 'green' ? 'default' : statusColor === 'yellow' ? 'secondary' : 'destructive'}
-            className="text-sm px-4 py-2"
-            data-testid="badge-system-status"
-          >
-            {statusColor === 'green' ? <CheckCircle2 className="w-4 h-4 mr-2" /> : 
-             statusColor === 'yellow' ? <AlertTriangle className="w-4 h-4 mr-2" /> : 
-             <XCircle className="w-4 h-4 mr-2" />}
-            System Status: {statusColor === 'green' ? 'Healthy' : statusColor === 'yellow' ? 'Warning' : 'Critical'}
-          </Badge>
-          <span className="text-sm text-muted-foreground">Auto-refreshing every 10s</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button 
-            onClick={() => runAnalysisMutation.mutate()}
-            variant="outline"
-            size="sm"
-            disabled={runAnalysisMutation.isPending}
-            data-testid="button-run-analysis"
-          >
-            <Activity className="w-4 h-4 mr-2" />
-            {runAnalysisMutation.isPending ? 'Analyzing...' : 'Run Analysis'}
-          </Button>
-          <Button 
-            onClick={handleExportReport}
-            variant="outline"
-            size="sm"
-            data-testid="button-export-report"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export Report
-          </Button>
-        </div>
-      </div>
-
-      {/* AI Diagnostic Insights Banner */}
-      {!analysisLoading && latestAnalysis && (
-        <Card 
-          className={`relative z-30 mb-6 border-l-4 ${
-            latestAnalysis.urgencyLevel === 'high' ? 'border-l-red-500 bg-red-50 dark:bg-red-950' :
-            latestAnalysis.urgencyLevel === 'medium' ? 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
-            'border-l-blue-500 bg-blue-50 dark:bg-blue-950'
-          }`}
-          data-testid="card-ai-diagnostic-insights"
-        >
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Bot className="w-5 h-5" />
-                AI Diagnostic Insights
-              </CardTitle>
-              <Badge 
-                variant={
-                  latestAnalysis.urgencyLevel === 'high' ? 'destructive' :
-                  latestAnalysis.urgencyLevel === 'medium' ? 'secondary' :
-                  'default'
-                }
-                data-testid="badge-diagnostic-urgency"
-              >
-                {latestAnalysis.urgencyLevel} priority
-              </Badge>
-            </div>
-            <CardDescription className="text-xs">
-              Last analyzed: {new Date(latestAnalysis.timestamp).toLocaleString()}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm mb-2" data-testid="text-diagnostic-summary">
-              {latestAnalysis.recommendation}
-            </p>
-            {latestAnalysis.metadata?.anomalies?.detected && (
-              <div className="mt-2 mb-3">
-                <p className="text-xs font-medium mb-1">Detected Anomalies:</p>
-                <div className="space-y-1">
-                  {latestAnalysis.metadata.anomalies.anomalies.map((anomaly, idx) => (
-                    <div 
-                      key={idx} 
-                      className="text-xs flex items-start gap-2 text-muted-foreground"
-                      data-testid={`text-anomaly-${idx}`}
-                    >
-                      <Badge variant={
-                        anomaly.severity === 'high' ? 'destructive' :
-                        anomaly.severity === 'medium' ? 'secondary' :
-                        'outline'
-                      } className="text-xs px-1 py-0">
-                        {anomaly.severity}
-                      </Badge>
-                      <span>{anomaly.description}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {latestAnalysis.metadata?.recommendations && latestAnalysis.metadata.recommendations.length > 0 && (
-              <div className="mt-3">
-                <p className="text-xs font-medium mb-1">Recommendations:</p>
-                <ul className="text-xs space-y-1 text-muted-foreground">
-                  {latestAnalysis.metadata.recommendations.map((rec, idx) => (
-                    <li key={idx} className="flex items-start gap-2" data-testid={`text-diagnostic-rec-${idx}`}>
-                      <span>•</span>
-                      <span>{rec}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
+    <div className="min-h-screen overflow-y-auto">
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap gap-2 justify-start w-full h-auto p-2" data-testid="tabs-system-monitoring">
+          <TabsTrigger value="system-ai" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-system-ai" title="System & AI">
+            <Activity className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">System & AI</span>
+          </TabsTrigger>
           <TabsTrigger value="performance" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-performance" title="Performance">
             <Cpu className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Performance</span>
@@ -581,6 +472,122 @@ export default function EnhancedSystemMonitoring() {
             <span className="hidden sm:inline">Lottie Tuning</span>
           </TabsTrigger>
         </TabsList>
+
+        {/* Tab 0: System & AI */}
+        <TabsContent value="system-ai" className="space-y-6 mt-6">
+          {/* System Status Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Badge 
+                variant={statusColor === 'green' ? 'default' : statusColor === 'yellow' ? 'secondary' : 'destructive'}
+                className="text-sm px-4 py-2"
+                data-testid="badge-system-status"
+              >
+                {statusColor === 'green' ? <CheckCircle2 className="w-4 h-4 mr-2" /> : 
+                 statusColor === 'yellow' ? <AlertTriangle className="w-4 h-4 mr-2" /> : 
+                 <XCircle className="w-4 h-4 mr-2" />}
+                System Status: {statusColor === 'green' ? 'Healthy' : statusColor === 'yellow' ? 'Warning' : 'Critical'}
+              </Badge>
+              <span className="text-sm text-muted-foreground">Auto-refreshing every 10s</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={() => runAnalysisMutation.mutate()}
+                variant="outline"
+                size="sm"
+                disabled={runAnalysisMutation.isPending}
+                data-testid="button-run-analysis"
+              >
+                <Activity className="w-4 h-4 mr-2" />
+                {runAnalysisMutation.isPending ? 'Analyzing...' : 'Run Analysis'}
+              </Button>
+              <Button 
+                onClick={handleExportReport}
+                variant="outline"
+                size="sm"
+                data-testid="button-export-report"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export Report
+              </Button>
+            </div>
+          </div>
+
+          {/* AI Diagnostic Insights */}
+          {!analysisLoading && latestAnalysis && (
+            <Card 
+              className={`border-l-4 ${
+                latestAnalysis.urgencyLevel === 'high' ? 'border-l-red-500 bg-red-50 dark:bg-red-950' :
+                latestAnalysis.urgencyLevel === 'medium' ? 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
+                'border-l-blue-500 bg-blue-50 dark:bg-blue-950'
+              }`}
+              data-testid="card-ai-diagnostic-insights"
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Bot className="w-5 h-5" />
+                    AI Diagnostic Insights
+                  </CardTitle>
+                  <Badge 
+                    variant={
+                      latestAnalysis.urgencyLevel === 'high' ? 'destructive' :
+                      latestAnalysis.urgencyLevel === 'medium' ? 'secondary' :
+                      'default'
+                    }
+                    data-testid="badge-diagnostic-urgency"
+                  >
+                    {latestAnalysis.urgencyLevel} priority
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs">
+                  Last analyzed: {new Date(latestAnalysis.timestamp).toLocaleString()}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm mb-2" data-testid="text-diagnostic-summary">
+                  {latestAnalysis.recommendation}
+                </p>
+                {latestAnalysis.metadata?.anomalies?.detected && (
+                  <div className="mt-2 mb-3">
+                    <p className="text-xs font-medium mb-1">Detected Anomalies:</p>
+                    <div className="space-y-1">
+                      {latestAnalysis.metadata.anomalies.anomalies.map((anomaly, idx) => (
+                        <div 
+                          key={idx} 
+                          className="text-xs flex items-start gap-2 text-muted-foreground"
+                          data-testid={`text-anomaly-${idx}`}
+                        >
+                          <Badge variant={
+                            anomaly.severity === 'high' ? 'destructive' :
+                            anomaly.severity === 'medium' ? 'secondary' :
+                            'outline'
+                          } className="text-xs px-1 py-0">
+                            {anomaly.severity}
+                          </Badge>
+                          <span>{anomaly.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {latestAnalysis.metadata?.recommendations && latestAnalysis.metadata.recommendations.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-medium mb-1">Recommendations:</p>
+                    <ul className="text-xs space-y-1 text-muted-foreground">
+                      {latestAnalysis.metadata.recommendations.map((rec, idx) => (
+                        <li key={idx} className="flex items-start gap-2" data-testid={`text-diagnostic-rec-${idx}`}>
+                          <span>•</span>
+                          <span>{rec}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         {/* Tab 1: Real-Time Performance */}
         <TabsContent value="performance" className="space-y-4 mt-6">
