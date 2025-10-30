@@ -89,6 +89,20 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
+  // Phase 31.H: Fetch system config for passive learning status
+  const { data: systemConfigData } = useQuery({
+    queryKey: ['/api/system/config'],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest('GET', '/api/system/config');
+        return response;
+      } catch (error) {
+        return { systemFlags: { passiveLearning: false } };
+      }
+    },
+    refetchInterval: 10000, // Refetch every 10 seconds
+  });
+
   // Update dual time display (UTC + Local)
   useEffect(() => {
     const updateTime = () => {
@@ -668,6 +682,18 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
                 PAPER
               </Button>
             </div>
+
+            {/* Phase 31.H: Passive Learning Indicator */}
+            {systemConfigData?.systemFlags?.passiveLearning && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-md">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                  <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                    PASSIVE LEARNING ACTIVE
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         

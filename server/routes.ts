@@ -4282,6 +4282,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/system/drive-status', async (_, res) => {
     try {
       const { strategyDriveSummary } = await import('@shared/schema');
+      const { systemConfigService } = await import('./services/system-config');
+      
       const [latest] = await db
         .select()
         .from(strategyDriveSummary)
@@ -4292,26 +4294,85 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(404).json({ error: "No drive status data available" });
       }
       
-      // Check if passive learning is enabled (placeholder - will be implemented)
-      const passiveLearning = false; // TODO: Get from system flags
+      // Get passive learning state from system config
+      const config = await systemConfigService.getConfig();
+      console.log('[31.H][DEBUG] drive-status config:', JSON.stringify(config));
       
       res.json({
+        status: "ok",
         latest: {
+          id: latest.id,
+          createdAt: latest.createdAt,
           globalSDI: latest.globalSDI,
-          driveIndex: latest.driveIndex,
-          personalBest: latest.personalBest,
+          bestStrategy: latest.bestStrategy,
+          weakestStrategy: latest.weakestStrategy,
+          dhmaWeight: latest.dhmaWeight,
+          quantflowWeight: latest.quantflowWeight,
+          trendpulseWeight: latest.trendpulseWeight,
+          volsurfWeight: latest.volsurfWeight,
+          momentumxWeight: latest.momentumxWeight,
           sdiSmoothed: latest.sdiSmoothed,
           forecastBest: latest.forecastBest,
           forecastWeakest: latest.forecastWeakest,
           forecastConfidence: latest.forecastConfidence,
-          timestamp: latest.createdAt,
+          driveIndex: latest.driveIndex,
+          personalBest: latest.personalBest,
         },
-        passiveLearning,
+        passiveLearning: config.passiveLearning,
+        timestamp: new Date().toISOString(),
       });
     } catch (error: any) {
       console.error("[31.G] Drive status endpoint error:", error);
       res.status(500).json({ 
         error: "Unable to retrieve drive status",
+        message: error.message 
+      });
+    }
+  });
+
+  // Phase 31.H: Get System Configuration
+  apiRouter.get('/system/config', async (_, res) => {
+    try {
+      const { systemConfigService } = await import('./services/system-config');
+      const config = await systemConfigService.getConfig();
+      
+      res.json({
+        ok: true,
+        systemFlags: config,
+      });
+    } catch (error: any) {
+      console.error("[31.H] System config GET error:", error);
+      res.status(500).json({ 
+        error: "Unable to retrieve system configuration",
+        message: error.message 
+      });
+    }
+  });
+
+  // Phase 31.H: Update System Configuration
+  apiRouter.post('/system/config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { systemConfigService } = await import('./services/system-config');
+      const { systemFlags } = req.body;
+      
+      if (!systemFlags || typeof systemFlags !== 'object') {
+        return res.status(400).json({ 
+          error: "Invalid request body. Expected { systemFlags: {...} }" 
+        });
+      }
+      
+      const username = req.user?.username || 'unknown';
+      const updated = await systemConfigService.updateConfig(systemFlags, username);
+      
+      res.json({
+        ok: true,
+        systemFlags: updated,
+        message: 'System configuration updated successfully'
+      });
+    } catch (error: any) {
+      console.error("[31.H] System config POST error:", error);
+      res.status(500).json({ 
+        error: "Unable to update system configuration",
         message: error.message 
       });
     }
