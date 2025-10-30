@@ -1,0 +1,123 @@
+⚙️ Phase 32.D-Fix.3 — Trading State Visualization Sync
+1️⃣ Update TopBar Active State Logic
+
+File: client/src/components/layout/top-bar.tsx
+
+Find:
+
+const isActive = currentMode === 'paper' 
+  ? tradingStatus?.isEngineActivePaper || false
+  : tradingStatus?.isEngineActiveLive || false;
+
+
+Replace it with:
+
+// Phase 32.D-Fix.3 — Unified Active State
+const isActive = (() => {
+  if (currentMode === 'paper') {
+    return (
+      tradingStatus?.isEngineActivePaper ||
+      paperSimStatus?.isRunning ||
+      false
+    );
+  }
+  if (currentMode === 'live') {
+    return tradingStatus?.isEngineActiveLive || false;
+  }
+  return false;
+})();
+
+
+🧠 This ensures the frontend considers both the Trading Engine and the Paper Simulation Engine state.
+
+2️⃣ Update the Blue Top Bar Label Logic
+
+Look for where the top bar text is rendered (probably near line 600–620, where the “Trading / Active / Stopped” labels appear).
+Make sure the banner text uses isActive from above, not its own separate condition.
+
+Replace any code like:
+
+{systemFlags.activeMode === 'paper' && !isActive && <BlueBar text="Stopped" />}
+
+
+with something like:
+
+<BlueBar text={
+  systemConfigData?.systemFlags?.activeMode === 'paper'
+    ? (isActive ? 'Paper Trading Mode — Active (Simulated Trades Executing)' : 'Paper Trading Mode — Stopped')
+    : (isActive ? 'Live Trading Mode — Active' : 'Live Trading Mode — Stopped')
+} />
+
+
+That ensures the label dynamically reflects your unified isActive.
+
+3️⃣ (Optional but Recommended)
+
+Inside useTrading() (file client/src/hooks/use-trading.tsx), add a derived flag for clarity:
+
+Right after:
+
+const { data: tradingStatus } = useQuery<TradingStatus>(...)
+const { data: paperSimStatus } = useQuery(...)
+
+
+add:
+
+const isTradingActive = tradingStatus?.isEngineActivePaper || paperSimStatus?.isRunning;
+
+
+and return it from the hook:
+
+return {
+  tradingStatus,
+  paperSimStatus,
+  isTradingActive,
+  startTrading,
+  stopTrading,
+  ...
+};
+
+
+Then in TopBar, you can replace your new logic with a single isTradingActive variable — cleaner and consistent everywhere.
+
+🧾 Verification Plan
+
+Run:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+echo "=== Trading Status ==="
+curl -s http://localhost:5000/api/trading/status -H "Authorization: Bearer $TOKEN" | jq '.isEngineActivePaper,.isEngineActiveLive'
+
+echo "=== PaperSim Status ==="
+curl -s http://localhost:5000/api/paper-sim/status -H "Authorization: Bearer $TOKEN" | jq '.isRunning'
+
+
+✅ Expected
+
+isEngineActivePaper: false
+isEngineActiveLive: false
+isRunning: true
+
+
+→ Your UI should now show “Paper Trading — Active” because of the fallback to isRunning.
+
+🧠 Summary
+
+Your backend is working fine.
+
+The frontend was checking only one field that doesn’t change.
+
+Adding paperSimStatus.isRunning fixes it permanently.
+
+This change will make:
+
+The blue top bar
+
+The toggle
+
+The ACTIVE / STOPPED label
+
+all display the correct status in real time.

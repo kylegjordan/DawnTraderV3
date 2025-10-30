@@ -208,12 +208,18 @@ export function useTrading() {
     }
   });
 
+  // Phase 32.D-Fix.3: Derived flag for unified trading active state
+  const isTradingActivePaper = tradingStatus?.isEngineActivePaper || paperSimStatus?.isRunning || false;
+  const isTradingActiveLive = tradingStatus?.isEngineActiveLive || false;
+
   return {
     // Status and control
     tradingStatus,
     statusLoading,
     paperSimStatus,
     paperSimStatusLoading,
+    isTradingActivePaper,
+    isTradingActiveLive,
     startTrading: startTradingMutation.mutateAsync,
     stopTrading: stopTradingMutation.mutateAsync,
     isStarting: startTradingMutation.isPending,

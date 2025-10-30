@@ -43,6 +43,8 @@ The coherency rules have been rationalized to act as extreme fail-safes only, wi
 
 **Phase 32.D-Fix.2: Passive Flag Isolation & UI Sync** resolves UI confusion where "PASSIVE LEARNING" badge appeared during active paper trading. The `/api/system/config` endpoint now computes a `passiveMode` flag that is automatically forced to `false` when paper trading is actively executing, while preserving the original `passiveLearning` config flag. The frontend top-bar now uses `passiveMode` for display logic, ensuring the passive badge is hidden during active trading sessions.
 
+**Phase 32.D-Fix.3: Trading State Visualization Sync** fixes TopBar active state display to consider both `isEngineActivePaper` and `paperSimStatus.isRunning` for paper mode. The unified active state logic ensures the UI correctly displays "ACTIVE" when the paper simulation engine is running, even if the trading engine state hasn't updated yet. The `useTrading` hook now exports `isTradingActivePaper` and `isTradingActiveLive` derived flags for consistent state computation across components.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

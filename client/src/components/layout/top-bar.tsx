@@ -509,10 +509,20 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   };
 
-  // Phase 27.F.12: Determine if trading is active based on current mode using mode-specific fields
-  const isActive = currentMode === 'paper' 
-    ? tradingStatus?.isEngineActivePaper || false
-    : tradingStatus?.isEngineActiveLive || false;
+  // Phase 32.D-Fix.3: Unified Active State - considers both engine state and paper sim status
+  const isActive = (() => {
+    if (currentMode === 'paper') {
+      return (
+        tradingStatus?.isEngineActivePaper ||
+        paperSimStatus?.isRunning ||
+        false
+      );
+    }
+    if (currentMode === 'live') {
+      return tradingStatus?.isEngineActiveLive || false;
+    }
+    return false;
+  })();
 
   return (
     <header 
