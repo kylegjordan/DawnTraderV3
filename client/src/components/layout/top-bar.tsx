@@ -685,10 +685,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
 
             {/* Phase 31.H: Passive Learning Indicator */}
             {systemConfigData?.systemFlags?.passiveLearning && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-md">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                  <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+              <div className="flex items-center gap-1 px-1.5 py-1 bg-blue-500/10 border border-blue-500/30 rounded-md">
+                <div className="flex items-center gap-1">
+                  <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse" />
+                  <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">
                     PASSIVE LEARNING ACTIVE
                   </span>
                 </div>

@@ -4296,7 +4296,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get passive learning state from system config
       const config = await systemConfigService.getConfig();
-      console.log('[31.H][DEBUG] drive-status config:', JSON.stringify(config));
       
       res.json({
         status: "ok",
