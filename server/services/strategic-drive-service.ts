@@ -12,6 +12,19 @@ interface StrategyTelemetry {
   alphaStrength?: number;
 }
 
+/**
+ * Phase 31.A – EMA Smoothing Utility
+ * Calculates exponential moving average for SDI smoothing
+ */
+function emaSmooth(values: number[], period: number = 5): number {
+  if (values.length === 0) return 0;
+  const k = 2 / (period + 1);
+  return values.reduce(
+    (prev, curr, idx) => idx === 0 ? curr : curr * k + prev * (1 - k),
+    values[0]
+  );
+}
+
 export class StrategicDriveService {
   /**
    * Compute drive metrics for all strategies based on telemetry data
@@ -54,6 +67,7 @@ export class StrategicDriveService {
 
   /**
    * Summarize drive metrics and calculate Strategic Drive Index (SDI)
+   * Phase 31.B – Enhanced with EMA smoothing and forecasting
    */
   async summarizeDriveMetrics(): Promise<any> {
     try {
@@ -97,7 +111,23 @@ export class StrategicDriveService {
       // Calculate global SDI (average of all strategy scores)
       const globalSDI = entries.reduce((sum, [_, v]) => sum + v, 0) / entries.length;
 
-      // Create summary record
+      // Phase 31.B – Add Smoothed SDI and Forecast
+      const recent = await db
+        .select()
+        .from(strategyDriveSummary)
+        .orderBy(desc(strategyDriveSummary.createdAt))
+        .limit(10);
+
+      const recentValues = recent.map(r => Number(r.globalSDI));
+      const sdiSmoothed = emaSmooth([...recentValues, globalSDI]);
+
+      // Simple forecast logic – trend based prediction
+      const delta = globalSDI - (recentValues[0] || globalSDI);
+      const forecastConfidence = Math.min(Math.abs(delta) * 10, 1);
+      const forecastBest = best[0];
+      const forecastWeakest = worst[0];
+
+      // Create summary record with smoothed values and forecast
       const [summary] = await db.insert(strategyDriveSummary).values({
         globalSDI,
         bestStrategy: best[0],
@@ -107,9 +137,14 @@ export class StrategicDriveService {
         trendpulseWeight: avgScores["trendpulse"] || 1,
         volsurfWeight: avgScores["volsurf"] || 1,
         momentumxWeight: avgScores["momentumx"] || 1,
+        sdiSmoothed,
+        forecastBest,
+        forecastWeakest,
+        forecastConfidence,
       }).returning();
 
       console.log(`[31.0][SDPOE] Summary created - Global SDI: ${globalSDI.toFixed(3)}, Best: ${best[0]}, Weakest: ${worst[0]}`);
+      console.log(`[31.A/B] Smoothed SDI: ${sdiSmoothed.toFixed(3)} | Forecast Best: ${forecastBest} (confidence: ${forecastConfidence.toFixed(2)})`);
 
       return { globalSDI, best, worst, summary };
     } catch (error: any) {
