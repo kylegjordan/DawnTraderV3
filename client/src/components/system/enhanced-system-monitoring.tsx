@@ -474,9 +474,8 @@ export default function EnhancedSystemMonitoring() {
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="relative">
-        <div className="sticky top-0 z-20 bg-background pb-16">
-          <TabsList className="flex w-full flex-wrap gap-1 sm:gap-2 bg-background pt-2 pb-6" data-testid="tabs-system-monitoring">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="flex flex-wrap gap-2 justify-start w-full h-auto p-2" data-testid="tabs-system-monitoring">
           <TabsTrigger value="performance" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-performance" title="Performance">
             <Cpu className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Performance</span>
@@ -582,10 +581,9 @@ export default function EnhancedSystemMonitoring() {
             <span className="hidden sm:inline">Lottie Tuning</span>
           </TabsTrigger>
         </TabsList>
-        </div>
 
         {/* Tab 1: Real-Time Performance */}
-        <TabsContent value="performance" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="performance" className="space-y-4 mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* CPU Card */}
             <Card data-testid="card-cpu">
@@ -707,7 +705,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 2: Trading Engine Status */}
-        <TabsContent value="trading-engine" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="trading-engine" className="space-y-6 mt-6">
           <Card data-testid="card-trading-engine">
             <CardHeader>
               <CardTitle>Trading Engine Status</CardTitle>
@@ -757,7 +755,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 3: Walter Activity */}
-        <TabsContent value="walter" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="walter" className="space-y-6 mt-6">
           <Card data-testid="card-walter-activity">
             <CardHeader>
               <CardTitle>Walter Activity Metrics</CardTitle>
@@ -801,7 +799,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 4: Database Health */}
-        <TabsContent value="database" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="database" className="space-y-6 mt-6">
           <Card data-testid="card-database-health">
             <CardHeader>
               <CardTitle>Database Health Metrics</CardTitle>
@@ -862,7 +860,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 5: Alert Log */}
-        <TabsContent value="alerts" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="alerts" className="space-y-6 mt-6">
           <Card data-testid="card-alerts">
             <CardHeader>
               <CardTitle>Alert Log</CardTitle>
@@ -1005,77 +1003,77 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 7: Awareness - System Self-Awareness State */}
-        <TabsContent value="awareness" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="awareness" className="space-y-6 mt-6">
           <AwarenessTab />
         </TabsContent>
 
         {/* Tab 8: Goal Alignment - Adaptive Learning & Policy Alignment */}
-        <TabsContent value="alignment" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="alignment" className="space-y-6 mt-6">
           <AlignmentTab />
         </TabsContent>
 
         {/* Tab 7: Strategy & Learning */}
-        <TabsContent value="strategy" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="strategy" className="space-y-6 mt-6">
           <StrategyTab />
         </TabsContent>
 
         {/* Tab 8: Simulation - Phase 9.3 */}
-        <TabsContent value="simulation" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="simulation" className="space-y-6 mt-6">
           <SimulationTab />
         </TabsContent>
 
         {/* Tab 9: Reflection - Phase 9.4 */}
-        <TabsContent value="reflection" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="reflection" className="space-y-6 mt-6">
           <ReflectionTab />
         </TabsContent>
 
         {/* Tab 10: Ethics - Phase 13.0 */}
-        <TabsContent value="ethics" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="ethics" className="space-y-6 mt-6">
           <EthicsTab />
         </TabsContent>
 
         {/* Tab 10.5: Federation - Phase 14.0 */}
-        <TabsContent value="federation" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="federation" className="space-y-6 mt-6">
           <FederationTab />
         </TabsContent>
 
         {/* Tab 11: Collaboration - Phase 9.6 */}
-        <TabsContent value="collaboration" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="collaboration" className="space-y-6 mt-6">
           <CollaborationTab />
         </TabsContent>
 
         {/* Tab 12: Learning - Phase 9.7 */}
-        <TabsContent value="learning" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="learning" className="space-y-6 mt-6">
           <LearningTab />
         </TabsContent>
 
         {/* Tab 13: Oversight - Phase 9.8 */}
-        <TabsContent value="oversight" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="oversight" className="space-y-6 mt-6">
           <OversightTab />
         </TabsContent>
 
         {/* Tab 14: Memory - Phase 9.9 */}
-        <TabsContent value="memory" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="memory" className="space-y-6 mt-6">
           <MemoryTab />
         </TabsContent>
 
         {/* Tab 15: Core - Phase 10.0 */}
-        <TabsContent value="core" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="core" className="space-y-6 mt-6">
           <CoreTab />
         </TabsContent>
 
         {/* Tab 16: Safety - Phase 11.0 */}
-        <TabsContent value="safety" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="safety" className="space-y-6 mt-6">
           <SafetyTab />
         </TabsContent>
 
         {/* Tab 17: Task Performance Metrics - Phase 12.0 */}
-        <TabsContent value="perf-metrics" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="perf-metrics" className="space-y-6 mt-6">
           <PerformanceTab />
         </TabsContent>
 
         {/* Tab 21: Introspection - Phase 15.0 */}
-        <TabsContent value="introspection" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="introspection" className="space-y-6 mt-6">
           <IntrospectionTab 
             introspection={introspection}
             introspectionLoading={introspectionLoading}
@@ -1088,22 +1086,22 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Tab 22: Knowledge - Phase 16.0 */}
-        <TabsContent value="knowledge" className="relative z-0 overflow-visible mt-12 space-y-4">
+        <TabsContent value="knowledge" className="space-y-6 mt-6">
           <KnowledgeTab />
         </TabsContent>
 
         {/* Cluster Tab */}
-        <TabsContent value="cluster" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-cluster">
+        <TabsContent value="cluster" className="space-y-6 mt-6" data-testid="content-cluster">
           <ClusterTab />
         </TabsContent>
 
         {/* Learning Network Tab - Phase 18.0 */}
-        <TabsContent value="learning" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-learning">
+        <TabsContent value="learning" className="space-y-6 mt-6" data-testid="content-learning">
           <LearningNetworkTab />
         </TabsContent>
 
         {/* Phase 27.F.31: Diagnostics & Telemetry Tab */}
-        <TabsContent value="diagnostics" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-diagnostics">
+        <TabsContent value="diagnostics" className="space-y-6 mt-6" data-testid="content-diagnostics">
           <div className="space-y-6">
             <h3 className="text-xl font-bold text-foreground">System Diagnostics & Telemetry</h3>
             <p className="text-sm text-muted-foreground">
@@ -1122,7 +1120,7 @@ export default function EnhancedSystemMonitoring() {
         </TabsContent>
 
         {/* Phase 31.J: Lottie Tuning Tab */}
-        <TabsContent value="lottie-tuning" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-lottie-tuning">
+        <TabsContent value="lottie-tuning" className="space-y-6 mt-6" data-testid="content-lottie-tuning">
           <LottieTuningTab />
         </TabsContent>
       </Tabs>

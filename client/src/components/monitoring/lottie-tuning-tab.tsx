@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Activity, TrendingUp, Target, Clock } from "lucide-react";
@@ -19,31 +19,25 @@ interface LATTIMetrics {
 }
 
 export default function LottieTuningTab() {
-  const [data, setData] = useState<LATTIMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, isError, error } = useQuery<LATTIMetrics>({
+    queryKey: ['/api/system/latti-tuning'],
+    refetchInterval: 30000, // Update every 30 seconds
+  });
 
-  async function fetchData() {
-    try {
-      const res = await fetch("/api/system/latti-tuning");
-      const json = await res.json();
-      setData(json);
-      setLoading(false);
-    } catch (error) {
-      console.error("Failed to fetch LATTI tuning metrics:", error);
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // Update every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Loading Lottie tuning metrics...</div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-destructive">
+          Failed to load tuning metrics: {error instanceof Error ? error.message : 'Unknown error'}
+        </div>
       </div>
     );
   }

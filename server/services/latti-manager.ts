@@ -48,7 +48,7 @@ export class LATTIManager {
       oneDayAgo.setDate(oneDayAgo.getDate() - 1);
       
       const allTrades = mode === 'live' 
-        ? await storage.getTrades({ limit: 10000 })
+        ? await storage.getTrades('live', { limit: 10000 })
         : await storage.getAllPaperTrades();
       
       // Filter for DHMA strategy in the last 24 hours

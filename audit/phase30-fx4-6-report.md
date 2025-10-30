@@ -1,11 +1,21 @@
 # Phase 30.FX.4–6 Report
-Generated: 2025-10-30T05:52:13.306Z
+Generated: 2025-10-30T06:21:28.817Z
 
 ## Overview
 This report summarizes the Lottie Oversight and Cross-Strategy Optimization activities.
 
 ## Lottie Oversight Log (Last 20 Events)
 
+- 2025-10-30T06:21:28.588Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-10-30T06:20:01.904Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T06:17:59.314Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T06:16:53.052Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T06:15:14.250Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T06:14:48.164Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T06:12:13.445Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T06:07:13.442Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T06:02:13.442Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
+- 2025-10-30T05:57:13.445Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 - 2025-10-30T05:52:13.062Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 - 2025-10-30T05:51:42.289Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 - 2025-10-30T05:50:41.477Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
@@ -16,16 +26,6 @@ This report summarizes the Lottie Oversight and Cross-Strategy Optimization acti
 - 2025-10-30T05:40:33.037Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 - 2025-10-30T05:35:33.032Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 - 2025-10-30T05:30:32.650Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:28:39.288Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:27:21.535Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:26:22.812Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:24:40.272Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:19:52.844Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:14:52.462Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:11:57.923Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:06:57.906Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T05:01:57.894Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
-- 2025-10-30T04:56:57.973Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Request failed with status code 500)
 
 ## Strategy Mix Changes (Last 20)
 No strategy mix changes recorded yet.
@@ -37,7 +37,8 @@ No strategy mix changes recorded yet.
 - Total events: 20
 - Active strategies: 1
 - Status breakdown:
-  - error: 20
+  - suspended: 1
+  - error: 19
 
 ### Strategy Mix
 - Total changes: 0
