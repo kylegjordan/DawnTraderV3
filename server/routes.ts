@@ -2694,14 +2694,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       const lastTickISO = new Date().toISOString();
       
+      // Phase 32.D-Fix.Final: Fetch passiveLearning from system config
+      const { systemConfigService } = await import('./services/system-config');
+      const systemConfig = await systemConfigService.getConfig();
+      const passiveLearning = systemConfig.passiveLearning || false;
+      
+      // Phase 32.D-Fix.Final: Compute authoritative active state
+      // Active = true if EITHER engine is running (paper OR live)
+      const active = !!(isPaperSimRunning || isLiveEngineRunning);
+      
       // Phase 27.F.3: Unified Trading State Authority object
       // Phase 27.F.13.O: Added audit fields
+      // Phase 32.D-Fix.Final: Updated to match contract (mode, active, isEngineActivePaper, isEngineActiveLive, passiveLearning, ts)
       const unifiedState = {
         mode: currentMode,
-        active: isEngineActive,
-        engineStatus: isEngineActive ? 'ACTIVE' : 'STOPPED' as const,
+        active,  // Phase 32.D-Fix.Final: Authoritative active state
+        engineStatus: active ? 'ACTIVE' : 'STOPPED' as const,
         lastUpdate: systemContext?.updatedAt?.toISOString() || lastTickISO,
-        lastUserAction: isEngineActive ? 'start' : 'stop' as 'start' | 'stop' | null,
+        lastUserAction: active ? 'start' : 'stop' as 'start' | 'stop' | null,
         lastModeChange: systemContext?.lastModeChange?.toISOString() || null,
         changedBy: systemContext?.changedBy || null,
         changeReason: systemContext?.changeReason || null,
@@ -2714,14 +2724,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Return dual-mode structure with unified state authority (Phase 27.F.3)
       // Phase 27.F.12: Added mode-specific engine status fields
       // Phase 27.F.13.O: Global mode-based status with audit fields
+      // Phase 32.D-Fix.Final: Added passiveLearning and ts for contract compliance
       res.json({
         // Phase 27.F.3: Unified state at the top level for easy access
         ...unifiedState,
         currentMode,
-        isEngineActive,
-        // Phase 27.F.12: Mode-specific engine status
-        isEngineActivePaper: isPaperSimRunning,
-        isEngineActiveLive: isLiveEngineRunning,
+        isEngineActive: active,  // Phase 32.D-Fix.Final: Ensure consistency with active
+        // Phase 27.F.12 + 32.D-Fix.Final: Mode-specific engine status
+        isEngineActivePaper: !!isPaperSimRunning,
+        isEngineActiveLive: !!isLiveEngineRunning,
+        passiveLearning,  // Phase 32.D-Fix.Final: FYI field for passive badge
+        ts: lastTickISO,  // Phase 32.D-Fix.Final: timestamp
         dataSource: 'system_context',
         live: {
           portfolioBalance: liveBalance,

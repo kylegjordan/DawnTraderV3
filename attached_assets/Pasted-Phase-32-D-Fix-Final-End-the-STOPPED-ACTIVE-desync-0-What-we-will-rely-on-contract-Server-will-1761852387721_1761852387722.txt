@@ -1,0 +1,195 @@
+Phase 32.D-Fix.Final — End the STOPPED/ACTIVE desync
+0) What we will rely on (contract)
+
+Server will expose the same shape both via REST (/api/trading/status) and WS (trading_state_changed):
+
+type TradingState = {
+  mode: 'paper' | 'live';
+  active: boolean;                // authoritative
+  isEngineActivePaper: boolean;   // convenience
+  isEngineActiveLive: boolean;    // convenience
+  passiveLearning: boolean;       // FYI (badge only), never gates “active”
+  ts: string;
+}
+
+
+Client computes isTradingActive only from active (with sensible fallbacks), and never from passive.
+
+1) SERVER — make REST and WS publish the same truth
+1a) /api/trading/status — add mode and active
+
+Where you build the response (near lines ~2720):
+
+// BEFORE (only per-engine flags)
+res.json({
+  isEngineActivePaper: isPaperSimRunning,
+  isEngineActiveLive: isLiveEngineRunning,
+  // ...
+});
+
+
+AFTER
+
+const mode = globalState?.activeMode === 'live' ? 'live' : 'paper'; // default paper
+const active = !!(isPaperSimRunning || isLiveEngineRunning);
+
+res.json({
+  mode,
+  active,                       // <- authoritative
+  isEngineActivePaper: !!isPaperSimRunning,
+  isEngineActiveLive: !!isLiveEngineRunning,
+  passiveLearning: !!systemFlags?.passiveLearning,  // FYI only
+  ts: new Date().toISOString(),
+});
+
+1b) trading_state_changed — keep payload.active (you already have it)
+
+Your current broadcast includes active, isEngineActive, isEngineActivePaper, isEngineActiveLive. That’s good—keep payload.active as the authoritative boolean.
+
+2) CLIENT — hook: hydrate cache on WS, export one isTradingActive
+2a) use-trading.tsx — WebSocket listener (Lines 29–77)
+
+Replace your listener body so we hydrate /api/trading/status with the payload (not just invalidate), then optionally invalidate the others:
+
+useEffect(() => {
+  const updates = wsMessages.filter((m: any) => m.type === 'trading_state_changed');
+  if (!updates.length) return;
+
+  const payload = updates[updates.length - 1]?.payload;
+  console.log('[SYNC] trading_state_changed:', payload);
+
+  if (payload) {
+    // HYDRATE the authoritative query immediately so UI flips without waiting.
+    queryClient.setQueryData(['/api/trading/status'], payload);
+  }
+
+  // invalidate dependent queries after hydrating the truth
+  Promise.allSettled([
+    queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] }),
+    queryClient.invalidateQueries({ queryKey: ['/api/system/config'] }),
+    // add others if they visually depend on trading state
+  ]);
+}, [wsMessages, queryClient]);
+
+2b) use-trading.tsx — exported “active” (replace Lines 243–244)
+
+Introduce a small helper and use it:
+
+function deriveIsActive(state?: TradingState, paperSimStatus?: { isRunning?: boolean }) {
+  // Authoritative boolean first
+  if (state && typeof state.active === 'boolean') return state.active;
+  if (!state) return !!paperSimStatus?.isRunning;                 // best-effort on first paint
+  if (state.mode === 'paper') return !!(state.isEngineActivePaper || paperSimStatus?.isRunning);
+  return !!state.isEngineActiveLive;
+}
+
+const isTradingActivePaper = deriveIsActive(tradingStatus, paperSimStatus);
+const isTradingActiveLive  = deriveIsActive(tradingStatus, undefined); // same truth, per-mode UI can still read this
+
+
+Also export a single isTradingActive to make Top Bar simpler:
+
+const isTradingActive = deriveIsActive(tradingStatus, paperSimStatus);
+
+return {
+  tradingStatus,
+  paperSimStatus,
+  isTradingActive,
+  // ... other exports
+};
+
+3) CLIENT — Top Bar: bind UI to isTradingActive, fix passive badge
+3a) Replace the local isActive computation (Lines 534–547)
+
+Stop recomputing from flags; consume the hook’s truth:
+
+const { isTradingActive, tradingStatus } = useTrading();
+
+const bannerText =
+  tradingStatus?.mode === 'paper'
+    ? (isTradingActive
+        ? 'Paper Trading Mode — Active (Simulated Trades Executing)'
+        : 'Paper Trading Mode — Stopped')
+    : (isTradingActive
+        ? 'Live Trading Mode — Active'
+        : 'Live Trading Mode — Stopped');
+
+
+Make sure your toggle checked prop also uses isTradingActive.
+
+3b) Passive badge property (Lines 718–728)
+
+You found it—rename passiveMode → passiveLearning. While we’re at it, also don’t let passive hide/show affect isTradingActive.
+
+{/* Passive Learning Indicator (FYI only; does not gate Active/Stopped) */}
+{systemConfigData?.systemFlags?.passiveLearning && (
+  <div className="flex items-center gap-0.5 px-0.5 py-0 bg-blue-500/10 border border-blue-500/30 rounded mr-2">
+    <div className="flex items-center gap-0.5">
+      <div className="w-0.5 h-0.5 bg-blue-500 rounded-full animate-pulse" />
+      <span className="text-[6px] font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+        PASSIVE LEARNING
+      </span>
+    </div>
+  </div>
+)}
+
+
+Passive badge becomes a simple FYI that shows when data is flowing but the engine is not trading. It never gates “ACTIVE.”
+
+4) CLIENT — remove double toast (one source of truth)
+
+You’re likely showing a toast in both the user action (modal/toggle) and again when the WS message arrives. Keep the user-action toast and remove any success toast triggered inside the WS listener or query success callback. (The state flip in the UI will be instant thanks to setQueryData above.)
+
+5) Quick verification
+
+Shell
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+echo "=== STATUS (idle) ==="
+curl -s http://localhost:5000/api/trading/status -H "Authorization: Bearer $TOKEN" | jq '{mode,active,isEngineActivePaper,isEngineActiveLive,passiveLearning}'
+
+echo "=== START PAPER ==="
+curl -s -X POST http://localhost:5000/api/paper-sim/start -H "Authorization: Bearer $TOKEN" >/dev/null
+sleep 1
+curl -s http://localhost:5000/api/trading/status -H "Authorization: Bearer $TOKEN" | jq '{mode,active,isEngineActivePaper,isEngineActiveLive,passiveLearning}'
+
+echo "=== STOP PAPER ==="
+curl -s -X POST http://localhost:5000/api/paper-sim/stop -H "Authorization: Bearer $TOKEN" >/dev/null
+sleep 1
+curl -s http://localhost:5000/api/trading/status -H "Authorization: Bearer $TOKEN" | jq '{mode,active,isEngineActivePaper,isEngineActiveLive,passiveLearning}'
+
+
+Expected
+
+After start → active:true, isEngineActivePaper:true, badge may hide.
+
+After stop → active:false, isEngineActivePaper:false, badge can show.
+
+Browser
+
+On start: one toast only; toggle flips to ON; blue bar = “Active”.
+
+On stop: toggle OFF; blue bar = “Stopped”; passive badge visible.
+
+Why this will finally stick
+
+We hydrate the trading status cache with the WS payload (no stale read).
+
+The Top Bar and toggle depend on a single exported boolean (isTradingActive), not on passive, not on mixed fields.
+
+REST and WS now publish the same schema; there’s nothing left to “interpret”.
+
+Passive is treated as display-only—it cannot force the UI to “Stopped”.
+
+If you want, ask Replit to paste back just three small diffs after they apply this:
+
+The new /api/trading/status JSON (to confirm mode + active exist).
+
+The updated WS listener in use-trading.tsx (with setQueryData).
+
+The Top Bar’s isTradingActive usage and the fixed passiveLearning badge.
+
+We’ll sanity-check those three, and this STOPPED/ACTIVE annoyance should be gone for good.
