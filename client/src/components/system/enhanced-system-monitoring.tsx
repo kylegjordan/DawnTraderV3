@@ -151,7 +151,7 @@ interface ConfidenceDrift {
 }
 
 export default function EnhancedSystemMonitoring() {
-  const [activeTab, setActiveTab] = useState("system-ai");
+  const [activeTab, setActiveTab] = useState("lottie-tuning");
   const { toast } = useToast();
   const logEndRef = useRef<HTMLDivElement>(null);
   
@@ -363,6 +363,10 @@ export default function EnhancedSystemMonitoring() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap gap-2 justify-start w-full h-auto p-2" data-testid="tabs-system-monitoring">
+          <TabsTrigger value="lottie-tuning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-lottie-tuning" title="Lottie Tuning">
+            <Gauge className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Lottie Tuning</span>
+          </TabsTrigger>
           <TabsTrigger value="system-ai" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-system-ai" title="System & AI">
             <Activity className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">System & AI</span>
@@ -466,10 +470,6 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="diagnostics" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-diagnostics" title="Diagnostics & Telemetry">
             <Monitor className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Diagnostics & Telemetry</span>
-          </TabsTrigger>
-          <TabsTrigger value="lottie-tuning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-lottie-tuning" title="Lottie Tuning">
-            <Gauge className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Lottie Tuning</span>
           </TabsTrigger>
         </TabsList>
 
