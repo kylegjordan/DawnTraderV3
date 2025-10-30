@@ -4278,6 +4278,45 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 31.G: Get Strategic Drive Status with Motivational Metrics
+  apiRouter.get('/system/drive-status', async (_, res) => {
+    try {
+      const { strategyDriveSummary } = await import('@shared/schema');
+      const [latest] = await db
+        .select()
+        .from(strategyDriveSummary)
+        .orderBy(desc(strategyDriveSummary.createdAt))
+        .limit(1);
+      
+      if (!latest) {
+        return res.status(404).json({ error: "No drive status data available" });
+      }
+      
+      // Check if passive learning is enabled (placeholder - will be implemented)
+      const passiveLearning = false; // TODO: Get from system flags
+      
+      res.json({
+        latest: {
+          globalSDI: latest.globalSDI,
+          driveIndex: latest.driveIndex,
+          personalBest: latest.personalBest,
+          sdiSmoothed: latest.sdiSmoothed,
+          forecastBest: latest.forecastBest,
+          forecastWeakest: latest.forecastWeakest,
+          forecastConfidence: latest.forecastConfidence,
+          timestamp: latest.createdAt,
+        },
+        passiveLearning,
+      });
+    } catch (error: any) {
+      console.error("[31.G] Drive status endpoint error:", error);
+      res.status(500).json({ 
+        error: "Unable to retrieve drive status",
+        message: error.message 
+      });
+    }
+  });
+
   // Phase 8.3: Manual System Recovery Trigger
   apiRouter.post('/system/recover', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

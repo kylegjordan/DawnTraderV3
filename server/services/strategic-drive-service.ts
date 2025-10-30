@@ -25,7 +25,28 @@ function emaSmooth(values: number[], period: number = 5): number {
   );
 }
 
+/**
+ * Phase 31.G: Motivational Incentive Engine Parameters
+ */
+interface MotivationalIncentiveConfig {
+  driveRewardFactor: number;
+  drivePenaltyFactor: number;
+  challengePersistence: number;
+  minConfidenceForReward: number;
+}
+
 export class StrategicDriveService {
+  private incentiveConfig: MotivationalIncentiveConfig = {
+    driveRewardFactor: 0.8,
+    drivePenaltyFactor: 0.6,
+    challengePersistence: 12,
+    minConfidenceForReward: 0.55,
+  };
+
+  constructor() {
+    console.log('[31.G][SDPOE] Motivational Incentive Layer initialized');
+  }
+
   /**
    * Compute drive metrics for all strategies based on telemetry data
    */
@@ -129,7 +150,33 @@ export class StrategicDriveService {
       const forecastBest = best[0];
       const forecastWeakest = worst[0];
 
-      // Create summary record with smoothed values and forecast
+      // Phase 31.G: Motivational Incentive Engine
+      const previousDriveIndex = recent.length > 0 ? Number(recent[0].driveIndex) : 0.5;
+      const previousPersonalBest = recent.length > 0 ? Number(recent[0].personalBest) : 0;
+      
+      let driveIndex = previousDriveIndex;
+      let personalBest = previousPersonalBest;
+      
+      // Apply reward or penalty based on SDI delta
+      if (delta > 0 && forecastConfidence >= this.incentiveConfig.minConfidenceForReward) {
+        // Reward: SDI increased
+        const rewardPoints = delta * 100 * this.incentiveConfig.driveRewardFactor;
+        driveIndex = Math.min(1.0, driveIndex + (rewardPoints / 100));
+        console.log(`[31.G][Motivation] SDI +${delta.toFixed(3)} → Reward +${rewardPoints.toFixed(0)} pts (DriveIndex = ${driveIndex.toFixed(2)})`);
+      } else if (delta < 0) {
+        // Penalty: SDI decreased
+        const penaltyPoints = Math.abs(delta) * 100 * this.incentiveConfig.drivePenaltyFactor;
+        driveIndex = Math.max(0.0, driveIndex - (penaltyPoints / 100));
+        console.log(`[31.G][Motivation] SDI ${delta.toFixed(3)} → Penalty -${penaltyPoints.toFixed(0)} pts (DriveIndex = ${driveIndex.toFixed(2)})`);
+      }
+      
+      // Update personal best if exceeded
+      if (globalSDI > personalBest) {
+        personalBest = globalSDI;
+        console.log(`[31.G][Motivation] New personal best! Target updated → ${personalBest.toFixed(2)}`);
+      }
+
+      // Create summary record with smoothed values, forecast, and motivational metrics
       const [summary] = await db.insert(strategyDriveSummary).values({
         globalSDI,
         bestStrategy: best[0],
@@ -143,12 +190,15 @@ export class StrategicDriveService {
         forecastBest,
         forecastWeakest,
         forecastConfidence,
+        driveIndex,
+        personalBest,
       }).returning();
 
       console.log(`[31.0][SDPOE] Summary created - Global SDI: ${globalSDI.toFixed(3)}, Best: ${best[0]}, Weakest: ${worst[0]}`);
       console.log(`[31.A/B] Smoothed SDI: ${sdiSmoothed.toFixed(3)} | Forecast Best: ${forecastBest} (confidence: ${forecastConfidence.toFixed(2)})`);
+      console.log(`[31.G] DriveIndex: ${driveIndex.toFixed(2)} | PersonalBest: ${personalBest.toFixed(2)}`);
 
-      return { globalSDI, best, worst, summary };
+      return { globalSDI, best, worst, summary, driveIndex, personalBest };
     } catch (error: any) {
       console.error(`[31.0][SDPOE] Error summarizing drive metrics:`, error);
       return null;

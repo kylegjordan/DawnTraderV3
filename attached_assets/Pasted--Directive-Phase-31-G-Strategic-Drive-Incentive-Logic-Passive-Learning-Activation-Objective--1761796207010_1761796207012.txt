@@ -1,0 +1,124 @@
+🔧 Directive: Phase 31.G — Strategic Drive Incentive Logic & Passive Learning Activation
+Objective
+
+Enhance the Strategic Drive & Profit Optimization Engine (SDPOE) with:
+
+A Motivational Incentive Layer that introduces Drive Reward, Drive Penalty, and Challenge Mode mechanics.
+
+Enable Passive Learning Mode within Paper Mode for live market observation without order execution.
+
+Tasks
+1. SDPOE Motivational Incentive Layer
+
+File: server/services/strategic-drive-service.ts
+
+Add a new internal module: MotivationalIncentiveEngine
+
+Parameters:
+
+{
+  driveRewardFactor: 0.8,    // amplifies learning when SDI rises
+  drivePenaltyFactor: 0.6,   // dampens aggression when SDI drops
+  challengePersistence: 12,  // number of cycles the “personal best” remains as a goal
+  minConfidenceForReward: 0.55
+}
+
+
+Behavior:
+
+On each SDI update:
+
+Calculate delta between current and previous SDI.
+
+If Δ > 0 → apply reward: increment driveIndex internally and log
+[31.G][Motivation] SDI +0.043 → Reward +12 pts (DriveIndex = 0.81).
+
+If Δ < 0 → apply penalty: reduce driveIndex or learning rate.
+
+If SDI > previous best → set new challenge target, log
+[31.G][Motivation] New personal best! Target updated → 0.82.
+
+DriveIndex influences LATTI Manager’s learning-rate scalar:
+
+lattiLearningRate = baseRate * (1 + (driveIndex - 0.5));
+
+2. Database Enhancements
+
+Add optional columns (if not present):
+
+ALTER TABLE strategy_drive_summary
+ADD COLUMN IF NOT EXISTS drive_index DOUBLE PRECISION DEFAULT 0.5,
+ADD COLUMN IF NOT EXISTS personal_best DOUBLE PRECISION DEFAULT 0.0;
+
+3. Passive Learning Flag
+
+File: server/services/trading-state-sync.ts and server/context/trading-context.ts
+
+Introduce:
+
+systemFlags.passiveLearning = true; // enables observation-only mode
+
+
+When mode === "paper" && systemFlags.passiveLearning === true:
+
+Skip order placement and position updates.
+
+Continue telemetry, DHMA, LATTI, and SDPOE processing normally.
+
+Log:
+[PassiveLearning] Observing market flow, no trades executed (paper mode).
+
+Switching systemFlags.passiveLearning = false immediately resumes simulated order execution without reconnecting or resetting.
+
+4. Integration and Logging
+
+Add Phase 31.G startup log entries:
+
+[31.G][SDPOE] Motivational Incentive Layer initialized.
+[31.G][SDPOE] Passive Learning flag = true (paper mode – observation active).
+
+
+Verify continuity by confirming:
+
+[ContextBridge] Trading mode: paper (passive)
+[31.0][SDPOE] Data flow active, orders disabled
+
+5. Post-Run Verification Block
+
+After deployment, run:
+
+echo "=== Verify Phase 31.G ==="
+grep -E "\[31\.G\]|\[PassiveLearning\]" /tmp/logs/Start_application_* | tail -20
+curl -s http://localhost:5000/api/system/drive-status | jq '.latest'
+
+
+Expected output:
+
+[31.G][Motivation] SDI +0.038 → Reward +9 pts (DriveIndex = 0.78)
+[PassiveLearning] Observing market flow (no orders)
+{
+  "globalSDI": 0.804,
+  "driveIndex": 0.78,
+  "personalBest": 0.82,
+  "passiveLearning": true
+}
+
+Test User Account
+
+Use credentials:
+
+username: testuser123
+password: SecurePass123!
+
+
+for endpoint authentication during verification.
+
+Expected Outcome
+
+SDPOE gains emotional reinforcement dynamics that modulate LATTI learning adaptively.
+
+Passive Learning activates seamlessly within Paper Mode; data flow continues uninterrupted when toggled off.
+
+No schema migrations beyond optional column additions.
+
+No new system modes or UI changes required.

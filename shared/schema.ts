@@ -4413,6 +4413,8 @@ export const strategyDriveSummary = pgTable("strategy_drive_summary", {
   forecastBest: varchar("forecast_best", { length: 100 }),
   forecastWeakest: varchar("forecast_weakest", { length: 100 }),
   forecastConfidence: doublePrecision("forecast_confidence").notNull().default(0),
+  driveIndex: doublePrecision("drive_index").notNull().default(0.5),
+  personalBest: doublePrecision("personal_best").notNull().default(0),
 }, (table) => ({
   createdAtIdx: index("strategy_drive_summary_created_at_idx").on(table.createdAt),
 }));
