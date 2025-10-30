@@ -4424,3 +4424,24 @@ export const insertStrategyDriveSummarySchema = createInsertSchema(strategyDrive
 
 export type InsertStrategyDriveSummary = z.infer<typeof insertStrategyDriveSummarySchema>;
 export type StrategyDriveSummary = typeof strategyDriveSummary.$inferSelect;
+
+// Phase 31.D: Strategic Drive Guardrail Policy (Soft Guardrails, Hard Coherency)
+export const strategyDriveGuardrailPolicy = pgTable("strategy_drive_guardrail_policy", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  maxDeltaPerCycle: doublePrecision("max_delta_per_cycle").notNull().default(0.15),
+  maxTotalShiftPerHour: doublePrecision("max_total_shift_per_hour").notNull().default(0.40),
+  minConfidence: doublePrecision("min_confidence").notNull().default(0.50),
+  minSmoothedSDI: doublePrecision("min_smoothed_sdi").notNull().default(0.45),
+  maxExposurePerStrategy: doublePrecision("max_exposure_per_strategy").notNull().default(0.50),
+  coolingMinutes: integer("cooling_minutes").notNull().default(20),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedBy: varchar("updated_by", { length: 100 }),
+});
+
+export const insertStrategyDriveGuardrailPolicySchema = createInsertSchema(strategyDriveGuardrailPolicy).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertStrategyDriveGuardrailPolicy = z.infer<typeof insertStrategyDriveGuardrailPolicySchema>;
+export type StrategyDriveGuardrailPolicy = typeof strategyDriveGuardrailPolicy.$inferSelect;

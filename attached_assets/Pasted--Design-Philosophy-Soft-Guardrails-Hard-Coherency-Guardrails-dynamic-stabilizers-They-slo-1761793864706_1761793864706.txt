@@ -1,0 +1,66 @@
+🧩 Design Philosophy: “Soft Guardrails, Hard Coherency”
+
+Guardrails = dynamic stabilizers → They slow down risky reallocations but rarely block them outright.
+
+Coherency Rules = hard safety stop → They’re the final layer preventing unsafe exposure or trade loops.
+
+So we’ll widen guardrails slightly and lower their strict thresholds to ensure they never overrule valid trades or block reallocation unless absolutely necessary.
+
+⚙️ Recommended Default Guardrail Policy (Conflict-Free Configuration)
+Parameter	Purpose	Default (Safe Value)	Effect
+maxDeltaPerCycle	Max single-strategy shift per reallocation cycle	0.15 (15%)	Allows fluid adjustments without abrupt reallocations
+maxTotalShiftPerHour	Max total shift across all strategies	0.40 (40%)	Plenty of movement room; prevents over-throttling
+minConfidence	Minimum forecast confidence required for auto action	0.50	Ensures auto-drive continues unless forecast is very weak
+minSmoothedSDI	Minimum SDI strength before halting reallocation	0.45	Prevents trade starvation in sideways/quiet markets
+maxExposurePerStrategy	Cap on any single strategy’s weight	0.50 (50%)	Allows a strong winner to dominate moderately without breaching coherence
+coolingMinutes	Cooldown period before next reallocation attempt	20	Balances responsiveness and stability
+💡 Why These Values Work
+
+They won’t trigger coherency conflicts:
+The coherency validator kicks in only if exposures exceed 100% or relative ratios breach portfolio constraints. These defaults remain far below those thresholds.
+
+They won’t starve trading frequency:
+minSmoothedSDI at 0.45 ensures that LATTI continues operating even when performance is flat.
+Only extremely poor confidence (<0.5) will pause reallocations.
+
+They keep Lottie Oversight engaged but not throttled:
+Lottie’s semi-auto approval flow still gets invoked, but she won’t see an excess of “blocked” events.
+
+🧱 Implementation Update
+
+You can apply these defaults by adjusting the SQL seeding block from the previous directive:
+
+-- Update guardrail defaults for non-conflict configuration
+UPDATE guardrail_policy
+SET 
+  max_delta_per_cycle = 0.15,
+  max_total_shift_per_hour = 0.40,
+  min_confidence = 0.50,
+  min_smoothed_sdi = 0.45,
+  max_exposure_per_strategy = 0.50,
+  cooling_minutes = 20;
+
+
+Or in the TypeScript seed if you want it programmatic:
+
+await db.insert(guardrailPolicy).values({
+  maxDeltaPerCycle: 0.15,
+  maxTotalShiftPerHour: 0.40,
+  minConfidence: 0.50,
+  minSmoothedSDI: 0.45,
+  maxExposurePerStrategy: 0.50,
+  coolingMinutes: 20,
+});
+
+✅ Expected Behavioral Outcome
+Scenario	Behavior
+Moderate forecast (confidence 0.55–0.7)	Auto-drive continues normally.
+Weak market (SDI ~0.4)	Reallocation slows down but doesn’t halt.
+Flat market (multiple neutral strategies)	LATTI redistributes slightly, maintaining exposure balance.
+Strong trend (SDI > 0.8)	Strategies rebalance quickly toward top performer.
+Overlap with coherency thresholds	Guardrails soften, but coherency rules remain the hard stop — no double-blocking.
+🧩 Summary
+
+✅ Guardrails = soft limits to smooth volatility
+✅ Coherency = hard stop for systemic safety
+✅ Combined behavior = smooth, safe, uninterrupted trading

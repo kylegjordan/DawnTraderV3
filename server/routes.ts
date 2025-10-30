@@ -4232,6 +4232,52 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 31.D: Get Strategic Drive Guardrail Policy
+  apiRouter.get('/system/drive-guardrails', async (_, res) => {
+    try {
+      const { strategicDriveGuardrails } = await import('./services/strategic-drive-guardrail-service');
+      const policy = await strategicDriveGuardrails.getPolicy();
+      const state = strategicDriveGuardrails.getState();
+      
+      res.json({
+        policy,
+        state,
+      });
+    } catch (error: any) {
+      console.error("[31.D] Guardrail policy GET error:", error);
+      res.status(500).json({ 
+        error: "Unable to retrieve guardrail policy",
+        message: error.message 
+      });
+    }
+  });
+
+  // Phase 31.D: Update Strategic Drive Guardrail Policy
+  apiRouter.put('/system/drive-guardrails', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { strategicDriveGuardrails } = await import('./services/strategic-drive-guardrail-service');
+      const { insertStrategyDriveGuardrailPolicySchema } = await import('@shared/schema');
+      
+      const validated = insertStrategyDriveGuardrailPolicySchema.parse(req.body);
+      const username = req.user?.username || 'unknown';
+      
+      const updated = await strategicDriveGuardrails.updatePolicy(validated, username);
+      
+      res.json({
+        ok: true,
+        policy: updated,
+        message: 'Guardrail policy updated successfully'
+      });
+    } catch (error: any) {
+      console.error("[31.D] Guardrail policy PUT error:", error);
+      res.status(400).json({ 
+        ok: false,
+        error: "Unable to update guardrail policy",
+        message: error.message 
+      });
+    }
+  });
+
   // Phase 8.3: Manual System Recovery Trigger
   apiRouter.post('/system/recover', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
