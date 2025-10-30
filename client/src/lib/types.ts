@@ -134,10 +134,13 @@ export interface PortfolioMetrics {
 
 export interface TradingStatus {
   mode: 'live' | 'paper';
+  active: boolean;  // Phase 32.D-Fix.Final: Authoritative active state
   engineActive: boolean;
   // Phase 27.F.12: Mode-specific engine status
   isEngineActivePaper?: boolean;
   isEngineActiveLive?: boolean;
+  passiveLearning?: boolean;  // Phase 32.D-Fix.Final: FYI field for passive badge
+  ts?: string;  // Phase 32.D-Fix.Final: timestamp
   activeStrategies: string[];
   activeStrategiesCount: number;
   filteredPairs: number;

@@ -46,6 +46,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const { 
     tradingStatus,
     paperSimStatus,
+    isTradingActive,  // Phase 32.D-Fix.Final: Single authoritative active state
     startTrading, 
     stopTrading, 
     isStarting, 
@@ -531,20 +532,17 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   };
 
-  // Phase 32.D-Fix.3: Unified Active State - considers both engine state and paper sim status
-  const isActive = (() => {
-    if (currentMode === 'paper') {
-      return (
-        tradingStatus?.isEngineActivePaper ||
-        paperSimStatus?.isRunning ||
-        false
-      );
-    }
-    if (currentMode === 'live') {
-      return tradingStatus?.isEngineActiveLive || false;
-    }
-    return false;
-  })();
+  // Phase 32.D-Fix.Final: Use authoritative isTradingActive from hook
+  const isActive = isTradingActive;
+  
+  // Phase 32.D-Fix.Final: Compute banner text based on mode and active state
+  const bannerText = currentMode === 'paper'
+    ? (isActive
+        ? 'Paper Trading Mode — Active (Simulated Trades Executing)'
+        : 'Paper Trading Mode — Stopped')
+    : (isActive
+        ? 'Live Trading Mode — Active'
+        : 'Live Trading Mode — Stopped');
 
   return (
     <header 
@@ -715,8 +713,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               </Button>
             </div>
 
-            {/* Phase 31.H/32.D-Fix.2: Passive Learning Indicator */}
-            {systemConfigData?.systemFlags?.passiveMode && (
+            {/* Phase 31.H/32.D-Fix.Final: Passive Learning Indicator (FYI only; does not gate Active/Stopped) */}
+            {systemConfigData?.systemFlags?.passiveLearning && (
               <div className="flex items-center gap-0.5 px-0.5 py-0 bg-blue-500/10 border border-blue-500/30 rounded mr-2">
                 <div className="flex items-center gap-0.5">
                   <div className="w-0.5 h-0.5 bg-blue-500 rounded-full animate-pulse" />
