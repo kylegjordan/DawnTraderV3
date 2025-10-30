@@ -1,0 +1,187 @@
+🧭 Directive: Phase 31.J — Enable “Lottie Tuning” Tab in System Monitoring
+🎯 Objective
+
+Add a “Lottie Tuning” tab to the System Monitoring dashboard so that you can see the ongoing parameter adjustments, confidence levels, and stability metrics from LATTI Manager (Phase 30.FX.3).
+
+The tab will:
+
+Display real-time adaptive tuning metrics (updated every 30 s).
+
+Include a small “Observation Mode” badge when passiveLearning = true.
+
+Use your existing charting components for consistency with the Strategy Performance widget.
+
+🧱 Implementation Steps
+1️⃣ Backend Validation
+
+Confirm or expose the endpoint:
+
+File: server/routes.ts
+
+// ✅ Add if missing
+router.get("/api/system/latti-tuning", async (req, res) => {
+  try {
+    const data = await lattiManager.getLatestMetrics();
+    res.json(data || { status: "no_data" });
+  } catch (err) {
+    console.error("[31.J][LATTI-TUNING]", err);
+    res.status(500).json({ error: "Failed to load tuning metrics" });
+  }
+});
+
+
+Expected response format
+
+{
+  "lastRun": "2025-10-30T14:00:00Z",
+  "tuningCycle": 30,
+  "adjustments": { "dhma.alpha": 0.012, "trendpulse.beta": -0.004 },
+  "confidence": 0.81,
+  "stabilityScore": 0.94
+}
+
+2️⃣ Frontend – Add Tab
+
+File: client/src/pages/system-monitoring.tsx
+
+const tabs = [
+  { label: "System Health", value: "health" },
+  { label: "AI Metrics", value: "ai" },
+  { label: "Lottie Tuning", value: "tuning" },  // 👈 new tab
+  { label: "Strategy Health", value: "strategy" }
+];
+
+
+Create client/src/components/monitoring/lottie-tuning-tab.tsx
+
+import React, { useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+
+export default function LottieTuningTab() {
+  const [data, setData] = useState<any>(null);
+
+  async function fetchData() {
+    const res = await fetch("/api/system/latti-tuning");
+    const json = await res.json();
+    setData(json);
+  }
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!data) return <div>Loading Lottie tuning metrics...</div>;
+
+  return (
+    <Card className="p-4">
+      <CardContent>
+        <h2 className="text-xl font-bold mb-2">Lottie Tuning Overview</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p><strong>Last Run:</strong> {data.lastRun}</p>
+            <p><strong>Confidence:</strong> {data.confidence}</p>
+            <p><strong>Stability Score:</strong> {data.stabilityScore}</p>
+            <p><strong>Tuning Cycle:</strong> {data.tuningCycle} min</p>
+          </div>
+          <div>
+            <ResponsiveContainer width="100%" height={150}>
+              <LineChart data={Object.entries(data.adjustments).map(([k, v]) => ({ name: k, value: v }))}>
+                <XAxis dataKey="name" hide />
+                <YAxis domain={[-0.05, 0.05]} />
+                <Tooltip />
+                <Line type="monotone" dataKey="value" stroke="#0ea5e9" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="mt-3 text-sm text-gray-400 italic">
+          {data.passiveLearning ? "Observation Mode Active" : "Live Adaptive Mode"}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+3️⃣ Add Passive Learning Indicator to Top Bar (optional enhancement)
+
+File: client/src/components/top-bar.tsx
+
+{systemConfig?.systemFlags?.passiveLearning && (
+  <span className="ml-2 px-2 py-1 text-xs bg-sky-600 text-white rounded">
+    Passive Learning
+  </span>
+)}
+
+4️⃣ Verification Commands
+
+Login as test user
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+echo "Token: $TOKEN"
+
+
+Confirm endpoint returns data
+
+curl -s http://localhost:5000/api/system/latti-tuning | jq '.'
+
+
+Check passive learning flag
+
+curl -s http://localhost:5000/api/system/config | jq '.systemFlags.passiveLearning'
+
+
+Expected output
+
+true
+
+
+Confirm tuning logs
+
+grep -E "\[LATTIManager\]" /tmp/logs/Start_application_* | tail -5
+
+
+Expected:
+
+[LATTIManager] ✅ Adaptive tuning complete (mode=paper)
+[LATTIManager] Confidence=0.82, Stability=0.95
+
+5️⃣ Acceptance Criteria
+
+✅ “Lottie Tuning” tab appears on the System Monitoring page.
+
+✅ Endpoint /api/system/latti-tuning returns valid JSON every 30 s.
+
+✅ Tab updates dynamically without refreshing the page.
+
+✅ “Passive Learning” indicator visible in Top Bar when active.
+
+✅ No errors in browser console or server logs.
+
+🧪 Test User
+Field	Value
+Username	testuser123
+Password	SecurePass123!
+📋 Post-Run Verification Summary
+
+After deployment, confirm:
+
+The System Monitoring page now shows a “Lottie Tuning” tab.
+
+The tab displays:
+
+Last run timestamp
+
+Confidence & stability scores
+
+Adjustment deltas chart
+
+“Observation Mode Active” badge
+
+LATTI Manager logs show regular cycles.
+
+Passive Learning flag = true in /api/system/config.
