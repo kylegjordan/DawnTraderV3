@@ -4447,3 +4447,22 @@ export const insertStrategyDriveGuardrailPolicySchema = createInsertSchema(strat
 
 export type InsertStrategyDriveGuardrailPolicy = z.infer<typeof insertStrategyDriveGuardrailPolicySchema>;
 export type StrategyDriveGuardrailPolicy = typeof strategyDriveGuardrailPolicy.$inferSelect;
+
+// Phase 31.H: System Configuration (Passive Learning & System Flags)
+export const systemConfig = pgTable("system_config", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  systemFlags: jsonb("system_flags").$type<{
+    passiveLearning?: boolean;
+    [key: string]: any;
+  }>().notNull().default(sql`'{}'::jsonb`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedBy: varchar("updated_by", { length: 100 }),
+});
+
+export const insertSystemConfigSchema = createInsertSchema(systemConfig).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
+export type SystemConfig = typeof systemConfig.$inferSelect;

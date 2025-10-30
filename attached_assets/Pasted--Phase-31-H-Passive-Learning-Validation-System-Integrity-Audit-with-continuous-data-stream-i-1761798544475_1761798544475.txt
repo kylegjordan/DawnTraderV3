@@ -1,0 +1,96 @@
+⚙️ Phase 31.H – Passive Learning Validation & System Integrity Audit
+
+(with continuous data stream into upcoming paper-testing phase)
+
+🔧 Purpose
+
+Enable continuous passive observation for a full 60 minutes (no fast-forwarding).
+
+Add top-bar status indicator → “PASSIVE LEARNING ACTIVE”.
+
+Verify telemetry flow ( Kraken feed → LATTI → SDPOE → DHMA ).
+
+Perform full audit of all phases 30–31 to confirm zero breaks or user-ID reference leaks.
+
+Leave passive mode ON after the audit so data continues seamlessly into Phase 32 testing.
+
+🧪 Directive for Replit Chat
+# ===============================
+# PHASE 31.H – PASSIVE LEARNING VALIDATION & SYSTEM INTEGRITY AUDIT
+# ===============================
+
+# 🔐 Test user credentials
+TEST_USER_USERNAME="testuser123"
+TEST_USER_PASSWORD="SecurePass123!"
+
+echo "🔵 Logging in as test user..."
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$TEST_USER_USERNAME"'","password":"'"$TEST_USER_PASSWORD"'"}' \
+  | jq -r '.accessToken')
+
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+  echo "❌ Login failed — cannot continue."
+  exit 1
+fi
+echo "✅ Login successful."
+
+# 1️⃣ Enable passive learning mode (remains active after audit)
+echo "🟢 Enabling passive learning mode (observation only, no execution)..."
+curl -s -X POST http://localhost:5000/api/system/config \
+  -H "Content-Type: application/json" \
+  -d '{"systemFlags":{"passiveLearning":true}}' | jq '.'
+
+# 2️⃣ Verify UI indicator and backend acknowledgment
+echo "🧭 Checking that 'PASSIVE LEARNING ACTIVE' indicator appears in Paper Mode bar..."
+grep -E "PASSIVE LEARNING ACTIVE" client/src/components/ui/top-bar* || echo "UI indicator not yet rendered — will verify visually."
+
+# 3️⃣ Confirm backend telemetry and strategy pipelines are flowing
+echo "📡 Checking live telemetry frames (LATTI + SDPOE + DHMA)..."
+grep -E "\[PassiveLearning\]|\[SDPOE\]|\[DHMA\]" /tmp/logs/Start_application_* | tail -25
+
+# 4️⃣ Run full system integrity audit
+echo "🧩 Running lint and dependency integrity checks..."
+npm run lint && npm run check:integrity
+
+echo "🔍 Checking system health endpoints..."
+curl -s http://localhost:5000/api/system/health-30fx | jq '.'
+curl -s http://localhost:5000/api/system/drive-status | jq '.status'
+curl -s http://localhost:5000/api/system/drive-forecast | jq '.forecastBest'
+
+# 5️⃣ Maintain observation for exactly 60 minutes (no acceleration)
+echo "⏱  Maintaining continuous passive observation for 60 minutes..."
+sleep 3600
+
+# 6️⃣ Log verification — confirm continuous flow
+echo "📊 Collecting last 50 passive-learning telemetry frames..."
+grep -E "\[PassiveLearning\]" /tmp/logs/Start_application_* | tail -50
+
+echo "✅ Passive learning validation complete."
+echo "⚡ Passive mode remains active — data stream will continue into Phase 32 paper testing."
+
+🧠 Expected Results
+
+Blue Paper-Mode bar shows “PASSIVE LEARNING ACTIVE”.
+
+Console logs update every ≈ minute:
+
+[PassiveLearning] Frame received: BTC/USD tick @ 0.43 s latency
+[SDPOE] Observation cycle complete (no trades executed)
+
+
+Health endpoints all return 200 OK.
+
+No guardrail or coherency violations triggered.
+
+After 60 minutes, logs show “Passive learning validation complete” and stream continues live for Phase 32.
+
+Once this completes successfully, Replit will confirm:
+
+All services ( LATTI, SDPOE, Guardrails, Motivation ) are active.
+
+Data flow is continuous and stable.
+
+No broken dependencies or user-ID references remain.
+
+After that confirmation, we’ll move directly into Phase 32 – Controlled Paper Trading Testing without restarting or cutting the data feed.
