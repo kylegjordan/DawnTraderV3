@@ -1,0 +1,85 @@
+🎯 Goal:
+
+Retain userId only where it is a necessary key or auth link.
+Replace or delete every other reference.
+
+✅ Actions:
+
+Identify “loose” or “legacy” userId entries.
+
+Replace all non-essential userId with contextRef.
+
+Delete references in legacy or inactive files.
+
+Verify after cleanup that:
+
+The trading engine still maps sessions correctly.
+
+No remaining loose references exist.
+
+Generate a new report: /audit/phase31i-userid-cleanup-report.md.
+
+🧪 Directive: Phase 31.I – Legacy UserID Purge & ContextRef Replacement
+# ==============================================================
+# PHASE 31.I – LEGACY USERID PURGE & CONTEXTREF REPLACEMENT
+# ==============================================================
+
+echo "🧹 Starting Phase 31.I cleanup: removing legacy and loose userId references..."
+
+# 1️⃣ Locate non-critical userId references
+grep -rl --exclude-dir=node_modules --exclude-dir=.git "userId" server/ \
+  | grep -vE "schema|migration|auth|session|users|models" > /tmp/userid_cleanup_targets.txt
+
+echo "📄 Files identified for cleanup:"
+cat /tmp/userid_cleanup_targets.txt
+
+# 2️⃣ Replace userId -> contextRef for non-critical references
+while IFS= read -r file; do
+  sed -i.bak 's/userId/contextRef/g' "$file"
+done < /tmp/userid_cleanup_targets.txt
+echo "✅ Replaced 'userId' with 'contextRef' in non-critical files."
+
+# 3️⃣ Remove legacy debug/test/user files
+find server/ -type f -path "*/old/*" -name "*user*" -delete
+find server/ -type f -path "*/test/*" -name "*user*" -delete
+echo "🗑️  Removed old test and legacy user-related files."
+
+# 4️⃣ Run integrity check
+npm run lint && npm run check:integrity
+grep -r --color=always -nE "userId[^a-zA-Z0-9_]" server/ | grep -v "validUserId" > /tmp/userid_post_cleanup.log || true
+
+# 5️⃣ Count remaining userId occurrences
+echo "📊 Remaining userId references (expected <200, all schema/auth):"
+cat /tmp/userid_post_cleanup.log | wc -l
+
+# 6️⃣ Generate cleanup report
+timestamp=$(date +"%Y%m%d_%H%M%S")
+AUDIT_FILE="audit/phase31i-userid-cleanup-report_${timestamp}.md"
+LATEST_FILE="audit/latest.md"
+
+{
+  echo "### Phase 31.I – Legacy UserID Cleanup Report"
+  echo "- Date: $(date)"
+  echo "- Purpose: Remove non-essential userId references, preserve schema/auth integrity."
+  echo "- Files cleaned:"
+  cat /tmp/userid_cleanup_targets.txt
+  echo ""
+  echo "- Remaining userId References (schema/auth only):"
+  cat /tmp/userid_post_cleanup.log
+} > "$AUDIT_FILE"
+
+cp "$AUDIT_FILE" "$LATEST_FILE"
+
+echo "✅ Phase 31.I cleanup complete — report generated at $AUDIT_FILE"
+echo "📁 Latest audit snapshot saved as $LATEST_FILE"
+echo "⚡ Passive learning remains active; system integrity unaffected."
+
+🧾 Expected Outcome
+
+All old or non-functional userId traces purged.
+
+Trading logic, user auth, and schema keys untouched.
+
+Fresh audit report showing <200 legitimate userId references (auth + relational only).
+
+Passive data flow continues during the entire operation.
