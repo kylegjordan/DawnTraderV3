@@ -2774,11 +2774,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Paper mode - get simulated portfolio state
         const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
         
-        if (!portfolioState) {
+        if (!portfolioState || !portfolioState.balance) {
+          console.error('[Portfolio/Overview] Paper portfolio state not found or balance is null');
           return res.status(404).json({ error: 'Paper portfolio state not found' });
         }
         
-        const balance = parseFloat(portfolioState.balance || '850');
+        const balance = parseFloat(portfolioState.balance);
         const cryptoValue = parseFloat(portfolioState.cryptoValue || '0');
         const cashValue = parseFloat(portfolioState.cash || balance.toString());
         
@@ -3442,11 +3443,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
       
-      if (!portfolioState) {
+      if (!portfolioState || !portfolioState.balance) {
+        console.error('[Paper/Portfolio/State] Portfolio state not found or balance is null');
         return res.status(404).json({ error: 'Paper portfolio state not found' });
       }
       
-      const balance = parseFloat(portfolioState.balance || '800');
+      const balance = parseFloat(portfolioState.balance);
       const unrealizedPnl = parseFloat(portfolioState.unrealizedPnl || '0');
       const realizedPnl = parseFloat(portfolioState.realizedPnl || '0');
       const cryptoValue = parseFloat(portfolioState.cryptoValue || '0');
@@ -16774,7 +16776,12 @@ export async function handleUpdateTradingPace(req: AuthenticatedRequest, res: Re
         storage.getPortfolioState({ globalContextId: userId, mode })
       ]);
       
-      const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 850;
+      if (!portfolioState || !portfolioState.balance) {
+        console.error(`[TradingPace-API] Portfolio state not found for ${mode} mode`);
+        throw new Error(`Portfolio state not found for ${mode} mode`);
+      }
+      
+      const portfolioBalance = parseFloat(portfolioState.balance);
       const targetDailyAvgEarningPct = portfolioBalance > 0 
         ? ((selectedMetrics.dailyProfit / portfolioBalance) * 100).toFixed(2)
         : '0';
@@ -16865,7 +16872,15 @@ export async function handleLATTITargets(req: AuthenticatedRequest, res: Respons
     
     // Get portfolio balance
     const portfolioState = await storage.getPortfolioState({ globalContextId: userId, mode });
-    const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 850;
+    
+    if (!portfolioState || !portfolioState.balance) {
+      console.error(`[LATTI-Targets] Portfolio state not found for ${mode} mode`);
+      return res.status(404).json({ 
+        error: `Portfolio balance not found for ${mode} mode. Please ensure portfolio state is initialized.` 
+      });
+    }
+    
+    const portfolioBalance = parseFloat(portfolioState.balance);
     
     // Phase 27.F.21: LATTI targets work BACKWARDS from desired portfolio percentage returns
     // These are aspirational targets independent of guardrails (which control actual execution limits)

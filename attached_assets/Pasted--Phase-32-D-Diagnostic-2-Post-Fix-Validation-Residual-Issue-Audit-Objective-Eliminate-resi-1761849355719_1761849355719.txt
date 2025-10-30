@@ -1,0 +1,128 @@
+🧩 Phase 32.D-Diagnostic.2 — Post-Fix Validation & Residual Issue Audit
+🎯 Objective
+
+Eliminate residual UI state and data-binding errors after Phases 32.D-Fix.6 → 9.
+Replit should investigate five remaining problem clusters and propose corrections.
+
+1️⃣ Passive Mode Reversion on Startup
+
+Symptoms
+
+After restart + login, Passive Mode badge sometimes fails to appear even though trading = stopped.
+Probable Cause
+
+system_context still initializes after the first /api/system/config call.
+
+passiveMode depends on that late init.
+
+Expected Fix Path
+
+Delay first broadcast until trading-state-sync.initialize() completes or preload passiveMode = true in Redux/React Query default state.
+
+Verify /api/system/config returns "passiveMode": true immediately on cold boot.
+
+2️⃣ Portfolio Balance Fragmentation (Primary vs Goals vs LATTI)
+
+Symptoms
+
+Dashboard = $818 → 830 → 835 (new value).
+
+LATTI Goals & Guardrails / Goals Engine = $850 (stale constant).
+Probable Cause
+
+Still two portfolio data sources:
+
+/api/dashboard/overview reads portfolio_state (paper context).
+
+/api/goals/summary reads goals_state snapshot table that isn’t refreshed by portfolio_balance_updated.
+Expected Fix Path
+
+Consolidate both endpoints to use the same query (storage.getPortfolioBalance(mode)).
+
+Add React Query invalidation for /api/goals/summary whenever portfolio_balance_updated fires.
+
+Remove any “fallbackBalance” logic in usePortfolioBalance().
+
+3️⃣ Trading Toggle & Blue Bar Still Stopped After Toast
+
+Symptoms
+
+Toast fires ✅ , Passive badge disappears ✅ , but toggle / bar remain STOPPED.
+Probable Cause
+
+TopBar WebSocket listener now reads from latestUpdate.payload.mode, but payload.active may not be parsed because server broadcasts { active: true } while the frontend checks payload.isEngineActive.
+Expected Fix Path
+
+Normalize payload keys:
+
+const isActive = payload.active ?? payload.isEngineActive ?? false;
+
+
+Ensure /api/paper-sim/status sets both active=true and isRunning=true.
+
+Log [TopBar] trading_state_changed → active:true in browser console to confirm.
+
+4️⃣ Goals Engine & Guardrails Fail to Load / Fetch Errors
+
+Symptoms
+
+“Failed to load presets / guardrails data / Failed to fetch” messages; Goals Engine stalls minutes.
+Probable Cause
+
+Backend GET /api/goals/summary & GET /api/goals/presets throwing 500 / timeout due to missing user-ID join after orphaned cleanup.
+
+Possible foreign-key mismatch (NULL userId after Phase 32.D-Fix.7 cleanup).
+Expected Fix Path
+
+Confirm both endpoints filter by (userId OR globalUser IS NULL) not strictly userId.
+
+Validate DB joins and indexes: ensure goal_presets.user_id defaults to NULL, not required.
+
+Add short-term logging in server/routes/goals.ts to capture thrown error text.
+
+5️⃣ Intermittent “Invalid Enum trading_mode” Errors (Backend Logs)
+
+Symptoms
+
+[MetricsCollector] ❌ invalid input value for enum trading_mode: "{}"
+[HeuristicTrader] ❌ invalid input value for enum trading_mode: "3ace5ebb-..."
+
+
+Probable Cause
+
+Function calls (collectMetrics, HeuristicTrader.run) still passing UUID or empty object instead of string 'paper' | 'live'.
+
+Leftover from pre-refactor modeRegistry/sessionContext.
+Expected Fix Path
+
+Search for collectMetrics( and ensure call sites always use context.tradingMode || 'paper'.
+
+Add runtime guard:
+
+if (!['live','paper'].includes(mode)) mode = 'paper';
+
+🧪 Verification Checklist (after Replit fixes)
+Test	Expected Result
+Restart → Login	Passive Learning badge visible within 1 s
+Start new PaperSim	Toast < 100 ms; toggle & bar → Active
+Dashboard vs Goals values	Identical portfolio balance within 100 ms
+Goals Engine load time	< 2 s; no “Failed to fetch” errors
+Backend logs	No enum trading_mode errors
+🧾 Deliverable from Replit
+
+Create → audit/phase32d-diagnostic2-postfix-sync.md including:
+
+Issue → Root cause → Fix implemented table.
+
+Screenshots of synchronized portfolio values.
+
+API responses from /api/system/config, /api/dashboard/overview, /api/goals/summary after start/stop.
+
+Console timestamps showing active → stopped transitions < 100 ms.
+
+📣 Instruction to Replit
+
+Run a full diagnostic for the five residual problems above.
+For each, describe the exact cause, show supporting logs or code lines, and apply the corrective fixes.
+Then verify against the test checklist and include results in the audit report.
+Use credentials testuser123 / SecurePass123! for all runs.
