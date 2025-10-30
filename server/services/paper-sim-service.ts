@@ -164,6 +164,7 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
 declare global {
   var globalPaperPortfolioManager: any;
   var globalPaperSimOperationLock: Promise<void> | null;
+  var globalPaperSimBusyFlag: boolean;
 }
 
 /**
@@ -202,6 +203,19 @@ export async function startPaperSimulation(
   }
 ): Promise<PaperSimResult> {
   try {
+    // Phase 33.A: Fast busy check to prevent overlapping requests
+    if (global.globalPaperSimBusyFlag) {
+      console.log('[Phase-33.A] Engine busy, rejecting start request');
+      return {
+        success: false,
+        message: 'Engine is busy processing another request. Please wait...',
+        error: 'BUSY',
+      };
+    }
+    
+    // Set busy flag
+    global.globalPaperSimBusyFlag = true;
+    
     // Wait for any pending operations to complete
     if (global.globalPaperSimOperationLock) {
       await global.globalPaperSimOperationLock;
@@ -375,6 +389,7 @@ export async function startPaperSimulation(
         throw error;
       } finally {
         global.globalPaperSimOperationLock = null;
+        global.globalPaperSimBusyFlag = false; // Phase 33.A: Clear busy flag
       }
     })();
 
@@ -384,6 +399,7 @@ export async function startPaperSimulation(
   } catch (error: any) {
     console.error('[PaperSimService] Error starting paper trading simulation:', error);
     global.globalPaperSimOperationLock = null;
+    global.globalPaperSimBusyFlag = false; // Phase 33.A: Clear busy flag on error
     return {
       success: false,
       message: `Error starting paper trading simulation: ${error.message}`,
@@ -401,6 +417,19 @@ export async function startPaperSimulation(
  */
 export async function stopPaperSimulation(userId: string): Promise<PaperSimResult> {
   try {
+    // Phase 33.A: Fast busy check to prevent overlapping requests
+    if (global.globalPaperSimBusyFlag) {
+      console.log('[Phase-33.A] Engine busy, rejecting stop request');
+      return {
+        success: false,
+        message: 'Engine is busy processing another request. Please wait...',
+        error: 'BUSY',
+      };
+    }
+    
+    // Set busy flag
+    global.globalPaperSimBusyFlag = true;
+    
     // Wait for any pending operations to complete
     if (global.globalPaperSimOperationLock) {
       await global.globalPaperSimOperationLock;
@@ -511,6 +540,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         throw error;
       } finally {
         global.globalPaperSimOperationLock = null;
+        global.globalPaperSimBusyFlag = false; // Phase 33.A: Clear busy flag
       }
     })();
 
@@ -520,6 +550,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
   } catch (error: any) {
     console.error('[PaperSimService] Error stopping paper trading simulation:', error);
     global.globalPaperSimOperationLock = null;
+    global.globalPaperSimBusyFlag = false; // Phase 33.A: Clear busy flag on error
     return {
       success: false,
       message: `Error stopping paper trading simulation: ${error.message}`,

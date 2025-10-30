@@ -55,6 +55,16 @@ export function useTrading() {
         }
       }));
       
+      // Phase 33.A: Hydrate portfolio balance immediately from WS payload
+      if (payload.active && payload.portfolioBalance !== undefined) {
+        queryClient.setQueryData(['/api/portfolio/overview'], (old: any) => ({
+          ...(old || {}), // Phase 33.A: Default to empty object if cache doesn't exist
+          totalValue: payload.portfolioBalance,
+          portfolioBalance: payload.portfolioBalance,
+        }));
+        console.log(`[Phase-33.A] Portfolio balance hydrated from WS: $${payload.portfolioBalance}`);
+      }
+      
       // Force re-renders for all updated caches
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'], exact: true });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'], exact: true });

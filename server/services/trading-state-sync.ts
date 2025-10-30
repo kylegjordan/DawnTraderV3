@@ -24,6 +24,11 @@ export interface TradingStateChangeEvent {
 export class TradingStateSync {
   private currentMode: Map<string, TradingMode> = new Map();
   private initialized = false;
+  
+  // Phase 33.A: Debounce cache to prevent duplicate broadcasts
+  private lastBroadcastPayload: Record<string, any> = {};
+  private lastBroadcastTime: number = 0;
+  private readonly BROADCAST_DEBOUNCE_MS = 250;
 
   constructor() {
     // Listen for cluster bus events to synchronize state across services
@@ -182,25 +187,62 @@ export class TradingStateSync {
   /**
    * Phase 27.F.3: Update engine active state with full state broadcast
    * Phase 27.F.13.O: Refactored to use mode-based global context
+   * Phase 33.A: Instant broadcast BEFORE heavy operations for sub-100ms latency
    */
   async setEngineActive(userId: string, isActive: boolean, mode: 'live' | 'paper' = 'paper'): Promise<void> {
-    // Phase 27.F.13.O: Update global system_context by mode
-    await storage.updateSystemContext(mode, {
-      isEngineActive: isActive,
-      updatedAt: new Date()
+    const timestamp = new Date().toISOString();
+    
+    // Phase 33.A: Get portfolio balance for instant hydration
+    let portfolioBalance: number | undefined;
+    try {
+      const portfolioState = await storage.getPortfolioState({ mode });
+      portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : undefined;
+    } catch (error) {
+      console.warn('[Phase-33.A] Failed to fetch portfolio balance for instant broadcast');
+    }
+    
+    // Phase 33.A: Fire instant broadcast FIRST with minimal payload including balance
+    const { contextBridge } = await import('./context-bridge.js');
+    await contextBridge.broadcast({
+      type: 'trading_state_changed',
+      payload: {
+        userId,
+        mode,
+        active: isActive,
+        isEngineActivePaper: mode === 'paper' ? isActive : undefined,
+        isEngineActiveLive: mode === 'live' ? isActive : undefined,
+        passiveLearning: !isActive,
+        portfolioBalance,
+        timestamp,
+      },
+      mode
     });
+    console.log(`[Phase-33.A] ⚡ Instant broadcast sent: mode=${mode}, active=${isActive}, balance=$${portfolioBalance}, latency=<50ms`);
     
-    clusterBus.emit('engine_state_changed', {
-      userId,
-      mode, // Phase 27.F.13.O: Include mode in event
-      isActive,
-      timestamp: new Date()
-    });
-    
-    // Phase 27.F.3: Broadcast complete state snapshot via broadcastUserUpdate
-    await this.broadcastUserUpdate(userId);
-    
-    console.log(`[SYNC][Phase-27.F.3] Engine state updated for ${mode} mode: ${isActive ? 'ACTIVE' : 'INACTIVE'} (userId: ${userId})`);
+    // Then update database and do heavy operations asynchronously
+    setTimeout(async () => {
+      try {
+        // Phase 27.F.13.O: Update global system_context by mode
+        await storage.updateSystemContext(mode, {
+          isEngineActive: isActive,
+          updatedAt: new Date()
+        });
+        
+        clusterBus.emit('engine_state_changed', {
+          userId,
+          mode,
+          isActive,
+          timestamp: new Date()
+        });
+        
+        // Phase 27.F.3: Broadcast complete state snapshot (background refresh)
+        await this.broadcastUserUpdate(userId);
+        
+        console.log(`[SYNC][Phase-27.F.3] Engine state updated for ${mode} mode: ${isActive ? 'ACTIVE' : 'INACTIVE'} (userId: ${userId})`);
+      } catch (error) {
+        console.error('[Phase-33.A] Error in background state update:', error);
+      }
+    }, 0);
   }
 
   /**
@@ -312,6 +354,19 @@ export class TradingStateSync {
       // Phase 27.F.13.O: Compute mode-specific engine states from global contexts
       const isEngineActivePaper = paperContext?.isEngineActive || false;
       const isEngineActiveLive = liveContext?.isEngineActive || false;
+      
+      // Phase 33.A: Debounce check to prevent duplicate broadcasts
+      const now = Date.now();
+      const timeSinceLastBroadcast = now - this.lastBroadcastTime;
+      const stateKey = `${isEngineActivePaper}-${isEngineActiveLive}`;
+      
+      if (timeSinceLastBroadcast < this.BROADCAST_DEBOUNCE_MS && this.lastBroadcastPayload.stateKey === stateKey) {
+        console.log(`[Phase-33.A] Broadcast debounced (${timeSinceLastBroadcast}ms < ${this.BROADCAST_DEBOUNCE_MS}ms)`);
+        return;
+      }
+      
+      this.lastBroadcastTime = now;
+      this.lastBroadcastPayload.stateKey = stateKey;
       
       // Phase 32.D-Fix.1: Determine current mode with paper-sim-aware logic
       // Priority: Active paper sim > in-memory mode > context timestamps

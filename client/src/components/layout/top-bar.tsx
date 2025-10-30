@@ -231,10 +231,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     try {
       console.log('[Phase-27.F.6] Stopping paper trading...');
       await stopTrading('paper');
-      toast({
-        title: "Trading Stopped",
-        description: "Paper Trading Simulation engine has been stopped",
-      });
+      // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
       let errorMessage = "Failed to toggle trading status";
       
@@ -346,10 +343,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     
     try {
       await startTrading('live');
-      toast({
-        title: "Trading Started",
-        description: "Live Trading engine started successfully",
-      });
+      // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
       let errorMessage = "Failed to start Live Trading";
       
@@ -386,10 +380,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     
     try {
       await stopTrading('live');
-      toast({
-        title: "Trading Stopped",
-        description: "Live Trading engine has been stopped",
-      });
+      // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
       let errorMessage = "Failed to stop Live Trading";
       
@@ -444,10 +435,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       console.log('[Phase-27.F.14.D-POST] Balance confirmed, retrying start...');
       await startTrading('paper');
       
-      toast({
-        title: "Trading Started",
-        description: `Paper Trading started with balance $${balance.toFixed(2)}`,
-      });
+      // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
       let errorMessage = "Failed to confirm balance and start trading";
       

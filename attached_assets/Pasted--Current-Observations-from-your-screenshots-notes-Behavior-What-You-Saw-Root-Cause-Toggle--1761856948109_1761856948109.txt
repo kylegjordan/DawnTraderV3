@@ -1,0 +1,159 @@
+🧩 Current Observations (from your screenshots + notes)
+Behavior	What You Saw	Root Cause
+🟢 Toggle / Blue Bar eventually sync	They both go to ACTIVE together, but only after 20–30 seconds	The WS broadcast fires late, after a REST call finishes (blocking on DB + watchlist rebuild)
+🟡 Double toasts ("trading started")	Two nearly identical toasts appear	The WS broadcast and the REST mutation both trigger a “start” message
+🔴 Red “Failed to fetch” on stop	Happens on first stop attempt	The frontend sends a stop request while backend still busy, so it times out or gets 409 conflict
+🔵 Passive badge flicker	Appears/disappears repeatedly after stop	WS broadcast sends passiveLearning toggles multiple times; frontend keeps re-rendering
+🧊 Portfolio stays $1000	Value doesn't update	The balance update query is still tied to the delayed REST refresh, not WS hydration
+⚠️ Trading tab hangs (“loading...”)	After start, filters never finish	Engine initialization triggers a blocking watchlist/strategy prefetch — likely running synchronously again
+🧠 What’s Really Going On
+
+The backend is still synchronous in critical sections.
+Even though the UI now reacts to WS updates, the server still:
+
+Recalculates metrics and watchlists before responding to /api/paper-sim/start.
+
+Broadcasts the WS message after it finishes.
+→ That’s why you wait ~30 seconds before the UI catches up.
+
+Duplicate toast messages come from both the WebSocket and the API response.
+
+Passive badge flickering is a re-broadcast loop:
+
+Server broadcasts { passiveLearning: true } and { passiveLearning: false } multiple times.
+
+Frontend invalidates /api/system/config each time → causing the banner re-render flicker.
+
+“Failed to fetch” occurs because stop/start calls overlap with engine initialization. The endpoint isn’t protected with a “busy” guard.
+
+✅ Fix Plan (Phase 33.A – “Instant Trading State Sync & Stability”)
+1️⃣ Fire WebSocket before heavy operations
+
+In paper-sim-service.ts, move the broadcast to the top of both startPaperSimulation() and stopPaperSimulation():
+
+// Immediately inform UI
+await contextBridge.broadcast({
+  type: 'trading_state_changed',
+  payload: {
+    mode: 'paper',
+    active: true,
+    passiveLearning: false,
+  },
+});
+
+// Then run backend work asynchronously
+setTimeout(async () => {
+  await populateWatchlistAsync();
+  await refreshMetrics();
+  await updateSystemContext();
+}, 0);
+
+
+This makes the toggle/blue bar/indicator respond in <100 ms.
+
+2️⃣ Debounce passiveLearning updates to avoid flicker
+
+In trading-state-sync.ts (or where broadcasts happen), wrap passive state changes:
+
+let lastPassiveState = null;
+
+function broadcastTradingState(payload) {
+  if (payload.passiveLearning === lastPassiveState) return;
+  lastPassiveState = payload.passiveLearning;
+  contextBridge.broadcast({
+    type: 'trading_state_changed',
+    payload,
+  });
+}
+
+
+This prevents duplicate broadcasts from causing flickering.
+
+3️⃣ Remove duplicate “started” toast
+
+In use-trading.tsx, add a guard to show toasts only on WebSocket events, not REST responses:
+
+if (payload.from !== 'api') {
+  if (payload.active) toast.success(`Paper trading started`);
+  else toast.info(`Paper trading stopped`);
+}
+
+
+And when sending REST requests, add { from: 'api' } to the payload to skip re-triggering.
+
+4️⃣ Add “busy” guard to backend endpoints
+
+In /api/paper-sim/start and /api/paper-sim/stop:
+
+if (globalSession.isBusy) {
+  return res.status(409).json({ success: false, message: 'Engine busy, please wait...' });
+}
+globalSession.isBusy = true;
+try {
+  await startPaperSimulation();
+  res.json({ success: true });
+} finally {
+  globalSession.isBusy = false;
+}
+
+
+That eliminates the random red “Failed to fetch” errors when stop/start overlap.
+
+5️⃣ Hydrate portfolio immediately from WS
+
+In use-trading.tsx WebSocket handler:
+
+if (payload.active) {
+  queryClient.setQueryData(['/api/portfolio/overview'], (old) => ({
+    ...old,
+    totalValue: payload.portfolioBalance ?? old.totalValue,
+  }));
+}
+
+
+That updates the balance widget instantly when you start.
+
+6️⃣ Speed up Trading tab
+
+In populateWatchlistAsync():
+
+Add await sleep(10); inside long loops, or switch to batching async inserts to avoid blocking event loop.
+
+Or defer this with a setTimeout (background job) so the UI isn’t waiting.
+
+🧾 Verification Checklist After These Fixes
+Test	Expected Result
+Start paper trading	Immediate toggle + blue bar to “ACTIVE”; single toast; balance updates
+Stop paper trading	Immediate toggle + blue bar to “STOPPED”; single toast; passive badge returns without flicker
+Restart quickly	No red “Failed to fetch” error
+Trading tab	Loads within 3 s; watchlist populated progressively
+Dashboard stability	No visual shift or flicker
+🧰 Debugging Enhancements to Keep Enabled for Now
+
+Add these logs (temporarily) for tracing timing:
+
+console.time('broadcast->UI');
+contextBridge.broadcast({ ... });
+console.timeEnd('broadcast->UI');
+
+
+and in use-trading.tsx:
+
+console.log('[WS event received]', performance.now());
+
+
+This will let Replit see exactly where the delay originates.
+
+TL;DR — Ask Replit to Implement:
+
+Move WS broadcast to top of start/stop service (asynchronous execution).
+
+Add debounce guard for passiveLearning broadcasts.
+
+Add “busy” guard to start/stop endpoints.
+
+Prevent duplicate toasts.
+
+Hydrate portfolio value on WS event.
+
+Optimize watchlist population (non-blocking async).
