@@ -55,6 +55,7 @@ interface StrategyUsage {
   strategy: string;
   timesRecommended: number;
   timesSelected: number;
+  queuedCount: number;
   winPercent: number;
   confidenceAverage: number;
 }
@@ -409,6 +410,9 @@ export default function LottieTuningTab() {
                     <th className="text-left py-2 px-3 font-semibold text-foreground">Strategy</th>
                     <th className="text-right py-2 px-3 font-semibold text-foreground">Recommended</th>
                     <th className="text-right py-2 px-3 font-semibold text-foreground">Selected</th>
+                    <th className="text-right py-2 px-3 font-semibold text-foreground" title="Trades that cleared guardrails and were queued for execution">
+                      Queued (Ready-to-Buy)
+                    </th>
                     <th className="text-right py-2 px-3 font-semibold text-foreground">Win %</th>
                     <th className="text-right py-2 px-3 font-semibold text-foreground">Avg Confidence</th>
                   </tr>
@@ -428,6 +432,9 @@ export default function LottieTuningTab() {
                       </td>
                       <td className="py-2 px-3 text-right text-muted-foreground" data-testid={`usage-selected-${idx}`}>
                         {s.timesSelected}
+                      </td>
+                      <td className="py-2 px-3 text-right font-medium text-indigo-600 dark:text-indigo-400" data-testid={`usage-queued-${idx}`}>
+                        {s.queuedCount}
                       </td>
                       <td className="py-2 px-3 text-right font-medium" data-testid={`usage-win-${idx}`}>
                         <span className={s.winPercent >= 55 ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}>
