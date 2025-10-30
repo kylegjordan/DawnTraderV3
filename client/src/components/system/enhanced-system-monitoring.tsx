@@ -42,6 +42,7 @@ import { LATTISafetyMonitor } from "./latti-safety-monitor";
 import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel";
 import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
 import SystemHealthSummary from "@/components/system-health-summary";
+import LottieTuningTab from "@/components/monitoring/lottie-tuning-tab";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SystemMetrics {
@@ -575,6 +576,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="diagnostics" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-diagnostics" title="Diagnostics & Telemetry">
             <Monitor className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Diagnostics & Telemetry</span>
+          </TabsTrigger>
+          <TabsTrigger value="lottie-tuning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-lottie-tuning" title="Lottie Tuning">
+            <Gauge className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Lottie Tuning</span>
           </TabsTrigger>
         </TabsList>
         </div>
@@ -1114,6 +1119,11 @@ export default function EnhancedSystemMonitoring() {
             {/* System Health Summary - Walter Activity (Feed/Formula Monitoring) */}
             <SystemHealthSummary />
           </div>
+        </TabsContent>
+
+        {/* Phase 31.J: Lottie Tuning Tab */}
+        <TabsContent value="lottie-tuning" className="relative z-0 overflow-visible mt-12 space-y-4" data-testid="content-lottie-tuning">
+          <LottieTuningTab />
         </TabsContent>
       </Tabs>
     </div>

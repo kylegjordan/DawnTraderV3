@@ -413,6 +413,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 31.J - LATTI Tuning Metrics Endpoint
+  apiRouter.get('/system/latti-tuning', async (_req, res) => {
+    try {
+      const { LATTIManager } = await import('./services/latti-manager');
+      const data = await LATTIManager.getLatestMetrics();
+      res.json(data || { status: "no_data" });
+    } catch (err: any) {
+      console.error("[31.J][LATTI-TUNING]", err);
+      res.status(500).json({ error: "Failed to load tuning metrics" });
+    }
+  });
+
   // Authentication Routes
   
   // REGISTER - DISABLED FOR SINGLE-USER MODE

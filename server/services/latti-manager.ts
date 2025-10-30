@@ -153,6 +153,105 @@ export class LATTIManager {
   }
 
   /**
+   * Phase 31.J - Get latest LATTI tuning metrics for dashboard
+   * Returns real-time adaptive tuning metrics
+   */
+  static async getLatestMetrics(): Promise<any> {
+    try {
+      const { db } = await import("../db");
+      const { sql } = await import("drizzle-orm");
+      const { systemConfigService } = await import("./system-config");
+      
+      // Get passive learning status
+      const config = await systemConfigService.getConfig();
+      const passiveLearning = config.passiveLearning || false;
+      
+      // Get latest DHMA parameter updates from audit log
+      const auditResult = await db.execute<{
+        created_at: string;
+        metadata: any;
+      }>(sql`
+        SELECT created_at, metadata
+        FROM trading_audit_log
+        WHERE triggered_by = 'latti_dhma_tuning'
+        ORDER BY created_at DESC
+        LIMIT 10
+      `);
+      
+      const auditRows = auditResult.rows;
+      
+      // Get current DHMA telemetry for paper mode
+      const telemetry = await this.fetchDHMATelemetry('paper');
+      
+      // Calculate adjustments from recent audit entries
+      const adjustments: Record<string, number> = {};
+      let lastRun: string | null = null;
+      let totalAdjustments = 0;
+      
+      if (auditRows.length > 0) {
+        lastRun = auditRows[0].created_at;
+        
+        // Aggregate parameter changes
+        for (const row of auditRows) {
+          const meta = row.metadata;
+          if (meta?.key && meta?.old_value !== undefined && meta?.new_value !== undefined) {
+            const delta = meta.new_value - meta.old_value;
+            const key = `dhma.${meta.key}`;
+            if (!adjustments[key]) {
+              adjustments[key] = delta;
+              totalAdjustments++;
+            }
+          }
+        }
+      }
+      
+      // Calculate confidence score based on telemetry
+      let confidence = 0.5; // Base confidence
+      if (telemetry.entries > 0 && telemetry.exits > 0) {
+        // Increase confidence with more data points
+        const dataPoints = telemetry.exits;
+        const dataFactor = Math.min(dataPoints / 20, 1.0); // Max at 20+ closed trades
+        
+        // Adjust based on hit rate
+        const hitRateFactor = telemetry.hitRate > 0.5 ? (telemetry.hitRate - 0.5) * 2 : 0;
+        
+        confidence = Math.min(0.95, 0.5 + (dataFactor * 0.3) + (hitRateFactor * 0.2));
+      }
+      
+      // Calculate stability score (how stable parameters are)
+      const stabilityScore = totalAdjustments < 2 ? 0.95 : 
+                            totalAdjustments < 4 ? 0.85 : 0.75;
+      
+      return {
+        lastRun: lastRun || new Date().toISOString(),
+        tuningCycle: 30, // Minutes
+        adjustments,
+        confidence: Math.round(confidence * 100) / 100,
+        stabilityScore: Math.round(stabilityScore * 100) / 100,
+        passiveLearning,
+        telemetry: {
+          entries: telemetry.entries,
+          exits: telemetry.exits,
+          hitRate: Math.round(telemetry.hitRate * 100) / 100,
+          avgPLPerTrade: Math.round(telemetry.avgPLPerTrade * 10000) / 10000,
+        },
+      };
+    } catch (error: any) {
+      console.error("[31.J][LATTIManager] Error fetching latest metrics:", error.message);
+      return {
+        status: "error",
+        error: error.message,
+        lastRun: new Date().toISOString(),
+        tuningCycle: 30,
+        adjustments: {},
+        confidence: 0,
+        stabilityScore: 0,
+        passiveLearning: false,
+      };
+    }
+  }
+
+  /**
    * Optimize strategy mix based on recent performance
    */
   private static async optimizeStrategyMix(): Promise<void> {
