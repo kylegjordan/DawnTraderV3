@@ -118,11 +118,13 @@ export class StrategicDriveService {
         .orderBy(desc(strategyDriveSummary.createdAt))
         .limit(10);
 
-      const recentValues = recent.map(r => Number(r.globalSDI));
+      // Reverse to chronological order (oldest→newest) for correct EMA calculation
+      const recentValues = recent.map(r => Number(r.globalSDI)).reverse();
       const sdiSmoothed = emaSmooth([...recentValues, globalSDI]);
 
       // Simple forecast logic – trend based prediction
-      const delta = globalSDI - (recentValues[0] || globalSDI);
+      const mostRecentSDI = recent.length > 0 ? Number(recent[0].globalSDI) : globalSDI;
+      const delta = globalSDI - mostRecentSDI;
       const forecastConfidence = Math.min(Math.abs(delta) * 10, 1);
       const forecastBest = best[0];
       const forecastWeakest = worst[0];
