@@ -154,9 +154,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       queryClient.invalidateQueries({ queryKey: ['/api/goals', 'live'] });
       queryClient.invalidateQueries({ queryKey: ['/api/goals', 'paper'] });
       
-      // Update local mode if changed (WebSocketMessage uses 'data' property)
-      if (latestUpdate.data?.mode) {
-        setMode(latestUpdate.data.mode);
+      // Phase 32.D-Fix.8: Update local mode if changed (use payload, fallback to data for legacy)
+      const mode = latestUpdate.payload?.mode || latestUpdate.data?.mode;
+      if (mode) {
+        setMode(mode);
       }
     }
   }, [wsMessages, queryClient, setMode]);
