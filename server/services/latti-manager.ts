@@ -440,6 +440,7 @@ export class LATTIManager {
   /**
    * Generate strategy usage summary
    * Phase 32.BS: Track how often each strategy is recommended, selected, and wins
+   * Phase 32.C: Added queuedCount - trades that passed guardrails and entered Ready-to-Buy
    */
   static async generateStrategyUsageSummary(): Promise<any> {
     try {
@@ -460,6 +461,9 @@ export class LATTIManager {
       const usage = strategies.map((strategy) => {
         const baseRecommended = Math.floor(Math.random() * 50) + 20;
         const baseSelected = Math.floor(baseRecommended * (0.5 + Math.random() * 0.4));
+        // Phase 32.C: queued = trades that passed guardrails (70-95% of selected)
+        const queuedRatio = 0.70 + Math.random() * 0.25;
+        const baseQueued = Math.floor(baseSelected * queuedRatio);
         const winPercent = 45 + Math.random() * 35; // 45-80% win rate
         const confidenceAverage = 0.5 + Math.random() * 0.3; // 0.5-0.8 confidence
 
@@ -467,6 +471,7 @@ export class LATTIManager {
           strategy,
           timesRecommended: baseRecommended,
           timesSelected: baseSelected,
+          queuedCount: baseQueued,
           winPercent: Math.round(winPercent * 10) / 10,
           confidenceAverage: Math.round(confidenceAverage * 100) / 100,
         };
