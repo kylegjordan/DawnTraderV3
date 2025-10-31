@@ -13,7 +13,7 @@
  */
 
 import { KrakenService } from './kraken.js';
-import type { ScreenerFilter } from '../storage.js';
+import type { ScreenerFilters } from '@shared/schema';
 
 export interface FilteredPairResult {
   symbol: string;
@@ -60,7 +60,7 @@ export class FilteredPairsService {
    */
   async getValidPairs(
     mode: 'live' | 'paper',
-    filters: ScreenerFilter,
+    filters: ScreenerFilters,
     forceRefresh = false
   ): Promise<FilteredPairsStats> {
     const cacheKey = mode;
@@ -75,22 +75,44 @@ export class FilteredPairsService {
     }
     
     // Get eligible pairs from Kraken using current filters
-    const eligiblePairs = await this.kraken.getEligiblePairs(
-      filters.maxSpread,
-      filters.minVolume,
-      filters.minVolumeUsd,
-      filters.maxVolumeUsd,
-      filters.minDailyRange,
-      filters.maxDailyRange,
-      filters.minPrice,
-      filters.maxPrice,
-      filters.minMarketCap,
-      filters.maxMarketCap,
-      filters.blacklist || [],
-      [], // whitelist (empty for now)
-      filters.volatilityMin,
-      filters.volatilityMax
-    );
+    const eligiblePairs = await this.kraken.getEligiblePairs({
+      minVolume: filters.minVolume ?? "1000000.00",
+      minDailyRange: "0", // Not in schema, use default
+      minPrice: filters.minPrice ?? "0.01",
+      maxPrice: filters.maxPrice ?? "10000.00",
+      maxBidAskSpread: filters.maxBidAskSpread ?? "1.00",
+      minMarketCap: filters.minMarketCap ?? "100000000.00",
+      excludeStablecoins: filters.excludeStablecoins ?? true,
+      blacklistedSymbols: [], // Not in schema
+      whitelistedSymbols: [], // Not in schema
+      volatilityMin: filters.volatilityMin ?? "0.50",
+      volatilityMax: filters.volatilityMax ?? "5.00",
+      rsiMin: filters.rsiMin ?? 30,
+      rsiMax: filters.rsiMax ?? 70,
+      minLiquidity: filters.minLiquidity ?? "500000.00",
+      allowRegulatedOnly: filters.allowRegulatedOnly ?? false,
+      universeSize: filters.universeSize ?? 100,
+      quoteCurrencies: (() => {
+        try {
+          return typeof filters.quoteCurrencies === 'string' 
+            ? JSON.parse(filters.quoteCurrencies as string) 
+            : (filters.quoteCurrencies ?? ["USD"]);
+        } catch (error) {
+          console.warn('[FilteredPairs] Invalid quoteCurrencies JSON, using default', error);
+          return ["USD"];
+        }
+      })(),
+      activeTimeframes: (() => {
+        try {
+          return typeof filters.activeTimeframes === 'string'
+            ? JSON.parse(filters.activeTimeframes as string)
+            : (filters.activeTimeframes ?? ["5m", "15m", "1h"]);
+        } catch (error) {
+          console.warn('[FilteredPairs] Invalid activeTimeframes JSON, using default', error);
+          return ["5m", "15m", "1h"];
+        }
+      })(),
+    });
     
     // Get all Kraken pairs for total count
     const allPairs = await this.kraken.getTradablePairs();
@@ -160,7 +182,7 @@ export class FilteredPairsService {
    */
   async getEligibleCount(
     mode: 'live' | 'paper',
-    filters: ScreenerFilter
+    filters: ScreenerFilters
   ): Promise<number> {
     const stats = await this.getValidPairs(mode, filters, false);
     return stats.eligiblePairs;
