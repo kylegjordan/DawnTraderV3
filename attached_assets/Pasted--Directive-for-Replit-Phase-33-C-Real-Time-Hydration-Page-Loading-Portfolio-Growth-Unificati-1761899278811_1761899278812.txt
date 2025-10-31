@@ -1,0 +1,242 @@
+🧭 Directive for Replit — Phase 33.C: Real-Time Hydration, Page Loading & Portfolio Growth Unification
+
+Objective:
+Fix all remaining issues involving:
+
+Pages stuck on “Loading…” (Trading, Goals Engine, System Monitoring).
+
+Portfolio balance not updating live (requires refresh).
+
+Legacy $850 balance hardcoded in LATTI Goals & Guardrails and Goals Engine growth tables.
+
+Slow or unstable passive-learning badge when stopping.
+
+👤 Test Account for All QA and Future Testing
+username: testuser123
+password: SecurePass123!
+
+
+🔐 Use this account only. Do not attempt to log in via user email.
+Store once in replit.md for all automated and manual tests.
+
+🧩 Phase 33.C Fix Plan
+0️⃣ Base Fetcher & Query Configuration
+
+Goal: remove custom fetch calls that bypass authentication and cause 401 → infinite loading.
+
+client/src/lib/api.ts
+
+export async function apiFetch(input: string, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(input, {
+      credentials: 'include',
+      signal: controller.signal,
+      ...init,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${text}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+
+client/src/main.tsx (or React Query Provider)
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: ({ queryKey }) => apiFetch(queryKey[0] as string),
+      refetchOnWindowFocus: false,
+      staleTime: 15000,
+      retry: 1,
+    },
+  },
+});
+
+
+✅ Effect: All API calls automatically include authentication, timeout properly, and fail visibly instead of hanging forever.
+
+1️⃣ Remove All Custom queryFn / Manual fetch() Calls
+
+Search and clean all React Query hooks in:
+
+client/src/components/dashboard/portfolio-chart.tsx
+client/src/components/dashboard/latti-dashboard-widget.tsx
+client/src/components/dashboard/dashboard-latti-widget.tsx
+client/src/pages/active-trades/*
+client/src/pages/goals-engine/*
+client/src/pages/system-monitoring/*
+client/src/components/metrics/*
+client/src/components/watchlist/*
+
+
+Each must use the default fetcher:
+
+useQuery({ queryKey: ['/api/paper/metrics/history'] })
+
+
+…and handle errors explicitly:
+
+if (status === 'error') return <ErrorPanel message={String(error)} />;
+
+
+✅ Effect: Pages will no longer spin indefinitely; they’ll display actual errors if an endpoint fails.
+
+2️⃣ Real-Time Portfolio Value Hydration
+Backend (server/services/trading-state-sync.ts)
+
+Broadcast the canonical portfolio overview each time trading state changes:
+
+await contextBridge.broadcast({
+  type: 'trading_state_changed',
+  payload: {
+    mode: currentMode,
+    active: isEngineActive,
+    passiveLearning: !isEngineActive,
+    portfolioOverview: {
+      totalValue: unifiedPortfolio.totalValue,
+      cash: unifiedPortfolio.cash,
+      crypto: unifiedPortfolio.crypto,
+    },
+    ts: new Date().toISOString(),
+  },
+});
+
+Frontend (client/src/hooks/use-trading.tsx)
+
+Within the WebSocket listener:
+
+if (payload?.portfolioOverview) {
+  // Instant hydration across all caches
+  queryClient.setQueryData(['/api/portfolio/overview'], payload.portfolioOverview);
+  queryClient.setQueryData(['/api/trading/status'], p => ({ ...(p||{}), ...payload }));
+  queryClient.invalidateQueries(['/api/goals/config']);
+  queryClient.invalidateQueries(['/api/goals/guardrails']);
+  queryClient.invalidateQueries(['/api/trading/filtered-pairs']);
+}
+
+
+✅ Effect: Dashboard and Goals Engine reflect the new portfolio value the moment trading starts—no refresh needed.
+
+3️⃣ Fix Legacy $850 Hardcoded Balances
+
+Root cause: early fallback constants still live in 3 places.
+
+🔧 Affected files
+
+client/src/hooks/usePortfolioBalance.ts
+
+client/src/components/dashboard/dashboard-latti-widget.tsx
+
+client/src/components/dashboard/latti-dashboard-widget.tsx
+
+✅ Replace all $850 fallbacks with live data or zero
+
+usePortfolioBalance.ts
+
+export function usePortfolioBalance() {
+  const { data } = useQuery({ queryKey: ['/api/portfolio/overview'] });
+  return data?.totalValue ?? 0; // remove hardcoded 850
+}
+
+
+Both LATTI widget files:
+
+const balance = usePortfolioBalance(); // pulls from unified overview
+<Text>${balance.toLocaleString()}</Text>
+
+
+✅ Effect: LATTI Goals & Guardrails → Goals Engine → Dashboard all show identical live portfolio totals.
+No $850 or $1000 placeholders remain.
+
+4️⃣ Fix “Loading…” Pages (Trading, Goals Engine, System Monitoring)
+
+Root cause: Background tasks (watchlist populate, goals refresh, metrics refresh) finish but never trigger revalidation.
+
+Backend (server/services/paper-sim-service.ts)
+
+Broadcast job completion:
+
+await contextBridge.broadcast({
+  type: 'background_jobs_complete',
+  payload: {
+    jobs: ['watchlist_populate', 'goals_refresh', 'metrics_refresh'],
+    ts: new Date().toISOString(),
+  },
+});
+
+Frontend (client/src/hooks/use-trading.tsx)
+
+Handle these events:
+
+if (msg.type === 'background_jobs_complete') {
+  const jobs = msg.payload.jobs || [];
+  const invalidate = (key) => queryClient.invalidateQueries([key]);
+  if (jobs.includes('watchlist_populate')) invalidate('/api/trading/filtered-pairs');
+  if (jobs.includes('goals_refresh')) {
+    invalidate('/api/goals/config');
+    invalidate('/api/goals/guardrails');
+  }
+  if (jobs.includes('metrics_refresh')) invalidate('/api/paper/metrics/history');
+}
+
+
+✅ Effect: Once background jobs finish, the relevant tabs re-render automatically and no longer hang.
+
+5️⃣ Stable Passive-Learning Badge and Fast Stop
+
+Derive passiveLearning directly from !active on the server.
+
+In TopBar, render passive badge solely from that authoritative flag.
+
+Use 2 s debounce (keep from Phase 33.B) but store lastActive in ref to prevent duplicate flickers.
+
+✅ Effect: passive badge no longer flashes during stop/start transitions.
+
+6️⃣ Standardize Query Keys (for reliable hydration)
+
+Use these keys across all components and invalidations:
+
+/api/trading/status
+/api/portfolio/overview
+/api/trading/filtered-pairs
+/api/paper/metrics/history
+/api/paper/metrics/earnings-chart
+/api/goals/config
+/api/goals/guardrails
+/api/system/health
+
+7️⃣ Verification Checklist
+Action	Expected Result
+Start paper trading (812 USD)	Toggle & blue bar → ACTIVE instantly; toast shows 812 USD; portfolio tile = 812 USD
+Dashboard LATTI widget	Updates to 812 USD (no $850)
+Goals Engine tab	Portfolio growth = 812 USD (matches dashboard)
+Trading tab	Filtered pairs + watchlist populate < 2 s
+System Monitoring	Loads metrics within 3 s
+Stop trading	“Trading Stopped” toast appears < 500 ms; passive badge steady
+Restart quickly	No errors or flickers; data consistent everywhere
+🧾 Deliverables
+
+Updated fetcher + global React Query config
+
+Removed all custom fetch()/queryFn
+
+Real-time portfolio broadcast + hydration
+
+Background job completion broadcasts
+
+Purged $850 fallbacks from all widgets
+
+Confirmed portfolio growth tables pull live values
+
+WS debug logs showing:
+
+trading_state_changed with portfolioOverview.totalValue
+
+background_jobs_complete for goals_refresh and metrics_refresh
