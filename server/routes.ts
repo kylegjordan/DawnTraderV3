@@ -5073,9 +5073,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           return res.status(400).json({ error: result.message || result.error });
         }
         
-        // Phase 34: Use tradingSync.broadcastUpdate to include portfolioOverview
-        const { tradingSync } = await import('./services/trading-state-sync.js');
-        await tradingSync.broadcastUpdate(userId, 'paper', true);
+        // Phase 34: Use tradingStateSync.broadcastUserUpdate to include portfolioOverview
+        const { tradingStateSync } = await import('./services/trading-state-sync.js');
+        await tradingStateSync.broadcastUserUpdate(userId);
         console.log('[Phase-34] Broadcasted paper trading_state_changed with portfolioOverview (active = true, new simulation)');
         
         return res.json({ success: true, message: `New simulation started with $${balance.toFixed(2)}` });
