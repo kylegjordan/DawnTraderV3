@@ -17,13 +17,62 @@ import { BaselineStatusWidget } from "@/components/dashboard/baseline-status-wid
 import { DashboardLATTiWidget } from "@/components/dashboard/dashboard-latti-widget";
 import AlertBanner from "@/components/alerts/alert-banner";
 import { useSystemHealth } from "@/hooks/use-system-health";
+import { PortfolioProvider, type PortfolioOverview } from "@/contexts/portfolio-context";
+import { useTradingMode } from "@/contexts/trading-mode-context";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { useEffect, useMemo } from "react";
+import { unstable_batchedUpdates } from "react-dom";
 
 export default function Dashboard() {
   // Enable auto-resync polling every 12s (detects backend changes and auto-refreshes widgets)
   useSystemHealth();
-
+  
+  const queryClient = useQueryClient();
+  const { mode, isPaper } = useTradingMode();
+  const { messages: wsMessages } = useWebSocket();
+  
+  // Phase 35.2A: Fetch portfolio data at Dashboard level for context isolation
+  const { data: livePortfolioData } = useQuery<PortfolioOverview>({
+    queryKey: [`/api/portfolio/overview?mode=live`],
+    enabled: !isPaper,
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
+  });
+  
+  const { data: paperPortfolioData } = useQuery<PortfolioOverview>({
+    queryKey: ['/api/paper/portfolio/state'],
+    enabled: isPaper,
+    refetchInterval: 60000,
+    staleTime: 60000,
+    refetchOnWindowFocus: false
+  });
+  
+  // Phase 35.2A: Memoize portfolio data to prevent unnecessary context updates
+  const portfolioData = useMemo(() => 
+    isPaper ? paperPortfolioData : livePortfolioData,
+    [isPaper, paperPortfolioData, livePortfolioData]
+  );
+  
+  // Phase 35.2A: Batch WebSocket updates to prevent render cascades
+  useEffect(() => {
+    const balanceUpdates = wsMessages.filter((msg: any) => msg.type === 'portfolio_balance_updated');
+    if (balanceUpdates.length > 0) {
+      const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
+      console.log('[35.2A][Dashboard] batched render triggered - portfolio balance update', latestUpdate.payload);
+      
+      // Batch all query invalidations together to prevent multiple renders
+      unstable_batchedUpdates(() => {
+        queryClient.invalidateQueries({ queryKey: [`/api/portfolio/overview?mode=${mode}`] });
+        queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+      });
+    }
+  }, [wsMessages, queryClient, mode]);
+  
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-testid="dashboard-page">
+    <PortfolioProvider value={portfolioData ?? null}>
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6" data-testid="dashboard-page">
       {/* Maintenance Mode Banner */}
       <MaintenanceBanner />
       
@@ -76,6 +125,7 @@ export default function Dashboard() {
 
       {/* Phase 27.F.31: LATTI Baseline Status Widget (moved from position 2) */}
       <BaselineStatusWidget />
-    </div>
+      </div>
+    </PortfolioProvider>
   );
 }
