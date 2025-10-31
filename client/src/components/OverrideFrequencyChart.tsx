@@ -119,6 +119,23 @@ function OverrideFrequencyChartComponent() {
   const criticalAnomalies = useMemo(() => anomalies.filter(a => a.severity === 'critical').length, [anomalies]);
   const warningAnomalies = useMemo(() => anomalies.filter(a => a.severity === 'warn').length, [anomalies]);
 
+  // Phase 35.2A: Memoize chart configuration objects to prevent unnecessary re-renders
+  const chartConfig = useMemo(() => ({
+    xAxisTick: { fontSize: 12 },
+    yAxisTick: { fontSize: 12 },
+    tooltipStyle: {
+      backgroundColor: 'hsl(var(--background))',
+      border: '1px solid hsl(var(--border))',
+    },
+    lineDot: { r: 3 },
+    lineActiveDot: { r: 5 },
+  }), []);
+
+  // Phase 35.2A: Add diagnostic log for chart render triggers
+  useEffect(() => {
+    console.log('[35.2A][Analytics] OverrideFrequencyChart render triggered');
+  });
+
   if (loadingFrequency || loadingAnomalies) {
     return (
       <Card>
@@ -231,15 +248,12 @@ function OverrideFrequencyChartComponent() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="hour" 
-                tick={{ fontSize: 12 }}
+                tick={chartConfig.xAxisTick}
                 interval="preserveStartEnd"
               />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis tick={chartConfig.yAxisTick} />
               <Tooltip 
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--background))',
-                  border: '1px solid hsl(var(--border))',
-                }}
+                contentStyle={chartConfig.tooltipStyle}
               />
               <Legend />
               <Line
@@ -247,16 +261,16 @@ function OverrideFrequencyChartComponent() {
                 dataKey="Paper"
                 stroke="#8884d8"
                 strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={chartConfig.lineDot}
+                activeDot={chartConfig.lineActiveDot}
               />
               <Line
                 type="monotone"
                 dataKey="Live"
                 stroke="#ff7300"
                 strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={chartConfig.lineDot}
+                activeDot={chartConfig.lineActiveDot}
               />
               <Line
                 type="monotone"
@@ -264,8 +278,8 @@ function OverrideFrequencyChartComponent() {
                 stroke="#82ca9d"
                 strokeWidth={2}
                 strokeDasharray="5 5"
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={chartConfig.lineDot}
+                activeDot={chartConfig.lineActiveDot}
               />
             </LineChart>
           </ResponsiveContainer>
