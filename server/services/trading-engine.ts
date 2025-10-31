@@ -1,12 +1,13 @@
 import { KrakenService } from './kraken';
 import { RiskManager } from './risk-manager';
-import { StrategyEngine } from './strategy-engine';
+import { StrategyEngine, StrategySignal } from './strategy-engine';
+import { SignalOrchestrator } from './signal-orchestrator';
 import { storage } from '../storage';
 import { Trade, TradingSettings } from '@shared/schema';
 
 export interface TradeSignal {
   symbol: string;
-  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap';
+  strategy: 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -26,6 +27,7 @@ export class TradingEngine {
   private kraken: KrakenService;
   private riskManager: RiskManager;
   private strategyEngine: StrategyEngine;
+  private signalOrchestrator: SignalOrchestrator | null = null;
   private isRunning = false;
   private mode: 'live' | 'paper';
 
@@ -43,12 +45,44 @@ export class TradingEngine {
 
   async start(): Promise<void> {
     this.isRunning = true;
-    console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trading engine started`);
+    console.log(`[37.A][ENGINE][mode=${this.mode}] Trading engine started`);
+
+    // Phase 37: Start signal orchestrator for automatic signal generation
+    this.signalOrchestrator = new SignalOrchestrator({
+      mode: this.mode,
+      evaluationIntervalMs: 30000, // 30 seconds
+      enabledStrategies: [
+        'vwap_pullback',
+        'abcd_long',
+        'sma_trend_ride',
+        'breakout',
+        'mean_reversion',
+        'range_trading',
+        'vwap_bounce',
+        'liquidity_trap',
+        'dhma'
+      ]
+    });
+
+    await this.signalOrchestrator.start(async (signal: StrategySignal) => {
+      // Forward generated signals to processSignal for trade execution
+      await this.processSignal(signal as TradeSignal);
+    });
+
+    console.log(`[37.A][ENGINE][mode=${this.mode}] Signal orchestrator started`);
   }
 
   async stop(): Promise<void> {
     this.isRunning = false;
-    console.log(`[Phase-27.F.15.B.3][mode=${this.mode}] Trading engine stopped`);
+    
+    // Phase 37: Stop signal orchestrator
+    if (this.signalOrchestrator) {
+      this.signalOrchestrator.stop();
+      this.signalOrchestrator = null;
+      console.log(`[37.A][ENGINE][mode=${this.mode}] Signal orchestrator stopped`);
+    }
+    
+    console.log(`[37.A][ENGINE][mode=${this.mode}] Trading engine stopped`);
   }
 
   private async calculateGoalAlignmentScore(signal: TradeSignal, mode: 'live' | 'paper'): Promise<number> {

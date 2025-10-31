@@ -1,0 +1,46 @@
+🧭 Next Step Directive — Phase 37: Feature Integrity & Functional Validation
+
+✅ Phase 36 is officially complete and production-ready from a systems standpoint.
+Now begin Phase 37 – Feature Integrity Audit, which ensures the trading logic, strategy engine, and supporting widgets behave as designed under both Paper and Live modes.
+
+Phase 37 Objectives
+
+1️⃣ Strategy Engine Activation Check
+ • Verify StrategyEngine.start() and StrategyEngine.evaluateSignals() fire in both paper and live modes.
+ • Add diagnostic logs:
+ ts  [37.A][ENGINE] Strategy evaluation tick triggered  [37.A][SIGNAL] Ready-to-Buy list length: ${signals.length}  
+ • Confirm at least one evaluation cycle executes each broadcast interval.
+
+2️⃣ Filtered Pairs Pipeline Integrity
+ • Investigate contextBridge2.getClientCount 500 error (already logged in 35.2B).
+ • Check import and method names between contextBridge2 and FilteredPairsService.
+ • Validate that FilteredPairsController receives populated pair data (≥ 1 record).
+ • If necessary, patch naming or stub missing method for now.
+
+3️⃣ Trade Execution Verification
+ • Run Paper and Live simulation for ≥ 10 minutes.
+ • Ensure at least one mock trade reaches “executed” state in DB.
+ • Log:
+   [37.B][TRADE] Submitted → Executed (id=XYZ)  [37.B][QUEUE] Task latency: ${latency} ms  
+
+4️⃣ UI Data Binding Audit
+ • Confirm widgets (ReadyToBuy, OpenTrades, PortfolioOverview) correctly map to updated data objects.
+ • Eliminate silent 0-counts caused by stale context or bad key mapping.
+
+5️⃣ Reporting & Deliverables
+ • Create /diagnostic-reports/phase-37-feature-integrity-audit.md containing:
+  – Strategy tick frequency and trade counts
+  – Filtered Pairs endpoint status
+  – Trade execution evidence
+  – Any schema or API mismatches
+ • Mark critical vs. cosmetic issues for the final polish phase.
+
+Known Starting Points (from prior phases)
+
+Anomaly #3 – Toggle Desync (Live Mode) → Cosmetic
+
+Anomaly #4 – No Ready-to-Buy Signals / No Trades → Functional
+
+Filtered Pairs HTTP 500 Error → Functional
+
+These three become your Phase 37 primary validation criteria.
