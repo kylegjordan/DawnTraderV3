@@ -1,6 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 
+interface PortfolioOverview {
+  totalValue: number;
+  cashBalance: number;
+  positions: any[];
+}
+
 /**
  * Phase 27.F.24: Dedicated hook for portfolio balance to prevent unnecessary re-renders
  * 
@@ -16,7 +22,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 export function usePortfolioBalance() {
   const { mode } = useTradingMode();
   
-  const { data, isLoading, error, isFetching } = useQuery({
+  const { data, isLoading, error, isFetching } = useQuery<PortfolioOverview>({
     queryKey: ['/api/portfolio/overview', mode],
     // Wait for mode to be available before executing query
     enabled: !!mode,
@@ -30,12 +36,17 @@ export function usePortfolioBalance() {
     retry: 1, // Retry once before using fallback
   });
 
-  // Extract balance with fallback
-  const balance = data?.totalValue ?? 850;
+  // Extract balance - no hardcoded fallback, return actual value or 0
+  const balance = data?.totalValue ?? 0;
   
   // Log errors for debugging
   if (error) {
-    console.warn('[usePortfolioBalance] API error, using fallback balance:', error);
+    console.warn('[usePortfolioBalance] API error:', error);
+  }
+  
+  // Log if using fallback
+  if (!data?.totalValue && mode) {
+    console.warn('[usePortfolioBalance] No portfolio data available, using 0 as fallback');
   }
 
   // Only consider loading if we're actually fetching and don't have data yet

@@ -172,7 +172,8 @@ const LATTIDashboardWidgetComponent = () => {
   const isPositive = targetDailyAvgEarningPct.startsWith('+');
   const isNegative = targetDailyAvgEarningPct.startsWith('-');
   
-  const portfolioBalance = lattiTargets?.portfolio_balance || portfolioMetrics?.totalValue || 850;
+  // Use portfolio balance from multiple sources with proper fallback chain
+  const portfolioBalance = lattiTargets?.portfolio_balance || portfolioMetrics?.totalValue || 0;
 
   return (
     <Card 

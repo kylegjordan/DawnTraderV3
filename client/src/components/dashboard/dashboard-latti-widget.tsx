@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { Settings, TrendingUp, Shield, Clock, Users } from "lucide-react";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { usePortfolioBalance } from "@/hooks/use-portfolio-balance";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,7 @@ interface GuardrailsCompliance {
 export function DashboardLATTiWidget() {
   const { mode } = useTradingMode();
   const [, setLocation] = useLocation();
+  const { balance: portfolioBalance, isLoading: portfolioLoading } = usePortfolioBalance();
 
   // Fetch guardrails
   const { data: guardrailsData, isLoading: guardrailsLoading, error: guardrailsError } = useQuery<{ ok: boolean; data: GuardrailsV2 }>({
@@ -72,7 +74,7 @@ export function DashboardLATTiWidget() {
   const preset = presetData?.data;
   const compliance = complianceData?.data;
 
-  const isLoading = guardrailsLoading || presetLoading || complianceLoading;
+  const isLoading = guardrailsLoading || presetLoading || complianceLoading || portfolioLoading;
   const hasError = guardrailsError || presetError || complianceError;
 
   const getCoherencyBadge = (status: string | undefined) => {
@@ -265,10 +267,8 @@ export function DashboardLATTiWidget() {
                   <h3 className="text-sm font-semibold">Projected Portfolio Growth</h3>
                 </div>
                 <div className="space-y-1.5">
-                  {/* Current Portfolio - fetch from portfolio endpoint or use preset data */}
+                  {/* Current Portfolio - using real portfolio balance from API */}
                   {preset && (() => {
-                    // Calculate portfolio balance - using static value for now
-                    const portfolioBalance = 850; // This should come from portfolio API
                     const targetPctValue = parseFloat(preset.targetDailyAvgEarningPct) || 0;
                     
                     return (
