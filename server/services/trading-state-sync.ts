@@ -540,9 +540,9 @@ export class TradingStateSync {
       } catch (error) {
         console.error('[SYNC][Phase-27.F.3][ReconciliationGuard] Error during reconciliation:', error);
       }
-    }, 15000); // Run every 15 seconds
+    }, 30000); // Phase 35.3.B: Increased from 15s to 30s to reduce update volume
     
-    console.log('[SYNC][Phase-27.F.13.O][ReconciliationGuard] Started (checks every 15s, global mode-based)');
+    console.log('[35.3][SYNC] Reconciliation interval = 30s (reduced from 15s to optimize performance)');
   }
 
   /**

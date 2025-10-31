@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { apiRequest } from '@/lib/queryClient';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useTradingMode } from '@/contexts/trading-mode-context';
@@ -41,6 +41,38 @@ export function useTrading() {
   // Phase 34.B: Invalidation guard to prevent loops
   const invalidationInProgressRef = useRef(false);
   
+  // Phase 35.3.A: Debounced invalidation (500ms) to reduce render bursts
+  // Accumulates query keys during the debounce window to prevent dropped invalidations
+  const pendingQueryKeys = useRef<Set<string>>(new Set());
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  const debouncedInvalidate = useCallback((queryKeys: string[][]) => {
+    // Add all query keys to the pending set (using JSON.stringify for comparison)
+    queryKeys.forEach(key => {
+      pendingQueryKeys.current.add(JSON.stringify(key));
+    });
+    
+    // Clear existing timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    
+    // Set new timer to flush all accumulated keys
+    debounceTimer.current = setTimeout(() => {
+      const keysToInvalidate = Array.from(pendingQueryKeys.current).map(k => JSON.parse(k));
+      console.log('[35.3][DEBOUNCE] Flushing accumulated queries:', keysToInvalidate);
+      
+      Promise.allSettled(
+        keysToInvalidate.map(key => 
+          queryClient.invalidateQueries({ queryKey: key, exact: true })
+        )
+      );
+      
+      // Clear the pending set
+      pendingQueryKeys.current.clear();
+    }, 500);
+  }, [queryClient]);
+  
   useEffect(() => {
     const updates = wsMessages.filter((m: any) => m.type === 'trading_state_changed');
     if (!updates.length) return;
@@ -52,60 +84,45 @@ export function useTrading() {
       // Hydrate truth - setQueryData first for instant UI updates
       queryClient.setQueryData(['/api/trading/status'], payload);
       
-      // Phase 34.B: Guard against invalidation loops
-      if (invalidationInProgressRef.current) {
-        console.log('[34.B] Invalidation already in progress, skipping duplicate');
-        return;
-      }
-      
-      invalidationInProgressRef.current = true;
-      
-      // Selective invalidations with exact: true to prevent cascades
-      Promise.allSettled([
-        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'], exact: true }),
-        queryClient.invalidateQueries({ queryKey: ['/api/system/config'], exact: true }),
-      ]).finally(() => {
-        // Reset guard after short delay
-        setTimeout(() => {
-          invalidationInProgressRef.current = false;
-        }, 100);
-      });
+      // Phase 35.3.A: Use debounced invalidation to reduce render bursts
+      debouncedInvalidate([
+        ['/api/paper-sim/status'],
+        ['/api/system/config']
+      ]);
     }
-  }, [wsMessages, queryClient]);
+  }, [wsMessages, queryClient, debouncedInvalidate]);
 
   // Phase 32.D-Fix.6 Fix #1: Listen for portfolio_balance_updated events
   useEffect(() => {
     const balanceUpdates = wsMessages.filter((msg: any) => msg.type === 'portfolio_balance_updated');
     if (balanceUpdates.length > 0) {
       const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
-      console.log('[32.D-Fix.6] Portfolio balance updated → invalidating queries', latestUpdate.payload);
+      console.log('[32.D-Fix.6] Portfolio balance updated → debounced invalidation', latestUpdate.payload);
       
-      // Invalidate all portfolio-dependent queries for instant UI sync
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] }),
+      // Phase 35.3.A: Use debounced invalidation for portfolio updates
+      debouncedInvalidate([
+        ['/api/dashboard/overview'],
+        ['/api/goals/summary'],
+        ['/api/paper-sim/status'],
+        ['/api/portfolio/overview']
       ]);
-      
-      // Force immediate refetch for critical portfolio data
-      queryClient.refetchQueries({ queryKey: ['/api/dashboard/overview'] });
-      queryClient.refetchQueries({ queryKey: ['/api/goals/summary'] });
     }
-  }, [wsMessages, queryClient]);
+  }, [wsMessages, queryClient, debouncedInvalidate]);
 
   // Phase 33.B: Listen for background_jobs_complete events
   useEffect(() => {
     const jobUpdates = wsMessages.filter((msg: any) => msg.type === 'background_jobs_complete');
     if (jobUpdates.length > 0) {
       const latestUpdate = jobUpdates[jobUpdates.length - 1];
-      console.log('[Phase-33.B] Background job complete:', latestUpdate.payload);
+      console.log('[Phase-33.B] Background job complete → debounced invalidation:', latestUpdate.payload);
       
-      // Invalidate filtered pairs to show updated watchlist
-      queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/watchlist'] });
+      // Phase 35.3.A: Use debounced invalidation for background jobs
+      debouncedInvalidate([
+        ['/api/trading/filtered-pairs'],
+        ['/api/watchlist']
+      ]);
     }
-  }, [wsMessages, queryClient]);
+  }, [wsMessages, queryClient, debouncedInvalidate]);
 
   // Paper trading simulation status (SYSTEM-WIDE - all users see the same status)
   const { data: paperSimStatus, isLoading: paperSimStatusLoading } = useQuery<{ 

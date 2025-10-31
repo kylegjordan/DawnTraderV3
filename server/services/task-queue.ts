@@ -3,6 +3,7 @@ import { reasoningQueue, InsertReasoningQueue } from "@shared/schema";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { performanceMonitor } from "./performance-monitor";
+import { taskQueueDiagnostics } from "./task-queue-diagnostics";
 
 /**
  * Phase 8.8.3: Async Task Queue Service
@@ -62,6 +63,9 @@ class TaskQueueService {
     await db.insert(reasoningQueue).values(task);
     
     console.log(`[TaskQueue] ✅ Task enqueued: ${taskId} (type: ${input.taskType}, trace: ${input.traceId})`);
+    
+    // Phase 35.3.C: Log to diagnostics if enabled
+    taskQueueDiagnostics.logEnqueued(taskId, input.taskType);
     
     // Broadcast queue event for Context Bridge
     this.broadcastQueueEvent({
@@ -131,6 +135,9 @@ class TaskQueueService {
       }
 
       console.log(`[TaskQueue] 🔒 Task locked: ${task.id} (worker: ${this.workerId})`);
+      
+      // Phase 35.3.C: Log to diagnostics if enabled
+      taskQueueDiagnostics.logLocked(task.id);
 
       return {
         id: task.id,
@@ -172,6 +179,9 @@ class TaskQueueService {
       .limit(1);
 
     console.log(`[TaskQueue] ✅ Task completed: ${id}`);
+    
+    // Phase 35.3.C: Log to diagnostics if enabled
+    taskQueueDiagnostics.logCompleted(id);
 
     // Broadcast completion event
     if (task) {
@@ -225,6 +235,9 @@ class TaskQueueService {
           completedAt: new Date(),
         })
         .where(eq(reasoningQueue.id, id));
+
+      // Phase 35.3.C: Log to diagnostics if enabled
+      taskQueueDiagnostics.logFailed(id, error);
 
       const [task] = await db.select()
         .from(reasoningQueue)
