@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { apiRequest } from '@/lib/queryClient';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { toast } from '@/hooks/use-toast';
 import { 
   TradingStatus, 
   PortfolioMetrics, 
@@ -16,6 +17,9 @@ import {
 export function useTrading() {
   const queryClient = useQueryClient();
   const { messages: wsMessages } = useWebSocket();
+  
+  // Phase 33.B: Track previous active state to prevent duplicate toasts
+  const previousActiveState = useRef<boolean | null>(null);
 
   // Phase 27.F.3: Trading status and control (Poll every 5s + WebSocket sync for unified state authority)
   const { data: tradingStatus, isLoading: statusLoading } = useQuery<TradingStatus>({
@@ -55,20 +59,47 @@ export function useTrading() {
         }
       }));
       
-      // Phase 33.A: Hydrate portfolio balance immediately from WS payload
-      if (payload.active && payload.portfolioBalance !== undefined) {
+      // Phase 33.B: Hydrate all portfolio-dependent caches with canonical value
+      const portfolioVal = (payload as any).portfolioValue ?? (payload as any).portfolioBalance;
+      if (portfolioVal !== undefined) {
+        // Hydrate portfolio overview
         queryClient.setQueryData(['/api/portfolio/overview'], (old: any) => ({
-          ...(old || {}), // Phase 33.A: Default to empty object if cache doesn't exist
-          totalValue: payload.portfolioBalance,
-          portfolioBalance: payload.portfolioBalance,
+          ...(old || {}),
+          totalValue: portfolioVal,
+          portfolioBalance: portfolioVal,
         }));
-        console.log(`[Phase-33.A] Portfolio balance hydrated from WS: $${payload.portfolioBalance}`);
+        
+        // Hydrate goals engine state
+        queryClient.setQueryData(['/api/goals-engine/state'], (old: any) => ({
+          ...(old || {}),
+          portfolio: { 
+            ...(old?.portfolio || {}), 
+            balance: portfolioVal 
+          },
+        }));
+        
+        console.log(`[Phase-33.B] Portfolio value unified across all caches: $${portfolioVal}`);
       }
       
       // Force re-renders for all updated caches
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'], exact: true });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'], exact: true });
       queryClient.invalidateQueries({ queryKey: ['/api/system/config'], exact: true });
+      
+      // Phase 33.B: Instantly rehydrate Trading & Goals pages
+      queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'], exact: true });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals-engine/state'], exact: true });
+      
+      // Phase 33.B: Show toasts ONLY on actual state transitions (not reconciliation broadcasts)
+      const currentActiveState = payload.active;
+      if (previousActiveState.current !== currentActiveState) {
+        if (currentActiveState && portfolioVal !== undefined) {
+          toast({ description: `Trading activated ($${portfolioVal.toFixed(2)})` });
+        } else if (!currentActiveState) {
+          toast({ description: 'Trading stopped' });
+        }
+        previousActiveState.current = currentActiveState;
+      }
     }
 
     // Invalidate dependent queries after hydrating the truth
@@ -101,6 +132,19 @@ export function useTrading() {
       // Force immediate refetch for critical portfolio data
       queryClient.refetchQueries({ queryKey: ['/api/dashboard/overview'] });
       queryClient.refetchQueries({ queryKey: ['/api/goals/summary'] });
+    }
+  }, [wsMessages, queryClient]);
+
+  // Phase 33.B: Listen for background_jobs_complete events
+  useEffect(() => {
+    const jobUpdates = wsMessages.filter((msg: any) => msg.type === 'background_jobs_complete');
+    if (jobUpdates.length > 0) {
+      const latestUpdate = jobUpdates[jobUpdates.length - 1];
+      console.log('[Phase-33.B] Background job complete:', latestUpdate.payload);
+      
+      // Invalidate filtered pairs to show updated watchlist
+      queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/watchlist'] });
     }
   }, [wsMessages, queryClient]);
 

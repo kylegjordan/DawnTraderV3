@@ -29,6 +29,10 @@ export class TradingStateSync {
   private lastBroadcastPayload: Record<string, any> = {};
   private lastBroadcastTime: number = 0;
   private readonly BROADCAST_DEBOUNCE_MS = 250;
+  
+  // Phase 33.B: Passive learning state debounce guard (2-second reset window)
+  private lastPassiveState: boolean | null = null;
+  private passiveStateResetTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     // Listen for cluster bus events to synchronize state across services
@@ -192,16 +196,16 @@ export class TradingStateSync {
   async setEngineActive(userId: string, isActive: boolean, mode: 'live' | 'paper' = 'paper'): Promise<void> {
     const timestamp = new Date().toISOString();
     
-    // Phase 33.A: Get portfolio balance for instant hydration
-    let portfolioBalance: number | undefined;
+    // Phase 33.A/B: Get portfolio value for instant hydration (canonical value)
+    let portfolioValue: number | undefined;
     try {
       const portfolioState = await storage.getPortfolioState({ mode });
-      portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : undefined;
+      portfolioValue = portfolioState ? parseFloat(portfolioState.balance) : undefined;
     } catch (error) {
-      console.warn('[Phase-33.A] Failed to fetch portfolio balance for instant broadcast');
+      console.warn('[Phase-33.A] Failed to fetch portfolio value for instant broadcast');
     }
     
-    // Phase 33.A: Fire instant broadcast FIRST with minimal payload including balance
+    // Phase 33.A/B: Fire instant broadcast FIRST with minimal payload including canonical portfolio value
     const { contextBridge } = await import('./context-bridge.js');
     await contextBridge.broadcast({
       type: 'trading_state_changed',
@@ -212,12 +216,12 @@ export class TradingStateSync {
         isEngineActivePaper: mode === 'paper' ? isActive : undefined,
         isEngineActiveLive: mode === 'live' ? isActive : undefined,
         passiveLearning: !isActive,
-        portfolioBalance,
+        portfolioValue, // Phase 33.B: Canonical portfolio value
         timestamp,
       },
       mode
     });
-    console.log(`[Phase-33.A] ⚡ Instant broadcast sent: mode=${mode}, active=${isActive}, balance=$${portfolioBalance}, latency=<50ms`);
+    console.log(`[Phase-33.B] ⚡ Instant broadcast sent: mode=${mode}, active=${isActive}, portfolio=$${portfolioValue}, latency=<50ms`);
     
     // Then update database and do heavy operations asynchronously
     setTimeout(async () => {
@@ -413,6 +417,23 @@ export class TradingStateSync {
       // Phase 27.F.13.O: Get the appropriate context and audit fields
       const context = (currentMode === 'paper' ? paperContext : liveContext);
       const isActive = (currentMode === 'paper' ? isEngineActivePaper : isEngineActiveLive);
+      
+      // Phase 33.B: Passive learning state debounce (2-second reset window)
+      const passiveLearning = !isActive;
+      if (this.lastPassiveState === passiveLearning) {
+        console.log(`[Phase-33.B] Duplicate passiveLearning broadcast skipped (state=${passiveLearning})`);
+        return;
+      }
+      
+      // Update state and reset after 2 seconds
+      this.lastPassiveState = passiveLearning;
+      if (this.passiveStateResetTimer) {
+        clearTimeout(this.passiveStateResetTimer);
+      }
+      this.passiveStateResetTimer = setTimeout(() => {
+        this.lastPassiveState = null;
+        console.log('[Phase-33.B] Passive state debounce reset (2s window expired)');
+      }, 2000);
       
       const payload = {
         userId, // Keep for audit trail

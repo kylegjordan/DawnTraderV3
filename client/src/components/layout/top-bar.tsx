@@ -207,6 +207,16 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const handleTradingToggle = async (enabled: boolean) => {
     console.log('[Phase-27.F.6] Toggle clicked:', { enabled, mode: currentMode });
     
+    // Phase 33.B: Front-end busy guard - prevent rapid toggling
+    if (isStarting || isStopping) {
+      toast({
+        title: "Please wait",
+        description: "Trading engine is busy. Please wait for the current operation to complete.",
+        variant: "default",
+      });
+      return;
+    }
+    
     // Phase 27.F.6: Show confirmation modals for live trading
     if (currentMode === 'live') {
       if (enabled) {

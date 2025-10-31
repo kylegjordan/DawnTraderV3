@@ -154,6 +154,19 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
     
     const elapsed = Date.now() - startTime;
     console.log(`[32.D-Fix.6] Watchlist populated in ${elapsed}ms (background)`);
+    
+    // Phase 33.B: Broadcast background job completion
+    const { contextBridge } = await import('./context-bridge.js');
+    await contextBridge.broadcast({
+      type: 'background_jobs_complete',
+      payload: {
+        job: 'watchlist_refresh',
+        durationMs: elapsed,
+        timestamp: new Date().toISOString(),
+      },
+      mode,
+    });
+    console.log(`[Phase-33.B] Broadcasted background_jobs_complete for watchlist (${elapsed}ms)`);
   } catch (error) {
     console.error('[32.D-Fix.6] Background watchlist population failed:', error);
   }

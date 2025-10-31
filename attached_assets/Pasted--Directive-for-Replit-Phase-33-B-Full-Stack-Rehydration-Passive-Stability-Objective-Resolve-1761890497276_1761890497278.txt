@@ -1,0 +1,191 @@
+🧭 Directive for Replit: Phase 33.B — Full-Stack Rehydration & Passive Stability
+
+Objective:
+Resolve remaining portfolio desync, delayed stops, and passive indicator flickering by extending real-time WebSocket hydration across all relevant caches and improving debounce behavior.
+
+
+---
+
+🧩 Context Summary
+
+What’s Working
+
+WebSocket broadcasts fire instantly (<50 ms).
+
+Blue bar & toggle update immediately.
+
+Passive indicator hides on start.
+
+No duplicate toasts.
+
+Backend busy guards functional.
+
+
+What’s Still Off
+
+1. Portfolio value mismatched across Dashboard ($812), Goals ($850), and cached ($1000).
+
+
+2. Trading + Goals Engine pages load very slowly (30 s+).
+
+
+3. Stopping trading takes > 1 min; passive indicator flickers.
+
+
+4. “Trading Stopped” toast missing.
+
+
+5. Watchlist/Filtered Pairs counts load but lists stay empty until heavy backend job completes.
+
+
+
+
+---
+
+✅ Phase 33.B Implementation Tasks
+
+1️⃣ Unify Portfolio Value Across Modules
+
+In server/services/trading-state-sync.ts:
+
+await contextBridge.broadcast({
+  type: 'trading_state_changed',
+  payload: {
+    mode: currentMode,
+    active: isEngineActive,
+    passiveLearning: !isEngineActive,
+    portfolioValue: currentPortfolioValue, // ✅ canonical portfolio value
+  },
+});
+
+In client/src/hooks/use-trading.tsx (WebSocket listener):
+
+// Hydrate all dependent caches instantly
+queryClient.setQueryData(['/api/portfolio/overview'], old => ({
+  ...old,
+  totalValue: payload.portfolioValue ?? old?.totalValue,
+}));
+
+queryClient.setQueryData(['/api/goals-engine/state'], old => ({
+  ...old,
+  portfolio: { ...old?.portfolio, balance: payload.portfolioValue },
+}));
+
+queryClient.setQueryData(['/api/system/config'], old => ({
+  ...old,
+  systemFlags: { ...old?.systemFlags, passiveLearning: payload.passiveLearning },
+}));
+
+
+---
+
+2️⃣ Relax & Log the Passive Debounce Guard
+
+In server/services/trading-state-sync.ts:
+
+let lastPassiveState = null;
+
+function broadcastTradingState(payload) {
+  if (payload.passiveLearning === lastPassiveState) {
+    console.log('[Phase33B] Duplicate passiveLearning broadcast skipped');
+    return;
+  }
+  lastPassiveState = payload.passiveLearning;
+  setTimeout(() => { lastPassiveState = null; }, 2000); // ✅ 2-second reset window
+  contextBridge.broadcast({ type: 'trading_state_changed', payload });
+}
+
+
+---
+
+3️⃣ Add “Trading Stopped” Toast
+
+In client/src/hooks/use-trading.tsx WebSocket handler:
+
+if (payload.active) {
+  toast.success(`Trading activated (${payload.portfolioValue}$)`);
+} else {
+  toast.info('Trading stopped');
+}
+
+
+---
+
+4️⃣ Add Front-End Busy Guard
+
+In client/src/components/layout/top-bar.tsx toggle handler:
+
+if (isStarting || isStopping) {
+  toast.warning('Please wait — trading engine is busy.');
+  return;
+}
+
+
+---
+
+5️⃣ Instantly Rehydrate Trading & Goals Pages
+
+Also inside the WebSocket handler:
+
+queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'], exact: true });
+queryClient.invalidateQueries({ queryKey: ['/api/goals-engine/state'], exact: true });
+
+
+---
+
+6️⃣ Add Lightweight “Background Jobs Complete” Event
+
+At the end of background jobs (watchlist, metrics, goals refresh):
+
+await contextBridge.broadcast({
+  type: 'background_jobs_complete',
+  payload: { job: 'watchlist_refresh', durationMs },
+});
+
+Client-side:
+
+if (msg.type === 'background_jobs_complete') {
+  queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'] });
+}
+
+
+---
+
+🧾 Verification Checklist
+
+Test Action	Expected Result
+
+Start paper trading	Toggle + blue bar → ACTIVE (<100 ms), passive indicator disappears, toast shows once
+Dashboard balance	Updates instantly to entered value
+Goals Engine balance	Matches Dashboard balance immediately
+Trading tab	Filtered pairs count + list load within 1–2 s
+Stop trading	“Trading Stopped” toast shows < 500 ms, passive indicator reappears steady (no flicker)
+Rapid restart	No errors or race conditions
+
+
+
+---
+
+👤 Test User Credentials (for verification)
+
+Username: testuser123
+Password: SecurePass123!
+
+Use this account for end-to-end testing of all UI transitions and WebSocket event timing.
+
+
+---
+
+Expected Outcome
+
+After this implementation, Dawn Trader should exhibit:
+
+Unified portfolio balances across all modules
+
+Instant trading start/stop (< 100 ms)
+
+Stable passive indicator (no flicker)
+
+Fast Goals & Trading page loading (< 2 s)
+
+Consistent success / stop toasts
