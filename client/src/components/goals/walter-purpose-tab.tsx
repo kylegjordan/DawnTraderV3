@@ -39,13 +39,7 @@ My success is measured not just by profits, but by consistent execution of our r
 
   // Fetch current purpose (mode-aware)
   const { data: response, isLoading } = useQuery<{ ok: boolean; purpose: WalterPurpose | null }>({
-    queryKey: ["/api/walter/purpose", mode],
-    queryFn: () => fetch(`/api/walter/purpose?mode=${mode}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'x-app-mode': mode
-      }
-    }).then(r => r.json()),
+    queryKey: [`/api/walter/purpose?mode=${mode}`],
   });
 
   const purpose = response?.purpose;

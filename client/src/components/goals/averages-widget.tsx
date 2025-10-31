@@ -31,12 +31,7 @@ export default function AveragesWidget() {
   const [period, setPeriod] = useState('1d');
   
   const { data: averages, isLoading } = useQuery<AveragesData>({
-    queryKey: ['trading', 'averages', mode, period],
-    queryFn: () => fetch(`/api/trading/averages?mode=${mode}&period=${period}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+    queryKey: [`/api/trading/averages?mode=${mode}&period=${period}`],
   });
 
   if (isLoading && !averages) {

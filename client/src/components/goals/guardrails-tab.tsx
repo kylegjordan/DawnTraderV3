@@ -88,21 +88,11 @@ export default function GuardrailsTab() {
   const { messages } = useWebSocket();
 
   const { data: currentSettings, isLoading } = useQuery<Guardrails>({
-    queryKey: ['/api/guardrails', mode],
-    queryFn: () => fetch(`/api/guardrails?mode=${mode}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+    queryKey: [`/api/guardrails?mode=${mode}`],
   });
 
   const { data: tradingSettings, isLoading: isLoadingSettings } = useQuery<TradingSettings>({
     queryKey: ['/api/settings'],
-    queryFn: () => fetch('/api/settings', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
   });
 
   useEffect(() => {

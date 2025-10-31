@@ -28,12 +28,7 @@ export default function ResultsWidget() {
   const [period, setPeriod] = useState('1d');
   
   const { data: results, isLoading } = useQuery<TradingResultsData>({
-    queryKey: ['trading', 'results', mode, period],
-    queryFn: () => fetch(`/api/trading/results?mode=${mode}&period=${period}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+    queryKey: [`/api/trading/results?mode=${mode}&period=${period}`],
   });
 
   if (isLoading) {

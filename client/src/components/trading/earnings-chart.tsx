@@ -30,8 +30,7 @@ export default function EarningsChart() {
   const endpoint = isPaper ? '/api/paper/metrics/earnings-chart' : '/api/portfolio/earnings-chart';
   
   const { data: chartData, isLoading } = useQuery<EarningsDataPoint[]>({
-    queryKey: [endpoint, selectedPeriod],
-    queryFn: () => fetch(`${endpoint}?days=${dayMapping[selectedPeriod]}`).then(r => r.json()),
+    queryKey: [`${endpoint}?days=${dayMapping[selectedPeriod]}`],
   });
 
   const periods: TimePeriod[] = ['7D', '30D', 'ALL'];

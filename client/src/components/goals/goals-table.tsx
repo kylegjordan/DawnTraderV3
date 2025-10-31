@@ -53,12 +53,7 @@ export default function GoalsTable() {
   const targetDailyProfit = tradesPerDay * targetPerTrade;
 
   const { data: goalsData, isLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
-    queryKey: ['goals', 'summary', mode],
-    queryFn: () => fetch(`/api/goals/summary?mode=${mode}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+    queryKey: [`/api/goals/summary?mode=${mode}`],
   });
 
   useEffect(() => {

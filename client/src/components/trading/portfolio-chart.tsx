@@ -23,9 +23,8 @@ export default function PortfolioChart() {
 
   const endpoint = isPaper ? '/api/paper/metrics/history' : '/api/portfolio/history';
   
-  const { data: chartData, isLoading } = useQuery<PortfolioDataPoint[]>({
-    queryKey: [endpoint, selectedPeriod],
-    queryFn: () => fetch(`${endpoint}?period=${selectedPeriod}`).then(r => r.json()),
+  const { data: chartData, isLoading} = useQuery<PortfolioDataPoint[]>({
+    queryKey: [`${endpoint}?period=${selectedPeriod}`],
   });
 
   const periods: TimePeriod[] = ['7D', '1M', '3M', 'YTD', 'ALL'];

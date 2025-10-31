@@ -33,8 +33,7 @@ export default function MarketInsightsWidget() {
   const { toast } = useToast();
   
   const { data: analysis, isLoading } = useQuery<MarketAnalysis>({
-    queryKey: ['/api/market-context/latest', mode],
-    queryFn: () => fetch(`/api/market-context/latest?mode=${mode}`).then(r => r.json()),
+    queryKey: [`/api/market-context/latest?mode=${mode}`],
   });
 
   const analyzeMutation = useMutation({

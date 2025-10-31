@@ -27,12 +27,7 @@ export default function GoalsSummaryWidget() {
   const [, setLocation] = useLocation();
   
   const { data, isLoading, refetch } = useQuery<GoalsSummaryData>({
-    queryKey: ['goals', 'summary', mode],
-    queryFn: () => fetch(`/api/goals/summary?mode=${mode}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    }).then(r => r.json()),
+    queryKey: [`/api/goals/summary?mode=${mode}`],
   });
 
   // Refetch when mode changes

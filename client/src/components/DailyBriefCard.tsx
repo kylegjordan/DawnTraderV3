@@ -68,8 +68,7 @@ export default function DailyBriefCard() {
   });
 
   const { data: marketInsights } = useQuery<MarketAnalysis>({
-    queryKey: ['/api/market-context/latest', mode],
-    queryFn: () => fetch(`/api/market-context/latest?mode=${mode}`).then(r => r.json()),
+    queryKey: [`/api/market-context/latest?mode=${mode}`],
   });
   
   const { data: autoResolvedStats } = useQuery<{ total: number; feed: number; formula: number }>({
