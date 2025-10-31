@@ -5073,21 +5073,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           return res.status(400).json({ error: result.message || result.error });
         }
         
-        // Phase 32.D-Fix.4: Broadcast unified trading_state_changed event on Paper Start (new simulation)
-        contextBridge.broadcast({
-          type: 'trading_state_changed',
-          payload: {
-            userId,
-            mode: 'paper',
-            active: true,
-            isEngineActivePaper: true,
-            isEngineActiveLive: false,
-            passiveLearning: false, // Active trading = no passive learning
-            timestamp: new Date().toISOString(),
-          },
-          mode: 'paper'
-        });
-        console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true, passiveLearning = false, new simulation)');
+        // Phase 34: Use tradingSync.broadcastUpdate to include portfolioOverview
+        const { tradingSync } = await import('./services/trading-state-sync.js');
+        await tradingSync.broadcastUpdate(userId, 'paper', true);
+        console.log('[Phase-34] Broadcasted paper trading_state_changed with portfolioOverview (active = true, new simulation)');
         
         return res.json({ success: true, message: `New simulation started with $${balance.toFixed(2)}` });
       }
@@ -5142,21 +5131,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: result.message || result.error });
       }
       
-      // Phase 32.D-Fix.4: Broadcast unified trading_state_changed event on Paper Start
-      contextBridge.broadcast({
-        type: 'trading_state_changed',
-        payload: {
-          userId,
-          mode: 'paper',
-          active: true,
-          isEngineActivePaper: true,
-          isEngineActiveLive: false,
-          passiveLearning: false, // Active trading = no passive learning
-          timestamp: new Date().toISOString(),
-        },
-        mode: 'paper'
-      });
-      console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = true, passiveLearning = false)');
+      // Phase 34: Use tradingSync.broadcastUpdate to include portfolioOverview
+      const { tradingSync } = await import('./services/trading-state-sync.js');
+      await tradingSync.broadcastUpdate(userId, 'paper', true);
+      console.log('[Phase-34] Broadcasted paper trading_state_changed with portfolioOverview (active = true)');
       
       res.json({ success: true, message: result.message });
     } catch (error: any) {
@@ -5183,21 +5161,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: result.message || result.error });
       }
       
-      // Phase 32.D-Fix.4: Broadcast unified trading_state_changed event on Paper Stop
-      contextBridge.broadcast({
-        type: 'trading_state_changed',
-        payload: {
-          userId,
-          mode: 'paper',
-          active: false,
-          isEngineActivePaper: false,
-          isEngineActiveLive: false,
-          passiveLearning: true, // Stopped = passive learning mode
-          timestamp: new Date().toISOString(),
-        },
-        mode: 'paper'
-      });
-      console.log('[32.D-Fix.4] Broadcasted paper trading_state_changed (active = false, passiveLearning = true)');
+      // Phase 34: Use tradingSync.broadcastUpdate to include portfolioOverview
+      const { tradingSync } = await import('./services/trading-state-sync.js');
+      await tradingSync.broadcastUpdate(userId, 'paper', false);
+      console.log('[Phase-34] Broadcasted paper trading_state_changed with portfolioOverview (active = false)');
       
       res.json({ success: true, message: result.message });
     } catch (error: any) {
