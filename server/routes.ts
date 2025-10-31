@@ -5407,26 +5407,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 27.F.13.A + 27.F.21: Filtered Pairs endpoint for UI (user-accessible)
-  // Returns ALL eligible pairs (no artificial limit)
+  // Phase 37.5: NOTE - Uses different filtering method than SignalOrchestrator (see Phase 37 report)
   apiRouter.get('/paper-sim/filtered-pairs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
       const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+      const { contextBridge } = await import('./services/context-bridge.js');
       
       const scanResult = await paperSimDiagnosticService.performUniverseScan({
         userId,
         mode: 'paper',
-        limit: 9999, // Return ALL eligible pairs (no artificial limit)
+        limit: 9999,
         trace: false,
-        strategies: false // Don't need strategy evaluation for simple filtering
+        strategies: false
       });
       
-      // Return ALL eligible candidates with simplified structure
       const filteredPairs = scanResult.top_candidates.map(candidate => ({
         symbol: candidate.symbol,
         price: candidate.snapshot.price,
-        vwap: null, // Will be added if available
+        vwap: null,
         spreadBps: candidate.snapshot.spread_bps,
         volume24h: candidate.snapshot.vol_24h,
         dailyRange: candidate.snapshot.daily_range,
@@ -5436,9 +5436,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       console.log(`[FilteredPairs] Returning ${filteredPairs.length}/${scanResult.eligible_count} eligible pairs for user ${userId}`);
       
-      // Phase 27.F.14.N: Broadcast trading data update to all clients
-      const clientCount = contextBridge.getClientCount();
-      console.log(`[FilterEngine] Broadcast trading_data_updated (mode=paper, pairs=${filteredPairs.length}) → ${clientCount} clients`);
+      const stats = contextBridge.getStats();
+      console.log(`[FilterEngine] Broadcast trading_data_updated (mode=paper, pairs=${filteredPairs.length}) → ${stats.connectedClients} clients`);
       contextBridge.broadcast({
         type: 'trading_data_updated',
         payload: {
