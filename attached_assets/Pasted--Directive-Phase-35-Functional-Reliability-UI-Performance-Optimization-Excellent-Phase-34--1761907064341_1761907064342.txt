@@ -1,0 +1,71 @@
+🧭 Directive: Phase 35 — Functional Reliability & UI Performance Optimization
+
+Excellent — Phase 34 is frozen and verified. Let’s begin Phase 35.
+
+This phase focuses on ensuring the Dawn Trader system performs reliably under continuous usage, reconnection events, and simulated live-trading load. The goal is to confirm production-grade runtime stability and sub-100 ms UI responsiveness across all major tabs.
+
+🔍 PHASE 35 OBJECTIVES
+
+1️⃣ Render & Load-Time Profiling
+
+Instrument React Profiler in key UI routes:
+
+/dashboard (portfolio + goals widgets)
+
+/trading (trade tables + execution panel)
+
+/analytics
+
+Capture initial mount time, re-render frequency, and average component update cost.
+
+Target: < 60 ms render per update, < 800 ms full first-paint.
+
+2️⃣ Task-Queue Reliability Simulation
+
+Run simulated trading cycles in paper mode for 10 minutes.
+
+Log every task in the trading engine queue (submit → execute → confirm).
+
+Ensure 100 % task completion and no dropped or duplicate executions.
+
+Track average cycle time (< 200 ms per trade simulation).
+
+3️⃣ Component Memory Integrity
+
+Use Chrome Performance or React DevTools Memory profiling to monitor:
+
+Component unmount cleanup (no ghost WebSockets or intervals).
+
+Heap stability over 10 min idle and 10 min active trading.
+
+Target: memory growth < 3 % over 20 minutes continuous runtime.
+
+4️⃣ Reconnection & Recovery
+
+Simulate a network drop (disconnect WS for 5 s, reconnect).
+
+Verify automatic re-subscribe and cache re-hydration without manual refresh.
+
+Expect [35.A][RECONNECT] Rehydrated portfolioOverview in logs.
+
+5️⃣ UI Consistency & Latency Verification
+
+Measure tab-switch latency (Dashboard ↔ Trading ↔ Goals).
+
+Ensure zero “loading flash” between cached views.
+
+Confirm no console warnings, no stale query errors.
+
+🧩 PHASE 35 DELIVERABLES
+
+diagnostic-reports/phase-35-performance-profile.md
+
+Metrics table (render times, heap usage, queue latency)
+
+Before → After comparisons
+
+Reconnect simulation logs
+
+If any performance bottlenecks exceed thresholds, propose incremental optimizations (Phase 35.A patches).
+
+When complete, summarize results and prepare a “Phase 35 Reliability Snapshot” confirming readiness for live-trade simulation in Phase 36.
