@@ -168,10 +168,15 @@ export class SignalOrchestrator {
 
       console.log(`[37.A][SIGNAL] Evaluating ${eligibleSymbols.length} eligible symbols`);
 
-      // Get trading settings
-      const settings = await storage.getTradingSettings(systemContext.id);
+      // Get trading settings from user who started the engine
+      if (!systemContext.lastStartedBy) {
+        console.error(`[37.A][SIGNAL] No user associated with ${this.mode} mode engine`);
+        return;
+      }
+      
+      const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
       if (!settings) {
-        console.error(`[37.A][SIGNAL] No trading settings found for mode ${this.mode}`);
+        console.error(`[37.A][SIGNAL] No trading settings found for user ${systemContext.lastStartedBy}`);
         return;
       }
 
