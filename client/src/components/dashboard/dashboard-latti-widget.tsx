@@ -8,6 +8,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { usePortfolioBalance } from "@/hooks/use-portfolio-balance";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { memo, useEffect } from "react";
 
 interface GuardrailsV2 {
   mode: string;
@@ -47,7 +48,10 @@ interface GuardrailsCompliance {
   killSwitchTripped: boolean;
 }
 
-export function DashboardLATTiWidget() {
+function DashboardLATTiWidgetComponent() {
+  useEffect(() => {
+    console.log('[35.2][Dashboard] DashboardLATTiWidget re-render');
+  });
   const { mode } = useTradingMode();
   const [, setLocation] = useLocation();
   const { balance: portfolioBalance, isLoading: portfolioLoading } = usePortfolioBalance();
@@ -350,3 +354,6 @@ export function DashboardLATTiWidget() {
     </section>
   );
 }
+
+// Phase 35.2A: Memoize to prevent unnecessary re-renders
+export const DashboardLATTiWidget = memo(DashboardLATTiWidgetComponent);

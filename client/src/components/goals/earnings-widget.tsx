@@ -5,6 +5,7 @@ import { TrendingUp, Info } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
+import { memo, useEffect } from "react";
 
 interface EarningsSummary {
   today: number;
@@ -23,7 +24,10 @@ interface EarningsDataPoint {
   timestamp: number;
 }
 
-export default function EarningsWidget() {
+function EarningsWidgetComponent() {
+  useEffect(() => {
+    console.log('[35.2][Dashboard] EarningsWidget re-render');
+  });
   const { mode, isPaper } = useTradingMode();
   
   const { data: earnings, isLoading } = useQuery<EarningsSummary>({
@@ -255,3 +259,6 @@ export default function EarningsWidget() {
     </Card>
   );
 }
+
+// Phase 35.2A: Memoize to prevent unnecessary re-renders
+export default memo(EarningsWidgetComponent);

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useTrading } from "@/hooks/use-trading";
+import { memo, useEffect } from "react";
 
 interface PortfolioMetrics {
   totalValue: number;
@@ -25,7 +26,10 @@ interface PortfolioMetrics {
   syncTimestamp?: number;
 }
 
-export default function PortfolioValueWidget() {
+function PortfolioValueWidgetComponent() {
+  useEffect(() => {
+    console.log('[35.2][Dashboard] PortfolioValueWidget re-render');
+  });
   const { isPaper } = useTradingMode();
   
   const { portfolioMetrics: livePortfolioMetrics, portfolioLoading: livePortfolioLoading } = useTrading();
@@ -157,3 +161,6 @@ export default function PortfolioValueWidget() {
     </Card>
   );
 }
+
+// Phase 35.2A: Memoize to prevent unnecessary re-renders
+export default memo(PortfolioValueWidgetComponent);

@@ -5,7 +5,7 @@ import { Activity } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { useState } from "react";
+import { useState, memo, useEffect } from "react";
 
 interface TradingActivityData {
   numberOfTrades: number;
@@ -33,7 +33,10 @@ const PERIOD_OPTIONS = [
   { value: '1y', label: 'Year' },
 ];
 
-export default function TradingActivityWidget() {
+function TradingActivityWidgetComponent() {
+  useEffect(() => {
+    console.log('[35.2][Dashboard] TradingActivityWidget re-render');
+  });
   const { mode, isPaper } = useTradingMode();
   const [period, setPeriod] = useState('1d');
   
@@ -161,3 +164,6 @@ export default function TradingActivityWidget() {
     </Card>
   );
 }
+
+// Phase 35.2A: Memoize to prevent unnecessary re-renders
+export default memo(TradingActivityWidgetComponent);

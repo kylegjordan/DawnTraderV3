@@ -5,7 +5,7 @@ import { BarChart3 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { useState } from "react";
+import { useState, memo, useEffect } from "react";
 
 interface AveragesData {
   avgDailyEarnings: number;
@@ -26,7 +26,10 @@ const PERIOD_OPTIONS = [
   { value: '1y', label: '1Y' },
 ];
 
-export default function AveragesWidget() {
+function AveragesWidgetComponent() {
+  useEffect(() => {
+    console.log('[35.2][Dashboard] AveragesWidget re-render');
+  });
   const { mode, isPaper } = useTradingMode();
   const [period, setPeriod] = useState('1d');
   
@@ -174,3 +177,6 @@ export default function AveragesWidget() {
     </Card>
   );
 }
+
+// Phase 35.2A: Memoize to prevent unnecessary re-renders
+export default memo(AveragesWidgetComponent);
