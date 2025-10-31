@@ -61,31 +61,30 @@ export function useTrading() {
         }
       }));
       
-      // Phase 33.B/C: Hydrate all portfolio-dependent caches with canonical value
-      const portfolioVal = (payload as any).portfolioValue ?? (payload as any).portfolioBalance;
-      if (portfolioVal !== undefined) {
-        // Hydrate portfolio overview for both modes with correct query key format
-        queryClient.setQueryData([`/api/portfolio/overview?mode=paper`], (old: any) => ({
-          ...(old || {}),
-          totalValue: portfolioVal,
-          portfolioBalance: portfolioVal,
-        }));
-        queryClient.setQueryData([`/api/portfolio/overview?mode=live`], (old: any) => ({
-          ...(old || {}),
-          totalValue: portfolioVal,
-          portfolioBalance: portfolioVal,
-        }));
+      // Phase 33.C: Hydrate all portfolio-dependent caches with full portfolio overview
+      const portfolioOverview = (payload as any).portfolioOverview;
+      if (portfolioOverview) {
+        // Hydrate portfolio overview for current mode with full data
+        queryClient.setQueryData([`/api/portfolio/overview?mode=${payload.mode}`], portfolioOverview);
+        
+        // Also update legacy query key for backward compatibility
+        queryClient.setQueryData(['/api/portfolio/overview'], portfolioOverview);
         
         // Hydrate goals engine state
         queryClient.setQueryData(['/api/goals-engine/state'], (old: any) => ({
           ...(old || {}),
           portfolio: { 
             ...(old?.portfolio || {}), 
-            balance: portfolioVal 
+            balance: portfolioOverview.totalValue 
           },
         }));
         
-        console.log(`[Phase-33.C] Portfolio value unified across all caches: $${portfolioVal}`);
+        // Invalidate dependent queries
+        queryClient.invalidateQueries({ queryKey: ['/api/goals/config'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/goals/guardrails'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'] });
+        
+        console.log(`[Phase-33.C] Portfolio overview unified: $${portfolioOverview.totalValue} (cash: $${portfolioOverview.cash}, crypto: $${portfolioOverview.crypto})`);
       }
       
       // Force re-renders for all updated caches
@@ -97,11 +96,11 @@ export function useTrading() {
       queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'], exact: true });
       queryClient.invalidateQueries({ queryKey: ['/api/goals-engine/state'], exact: true });
       
-      // Phase 33.B: Show toasts ONLY on actual state transitions (not reconciliation broadcasts)
+      // Phase 33.C: Show toasts ONLY on actual state transitions (not reconciliation broadcasts)
       const currentActiveState = payload.active;
       if (previousActiveState.current !== currentActiveState) {
-        if (currentActiveState && portfolioVal !== undefined) {
-          toast({ description: `Trading activated ($${portfolioVal.toFixed(2)})` });
+        if (currentActiveState && portfolioOverview) {
+          toast({ description: `Trading activated ($${portfolioOverview.totalValue.toFixed(2)})` });
         } else if (!currentActiveState) {
           toast({ description: 'Trading stopped' });
         }

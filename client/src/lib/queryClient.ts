@@ -1,5 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { ensureValidToken } from "./auth";
+import { apiFetch } from "./api";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -126,14 +127,16 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
+// Phase 33.C: Updated QueryClient with apiFetch as default fetcher
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      queryFn: getQueryFn({ on401: "throw" }),
+      // Use apiFetch as default fetcher - automatically includes credentials and timeout
+      queryFn: ({ queryKey }) => apiFetch(queryKey[0] as string),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      staleTime: 15000, // Phase 33.C: 15 second stale time
+      retry: 1, // Phase 33.C: Retry once on failure
       gcTime: Infinity,
     },
     mutations: {

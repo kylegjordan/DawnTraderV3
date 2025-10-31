@@ -305,6 +305,7 @@ export default function GuardrailsTab() {
   };
 
   // Phase 27.F.14.B - Task 4: Copy paper parameters to live mode fields
+  // Phase 33.C: Use default fetcher instead of custom fetch
   const handleCopyToLive = () => {
     if (!baselineStatus?.snapshot) return;
     
@@ -314,16 +315,11 @@ export default function GuardrailsTab() {
     // Note: These are the LIVE mode values stored in a separate query cache
     // We'll fetch them and update them in state
     queryClient.fetchQuery({
-      queryKey: ['/api/guardrails', 'live'],
-      queryFn: () => fetch('/api/guardrails?mode=live', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      }).then(r => r.json())
-    }).then((liveSettings: Guardrails) => {
+      queryKey: ['/api/guardrails?mode=live']
+    }).then((liveSettings: any) => {
       // Create updated live settings with paper baseline values
       const updatedLiveSettings = {
-        ...liveSettings,
+        ...(liveSettings || {}),
         riskPerTrade: snapshot.riskPerTradePercent,
         maxDailyLoss: snapshot.maxDailyLoss,
         maxDrawdown: snapshot.maxDrawdown,

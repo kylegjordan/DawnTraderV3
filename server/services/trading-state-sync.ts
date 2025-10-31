@@ -196,16 +196,32 @@ export class TradingStateSync {
   async setEngineActive(userId: string, isActive: boolean, mode: 'live' | 'paper' = 'paper'): Promise<void> {
     const timestamp = new Date().toISOString();
     
-    // Phase 33.A/B: Get portfolio value for instant hydration (canonical value)
-    let portfolioValue: number | undefined;
+    // Phase 33.C: Get full portfolio overview for instant hydration
+    let portfolioOverview = { totalValue: 0, cash: 0, crypto: 0 };
     try {
-      const portfolioState = await storage.getPortfolioState({ mode });
-      portfolioValue = portfolioState ? parseFloat(portfolioState.balance) : undefined;
+      if (mode === 'paper') {
+        const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
+        if (portfolioState) {
+          const totalValue = portfolioState.balance ? parseFloat(portfolioState.balance) : 0;
+          // For paper trading, balance represents total cash value (no open positions yet)
+          portfolioOverview = { totalValue, cash: totalValue, crypto: 0 };
+        }
+      } else {
+        // Import RiskManager dynamically for live mode
+        const { RiskManager } = await import('./risk-manager.js');
+        const riskManager = new RiskManager(storage);
+        const liveBalance = await riskManager.getLiveKrakenBalance(userId);
+        portfolioOverview = {
+          totalValue: liveBalance?.totalValueUSD || 0,
+          cash: liveBalance?.cashUSD || 0,
+          crypto: liveBalance?.cryptoUSD || 0,
+        };
+      }
     } catch (error) {
-      console.warn('[Phase-33.A] Failed to fetch portfolio value for instant broadcast');
+      console.warn('[Phase-33.C] Failed to fetch portfolio overview for instant broadcast');
     }
     
-    // Phase 33.A/B: Fire instant broadcast FIRST with minimal payload including canonical portfolio value
+    // Phase 33.C: Fire instant broadcast with full portfolioOverview object
     const { contextBridge } = await import('./context-bridge.js');
     await contextBridge.broadcast({
       type: 'trading_state_changed',
@@ -216,12 +232,13 @@ export class TradingStateSync {
         isEngineActivePaper: mode === 'paper' ? isActive : undefined,
         isEngineActiveLive: mode === 'live' ? isActive : undefined,
         passiveLearning: !isActive,
-        portfolioValue, // Phase 33.B: Canonical portfolio value
+        portfolioValue: portfolioOverview.totalValue, // Backward compatibility
+        portfolioOverview, // Phase 33.C: Full portfolio overview
         timestamp,
       },
       mode
     });
-    console.log(`[Phase-33.B] ⚡ Instant broadcast sent: mode=${mode}, active=${isActive}, portfolio=$${portfolioValue}, latency=<50ms`);
+    console.log(`[Phase-33.C] ⚡ Instant broadcast sent: mode=${mode}, active=${isActive}, portfolio=$${portfolioOverview.totalValue}, latency=<50ms`);
     
     // Then update database and do heavy operations asynchronously
     setTimeout(async () => {
