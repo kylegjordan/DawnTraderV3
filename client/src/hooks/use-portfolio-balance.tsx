@@ -23,7 +23,7 @@ export function usePortfolioBalance() {
   const { mode } = useTradingMode();
   
   const { data, isLoading, error, isFetching } = useQuery<PortfolioOverview>({
-    queryKey: ['/api/portfolio/overview', mode],
+    queryKey: [`/api/portfolio/overview?mode=${mode}`],
     // Wait for mode to be available before executing query
     enabled: !!mode,
     // Phase 27.F.24: Reduce refetch frequency for Goals Engine (doesn't need real-time updates)

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { apiRequest } from '@/lib/queryClient';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useTradingMode } from '@/contexts/trading-mode-context';
 import { toast } from '@/hooks/use-toast';
 import { 
   TradingStatus, 
@@ -17,6 +18,7 @@ import {
 export function useTrading() {
   const queryClient = useQueryClient();
   const { messages: wsMessages } = useWebSocket();
+  const { mode } = useTradingMode();
   
   // Phase 33.B: Track previous active state to prevent duplicate toasts
   const previousActiveState = useRef<boolean | null>(null);
@@ -59,11 +61,16 @@ export function useTrading() {
         }
       }));
       
-      // Phase 33.B: Hydrate all portfolio-dependent caches with canonical value
+      // Phase 33.B/C: Hydrate all portfolio-dependent caches with canonical value
       const portfolioVal = (payload as any).portfolioValue ?? (payload as any).portfolioBalance;
       if (portfolioVal !== undefined) {
-        // Hydrate portfolio overview
-        queryClient.setQueryData(['/api/portfolio/overview'], (old: any) => ({
+        // Hydrate portfolio overview for both modes with correct query key format
+        queryClient.setQueryData([`/api/portfolio/overview?mode=paper`], (old: any) => ({
+          ...(old || {}),
+          totalValue: portfolioVal,
+          portfolioBalance: portfolioVal,
+        }));
+        queryClient.setQueryData([`/api/portfolio/overview?mode=live`], (old: any) => ({
           ...(old || {}),
           totalValue: portfolioVal,
           portfolioBalance: portfolioVal,
@@ -78,7 +85,7 @@ export function useTrading() {
           },
         }));
         
-        console.log(`[Phase-33.B] Portfolio value unified across all caches: $${portfolioVal}`);
+        console.log(`[Phase-33.C] Portfolio value unified across all caches: $${portfolioVal}`);
       }
       
       // Force re-renders for all updated caches
@@ -206,15 +213,18 @@ export function useTrading() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      // Invalidate portfolio overview for both modes
+      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=paper'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trades/active'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
     }
   });
 
-  // Portfolio data
+  // Portfolio data - use mode-aware query key
   const { data: portfolioMetrics, isLoading: portfolioLoading } = useQuery<PortfolioMetrics>({
-    queryKey: ['/api/portfolio/overview'],
+    queryKey: [`/api/portfolio/overview?mode=${mode}`],
+    enabled: !!mode,
     refetchInterval: 60000,
     staleTime: 60000,
     refetchOnWindowFocus: false
@@ -243,7 +253,9 @@ export function useTrading() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trades/active'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      // Invalidate portfolio overview for both modes
+      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=paper'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
     }
   });
 

@@ -40,9 +40,10 @@ Phase 32.BS implements comprehensive monitoring and default operational state en
 
 ## Recent Changes (October 31, 2025)
 
-**Phase 33.C - Authentication & Portfolio Balance Fixes:**
+**Phase 33.C - Authentication & Portfolio Balance Unification:**
 - **Authentication Fix**: Resolved critical authentication bug affecting 12 components (portfolio-chart, earnings-chart, earnings-widget, averages-widget, trading-activity-widget, guardrails-tab, goals-table, goals-summary-widget, results-widget, market-insights-widget, DailyBriefCard, walter-purpose-tab). All components were using custom `queryFn` with manual `fetch()` calls that didn't include credentials, causing them to be stuck on "Loading..." indefinitely with 401 errors. All components now use the default fetcher which automatically handles authentication via cookies/sessions.
-- **Portfolio Balance Fix**: Removed hardcoded $850 portfolio balance values in dashboard widgets. Updated `usePortfolioBalance` hook to fetch from `/api/portfolio/overview` and fallback to 0 (instead of 850) if API fails. Updated `dashboard-latti-widget.tsx` to use `usePortfolioBalance` hook. Updated `latti-dashboard-widget.tsx` to fallback to 0 instead of 850. Portfolio Growth tables now display real-time portfolio values from the API.
+- **Portfolio Balance Unification**: Eliminated all hardcoded $850 fallback values. Fixed query key format bug in `usePortfolioBalance` hook - now correctly uses `/api/portfolio/overview?mode=paper` instead of malformed array-based key that was causing 404 errors. Updated `dashboard-latti-widget.tsx` and `latti-dashboard-widget.tsx` to use `usePortfolioBalance` hook with real-time data. Updated WebSocket hydration in `use-trading.tsx` to use correct query key format for instant portfolio updates. All Portfolio Growth tables now display unified real-time values from `/api/portfolio/overview` endpoint, falling back to 0 (not 850) if data unavailable.
+- **Query Key Standardization**: Standardized portfolio overview query keys across application to use proper URL format with mode parameter (`/api/portfolio/overview?mode=${mode}`) ensuring consistent cache hydration and invalidation.
 
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
