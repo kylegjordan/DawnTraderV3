@@ -15,6 +15,17 @@ import {
   SymbolAnalysis
 } from '@/lib/types';
 
+// Phase 34: Shared useTradingStatus hook to deduplicate polling
+export function useTradingStatus() {
+  return useQuery<TradingStatus>({
+    queryKey: ['/api/trading/status'],
+    staleTime: 15_000, // Data fresh for 15 seconds
+    refetchInterval: 15_000, // Poll every 15 seconds
+    refetchOnWindowFocus: false, // Don't refetch on tab focus
+    refetchOnReconnect: false // Don't refetch on reconnect
+  });
+}
+
 export function useTrading() {
   const queryClient = useQueryClient();
   const { messages: wsMessages } = useWebSocket();
@@ -23,13 +34,8 @@ export function useTrading() {
   // Phase 33.B: Track previous active state to prevent duplicate toasts
   const previousActiveState = useRef<boolean | null>(null);
 
-  // Phase 27.F.3: Trading status and control (Poll every 5s + WebSocket sync for unified state authority)
-  const { data: tradingStatus, isLoading: statusLoading } = useQuery<TradingStatus>({
-    queryKey: ['/api/trading/status'],
-    refetchInterval: 5000, // Poll every 5 seconds for real-time updates
-    staleTime: 0, // Always fetch fresh data
-    refetchOnWindowFocus: true
-  });
+  // Phase 34: Use shared trading status hook to deduplicate polling
+  const { data: tradingStatus, isLoading: statusLoading } = useTradingStatus();
 
   // Phase 34: Hydrate-first trading state - simplified WebSocket listener
   // Phase 34.B: Invalidation guard to prevent loops
