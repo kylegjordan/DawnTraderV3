@@ -22,7 +22,7 @@ export interface FilteredPairResult {
   currentPrice: number;
   volume24h: number;
   dailyRange: number;
-  vwap: number;
+  vwap: number | null;
   lastUpdate: Date;
 }
 

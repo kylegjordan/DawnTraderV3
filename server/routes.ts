@@ -5406,56 +5406,64 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 27.F.13.A + 27.F.21: Filtered Pairs endpoint for UI (user-accessible)
-  // Phase 37.5: NOTE - Uses different filtering method than SignalOrchestrator (see Phase 37 report)
+  // Phase 38.2: Unified Filtering - Uses Market Evaluation SSOT
+  // Ensures identical filtering to SignalOrchestrator (no more 17 vs 662 discrepancy)
   apiRouter.get('/paper-sim/filtered-pairs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
       
-      const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+      const { getMarketEvaluationService } = await import('./services/market-evaluation.js');
       const { contextBridge } = await import('./services/context-bridge.js');
       
-      const scanResult = await paperSimDiagnosticService.performUniverseScan({
-        userId,
-        mode: 'paper',
-        limit: 9999,
-        trace: false,
-        strategies: false
+      // Get trading settings for filters
+      const settings = await storage.getTradingSettings(userId);
+      if (!settings) {
+        return res.status(400).json({ error: 'Trading settings not found' });
+      }
+      
+      // Use SSOT market evaluation service
+      const marketEval = getMarketEvaluationService();
+      const filters = settings.screenerFilters || {};
+      const result = await marketEval.evaluateMarketOnce(mode, {
+        ...filters,
+        quoteCurrencies: filters.quoteCurrencies || ['USDC', 'USDT']
       });
       
-      const filteredPairs = scanResult.top_candidates.map(candidate => ({
-        symbol: candidate.symbol,
-        price: candidate.snapshot.price,
-        vwap: null,
-        spreadBps: candidate.snapshot.spread_bps,
-        volume24h: candidate.snapshot.vol_24h,
-        dailyRange: candidate.snapshot.daily_range,
-        filterReasons: candidate.reasons,
-        timestamp: scanResult.ts
+      // Transform to backward-compatible format
+      const filteredPairs = result.eligiblePairs.map(pair => ({
+        symbol: pair.symbol,
+        price: pair.currentPrice,
+        vwap: pair.vwap,
+        spreadBps: 0, // Not available in FilteredPairResult
+        volume24h: pair.volume24h,
+        dailyRange: pair.dailyRange,
+        filterReasons: [], // Not tracked in SSOT
+        timestamp: result.computedAt
       }));
 
-      console.log(`[FilteredPairs] Returning ${filteredPairs.length}/${scanResult.eligible_count} eligible pairs for user ${userId}`);
+      console.log(`[FilteredPairs][SSOT] Returning ${filteredPairs.length}/${result.universeCount} eligible pairs for ${mode} mode`);
       
       const stats = contextBridge.getStats();
-      console.log(`[FilterEngine] Broadcast trading_data_updated (mode=paper, pairs=${filteredPairs.length}) → ${stats.connectedClients} clients`);
+      console.log(`[FilterEngine][SSOT] Broadcast trading_data_updated (mode=${mode}, pairs=${filteredPairs.length}) → ${stats.connectedClients} clients`);
       contextBridge.broadcast({
         type: 'trading_data_updated',
         payload: {
-          mode: 'paper',
-          source: 'filtered_pairs_endpoint',
+          mode,
+          source: 'market_evaluation_ssot',
           eligibleCount: filteredPairs.length,
-          totalCount: scanResult.evaluated,
-          timestamp: scanResult.ts
+          totalCount: result.universeCount,
+          timestamp: result.computedAt
         },
-        mode: 'paper'
-      }).catch(err => console.error('[FilterEngine] ❌ Failed to broadcast trading_data_updated:', err.message));
+        mode
+      }).catch(err => console.error('[FilterEngine][SSOT] ❌ Failed to broadcast trading_data_updated:', err.message));
       
       res.json({
         pairs: filteredPairs,
-        totalEligible: scanResult.eligible_count,
-        totalEvaluated: scanResult.evaluated,
-        timestamp: scanResult.ts,
-        nextScanAt: scanResult.nextScanAt
+        totalEligible: filteredPairs.length,
+        totalEvaluated: result.universeCount,
+        timestamp: result.computedAt,
+        nextScanAt: new Date(Date.now() + 15000).toISOString() // 15s cache TTL
       });
     } catch (error) {
       console.error('Error fetching filtered pairs:', error);

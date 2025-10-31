@@ -1,0 +1,176 @@
+🧭 Phase 38 Directive — Unified Filtering & Insights Refactor
+
+Objective:
+Eliminate redundant filtering logic and unify Filtered Pairs + Filtered Insights under one authoritative market-evaluation SSOT (single source of truth) service.
+Maintain full Walter analytics compatibility and fix all deferred anomalies.
+
+🧩 Overview of Current Issues
+
+Duplicate filtering logic:
+
+FilteredPairsService (used by SignalOrchestrator / trading engine)
+
+PaperSimDiagnosticService.performUniverseScan() (used only for Insights tab)
+
+Discrepancy: 17 eligible pairs (SignalOrchestrator) vs 662 displayed (Insights)
+
+Deferred anomalies:
+
+Dashboard toggle desync (paper active vs banner stopped)
+
+Filtered Pairs tab HTTP 500 (contextBridge2.getClientCount error)
+
+Legacy redundant broadcast calls (getClientCount) scattered across services.
+
+⚙️ Implementation Tasks
+Task 38.1 — Create Single Source of Truth (SSOT)
+
+New file: server/services/market-evaluation.ts
+
+Expose evaluateMarketOnce(mode) returning:
+
+{
+  universeCount,
+  eligiblePairs: Pair[],      // filtered symbols actually tradable
+  ineligibleCount,
+  computedAt: ISODateString
+}
+
+
+Replace internal logic with the existing FilteredPairsService.getValidPairs() to ensure identical filtering to SignalOrchestrator.
+
+Add 15 s cache for stability between requests.
+
+Task 38.2 — Unify Insights and Filtered Pairs
+
+/api/paper-sim/filtered-pairs and Insights tab must both read from market-evaluation.ts.
+
+Remove or deprecate performUniverseScan() entirely.
+
+Ensure API responses preserve old keys for UI backward compatibility:
+
+universeEvaluated, eligiblePairs, ineligiblePairs, computedAt
+
+Task 38.3 — Remove Redundant / Obsolete Processes
+
+Delete all references to:
+
+contextBridge2.getClientCount() → use contextBridge.getStats().connectedClients
+
+Any unused diagnostic scans or universe-evaluation utilities
+
+Clean up duplicated React Query polling or unused caching hooks related to insights updates.
+
+Task 38.4 — Integrate Walter Compatibility Adapter
+
+(from previous directive, summarized)
+
+Create server/adapters/walter-compat.ts bridging SSOT → Walter analytics:
+
+Provide getFilteredInsightsForWalter(mode) that wraps evaluateMarketOnce(mode).
+
+Keep endpoint & event compatibility:
+
+/api/insights/filter
+
+/api/system/metrics
+
+WebSocket price_updated, signal_generated
+
+Include feature flag:
+
+WALTER_COMPAT_MODE=true
+
+
+When true → adapter path, when false → direct SSOT.
+
+Task 38.5 — Apply Deferred Fixes
+
+Dashboard toggle desync (cosmetic): synchronize state after broadcast.
+
+Filtered Pairs HTTP 500 error: now resolved automatically via SSOT adapter.
+
+Verify all getClientCount replacements.
+
+Task 38.6 — Generate Diagnostic and Parity Reports
+
+diagnostic-reports/phase-38-reference-inventory.md
+List every existing filtering/insight function before refactor.
+
+diagnostic-reports/phase-38-walter-compat-parity-report.md
+Compare legacy vs new adapter payloads (diff ≤ 1 pair allowed).
+
+diagnostic-reports/phase-38-unified-validation-metrics.md
+Confirm SSOT consistency: identical eligible pairs count for Filtered Pairs, Insights, and SignalOrchestrator.
+
+Task 38.7 — Comprehensive Validation
+
+Start paper mode via:
+
+curl -X POST http://localhost:5000/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"username":"testuser123","password":"SecurePass123!"}' |
+     jq -r '.accessToken' > token.txt
+
+TOKEN=$(cat token.txt)
+curl -X POST http://localhost:5000/api/trading/start \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"mode":"paper"}'
+
+
+Wait 60 s for signal cycles.
+
+Compare pair counts and sample symbols between:
+
+/api/paper-sim/filtered-pairs
+
+/api/insights/filter
+
+Latest [37.A][SIGNAL] logs.
+
+Log results in phase-38-unified-validation-metrics.md.
+
+🔒 Success Criteria
+Metric	Target	Validation
+Eligible pair count parity	≤ 1 difference	Diff check in parity report
+Filtered Insights latency	< 300 ms	Console profiling
+Walter adapter API status	200 OK + valid payload	Report snapshot
+WebSocket client count tracking	Accurate via getStats()	Confirm broadcast logs
+No crashes or timeouts	0	System logs
+🧠 Testing Credentials
+
+Use the existing Phase 37 test account:
+
+username: testuser123
+password: SecurePass123!
+
+🗂️ Output Artifacts
+
+/diagnostic-reports/phase-38-reference-inventory.md
+
+/diagnostic-reports/phase-38-walter-compat-parity-report.md
+
+/diagnostic-reports/phase-38-unified-validation-metrics.md
+
+/diagnostic-reports/phase-38-final-summary.md
+
+✅ Completion Checklist
+
+ All redundant filtering logic removed
+
+ Insights & Filtered Pairs share same SSOT data
+
+ Deferred fixes resolved
+
+ Walter compatibility parity validated
+
+ Final summary report archived
+
+Run unattended overnight.
+If all validations pass and the summary report shows parity ≤ 1 pair difference, automatically tag the build:
+
+phase-38-complete
+
+
+and mark baseline frozen for Phase 39 – System Optimization and Audit Retest.
