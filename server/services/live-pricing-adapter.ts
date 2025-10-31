@@ -31,6 +31,10 @@ export class LivePricingAdapter {
   private isRunning: boolean = false;
   private useMockMode: boolean = false;
   
+  // Phase 34: Throttling for price broadcasts
+  private lastBroadcastTime: Map<string, number> = new Map();
+  private readonly BROADCAST_THROTTLE_MS = 1000; // 1 second minimum between broadcasts per symbol
+  
   // Configuration
   private readonly REFRESH_INTERVAL_MS = 15000; // 15 seconds
   private readonly CACHE_TTL_MS = 30000; // 30 seconds
@@ -351,9 +355,22 @@ export class LivePricingAdapter {
 
   /**
    * Broadcast price update via WebSocket
+   * Phase 34: Throttled to max 1 broadcast per second per symbol
    */
   private async broadcastPriceUpdate(quote: PriceQuote): Promise<void> {
     try {
+      // Phase 34: Throttle broadcasts to ≤1/second per symbol
+      const now = Date.now();
+      const lastBroadcast = this.lastBroadcastTime.get(quote.symbol) || 0;
+      
+      if (now - lastBroadcast < this.BROADCAST_THROTTLE_MS) {
+        // Skip this broadcast - too soon since last one
+        return;
+      }
+      
+      // Update last broadcast time
+      this.lastBroadcastTime.set(quote.symbol, now);
+      
       await contextBridge.broadcast({
         type: 'price_updated',
         payload: {
