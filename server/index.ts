@@ -37,10 +37,24 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
+// Phase 34.A: Enhanced debug logging for all API endpoints
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
+
+  // Log incoming request details (Phase 34.A diagnostic)
+  if (path.startsWith("/api")) {
+    console.log(`[34.A][REQUEST] ${req.method} ${path}`, {
+      headers: {
+        authorization: req.headers.authorization ? 'Bearer ***' : 'none',
+        'x-app-mode': req.headers['x-app-mode'],
+        'content-type': req.headers['content-type']
+      },
+      body: req.body ? JSON.stringify(req.body).substring(0, 200) : 'none',
+      query: req.query
+    });
+  }
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -61,6 +75,15 @@ app.use((req, res, next) => {
       }
 
       log(logLine);
+      
+      // Phase 34.A: Detailed response logging for diagnostics
+      if (res.statusCode >= 400) {
+        console.error(`[34.A][RESPONSE-ERROR] ${req.method} ${path}`, {
+          status: res.statusCode,
+          duration,
+          response: capturedJsonResponse
+        });
+      }
     }
   });
 

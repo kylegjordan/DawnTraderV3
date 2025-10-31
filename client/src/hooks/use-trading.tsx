@@ -34,11 +34,19 @@ export function useTrading() {
   // Phase 27.F.3 + 27.F.10 + 32.D-Fix.Final: Subscribe to WebSocket trading_state_changed events for immediate sync
   // Phase 32.D-Fix.Final: Hydrate cache with setQueryData for instant UI updates
   useEffect(() => {
+    // Phase 34.A: Log all WebSocket messages for diagnostics
+    if (wsMessages.length > 0) {
+      console.log(`[34.A][WS-MESSAGES] Received ${wsMessages.length} messages:`, 
+        wsMessages.map((m: any) => ({ type: m.type, timestamp: m.timestamp }))
+      );
+    }
+    
     const updates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
     if (!updates.length) return;
 
     const payload = updates[updates.length - 1]?.payload;
     console.log('[SYNC][32.D-Fix.Final] trading_state_changed:', payload);
+    console.log('[34.A][WS-TRADING-STATE] Full payload:', JSON.stringify(payload, null, 2));
 
     if (payload) {
       // Phase 32.D-Fix.Final: HYDRATE both trading/status AND paper-sim/status so TopBar blue bar updates instantly
