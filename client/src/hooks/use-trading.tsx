@@ -49,8 +49,13 @@ export function useTrading() {
     console.log('[34.A][WS-TRADING-STATE] Full payload:', JSON.stringify(payload, null, 2));
 
     if (payload) {
+      // Phase 34.A: Log cache hydration operations
+      console.log('[34.A][CACHE-HYDRATE] Setting trading/status cache:', payload);
+      
       // Phase 32.D-Fix.Final: HYDRATE both trading/status AND paper-sim/status so TopBar blue bar updates instantly
       queryClient.setQueryData(['/api/trading/status'], payload);
+      
+      console.log('[34.A][CACHE-HYDRATE] Setting paper-sim/status cache with active:', payload.active);
       queryClient.setQueryData(['/api/paper-sim/status'], {
         isRunning: payload.active, // ensures blue bar updates immediately
         sessionInfo: payload.active ? { sessionId: 'active', startTime: new Date() } : null,
@@ -60,6 +65,7 @@ export function useTrading() {
         profitLoss: null
       });
       
+      console.log('[34.A][CACHE-HYDRATE] Updating system/config with passiveLearning:', payload.passiveLearning ?? !payload.active);
       // Also hydrate system config for passive learning badge
       queryClient.setQueryData(['/api/system/config'], (old: any) => ({
         ...old,
@@ -72,13 +78,19 @@ export function useTrading() {
       // Phase 33.C: Hydrate all portfolio-dependent caches with full portfolio overview
       const portfolioOverview = (payload as any).portfolioOverview;
       if (portfolioOverview) {
+        console.log('[34.A][PORTFOLIO-HYDRATE] Received portfolio data:', portfolioOverview);
+        
         // Hydrate portfolio overview for current mode with full data
-        queryClient.setQueryData([`/api/portfolio/overview?mode=${payload.mode}`], portfolioOverview);
+        const modeKey = `/api/portfolio/overview?mode=${payload.mode}`;
+        console.log(`[34.A][CACHE-HYDRATE] Setting ${modeKey}:`, portfolioOverview);
+        queryClient.setQueryData([modeKey], portfolioOverview);
         
         // Also update legacy query key for backward compatibility
+        console.log('[34.A][CACHE-HYDRATE] Setting legacy /api/portfolio/overview:', portfolioOverview);
         queryClient.setQueryData(['/api/portfolio/overview'], portfolioOverview);
         
         // Hydrate goals engine state
+        console.log('[34.A][CACHE-HYDRATE] Updating goals-engine/state with balance:', portfolioOverview.totalValue);
         queryClient.setQueryData(['/api/goals-engine/state'], (old: any) => ({
           ...(old || {}),
           portfolio: { 
@@ -88,14 +100,18 @@ export function useTrading() {
         }));
         
         // Invalidate dependent queries
+        console.log('[34.A][CACHE-INVALIDATE] Invalidating goals/config, goals/guardrails, filtered-pairs');
         queryClient.invalidateQueries({ queryKey: ['/api/goals/config'] });
         queryClient.invalidateQueries({ queryKey: ['/api/goals/guardrails'] });
         queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'] });
         
         console.log(`[Phase-33.C] Portfolio overview unified: $${portfolioOverview.totalValue} (cash: $${portfolioOverview.cash}, crypto: $${portfolioOverview.crypto})`);
+      } else {
+        console.warn('[34.A][PORTFOLIO-HYDRATE] No portfolioOverview in payload!');
       }
       
       // Force re-renders for all updated caches
+      console.log('[34.A][CACHE-INVALIDATE] Forcing re-render for trading/status, paper-sim/status, system/config');
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'], exact: true });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'], exact: true });
       queryClient.invalidateQueries({ queryKey: ['/api/system/config'], exact: true });
