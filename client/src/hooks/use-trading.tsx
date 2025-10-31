@@ -31,116 +31,39 @@ export function useTrading() {
     refetchOnWindowFocus: true
   });
 
-  // Phase 27.F.3 + 27.F.10 + 32.D-Fix.Final: Subscribe to WebSocket trading_state_changed events for immediate sync
-  // Phase 32.D-Fix.Final: Hydrate cache with setQueryData for instant UI updates
+  // Phase 34: Hydrate-first trading state - simplified WebSocket listener
+  // Phase 34.B: Invalidation guard to prevent loops
+  const invalidationInProgressRef = useRef(false);
+  
   useEffect(() => {
-    // Phase 34.A: Log all WebSocket messages for diagnostics
-    if (wsMessages.length > 0) {
-      console.log(`[34.A][WS-MESSAGES] Received ${wsMessages.length} messages:`, 
-        wsMessages.map((m: any) => ({ type: m.type, timestamp: m.timestamp }))
-      );
-    }
-    
-    const updates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
+    const updates = wsMessages.filter((m: any) => m.type === 'trading_state_changed');
     if (!updates.length) return;
-
-    const payload = updates[updates.length - 1]?.payload;
-    console.log('[SYNC][32.D-Fix.Final] trading_state_changed:', payload);
-    console.log('[34.A][WS-TRADING-STATE] Full payload:', JSON.stringify(payload, null, 2));
-
+    
+    const payload = updates.at(-1)?.payload;
+    console.log('[SYNC] trading_state_changed:', payload);
+    
     if (payload) {
-      // Phase 34.A: Log cache hydration operations
-      console.log('[34.A][CACHE-HYDRATE] Setting trading/status cache:', payload);
-      
-      // Phase 32.D-Fix.Final: HYDRATE both trading/status AND paper-sim/status so TopBar blue bar updates instantly
+      // Hydrate truth - setQueryData first for instant UI updates
       queryClient.setQueryData(['/api/trading/status'], payload);
       
-      console.log('[34.A][CACHE-HYDRATE] Setting paper-sim/status cache with active:', payload.active);
-      queryClient.setQueryData(['/api/paper-sim/status'], {
-        isRunning: payload.active, // ensures blue bar updates immediately
-        sessionInfo: payload.active ? { sessionId: 'active', startTime: new Date() } : null,
-        balance: null,
-        totalTrades: null,
-        winRate: null,
-        profitLoss: null
+      // Phase 34.B: Guard against invalidation loops
+      if (invalidationInProgressRef.current) {
+        console.log('[34.B] Invalidation already in progress, skipping duplicate');
+        return;
+      }
+      
+      invalidationInProgressRef.current = true;
+      
+      // Selective invalidations with exact: true to prevent cascades
+      Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'], exact: true }),
+        queryClient.invalidateQueries({ queryKey: ['/api/system/config'], exact: true }),
+      ]).finally(() => {
+        // Reset guard after short delay
+        setTimeout(() => {
+          invalidationInProgressRef.current = false;
+        }, 100);
       });
-      
-      console.log('[34.A][CACHE-HYDRATE] Updating system/config with passiveLearning:', payload.passiveLearning ?? !payload.active);
-      // Also hydrate system config for passive learning badge
-      queryClient.setQueryData(['/api/system/config'], (old: any) => ({
-        ...old,
-        systemFlags: {
-          ...(old?.systemFlags || {}),
-          passiveLearning: payload.passiveLearning ?? !payload.active
-        }
-      }));
-      
-      // Phase 33.C: Hydrate all portfolio-dependent caches with full portfolio overview
-      const portfolioOverview = (payload as any).portfolioOverview;
-      if (portfolioOverview) {
-        console.log('[34.A][PORTFOLIO-HYDRATE] Received portfolio data:', portfolioOverview);
-        
-        // Hydrate portfolio overview for current mode with full data
-        const modeKey = `/api/portfolio/overview?mode=${payload.mode}`;
-        console.log(`[34.A][CACHE-HYDRATE] Setting ${modeKey}:`, portfolioOverview);
-        queryClient.setQueryData([modeKey], portfolioOverview);
-        
-        // Also update legacy query key for backward compatibility
-        console.log('[34.A][CACHE-HYDRATE] Setting legacy /api/portfolio/overview:', portfolioOverview);
-        queryClient.setQueryData(['/api/portfolio/overview'], portfolioOverview);
-        
-        // Hydrate goals engine state
-        console.log('[34.A][CACHE-HYDRATE] Updating goals-engine/state with balance:', portfolioOverview.totalValue);
-        queryClient.setQueryData(['/api/goals-engine/state'], (old: any) => ({
-          ...(old || {}),
-          portfolio: { 
-            ...(old?.portfolio || {}), 
-            balance: portfolioOverview.totalValue 
-          },
-        }));
-        
-        // Invalidate dependent queries
-        console.log('[34.A][CACHE-INVALIDATE] Invalidating goals/config, goals/guardrails, filtered-pairs');
-        queryClient.invalidateQueries({ queryKey: ['/api/goals/config'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/goals/guardrails'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'] });
-        
-        console.log(`[Phase-33.C] Portfolio overview unified: $${portfolioOverview.totalValue} (cash: $${portfolioOverview.cash}, crypto: $${portfolioOverview.crypto})`);
-      } else {
-        console.warn('[34.A][PORTFOLIO-HYDRATE] No portfolioOverview in payload!');
-      }
-      
-      // Force re-renders for all updated caches
-      console.log('[34.A][CACHE-INVALIDATE] Forcing re-render for trading/status, paper-sim/status, system/config');
-      queryClient.invalidateQueries({ queryKey: ['/api/trading/status'], exact: true });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'], exact: true });
-      queryClient.invalidateQueries({ queryKey: ['/api/system/config'], exact: true });
-      
-      // Phase 33.B: Instantly rehydrate Trading & Goals pages
-      queryClient.invalidateQueries({ queryKey: ['/api/trading/filtered-pairs'], exact: true });
-      queryClient.invalidateQueries({ queryKey: ['/api/goals-engine/state'], exact: true });
-      
-      // Phase 33.C: Show toasts ONLY on actual state transitions (not reconciliation broadcasts)
-      const currentActiveState = payload.active;
-      if (previousActiveState.current !== currentActiveState) {
-        if (currentActiveState && portfolioOverview) {
-          toast({ description: `Trading activated ($${portfolioOverview.totalValue.toFixed(2)})` });
-        } else if (!currentActiveState) {
-          toast({ description: 'Trading stopped' });
-        }
-        previousActiveState.current = currentActiveState;
-      }
-    }
-
-    // Invalidate dependent queries after hydrating the truth
-    Promise.allSettled([
-      queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] }),
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] }),
-    ]);
-    
-    // Phase 27.F.10: Mode-specific invalidations
-    if (payload?.mode === 'paper') {
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
     }
   }, [wsMessages, queryClient]);
 
