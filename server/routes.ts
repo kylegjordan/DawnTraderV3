@@ -2846,9 +2846,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   apiRouter.get('/portfolio/earnings-chart', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
+      const mode = (req.query.mode as 'live' | 'paper') || (req.headers['x-app-mode'] as 'live' | 'paper') || 'paper';
       const days = parseInt(req.query.days as string) || 30;
-      const chartData = await riskManager.getEarningsChartData(userId, days);
+      const chartData = await riskManager.getEarningsChartData(mode, days);
       res.json(chartData);
     } catch (error) {
       console.error('Error fetching earnings chart data:', error);

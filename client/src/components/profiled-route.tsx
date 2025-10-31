@@ -3,7 +3,7 @@
  * Wraps routes with React Profiler for performance monitoring
  */
 
-import { Profiler, ComponentType, useEffect } from 'react';
+import { Profiler, ComponentType, useMemo } from 'react';
 import { performanceProfiler } from '@/utils/performance-profiler';
 
 interface ProfiledRouteProps {
@@ -13,10 +13,11 @@ interface ProfiledRouteProps {
 }
 
 export function ProfiledRoute({ component: Component, id, ...props }: ProfiledRouteProps) {
-  // Mark mount start before render
-  useEffect(() => {
+  // Mark mount start BEFORE first render using useMemo (runs synchronously before render)
+  useMemo(() => {
     performanceProfiler.markMountStart(id);
-  }, []);
+    return null;
+  }, [id]);
 
   return (
     <Profiler id={id} onRender={performanceProfiler.onRender}>
