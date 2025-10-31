@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { ensureValidToken } from "./auth";
 import { apiFetch } from "./api";
+import { setGlobalTradingMode as setTradingMode, getGlobalTradingMode as getTradingMode } from "./tradingMode";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -9,16 +10,13 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-// Global trading mode accessor - updated by TradingModeContext
-// Default to 'live' to match TradingModeContext default
-let currentTradingMode: 'live' | 'paper' = 'live';
-
+// Re-export for backwards compatibility
 export function setGlobalTradingMode(mode: 'live' | 'paper') {
-  currentTradingMode = mode;
+  setTradingMode(mode);
 }
 
 export function getGlobalTradingMode(): 'live' | 'paper' {
-  return currentTradingMode;
+  return getTradingMode();
 }
 
 // Phase 8.5 Addendum K: Global request trace recorder
@@ -54,7 +52,7 @@ export async function apiRequest<T = any>(
   const headers: Record<string, string> = {
     ...(data ? { "Content-Type": "application/json" } : {}),
     ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-    "x-app-mode": currentTradingMode
+    "x-app-mode": getTradingMode()
   };
 
   try {
@@ -75,7 +73,7 @@ export async function apiRequest<T = any>(
       endpoint: url,
       status: res.status,
       duration,
-      mode: currentTradingMode,
+      mode: getTradingMode(),
     });
     
     // For DELETE requests or 204 responses, return empty object
@@ -93,7 +91,7 @@ export async function apiRequest<T = any>(
       endpoint: url,
       status: 'error',
       duration,
-      mode: currentTradingMode,
+      mode: getTradingMode(),
       error: error instanceof Error ? error.message : String(error),
     });
     
@@ -111,7 +109,7 @@ export const getQueryFn: <T>(options: {
     
     const headers: Record<string, string> = {
       ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-      "x-app-mode": currentTradingMode
+      "x-app-mode": getTradingMode()
     };
     
     const res = await fetch(queryKey.join("/") as string, {
