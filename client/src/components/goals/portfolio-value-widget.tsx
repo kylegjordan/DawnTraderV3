@@ -1,50 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DollarSign } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
-import { useTrading } from "@/hooks/use-trading";
+import { usePortfolioContext } from "@/contexts/portfolio-context";
 import { memo, useEffect } from "react";
-
-interface PortfolioMetrics {
-  totalValue: number;
-  cash: number;
-  crypto: number;
-  cashPercent: number;
-  cryptoPercent: number;
-  unrealizedPL: number;
-  realizedPL: number;
-  openTradesCount: number;
-  totalTrades: number;
-  wins: number;
-  losses: number;
-  winRate: number;
-  currentExposure: number;
-  balanceSource?: string;
-  balanceError?: string;
-  syncTimestamp?: number;
-}
 
 function PortfolioValueWidgetComponent() {
   useEffect(() => {
-    console.log('[35.2][Dashboard] PortfolioValueWidget re-render');
+    console.log('[35.2A][Widget] PortfolioValueWidget re-render');
   });
   const { isPaper } = useTradingMode();
   
-  const { portfolioMetrics: livePortfolioMetrics, portfolioLoading: livePortfolioLoading } = useTrading();
-  
-  // Phase 27.F.14.I: Use paper-specific endpoint that queries portfolio_state table
-  const { data: paperPortfolioMetrics, isLoading: paperPortfolioLoading } = useQuery<PortfolioMetrics>({
-    queryKey: ['/api/paper/portfolio/state'],
-    enabled: isPaper,
-    refetchInterval: 60000,
-    staleTime: 60000,
-    refetchOnWindowFocus: false
-  });
-  
-  const portfolioMetrics = isPaper ? paperPortfolioMetrics : livePortfolioMetrics;
-  const portfolioLoading = isPaper ? paperPortfolioLoading : livePortfolioLoading;
+  // Phase 35.2A: Consume portfolio data from context instead of fetching independently
+  const portfolioMetrics = usePortfolioContext();
+  const portfolioLoading = !portfolioMetrics;
 
   if (portfolioLoading && !portfolioMetrics) {
     return (
