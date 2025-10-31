@@ -452,6 +452,31 @@ export class TradingStateSync {
         console.log('[Phase-33.B] Passive state debounce reset (2s window expired)');
       }, 2000);
       
+      // Phase 34.B: Fetch portfolioOverview for reconciliation broadcasts
+      let portfolioOverview = { totalValue: 0, cash: 0, crypto: 0 };
+      try {
+        if (currentMode === 'paper') {
+          const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
+          if (portfolioState?.balance) {
+            const balance = parseFloat(portfolioState.balance);
+            // Note: portfolioState schema only has 'balance' field. 
+            // Cash defaults to balance (all funds in cash when no positions open)
+            // Crypto defaults to 0 (would be calculated from open positions)
+            portfolioOverview = {
+              totalValue: balance,
+              cash: balance, // For paper mode with no positions, cash = total balance
+              crypto: 0      // Would need to calculate from open positions
+            };
+          }
+        } else {
+          // Live mode - would need to fetch from Kraken, but for now use placeholder
+          // In practice, this would call riskManager.getLiveKrakenBalance()
+          portfolioOverview = { totalValue: 0, cash: 0, crypto: 0 };
+        }
+      } catch (error) {
+        console.error('[34.B][RECONCILE] Failed to fetch portfolioOverview:', error);
+      }
+      
       const payload = {
         userId, // Keep for audit trail
         mode: currentMode,
@@ -468,7 +493,10 @@ export class TradingStateSync {
         lastStoppedBy: context?.lastStoppedBy,
         changedBy: isActive ? context?.lastStartedBy : context?.lastStoppedBy,
         changeReason: 'Engine state changed',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        // Phase 34.B: Include portfolio overview in all broadcasts
+        portfolioOverview,
+        passiveLearning // Phase 34.B: Include passive learning state
       };
       
       // Phase 27.F.13.O: Global mode-based broadcast (NO userId filter)
@@ -477,6 +505,11 @@ export class TradingStateSync {
         payload,
         mode: currentMode // Mode-scoped, all clients receive
       });
+      
+      // Phase 34.B: Log reconciliation broadcasts with portfolio data
+      if (userId === 'system-reconciliation') {
+        console.log(`[34.B][RECONCILE] portfolioOverview present: totalValue=$${portfolioOverview.totalValue}, cash=$${portfolioOverview.cash}, crypto=$${portfolioOverview.crypto}`);
+      }
       
       console.log(`[SYNC][Phase-27.F.13.O] Broadcasted global state snapshot for ${currentMode} mode: activePaper=${payload.isEngineActivePaper}, activeLive=${payload.isEngineActiveLive} (initiated by userId: ${userId})`);
     } catch (error) {
