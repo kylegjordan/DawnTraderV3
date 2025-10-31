@@ -18,6 +18,7 @@ import { RequestTraceProvider } from "@/hooks/use-request-trace";
 import { ensureValidToken } from "@/lib/auth";
 import WalterFloatingAssistant from "@/components/walter-floating-assistant";
 import { LATTIToastListener } from "@/components/latti-toast-listener";
+import { ProfiledRoute } from "@/components/profiled-route";
 
 const Settings = lazy(() => import("@/pages/settings"));
 const WalterPage = lazy(() => import("@/pages/walter"));
@@ -149,16 +150,27 @@ function Router() {
           
           <Suspense fallback={<LoadingFallback />}>
             <Switch>
-              <Route path="/" component={Dashboard} />
-              <Route path="/dashboard" component={Dashboard} />
+              {/* Phase 35.1 - Profiled Routes for Performance Monitoring */}
+              <Route path="/">
+                {() => <ProfiledRoute id="Dashboard" component={Dashboard} />}
+              </Route>
+              <Route path="/dashboard">
+                {() => <ProfiledRoute id="Dashboard" component={Dashboard} />}
+              </Route>
+              <Route path="/active-trades">
+                {() => <ProfiledRoute id="Trading" component={ActiveTradesPage} />}
+              </Route>
+              <Route path="/systems">
+                {() => <ProfiledRoute id="Analytics" component={SystemsPage} />}
+              </Route>
+              
+              {/* Standard Routes (no profiling) */}
               <Route path="/walter" component={WalterPage} />
               <Route path="/watchlist" component={WatchlistPage} />
-              <Route path="/active-trades" component={ActiveTradesPage} />
               <Route path="/reports" component={ReportsPage} />
               <Route path="/daily-brief" component={DailyBriefPage} />
               <Route path="/briefings" component={BriefingsPage} />
               <Route path="/goals-engine" component={GoalsEnginePage} />
-              <Route path="/systems" component={SystemsPage} />
               <Route path="/ai-transparency" component={AITransparencyPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/kill-switch" component={KillSwitchScreen} />
