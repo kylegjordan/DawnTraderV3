@@ -72,8 +72,8 @@ export class SignalOrchestrator {
       'mean_reversion',
       'range_trading',
       'vwap_bounce',
-      'liquidity_trap',
-      'dhma'
+      'liquidity_trap'
+      // DHMA disabled pending proper parameter loading
     ]);
     
     this.strategyEngine = new StrategyEngine();
@@ -370,13 +370,14 @@ export class SignalOrchestrator {
         }
       }
 
-      if (this.enabledStrategies.has('dhma')) {
-        const signal = this.strategyEngine.detectDHMA(ohlcAsAny, {});
-        if (signal) {
-          signal.symbol = symbol;
-          signals.push(signal);
-        }
-      }
+      // DHMA disabled pending proper parameter loading
+      // if (this.enabledStrategies.has('dhma')) {
+      //   const signal = this.strategyEngine.detectDHMA(ohlcAsAny, {});
+      //   if (signal) {
+      //     signal.symbol = symbol;
+      //     signals.push(signal);
+      //   }
+      // }
 
       if (signals.length > 0) {
         console.log(`[37.A][SIGNAL] ${symbol}: Generated ${signals.length} signal(s) - ${signals.map(s => s.strategy).join(', ')}`);

@@ -3,6 +3,8 @@ import { PaperExecutionEngine } from './paper-execution-engine';
 import { MicroExecutionService } from './micro-execution-service';
 import { KrakenService } from './kraken';
 import { registerEngine, registerMicroService } from './mode-registry';
+import { SignalOrchestrator } from './signal-orchestrator';
+import type { StrategySignal } from './strategy-engine';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -43,6 +45,7 @@ export class PaperPortfolioManager {
   private kraken: KrakenService;
   private isRunning: boolean = false;
   private watchlistRefreshInterval: NodeJS.Timeout | null = null;
+  private signalOrchestrator: SignalOrchestrator | null = null; // Phase 37: Signal generation
   
   // Portfolio-level guardrails
   private readonly MAX_DRAWDOWN_PERCENT = 20; // Max 20% drawdown
@@ -88,6 +91,32 @@ export class PaperPortfolioManager {
     // Phase 27.F.14.MICRO: Start micro-execution service
     await this.microExecutionService.start();
 
+    // Phase 37: Start signal orchestrator for automatic signal generation
+    console.log(`[PaperPortfolio:${this.userId}] Starting signal orchestrator...`);
+    this.signalOrchestrator = new SignalOrchestrator({
+      mode: this.mode,
+      evaluationIntervalMs: 30000, // 30 seconds
+      enabledStrategies: [
+        'vwap_pullback',
+        'abcd_long',
+        'sma_trend_ride',
+        'breakout',
+        'mean_reversion',
+        'range_trading',
+        'vwap_bounce',
+        'liquidity_trap',
+        'dhma'
+      ]
+    });
+
+    await this.signalOrchestrator.start(async (signal: StrategySignal) => {
+      // Forward generated signals to execution engine
+      console.log(`[PaperPortfolio:${this.userId}] Received signal for ${signal.symbol} - forwarding to execution engine`);
+      await this.executionEngine.processSignal(signal);
+    });
+
+    console.log(`[PaperPortfolio:${this.userId}] Signal orchestrator started successfully`);
+
     // Start watchlist refresh cycle
     console.log(`[PaperPortfolio:${this.userId}] Starting watchlist refresh (every ${this.WATCHLIST_REFRESH_INTERVAL_MS / 1000}s)`);
     this.watchlistRefreshInterval = setInterval(
@@ -105,6 +134,14 @@ export class PaperPortfolioManager {
 
     this.isRunning = false;
     console.log(`[PaperPortfolio:${this.userId}] Stopping paper portfolio manager`);
+
+    // Phase 37: Stop signal orchestrator
+    if (this.signalOrchestrator) {
+      console.log(`[PaperPortfolio:${this.userId}] Stopping signal orchestrator...`);
+      this.signalOrchestrator.stop();
+      this.signalOrchestrator = null;
+      console.log(`[PaperPortfolio:${this.userId}] Signal orchestrator stopped`);
+    }
 
     // Stop watchlist refresh
     if (this.watchlistRefreshInterval) {

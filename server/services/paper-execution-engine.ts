@@ -837,4 +837,37 @@ export class PaperExecutionEngine {
   getLastCycleSummary() {
     return this.lastCycleSummary;
   }
+
+  /**
+   * Phase 37: Process external signal from SignalOrchestrator
+   * Public method for SignalOrchestrator to submit signals for execution
+   */
+  async processSignal(signal: StrategySignal): Promise<void> {
+    if (!this.isRunning) {
+      console.log(`[PaperExecution:${this.mode}] Cannot process signal - engine not running`);
+      return;
+    }
+
+    try {
+      // Get system context for this mode
+      const systemContext = await storage.getSystemContext(this.mode);
+      if (!systemContext || !systemContext.lastStartedBy) {
+        console.error(`[PaperExecution:${this.mode}] No system context or user for ${this.mode} mode`);
+        return;
+      }
+
+      // Get trading settings from the user who started the engine
+      const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
+      if (!settings) {
+        console.error(`[PaperExecution:${this.mode}] No trading settings found for user ${systemContext.lastStartedBy}`);
+        return;
+      }
+
+      // Execute the trade
+      console.log(`[PaperExecution:${this.mode}] Processing external signal for ${signal.symbol}`);
+      await this.executeSimulatedTrade(signal, settings);
+    } catch (error) {
+      console.error(`[PaperExecution:${this.mode}] Error processing signal for ${signal.symbol}:`, error);
+    }
+  }
 }

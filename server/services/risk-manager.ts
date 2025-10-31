@@ -532,17 +532,7 @@ export class RiskManager {
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
-    const riskAmount = parseFloat(settings.riskPerTrade || '0');
-    const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
-    
-    if (stopDistance === 0) {
-      return { approved: true }; // Can't calculate if no stop distance
-    }
-    
-    const positionSize = riskAmount / stopDistance;
-    const positionValue = positionSize * signal.entryPrice;
-
-    // Phase 27.F.15.B.3: Get actual portfolio value from mode-based portfolio_state
+    // Phase 27.F.15.B.3: Get actual portfolio value from mode-based portfolio_state FIRST
     let portfolioValue = 0;
     
     const systemContext = await storage.getSystemContext(mode);
@@ -568,12 +558,23 @@ export class RiskManager {
       console.log(`[Phase-27.F.15.B.3][mode=${mode}] Final fallback to metrics: $${portfolioValue.toFixed(2)}`);
     }
     
+    // riskPerTrade is stored as a dollar amount in the database, not a percentage
+    const riskAmount = parseFloat(settings.riskPerTrade || '0');
+    const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
+    
+    if (stopDistance === 0) {
+      return { approved: true }; // Can't calculate if no stop distance
+    }
+    
+    const positionSize = riskAmount / stopDistance;
+    const positionValue = positionSize * signal.entryPrice;
+    
     // Maximum single position: dynamically configured (default 10% of portfolio)
     const maxPositionPercent = parseFloat(String(settings.maxPositionPercent || '10.00'));
     const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
     const positionPercent = (positionValue / portfolioValue) * 100;
 
-    console.log(`[Phase-27.F.15.B.3][mode=${mode}] Risk=${riskAmount}, Stop=${stopDistance}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
+    console.log(`[Phase-27.F.15.B.3][mode=${mode}] Risk=$${riskAmount.toFixed(2)}, Stop=${stopDistance.toFixed(4)}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
 
     if (positionPercent > maxPositionPercent) {
       return {

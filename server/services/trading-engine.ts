@@ -197,9 +197,12 @@ export class TradingEngine {
       if (!systemContext) {
         throw new Error(`System context not found for mode: ${this.mode}`);
       }
-      const settings = await storage.getTradingSettings(systemContext.id);
+      if (!systemContext.lastStartedBy) {
+        throw new Error(`No user associated with ${this.mode} mode engine`);
+      }
+      const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
       if (!settings) {
-        throw new Error(`Trading settings not found for mode: ${this.mode}`);
+        throw new Error(`Trading settings not found for user ${systemContext.lastStartedBy}`);
       }
 
       // Calculate goal alignment score and final score
