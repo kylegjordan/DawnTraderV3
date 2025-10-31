@@ -150,9 +150,9 @@ export class FilteredPairsService {
     // Phase 27.F.14.N: Broadcast trading data update to all clients
     try {
       const { contextBridge } = await import('./context-bridge.js');
-      const clientCount = contextBridge.getClientCount();
+      const stats = contextBridge.getStats();
       
-      console.log(`[FilterEngine] Broadcast trading_data_updated (mode=${mode}, pairs=${filteredPairs.length}) → ${clientCount} clients`, {
+      console.log(`[FilterEngine] Broadcast trading_data_updated (mode=${mode}, pairs=${filteredPairs.length}) → ${stats.connectedClients} clients`, {
         mode,
         eligiblePairs: filteredPairs.length,
         totalPairs: allPairs.length,

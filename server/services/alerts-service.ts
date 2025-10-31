@@ -75,7 +75,7 @@ export class AlertsService {
         alertId: alert.id,
         severity: alert.severity,
         category: alert.category,
-        connectedClients: contextBridge.getClientCount(),
+        connectedClients: contextBridge.getStats().connectedClients,
         timestamp: new Date().toISOString()
       });
       
@@ -147,13 +147,13 @@ export class AlertsService {
     // Phase 27.F.14.N: Broadcast alert dismissal to all clients
     try {
       const { contextBridge } = await import('./context-bridge.js');
-      const clientCount = contextBridge.getClientCount();
+      const stats = contextBridge.getStats();
       
-      console.log(`[AlertSync][Backend] ✅ Global alert dismissed → broadcasted to ${clientCount} clients`, {
+      console.log(`[AlertSync][Backend] ✅ Global alert dismissed → broadcasted to ${stats.connectedClients} clients`, {
         alertId: alert.id,
         alertType: alert.alertType,
         mode: alert.mode,
-        clientCount,
+        clientCount: stats.connectedClients,
         timestamp: new Date().toISOString()
       });
       
@@ -194,12 +194,12 @@ export class AlertsService {
     if (result.length > 0) {
       try {
         const { contextBridge } = await import('./context-bridge.js');
-        const clientCount = contextBridge.getClientCount();
+        const stats = contextBridge.getStats();
         
-        console.log(`[AlertSync][Backend] ✅ Global clear all (${result.length} alerts) → broadcasted to ${clientCount} clients`, {
+        console.log(`[AlertSync][Backend] ✅ Global clear all (${result.length} alerts) → broadcasted to ${stats.connectedClients} clients`, {
           mode,
           count: result.length,
-          clientCount,
+          clientCount: stats.connectedClients,
           timestamp: new Date().toISOString()
         });
         
