@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -15,6 +15,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { useThrottleData } from "@/hooks/use-throttle-data";
 
 interface OverrideFrequencyData {
   hour: string;
@@ -37,7 +38,10 @@ interface AnomalyDetectionResult {
   };
 }
 
-export function OverrideFrequencyChart() {
+function OverrideFrequencyChartComponent() {
+  useEffect(() => {
+    console.log('[35.2][Analytics] OverrideFrequencyChart re-render');
+  });
   const { toast } = useToast();
 
   // Fetch frequency data
@@ -97,17 +101,22 @@ export function OverrideFrequencyChart() {
     return date.toLocaleTimeString('en-US', { hour: '2-digit', hour12: false });
   };
 
-  // Prepare chart data
-  const chartData = frequencyData?.data.map((item) => ({
-    hour: formatHour(item.hour),
-    Paper: item.paperCount,
-    Live: item.liveCount,
-    Total: item.totalCount,
-  })) || [];
+  // Phase 35.2B: Use useMemo for data transformations to prevent recalculations
+  const rawChartData = useMemo(() => {
+    return frequencyData?.data.map((item) => ({
+      hour: formatHour(item.hour),
+      Paper: item.paperCount,
+      Live: item.liveCount,
+      Total: item.totalCount,
+    })) || [];
+  }, [frequencyData?.data]);
+
+  // Phase 35.2B: Throttle chart data updates to max 1 per second
+  const chartData = useThrottleData(rawChartData, 1000);
 
   const anomalies = anomalyData?.data || [];
-  const criticalAnomalies = anomalies.filter(a => a.severity === 'critical').length;
-  const warningAnomalies = anomalies.filter(a => a.severity === 'warn').length;
+  const criticalAnomalies = useMemo(() => anomalies.filter(a => a.severity === 'critical').length, [anomalies]);
+  const warningAnomalies = useMemo(() => anomalies.filter(a => a.severity === 'warn').length, [anomalies]);
 
   if (loadingFrequency || loadingAnomalies) {
     return (
@@ -292,3 +301,6 @@ export function OverrideFrequencyChart() {
     </Card>
   );
 }
+
+// Phase 35.2B: Memoize chart component to prevent unnecessary re-renders
+export const OverrideFrequencyChart = memo(OverrideFrequencyChartComponent);
