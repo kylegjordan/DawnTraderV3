@@ -114,7 +114,8 @@ function OverrideFrequencyChartComponent() {
   // Phase 35.2B: Throttle chart data updates to max 1 per second
   const chartData = useThrottleData(rawChartData, 1000);
 
-  const anomalies = anomalyData?.data || [];
+  // Phase 35.2B: Memoize anomalies array to prevent new reference on every render
+  const anomalies = useMemo(() => anomalyData?.data || [], [anomalyData?.data]);
   const criticalAnomalies = useMemo(() => anomalies.filter(a => a.severity === 'critical').length, [anomalies]);
   const warningAnomalies = useMemo(() => anomalies.filter(a => a.severity === 'warn').length, [anomalies]);
 
