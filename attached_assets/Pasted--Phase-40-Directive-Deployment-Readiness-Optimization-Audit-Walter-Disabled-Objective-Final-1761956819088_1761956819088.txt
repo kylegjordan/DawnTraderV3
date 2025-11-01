@@ -1,0 +1,140 @@
+🧭 Phase 40 Directive — Deployment Readiness & Optimization Audit (Walter Disabled)
+Objective
+
+Finalize the system’s deployment readiness by optimizing performance, confirming database efficiency, and verifying that all Phase 38–39 changes perform correctly under production-level conditions — without activating Walter or any live analytics processes.
+
+Global Configuration
+WALTER_COMPAT_MODE=false
+ENABLE_WALTER_ANALYTICS=false
+ENABLE_WALTER_ENGINE=false
+
+
+Walter remains inert.
+All adapter references are read-only for compatibility checks only.
+
+🧩 1️⃣ Database Optimization
+
+Goal: Eliminate portfolio-query latency.
+
+Actions
+
+Create indexes for high-frequency tables:
+
+portfolio_positions(symbol, mode)
+
+portfolio_history(user_id, mode, timestamp)
+
+executed_trades(symbol, mode, executed_at)
+
+Re-run profiling on affected queries (expect ≈ –250 ms latency).
+
+Generate:
+/diagnostic-reports/phase-40-db-index-optimization.md
+
+🧩 2️⃣ React Query Polling Alignment
+
+Goal: Match frontend polling with SSOT cache TTL.
+
+Actions
+
+Locate useQuery() hooks polling /api/paper-sim/filtered-pairs, /api/trading/status, /api/system/health.
+
+Set refetchInterval: 15000 ms.
+
+Confirm tab-inactive throttling and cache invalidation guards.
+
+Output: /diagnostic-reports/phase-40-react-query-alignment.md
+
+🧩 3️⃣ WebSocket Migration for Status Polling
+
+Goal: Replace periodic HTTP status checks with WS events.
+
+Actions
+
+Subscribe to system_status_update broadcasts.
+
+Remove /api/trading/status polling calls.
+
+Validate latency < 100 ms and 100 % uptime.
+
+Output: /diagnostic-reports/phase-40-websocket-migration.md
+
+🧩 4️⃣ Walter Adapter Parity Check (Non-Active Mode)
+
+Goal: Confirm that the adapter layer stays functional but dormant.
+
+Actions
+
+Keep WALTER_COMPAT_MODE=false.
+
+Execute a dry run of:
+
+/api/insights/filter
+
+/api/system/metrics
+
+Confirm these return mock/empty responses (no analytics activity).
+
+Output: /diagnostic-reports/phase-40-walter-parity-check.md
+
+🧩 5️⃣ Full Regression Audit
+
+Goal: Validate end-to-end stability after optimizations.
+
+Tests
+
+Start Paper Mode Simulation → ensure SignalOrchestrator operates.
+
+Verify Filtered Pairs tab matches SSOT.
+
+Validate WebSocket message delivery.
+
+Confirm portfolio updates reflect index performance.
+
+Confirm no UI re-renders > 120 ms.
+
+Outputs
+
+/diagnostic-reports/phase-40-stability-metrics.md
+
+/diagnostic-reports/phase-40-functional-audit.md
+
+🧩 6️⃣ Final Deployment Readiness Summary
+
+After all tasks complete, aggregate all reports into
+/diagnostic-reports/phase-40-final-readiness-summary.md.
+
+Confirm:
+
+Category	Pass Condition
+DB Latency	< 100 ms after index
+Polling Aligned	15 s interval
+WS Latency	< 100 ms
+Walter Mode	Disabled
+UI Performance	< 30 ms avg render
+Error Rate	0 critical
+
+When complete:
+
+Tag build:
+
+phase-40-complete
+
+
+Update replit.md with “Phase 40 – Deployment Readiness Audit Complete”.
+
+Do not enable Walter analytics engine until explicit Phase 41 directive.
+
+🧠 Test Credentials
+username: testuser123
+password: SecurePass123!
+
+⚙️ Execution Notes
+
+Run Tasks 1→6 sequentially.
+
+Auto-restart workflow between major service changes.
+
+Archive all reports in /diagnostic-reports/.
+
+On completion, confirm phase-40-complete tag exists and no Walter activity was detected.
