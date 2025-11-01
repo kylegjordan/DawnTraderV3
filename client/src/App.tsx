@@ -105,10 +105,11 @@ function Router() {
   const [location, setLocation] = useLocation();
   
   // Check kill switch status and auto-redirect
+  // Phase 40.2: Aligned to 15s for faster kill switch detection
   const { data: settings } = useQuery<{ tradingSuspended?: boolean }>({
     queryKey: ['/api/settings'],
-    refetchInterval: 60000,
-    staleTime: 60000,
+    refetchInterval: 15000,
+    staleTime: 15000,
     refetchOnWindowFocus: false
   });
   

@@ -25,11 +25,11 @@ export function useSystemHealth() {
   const { mode } = useTradingMode();
   const previousHealthRef = useRef<SystemHealth | null>(null);
 
-  // Poll system health every 12 seconds (10-15s range)
+  // Phase 40.2: Aligned to 15s to match MarketEvaluationService cache TTL
   const { data: health } = useQuery<SystemHealth>({
     queryKey: ['/api/system/health'],
-    refetchInterval: 12000,
-    staleTime: 0,
+    refetchInterval: 15000,
+    staleTime: 15000,
     refetchOnWindowFocus: true,
   });
 

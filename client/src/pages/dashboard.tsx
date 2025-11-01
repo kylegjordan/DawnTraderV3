@@ -33,19 +33,20 @@ export default function Dashboard() {
   const { messages: wsMessages } = useWebSocket();
   
   // Phase 35.2A: Fetch portfolio data at Dashboard level for context isolation
+  // Phase 40.2: Aligned to 15s to match MarketEvaluationService cache TTL
   const { data: livePortfolioData } = useQuery<PortfolioOverview>({
     queryKey: [`/api/portfolio/overview?mode=live`],
     enabled: !isPaper,
-    refetchInterval: 60000,
-    staleTime: 60000,
+    refetchInterval: 15000,
+    staleTime: 15000,
     refetchOnWindowFocus: false
   });
   
   const { data: paperPortfolioData } = useQuery<PortfolioOverview>({
     queryKey: ['/api/paper/portfolio/state'],
     enabled: isPaper,
-    refetchInterval: 60000,
-    staleTime: 60000,
+    refetchInterval: 15000,
+    staleTime: 15000,
     refetchOnWindowFocus: false
   });
   
