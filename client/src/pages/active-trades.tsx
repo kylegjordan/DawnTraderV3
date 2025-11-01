@@ -91,6 +91,8 @@ function FilteredPairsTab() {
     queryKey: ['/api/paper-sim/filtered-pairs'],
     refetchInterval: 10 * 60 * 1000, // Auto-refresh every 10 minutes
     refetchOnWindowFocus: false,
+    retry: 2, // Phase 41.3: Retry failed requests twice
+    retryDelay: 1000, // Phase 41.3: Wait 1s between retries
   });
 
   useEffect(() => {
@@ -103,7 +105,10 @@ function FilteredPairsTab() {
     await refetch();
   };
 
-  if (error) {
+  // Phase 41.3: Filter out abort errors (React Query cancellation)
+  const isAbortError = error && (error as Error).message?.includes('abort');
+  
+  if (error && !isAbortError) {
     return (
       <div className="space-y-4">
         <FilterHealthWidget />

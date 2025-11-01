@@ -3,15 +3,13 @@ import { useTrading } from "@/hooks/use-trading";
 import { cn } from "@/lib/utils";
 import { Beaker, Activity, PlayCircle, PauseCircle } from "lucide-react";
 
-// Phase 27.F.3: Enhanced to derive ACTIVE/STOPPED status from unified trading state authority
+// Phase 41.2: Use authoritative isTradingActive from useTrading hook to prevent state desync
 export default function ModeBanner() {
   const { mode, isLive, isPaper } = useTradingMode();
-  const { tradingStatus, paperSimStatus } = useTrading();
+  const { isTradingActive } = useTrading();
   
-  // Phase 27.F.3: Derive active state from unified trading store (no local state)
-  const isActive = mode === 'paper' 
-    ? paperSimStatus?.isRunning || false
-    : tradingStatus?.engineActive || false;
+  // Phase 41.2: Use single authoritative active state (same as TopBar)
+  const isActive = isTradingActive;
 
   return (
     <div
