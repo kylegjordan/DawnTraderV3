@@ -92,16 +92,6 @@ export class FilteredPairsService {
       minLiquidity: filters.minLiquidity ?? "500000.00",
       allowRegulatedOnly: filters.allowRegulatedOnly ?? false,
       universeSize: filters.universeSize ?? 100,
-      quoteCurrencies: (() => {
-        try {
-          return typeof filters.quoteCurrencies === 'string' 
-            ? JSON.parse(filters.quoteCurrencies as string) 
-            : (filters.quoteCurrencies ?? ["USD"]);
-        } catch (error) {
-          console.warn('[FilteredPairs] Invalid quoteCurrencies JSON, using default', error);
-          return ["USD"];
-        }
-      })(),
       activeTimeframes: (() => {
         try {
           return typeof filters.activeTimeframes === 'string'
@@ -126,7 +116,7 @@ export class FilteredPairsService {
       currentPrice: pair.currentPrice,
       volume24h: pair.volume24h,
       dailyRange: pair.dailyRange,
-      vwap: pair.vwap,
+      vwap: pair.vwap ?? null,
       lastUpdate: new Date(),
     }));
     

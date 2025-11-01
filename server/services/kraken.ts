@@ -674,7 +674,6 @@ export class KrakenService {
     
     // Phase 27.F.14: Parse Advanced Universe & Signal Controls
     const universeSize = settings.universeSize || undefined; // Limit number of pairs (25-150)
-    const quoteCurrencies = settings.quoteCurrencies || undefined; // Filter by specific quote currencies
     
     /**
      * Phase 27.F.15.B: Filters NOT IMPLEMENTED (require expensive operations or unavailable data):
@@ -720,55 +719,43 @@ export class KrakenService {
         return;
       }
 
-      // Filter 3: Quote currency check (Phase 27.F.14)
-      // If quoteCurrencies is specified, filter by allowed quote currencies
-      if (quoteCurrencies && quoteCurrencies.length > 0) {
-        const matchesQuoteCurrency = quoteCurrencies.some(currency => 
-          pairInfo.quote.toUpperCase() === currency.toUpperCase()
-        );
-        if (!matchesQuoteCurrency) {
-          exclusionReasons[pairName] = `Quote currency ${pairInfo.quote} not in allowed list`;
-          return;
-        }
-      }
-
-      // Filter 4: Stablecoin exclusion
+      // Filter 3: Stablecoin exclusion
       if (excludeStablecoins && stablecoinPatterns.some(pattern => pairInfo.base.includes(pattern))) {
         exclusionReasons[pairName] = `Stablecoin excluded`;
         return;
       }
 
-      // Filter 5: Minimum 24h volume
+      // Filter 4: Minimum 24h volume
       if (volume24h < minVolume) {
         exclusionReasons[pairName] = `Volume $${volume24h.toFixed(0)} < $${minVolume.toFixed(0)}`;
         return;
       }
 
-      // Filter 6: Minimum daily range
+      // Filter 5: Minimum daily range
       if (dailyRange < minDailyRange) {
         exclusionReasons[pairName] = `Daily range ${dailyRange.toFixed(2)}% < ${minDailyRange}%`;
         return;
       }
 
-      // Filter 7: Minimum price threshold
+      // Filter 6: Minimum price threshold
       if (currentPrice < minPrice) {
         exclusionReasons[pairName] = `Price $${currentPrice} < $${minPrice}`;
         return;
       }
 
-      // Filter 8: Maximum price threshold (Phase 27.F.15.B)
+      // Filter 7: Maximum price threshold (Phase 27.F.15.B)
       if (maxPrice && currentPrice > maxPrice) {
         exclusionReasons[pairName] = `Price $${currentPrice} > $${maxPrice}`;
         return;
       }
 
-      // Filter 9: Maximum bid-ask spread
+      // Filter 8: Maximum bid-ask spread
       if (bidAskSpread > maxBidAskSpread) {
         exclusionReasons[pairName] = `Bid-ask spread ${bidAskSpread.toFixed(2)}% > ${maxBidAskSpread}%`;
         return;
       }
 
-      // Filter 10: Volatility range (Phase 27.F.15.B)
+      // Filter 9: Volatility range (Phase 27.F.15.B)
       // Using daily range as a proxy for volatility
       if (volatilityMin !== undefined && dailyRange < volatilityMin) {
         exclusionReasons[pairName] = `Volatility ${dailyRange.toFixed(2)}% < ${volatilityMin}%`;
@@ -791,7 +778,7 @@ export class KrakenService {
       });
     });
 
-    // Filter 9: Check data history for candidate pairs
+    // Filter 10: Check data history for candidate pairs
     console.log(`\n📊 Screener: ${candidatePairs.length} pairs passed basic filters, checking history...`);
     
     for (const pair of candidatePairs) {

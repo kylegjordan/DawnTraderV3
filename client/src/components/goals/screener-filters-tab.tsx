@@ -31,7 +31,6 @@ const DEFAULTS = {
   allowRegulatedOnly: false,
   // Phase 27.F.14.UI-SYNC.2: Advanced Universe & Signal Controls
   universeSize: 100,
-  quoteCurrencies: ['USD'],
   activeTimeframes: ['5m', '15m', '1h'],
   confidenceThreshold: 60,
 };
@@ -51,7 +50,6 @@ interface ScreenerFilters {
   allowRegulatedOnly: boolean;
   // Phase 27.F.14.UI-SYNC.2: Advanced Universe & Signal Controls
   universeSize?: number;
-  quoteCurrencies?: string[];
   activeTimeframes?: string[];
   confidenceThreshold?: number;
 }
@@ -136,7 +134,6 @@ export default function ScreenerFiltersTab() {
         allowRegulatedOnly: currentFilters.allowRegulatedOnly ?? DEFAULTS.allowRegulatedOnly,
         // Phase 27.F.14.UI-SYNC.2: Advanced Universe & Signal Controls
         universeSize: currentFilters.universeSize ?? DEFAULTS.universeSize,
-        quoteCurrencies: currentFilters.quoteCurrencies ?? DEFAULTS.quoteCurrencies,
         activeTimeframes: currentFilters.activeTimeframes ?? DEFAULTS.activeTimeframes,
         confidenceThreshold: currentFilters.confidenceThreshold ?? DEFAULTS.confidenceThreshold,
       });
@@ -533,36 +530,6 @@ export default function ScreenerFiltersTab() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Minimum confidence level required for trade signals (40-90%)
-                </p>
-              </div>
-
-              {/* Quote Currencies */}
-              <div className="space-y-2 p-4 border rounded-lg">
-                <Label className="text-sm font-medium">Quote Currencies</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {['USD', 'USDT', 'USDC', 'EUR', 'GBP'].map((currency) => (
-                    <div key={currency} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`quote-${currency}`}
-                        checked={(filters.quoteCurrencies ?? DEFAULTS.quoteCurrencies).includes(currency)}
-                        onCheckedChange={(checked) => {
-                          const current = filters.quoteCurrencies ?? DEFAULTS.quoteCurrencies;
-                          const updated = checked 
-                            ? [...current, currency]
-                            : current.filter(c => c !== currency);
-                          setFilters(prev => ({ ...prev, quoteCurrencies: updated }));
-                          setHasChanges(true);
-                        }}
-                        data-testid={`checkbox-quote-${currency.toLowerCase()}`}
-                      />
-                      <Label htmlFor={`quote-${currency}`} className="text-xs cursor-pointer">
-                        {currency}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Select which quote currencies to include in trading pairs
                 </p>
               </div>
 
