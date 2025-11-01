@@ -1,0 +1,149 @@
+Replit team,
+
+I’ve attached a new series of screenshots showing the current state of The Dawn Trader app during paper-trading tests.
+Although we’ve made good progress — the prompts now appear correctly, and some balances update — the system still isn’t functioning correctly end-to-end.
+
+Here’s what’s happening:
+
+When I start paper trading, I’m prompted (as expected) to start a new simulation or continue an existing one. I select Start New Simulation, enter a portfolio value (for this test, I entered $806), and confirm. A toast appears saying the new simulation has started with a balance of $806.
+However, none of the displayed balances update. Both portfolio displays on the Dashboard and the one in the Goals tab continue to show the previous amount of $827, which strongly suggests that value is still cached or hard-coded somewhere in state.
+
+The toggle button now shows Active, and the blue Paper Trading Mode banner also shows Active, but the Passive Learning badge is still visible — that’s a clear state mismatch between frontend indicators and backend trading state.
+
+When navigating to the Goals Engine tab, the page takes about 10 seconds to load. It eventually displays, but still shows the outdated portfolio value of $827.
+
+When I move to the Trading → Filtered Pairs tab, the table loads this time, which is progress, but there’s an inconsistency: it shows 216 eligible pairs in the stats while the table lists only one filtered pair. Then the UI refreshes itself automatically — the whole screen blanks and reloads — after which the portfolio balances finally update to $806, but the trading engine stops.
+
+So the system is closer, but it’s still unstable. We have persistent problems with:
+
+Portfolio value propagation and synchronization
+
+UI state coherence between backend services and displayed mode indicators
+
+Filtered pair and eligible-pair alignment
+
+Spontaneous refreshes that terminate the running simulation
+
+These must be fixed before we can trust any trading simulation results.
+
+That’s why I’m requesting this Paper Trading Simulation Validation & Self-Healing Audit.
+Replit should run the full simulation through the UI, validate data propagation front-to-back, fix every break it encounters, and repeat the test cycle until it can complete a full paper-trading run that executes at least three simulated trades successfully.
+
+All screenshots referenced are attached for context.
+
+Phase 41B Directive – Full Paper Trading Simulation Validation & Self-Healing Audit
+
+Objective:
+Run a complete paper-trading simulation cycle through the UI only, fixing and verifying all functional issues, until the system executes three simulated trades successfully and all indicators and balances remain synchronized.
+
+Test User
+username: testuser123
+password: SecurePass123!
+
+Execution Plan
+
+1️⃣ Start Simulation via UI
+
+Launch browser preview.
+
+Click the Trading toggle → select Start New Simulation.
+
+Enter a unique portfolio value (first run: $806; subsequent runs should increment +5 each time) and confirm.
+
+Validate immediately:
+
+Dashboard Portfolio Value = entered amount.
+
+Goals Engine → Current Portfolio Value = same amount.
+
+LATTi Goals & Guardrails panel = same amount.
+
+2️⃣ Verify State Synchronization
+
+Blue banner → shows ACTIVE.
+
+Passive Learning badge → should disappear when ACTIVE.
+
+API /api/paper-sim/status → { active:true }.
+
+WebSocket events: trading_state_changed = active.
+
+3️⃣ Filtered Pairs Validation
+
+Open Trading → Filtered Pairs tab.
+
+Table loads without 500 errors.
+
+Confirm: eligible pairs count matches visible rows ± 3 % variance.
+
+4️⃣ Strategy and Execution Loop
+
+Keep simulation running ≥ 15 minutes or until ≥ 3 trades executed.
+
+Verify in logs and DB:
+
+[SIGNAL] events every ~30 s.
+
+[Trade executed] appears ≥ 3 times.
+
+Dashboard Earnings and Averages update after each trade.
+
+5️⃣ Lottie and System Monitoring Check
+
+Open System Monitoring → Lottie Tuning tab.
+
+Ensure activity logs show guardrail adjustments (confidence_adjusted, guardrail_triggered, etc.).
+
+Save logs to /diagnostic-reports/phase-41b-lottie-activity-log.md.
+
+6️⃣ Error Handling and Self-Healing
+If any of the following occur:
+
+Portfolio value fails to update correctly,
+
+UI state mismatch (banner/toggle/passive badge),
+
+Filtered Pairs error or miscount,
+
+Simulation stops unexpectedly,
+then Replit should:
+
+Log and screenshot the failure.
+
+Diagnose and apply the necessary fix (frontend or backend).
+
+Restart the workflow and repeat Steps 1-5 with the next portfolio value (+5 increment).
+
+Continue until a full cycle completes with three successful executed trades and no errors.
+
+Outputs
+File	Purpose
+/diagnostic-reports/phase-41b-paper-sim-validation.md	Full simulation audit log
+/diagnostic-reports/phase-41b-lottie-activity-log.md	Strategy & Lottie tuning trace
+/diagnostic-reports/phase-41b-fixed-bugs.md	List of auto-repaired issues
+/diagnostic-reports/phase-41b-final-summary.md	Consolidated results & success confirmation
+Success Criteria
+Metric	Target
+Portfolio sync accuracy	100 % across Dashboard ×2 + Goals
+Trades executed	≥ 3 simulated trades
+UI state sync	Banner + Toggle + Mode match
+Filtered Pairs	Loads without error / accurate count
+Lottie Logs	≥ 1 strategy adjustment recorded
+Execution Settings
+
+Run unattended overnight.
+
+Perform self-healing fixes until criteria met.
+
+Roll back any fix that creates a new error.
+
+Archive all logs in /diagnostic-reports/.
+
+Use paper mode only (no live trading, no Walter activation).
+
+Attached Screenshots:
+ce7c2d33-2a68-4e4d-8a2e-96a90d95ee7b.png, a8c87c2d-851f-434f-8bc9-b36054da567a.png, 55053722-4e68-49c1-b93d-2f85f14500f2.png, 5a8c9493-74bd-449d-8146-236c3a041fce.png, 0b5d35f4-8f15-4a4c-a28f-2f3bd73301d5.png, fe190d72-cb1d-4cf5-abb9-aa585dc1c0fa.png
+
+✅ Expected Outcome:
+By the end of this phase, the paper-trading workflow should be fully functional from start to finish — balances propagate correctly, UI and backend states stay in sync, filtered pairs and eligible pairs match, and three successful simulated trades execute without interruption.
+All logs and fixes should be recorded for review.
