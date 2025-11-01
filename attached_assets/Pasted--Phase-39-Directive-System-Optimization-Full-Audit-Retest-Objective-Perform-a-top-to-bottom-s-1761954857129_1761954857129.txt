@@ -1,0 +1,167 @@
+🧭 Phase 39 Directive — System Optimization & Full Audit Retest
+Objective
+
+Perform a top-to-bottom system optimization and validation pass.
+Confirm that the Phase 38 unified filtering architecture operates flawlessly across all components and that no regressions, caching leaks, or redundant queries remain.
+
+🧩 1️⃣ Regression & Cache Isolation Validation
+
+Goal: Prove that the new SSOT caching system (mode + filterHash) correctly isolates data across multiple filter configurations.
+
+Actions
+
+Run automated tests cycling through at least three filter configurations:
+
+Default (ZUSD/ZEUR)
+
+ETH pairs only
+
+Mixed crypto quotes (XETH + XXBT)
+
+For each run:
+
+Call /api/paper-sim/filtered-pairs?mode=paper
+
+Record filterHash, eligiblePairs, and timestamps
+
+Ensure no cache bleed (hash/timestamp changes per config)
+
+Generate /diagnostic-reports/phase-39-cache-isolation-report.md showing key→value consistency.
+
+🧩 2️⃣ Walter Adapter Integrity Verification
+
+Goal: Validate that Walter receives the same data structures and metrics as before refactor.
+
+Actions
+
+Enable WALTER_COMPAT_MODE=true
+
+Query both endpoints:
+
+/api/insights/filter
+
+/api/system/metrics
+
+Compare outputs to market-evaluation.ts results.
+Difference ≤ 1 pair is acceptable.
+
+Confirm WebSocket events price_updated and signal_generated contain:
+
+{ "source": "market_evaluation_ssot", "eligibleCount": <int> }
+
+
+Archive comparison to /diagnostic-reports/phase-39-walter-adapter-validation.md.
+
+🧩 3️⃣ React Query Hook Optimization
+
+Goal: Identify and remove any redundant polling or invalidation loops.
+
+Actions
+
+Audit all React Query hooks under client/src/hooks/
+
+Look for duplicate useQuery() calls fetching identical endpoints.
+
+Reduce polling intervals to match SSOT cache (15 s).
+
+Confirm no loops when switching modes or tabs.
+
+Log results to /diagnostic-reports/phase-39-react-query-optimization.md.
+
+🧩 4️⃣ Full Functional Stability Audit (Phases 34–36 Retest)
+
+Goal: Re-run the full diagnostic suite to confirm overall performance and stability.
+
+Tests
+
+WebSocket connection integrity (1 connection per client)
+
+Invalidation guard tests (no duplicate refreshes)
+
+Paper & Live mode signal-to-trade pipeline
+
+Risk manager validation (safe trade rejections)
+
+Dashboard render latency & flicker check
+
+End-to-end profiling with React Profiler
+
+Outputs
+
+diagnostic-reports/phase-39-system-stability-metrics.md
+
+diagnostic-reports/phase-39-functional-retest-summary.md
+
+🧩 5️⃣ Performance Metrics Aggregation
+
+Collect quantitative performance data:
+
+Metric	Target	Description
+Avg render time	≤ 3 ms	Dashboard update speed
+Max render	≤ 120 ms	Any single UI update
+Cache hit ratio	≥ 80 %	SSOT validation
+WS latency	< 100 ms	Broadcast delay
+API latency	< 300 ms	All GET/POST requests
+Signal loop	30 s ± 2 s	Consistency check
+
+Results → /diagnostic-reports/phase-39-performance-metrics.md.
+
+🧩 6️⃣ Comprehensive Final Report & Baseline Tag
+
+When all tests complete:
+
+Aggregate findings into
+/diagnostic-reports/phase-39-final-system-audit.md
+
+Include:
+
+Cache isolation evidence
+
+Walter adapter parity
+
+React Query efficiency summary
+
+Stability metrics table
+
+Pass/fail matrix
+
+Tag build:
+
+phase-39-complete
+
+
+Update replit.md with “Phase 39 – System Optimization & Audit Complete” and freeze baseline.
+
+🧠 Test Credentials
+
+Use the global test account (for both modes):
+
+username: testuser123
+password: SecurePass123!
+
+⚙️ Automation Notes
+
+Run sequentially (Tasks 1→6).
+
+Each task auto-restarts workflow between major service changes.
+
+Reboot or restart workflow on completion of Phase 39 to clear caches.
+
+All results must be stored in /diagnostic-reports/ and confirmed OK before tagging complete.
+
+✅ Completion Criteria
+Category	Pass Condition
+Cache isolation	No cross-filter contamination
+Walter adapter	≤ 1 pair discrepancy
+React Query	No redundant calls
+Functional stability	0 errors, no memory leaks
+UI performance	All metrics ≤ targets
+Documentation	All 5 reports generated
+
+Run unattended overnight.
+When all validations pass and all reports are archived, mark baseline as:
+
+phase-39-complete
+
+
+Then stand by for Phase 40 — Final Deployment Readiness Audit.
