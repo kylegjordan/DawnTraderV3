@@ -15,14 +15,15 @@ import {
   SymbolAnalysis
 } from '@/lib/types';
 
-// Phase 34: Shared useTradingStatus hook to deduplicate polling
+// Phase 40.3: WebSocket-only trading status - no polling
+// Status updates delivered via 'trading_state_changed' WebSocket events
 export function useTradingStatus() {
   return useQuery<TradingStatus>({
     queryKey: ['/api/trading/status'],
-    staleTime: 15_000, // Data fresh for 15 seconds
-    refetchInterval: 15_000, // Poll every 15 seconds
-    refetchOnWindowFocus: false, // Don't refetch on tab focus
-    refetchOnReconnect: false // Don't refetch on reconnect
+    staleTime: Infinity, // Data stays fresh until invalidated
+    refetchInterval: false, // ✅ Disabled - use WebSocket events instead
+    refetchOnWindowFocus: true, // Refetch on tab focus as fallback
+    refetchOnReconnect: true // Refetch on network reconnect as fallback
   });
 }
 
