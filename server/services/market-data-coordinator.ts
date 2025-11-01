@@ -81,6 +81,12 @@ class MarketDataCoordinator extends EventEmitter {
         this.handleFallback();
       }
     });
+
+    // Handle WebSocket errors gracefully (prevents app crash)
+    this.wsClient.on('error', (error: Error) => {
+      console.warn('[MD-Coordinator] WebSocket error (using REST fallback):', error.message);
+      this.handleFallback();
+    });
   }
 
   /**
