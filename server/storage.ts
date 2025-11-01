@@ -3522,8 +3522,15 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getPortfolioState({ globalContextId: contextId, mode: data.mode });
     
     if (existing) {
+      // Phase 41.1: When updating balance, also update cash/crypto to stay synchronized
       const [updated] = await db.update(portfolioState)
-        .set({ balance: data.balance, lastUpdate: new Date(), userId: data.userId })
+        .set({ 
+          balance: data.balance, 
+          cash: data.cash || data.balance, // Default cash = balance if not specified
+          cryptoValue: data.cryptoValue || '0', // Default crypto = 0 if not specified
+          lastUpdate: new Date(), 
+          userId: data.userId 
+        })
         .where(and(
           eq(portfolioState.globalContextId, contextId),
           eq(portfolioState.mode, data.mode)
