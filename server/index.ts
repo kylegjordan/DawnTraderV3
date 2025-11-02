@@ -6,6 +6,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { databaseMonitor } from "./services/database-monitor";
 import { marketDataHealthCheck } from "./services/market-data-health-check";
+import { healthRouter } from "./routes-health.js"; // Phase 41F-D/F: Health monitoring routes
 
 console.log('[BOOT]', process.env.COMMIT_SHA || 'local', new Date().toISOString());
 
@@ -98,6 +99,9 @@ app.use((req, res, next) => {
 
   // Mount API router BEFORE Vite middleware to ensure backend routes take precedence
   app.use('/api', apiRouter);
+  
+  // Phase 41F-D/F: Mount health monitoring routes
+  app.use('/api/health', healthRouter);
   console.log('[Server] API routes mounted at /api');
 
   // Phase 41F-B-5: Initialize operation queues and clear orphaned state
