@@ -1,9 +1,11 @@
 /**
  * Live Trading Service
  * Phase 22.3 - Live Trading Voice/Chat Activation
+ * Phase 41F-A-5 - Live Mode Queue Integration
  * 
  * Manages live trading mode with manual approval requirements
  * Integrates with ExecutionPolicyController for safety
+ * Uses OperationQueue for serialized execution (Phase 41F)
  */
 
 import { storage } from '../storage';
@@ -12,6 +14,7 @@ import ExecutionPolicyController from './execution-policy-controller';
 import type { ActionResult } from './nlai-action-registry';
 import { permissionCache } from './permission-cache.js';
 import type { UserRole } from '../config/permissions.js';
+import { liveOperationQueue } from '../utils/operation-queue';
 
 // Initialize ExecutionPolicyController instance
 const executionPolicyController = new ExecutionPolicyController(storage as any);
@@ -99,13 +102,19 @@ This is a high-risk operation and requires your explicit consent.`;
   /**
    * Activate live trading after approval received
    * Called by approval handler or explicit confirmation
+   * Phase 41F-A-5: Uses operation queue for serialized execution
    */
   async activateLiveTrading(userId: string): Promise<ActionResult> {
+    console.log(`[41F][QUEUE][LIVE] activateLiveTrading called (userId: ${userId})`);
+    
     try {
-      console.log(`[LiveTrading] Activating live mode for user ${userId} (post-approval)`);
+      return await liveOperationQueue.enqueue(
+        async () => {
+          try {
+            console.log(`[LiveTrading] Activating live mode for user ${userId} (post-approval)`);
 
-      // 1. Phase 27.3: Verify user has trade_live permission (fail closed)
-      const user = await storage.getUser(userId);
+            // 1. Phase 27.3: Verify user has trade_live permission (fail closed)
+            const user = await storage.getUser(userId);
       if (!user || !user.role) {
         console.log(`[LiveTrading] ❌ Permission denied: user ${userId} not found or role missing`);
         return {
@@ -194,20 +203,34 @@ This is a high-risk operation and requires your explicit consent.`;
         console.warn(`[LiveTrading] Failed to broadcast via context bridge:`, bridgeError.message);
       }
 
-      console.log(`[LiveTrading] ✅ Live trading activated successfully for user ${userId}`);
+            console.log(`[LiveTrading] ✅ Live trading activated successfully for user ${userId}`);
 
-      return {
-        success: true,
-        message: '✅ Live trading activated! System is now placing **real orders** on Kraken. Monitor closely.',
-        data: {
-          mode: 'live',
-          status: 'active',
-          startedAt: new Date().toISOString(),
+            return {
+              success: true,
+              message: '✅ Live trading activated! System is now placing **real orders** on Kraken. Monitor closely.',
+              data: {
+                mode: 'live',
+                status: 'active',
+                startedAt: new Date().toISOString(),
+              },
+            };
+          } catch (error: any) {
+            console.error(`[LiveTrading] Error in activateLiveTrading job:`, error);
+            return {
+              success: false,
+              message: `Failed to activate live trading: ${error.message}`,
+              error: error.message,
+            };
+          }
         },
-      };
-
+        {
+          userId,
+          mode: 'live',
+          action: 'start',
+        }
+      );
     } catch (error: any) {
-      console.error(`[LiveTrading] Error activating live trading:`, error);
+      console.error(`[41F][QUEUE][LIVE] activateLiveTrading queue error:`, error);
       return {
         success: false,
         message: `Failed to activate live trading: ${error.message}`,
@@ -218,13 +241,19 @@ This is a high-risk operation and requires your explicit consent.`;
 
   /**
    * Stop live trading mode
+   * Phase 41F-A-5: Uses operation queue for serialized execution
    */
   async stopLiveTrading(userId: string): Promise<ActionResult> {
+    console.log(`[41F][QUEUE][LIVE] stopLiveTrading called (userId: ${userId})`);
+    
     try {
-      console.log(`[LiveTrading] Stop request for user ${userId}`);
+      return await liveOperationQueue.enqueue(
+        async () => {
+          try {
+            console.log(`[LiveTrading] Stop request for user ${userId}`);
 
-      // 1. Check if running
-      const session = this.sessions.get(userId);
+            // 1. Check if running
+            const session = this.sessions.get(userId);
       if (!session) {
         // Check global state
         const tradingEngines = (global as any).tradingEngines as Map<string, any>;
@@ -282,20 +311,34 @@ This is a high-risk operation and requires your explicit consent.`;
         console.warn(`[LiveTrading] Failed to broadcast via context bridge:`, bridgeError.message);
       }
 
-      console.log(`[LiveTrading] ✅ Live trading stopped successfully for user ${userId}`);
+            console.log(`[LiveTrading] ✅ Live trading stopped successfully for user ${userId}`);
 
-      return {
-        success: true,
-        message: '✅ Live trading deactivated. System is now in standby mode.',
-        data: {
-          mode: 'stopped',
-          previousMode: 'live',
-          stoppedAt: new Date().toISOString(),
+            return {
+              success: true,
+              message: '✅ Live trading deactivated. System is now in standby mode.',
+              data: {
+                mode: 'stopped',
+                previousMode: 'live',
+                stoppedAt: new Date().toISOString(),
+              },
+            };
+          } catch (error: any) {
+            console.error(`[LiveTrading] Error in stopLiveTrading job:`, error);
+            return {
+              success: false,
+              message: `Failed to stop live trading: ${error.message}`,
+              error: error.message,
+            };
+          }
         },
-      };
-
+        {
+          userId,
+          mode: 'live',
+          action: 'stop',
+        }
+      );
     } catch (error: any) {
-      console.error(`[LiveTrading] Error stopping live trading:`, error);
+      console.error(`[41F][QUEUE][LIVE] stopLiveTrading queue error:`, error);
       return {
         success: false,
         message: `Failed to stop live trading: ${error.message}`,
