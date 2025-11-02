@@ -1,0 +1,192 @@
+Phase 41F-H — Stability Burn-In (Recovery-Integrated)
+
+Objective: Run a continuous light-load burn-in to prove stability of anomaly detection + auto-recovery for ~30 minutes (ok to shorten to 20 min on Replit if needed).
+Test creds: username=testuser123 / password=SecurePass123!
+
+A) Runtime flags (verify)
+
+Paper mode only; auto-recovery enabled; not dry-run:
+
+ENABLE_AUTO_RECOVERY=true
+
+AUTO_RECOVERY_DRYRUN=false
+
+AUTO_RECOVERY_MAX_ACTIONS=3 (per 10 min)
+
+AUTO_RECOVERY_COOLDOWN_MS=120000
+
+Confirm WebSocket singleton + broadcast throttles are active (from Phase 34).
+
+B) Create burn-in script
+
+Create diagnostic-reports/phase-41F-H-burnin.sh:
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE="http://localhost:5000"
+USER="testuser123"
+PASS="SecurePass123!"
+DUR_SECS="${1:-1800}"   # default 30m; pass 1200 for 20m
+INTERVAL=15             # poll every 15s
+LOOPS=$(( DUR_SECS / INTERVAL ))
+
+echo "⏳ Phase 41F-H burn-in for ${DUR_SECS}s (${LOOPS} loops @ ${INTERVAL}s)"
+
+TOKEN=$(curl -s -X POST "$BASE/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$USER"'","password":"'"$PASS"'"}' | jq -r '.accessToken')
+
+if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
+  echo "❌ Failed to get token"; exit 1
+fi
+echo "🔐 Token acquired"
+
+START_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+CRIT_COUNT=0
+WARN_COUNT=0
+RECOVERY_COUNT=0
+MAX_LAT_MS=0
+MEM_PEAK_MB=0
+
+mkdir -p diagnostic-reports
+LOG="diagnostic-reports/phase-41F-H-burnin-log.ndjson"
+: > "$LOG"
+
+for i in $(seq 1 $LOOPS); do
+  TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  # 1) Health anomalies
+  ANOM=$(curl -s "$BASE/api/health/anomalies?limit=50" -H "Authorization: Bearer $TOKEN")
+  ACOUNT=$(echo "$ANOM" | jq '.anomalies | length')
+  ACRIT=$(echo "$ANOM" | jq '[.anomalies[]? | select(.level=="critical")] | length')
+  AWARN=$(echo "$ANOM" | jq '[.anomalies[]? | select(.level=="warning")] | length')
+
+  # track counts (rolling window)
+  (( CRIT_COUNT += ACRIT ))
+  (( WARN_COUNT += AWARN ))
+
+  # extract last broadcast latency if present
+  LAT=$(echo "$ANOM" | jq -r '.anomalies[]? | select(.component=="broadcast" and .metric=="latency") | .value' | tail -n1)
+  if [[ "$LAT" =~ ^[0-9]+$ ]]; then
+    (( LAT > MAX_LAT_MS )) && MAX_LAT_MS=$LAT
+  fi
+
+  # 2) Recovery timeline
+  RECV=$(curl -s "$BASE/api/health/recovery/log?limit=25" -H "Authorization: Bearer $TOKEN")
+  RCOUNT=$(echo "$RECV" | jq '.recoveries | length')
+  (( RECOVERY_COUNT += RCOUNT ))
+
+  # 3) System health snapshot (optional, if available)
+  SYS=$(curl -s "$BASE/api/system/health" -H "Authorization: Bearer $TOKEN" || echo '{}')
+
+  # 4) Server memory/process probe (Replit friendly best-effort)
+  MEM=$(ps -o rss= -p $(pgrep -f "node .*server" | head -n1) 2>/dev/null || echo 0)
+  MEM_MB=$(( MEM / 1024 ))
+  (( MEM_MB > MEM_PEAK_MB )) && MEM_PEAK_MB=$MEM_MB
+
+  # log line
+  jq -n --arg ts "$TS" \
+        --argjson ac "$ACOUNT" --argjson aw "$AWARN" --argjson aci "$ACRIT" \
+        --argjson rc "$RCOUNT" --argjson lat "${LAT:-0}" --argjson mem "$MEM_MB" \
+        '{ts:$ts, anomalies:$ac, warnings:$aw, criticals:$aci, recoveries:$rc, lastLatencyMs:$lat, memMB:$mem}' \
+        >> "$LOG"
+
+  echo "[$TS] anomalies=$ACOUNT warn=$AWARN crit=$ACRIT recov+=$RCOUNT lat=${LAT:--}ms mem=${MEM_MB}MB"
+  sleep $INTERVAL
+done
+
+END_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Summaries
+TOTAL_REC=$(jq '[.recoveries] | add' "$LOG" | tail -n1)
+TOTAL_WARN=$(jq '[.warnings] | add' "$LOG" | tail -n1)
+TOTAL_CRIT=$(jq '[.criticals] | add' "$LOG" | tail -n1)
+
+REPORT="diagnostic-reports/phase-41F-H-stability-burnin.md"
+cat > "$REPORT" <<EOF
+# Phase 41F-H Stability Burn-In Report
+
+**Window:** $START_TS → $END_TS  
+**Duration:** ${DUR_SECS}s  
+**Polling:** every ${INTERVAL}s
+
+## Roll-up
+- Total warnings (sum across polls): ${TOTAL_WARN}
+- Total criticals (sum across polls): ${TOTAL_CRIT}
+- Total recoveries observed (sum across polls): ${TOTAL_REC}
+- Max observed broadcast latency: ${MAX_LAT_MS} ms
+- Peak server memory (RSS): ${MEM_PEAK_MB} MB
+
+## Pass/Fail Criteria
+- Critical anomalies: **0** required
+- Warnings: **≤ 3** total across window
+- Recoveries: **0** after first 60s warm-up
+- Max broadcast latency: **< 100 ms** after warm-up
+- Memory: **no monotonic creep** (peak stable within a small band)
+
+EOF
+
+echo "✅ Burn-in complete. Report at: $REPORT"
+
+
+Make it executable:
+
+chmod +x diagnostic-reports/phase-41F-H-burnin.sh
+
+C) Run the burn-in
+
+Start the app, then run:
+
+# 30-minute run (pass 1200 for 20 min if you prefer)
+diagnostic-reports/phase-41F-H-burnin.sh 1800 | tee diagnostic-reports/phase-41F-H-console.txt
+
+
+Notes
+
+The script polls every 15s, aggregates roll-ups, and writes both an NDJSON log and a human-readable report.
+
+It treats the first 60s as warm-up (your evaluation can ignore a single early recovery triggered during startup).
+
+D) Pass / Fail criteria (gate)
+
+PASS if all true:
+
+Critical anomalies = 0 over the window.
+
+Warnings ≤ 3 aggregate (the anomalies buffer can have transient warnings; we allow a small count).
+
+Recoveries = 0 after the first 60s (cool-down/circuit-breaker should keep you stable).
+
+Max broadcast latency < 100 ms after warm-up.
+
+Memory doesn’t creep (peak stays within a small band—no steadily rising line).
+
+FAIL if any occur:
+
+Any critical anomaly.
+
+3 warnings, or any recovery after warm-up.
+
+Latency repeatedly ≥100 ms (sustained) after warm-up.
+
+Memory steadily trends up.
+
+When FAIL, capture Start_application_*.log tail (last 300 lines) and append to the report for triage.
+
+E) Deliverables
+
+diagnostic-reports/phase-41F-H-burnin-log.ndjson (raw loop data)
+
+diagnostic-reports/phase-41F-H-console.txt (console transcript)
+
+diagnostic-reports/phase-41F-H-stability-burnin.md (summary with PASS/FAIL)
+
+F) After 41F-H
+
+If PASS:
+
+Proceed to 41F-I Trade Telemetry Hardening (wire trade lifecycle events + correlation tags).
+If FAIL:
+
+Open a “41F-H Regression” ticket and attach the burn-in artifacts; we’ll tune thresholds or fix the offending subsystem before moving on.
