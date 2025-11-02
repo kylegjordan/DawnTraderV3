@@ -92,7 +92,7 @@ export default function EngineTelemetry() {
   }, [messages]);
 
   // REST fallback - fetch health summary every 15s
-  const { data: healthSummary } = useQuery<HealthSummary>({
+  const { data: healthSummary, isLoading: summaryLoading } = useQuery<HealthSummary>({
     queryKey: ['/api/health/summary'],
     refetchInterval: 15000,
   });
@@ -105,11 +105,26 @@ export default function EngineTelemetry() {
 
   const latestData = wsHealthData || healthSummary;
 
-  if (!latestData) {
+  // Show loading state only if query is actively loading and no data exists yet
+  if (summaryLoading && !latestData) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  // If still no data after loading, show error state
+  if (!latestData) {
+    return (
+      <div className="p-6 text-center">
+        <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+        <p className="text-lg font-medium">Unable to load health data</p>
+        <p className="text-sm text-muted-foreground mt-2">
+          The health monitoring service may be unavailable. Please try refreshing the page.
+        </p>
       </div>
     );
   }
