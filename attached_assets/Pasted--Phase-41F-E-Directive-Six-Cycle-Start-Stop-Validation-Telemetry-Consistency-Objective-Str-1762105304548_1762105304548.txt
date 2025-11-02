@@ -1,0 +1,95 @@
+🧭 Phase 41F-E Directive — Six-Cycle Start/Stop Validation & Telemetry Consistency
+🎯 Objective
+
+Stress-test both Paper and Live trading engines through repeated start/stop operations while validating:
+
+Engine state synchronization
+
+Queue integrity and lock release
+
+Telemetry broadcast consistency
+
+UI responsiveness and metric updates
+
+🧩 Cycle Plan
+Mode	Cycle	Steps
+Paper	1–3	Start → Stop → Start → Stop → Start → Stop
+Live	4–6	Start → Stop → Start → Stop → Start → Stop
+
+Each start begins a new session; each stop ensures graceful shutdown and queue drain.
+
+🧠 Validation Focus
+
+During all six cycles, confirm via logs + UI:
+
+System Status Tile updates to ✅ Active / 🛑 Stopped correctly.
+
+Broadcast Latency remains < 100 ms.
+
+Queue Health (Paper & Live) always returns depth ≤ 3 and executing ≤ 1.
+
+Engine Health shows accurate isRunning state.
+
+Market Data / Database / WebSocket reconnects automatically if disrupted.
+
+No busy-flag lock persists between cycles.
+
+⚙️ Test Script Outline (Replit Automation)
+
+Replit Agent should:
+
+Log in as test user
+
+Username: testuser123
+Password: SecurePass123!
+
+
+For each mode:
+
+Run /api/{mode}/start via UI or API.
+
+Wait ~30 s for telemetry update.
+
+Run /api/{mode}/stop.
+
+Wait 10 s for queues to clear.
+
+Capture snapshots from /api/health/summary and the WebSocket stream after each state change.
+
+🧾 Report Generation
+
+After completion, automatically create
+diagnostic-reports/phase-41F-E-validation-report.md
+with the following structure:
+
+1️⃣ Overview
+
+Test date/time
+
+Software build hash
+
+Environment (Paper + Live)
+
+Summary (✅ Pass / ❌ Fail)
+
+2️⃣ Cycle Results Table
+Mode	Cycle	Start → Stop Duration	Queue Depth	Broadcast Latency	Result
+3️⃣ Telemetry Trends
+
+Graphs or sparkline samples for latency and queue depth
+
+Screenshots of Engine Telemetry UI during Paper and Live runs
+
+4️⃣ Recovery & Resilience Notes
+
+Any retry events logged by OperationQueue
+
+Any auto-recoveries triggered by HealthMonitor
+
+✅ Success Criteria
+Metric	Target	Status
+Operation time per cycle	< 3 s	✅
+Queue depth at stop	0	✅
+Broadcast latency	< 100 ms	✅
+No HTTP timeouts	0	✅
+UI stable throughout	Yes	✅
