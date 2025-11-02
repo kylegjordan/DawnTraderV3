@@ -160,7 +160,7 @@ export default function EngineTelemetry() {
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Last updated: {new Date(latestData.timestamp || Date.now()).toLocaleTimeString()}
+              Last updated: {new Date(('timestamp' in latestData ? latestData.timestamp : latestData.ts) || Date.now()).toLocaleTimeString()}
             </p>
           </CardContent>
         </Card>
