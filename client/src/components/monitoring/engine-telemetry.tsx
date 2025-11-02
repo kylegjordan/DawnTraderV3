@@ -209,221 +209,227 @@ export default function EngineTelemetry() {
         </Card>
       </div>
 
-      {/* Queue Health Section */}
-      <Card data-testid="card-queue-health">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Cpu className="h-5 w-5" />
-            Queue Health (Paper & Live)
-          </CardTitle>
-          <CardDescription>Operation queue metrics and execution status</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Paper Queue */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Paper Mode</span>
-                {wsHealthData && getStatusBadge(wsHealthData.paper.queue.ok)}
-              </div>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Queue Depth:</span>
-                  <span className="font-mono">{wsHealthData?.paper.queue.depth || 0}</span>
+      {/* Queue Health Section - Only show if WebSocket data available */}
+      {wsHealthData && (
+        <Card data-testid="card-queue-health">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Cpu className="h-5 w-5" />
+              Queue Health (Paper & Live)
+            </CardTitle>
+            <CardDescription>Operation queue metrics and execution status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Paper Queue */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Paper Mode</span>
+                  {getStatusBadge(wsHealthData.paper.queue.ok)}
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Executing Age:</span>
-                  <span className="font-mono">
-                    {wsHealthData?.paper.queue.executingJobAgeMs 
-                      ? `${wsHealthData.paper.queue.executingJobAgeMs}ms`
-                      : 'None'}
-                  </span>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Queue Depth:</span>
+                    <span className="font-mono">{wsHealthData.paper.queue.depth || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Executing Age:</span>
+                    <span className="font-mono">
+                      {wsHealthData.paper.queue.executingJobAgeMs 
+                        ? `${wsHealthData.paper.queue.executingJobAgeMs}ms`
+                        : 'None'}
+                    </span>
+                  </div>
+                </div>
+                <Collapsible>
+                  <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                    <Info className="h-3 w-3" />
+                    Learn More
+                    <ChevronDown className="h-3 w-3" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2 p-3 bg-muted/50 rounded-md text-xs space-y-1">
+                    <p><strong>Queue Depth:</strong> Normal 0-3 ⚠️ &gt;10 = bottleneck</p>
+                    <p><strong>Executing Age:</strong> Normal &lt;500ms 🚨 &gt;3000ms = stuck job (auto-recovery at 60s)</p>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+
+              {/* Live Queue */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Live Mode</span>
+                  {getStatusBadge(wsHealthData.live.queue.ok)}
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Queue Depth:</span>
+                    <span className="font-mono">{wsHealthData.live.queue.depth || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Executing Age:</span>
+                    <span className="font-mono">
+                      {wsHealthData.live.queue.executingJobAgeMs 
+                        ? `${wsHealthData.live.queue.executingJobAgeMs}ms`
+                        : 'None'}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <Collapsible>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Engine Health Section - Only show if WebSocket data available */}
+      {wsHealthData && (
+        <Card data-testid="card-engine-health">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Trading Engine Health
+            </CardTitle>
+            <CardDescription>Engine runtime status and activity metrics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Paper Engine */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Paper Engine</span>
+                  {getStatusBadge(wsHealthData.paper.engine.ok)}
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Running:</span>
+                    <span className="font-mono">
+                      {wsHealthData.paper.engine.isRunning ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Last Tick:</span>
+                    <span className="font-mono">
+                      {wsHealthData.paper.engine.lastTickAgeMs 
+                        ? `${wsHealthData.paper.engine.lastTickAgeMs}ms ago`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+                <Collapsible>
+                  <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                    <Info className="h-3 w-3" />
+                    Learn More
+                    <ChevronDown className="h-3 w-3" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2 p-3 bg-muted/50 rounded-md text-xs space-y-1">
+                    <p><strong>Tick Age:</strong> &lt;60,000ms ✅ ⚠️ &gt;1min = idle engine (auto-restart triggered)</p>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+
+              {/* Live Engine */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Live Engine</span>
+                  {getStatusBadge(wsHealthData.live.engine.ok)}
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Running:</span>
+                    <span className="font-mono">
+                      {wsHealthData.live.engine.isRunning ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Last Tick:</span>
+                    <span className="font-mono">
+                      {wsHealthData.live.engine.lastTickAgeMs 
+                        ? `${wsHealthData.live.engine.lastTickAgeMs}ms ago`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Market Data & Infrastructure - Only show if WebSocket data available */}
+      {wsHealthData && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card data-testid="card-market-data">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Market Data
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 mb-2">
+                {getStatusIcon(wsHealthData.marketData.ok)}
+                <span className="font-medium">
+                  {wsHealthData.marketData.ok ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+              {wsHealthData.marketData.lastUpdateAgeMs && (
+                <p className="text-xs text-muted-foreground">
+                  Last update: {wsHealthData.marketData.lastUpdateAgeMs}ms ago
+                </p>
+              )}
+              <Collapsible className="mt-2">
                 <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                   <Info className="h-3 w-3" />
                   Learn More
                   <ChevronDown className="h-3 w-3" />
                 </CollapsibleTrigger>
-                <CollapsibleContent className="mt-2 p-3 bg-muted/50 rounded-md text-xs space-y-1">
-                  <p><strong>Queue Depth:</strong> Normal 0-3 ⚠️ &gt;10 = bottleneck</p>
-                  <p><strong>Executing Age:</strong> Normal &lt;500ms 🚨 &gt;3000ms = stuck job (auto-recovery at 60s)</p>
+                <CollapsibleContent className="mt-2 p-3 bg-muted/50 rounded-md text-xs">
+                  <p>Normal: connected or fallback_rest</p>
+                  <p>🚨 blocked &gt;30s → auto-recovery</p>
                 </CollapsibleContent>
               </Collapsible>
-            </div>
+            </CardContent>
+          </Card>
 
-            {/* Live Queue */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Live Mode</span>
-                {wsHealthData && getStatusBadge(wsHealthData.live.queue.ok)}
+          <Card data-testid="card-database">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Database
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                {getStatusIcon(wsHealthData.database.ok)}
+                <span className="font-medium">
+                  {wsHealthData.database.ok ? 'Connected' : 'Disconnected'}
+                </span>
               </div>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Queue Depth:</span>
-                  <span className="font-mono">{wsHealthData?.live.queue.depth || 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Executing Age:</span>
-                  <span className="font-mono">
-                    {wsHealthData?.live.queue.executingJobAgeMs 
-                      ? `${wsHealthData.live.queue.executingJobAgeMs}ms`
-                      : 'None'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
-      {/* Engine Health Section */}
-      <Card data-testid="card-engine-health">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            Trading Engine Health
-          </CardTitle>
-          <CardDescription>Engine runtime status and activity metrics</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Paper Engine */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Paper Engine</span>
-                {wsHealthData && getStatusBadge(wsHealthData.paper.engine.ok)}
+          <Card data-testid="card-websocket">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Zap className="h-4 w-4" />
+                WebSocket
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 mb-2">
+                {getStatusIcon(wsHealthData.websocket.ok)}
+                <span className="font-medium">
+                  {wsHealthData.websocket.ok ? 'Active' : 'Inactive'}
+                </span>
               </div>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Running:</span>
-                  <span className="font-mono">
-                    {wsHealthData?.paper.engine.isRunning ? 'Yes' : 'No'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Last Tick:</span>
-                  <span className="font-mono">
-                    {wsHealthData?.paper.engine.lastTickAgeMs 
-                      ? `${wsHealthData.paper.engine.lastTickAgeMs}ms ago`
-                      : 'N/A'}
-                  </span>
-                </div>
-              </div>
-              <Collapsible>
-                <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                  <Info className="h-3 w-3" />
-                  Learn More
-                  <ChevronDown className="h-3 w-3" />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-2 p-3 bg-muted/50 rounded-md text-xs space-y-1">
-                  <p><strong>Tick Age:</strong> &lt;60,000ms ✅ ⚠️ &gt;1min = idle engine (auto-restart triggered)</p>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
-
-            {/* Live Engine */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Live Engine</span>
-                {wsHealthData && getStatusBadge(wsHealthData.live.engine.ok)}
-              </div>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Running:</span>
-                  <span className="font-mono">
-                    {wsHealthData?.live.engine.isRunning ? 'Yes' : 'No'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Last Tick:</span>
-                  <span className="font-mono">
-                    {wsHealthData?.live.engine.lastTickAgeMs 
-                      ? `${wsHealthData.live.engine.lastTickAgeMs}ms ago`
-                      : 'N/A'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Market Data & Infrastructure */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card data-testid="card-market-data">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Market Data
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 mb-2">
-              {wsHealthData && getStatusIcon(wsHealthData.marketData.ok)}
-              <span className="font-medium">
-                {wsHealthData?.marketData.ok ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-            {wsHealthData?.marketData.lastUpdateAgeMs && (
-              <p className="text-xs text-muted-foreground">
-                Last update: {wsHealthData.marketData.lastUpdateAgeMs}ms ago
-              </p>
-            )}
-            <Collapsible className="mt-2">
-              <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                <Info className="h-3 w-3" />
-                Learn More
-                <ChevronDown className="h-3 w-3" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 p-3 bg-muted/50 rounded-md text-xs">
-                <p>Normal: connected or fallback_rest</p>
-                <p>🚨 blocked &gt;30s → auto-recovery</p>
-              </CollapsibleContent>
-            </Collapsible>
-          </CardContent>
-        </Card>
-
-        <Card data-testid="card-database">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Database className="h-4 w-4" />
-              Database
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              {wsHealthData && getStatusIcon(wsHealthData.database.ok)}
-              <span className="font-medium">
-                {wsHealthData?.database.ok ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card data-testid="card-websocket">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Zap className="h-4 w-4" />
-              WebSocket
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 mb-2">
-              {wsHealthData && getStatusIcon(wsHealthData.websocket.ok)}
-              <span className="font-medium">
-                {wsHealthData?.websocket.ok ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-            {wsHealthData?.websocket.connectedClients !== undefined && (
-              <p className="text-xs text-muted-foreground">
-                {wsHealthData.websocket.connectedClients} client(s) connected
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              {wsHealthData.websocket.connectedClients !== undefined && (
+                <p className="text-xs text-muted-foreground">
+                  {wsHealthData.websocket.connectedClients} client(s) connected
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Recovery Log */}
       {recoveryData && recoveryData.actions.length > 0 && (
