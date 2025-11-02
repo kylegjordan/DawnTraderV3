@@ -16071,6 +16071,11 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 41F-D: Mount health monitoring routes into apiRouter
+  const { healthRouter } = await import('./routes-health.js');
+  apiRouter.use('/health', healthRouter);
+  console.log('[41F-D] Health routes mounted at /api/health');
+
   // Catch-all handler for unmatched /api/* routes
   // This prevents requests from falling through to Vite's HTML handler
   // and ensures all API routes return JSON (even 404s)

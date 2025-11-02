@@ -100,11 +100,6 @@ app.use((req, res, next) => {
   app.use('/api', apiRouter);
   console.log('[Server] API routes mounted at /api');
 
-  // Phase 41F-C: Mount health monitoring routes
-  const { healthRouter } = await import('./routes-health.js');
-  app.use('/api/health', healthRouter);
-  console.log('[41F-C] Health monitoring routes mounted at /api/health');
-
   // Phase 41F-B-5: Initialize operation queues and clear orphaned state
   try {
     const { initializeQueues } = await import('./utils/operation-queue');

@@ -43,6 +43,7 @@ import { DataFlowTracePanel } from "@/components/dashboard/data-flow-trace-panel
 import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
 import SystemHealthSummary from "@/components/system-health-summary";
 import LottieTuningTab from "@/components/monitoring/lottie-tuning-tab";
+import EngineTelemetry from "@/components/monitoring/engine-telemetry";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SystemMetrics {
@@ -366,6 +367,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="lottie-tuning" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-lottie-tuning" title="LATTI Tuning">
             <Gauge className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">LATTI Tuning</span>
+          </TabsTrigger>
+          <TabsTrigger value="engine-telemetry" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-engine-telemetry" title="Engine Telemetry">
+            <Server className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Engine Telemetry</span>
           </TabsTrigger>
           <TabsTrigger value="system-ai" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-system-ai" title="System & AI">
             <Activity className="w-4 h-4 sm:mr-2" />
@@ -1129,6 +1134,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Phase 31.J: Lottie Tuning Tab */}
         <TabsContent value="lottie-tuning" className="space-y-6 mt-6" data-testid="content-lottie-tuning">
           <LottieTuningTab />
+        </TabsContent>
+
+        {/* Phase 41F-D: Engine Telemetry Tab */}
+        <TabsContent value="engine-telemetry" className="space-y-6 mt-6" data-testid="content-engine-telemetry">
+          <EngineTelemetry />
         </TabsContent>
       </Tabs>
     </div>

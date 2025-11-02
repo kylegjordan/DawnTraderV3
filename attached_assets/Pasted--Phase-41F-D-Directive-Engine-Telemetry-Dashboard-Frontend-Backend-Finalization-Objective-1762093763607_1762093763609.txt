@@ -1,0 +1,161 @@
+🧭 Phase 41F-D Directive — Engine Telemetry Dashboard (Frontend + Backend Finalization)
+🎯 Objective
+
+Finalize the health-monitoring system by:
+
+Completing the backend (mounting the /api/health/* routes in server/index.ts);
+
+Implementing the new Engine Telemetry UI tab under System Monitoring → after LATTI Tuning;
+
+Displaying real-time metrics and explanations from the Phase 41F-C Health Monitor;
+
+Validating end-to-end telemetry through three paper + three live cycles.
+
+🧱 Phase 41F-D Task List
+#	Task	Description
+1	🔧 Fix backend route mount	Import healthRouter into server/index.ts and mount at /api/health.
+2	🧠 Create EngineTelemetry page	Add client/src/pages/system/EngineTelemetry.tsx for real-time monitoring.
+3	📊 Visualize metrics	Build tiles + sparklines using WebSocket (health_engine) and REST fallback.
+4	ℹ️ Add contextual guidance	Below each tile, add normal ranges + actions if out of range.
+5	🧩 Integrate into System Monitoring nav	Insert after LATTI Tuning in sidebar.
+6	🧪 Validate UI + backend integration	Run 3 paper and 3 live cycles to verify heartbeat, metrics, and tooltips.
+7	📘 Generate validation report	Output diagnostic-reports/phase-41F-D-telemetry-ui-validation.md.
+⚙️ Backend Fix — Mount Health Routes
+
+Edit server/index.ts and add these lines (if not already present):
+
+// --- Phase 41F-D Backend Route Fix ---
+import healthRouter from "./routes-health";       // ✅ add this near other router imports
+app.use("/api/health", healthRouter);             // ✅ mount routes
+console.log("[41F-D] ✅ Health monitoring routes mounted at /api/health");
+
+
+After saving, restart the server and verify that the following endpoints respond:
+
+GET /api/health/engine
+GET /api/health/summary
+GET /api/health/recovery
+
+🖥️ Frontend Implementation — EngineTelemetry Tab
+
+File: client/src/pages/system/EngineTelemetry.tsx
+
+Add to navigation: System Monitoring → after LATTI Tuning.
+Label: 🩺 Engine Telemetry (Health Monitor)
+
+Data Sources
+
+WebSocket feed health_engine (heartbeat every 5 s)
+
+REST fallback GET /api/health/summary (every 15 s)
+
+Display Structure
+
+Top Row
+
+System Status (✅ OK / ⚠️ Warn / 🚨 Critical)
+
+Heartbeat Latency (gauge + sparkline)
+
+Last Recovery Event (timestamp + type)
+
+Sections
+
+Queue Health (Paper & Live)
+Metrics: depth, executingAgeMs, piggybackCount
+Below tile:
+
+Queue Depth — normal 0-3 ⚠️ > 10 = bottleneck
+Executing Age — normal < 500 ms 🚨 > 3000 ms = stuck job (auto-recovery 60 s)
+
+Engine Health
+Metrics: isRunning, lastTickAgeMs, lastSignalAgeMs
+
+Tick Age < 60 000 ms ✅ ⚠️ > 1 min = idle engine (auto-restart)
+
+Market Data Status
+Metrics: websocketStatus, lastUpdateAgeMs, fallbackActive
+
+Normal: connected or fallback_rest; 🚨 blocked > 30 s → auto-recovery.
+
+Cache & Database
+Metrics: cache.hits, cache.misses, db.pool.active, slowQueries
+
+Cache Hit Rate > 80 % ✅ < 60 % = latency risk.
+Slow Queries < 2/min ✅ > 10 = index review.
+
+Broadcast Latency & Recovery Log
+Metrics: lastLatencyMs, lastEvent, plus table from /api/health/recovery.
+
+Broadcast Latency < 100 ms ✅ High values = network load.
+
+Each tile has collapsible “ℹ️ Learn More” section with these guidelines.
+
+🧪 Validation Procedure
+
+Login to the app as testuser123 / SecurePass123!.
+
+Verify the Engine Telemetry tab appears under System Monitoring.
+
+Confirm metrics update every ≤ 5 s (via WS).
+
+Run:
+
+3 Paper mode cycles (start → stop → start)
+
+3 Live mode cycles (start → stop → start)
+
+Watch tiles update and color-change based on telemetry.
+
+Ensure all explanations load and expand/collapse correctly.
+
+Capture screenshots of each metric with descriptive text.
+
+Generate report: diagnostic-reports/phase-41F-D-telemetry-ui-validation.md
+Include:
+
+Heartbeat and WS latency averages
+
+Queue depth history
+
+Engine tick ages
+
+Cache hit rates
+
+Recovery event log
+
+🧾 Acceptance Criteria
+Metric	Target	Pass Condition
+Heartbeat Latency	< 100 ms	✅ Tile shows green status
+Broadcast Latency	< 150 ms	✅ Sparkline shows stable trend
+Cache Hit Rate	> 80 %	✅ No warnings triggered
+Queue Depth	< 5	✅ Remains green throughout
+UI Responsiveness	< 1 s load time	✅ All tiles visible in 1 s
+Validation Report	Generated	✅ File present with metrics
+🔐 Test Credentials
+Username: testuser123
+Password: SecurePass123!
+
+🧩 Optional Configuration
+
+Enable/disable the UI feature with:
+
+ENGINE_TELEMETRY_UI_ENABLED=true
+
+🏁 Completion Deliverables
+
+Updated server/index.ts with mounted health routes
+
+New EngineTelemetry.tsx page + navigation entry
+
+Validation report phase-41F-D-telemetry-ui-validation.md
+
+Confirmation screenshots for all tiles and descriptions
+
+🚦 Expected Outcome
+
+✅ Health routes operational (/api/health/*)
+✅ UI updates in real time from WS feed
+✅ Each tile includes plain-language guidance
+✅ All metrics remain within normal ranges during three-cycle validation
+✅ Validation report and screenshots saved
