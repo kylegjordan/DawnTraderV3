@@ -448,7 +448,8 @@ class HealthMonitor extends EventEmitter {
   private async checkMarketDataHealth(): Promise<MarketDataHealth> {
     try {
       // Import market data coordinator
-      const { marketDataCoordinator } = await import('./market-data-coordinator.js');
+      const { getMarketDataCoordinator } = await import('./market-data-coordinator.js');
+      const marketDataCoordinator = getMarketDataCoordinator();
       const status = marketDataCoordinator.getStatus();
 
       const websocketStatus = status.wsConnected
@@ -485,7 +486,8 @@ class HealthMonitor extends EventEmitter {
   private async checkSSOTHealth(): Promise<SSOTHealth> {
     try {
       // Import market evaluation service (SSOT)
-      const { marketEvaluationService } = await import('./market-evaluation.js');
+      const { getMarketEvaluationService } = await import('./market-evaluation.js');
+      const marketEvaluationService = getMarketEvaluationService();
       
       // Get cache stats (if available)
       const stats = (marketEvaluationService as any).getCacheStats?.() || {

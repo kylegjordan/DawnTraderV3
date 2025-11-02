@@ -100,6 +100,11 @@ app.use((req, res, next) => {
   app.use('/api', apiRouter);
   console.log('[Server] API routes mounted at /api');
 
+  // Phase 41F-C: Mount health monitoring routes
+  const { healthRouter } = await import('./routes-health.js');
+  app.use('/api/health', healthRouter);
+  console.log('[41F-C] Health monitoring routes mounted at /api/health');
+
   // Phase 41F-B-5: Initialize operation queues and clear orphaned state
   try {
     const { initializeQueues } = await import('./utils/operation-queue');
@@ -961,6 +966,46 @@ app.use((req, res, next) => {
       console.log('[AwarenessScheduler] ✅ Started successfully');
     } catch (error) {
       console.error('[AwarenessScheduler] ⚠️ Startup failed:', error);
+    }
+
+    // Phase 41F-C: Start Unified Engine Health Monitor (5s heartbeat, auto-recovery)
+    try {
+      const { healthMonitor } = await import('./services/health-monitor.js');
+      const { contextBridge } = await import('./services/context-bridge.js');
+      
+      // Wire up WebSocket broadcasting for health beats
+      healthMonitor.on('heartbeat', (beat) => {
+        // Non-blocking broadcast (setImmediate ensures it doesn't block heartbeat)
+        setImmediate(() => {
+          const broadcastStart = Date.now();
+          contextBridge.broadcast({
+            type: 'health_engine',
+            payload: beat,
+          }).catch(err => {
+            console.error('[41F-C][BROADCAST] Error broadcasting health beat:', err.message);
+          }).then(() => {
+            const latency = Date.now() - broadcastStart;
+            healthMonitor.trackBroadcast('health_engine', latency);
+          });
+        });
+      });
+      
+      // Wire up recovery action broadcasting
+      healthMonitor.on('recovery', (action) => {
+        setImmediate(() => {
+          contextBridge.broadcast({
+            type: 'health_recovery',
+            payload: action,
+          }).catch(err => {
+            console.error('[41F-C][BROADCAST] Error broadcasting recovery action:', err.message);
+          });
+        });
+      });
+      
+      healthMonitor.start();
+      console.log('[41F-C] ✅ Engine Health Monitor started (heartbeat=5s, autoRecovery=enabled, WebSocket=enabled)');
+    } catch (error) {
+      console.error('[41F-C] ⚠️ Health Monitor startup failed:', error);
     }
   });
 
