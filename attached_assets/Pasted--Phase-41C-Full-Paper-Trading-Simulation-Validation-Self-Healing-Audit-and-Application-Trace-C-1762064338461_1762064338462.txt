@@ -1,0 +1,238 @@
+🧭 Phase 41C – Full Paper Trading Simulation Validation, Self-Healing Audit, and Application Trace
+Context and Objective
+
+Replit,
+the screenshots and recent test logs show that while progress has been made, the paper trading simulation is still not functioning correctly end-to-end.
+Portfolio balances aren’t synchronizing consistently, state indicators conflict (e.g., “Active” but still showing “Passive Learning”), and the Filtered Pairs and eligible-pair counts are still mismatched.
+Even after the previous fixes, the system stops trading before executing any real simulated trades.
+
+During this phase we will:
+
+Eliminate all quote-currency restrictions to open up the entire trade universe;
+
+Run a complete paper-trading simulation from the UI until at least three simulated trades execute successfully;
+
+Automatically self-heal any blocking issue found along the way, re-running tests each time; and
+
+Record a complete trace of every backend process, API call, service interaction, and frontend state change from the moment trading starts to the moment it stops — so we can see exactly how the app behaves.
+
+Kraken maintenance has caused temporary WebSocket outages, so REST fallback should remain enabled. Once their API is stable, run this directive unattended overnight.
+
+User Credentials
+username: testuser123
+password: SecurePass123!
+
+🧩 PHASE TASKS
+1️⃣ Remove Quote-Currency Filtering
+
+Remove all quote-currency restrictions from:
+
+screener_filters
+
+FilteredPairsService
+
+MarketEvaluationService
+
+Any cached filter logic using quote_currencies
+
+All pairs that pass normal filters (volume, spread, daily range, etc.) must be eligible for trading — no currency exclusions.
+
+Ensure backend normalization converts results to the base portfolio currency (USD/USDT) for PnL reporting.
+
+2️⃣ Start Simulation via UI
+
+Use the automated UI agent to run through the normal process (no backend overrides):
+
+Launch app in preview.
+
+Click Trading Toggle → Start New Simulation.
+
+Enter portfolio value:
+
+First run: $810, then +$5 for each retry ($815, $820, etc.)
+
+Confirm start.
+
+Verify propagation across all three displays:
+
+Dashboard (Portfolio Value)
+
+LATTi Goals & Guardrails section
+
+Goals Engine → Projected Portfolio Growth
+All three must match the entered value.
+
+3️⃣ Validate Trading State Synchronization
+
+Once trading begins:
+
+Top toggle: shows Active
+
+Blue Paper Trading banner: shows Active
+
+Passive Learning indicator: hidden
+
+/api/paper-sim/status → { active:true }
+
+WebSocket event trading_state_changed → active
+
+All visual and backend states must remain synchronized for the duration of the simulation.
+
+4️⃣ Trading Execution Cycle
+
+Keep the engine running for at least 15 minutes, or until at least 3 simulated trades have executed.
+
+Verify in logs:
+
+[SIGNAL] every ~30 seconds
+
+[Trade executed] entries ≥ 3
+
+Confirm Dashboard → Trading Activity and Earnings widgets update dynamically.
+
+Confirm Goals Engine updates projected portfolio values accordingly.
+
+5️⃣ Lottie & Monitoring Validation
+
+Open System Monitoring → Lottie Tuning tab:
+
+Ensure events are recorded (confidence_adjusted, guardrail_triggered, strategy_recalibrated).
+
+Save to /diagnostic-reports/phase-41c-lottie-activity-log.md.
+
+6️⃣ Self-Healing Loop
+
+If at any point one of the following occurs:
+
+Portfolio balances fail to update correctly,
+
+UI and backend states desynchronize,
+
+Filtered Pairs show errors or mismatched counts,
+
+Simulation stops prematurely, or
+
+Any unhandled exception appears in logs,
+
+Then:
+
+Log and capture the error (both front & back).
+
+Diagnose and apply the required fix.
+
+Restart the workflow.
+
+Start a new simulation with the next portfolio value (+$5).
+
+Repeat until a full run produces three successful executed trades, with all synchronization working correctly.
+
+Each attempt and fix should be recorded in the final report.
+
+7️⃣ Application Trace Logging (Full Run Telemetry)
+
+From the moment the trading engine starts until it automatically stops:
+
+Enable telemetry tracing for:
+
+TradingEngine
+
+SignalOrchestrator
+
+RiskManager
+
+PortfolioManager
+
+FilteredPairsService
+
+MarketDataCoordinator
+
+LottieTuning
+
+WebSocketManager
+
+Record every backend event, including:
+
+Initialization and configuration loading
+
+Market data fetches and REST/WebSocket fallback events
+
+Filter cycles and eligible-pair counts
+
+Strategy evaluations and signal generation
+
+Risk checks and trade executions
+
+Portfolio updates and reconciliations
+
+System health snapshots (CPU, memory, latency)
+
+Any fallback, retry, or error-handling event
+
+Synchronize frontend events (page loads, UI updates, button clicks, tab switches) with backend timestamps.
+
+Compile into a single timeline file:
+
+/diagnostic-reports/phase-41c-application-trace.md
+/diagnostic-reports/phase-41c-application-trace.json
+
+
+Include summaries:
+
+Total simulation duration
+
+Function calls and internal API requests count
+
+Average response times
+
+Cache hits/misses
+
+Number of strategy cycles
+
+Errors or warnings encountered
+
+Services initialized and sequence of operations
+
+Final system health at simulation stop
+
+8️⃣ Output Reports
+File	Purpose
+/diagnostic-reports/phase-41c-paper-sim-validation.md	Full validation audit
+/diagnostic-reports/phase-41c-lottie-activity-log.md	Lottie tuning activity trace
+/diagnostic-reports/phase-41c-fixed-bugs.md	List of all self-healing fixes applied
+/diagnostic-reports/phase-41c-application-trace.md	Chronological backend + frontend activity timeline
+/diagnostic-reports/phase-41c-final-summary.md	Consolidated report with summary metrics & attempt timeline
+9️⃣ Success Criteria
+Metric	Target
+Portfolio sync accuracy	100 % across Dashboard ×2 + Goals
+Executed trades	≥ 3 simulated paper trades
+UI state coherence	Toggle + Banner + Mode consistent
+Filtered Pairs	Loads cleanly, accurate count
+Lottie logs	≥ 1 adjustment event recorded
+Currency eligibility	All currencies accepted
+Simulation stability	No unhandled exceptions
+Trace log	Complete from engine start to stop
+🔟 Execution Settings
+
+Run unattended overnight after Kraken maintenance concludes.
+
+Use REST fallback while WebSocket reconnects.
+
+No Walter activation during this phase.
+
+Roll back any fix that introduces new errors.
+
+Archive every diagnostic file under /diagnostic-reports/.
+
+✅ Expected Outcome
+
+By the end of Phase 41C:
+
+The paper-trading engine will execute ≥ 3 simulated trades successfully.
+
+Portfolio balances update consistently across all screens.
+
+Filtered pairs and eligible pairs align.
+
+Lottie logs show dynamic guardrail tuning activity.
+
+The full Application Trace Report documents every system action from engine start to stop, giving a transparent view of the app’s behavior path-by-path.
