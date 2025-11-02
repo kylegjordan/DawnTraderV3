@@ -4,6 +4,7 @@ import { TradeSignal } from './trading-engine';
 import { KrakenService } from './kraken';
 import { marketDataService } from './market-data';
 import { AssetCapabilitiesService } from './asset-capabilities';
+import { telemetryService } from './telemetry-service.js';
 
 export interface RiskCheckResult {
   approved: boolean;
@@ -632,10 +633,28 @@ export class RiskManager {
         maxInvestment,
         price: entryPrice
       });
+      
+      // Phase 41F-I: Record risk evaluation metric
+      await telemetryService.recordTradeMetric('risk_eval', {
+        symbol,
+        riskPct: (riskAmount / maxInvestment) * 100,
+        quantity: sizing.quantity,
+        notionalValue: sizing.notionalValue
+      });
+      
       return sizing;
     } catch (error) {
       // Fallback: use basic calculation if capabilities not available
       console.warn(`[RiskManager] Asset capabilities not available for ${symbol}, using basic sizing:`, error);
+      
+      // Phase 41F-I: Record risk evaluation metric (fallback path)
+      await telemetryService.recordTradeMetric('risk_eval', {
+        symbol,
+        riskPct: (riskAmount / maxInvestment) * 100,
+        quantity,
+        notionalValue: maxInvestment
+      });
+      
       return {
         quantity,
         notionalValue: maxInvestment,

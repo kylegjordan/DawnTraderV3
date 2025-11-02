@@ -1,6 +1,7 @@
 import { Trade, TradingSettings, PriceData } from '@shared/schema';
 import { storage } from '../storage';
 import { detectRange, detectStopZone, type RangeDetectionResult, type StopZoneResult } from './strategy-filters';
+import { telemetryService } from './telemetry-service.js';
 
 export interface StrategySignal {
   symbol: string;
@@ -1034,7 +1035,7 @@ export class StrategyEngine {
     
     console.log(`[DHMA] ✅ Signal ${longSignal ? 'long' : 'short'} - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}, Confidence: ${(confidence * 100).toFixed(0)}%`);
     
-    return {
+    const signal = {
       symbol: '',
       strategy: 'dhma',
       entryPrice,
@@ -1053,6 +1054,15 @@ export class StrategyEngine {
         realizedVolatility: realizedVol
       }
     };
+    
+    // Phase 41F-I: Record signal emission metric
+    await telemetryService.recordTradeMetric('signal_emit', {
+      strategy: 'dhma',
+      strength: confidence,
+      direction: longSignal ? 'long' : 'short'
+    });
+    
+    return signal;
   }
 
   private calculateVolatility(data: PriceData[]): number {
