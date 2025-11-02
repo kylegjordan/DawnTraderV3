@@ -2328,9 +2328,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         changeReason: 'User-initiated start'
       });
       
-      // Phase 27.F.2: Broadcast state update (mode-scoped)
+      console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
+      
+      // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
-      await tradingStateSync.broadcastUserUpdate(userId);
+      tradingStateSync.broadcastUserUpdate(userId)
+        .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (live mode start)'))
+        .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
+      
+      console.log('[41D-FIX] Broadcast triggered asynchronously');
       
       // Get current global context for deterministic response
       const context = await storage.getSystemContext(mode);
@@ -2427,9 +2433,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         changeReason: 'User-initiated stop'
       });
       
-      // Phase 27.F.2: Broadcast state update (mode-scoped)
+      console.log('[41D-FIX] Engine stop completed, preparing HTTP response...');
+      
+      // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
-      await tradingStateSync.broadcastUserUpdate(userId);
+      tradingStateSync.broadcastUserUpdate(userId)
+        .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (live mode stop)'))
+        .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
+      
+      console.log('[41D-FIX] Broadcast triggered asynchronously');
       
       console.log(`[TradingStop] Completed stop for user ${userId} mode=${currentMode} active=false`);
       
