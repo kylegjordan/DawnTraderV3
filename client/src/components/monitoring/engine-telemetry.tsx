@@ -119,6 +119,12 @@ export default function EngineTelemetry() {
     refetchInterval: 30000,
   });
 
+  // Phase 41F-F: Anomaly detection data
+  const { data: anomaliesData } = useQuery<{ anomalies: any[] }>({
+    queryKey: ['/api/health/anomalies/recent'],
+    refetchInterval: 15000,
+  });
+
   // Diagnostic logging for data sources
   useEffect(() => {
     console.log('[EngineTelemetry] Data sources updated:', {
@@ -157,16 +163,37 @@ export default function EngineTelemetry() {
     );
   }
 
-  const getStatusIcon = (ok: boolean) => {
-    if (ok) return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+  // Phase 41F-F: Enhanced status indicators with 3-state color coding
+  const getStatusColor = (ok: boolean, warning?: boolean): 'green' | 'yellow' | 'red' => {
+    if (ok) return 'green';
+    if (warning) return 'yellow';
+    return 'red';
+  };
+
+  const getStatusIcon = (ok: boolean, warning?: boolean) => {
+    const color = getStatusColor(ok, warning);
+    if (color === 'green') return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+    if (color === 'yellow') return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
     return <XCircle className="h-5 w-5 text-red-500" />;
   };
 
-  const getStatusBadge = (ok: boolean, label: string = "OK") => {
-    if (ok) {
-      return <Badge className="bg-green-500/10 text-green-500">{label}</Badge>;
+  const getStatusBadge = (ok: boolean, label: string = "OK", warning?: boolean) => {
+    const color = getStatusColor(ok, warning);
+    if (color === 'green') {
+      return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">{label}</Badge>;
     }
-    return <Badge variant="destructive">WARN</Badge>;
+    if (color === 'yellow') {
+      return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">WARN</Badge>;
+    }
+    return <Badge className="bg-red-500/10 text-red-500 border-red-500/20">CRIT</Badge>;
+  };
+
+  // Phase 41F-F: Metric card with color-coded background
+  const getMetricCardClass = (ok: boolean, warning?: boolean): string => {
+    const color = getStatusColor(ok, warning);
+    if (color === 'green') return 'border-green-500/20 bg-green-500/5';
+    if (color === 'yellow') return 'border-yellow-500/20 bg-yellow-500/5';
+    return 'border-red-500/20 bg-red-500/5';
   };
 
   // Error boundary wrapper for the main render
@@ -175,7 +202,10 @@ export default function EngineTelemetry() {
       <div className="space-y-6">
         {/* Top Row - System Status */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card data-testid="card-system-status">
+          <Card 
+            data-testid="card-system-status"
+            className={getMetricCardClass(latestData?.overallOk !== false)}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Activity className="h-4 w-4" />
@@ -195,7 +225,13 @@ export default function EngineTelemetry() {
             </CardContent>
           </Card>
 
-          <Card data-testid="card-broadcast-latency">
+          <Card 
+            data-testid="card-broadcast-latency"
+            className={getMetricCardClass(
+              (healthSummary?.lastLatencies?.broadcast ?? 0) < 100,
+              (healthSummary?.lastLatencies?.broadcast ?? 0) >= 100 && (healthSummary?.lastLatencies?.broadcast ?? 0) < 200
+            )}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Zap className="h-4 w-4" />
@@ -203,25 +239,29 @@ export default function EngineTelemetry() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {healthSummary?.lastLatencies?.broadcast ?? 'N/A'}
-                {healthSummary?.lastLatencies?.broadcast && ' ms'}
-              </div>
-              {heartbeatHistory.length > 0 && (
-                <div className="mt-2 h-8 flex items-end gap-0.5">
-                  {heartbeatHistory.map((val, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 bg-primary/20 rounded-sm"
-                      style={{ height: `${Math.min((val / 200) * 100, 100)}%` }}
-                    />
-                  ))}
+              <div className="flex items-center gap-2">
+                {getStatusIcon(
+                  (healthSummary?.lastLatencies?.broadcast ?? 0) < 100,
+                  (healthSummary?.lastLatencies?.broadcast ?? 0) >= 100 && (healthSummary?.lastLatencies?.broadcast ?? 0) < 200
+                )}
+                <div className="text-2xl font-bold">
+                  {healthSummary?.lastLatencies?.broadcast ?? 'N/A'}
+                  {healthSummary?.lastLatencies?.broadcast && ' ms'}
                 </div>
-              )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Target: &lt;100ms
+              </p>
             </CardContent>
           </Card>
 
-          <Card data-testid="card-recovery-events">
+          <Card 
+            data-testid="card-recovery-events"
+            className={getMetricCardClass(
+              (healthSummary?.recentRecoveries ?? 0) === 0,
+              (healthSummary?.recentRecoveries ?? 0) > 0 && (healthSummary?.recentRecoveries ?? 0) < 5
+            )}
+          >
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Server className="h-4 w-4" />
@@ -229,8 +269,14 @@ export default function EngineTelemetry() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {healthSummary?.recentRecoveries ?? 0}
+              <div className="flex items-center gap-2">
+                {getStatusIcon(
+                  (healthSummary?.recentRecoveries ?? 0) === 0,
+                  (healthSummary?.recentRecoveries ?? 0) > 0 && (healthSummary?.recentRecoveries ?? 0) < 5
+                )}
+                <div className="text-2xl font-bold">
+                  {healthSummary?.recentRecoveries ?? 0}
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
                 Last 24 hours
@@ -459,6 +505,64 @@ export default function EngineTelemetry() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Phase 41F-F: Recent Anomalies Panel */}
+        {anomaliesData && anomaliesData.anomalies && anomaliesData.anomalies.length > 0 && (
+          <Card data-testid="card-anomalies">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                Recent Anomalies
+              </CardTitle>
+              <CardDescription>Detected system anomalies and alerts (last 50)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {anomaliesData.anomalies.map((anomaly: any, idx: number) => {
+                  const severityColor = 
+                    anomaly.severity === 'critical' ? 'text-red-500 bg-red-500/10 border-red-500/20' :
+                    anomaly.severity === 'warning' ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20' :
+                    'text-blue-500 bg-blue-500/10 border-blue-500/20';
+                  
+                  const severityIcon = 
+                    anomaly.severity === 'critical' ? <XCircle className="h-4 w-4 text-red-500" /> :
+                    anomaly.severity === 'warning' ? <AlertTriangle className="h-4 w-4 text-yellow-500" /> :
+                    <Info className="h-4 w-4 text-blue-500" />;
+
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`flex items-start gap-3 p-3 rounded-md border ${severityColor}`}
+                      data-testid={`anomaly-${idx}`}
+                    >
+                      {severityIcon}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs">
+                            {anomaly.subsystem || 'Unknown'}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {anomaly.timestamp ? new Date(anomaly.timestamp).toLocaleString() : 'Unknown time'}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium break-words">{anomaly.message || 'Unknown anomaly'}</p>
+                        {anomaly.value !== undefined && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Value: <span className="font-mono">{anomaly.value}</span>
+                            {anomaly.threshold && ` (threshold: ${anomaly.threshold})`}
+                          </p>
+                        )}
+                      </div>
+                      {anomaly.recovered && (
+                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" title="Auto-recovered" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Recovery Log */}
