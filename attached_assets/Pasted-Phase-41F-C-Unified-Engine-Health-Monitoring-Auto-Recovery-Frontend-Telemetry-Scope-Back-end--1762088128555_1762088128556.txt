@@ -1,0 +1,272 @@
+Phase 41F-C — Unified Engine Health Monitoring, Auto-Recovery & Frontend Telemetry
+
+Scope: Back-end health monitor + non-blocking broadcasts + automatic recovery hooks + a new System Monitoring tab (“Engine Telemetry”) + full validation (paper & live).
+Do not reactivate Walter unless a step explicitly says to toggle a feature flag for a short validation and then turn it back off.
+
+Context (why we’re doing this)
+
+We’ve just completed production-grade queuing (41F-A/B): start/stop are serialized, deduplicated, and non-blocking with clean telemetry. The next reliability gap is observability: we need first-class visibility into queue health, trading engine loops, data feeds, cache, and DB—plus automatic recovery when something stalls (e.g., WS 403, long-running job, stuck busy flag). This phase adds a single source of truth for system health, continuous heartbeat, defensive self-healing, and a UI panel to make issues obvious within seconds.
+
+Guardrails
+
+Walter stays disabled. If you must touch Walter, wrap with WALTER_COMPAT_MODE=false and document any temporary enable/disable in logs.
+
+Non-blocking everything: Health checks and broadcasts must never block HTTP routes or queue jobs.
+
+No schema breaks: New tables/columns must be additive and backward-compatible.
+
+Deliverables
+
+Market/Engine Health Monitor Service (backend)
+
+Automatic Recovery Hooks (backend)
+
+Engine Telemetry UI tab under System Monitoring (frontend)
+
+Metrics API + WS health stream (backend)
+
+End-to-end validation (3 cycles paper + 3 cycles live) with reports
+
+Roll-back notes and feature flags
+
+Backend — Implementation Plan
+1) New service: server/services/health-monitor.ts
+
+Create a singleton HealthMonitor that runs every 5s (configurable) and emits a structured heartbeat.
+
+Checks (each must have: ok:boolean, latencyMs:number, details:any)
+
+Queues: paperOperationQueue, liveOperationQueue
+
+depth, oldestAgeMs, executingJobAgeMs, dedup piggyback count
+
+Trading Engines: paper & live
+
+loop tick age (last orchestrator tick), last signal time, last trade submission time, isRunning, sessionId
+
+Market Data Coordinator:
+
+websocketStatus (connected/blocked/retrying), last message age, REST fallback active flag
+
+SSOT Cache: hits/misses, TTL, last refresh age, filterHash currently active
+
+DB health: pool usage, slow query count (> 500 ms), last error age
+
+Broadcast bus: last broadcast age for trading_state_changed, average emit latency (rolling)
+
+External connectivity: (Kraken) last 200 response vs. last error timestamp
+
+Output shape (example):
+
+{
+  "ts": "ISO",
+  "paper": {
+    "queue": {"ok":true,"depth":0,"executingAgeMs":12},
+    "engine": {"ok":true,"isRunning":true,"lastTickAgeMs":3100,"lastSignalAgeMs":3100}
+  },
+  "live": {...},
+  "marketData": {"ok":true,"websocketStatus":"blocked_fallback_rest","retryBackoffMs":16000},
+  "ssot": {"ok":true,"cache":{"hits":24,"misses":3,"ttlMs":15000,"activeFilterHash":"..."}},
+  "db": {"ok":true,"pool":{"active":3,"idle":5},"slowQueries":0},
+  "broadcasts":{"ok":true,"lastLatencyMs":7,"lastEvent":"trading_state_changed"},
+  "overallOk": true
+}
+
+
+Storage/Publishing
+
+In-memory ring buffer (last 250 heartbeats) for quick UI charts.
+
+Do not write to DB on each beat; emit via:
+
+HTTP: GET /api/health/engine (returns latest + last N = 120s)
+
+WS topic: health_engine broadcasting the latest snapshot
+
+Add log markers: [41F-C][HEARTBEAT], [41F-C][CHECK].
+
+2) Auto-Recovery Hooks
+
+Inside HealthMonitor (or a sibling recovery.ts):
+
+Rules (config in config/health.json):
+
+Stuck queue job: executing age > queue.maxExecMs (default 3,000 ms) → log [41F-C][RECOVERY][QUEUE], soft reset job, notify listeners with failure, continue queue.
+
+Engine idle / dead tick: last orchestrator tick > engine.maxTickGapMs (default 60,000 ms) while isRunning=true → emit [41F-C][RECOVERY][ENGINE] and call non-blocking engine.recover() (restart loop, not the process).
+
+WS blocked: websocketStatus=blocked and last market update age > market.fallbackMaxAgeMs (default 20,000 ms) → force REST refresh & backoff jitter.
+
+Busy flag drift: paper/live state mismatch (manager stopped but busy true) → clear flag safely and report.
+
+All recovery actions must be fire-and-forget, never block API handlers.
+
+3) Non-blocking Broadcast Separation
+
+Ensure all contextBridge.broadcast* calls are queued to microtasks (e.g., setImmediate / queueMicrotask) and never awaited in HTTP paths.
+
+Add markers [41F-C][BROADCAST] {event, latencyMs}.
+
+4) Metrics APIs
+
+GET /api/health/engine → latest beat + ring buffer (JSON)
+
+GET /api/health/summary → reduced payload for widgets (overallOk, per-section ok, last latencies)
+
+WS topic health_engine pushes the latest beat every 5s (or on state change)
+
+5) Feature Flags
+
+ENGINE_HEALTH_MONITOR_ENABLED=true
+
+ENGINE_AUTO_RECOVERY_ENABLED=true
+
+BROADCAST_NONBLOCKING_ENFORCED=true
+
+All flags read from server config; default enabled.
+
+Frontend — Implementation Plan
+New Tab: System Monitoring → Engine Telemetry
+
+Create client/src/pages/system/EngineTelemetry.tsx:
+
+Widgets (React + Tailwind; use existing shadcn/ui)
+
+Overall Status Pill (green/amber/red) from overallOk
+
+Queues Panel (paper/live): depth, executingAge, dedup listeners, sparkline of depth (last 2 min)
+
+Engines Panel (paper/live): isRunning, lastTickAge, lastSignalAge, sessionId
+
+Market Data Panel: websocket status (connected/blocked/fallback), retry backoff, last update age
+
+SSOT Cache Panel: hits/misses, ttl, active filterHash
+
+DB Panel: pool active/idle, slowQueries
+
+Broadcast Panel: last event, avg latency
+
+Recent Recovery Actions: list last 10 [41F-C][RECOVERY] log summaries
+
+Data source
+
+Subscribe to health_engine WS; fallback to GET /api/health/summary every 15s.
+
+Never poll faster than backend heartbeat.
+
+Validation — Overnight, Unattended
+Test user
+
+Username: testuser123
+
+Password: SecurePass123!
+
+Phase A — Baseline (no faults)
+
+Start server; confirm ENGINE_HEALTH_MONITOR_ENABLED true.
+
+Run 3 cycles paper: start → 20s observe → stop → 10s; repeat x3.
+
+Run 3 cycles live: same cadence.
+
+Collect:
+
+Zero HTTP timeouts
+
+Heartbeat every ~5s
+
+No recoveries triggered
+
+UI tab charts moving & statuses accurate
+
+Phase B — Fault Injection
+
+Run these one at a time; after each, auto-recovery must resolve within 60s:
+
+Stuck job: Inject artificial delay (4s) into a queued start; expect [RECOVERY][QUEUE] and queue continues.
+
+Idle engine: Pause orchestrator tick for 70s; expect [RECOVERY][ENGINE] and tick resumes.
+
+WS blocked: Simulate 403/maintenance; expect REST fallback active, no crashes.
+
+Busy flag drift: Manually set mismatched state; expect flag cleared & logged.
+
+Throughout, the Engine Telemetry tab must reflect states within one beat.
+
+Phase C — Reports
+
+Emit the following files to repo (or /diagnostic-reports/):
+
+phase-41F-C-health-monitoring-validation.md
+
+Scenario → Expected → Observed → Pass/Fail + screenshots
+
+phase-41F-C-recovery-events.json
+
+Array of recovery actions with timestamps & causes
+
+phase-41F-C-metrics-snapshot.json
+
+Final 2-minute ring buffer export for paper & live
+
+Acceptance Criteria
+
+Heartbeat emits every ≤ 5s with overallOk correctness.
+
+All broadcasts non-blocking (no HTTP handler awaits on WS).
+
+Faults auto-recover within ≤ 60s without manual restart.
+
+Engine Telemetry tab displays accurate, live metrics within one beat.
+
+3× paper + 3× live start/stop cycles complete without timeout.
+
+All reports generated and saved; links printed in console.
+
+Reversion Plan
+
+Feature flags allow instant disable:
+
+ENGINE_HEALTH_MONITOR_ENABLED=false
+
+ENGINE_AUTO_RECOVERY_ENABLED=false
+
+BROADCAST_NONBLOCKING_ENFORCED=false
+
+Leave code paths intact; wrap new invocations with guards.
+
+Provide git revert checkpoints at:
+
+HealthMonitor introduction
+
+Recovery hooks
+
+UI tab addition
+
+Notes & Conventions
+
+Log tags: [41F-C][HEARTBEAT], [41F-C][CHECK], [41F-C][RECOVERY], [41F-C][BROADCAST].
+
+All new async actions must use try/catch with concise failure telemetry.
+
+Do not change database schema for this phase.
+
+Walter remains disabled.
+
+Kickoff Checklist (RAPID)
+
+Create server/services/health-monitor.ts and wire into server bootstrap.
+
+Add /api/health/engine, /api/health/summary, and WS health_engine.
+
+Enforce non-blocking broadcasts in all touched routes/services.
+
+Add EngineTelemetry.tsx page and navigation link under System Monitoring.
+
+Run Phase A/B validation and generate all reports.
+
+Post console links to generated files and screenshots.
+
+If any blocking defect is detected during validation, pause, write a tiny patch, and resume the same scenario until green. The final summary should clearly show “before/after” for each fault injection and the corresponding recovery marker(s).
+
+End of directive. 🧭
