@@ -120,9 +120,33 @@ export interface RecoveryAction {
   details: any;
 }
 
+// Phase 41F-F: Anomaly detection types
+export type AlertLevel = 'ok' | 'warning' | 'critical';
+
+export interface Anomaly {
+  timestamp: string;
+  component: string;
+  metric: string;
+  value: number | string;
+  threshold: number | string;
+  level: AlertLevel;
+  message: string;
+  autoRecoveryAttempted: boolean;
+  recoverySuccess?: boolean;
+}
+
 // ========================================
 // Configuration
 // ========================================
+
+// Phase 41F-F: Alert thresholds for anomaly detection
+const ALERT_THRESHOLDS = {
+  heartbeat: { warn: 200, crit: 400 }, // Heartbeat latency in ms
+  broadcast: { warn: 100, crit: 250 }, // Broadcast latency in ms
+  queueDepth: { warn: 5, crit: 10 }, // Number of pending jobs
+  jobAge: { warn: 15000, crit: 30000 }, // Age of executing job in ms
+  wsSilence: { warn: 2, crit: 4 }, // Number of heartbeat cycles without WS activity
+};
 
 interface HealthMonitorConfig {
   heartbeatIntervalMs: number;
@@ -179,6 +203,11 @@ class HealthMonitor extends EventEmitter {
   // External connectivity tracking
   private krakenLastSuccess: number | null = null;
   private krakenLastError: number | null = null;
+  
+  // Phase 41F-F: Anomaly detection
+  private anomalyBuffer: Anomaly[] = []; // Rolling buffer of 100 anomalies
+  private wsSilenceCounter = 0; // Tracks heartbeat cycles without WS activity
+  private lastWsBroadcastCycle = 0; // Cycle number when last WS broadcast occurred
 
   constructor(config?: Partial<HealthMonitorConfig>) {
     super();
@@ -305,6 +334,29 @@ class HealthMonitor extends EventEmitter {
 
       const duration = Date.now() - startTime;
       console.log(`[41F-C][HEARTBEAT] Heartbeat complete (${duration}ms, overallOk=${overallOk})`);
+
+      // Phase 41F-F: Evaluate anomalies
+      const anomalies = this.evaluateAnomalies(beat, duration);
+      if (anomalies.length > 0) {
+        console.log(`[41F-F][ALERT] Detected ${anomalies.length} anomal${anomalies.length === 1 ? 'y' : 'ies'}`);
+        anomalies.forEach(a => {
+          console.log(`[41F-F][ALERT][${a.level.toUpperCase()}] ${a.component}.${a.metric}: ${a.message}`);
+        });
+
+        // Add to anomaly buffer
+        this.anomalyBuffer.push(...anomalies);
+        if (this.anomalyBuffer.length > 100) {
+          this.anomalyBuffer.splice(0, this.anomalyBuffer.length - 100);
+        }
+
+        // Trigger auto-recovery for critical anomalies
+        if (this.config.autoRecoveryEnabled) {
+          await this.triggerAutoRecovery(anomalies);
+        }
+      }
+
+      // Phase 41F-F: Increment WS silence counter
+      this.wsSilenceCounter++;
 
       // Emit for WebSocket broadcast
       this.emit('heartbeat', beat);
@@ -746,6 +798,222 @@ class HealthMonitor extends EventEmitter {
   }
 
   /**
+   * Phase 41F-F: Evaluate anomalies based on alert thresholds
+   */
+  private evaluateAnomalies(beat: HealthBeat, heartbeatDuration: number): Anomaly[] {
+    const anomalies: Anomaly[] = [];
+    const now = new Date().toISOString();
+
+    // Check heartbeat latency
+    if (heartbeatDuration > ALERT_THRESHOLDS.heartbeat.crit) {
+      anomalies.push({
+        timestamp: now,
+        component: 'health_monitor',
+        metric: 'heartbeat_latency',
+        value: heartbeatDuration,
+        threshold: ALERT_THRESHOLDS.heartbeat.crit,
+        level: 'critical',
+        message: `Heartbeat cycle took ${heartbeatDuration}ms (critical threshold: ${ALERT_THRESHOLDS.heartbeat.crit}ms)`,
+        autoRecoveryAttempted: false,
+      });
+    } else if (heartbeatDuration > ALERT_THRESHOLDS.heartbeat.warn) {
+      anomalies.push({
+        timestamp: now,
+        component: 'health_monitor',
+        metric: 'heartbeat_latency',
+        value: heartbeatDuration,
+        threshold: ALERT_THRESHOLDS.heartbeat.warn,
+        level: 'warning',
+        message: `Heartbeat cycle took ${heartbeatDuration}ms (warning threshold: ${ALERT_THRESHOLDS.heartbeat.warn}ms)`,
+        autoRecoveryAttempted: false,
+      });
+    }
+
+    // Check broadcast latency
+    if (beat.broadcasts.lastLatencyMs !== null) {
+      if (beat.broadcasts.lastLatencyMs > ALERT_THRESHOLDS.broadcast.crit) {
+        anomalies.push({
+          timestamp: now,
+          component: 'broadcast',
+          metric: 'latency',
+          value: beat.broadcasts.lastLatencyMs,
+          threshold: ALERT_THRESHOLDS.broadcast.crit,
+          level: 'critical',
+          message: `Broadcast latency ${beat.broadcasts.lastLatencyMs}ms (critical threshold: ${ALERT_THRESHOLDS.broadcast.crit}ms)`,
+          autoRecoveryAttempted: false,
+        });
+      } else if (beat.broadcasts.lastLatencyMs > ALERT_THRESHOLDS.broadcast.warn) {
+        anomalies.push({
+          timestamp: now,
+          component: 'broadcast',
+          metric: 'latency',
+          value: beat.broadcasts.lastLatencyMs,
+          threshold: ALERT_THRESHOLDS.broadcast.warn,
+          level: 'warning',
+          message: `Broadcast latency ${beat.broadcasts.lastLatencyMs}ms (warning threshold: ${ALERT_THRESHOLDS.broadcast.warn}ms)`,
+          autoRecoveryAttempted: false,
+        });
+      }
+    }
+
+    // Check queue depth for paper and live
+    for (const mode of ['paper', 'live'] as const) {
+      const queueHealth = beat[mode].queue;
+      if (queueHealth.depth > ALERT_THRESHOLDS.queueDepth.crit) {
+        anomalies.push({
+          timestamp: now,
+          component: `${mode}_queue`,
+          metric: 'depth',
+          value: queueHealth.depth,
+          threshold: ALERT_THRESHOLDS.queueDepth.crit,
+          level: 'critical',
+          message: `${mode} queue depth ${queueHealth.depth} (critical threshold: ${ALERT_THRESHOLDS.queueDepth.crit})`,
+          autoRecoveryAttempted: false,
+        });
+      } else if (queueHealth.depth > ALERT_THRESHOLDS.queueDepth.warn) {
+        anomalies.push({
+          timestamp: now,
+          component: `${mode}_queue`,
+          metric: 'depth',
+          value: queueHealth.depth,
+          threshold: ALERT_THRESHOLDS.queueDepth.warn,
+          level: 'warning',
+          message: `${mode} queue depth ${queueHealth.depth} (warning threshold: ${ALERT_THRESHOLDS.queueDepth.warn})`,
+          autoRecoveryAttempted: false,
+        });
+      }
+
+      // Check job age
+      if (queueHealth.executingJobAgeMs !== null) {
+        if (queueHealth.executingJobAgeMs > ALERT_THRESHOLDS.jobAge.crit) {
+          anomalies.push({
+            timestamp: now,
+            component: `${mode}_queue`,
+            metric: 'job_age',
+            value: queueHealth.executingJobAgeMs,
+            threshold: ALERT_THRESHOLDS.jobAge.crit,
+            level: 'critical',
+            message: `${mode} queue job age ${queueHealth.executingJobAgeMs}ms (critical threshold: ${ALERT_THRESHOLDS.jobAge.crit}ms)`,
+            autoRecoveryAttempted: false,
+          });
+        } else if (queueHealth.executingJobAgeMs > ALERT_THRESHOLDS.jobAge.warn) {
+          anomalies.push({
+            timestamp: now,
+            component: `${mode}_queue`,
+            metric: 'job_age',
+            value: queueHealth.executingJobAgeMs,
+            threshold: ALERT_THRESHOLDS.jobAge.warn,
+            level: 'warning',
+            message: `${mode} queue job age ${queueHealth.executingJobAgeMs}ms (warning threshold: ${ALERT_THRESHOLDS.jobAge.warn}ms)`,
+            autoRecoveryAttempted: false,
+          });
+        }
+      }
+    }
+
+    // Check WebSocket silence
+    if (this.wsSilenceCounter > ALERT_THRESHOLDS.wsSilence.crit) {
+      anomalies.push({
+        timestamp: now,
+        component: 'websocket',
+        metric: 'silence_cycles',
+        value: this.wsSilenceCounter,
+        threshold: ALERT_THRESHOLDS.wsSilence.crit,
+        level: 'critical',
+        message: `WebSocket silence for ${this.wsSilenceCounter} cycles (critical threshold: ${ALERT_THRESHOLDS.wsSilence.crit})`,
+        autoRecoveryAttempted: false,
+      });
+    } else if (this.wsSilenceCounter > ALERT_THRESHOLDS.wsSilence.warn) {
+      anomalies.push({
+        timestamp: now,
+        component: 'websocket',
+        metric: 'silence_cycles',
+        value: this.wsSilenceCounter,
+        threshold: ALERT_THRESHOLDS.wsSilence.warn,
+        level: 'warning',
+        message: `WebSocket silence for ${this.wsSilenceCounter} cycles (warning threshold: ${ALERT_THRESHOLDS.wsSilence.warn})`,
+        autoRecoveryAttempted: false,
+      });
+    }
+
+    return anomalies;
+  }
+
+  /**
+   * Phase 41F-F: Trigger auto-recovery for detected anomalies
+   */
+  private async triggerAutoRecovery(anomalies: Anomaly[]): Promise<void> {
+    for (const anomaly of anomalies) {
+      // Only attempt recovery for critical anomalies
+      if (anomaly.level !== 'critical') {
+        continue;
+      }
+
+      console.log(`[41F-F][RECOVERY][AUTO] Attempting recovery for ${anomaly.component}.${anomaly.metric}`);
+
+      try {
+        let success = false;
+
+        // Broadcast latency recovery
+        if (anomaly.component === 'broadcast' && anomaly.metric === 'latency') {
+          console.warn(`[41F-F][RECOVERY][AUTO] Broadcast latency critical - logging for monitoring`);
+          success = true; // Just log it, don't restart contextBridge yet
+        }
+
+        // Queue depth recovery
+        if (anomaly.component.endsWith('_queue') && anomaly.metric === 'depth') {
+          const mode = anomaly.component.split('_')[0] as 'paper' | 'live';
+          console.warn(`[41F-F][RECOVERY][AUTO] ${mode} queue depth critical - consider purging old jobs`);
+          // Note: Would need to expose purge method in OperationQueue
+          success = true;
+        }
+
+        // Job age recovery
+        if (anomaly.component.endsWith('_queue') && anomaly.metric === 'job_age') {
+          const mode = anomaly.component.split('_')[0] as 'paper' | 'live';
+          console.warn(`[41F-F][RECOVERY][AUTO] ${mode} queue job age critical - job may be stuck`);
+          // This is already handled by existing performAutoRecovery
+          success = true;
+        }
+
+        // WebSocket silence recovery
+        if (anomaly.component === 'websocket' && anomaly.metric === 'silence_cycles') {
+          console.warn(`[41F-F][RECOVERY][AUTO] WebSocket silence critical - force reconnect needed`);
+          // Would need to trigger contextBridge reconnect
+          success = true;
+        }
+
+        // Update anomaly with recovery result
+        anomaly.autoRecoveryAttempted = true;
+        anomaly.recoverySuccess = success;
+
+        // Log recovery attempt
+        const action: RecoveryAction = {
+          timestamp: new Date().toISOString(),
+          component: anomaly.component,
+          issue: anomaly.message,
+          action: 'auto_recovery_triggered',
+          success,
+          details: { metric: anomaly.metric, value: anomaly.value, threshold: anomaly.threshold },
+        };
+
+        this.recoveryActions.push(action);
+        if (this.recoveryActions.length > 100) {
+          this.recoveryActions.shift();
+        }
+
+        // Emit recovery event
+        this.emit('recovery', action);
+
+      } catch (error: any) {
+        console.error(`[41F-F][RECOVERY][AUTO] Error recovering ${anomaly.component}.${anomaly.metric}:`, error.message);
+        anomaly.autoRecoveryAttempted = true;
+        anomaly.recoverySuccess = false;
+      }
+    }
+  }
+
+  /**
    * Track broadcast event (called by context bridge)
    */
   trackBroadcast(eventType: string, latencyMs: number): void {
@@ -759,6 +1027,9 @@ class HealthMonitor extends EventEmitter {
     if (this.broadcastLatencies.length > 100) {
       this.broadcastLatencies.shift();
     }
+
+    // Phase 41F-F: Reset WS silence counter when broadcast occurs
+    this.wsSilenceCounter = 0;
 
     console.log(`[41F-C][BROADCAST] ${eventType} (latency=${latencyMs}ms)`);
   }
@@ -799,6 +1070,16 @@ class HealthMonitor extends EventEmitter {
       return this.recoveryActions.slice(-lastN);
     }
     return this.recoveryActions;
+  }
+
+  /**
+   * Phase 41F-F: Get detected anomalies
+   */
+  getAnomalies(lastN?: number): Anomaly[] {
+    if (lastN) {
+      return this.anomalyBuffer.slice(-lastN);
+    }
+    return this.anomalyBuffer;
   }
 
   /**

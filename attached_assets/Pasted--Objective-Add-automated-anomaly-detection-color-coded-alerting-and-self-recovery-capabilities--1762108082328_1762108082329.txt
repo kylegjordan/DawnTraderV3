@@ -1,0 +1,127 @@
+🎯 Objective
+
+Add automated anomaly detection, color-coded alerting, and self-recovery capabilities to the existing Unified Engine Health Monitor and Engine Telemetry Dashboard.
+This will allow the system to automatically detect and respond to operational faults (e.g., stalled queues, long heartbeats, blocked WebSocket, etc.) in both Paper and Live modes.
+
+🧩 Implementation Tasks
+Task 1 – Define Alert Thresholds
+
+Add thresholds in server/services/health-monitor.ts:
+
+Metric	Warning (YELLOW)	Critical (RED)	Action
+Heartbeat latency	> 200 ms	> 400 ms	Flag & recover
+Broadcast latency	> 100 ms	> 250 ms	Reinit contextBridge
+Queue depth	> 5	> 10	Purge old jobs
+Job age	> 15 s	> 30 s	Restart engine
+WebSocket silence	> 2 cycles	> 4 cycles	Force reconnect
+
+Use a configuration block:
+
+const ALERT_THRESHOLDS = {
+  heartbeat: { warn: 200, crit: 400 },
+  broadcast: { warn: 100, crit: 250 },
+  queueDepth: { warn: 5, crit: 10 },
+  jobAge: { warn: 15000, crit: 30000 },
+  wsSilence: { warn: 2, crit: 4 },
+};
+
+Task 2 – Extend HealthMonitor
+
+Add:
+
+evaluateAnomalies() method comparing metrics to thresholds.
+
+triggerAutoRecovery(reason) method that:
+
+Logs [41F-F][RECOVERY][AUTO] entries.
+
+Broadcasts health_recovery over WebSocket.
+
+Executes recovery routines (queue clear, reconnect, etc.).
+
+Append anomalies to a rolling anomalyBuffer (100 entries).
+
+Task 3 – Update EngineTelemetry UI
+
+Enhance the Engine Telemetry tab:
+
+Display metric tiles with color state (green = OK / yellow = Warning / red = Critical).
+
+Add a collapsible “Recent Anomalies & Recoveries” panel below the metrics.
+
+Show guidance: normal ranges + what to check if out of range.
+
+Task 4 – Implement Recovery Log API
+
+Add to server/routes-health.ts:
+
+GET  /api/health/recovery/log     // return recent recovery events
+POST /api/health/recovery/trigger // manual recovery test
+
+Task 5 – Fault-Injection Testing
+
+Create /test-scripts/phase-41F-F-fault-injection.sh to simulate:
+
+Stuck job: enqueue a dummy job that never resolves.
+
+Busy flag drift: set globalPaperSimBusyFlag = true and start engine.
+
+WebSocket silence: disable WS temporarily to trigger reconnect.
+
+Cache burst: push 1000 dummy entries to test latency alerts.
+
+Heartbeat lag: pause HealthMonitor thread for > 500 ms.
+
+Observe that:
+
+Alerts are generated.
+
+Auto-recovery occurs.
+
+Engine resumes normal heartbeat within 10 seconds.
+
+Task 6 – Validation Report
+
+After testing, generate
+diagnostic-reports/phase-41F-F-anomaly-validation.md
+with:
+
+Test conditions + triggered alerts
+
+Recovery times
+
+Screenshots of Engine Telemetry alerts
+
+Log extracts with [41F-F][ALERT] and [41F-F][RECOVERY] markers
+
+Architect review summary
+
+🧪 Credentials for Testing
+Username: testuser123
+Password: SecurePass123!
+
+✅ Success Criteria
+Metric	Target	Pass
+Alert latency	< 5 s	✅
+Recovery latency	< 10 s	✅
+System uptime	100 % (no crash)	✅
+UI synchronization	100 %	✅
+📦 After Completion
+
+Once alerts and recoveries are confirmed:
+
+Update replit.md with Phase 41F-F summary.
+
+Archive the anomaly report.
+
+Prepare to begin the three-trade paper-mode test (next phase).
+
+🧩 Important Integration Step
+
+Ensure the import in server/index.ts exists:
+
+import healthRouter from "./routes-health";
+app.use("/api/health", healthRouter);
+
+
+Place this before any catch-all 404 handler.
