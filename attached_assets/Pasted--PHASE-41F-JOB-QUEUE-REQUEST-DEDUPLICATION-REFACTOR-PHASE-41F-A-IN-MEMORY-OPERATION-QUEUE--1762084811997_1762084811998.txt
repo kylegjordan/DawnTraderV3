@@ -1,0 +1,108 @@
+🧭 PHASE 41F – JOB QUEUE & REQUEST DEDUPLICATION REFACTOR
+✅ PHASE 41F-A — IN-MEMORY OPERATION QUEUE HANDLER
+
+Status: COMPLETE (Architect-Approved)
+Date: Nov 3 2025
+Owner: Kyle
+Environment: Replit (testuser123 / TestPass123!)
+Scope: Paper Trading Mode
+
+🧩 Deliverables & Changes
+File	Description
+server/utils/operation-queue.ts	Implemented OperationQueue class with FIFO processing, promise-based result handling, and automatic retry (1×, 500 ms backoff). Includes [41F][QUEUE] telemetry for enqueue/start/complete/fail/idle.
+server/services/paper-sim-service.ts	Replaced globalPaperSimOperationLock with paperOperationQueue.enqueue() for startPaperSimulation() and stopPaperSimulation(). Removed busy-flag logic. Wrapped queue calls in try/catch to return structured PaperSimResult.
+server/index.ts	Added SIGTERM/SIGINT graceful-shutdown hook to drain pending queue jobs before exit.
+🧠 Behavior
+
+All paper-mode operations now enter a serialized FIFO queue.
+
+Single active operation per user/mode at a time (prevents collisions).
+
+Automatic retry on failure with graceful error reporting.
+
+No more timeouts or blocking from UI/API concurrency.
+
+Telemetry appears as [41F][QUEUE] in logs.
+
+✅ Architect Review Result
+
+PASS – Production Ready
+
+“Queue handler solid. API contracts restored. Telemetry clear. Proceed to Phase 41F-A-5 (live-mode integration) and Phase 41F-B (deduplication + telemetry).”
+
+🚀 PHASE 41F-A-5 — LIVE-MODE QUEUE INTEGRATION
+
+Goal: Extend the in-memory OperationQueue architecture from paper mode to live trading operations to eliminate concurrency collisions and guarantee serialized execution of start/stop requests.
+
+🔧 Implementation Plan
+1. Add Live Mode Queue
+
+Create liveOperationQueue = new OperationQueue('live') in server/services/trading-service.ts.
+
+Replace any usage of globalLiveOperationLock or similar constructs with liveOperationQueue.enqueue().
+
+Each job wrapped in metadata object { userId, mode: 'live', action }.
+
+2. Refactor Start/Stop Functions
+
+Wrap startLiveTrading() and stopLiveTrading() in try/catch blocks like the paper-mode pattern.
+
+Return standardized TradingResult objects.
+
+Emit telemetry:
+
+[41F][QUEUE][LIVE] Job enqueued
+
+[41F][QUEUE][LIVE] Job start
+
+[41F][QUEUE][LIVE] Job complete in {duration}ms
+
+3. Graceful Shutdown Integration
+
+Extend the existing SIGTERM/SIGINT shutdown hook in server/index.ts to await both paperOperationQueue and liveOperationQueue drain.
+
+Confirm log marker [41F][QUEUE][SHUTDOWN] All queues drained.
+
+4. Validation Testing
+
+Run three-cycle tests for each mode:
+
+Paper mode: Balances $905 → $910 → $915.
+
+Live mode: Real Kraken account balance (~$834). No balance mutation.
+
+Each cycle must complete < 3 s without timeouts.
+
+Confirm sequential execution and matching telemetry logs.
+
+5. Expected Telemetry Markers
+[41F][QUEUE][LIVE] Job enqueued (userId=testuser123, action=start)
+[41F][QUEUE][LIVE] Job started
+[41F][QUEUE][LIVE] Job completed in 2.4s
+[41F][QUEUE][LIVE] Queue idle
+
+6. Deliverables to Document in replit.md
+
+Live mode queue integration details.
+
+Validation results (< 3 s average execution).
+
+Architect approval status.
+
+🧩 Post-Implementation Steps
+
+Upon successful validation:
+
+Proceed to Phase 41F-B (Request Deduplication & Telemetry Enhancement).
+
+Enable job tracking by (sessionId + userId + mode).
+
+Add deduplication guard to prevent duplicate starts or stops.
+
+✅ Expected Outcome
+
+No request collisions between UI and API.
+
+Deterministic execution of start/stop jobs across all modes.
+
+Uniform telemetry and traceability for Phase 41F foundation.
