@@ -274,7 +274,7 @@ export async function startPaperSimulation(
   
   // Phase 41F: Use operation queue instead of busy flag and operation lock
   try {
-    return await paperOperationQueue.enqueue(
+    const queueResult = await paperOperationQueue.enqueue(
     async () => {
       try {
         console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
@@ -300,6 +300,7 @@ export async function startPaperSimulation(
               mode: existingSession.mode,
               isIdempotentReuse: true,
             },
+            shouldBroadcast: false, // Phase 41F-B: No broadcast needed for idempotent reuse
           };
         }
         
@@ -323,6 +324,7 @@ export async function startPaperSimulation(
               isIdempotentReuse: true,
               wasReconciled: true,
             },
+            shouldBroadcast: true, // Phase 41F-B: Broadcast reconciliation
           };
         }
         
@@ -358,16 +360,10 @@ export async function startPaperSimulation(
         const dbSession = await storage.createPaperSimSession(sessionData);
         console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
 
-        // Phase 32.D-Fix.6 Fix #3: Activate engine FIRST for instant API response
-        // Phase 27.F.17b: State Persistence and Broadcast Verification
+        // Phase 41F-B: Move broadcast-triggering calls OUTSIDE queue job
+        // State updates will be done, but broadcasts happen after queue completes
         const mode = 'paper';
-        console.log('[ENGINE_CHECKPOINT_4] Setting engine active state (fast path)...');
-        await tradingStateSync.setEngineActive(userId, true, mode);
-        console.log('[ENGINE_CHECKPOINT_5] Engine active state set successfully');
-        
-        // Phase 32.D-Fix.1: Explicitly set trading mode to paper
-        await tradingStateSync.setTradingMode(userId, 'paper', userId, 'Paper simulation started');
-        console.log('[32.D-Fix.1] ✅ Paper trading mode activated globally');
+        console.log('[ENGINE_CHECKPOINT_4] Queued job - skipping broadcasts (will fire after queue completion)');
         
         // Phase 32.D-Fix.6 Fix #3: Populate watchlist asynchronously in background
         if (!options?.skipAutoWatchlist) {
@@ -447,6 +443,7 @@ export async function startPaperSimulation(
             mode: dbSession.mode,
             startingBalance: dbSession.startingBalance,
           },
+          shouldBroadcast: true, // Phase 41F-B: Trigger broadcasts after queue completion
         };
       } catch (error: any) {
         // Phase 41C-FIX: Complete rollback - clean up manager AND database session
@@ -473,6 +470,24 @@ export async function startPaperSimulation(
       action: 'start',
     }
   );
+    
+    // Phase 41F-B-2: Fire state sync & broadcasts OUTSIDE queue job (non-blocking)
+    if (queueResult.shouldBroadcast) {
+      console.log('[41F-B][BROADCAST] Firing engine state sync and broadcasts (async, non-blocking)');
+      const mode = 'paper';
+      
+      // Update trading state (triggers internal broadcasts) - don't block HTTP response
+      tradingStateSync.setEngineActive(userId, true, mode)
+        .then(() => tradingStateSync.setTradingMode(userId, 'paper', userId, 'Paper simulation started'))
+        .then(() => {
+          console.log('[41F-B][BROADCAST] Engine state sync completed successfully');
+        })
+        .catch(err => {
+          console.error('[41F-B][BROADCAST] Error in state sync/broadcast:', err);
+        });
+    }
+    
+    return queueResult;
   } catch (error: any) {
     console.error('[41F][QUEUE] startPaperSimulation queue error:', error);
     return {
@@ -495,7 +510,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
   
   // Phase 41F: Use operation queue instead of busy flag and operation lock
   try {
-    return await paperOperationQueue.enqueue(
+    const queueResult = await paperOperationQueue.enqueue(
     async () => {
       try {
         // Check database for running session (single source of truth)
@@ -521,6 +536,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
             success: true,
             message: 'Paper trading simulation already stopped',
             data: { isIdempotentReuse: true },
+            shouldBroadcast: false, // Phase 41F-B: No broadcast needed for idempotent reuse
           };
         }
 
@@ -559,36 +575,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
 
         console.log(`[PaperSimService] Stopped session: ${existingSession.sessionId}, duration: ${runDuration}ms`);
         console.log('[PaperSimService] Manager cleared (service + global), DB session ended');
-        console.log('[41E-S] Critical teardown complete, preparing HTTP response...');
-
-        // Phase 41E-S: Non-blocking broadcast and verification
-        // Phase 27.F.17b: State Persistence and Broadcast Verification
-        // Phase 27.F.13.O: Mode-based global context
-        const mode = 'paper';
-        const t2 = Date.now();
-        
-        // Trigger state broadcast asynchronously (non-blocking)
-        tradingStateSync.setEngineActive(userId, false, mode)
-          .then(async () => {
-            console.log(`[41E-S][TIMING] State broadcast completed in ${Date.now() - t2}ms`);
-            
-            // Verify system_context status in background
-            const t3 = Date.now();
-            const stoppedContext = await storage.getSystemContext(mode);
-            console.log(`[41E-S][TIMING] Context verification completed in ${Date.now() - t3}ms`);
-            
-            if (stoppedContext && !stoppedContext.isEngineActive) {
-              console.log('[StateSync] paper_engine_status = STOPPED confirmed');
-              console.log('[41E-S] ✅ Verified system_context.isEngineActive = false (background)');
-            } else {
-              console.warn('[41E-S] ⚠️ Failed to verify engine inactive state (background)');
-            }
-          })
-          .catch(err => {
-            console.warn('[41E-S] Background broadcast/verification error:', err.message);
-          });
-        
-        console.log('[41E-S] State broadcast triggered asynchronously (HTTP response not blocked)');
+        console.log('[41F-B] Critical teardown complete, preparing HTTP response...');
 
         // Emit cluster bus event for distributed awareness
         try {
@@ -616,6 +603,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
             stoppedAt,
             runDurationMs: runDuration,
           },
+          shouldBroadcast: true, // Phase 41F-B: Trigger broadcasts after queue completion
         };
       } catch (error: any) {
         console.error('[PaperSimService] Error during stop:', error);
@@ -628,6 +616,35 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
       action: 'stop',
     }
   );
+    
+    // Phase 41F-B-2: Fire state sync & broadcasts OUTSIDE queue job (non-blocking)
+    if (queueResult.shouldBroadcast) {
+      console.log('[41F-B][BROADCAST] Firing engine stop state sync and broadcasts (async, non-blocking)');
+      const mode = 'paper';
+      const t2 = Date.now();
+      
+      // Update trading state (triggers internal broadcasts) - don't block HTTP response
+      tradingStateSync.setEngineActive(userId, false, mode)
+        .then(async () => {
+          console.log(`[41F-B][BROADCAST] State sync completed in ${Date.now() - t2}ms`);
+          
+          // Verify system_context status in background
+          const t3 = Date.now();
+          const stoppedContext = await storage.getSystemContext(mode);
+          console.log(`[41F-B][BROADCAST] Context verification completed in ${Date.now() - t3}ms`);
+          
+          if (stoppedContext && !stoppedContext.isEngineActive) {
+            console.log('[41F-B][BROADCAST] ✅ Verified system_context.isEngineActive = false');
+          } else {
+            console.warn('[41F-B][BROADCAST] ⚠️ Failed to verify engine inactive state');
+          }
+        })
+        .catch(err => {
+          console.error('[41F-B][BROADCAST] Error in state sync/broadcast:', err);
+        });
+    }
+    
+    return queueResult;
   } catch (error: any) {
     console.error('[41F][QUEUE] stopPaperSimulation queue error:', error);
     return {

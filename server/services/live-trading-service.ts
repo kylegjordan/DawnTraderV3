@@ -108,7 +108,7 @@ This is a high-risk operation and requires your explicit consent.`;
     console.log(`[41F][QUEUE][LIVE] activateLiveTrading called (userId: ${userId})`);
     
     try {
-      return await liveOperationQueue.enqueue(
+      const queueResult = await liveOperationQueue.enqueue(
         async () => {
           try {
             console.log(`[LiveTrading] Activating live mode for user ${userId} (post-approval)`);
@@ -140,6 +140,7 @@ This is a high-risk operation and requires your explicit consent.`;
         return {
           success: true,
           message: 'Live trading already activated.',
+          shouldBroadcast: false, // Phase 41F-B: No broadcast needed for idempotent reuse
         };
       }
 
@@ -191,17 +192,8 @@ This is a high-risk operation and requires your explicit consent.`;
         console.warn(`[LiveTrading] Failed to emit cluster bus event:`, busError.message);
       }
 
-      // 5. Broadcast state change
-      try {
-        const { contextBridge } = await import('./context-bridge');
-        await contextBridge.broadcast({
-          type: 'state_update',
-          payload: { tradingMode: 'live', status: 'active' },
-          userId,
-        });
-      } catch (bridgeError: any) {
-        console.warn(`[LiveTrading] Failed to broadcast via context bridge:`, bridgeError.message);
-      }
+      // Phase 41F-B-3: Move WebSocket broadcast OUTSIDE queue job
+      console.log('[41F-B][BROADCAST] Queued job - skipping broadcast (will fire after queue completion)');
 
             console.log(`[LiveTrading] ✅ Live trading activated successfully for user ${userId}`);
 
@@ -213,6 +205,7 @@ This is a high-risk operation and requires your explicit consent.`;
                 status: 'active',
                 startedAt: new Date().toISOString(),
               },
+              shouldBroadcast: true, // Phase 41F-B: Trigger broadcasts after queue completion
             };
           } catch (error: any) {
             console.error(`[LiveTrading] Error in activateLiveTrading job:`, error);
@@ -229,6 +222,23 @@ This is a high-risk operation and requires your explicit consent.`;
           action: 'start',
         }
       );
+      
+      // Phase 41F-B-3: Fire WebSocket broadcasts OUTSIDE queue job (non-blocking)
+      if (queueResult.shouldBroadcast) {
+        console.log('[41F-B][BROADCAST] Firing live mode state broadcasts (async, non-blocking)');
+        
+        // Fire broadcast asynchronously - don't block HTTP response
+        const { contextBridge } = await import('./context-bridge');
+        contextBridge.broadcast({
+          type: 'state_update',
+          payload: { tradingMode: 'live', status: 'active' },
+          userId,
+        }).catch((err: Error) => {
+          console.error('[41F-B][BROADCAST] Error broadcasting live mode activation:', err);
+        });
+      }
+      
+      return queueResult;
     } catch (error: any) {
       console.error(`[41F][QUEUE][LIVE] activateLiveTrading queue error:`, error);
       return {
@@ -247,7 +257,7 @@ This is a high-risk operation and requires your explicit consent.`;
     console.log(`[41F][QUEUE][LIVE] stopLiveTrading called (userId: ${userId})`);
     
     try {
-      return await liveOperationQueue.enqueue(
+      const queueResult = await liveOperationQueue.enqueue(
         async () => {
           try {
             console.log(`[LiveTrading] Stop request for user ${userId}`);
@@ -264,6 +274,7 @@ This is a high-risk operation and requires your explicit consent.`;
             success: true,
             message: 'Live trading is not currently active.',
             data: { wasRunning: false },
+            shouldBroadcast: false, // Phase 41F-B: No broadcast needed for idempotent reuse
           };
         }
       }
@@ -299,17 +310,8 @@ This is a high-risk operation and requires your explicit consent.`;
         console.warn(`[LiveTrading] Failed to emit cluster bus event:`, busError.message);
       }
 
-      // 5. Broadcast state change
-      try {
-        const { contextBridge } = await import('./context-bridge');
-        await contextBridge.broadcast({
-          type: 'state_update',
-          payload: { tradingMode: 'stopped', previousMode: 'live' },
-          userId,
-        });
-      } catch (bridgeError: any) {
-        console.warn(`[LiveTrading] Failed to broadcast via context bridge:`, bridgeError.message);
-      }
+      // Phase 41F-B-3: Move WebSocket broadcast OUTSIDE queue job
+      console.log('[41F-B][BROADCAST] Queued job - skipping broadcast (will fire after queue completion)');
 
             console.log(`[LiveTrading] ✅ Live trading stopped successfully for user ${userId}`);
 
@@ -321,6 +323,7 @@ This is a high-risk operation and requires your explicit consent.`;
                 previousMode: 'live',
                 stoppedAt: new Date().toISOString(),
               },
+              shouldBroadcast: true, // Phase 41F-B: Trigger broadcasts after queue completion
             };
           } catch (error: any) {
             console.error(`[LiveTrading] Error in stopLiveTrading job:`, error);
@@ -337,6 +340,23 @@ This is a high-risk operation and requires your explicit consent.`;
           action: 'stop',
         }
       );
+      
+      // Phase 41F-B-3: Fire WebSocket broadcasts OUTSIDE queue job (non-blocking)
+      if (queueResult.shouldBroadcast) {
+        console.log('[41F-B][BROADCAST] Firing live mode stop broadcasts (async, non-blocking)');
+        
+        // Fire broadcast asynchronously - don't block HTTP response
+        const { contextBridge } = await import('./context-bridge');
+        contextBridge.broadcast({
+          type: 'state_update',
+          payload: { tradingMode: 'stopped', previousMode: 'live' },
+          userId,
+        }).catch((err: Error) => {
+          console.error('[41F-B][BROADCAST] Error broadcasting live mode stop:', err);
+        });
+      }
+      
+      return queueResult;
     } catch (error: any) {
       console.error(`[41F][QUEUE][LIVE] stopLiveTrading queue error:`, error);
       return {
