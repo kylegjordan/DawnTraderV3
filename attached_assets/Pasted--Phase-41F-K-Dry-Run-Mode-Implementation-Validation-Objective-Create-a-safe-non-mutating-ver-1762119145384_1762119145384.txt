@@ -1,0 +1,149 @@
+⚙️ Phase 41F-K — Dry-Run Mode Implementation & Validation
+
+Objective
+Create a safe, non-mutating version of the full trade pipeline that runs all trade logic (strategy, engine, risk, telemetry, anomaly hooks) without writing to the database or altering the portfolio.
+
+This allows complete trade-flow validation under production conditions with zero state mutation.
+
+Credentials
+username=testuser123 password=SecurePass123!
+
+A) Environment Configuration
+
+Add the following to .env (or set as process environment variables):
+
+DRYRUN_TRADING=true
+
+
+Optional supporting flags (for clarity):
+
+ENABLE_AUTO_RECOVERY=true
+AUTO_RECOVERY_DRYRUN=false
+
+B) Trading Engine Modifications
+
+File: server/services/trading-engine.ts
+
+Insert early in the trade-execution path — just before the normal order placement or DB persistence logic:
+
+if (process.env.DRYRUN_TRADING === "true") {
+  console.log(`[41F-K][DRYRUN] Simulating trade: ${tradeCandidate.symbol} (${tradeCandidate.action})`);
+  await telemetryService.recordTradeEvent("dryrun_trade", {
+    symbol: tradeCandidate.symbol,
+    action: tradeCandidate.action,
+    amount: tradeCandidate.amount,
+    price: tradeCandidate.price,
+    simulated: true
+  });
+  return { ok: true, simulated: true, ...tradeCandidate };
+}
+
+
+✅ This block:
+
+Executes all pre-trade validation and risk logic.
+
+Emits full telemetry and anomaly events.
+
+Skips persistence into paper_sim_trades, paper_sim_open_positions, and portfolio_overview.
+
+C) API Adjustments
+1️⃣ Skip DB writes
+
+Wrap database calls with a dry-run guard:
+
+if (process.env.DRYRUN_TRADING !== "true") {
+  await paperExecution.insertTrade(tradeCandidate);
+}
+
+2️⃣ Add a helper endpoint for testing
+
+In server/routes.ts, add (temporary for 41F-K only):
+
+apiRouter.post("/dryrun/trade/test", authenticateToken, async (req, res) => {
+  try {
+    const trade = await tradingEngine.executeTrade(req.body);
+    res.json({ ok: true, trade });
+  } catch (err) {
+    console.error("[41F-K][ERROR] Dryrun test failed", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+D) Telemetry & Health Integration
+
+Extend telemetry-service.ts and health-monitor.ts with awareness of dry-run events:
+
+if (event.type === "dryrun_trade") {
+  this.logAnomaly({
+    component: "tradePipeline",
+    metric: "dryrun",
+    level: "info",
+    message: `Dry-run trade executed (${event.symbol} ${event.action})`
+  });
+}
+
+
+✅ Dry-run trades now appear in the anomalies panel as informational entries (blue).
+
+E) Validation Script
+
+Create diagnostic-reports/phase-41F-K-dryrun-test.sh:
+
+#!/usr/bin/env bash
+set -e
+BASE="http://localhost:5000"
+USER="testuser123"; PASS="SecurePass123!"
+TOKEN=$(curl -s -X POST "$BASE/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$USER"'","password":"'"$PASS"'"}' | jq -r '.accessToken')
+
+echo "🚀 Phase 41F-K Dry-Run Validation"
+echo "Starting 3 simulated trades (no DB mutation)..."
+
+for SYMBOL in "BTC/USD" "ETH/USD" "LTC/USD"; do
+  curl -s -X POST "$BASE/api/dryrun/trade/test" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    -d '{"symbol":"'"$SYMBOL"'", "action":"buy", "amount":0.01}' | jq .
+done
+
+echo "=== Checking for anomalies ==="
+curl -s "$BASE/api/health/anomalies?limit=10" -H "Authorization: Bearer $TOKEN" | jq '.anomalies'
+echo "=== Checking portfolio ==="
+curl -s "$BASE/api/trading/status" -H "Authorization: Bearer $TOKEN" | jq '.portfolioOverview'
+
+
+Make executable:
+
+chmod +x diagnostic-reports/phase-41F-K-dryrun-test.sh
+
+
+Run:
+
+diagnostic-reports/phase-41F-K-dryrun-test.sh | tee diagnostic-reports/phase-41F-K-console.txt
+
+F) Pass / Fail Criteria
+Check	Expectation
+Trades execute successfully	✅ Each returns { simulated:true }
+Portfolio unchanged	✅ Balances identical pre- and post-test
+Anomalies show “dryrun_trade” entries only	✅ Level = info
+No auto-recovery triggered	✅
+Latency average < 120 ms	✅
+
+Fail if:
+
+Any trade modifies DB state.
+
+Any anomaly of level warning/critical appears.
+
+Portfolio value changes > 0.01 %.
+
+G) Deliverables
+
+phase-41F-K-dryrun-test.sh
+
+phase-41F-K-console.txt
+
+phase-41F-K-dryrun-validation.md (summary)
+
+Updated replit.md with Phase 41F-K summary and test outcomes.

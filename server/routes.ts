@@ -3826,6 +3826,99 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 41F-K: Dry-run mode test endpoint
+  apiRouter.post('/dryrun/trade/test', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    console.log('[41F-K][ENDPOINT] Dry-run trade test request:', req.body);
+    
+    try {
+      if (!req.user || !req.user.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const { symbol, action, amount, price } = req.body;
+
+      // Validate inputs
+      if (!symbol || !action || !amount) {
+        return res.status(400).json({ error: 'Missing required fields: symbol, action, amount' });
+      }
+
+      if (!['buy', 'sell'].includes(action)) {
+        return res.status(400).json({ error: 'Invalid action. Must be buy or sell' });
+      }
+
+      if (amount <= 0) {
+        return res.status(400).json({ error: 'Amount must be positive' });
+      }
+
+      // Get current price if not provided
+      const { KrakenService } = await import('./services/kraken.js');
+      const currentPrice = price || await KrakenService.getCurrentPrice(symbol);
+
+      console.log(`[41F-K][DRYRUN] Test trade: ${action} ${amount} ${symbol} @ $${currentPrice.toFixed(2)}`);
+
+      // Import trading engine for current mode
+      const mode = req.headers['x-app-mode'] as 'paper' | 'live' || 'paper';
+      const { TradingEngine } = await import('./services/trading-engine.js');
+      
+      // Get mode-based engine
+      const { ModeRegistry } = await import('./services/mode-registry.js');
+      const engine = ModeRegistry.getEngine(mode);
+
+      if (!engine) {
+        return res.status(500).json({ error: `Trading engine not found for mode: ${mode}` });
+      }
+
+      // Create a synthetic trade signal for dry-run testing
+      const tradeSignal = {
+        symbol,
+        action,
+        entryPrice: currentPrice,
+        stopPrice: currentPrice * (action === 'buy' ? 0.98 : 1.02), // 2% stop
+        targetPrice: currentPrice * (action === 'buy' ? 1.03 : 0.97), // 3% target
+        confidence: 0.85,
+        strategy: 'manual_dryrun_test',
+        goalAlignmentScore: 0.80,
+        finalScore: 0.82,
+        metadata: {
+          signal_type: 'dryrun_test',
+          test_mode: true,
+          manual_entry: true
+        }
+      };
+
+      // Execute through the trading engine (will be caught by dry-run check if DRYRUN_TRADING=true)
+      const trade = await (engine as any).executeTrade(tradeSignal, amount, currentPrice * amount * 0.02);
+
+      console.log('[41F-K][DRYRUN] Trade execution result:', {
+        id: trade.id,
+        symbol: trade.symbol,
+        simulated: trade.metadata?.simulated,
+        dryrun: trade.metadata?.dryrun
+      });
+
+      res.json({
+        ok: true,
+        simulated: trade.metadata?.simulated || false,
+        dryrun: trade.metadata?.dryrun || false,
+        trade: {
+          id: trade.id,
+          symbol: trade.symbol,
+          action,
+          quantity: parseFloat(trade.quantity),
+          entryPrice: parseFloat(trade.entryPrice),
+          stopPrice: parseFloat(trade.stopPrice),
+          targetPrice: parseFloat(trade.targetPrice),
+          strategy: trade.strategy,
+          timestamp: trade.createdAt
+        }
+      });
+
+    } catch (error: any) {
+      console.error('[41F-K][ERROR] Dry-run test failed:', error);
+      res.status(500).json({ ok: false, error: error.message || 'Dry-run test failed' });
+    }
+  });
+
   // Live Trading Routes (Phase 22.3)
   // Control live trading mode with manual approval requirements
   apiRouter.post('/live-trading/start', authenticateToken, async (req: AuthenticatedRequest, res) => {

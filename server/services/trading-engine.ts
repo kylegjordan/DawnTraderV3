@@ -375,6 +375,52 @@ export class TradingEngine {
       actualEntryPrice *= (1 + entrySlippage / 100);
     }
 
+    // Phase 41F-K: Dry-run mode check - simulate trade without DB mutation
+    if (process.env.DRYRUN_TRADING === 'true') {
+      console.log(`[41F-K][DRYRUN] Simulating trade: ${signal.symbol} (buy) qty=${filledQuantity.toFixed(8)}`);
+      console.log(`[41F-K][DRYRUN] Entry: ${actualEntryPrice.toFixed(2)}, Stop: ${signal.stopPrice.toFixed(2)}, Target: ${signal.targetPrice.toFixed(2)}`);
+      
+      // Record telemetry for dry-run trade
+      await telemetryService.recordTradeEvent('dryrun_trade', {
+        symbol: signal.symbol,
+        action: 'buy',
+        mode: this.mode,
+        amount: filledQuantity,
+        price: actualEntryPrice,
+        strategy: signal.strategy,
+        simulated: true
+      });
+      
+      // Return simulated trade object (matches Trade type but with simulated flag)
+      const simulatedTrade = {
+        id: `dryrun-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        mode: this.mode,
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        entryPrice: actualEntryPrice.toString(),
+        quantity: filledQuantity.toString(),
+        stopPrice: signal.stopPrice.toString(),
+        targetPrice: signal.targetPrice.toString(),
+        entryOrderId: entryOrderId || `dryrun-order-${Date.now()}`,
+        entryFee: entryFee.toString(),
+        entrySlippage: entrySlippage.toString(),
+        riskAmount: riskAmount.toString(),
+        status: 'open' as const,
+        createdAt: new Date(),
+        metadata: {
+          ...signal.metadata,
+          signalConfidence: signal.confidence,
+          goalAlignmentScore: signal.goalAlignmentScore,
+          finalScore: signal.finalScore,
+          simulated: true,
+          dryrun: true
+        }
+      } as any; // Cast to any to bypass type checking for simulated field
+      
+      console.log(`[41F-K][DRYRUN] ✅ Dry-run trade completed (no DB write)`);
+      return simulatedTrade;
+    }
+
     // Phase 27.F.15.B.3: Create mode-based trade record (no userId)
     const tradeData = {
       mode: this.mode,
