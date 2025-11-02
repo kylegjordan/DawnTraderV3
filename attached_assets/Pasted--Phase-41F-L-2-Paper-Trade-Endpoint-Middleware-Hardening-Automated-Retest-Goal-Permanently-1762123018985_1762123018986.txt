@@ -1,0 +1,183 @@
+⚙️ Phase 41F-L.2 — Paper Trade Endpoint & Middleware Hardening + Automated Retest
+
+Goal: Permanently eliminate the “Cannot convert undefined or null to object” class of failures by fixing middleware order, validating request bodies, and improving observability — then run the full 3-trade paper simulation.
+
+Test creds: testuser123 / SecurePass123!
+Runtime: compiled /dist build (from 41F-J.1)
+
+A) Middleware order & global error handling
+1) Ensure JSON body parser is mounted before routes
+
+File: server/index.ts (or your main server bootstrap)
+
+import express from "express";
+import morgan from "morgan";
+
+const app = express();
+
+// 1) Request logging first (will show Content-Type and basic info)
+app.use(morgan(':method :url :status - :res[content-length] bytes - :response-time ms'));
+
+// 2) JSON parser BEFORE any routes use req.body
+app.use(express.json({ limit: "1mb" }));
+
+// (optional) urlencoded if you need it elsewhere
+app.use(express.urlencoded({ extended: true }));
+
+// Mount API routes only after parsers
+import { apiRouter } from "./routes";
+app.use("/api", apiRouter);
+
+// 3) Global error handler LAST — catches thrown errors and sends JSON
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[GLOBAL][ERROR]", err?.stack || err);
+  res.status(err?.status || 500).json({ ok: false, error: err?.message || "Internal error" });
+});
+
+export default app;
+
+B) Route-local body guard + schema validation
+2) Add a small schema for the test trade body
+
+File: server/routes.ts
+
+import { z } from "zod";
+
+const TradeTestSchema = z.object({
+  symbol: z.string().min(3).default("BTC/USD"),
+  action: z.enum(["buy", "sell"]).default("buy"),
+  amount: z.number().positive().default(0.01)
+});
+
+// Optional route-local guard to reject wrong content types
+const requireJson = (req, res, next) => {
+  if (!req.is("application/json")) {
+    return res.status(415).json({ ok: false, error: "Content-Type application/json required" });
+  }
+  return next();
+};
+
+
+If zod isn’t already in your deps: npm i zod
+
+C) Harden /api/paper/trade/test endpoint (permanent)
+
+Replace the existing handler with this defensive, schema-validated version:
+
+/**
+ * [41F-L.2] Permanent — Paper Trade Test (schema-validated, defensive)
+ */
+apiRouter.post("/paper/trade/test", authenticateToken, requireJson, async (req, res, next) => {
+  try {
+    const parsed = TradeTestSchema.safeParse({
+      symbol: req?.body?.symbol,
+      action: req?.body?.action,
+      amount: typeof req?.body?.amount === "string" ? Number(req.body.amount) : req?.body?.amount
+    });
+
+    if (!parsed.success) {
+      console.warn("[41F-L.2][WARN] Body validation failed:", parsed.error.flatten());
+      return res.status(400).json({ ok: false, error: "Invalid body", details: parsed.error.flatten() });
+    }
+
+    const { symbol, action, amount } = parsed.data;
+
+    console.log(`[41F-L.2] Paper test trade → ${symbol} ${action} ${amount}`);
+
+    // Obtain paper engine safely (works with compiled build)
+    const { getEngine } = await import("../services/mode-registry.js");
+    const engine = getEngine?.("paper");
+    if (!engine) {
+      console.warn("[41F-L.2][WARN] Paper engine unavailable");
+      return res.status(503).json({ ok: false, error: "Paper engine unavailable" });
+    }
+
+    // Build & execute according to your engine’s API; if not available, call the service layer used in normal paper trades
+    const tradeCandidate = await engine.buildTrade?.(symbol, action, amount);
+    if (!tradeCandidate) {
+      return res.status(500).json({ ok: false, error: "Trade construction failed" });
+    }
+
+    const result = await engine.executeTrade?.(tradeCandidate);
+    console.log("[41F-L.2][INFO] Paper test trade executed:", result?.id ?? "(no-id)");
+
+    return res.json({ ok: true, trade: result });
+  } catch (err) {
+    console.error("[41F-L.2][ERROR] Paper trade test failed:", err);
+    return next(err); // handled by global error handler
+  }
+});
+
+
+If your paper engine doesn’t expose buildTrade/executeTrade, replace those two calls with the same service path your UI uses for real paper trades (e.g., paperExecution.createAndInsert(...), then broadcast). The schema guard + middleware order + global error handler remain the same and are the key permanent fixes.
+
+D) Observability: route-level debug logging
+
+Directly above the handler, add a tiny probe for this route only:
+
+apiRouter.use("/paper/trade/test", (req, _res, next) => {
+  console.log("[41F-L.2][REQ]", {
+    url: req.url,
+    method: req.method,
+    ct: req.headers["content-type"],
+    hasBody: !!req.body
+  });
+  next();
+});
+
+
+This gives you a quick “is JSON parsed?” confirmation on each call.
+
+E) Rebuild & restart (compiled build)
+npm run clear-cache
+npm run build
+npm start
+
+
+Wait for:
+
+[41F-J] REGISTRATION: /api/paper/trade/test
+Server listening on port 5000
+
+F) Automated retest
+1) Scripted fallback (runs anywhere)
+cd diagnostic-reports
+bash phase-41F-L-scripted.sh | tee phase-41F-L2-console.txt
+
+2) Playwright (preferred, human-simulation)
+npx playwright test tests/phase-41F-L-simulation.spec.ts --reporter=list
+
+G) Pass/Fail gates
+
+PASS when all true:
+
+All 3 trades return 200 with bodies like { ok: true, trade: {...} }
+
+Portfolio updates reflect the three trades
+
+diagnostic-reports/phase-41F-L-trace.ndjson contains trade_* and health_engine records
+
+0 critical anomalies; ≤1 transient warning
+
+Avg broadcast latency < 120 ms
+
+FAIL if any:
+
+500 error returns
+
+Portfolio not updated
+
+Missing broadcasts
+
+More than one warning or any critical
+
+H) Artifacts to attach
+
+phase-41F-L2-console.txt (scripted run)
+
+Playwright output & screenshot (phase-41F-L-final.png)
+
+phase-41F-L-trace.ndjson (backend trace)
+
+phase-41F-L1-validation.md → update to PASS with new evidence

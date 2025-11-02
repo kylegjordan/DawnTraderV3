@@ -442,12 +442,11 @@ app.use((req, res, next) => {
     }
   });
 
+  // [41F-L.2] Global error handler - catches thrown errors and sends JSON
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
+    console.error("[GLOBAL][ERROR]", err?.stack || err);
+    res.status(err?.status || 500).json({ ok: false, error: err?.message || "Internal error" });
   });
 
   // importantly only setup vite in development and after
