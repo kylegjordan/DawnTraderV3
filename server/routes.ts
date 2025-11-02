@@ -2278,21 +2278,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       }
       
-      // Phase 27.F.14.D-POST: Check balance confirmation for paper mode
-      if (mode === 'paper') {
-        const { checkBalanceConfirmationRequired } = await import('./services/paper-sim-service.js');
-        const confirmationCheck = await checkBalanceConfirmationRequired('paper');
-        
-        if (confirmationCheck.required) {
-          console.log('[PaperSim] Balance confirmation required, prompting user');
-          return res.json({
-            success: false,
-            requiresConfirmation: true,
-            currentBalance: confirmationCheck.currentBalance,
-            message: 'Please confirm your starting portfolio balance'
-          });
-        }
-      }
+      // Phase 41D: Balance confirmation system removed - accept startingBalance directly
+      console.log('[41D] Starting engine without balance confirmation gate');
       
       // Phase 27.F.13.I: Wrap engine start in 10-second timeout
       const ENGINE_START_TIMEOUT = 10000; // 10 seconds
@@ -4995,57 +4982,31 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // ==================== End Phase 8.5 ====================
 
-  // Phase 27.F.14.D-POST: Confirm portfolio balance before starting
+  // Phase 41D: Balance confirmation endpoint disabled (no longer required)
+  // Endpoint kept as no-op for backwards compatibility
   apiRouter.post('/paper-sim/confirm-balance', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { balance, mode } = req.body;
-      
-      if (!balance || balance <= 0) {
-        return res.status(400).json({ error: 'Invalid balance provided' });
-      }
-      
-      const tradingMode = (mode || 'paper') as 'live' | 'paper';
-      
-      // Phase 27.F.15.C MSI: Live mode balance safeguards - reject manual edits
-      if (tradingMode === 'live') {
-        console.error('[27.F.15.C][MSI] ❌ Manual balance edit rejected for live mode');
-        return res.status(403).json({ 
-          error: 'Live mode balance cannot be manually edited - it must be sourced from exchange API',
-          code: 'MSI_LIVE_BALANCE_PROTECTED'
-        });
-      }
-      
-      const { confirmPortfolioBalance } = await import('./services/paper-sim-service.js');
-      await confirmPortfolioBalance(tradingMode, parseFloat(balance));
-      
-      // Phase 27.F.14.E: Broadcast portfolio balance update to all clients
-      console.log('[Phase-27.F.14.E] Broadcasting portfolio balance update:', balance);
-      const { contextBridge } = await import('./services/context-bridge.js');
-      await contextBridge.broadcast({
-        type: 'portfolio_balance_updated',
-        payload: {
-          balance: parseFloat(balance),
-          mode: tradingMode,
-          reason: 'balance_confirmed',
-          timestamp: new Date().toISOString()
-        },
-        mode: tradingMode
-      });
-      
-      res.json({ success: true, message: `Balance confirmed: $${balance}` });
+      const { balance } = req.body;
+      console.log('[41D] confirm-balance called (no-op) - balance confirmation system disabled');
+      res.json({ success: true, message: `Balance confirmation no longer required (accepted: $${balance})` });
     } catch (error: any) {
-      console.error('Error confirming portfolio balance:', error);
-      res.status(500).json({ error: error.message || 'Failed to confirm balance' });
+      res.status(500).json({ error: error.message });
     }
   });
 
   apiRouter.post('/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const t0 = Date.now();
+    console.log(`[41D-ROUTE-1] /paper-sim/start entered at ${new Date().toISOString()}`);
+    
     const userId = req.user!.id;
     const { mode = 'continue', initialBalance } = req.body; // Phase 27.F.14.I: Support continue/new modes
+    console.log(`[41D-ROUTE-2] userId: ${userId}, mode: ${mode}, balance: ${initialBalance}`);
     
     try {
+      console.log(`[41D-ROUTE-3] Entering try block (t+${Date.now()-t0}ms)`);
       // Phase 27.F.14.J: Handle "Start New Simulation" mode
       if (mode === 'new') {
+        console.log(`[41D-ROUTE-4] Mode is 'new' (t+${Date.now()-t0}ms)`);
         const balance = initialBalance ? parseFloat(initialBalance) : 800;
         console.log(`[Phase-27.F.14.J] Starting NEW simulation with balance $${balance}`);
         
@@ -5175,19 +5136,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log('[LATTI][Paper] Baseline continued without reset (persistent mode)');
       }
       
-      // Phase 27.F.14.D-POST: Check if balance confirmation is required
-      const { checkBalanceConfirmationRequired } = await import('./services/paper-sim-service.js');
-      const confirmationCheck = await checkBalanceConfirmationRequired('paper');
-      
-      if (confirmationCheck.required) {
-        console.log('[PaperSim] Balance confirmation required, prompting user');
-        return res.json({
-          success: false,
-          requiresConfirmation: true,
-          currentBalance: confirmationCheck.currentBalance,
-          message: 'Please confirm your starting portfolio balance'
-        });
-      }
+      // Phase 41D: Balance confirmation removed - continue directly
+      console.log('[41D] Continuing simulation without balance confirmation gate');
       
       // Continue with existing baseline
       const { startPaperSimulation } = await import('./services/paper-sim-service.js');

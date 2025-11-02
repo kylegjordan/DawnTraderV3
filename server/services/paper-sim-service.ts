@@ -215,8 +215,12 @@ export async function startPaperSimulation(
     skipAutoWatchlist?: boolean; // Phase 27.F.13.I: Skip slow Kraken API calls during startup
   }
 ): Promise<PaperSimResult> {
+  const t0 = Date.now();
+  console.log(`[41D-DEBUG-1] startPaperSimulation entered (userId: ${userId}, balance: ${options?.startingBalance})`);
+  
   try {
     // Phase 33.A: Fast busy check to prevent overlapping requests
+    console.log(`[41D-DEBUG-2] Checking busy flag (t+${Date.now()-t0}ms)`);
     if (global.globalPaperSimBusyFlag) {
       console.log('[Phase-33.A] Engine busy, rejecting start request');
       return {
@@ -227,19 +231,28 @@ export async function startPaperSimulation(
     }
     
     // Set busy flag
+    console.log(`[41D-DEBUG-3] Setting busy flag (t+${Date.now()-t0}ms)`);
     global.globalPaperSimBusyFlag = true;
     
     // Wait for any pending operations to complete
+    console.log(`[41D-DEBUG-4] Checking operation lock (t+${Date.now()-t0}ms)`);
     if (global.globalPaperSimOperationLock) {
+      console.log(`[41D-DEBUG-4a] Waiting for pending operation (t+${Date.now()-t0}ms)`);
       await global.globalPaperSimOperationLock;
+      console.log(`[41D-DEBUG-4b] Pending operation complete (t+${Date.now()-t0}ms)`);
     }
 
     // Create lock to serialize all start/stop operations
     const startPromise = (async () => {
       try {
+        console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
         // Phase 27.F.9: Prevent duplicates by checking both DB and global state atomically
         const existingSession = await storage.getActivePaperSimSession(userId);
+        console.log(`[41D-DEBUG-6] DB check complete - exists: ${!!existingSession} (t+${Date.now()-t0}ms)`);
+        
         const existingManager = getGlobalPaperSimManager();
+        console.log(`[41D-DEBUG-7] Manager check complete - exists: ${!!existingManager} (t+${Date.now()-t0}ms)`);
+
         
         if (existingSession && existingManager) {
           // IDEMPOTENT: Both session and manager exist, return success

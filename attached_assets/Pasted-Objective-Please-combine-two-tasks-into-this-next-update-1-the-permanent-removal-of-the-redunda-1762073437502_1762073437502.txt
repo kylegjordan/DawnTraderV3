@@ -1,0 +1,64 @@
+Objective:
+Please combine two tasks into this next update — (1) the permanent removal of the redundant 24-hour balance-confirmation system, and (2) a focused debugging pass on the /api/paper-sim/start endpoint timeout so we can achieve a clean start/stop/start cycle.
+
+1️⃣ Permanent Removal – 24-Hour Balance Confirmation
+
+Please remove the 24-hour balance confirmation requirement entirely from the paper trading simulation logic.
+This includes:
+
+Deleting or permanently bypassing any call to checkBalanceConfirmationRequired() in paper-sim-service.ts.
+
+Removing or disabling the /api/paper-sim/confirm-balance route and any code that forces balance confirmation before engine start.
+
+Ensuring the /api/paper-sim/start endpoint always accepts a startingBalance parameter directly and proceeds immediately to initialization without additional validation.
+
+Rationale:
+This mechanism was originally a sandbox safety check, but it’s redundant for our controlled test and development environment.
+Every simulation is either explicitly new or a deliberate continuation. The confirmation gate only introduces unnecessary latency, timeouts, and state-sync issues.
+
+2️⃣ Debugging – /api/paper-sim/start Timeout
+
+Once the confirmation logic is removed, please investigate and resolve why the /api/paper-sim/start endpoint is hanging before reaching the engine initialization code.
+
+Symptoms:
+
+The HTTP request hangs >40 seconds, never returns.
+
+No [ENGINE_CHECKPOINT_12] log entries appear.
+
+Engine state shows isRunning:true but hasDbSession:false.
+
+Likely causes: DB lock, auth middleware deadlock, or a stale globalPaperSimBusyFlag.
+
+Please:
+
+Add temporary log statements around each pre-engine step (auth middleware, DB session creation, global busy flag check).
+
+Confirm the exact line where the request stalls.
+
+Purge or reset any stale simulation sessions or flags before running this test.
+
+3️⃣ Test Parameters
+
+After the above changes:
+
+Run an API-direct start/stop test (no UI) using a new balance of $825.
+
+Verify:
+
+/api/paper-sim/start responds within 5 seconds.
+
+[ENGINE_CHECKPOINT_12] Manager started successfully appears in logs.
+
+/api/paper-sim/status shows both hasDbSession:true and hasManager:true.
+
+/api/paper-sim/stop returns normally and clears both flags.
+
+Immediately starting again works without desync.
+
+Once this sequence succeeds, we’ll proceed with the full 15-minute telemetry simulation test.
+
+Summary:
+🔧 Remove the 24-hour balance confirmation system entirely.
+🧩 Debug and fix the /api/paper-sim/start pre-init timeout.
+🚀 Validate start/stop/start works cleanly using $825 balance.
