@@ -1,0 +1,169 @@
+⚙️ Phase 41F-L — Three-Trade Paper-Mode Simulation (Human-Interactive Validation)
+
+Objective
+Confirm end-to-end paper-trading flow — UI actions, backend trade execution, portfolio updates, and telemetry broadcasts — all under human-simulated conditions.
+If Playwright is available, use real cursor/keyboard automation; otherwise fall back to headless scripted API calls that follow the same sequence.
+
+A) Environment Configuration
+1️⃣ Runtime flags
+
+In .env (or environment variables):
+
+DRYRUN_TRADING=false
+ENABLE_AUTO_RECOVERY=true
+AUTO_RECOVERY_DRYRUN=false
+ACTIVE_MODE=paper
+
+2️⃣ Verify build pipeline (from 41F-J.1)
+npm run clear-cache && npm run build
+npm start
+
+
+✅ Confirm [41F-J] REGISTRATION and health_engine broadcast logs on startup.
+
+B) Playwright Human-Simulation Test
+1️⃣ Dependencies
+
+Install Playwright and browsers:
+
+npm install -D playwright
+npx playwright install
+
+2️⃣ Create test spec
+
+tests/phase-41F-L-simulation.spec.ts
+
+import { test, expect } from "@playwright/test";
+
+test("Phase 41F-L Three-Trade Paper Simulation", async ({ page }) => {
+  // Launch the monitoring dashboard
+  await page.goto("http://localhost:5000");
+  await page.waitForTimeout(2000);
+
+  // Login as testuser123
+  await page.fill('input[name="username"]', "testuser123");
+  await page.fill('input[name="password"]', "SecurePass123!");
+  await page.click('button:has-text("Login")');
+  await page.waitForSelector("text=System Monitoring");
+
+  // Confirm paper mode active
+  await expect(page.locator("text=Mode: PAPER")).toBeVisible();
+
+  // --- TRADE 1 ---
+  await page.click('button:has-text("New Trade")');
+  await page.fill('input[name="symbol"]', "BTC/USD");
+  await page.fill('input[name="amount"]', "0.01");
+  await page.click('button:has-text("Buy")');
+  await page.waitForTimeout(3000);
+
+  // --- TRADE 2 ---
+  await page.click('button:has-text("New Trade")');
+  await page.fill('input[name="symbol"]', "ETH/USD");
+  await page.fill('input[name="amount"]', "0.05");
+  await page.click('button:has-text("Buy")');
+  await page.waitForTimeout(3000);
+
+  // --- TRADE 3 ---
+  await page.click('button:has-text("New Trade")');
+  await page.fill('input[name="symbol"]', "BTC/USD");
+  await page.fill('input[name="amount"]', "0.01");
+  await page.click('button:has-text("Sell")');
+  await page.waitForTimeout(3000);
+
+  // Capture portfolio overview
+  const portfolio = await page.locator("#portfolio-overview").innerText();
+  console.log("[41F-L] Portfolio overview:", portfolio);
+
+  // Confirm trades appear in history
+  await page.click('button:has-text("Trade History")');
+  const historyText = await page.locator("#trade-history").innerText();
+  console.log("[41F-L] Trade History:", historyText);
+
+  // Check telemetry status
+  await page.click('button:has-text("System Monitoring")');
+  await expect(page.locator("text=System Status: OK")).toBeVisible();
+
+  await page.screenshot({ path: "diagnostic-reports/phase-41F-L-final.png", fullPage: true });
+});
+
+3️⃣ Run the Playwright test
+npx playwright test tests/phase-41F-L-simulation.spec.ts --reporter=list
+
+
+✅ Expected console output:
+
+[41F-L] Trade History: 3 trades
+[41F-L] Portfolio overview: totalValue $10,417.62
+
+C) Backend Recording
+
+Enable backend tracing during the test to log every telemetry and broadcast event.
+
+File: server/services/context-bridge.ts
+
+Add:
+
+if (update?.type?.startsWith("trade_") || update?.type === "health_engine") {
+  const record = { ts: Date.now(), type: update.type, payload: update.payload };
+  fs.appendFileSync("diagnostic-reports/phase-41F-L-trace.ndjson", JSON.stringify(record) + "\n");
+}
+
+
+✅ Produces phase-41F-L-trace.ndjson with every broadcast and health update.
+
+D) Scripted Fallback (if Playwright not available)
+
+Create diagnostic-reports/phase-41F-L-scripted.sh:
+
+#!/usr/bin/env bash
+set -e
+BASE="http://localhost:5000"
+USER="testuser123"; PASS="SecurePass123!"
+TOKEN=$(curl -s -X POST "$BASE/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"'"$USER"'","password":"'"$PASS"'"}' | jq -r '.accessToken')
+
+echo "🚀 Running scripted 3-trade paper simulation"
+for T in "BTC/USD buy 0.005" "ETH/USD buy 0.05" "BTC/USD sell 0.005"; do
+  set -- $T
+  curl -s -X POST "$BASE/api/paper/trade/test" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"symbol":"'"$1"'", "action":"'"$2"'", "amount":'"$3"'}' | jq .
+  sleep 3
+done
+
+echo "=== Portfolio ==="
+curl -s "$BASE/api/trading/status" -H "Authorization: Bearer $TOKEN" | jq '.portfolioOverview'
+
+echo "=== Anomalies ==="
+curl -s "$BASE/api/health/anomalies?limit=10" -H "Authorization: Bearer $TOKEN" | jq '.anomalies'
+
+E) Validation Criteria
+Check	Expectation
+UI/Playwright test completes	✅
+Three trades executed	✅ 3 entries in history
+Portfolio updated	✅ totalValue changes
+Broadcasts logged	✅ phase-41F-L-trace.ndjson contains trade & health events
+System status	✅ “OK” or “WARN (transient)”
+Anomalies	≤ 1 warning, 0 critical
+
+Fail if:
+
+Any trade returns 500 or null.
+
+Portfolio fails to update.
+
+Missing broadcast records or anomalies > 1 warning.
+
+F) Deliverables
+
+phase-41F-L-simulation.spec.ts (Playwright test)
+
+phase-41F-L-trace.ndjson (backend event log)
+
+phase-41F-L-console.txt (test output)
+
+phase-41F-L-final.png (screenshot)
+
+phase-41F-L-validation.md (summary report)

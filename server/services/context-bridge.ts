@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { nanoid } from 'nanoid';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
+import { appendFileSync } from 'fs';
 
 export interface ContextUpdate {
   type: 'state_update' | 'chat_update' | 'config_update' | 'trade_update' | 'safety_event' | 'kill_switch_changed' | 'ethical_event' | 'ethics_federation_sync_complete' | 'ethics_conflict_updated' | 'trading_state_changed' | 'portfolio_balance_updated' | 'alerts_updated' | 'mode_status_updated' | 'metrics_updated' | 'price_updated' | 'guardrail.kill_switch.tripped' | 'guardrail.kill_switch.reset' | 'guardrail.override.conflict' | 'guardrail.policy.updated' | 'guardrails_updated' | 'tuning_policy_updated' | 'guardrail.override.changed' | 'guardrails_v2_updated' | 'goals_preset_changed' | 'trading_data_updated' | 'background_jobs_complete' | 'health_engine' | 'health_recovery' | 'trade_event';
@@ -117,6 +118,22 @@ class ContextBridge extends EventEmitter {
     // Phase 34.A + 41.2: Detailed broadcast payload logging for diagnostics (safe stringify)
     const payloadStr = update.payload ? JSON.stringify(update.payload).substring(0, 300) : 'undefined';
     console.log(`[34.A][BROADCAST] type=${update.type}, payload=${payloadStr}`);
+
+    // Phase 41F-L: Record trade and health broadcasts to NDJSON trace file
+    if (update.type.startsWith('trade_') || update.type === 'health_engine' || update.type === 'trade_event') {
+      try {
+        const record = { 
+          ts: Date.now(), 
+          type: update.type, 
+          payload: update.payload,
+          mode: update.mode,
+          traceId: fullUpdate.traceId
+        };
+        appendFileSync('diagnostic-reports/phase-41F-L-trace.ndjson', JSON.stringify(record) + '\n');
+      } catch (err) {
+        // Silent fail - don't break broadcasts for tracing
+      }
+    }
 
     // Send to filtered clients with retry logic
     const promises = targetClients.map(([ws, metadata]) => 
