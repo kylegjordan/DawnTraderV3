@@ -47,6 +47,8 @@ The `MarketEvaluationService` (`server/services/market-evaluation.ts`) unifies a
 
 **Trade Telemetry Hardening & Broadcast Optimization (Phase 41F-I)** implements comprehensive trade lifecycle telemetry with health monitor integration and optimized broadcast thresholds. Created `TelemetryService` (`server/services/telemetry-service.ts`) with `recordTradeEvent()` and `recordTradeMetric()`. Integrated telemetry hooks across `TradingEngine`, `RiskManager`, and `StrategyEngine`.
 
+**Dry-Run Mode (Phase 41F-K)** introduces safe, non-mutating trade pipeline validation. Trading engine checks `process.env.DRYRUN_TRADING` and skips `storage.createTrade()` when enabled, returning simulated trade objects with telemetry recording. Standalone test endpoint `/api/dryrun/trade/test` validates trade execution without requiring running engines. Enables zero-risk validation of trade logic, strategy signals, and risk calculations.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
