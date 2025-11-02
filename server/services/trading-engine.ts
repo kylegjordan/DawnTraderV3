@@ -5,6 +5,7 @@ import { SignalOrchestrator } from './signal-orchestrator';
 import { storage } from '../storage';
 import { Trade, TradingSettings } from '@shared/schema';
 import { telemetryTrace } from './telemetry-trace.js';
+import { telemetryService } from './telemetry-service.js';
 
 export interface TradeSignal {
   symbol: string;
@@ -270,6 +271,15 @@ export class TradingEngine {
       return trade;
     } catch (error) {
       console.error(`[Phase-27.F.15.B.3][mode=${this.mode}] Error processing trade signal:`, error);
+      
+      // Phase 41F-I: Record trade error event
+      await telemetryService.recordTradeEvent('trade_error', {
+        symbol: signal.symbol,
+        mode: this.mode,
+        reason: error instanceof Error ? error.message : 'Unknown error',
+        durationMs: 0
+      });
+      
       return null;
     }
   }
@@ -387,6 +397,15 @@ export class TradingEngine {
     };
 
     const trade = await storage.createTrade(tradeData);
+
+    // Phase 41F-I: Record trade opened event
+    await telemetryService.recordTradeEvent('trade_opened', {
+      symbol: trade.symbol,
+      mode: this.mode,
+      amount: filledQuantity,
+      price: actualEntryPrice,
+      strategy: trade.strategy
+    });
 
     // Capture prediction metadata for Learning Feedback Engine
     if (signal.metadata?.signal_type || signal.metadata?.confidence) {
@@ -547,7 +566,19 @@ export class TradingEngine {
 
     const exitPrice = marketPrice * (1 - exitSlippage / 100);
     
-    return await storage.closeTrade(targetTrade.id, exitPrice, exitFee, exitSlippage);
+    const closedTrade = await storage.closeTrade(targetTrade.id, exitPrice, exitFee, exitSlippage);
+    
+    // Phase 41F-I: Record trade closed event
+    await telemetryService.recordTradeEvent('trade_closed', {
+      symbol: closedTrade.symbol,
+      mode: this.mode,
+      result: closedTrade.profitLoss ? `${closedTrade.profitLoss} PnL` : reason,
+      durationMs: closedTrade.exitTime && closedTrade.entryTime 
+        ? new Date(closedTrade.exitTime).getTime() - new Date(closedTrade.entryTime).getTime()
+        : 0
+    });
+    
+    return closedTrade;
   }
 
   private getSlippageTolerance(symbol: string, settings: TradingSettings): number {

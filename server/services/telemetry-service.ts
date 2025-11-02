@@ -12,8 +12,6 @@
  * - Cross-link to health monitor for anomaly detection
  */
 
-import type { EngineHealthMonitor } from './health-monitor.js';
-
 interface TradeEvent {
   ts: number;
   type: 'trade_opened' | 'trade_closed' | 'trade_error';
@@ -43,7 +41,7 @@ class TelemetryService {
   private eventBuffer: TradeEvent[] = [];
   private metricBuffer: TradeMetric[] = [];
   private maxBufferSize: number = 1000;
-  private healthMonitor: EngineHealthMonitor | null = null;
+  private healthMonitor: any = null;
   private contextBridge: any = null;
 
   private constructor() {}
@@ -58,7 +56,7 @@ class TelemetryService {
   /**
    * Initialize with health monitor reference for cross-linking
    */
-  setHealthMonitor(monitor: EngineHealthMonitor): void {
+  setHealthMonitor(monitor: any): void {
     this.healthMonitor = monitor;
   }
 
