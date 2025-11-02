@@ -425,6 +425,77 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 41C: Telemetry Trace API Endpoints
+  apiRouter.post('/telemetry/trace/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { telemetryTrace } = await import('./services/telemetry-trace.js');
+      const userId = req.user!.id;
+      const { mode, portfolioValue } = req.body;
+      
+      const sessionId = `${mode || 'paper'}-${Date.now()}`;
+      telemetryTrace.startSession(sessionId, {
+        mode: mode || 'paper',
+        portfolioValue: portfolioValue || 0,
+        userId
+      });
+      
+      console.log(`[Phase-41C] Telemetry trace session started: ${sessionId}`);
+      res.json({ 
+        success: true, 
+        sessionId,
+        message: 'Trace session started successfully'
+      });
+    } catch (error: any) {
+      console.error('[Phase-41C] Error starting trace session:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  apiRouter.post('/telemetry/trace/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { telemetryTrace } = await import('./services/telemetry-trace.js');
+      
+      const filePath = await telemetryTrace.stopSession();
+      
+      if (filePath) {
+        // Generate markdown report
+        const mdPath = await telemetryTrace.generateMarkdownReport(filePath);
+        
+        console.log(`[Phase-41C] Telemetry trace session stopped. Files: ${filePath}, ${mdPath}`);
+        res.json({ 
+          success: true, 
+          jsonFile: filePath,
+          markdownFile: mdPath,
+          message: 'Trace session stopped and reports generated'
+        });
+      } else {
+        res.json({ 
+          success: false, 
+          message: 'No active trace session'
+        });
+      }
+    } catch (error: any) {
+      console.error('[Phase-41C] Error stopping trace session:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  apiRouter.get('/telemetry/trace/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { telemetryTrace } = await import('./services/telemetry-trace.js');
+      
+      const info = telemetryTrace.getSessionInfo();
+      
+      res.json({ 
+        success: true, 
+        session: info
+      });
+    } catch (error: any) {
+      console.error('[Phase-41C] Error getting trace status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Phase 31.K - LATTI Learning Insights Endpoint
   apiRouter.get('/system/latti-insights', async (_req, res) => {
     try {
@@ -16956,77 +17027,3 @@ export async function handleLATTITargets(req: AuthenticatedRequest, res: Respons
     res.status(500).json({ error: error.message });
   }
 }
-
-// ========================================
-// Phase 41C: Telemetry Trace API Endpoints
-// ========================================
-
-apiRouter.post('/telemetry/trace/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  try {
-    const { telemetryTrace } = await import('./services/telemetry-trace.js');
-    const userId = req.user!.id;
-    const { mode, portfolioValue } = req.body;
-    
-    const sessionId = `${mode || 'paper'}-${Date.now()}`;
-    telemetryTrace.startSession(sessionId, {
-      mode: mode || 'paper',
-      portfolioValue: portfolioValue || 0,
-      userId
-    });
-    
-    console.log(`[Phase-41C] Telemetry trace session started: ${sessionId}`);
-    res.json({ 
-      success: true, 
-      sessionId,
-      message: 'Trace session started successfully'
-    });
-  } catch (error: any) {
-    console.error('[Phase-41C] Error starting trace session:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-apiRouter.post('/telemetry/trace/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  try {
-    const { telemetryTrace } = await import('./services/telemetry-trace.js');
-    
-    const filePath = await telemetryTrace.stopSession();
-    
-    if (filePath) {
-      // Generate markdown report
-      const mdPath = await telemetryTrace.generateMarkdownReport(filePath);
-      
-      console.log(`[Phase-41C] Telemetry trace session stopped. Files: ${filePath}, ${mdPath}`);
-      res.json({ 
-        success: true, 
-        jsonFile: filePath,
-        markdownFile: mdPath,
-        message: 'Trace session stopped and reports generated'
-      });
-    } else {
-      res.json({ 
-        success: false, 
-        message: 'No active trace session'
-      });
-    }
-  } catch (error: any) {
-    console.error('[Phase-41C] Error stopping trace session:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-apiRouter.get('/telemetry/trace/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
-  try {
-    const { telemetryTrace } = await import('./services/telemetry-trace.js');
-    
-    const info = telemetryTrace.getSessionInfo();
-    
-    res.json({ 
-      success: true, 
-      session: info
-    });
-  } catch (error: any) {
-    console.error('[Phase-41C] Error getting trace status:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
