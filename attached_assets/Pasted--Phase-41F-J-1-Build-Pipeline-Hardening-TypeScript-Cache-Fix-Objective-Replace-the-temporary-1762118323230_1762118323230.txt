@@ -1,0 +1,125 @@
+⚙️ Phase 41F-J.1 — Build Pipeline Hardening & TypeScript Cache Fix
+
+Objective:
+Replace the temporary --no-cache workaround with a permanent, automated build pipeline that ensures all source edits are compiled and live before validation or deployment.
+
+Credentials:
+username=testuser123 password=SecurePass123!
+
+A) Why This Phase Exists
+
+The dev runtime (tsx) cached old compiled modules, preventing new route and API edits from loading.
+This phase ensures every subsequent test (dry-run, paper-mode, audit) runs on a fully rebuilt binary so validation reflects the true production environment.
+
+B) File Changes
+1️⃣ package.json — Add build scripts
+
+Append or replace your scripts block with:
+
+"scripts": {
+  "clear-cache": "rm -rf .tsx-cache node_modules/.cache/tsx dist",
+  "build": "tsc --project tsconfig.json",
+  "dev": "npm run clear-cache && npx tsx server/index.ts",
+  "start": "npm run clear-cache && npm run build && node dist/server/index.js"
+}
+
+
+✅ npm run dev still launches a live tsx session (for quick testing).
+✅ npm start runs the compiled /dist build used for all validation phases.
+
+2️⃣ tsconfig.json — Ensure clean output directory
+
+Confirm or add:
+
+"compilerOptions": {
+  "outDir": "./dist",
+  "rootDir": "./",
+  "target": "ES2020",
+  "module": "ESNext",
+  "moduleResolution": "node",
+  "esModuleInterop": true,
+  "strict": true,
+  "skipLibCheck": true
+}
+
+3️⃣ Replit or PM2 Launch Command
+
+Update startup script:
+
+npm run start
+
+
+This guarantees each launch clears cache, rebuilds, and starts from /dist.
+
+C) Verification Steps
+
+Run manually once:
+
+npm run clear-cache
+npm run build
+node dist/server/index.js
+
+
+✅ Expected console lines:
+
+[41F-J] REGISTRATION: /api/paper/trade/test
+[ContextBridge] Broadcasting health_engine ...
+Server listening on port 5000
+
+
+If those appear, your compiled routes and new broadcasts are now truly active.
+
+D) Validation Script
+
+Create diagnostic-reports/phase-41F-J1-build-pipeline-test.sh:
+
+#!/usr/bin/env bash
+set -e
+echo "🧱 Phase 41F-J.1 Build Pipeline Validation"
+npm run clear-cache
+npm run build
+node dist/server/index.js > /tmp/buildtest.log 2>&1 &
+PID=$!
+sleep 8
+grep -E "41F-J|health_engine|Server listening" /tmp/buildtest.log || {
+  echo "❌ Expected startup logs missing"; kill $PID; exit 1; }
+kill $PID
+echo "✅ Build pipeline verified. Logs compiled from /dist, no tsx cache."
+
+
+Make it executable:
+
+chmod +x diagnostic-reports/phase-41F-J1-build-pipeline-test.sh
+
+
+Run:
+
+diagnostic-reports/phase-41F-J1-build-pipeline-test.sh | tee diagnostic-reports/phase-41F-J1-console.txt
+
+E) Pass/Fail Criteria
+Check	Expectation
+.tsx-cache and .cache/tsx directories absent	✅ Pass
+/dist folder contains compiled .js files	✅ Pass
+Startup logs appear from /dist/server/index.js	✅ Pass
+[41F-J] REGISTRATION & health_engine logs visible	✅ Pass
+No further need for --no-cache flag	✅ Pass
+F) Deliverables
+
+phase-41F-J1-build-pipeline-test.sh
+
+phase-41F-J1-console.txt
+
+phase-41F-J1-build-validation.md (summary)
+
+Updated package.json and tsconfig.json
+
+G) Next Step
+
+Once this passes:
+
+Phase	Focus	Purpose
+41F-K	Dry-Run Mode Implementation	Safe, non-mutating trade pipeline rehearsal
+41F-L	3-Trade Paper-Mode Simulation	Final functional verification
+41F-M	Audit & Sign-off	End-to-end certification
+
+After 41F-J.1 you’ll be running in the same environment that will ship to production — every following validation (dry-run and simulation) will now truly represent the real runtime.
