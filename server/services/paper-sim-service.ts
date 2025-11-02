@@ -343,15 +343,20 @@ export async function startPaperSimulation(
         
         console.log('[ENGINE_CHECKPOINT_10] Registering manager globally...');
         setGlobalPaperSimManager(manager);
-        console.log('[ENGINE_CHECKPOINT_11] Manager registered, starting manager in background...');
+        console.log('[ENGINE_CHECKPOINT_11] Manager registered, starting manager...');
         
-        // Phase 27.F.13.I: Start manager non-blocking to avoid timeout
-        manager.start().then(() => {
-          console.log('[ENGINE_CHECKPOINT_12] Manager started successfully (async)');
-        }).catch((error) => {
-          console.error('[ENGINE_ERROR] Manager start failed:', error);
-        });
-        console.log('[ENGINE_CHECKPOINT_12_IMMEDIATE] Manager start initiated, continuing...');
+        // Phase 41C-FIX: Start manager synchronously with proper error handling
+        // Previous async approach caused UI to show ACTIVE while engine failed silently
+        try {
+          await manager.start();
+          console.log('[ENGINE_CHECKPOINT_12] Manager started successfully');
+        } catch (managerError: any) {
+          console.error('[ENGINE_ERROR] Manager start failed:', managerError);
+          // Rollback on manager start failure
+          clearGlobalPaperSimManager();
+          await storage.updatePaperSimSessionStatus(userId, sessionId, 'failed');
+          throw new Error(`Failed to start trading engine: ${managerError.message}`);
+        }
         
         // Register global session for status tracking
         if (typeof (global as any).registerSimulationSession === 'function') {
