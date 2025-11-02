@@ -512,9 +512,13 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
 
         // Phase 27.F.9: Stop portfolio manager and clear both references
         const currentManager = getGlobalPaperSimManager();
+        const t0 = Date.now();
+        
         if (currentManager) {
+          console.log('[41E-S][TIMING] Starting manager.stop()...');
           await currentManager.stop();
           clearGlobalPaperSimManager();
+          console.log(`[41E-S][TIMING] Manager shutdown completed in ${Date.now() - t0}ms`);
         } else {
           console.warn('[PaperSimService] No active manager found, updating database only');
         }
@@ -530,29 +534,47 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         const runDuration = stoppedAt.getTime() - new Date(existingSession.startedAt).getTime();
 
         // Update session in database (end DB session)
+        const t1 = Date.now();
+        console.log('[41E-S][TIMING] Starting DB session update...');
         await storage.updatePaperSimSession(existingSession.id, {
           status: 'stopped',
           stoppedAt: stoppedAt,
           runForMs: runDuration,
         });
+        console.log(`[41E-S][TIMING] DB session update completed in ${Date.now() - t1}ms`);
 
         console.log(`[PaperSimService] Stopped session: ${existingSession.sessionId}, duration: ${runDuration}ms`);
         console.log('[PaperSimService] Manager cleared (service + global), DB session ended');
+        console.log('[41E-S] Critical teardown complete, preparing HTTP response...');
 
+        // Phase 41E-S: Non-blocking broadcast and verification
         // Phase 27.F.17b: State Persistence and Broadcast Verification
         // Phase 27.F.13.O: Mode-based global context
         const mode = 'paper';
-        console.log('[PaperSimService][Phase-27.F.17b] Setting engine inactive state...');
-        await tradingStateSync.setEngineActive(userId, false, mode);
+        const t2 = Date.now();
         
-        // Verify system_context status and log with [StateSync] prefix
-        const stoppedContext = await storage.getSystemContext(mode);
-        if (stoppedContext && !stoppedContext.isEngineActive) {
-          console.log('[StateSync] paper_engine_status = STOPPED confirmed');
-          console.log('[PaperSimService][Phase-27.F.17b] ✅ Verified system_context.isEngineActive = false');
-        } else {
-          console.warn('[PaperSimService][Phase-27.F.17b] ⚠️ Failed to verify engine inactive state');
-        }
+        // Trigger state broadcast asynchronously (non-blocking)
+        tradingStateSync.setEngineActive(userId, false, mode)
+          .then(async () => {
+            console.log(`[41E-S][TIMING] State broadcast completed in ${Date.now() - t2}ms`);
+            
+            // Verify system_context status in background
+            const t3 = Date.now();
+            const stoppedContext = await storage.getSystemContext(mode);
+            console.log(`[41E-S][TIMING] Context verification completed in ${Date.now() - t3}ms`);
+            
+            if (stoppedContext && !stoppedContext.isEngineActive) {
+              console.log('[StateSync] paper_engine_status = STOPPED confirmed');
+              console.log('[41E-S] ✅ Verified system_context.isEngineActive = false (background)');
+            } else {
+              console.warn('[41E-S] ⚠️ Failed to verify engine inactive state (background)');
+            }
+          })
+          .catch(err => {
+            console.warn('[41E-S] Background broadcast/verification error:', err.message);
+          });
+        
+        console.log('[41E-S] State broadcast triggered asynchronously (HTTP response not blocked)');
 
         // Emit cluster bus event for distributed awareness
         try {
