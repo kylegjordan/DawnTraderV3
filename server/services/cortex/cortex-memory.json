@@ -1,60 +1,60 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-11-02T21:20:36.052Z",
+    "timestamp": "2025-11-02T21:23:36.052Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-11-02T21:20:36.050Z",
+        "lastUpdate": "2025-11-02T21:23:36.050Z",
         "stale": false,
-        "hitRate": "71.9%",
+        "hitRate": "82.2%",
         "cacheSize": 4,
         "ttl": 30
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-11-02T21:20:36.050Z",
+        "lastUpdate": "2025-11-02T21:23:36.050Z",
         "stale": false,
-        "hitRate": "71.9%",
+        "hitRate": "82.2%",
         "cacheSize": 4,
         "ttl": 30
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-11-02T21:20:36.050Z",
+        "lastUpdate": "2025-11-02T21:23:36.050Z",
         "stale": false,
-        "hitRate": "71.9%",
+        "hitRate": "82.2%",
         "cacheSize": 4,
         "ttl": 30
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-11-02T21:20:36.050Z",
+        "lastUpdate": "2025-11-02T21:23:36.050Z",
         "stale": false,
-        "hitRate": "71.9%",
+        "hitRate": "82.2%",
         "cacheSize": 4,
         "ttl": 30
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-11-02T21:20:36.050Z",
+        "lastUpdate": "2025-11-02T21:23:36.050Z",
         "stale": false,
-        "hitRate": "71.9%",
+        "hitRate": "82.2%",
         "cacheSize": 4,
         "ttl": 30
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-11-02T21:20:36.050Z",
+        "lastUpdate": "2025-11-02T21:23:36.050Z",
         "stale": false,
-        "hitRate": "71.9%",
+        "hitRate": "82.2%",
         "cacheSize": 4,
         "ttl": 30
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-11-02T21:20:36.050Z",
+        "lastUpdate": "2025-11-02T21:23:36.050Z",
         "stale": false,
-        "hitRate": "71.9%",
+        "hitRate": "82.2%",
         "cacheSize": 4,
         "ttl": 30
       }
@@ -62,9 +62,9 @@
     "overallStats": {
       "modulesActive": 7,
       "totalCacheSize": 4,
-      "overallHitRate": "71.9%",
-      "totalHits": 23,
-      "totalMisses": 9
+      "overallHitRate": "82.2%",
+      "totalHits": 398,
+      "totalMisses": 86
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -73,23 +73,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-11-02T21:20:36.052Z",
+        "timestamp": "2025-11-02T21:23:36.052Z",
         "system": {
           "cpuUsage": 53.4,
           "memoryUsage": {
             "total": 67433574400,
-            "used": 26126446592,
-            "free": 41307127808,
+            "used": 26267115520,
+            "free": 41166458880,
             "percentUsed": 39
           },
-          "uptime": 41
+          "uptime": 221
         },
         "cache": {
-          "hitRate": 77,
-          "missRate": 23,
-          "totalRequests": 30,
-          "hits": 23,
-          "misses": 7
+          "hitRate": 83,
+          "missRate": 17,
+          "totalRequests": 482,
+          "hits": 398,
+          "misses": 84
         },
         "latency": {
           "cortex": null,
@@ -98,11 +98,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 41,
-            "lastRun": "2025-11-02T21:20:06.048Z"
+            "uptime": 221,
+            "lastRun": "2025-11-02T21:23:06.053Z"
           },
           "analytics": {
-            "uptime": 41,
+            "uptime": 221,
             "lastRun": "2025-11-02T21:20:06.479Z"
           }
         },
@@ -158,10 +158,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-11-02T21:20:36.051Z"
+      "timestamp": "2025-11-02T21:23:36.050Z"
     }
   },
-  "last_sync": "2025-11-02T21:20:36.052Z",
+  "last_sync": "2025-11-02T21:23:36.052Z",
   "memory": {
     "analytics_paper_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
