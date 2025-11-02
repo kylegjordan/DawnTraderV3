@@ -3670,32 +3670,135 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ ok: false, error: "Invalid request body" });
       }
 
+      const userId = req.user!.id;
       const symbol = req.body.symbol ?? "BTC/USD";
       const action = req.body.action ?? "buy";
       const amount = Number(req.body.amount ?? 0.01);
 
-      console.log(`[41F-L.1] Executing paper trade: ${symbol} ${action} ${amount}`);
+      console.log(`[41F-L.1] Executing paper trade: ${symbol} ${action} ${amount} for user ${userId}`);
 
-      // --- Engine availability check ---
-      const { getEngine } = await import("./services/mode-registry.js");
-      const engine = getEngine("paper");
+      // --- Get mock price based on symbol ---
+      const mockPrices: Record<string, number> = {
+        'BTC/USD': 68500,
+        'BTCUSD': 68500,
+        'ETH/USD': 3650,
+        'ETHUSD': 3650,
+        'SOL/USD': 155,
+        'SOLUSD': 155,
+      };
 
-      if (!engine) {
-        console.warn("[41F-L.1][WARN] Paper engine unavailable");
-        return res.status(503).json({ ok: false, error: "Paper engine unavailable" });
+      const basePrice = mockPrices[symbol] || mockPrices[symbol.replace('/', '')] || 100;
+      const normalizedSymbol = symbol.replace('/', '');
+
+      if (action === 'buy') {
+        // Create a simulated buy trade directly in the database
+        const tradeValue = basePrice * amount;
+        const trade = await storage.createPaperSimTrade({
+          userId,
+          symbol: normalizedSymbol,
+          strategy: 'test_trade',
+          entryPrice: basePrice.toString(),
+          quantity: amount.toString(),
+          stopPrice: (basePrice * 0.98).toString(),
+          targetPrice: (basePrice * 1.05).toString(),
+          confidence: 100,
+          metadata: { testTrade: true, phase: '41F-L.1' }
+        });
+
+        // Create open position
+        await storage.createPaperSimOpenPosition({
+          userId,
+          symbol: normalizedSymbol,
+          quantity: amount.toString(),
+          avgPrice: basePrice.toString(),
+          metadata: { tradeId: trade.id }
+        });
+
+        // Update portfolio balance
+        const portfolio = await storage.getPortfolioBalance('paper');
+        const newBalance = portfolio.balance - tradeValue;
+        await storage.updatePortfolioBalance({ mode: 'paper', balance: newBalance });
+
+        console.log(`[41F-L.1][INFO] Buy trade created: ${trade.id}, portfolio: $${newBalance.toFixed(2)}`);
+
+        // Broadcast portfolio update
+        const { tradingStateSync } = await import('./services/trading-state-sync.js');
+        await tradingStateSync.broadcastUserUpdate(userId);
+
+        return res.json({
+          ok: true,
+          trade: {
+            id: trade.id,
+            symbol: trade.symbol,
+            action,
+            quantity: trade.quantity,
+            price: trade.entryPrice,
+            timestamp: trade.openedAt
+          }
+        });
+      } else if (action === 'sell') {
+        // Find and close an open position
+        const openPositions = await storage.getPaperSimOpenPositions(userId);
+        const position = openPositions.find(p => p.symbol === normalizedSymbol || p.symbol === symbol);
+
+        if (!position) {
+          console.warn(`[41F-L.1][WARN] No open position found for ${symbol}`);
+          return res.status(404).json({ ok: false, error: `No open position found for ${symbol}` });
+        }
+
+        // Calculate P&L
+        const entryPrice = parseFloat(position.avgPrice);
+        const exitPrice = basePrice;
+        const posQuantity = parseFloat(position.quantity);
+        const pnl = (exitPrice - entryPrice) * posQuantity;
+        const pnlPercent = ((exitPrice - entryPrice) / entryPrice) * 100;
+
+        // Update the trade record
+        const trades = await storage.getPaperSimTrades('paper', {});
+        const tradeRecord = trades.find(t => t.id === position.metadata?.tradeId);
+
+        if (tradeRecord) {
+          await storage.updatePaperSimTrade(tradeRecord.id, {
+            exitPrice: exitPrice.toString(),
+            closedAt: new Date(),
+            closeReason: 'manual_test',
+            pnl: pnl.toString(),
+            pnlPercent: pnlPercent.toString()
+          });
+        }
+
+        // Delete the open position
+        await storage.deletePaperSimOpenPosition(position.id);
+
+        // Update portfolio balance
+        const portfolio = await storage.getPortfolioBalance('paper');
+        const tradeValue = exitPrice * posQuantity;
+        const newBalance = portfolio.balance + tradeValue;
+        await storage.updatePortfolioBalance({ mode: 'paper', balance: newBalance });
+
+        console.log(`[41F-L.1][INFO] Sell trade executed: P&L ${pnlPercent > 0 ? '+' : ''}$${pnl.toFixed(2)}, portfolio: $${newBalance.toFixed(2)}`);
+
+        // Broadcast portfolio update
+        const { tradingStateSync } = await import('./services/trading-state-sync.js');
+        await tradingStateSync.broadcastUserUpdate(userId);
+
+        return res.json({
+          ok: true,
+          trade: {
+            id: tradeRecord?.id,
+            symbol: position.symbol,
+            action,
+            quantity: position.quantity,
+            entryPrice,
+            exitPrice,
+            pnl,
+            pnlPercent,
+            timestamp: new Date()
+          }
+        });
+      } else {
+        return res.status(400).json({ ok: false, error: `Invalid action: ${action}. Must be 'buy' or 'sell'` });
       }
-
-      // --- Trade creation and execution ---
-      const tradeCandidate = await engine.buildTrade(symbol, action, amount);
-      if (!tradeCandidate) {
-        console.error("[41F-L.1][ERROR] Failed to build tradeCandidate");
-        return res.status(500).json({ ok: false, error: "Trade construction failed" });
-      }
-
-      const result = await engine.executeTrade(tradeCandidate);
-      console.log("[41F-L.1][INFO] Trade executed successfully:", result?.id ?? "no-id");
-
-      return res.json({ ok: true, trade: result });
     } catch (err: any) {
       console.error("[41F-L.1][ERROR] Paper trade test failed:", err);
       return res.status(500).json({ ok: false, error: err.message || "Internal server error" });
