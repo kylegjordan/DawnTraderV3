@@ -1,14 +1,16 @@
 /**
  * Phase 41F-A: Operation Queue Handler
+ * Phase 41F-B: Request Deduplication & Telemetry
  * 
  * Lightweight in-memory FIFO queue for serializing trading operations
  * (start/stop) to prevent concurrent request collisions.
  * 
  * Features:
  * - Sequential job execution (one at a time)
+ * - Request deduplication by (userId:mode:action) key
  * - Automatic retry (once) with exponential backoff
  * - Promise-based result handling
- * - [41F][QUEUE] telemetry logging
+ * - [41F-B][QUEUE] telemetry logging
  * - Graceful shutdown support
  */
 
@@ -21,10 +23,15 @@ export interface QueueJobMeta {
 
 interface QueueJob<T> {
   id: string;
+  key: string; // Phase 41F-B: Deduplication key (userId:mode:action)
   execute: () => Promise<T>;
   meta: QueueJobMeta;
   resolve: (value: T) => void;
   reject: (error: Error) => void;
+  additionalListeners: Array<{ // Phase 41F-B: Piggybacked duplicate requests
+    resolve: (value: T) => void;
+    reject: (error: Error) => void;
+  }>;
   retryCount: number;
 }
 
@@ -33,21 +40,46 @@ export class OperationQueue {
   private processing = false;
   private jobCounter = 0;
   private shuttingDown = false;
+  private currentJob: QueueJob<any> | null = null; // Phase 41F-B: Track in-flight job
 
   constructor(private queueName: string) {
-    console.log(`[41F][QUEUE] ${queueName} initialized`);
+    console.log(`[41F-B][QUEUE] ${queueName} initialized (queue_depth=0)`);
   }
 
   /**
    * Enqueue a job for execution
    * Returns a Promise that resolves/rejects with the job result
+   * Phase 41F-B: Includes deduplication logic
    */
   async enqueue<T>(
     job: () => Promise<T>,
     meta: Omit<QueueJobMeta, 'enqueuedAt'>
   ): Promise<T> {
     if (this.shuttingDown) {
-      throw new Error('[41F][QUEUE] Queue is shutting down, rejecting new jobs');
+      throw new Error('[41F-B][QUEUE] Queue is shutting down, rejecting new jobs');
+    }
+
+    // Phase 41F-B: Generate deduplication key
+    const dedupeKey = `${meta.userId}:${meta.mode}:${meta.action}`;
+    
+    // Phase 41F-B: Check for duplicate jobs in queue OR currently executing
+    // Note: No retryCount filter - dedupe must work even during retry backoff
+    const existingQueuedJob = this.queue.find(q => q.key === dedupeKey);
+    const existingInFlightJob = this.currentJob?.key === dedupeKey
+      ? this.currentJob
+      : null;
+    
+    const existingJob = existingQueuedJob || existingInFlightJob;
+    
+    if (existingJob) {
+      const location = existingQueuedJob ? 'queued' : 'in-flight';
+      console.warn(
+        `[41F-B][QUEUE] Duplicate ${meta.action} request piggybacking for ${dedupeKey} (existing ${location} job: ${existingJob.id})`
+      );
+      // Piggyback: add new listeners to existing job instead of creating duplicate
+      return new Promise<T>((resolve, reject) => {
+        existingJob.additionalListeners.push({ resolve, reject });
+      });
     }
 
     const jobId = `${meta.mode}-${meta.action}-${++this.jobCounter}`;
@@ -59,10 +91,12 @@ export class OperationQueue {
     return new Promise<T>((resolve, reject) => {
       const queueJob: QueueJob<T> = {
         id: jobId,
+        key: dedupeKey,
         execute: job,
         meta: fullMeta,
         resolve,
         reject,
+        additionalListeners: [], // Phase 41F-B: Initialize empty listener array
         retryCount: 0,
       };
 
@@ -70,7 +104,7 @@ export class OperationQueue {
       
       const queuePosition = this.queue.length;
       console.log(
-        `[41F][QUEUE] Job enqueued: ${jobId} (user=${meta.userId}, position=${queuePosition})`
+        `[41F-B][QUEUE] Job enqueued: ${jobId} (key=${dedupeKey}, position=${queuePosition}, queue_depth=${this.queue.length})`
       );
 
       // Start processing if not already running
@@ -92,22 +126,37 @@ export class OperationQueue {
 
     while (this.queue.length > 0) {
       const job = this.queue.shift()!;
+      this.currentJob = job; // Track in-flight job for deduplication
+      
       const startTime = Date.now();
       const waitTime = startTime - job.meta.enqueuedAt;
 
       console.log(
-        `[41F][QUEUE] Job started: ${job.id} (waited ${waitTime}ms, queue_size=${this.queue.length})`
+        `[41F-B][QUEUE] Job started: ${job.id} (key=${job.key}, waited=${waitTime}ms, queue_depth=${this.queue.length})`
       );
 
       try {
         const result = await job.execute();
         const duration = Date.now() - startTime;
         
+        const listenerCount = job.additionalListeners.length;
         console.log(
-          `[41F][QUEUE] Job completed: ${job.id} (duration=${duration}ms, queue_size=${this.queue.length})`
+          `[41F-B][QUEUE] Job completed: ${job.id} (duration=${duration}ms, queue_depth=${this.queue.length}, piggybacked_listeners=${listenerCount})`
         );
         
+        this.currentJob = null; // Clear in-flight tracking
+        
+        // Notify primary caller
         job.resolve(result);
+        
+        // Notify all piggybacked callers
+        job.additionalListeners.forEach(listener => {
+          try {
+            listener.resolve(result);
+          } catch (err) {
+            console.error(`[41F-B][QUEUE] Error notifying piggybacked listener:`, err);
+          }
+        });
       } catch (error: any) {
         const duration = Date.now() - startTime;
 
@@ -115,7 +164,7 @@ export class OperationQueue {
         if (job.retryCount === 0) {
           job.retryCount++;
           console.warn(
-            `[41F][QUEUE] Job failed (will retry): ${job.id} (duration=${duration}ms, error=${error.message})`
+            `[41F-B][QUEUE] Job failed (will retry): ${job.id} (duration=${duration}ms, error=${error.message})`
           );
           
           // Wait 500ms before retry
@@ -123,19 +172,33 @@ export class OperationQueue {
           
           // Re-enqueue at front of queue for immediate retry
           this.queue.unshift(job);
-          console.log(`[41F][QUEUE] Job retry: ${job.id} (attempt 2/2)`);
+          console.log(`[41F-B][QUEUE] Job retry: ${job.id} (attempt 2/2)`);
         } else {
           // Max retries exceeded, reject
+          const listenerCount = job.additionalListeners.length;
           console.error(
-            `[41F][QUEUE] Job failed (max retries): ${job.id} (duration=${duration}ms, error=${error.message})`
+            `[41F-B][QUEUE] Job failed (max retries): ${job.id} (duration=${duration}ms, error=${error.message}, piggybacked_listeners=${listenerCount})`
           );
+          this.currentJob = null; // Clear in-flight tracking
+          
+          // Notify primary caller
           job.reject(error);
+          
+          // Notify all piggybacked callers
+          job.additionalListeners.forEach(listener => {
+            try {
+              listener.reject(error);
+            } catch (err) {
+              console.error(`[41F-B][QUEUE] Error notifying piggybacked listener:`, err);
+            }
+          });
         }
       }
     }
 
     this.processing = false;
-    console.log(`[41F][QUEUE] Queue idle (${this.queueName})`);
+    this.currentJob = null; // Ensure cleared when queue is idle
+    console.log(`[41F-B][QUEUE] Queue idle (${this.queueName}, queue_depth=0)`);
   }
 
   /**
@@ -161,7 +224,7 @@ export class OperationQueue {
    * Graceful shutdown: wait for pending jobs to complete
    */
   async shutdown(timeoutMs = 10000): Promise<void> {
-    console.log(`[41F][QUEUE] Shutdown initiated (${this.queueName})`);
+    console.log(`[41F-B][QUEUE] Shutdown initiated (${this.queueName}, queue_depth=${this.queue.length})`);
     this.shuttingDown = true;
 
     const startTime = Date.now();
@@ -172,7 +235,7 @@ export class OperationQueue {
       
       if (elapsed > timeoutMs) {
         console.error(
-          `[41F][QUEUE] Shutdown timeout (${this.queueName}), ${this.queue.length} jobs abandoned`
+          `[41F-B][QUEUE] Shutdown timeout (${this.queueName}), ${this.queue.length} jobs abandoned`
         );
         break;
       }
@@ -180,7 +243,7 @@ export class OperationQueue {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    console.log(`[41F][QUEUE] Shutdown complete (${this.queueName})`);
+    console.log(`[41F-B][QUEUE] Shutdown complete (${this.queueName}, queue_depth=${this.queue.length})`);
   }
 }
 
@@ -192,10 +255,10 @@ export const liveOperationQueue = new OperationQueue('live-trading');
  * Graceful shutdown hook for both queues
  */
 export async function shutdownAllQueues(): Promise<void> {
-  console.log('[41F][QUEUE] Shutting down all operation queues...');
+  console.log('[41F-B][QUEUE] Shutting down all operation queues...');
   await Promise.all([
     paperOperationQueue.shutdown(),
     liveOperationQueue.shutdown(),
   ]);
-  console.log('[41F][QUEUE] All queues shut down successfully');
+  console.log('[41F-B][QUEUE] All queues shut down successfully');
 }

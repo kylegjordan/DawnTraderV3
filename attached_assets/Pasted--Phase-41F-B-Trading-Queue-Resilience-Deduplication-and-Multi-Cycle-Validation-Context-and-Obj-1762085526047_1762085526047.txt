@@ -1,0 +1,178 @@
+⚙️ Phase 41F-B — Trading Queue Resilience, Deduplication, and Multi-Cycle Validation
+Context and Objective
+
+RAPID,
+Phase 41F-A-5 successfully implemented the in-memory operation queue for both paper and live trading modes.
+Now that serialization and error handling are stable, we’re moving to Phase 41F-B, which focuses on refining the queue architecture to make it more resilient and production-safe.
+
+The system currently executes operations sequentially, but we still need to:
+
+Prevent duplicate start/stop requests from queuing for the same user/session.
+
+Separate UI/WebSocket updates from queue-blocking engine jobs.
+
+Validate end-to-end stability with repeated start/stop cycles on both trading modes.
+
+This phase ensures the queue remains efficient, self-healing, and safe under concurrent user actions — a critical step toward full live-trading readiness.
+
+🧩 Implementation Tasks
+1️⃣ Implement Request Deduplication
+
+Goal: Avoid stacking identical jobs in the queue.
+
+In server/utils/operation-queue.ts, extend enqueue() logic to check existing queued jobs.
+
+enqueue(job: OperationJob) {
+  const key = `${job.userId}:${job.mode}:${job.sessionId || 'default'}`;
+  if (this.queue.find(q => q.key === key && q.action === job.action)) {
+    console.warn(`[41F-B][QUEUE] Duplicate ${job.action} ignored for ${key}`);
+    return Promise.resolve({ status: 'ignored', reason: 'duplicate' });
+  }
+
+  this.queue.push({ ...job, key });
+  this.processNext();
+  return job.promise;
+}
+
+
+✅ Prevents redundant “start-while-starting” or “stop-while-stopping” collisions.
+✅ Reduces queue size and eliminates duplicate WebSocket notifications.
+
+2️⃣ Separate WebSocket/UI Broadcasts from Engine Jobs
+
+In both:
+
+server/services/paper-sim-service.ts
+
+server/services/live-trading-service.ts
+
+Move any broadcastUserUpdate() or notifyClients() calls outside the queue jobs.
+They should fire asynchronously once the job resolves successfully.
+
+Example pattern:
+
+// Inside job execution
+const result = await engine.start();
+return result;
+
+// After job completion
+job.promise.finally(() => {
+  tradingStateSync.broadcastUserUpdate(job.userId)
+    .then(() => console.log('[41F-B][WS] Broadcast (non-blocking) sent'))
+    .catch(err => console.warn('[41F-B][WS] Broadcast error:', err.message));
+});
+
+
+✅ Ensures WebSocket lag never blocks engine operations.
+✅ Improves responsiveness on start/stop actions.
+
+3️⃣ Add Queue Telemetry & Metrics
+
+Enhance logging to capture queue health in real time:
+
+console.log(`[41F-B][QUEUE] Job started: ${job.action} (${this.queue.length} in queue)`);
+console.log(`[41F-B][QUEUE] Job finished: ${job.action} → ${result.status}`);
+
+
+Add periodic queue metrics broadcast (every 30 s) to /api/system/metrics:
+
+activeJobs
+
+averageJobTime (ms)
+
+queueDepth
+
+errorRate (last 10 jobs)
+
+✅ Supports future monitoring dashboards.
+
+4️⃣ Graceful Recovery Logic
+
+Add a lightweight safeguard to handle unclean shutdowns:
+
+process.on('startup', () => {
+  if (this.queue.length > 0) {
+    console.warn('[41F-B][QUEUE] Clearing orphaned jobs from previous session');
+    this.queue = [];
+  }
+});
+
+
+✅ Prevents orphaned “busy” states after restarts.
+
+5️⃣ Update Documentation
+
+Create or update these internal documents:
+
+/diagnostic-reports/phase-41f-b-architecture.md
+→ Describes deduplication logic, queue separation, telemetry schema.
+
+/diagnostic-reports/phase-41f-b-queue-code-review.md
+→ Summarizes LSP checks, error handling audit, and shutdown flow.
+
+🔁 6️⃣ Multi-Cycle Validation Test
+
+After implementing all refinements, run a three-cycle validation for both paper and live modes to confirm consistency.
+
+Credentials
+username: testuser123
+password: SecurePass123!
+
+Test Flow (Per Mode)
+Step	Action	Expected Result
+1	Start trading with initial balance ($880 paper / $885 live)	✅ Responds < 3 s, isRunning:true
+2	Stop trading	✅ Responds < 3 s, isRunning:false
+3	Start trading again	✅ Responds < 3 s
+4	Stop trading again	✅ Responds < 3 s
+5	Start trading one final time	✅ Responds < 3 s
+6	Stop trading	✅ No hangs or duplicate jobs
+7	Repeat full sequence for opposite mode	✅ Same behavior
+
+During the test:
+
+Verify queue logs: [41F-B][QUEUE] Job started → [QUEUE] Job finished.
+
+Confirm no “duplicate job ignored” messages for valid unique requests.
+
+Confirm queue depth ≤ 1 between cycles.
+
+Verify [41F-B][WS] Broadcast (non-blocking) appears after each job completion.
+
+Reporting
+
+After all cycles, RAPID will generate:
+
+Report File	Purpose
+/diagnostic-reports/phase-41f-b-validation.md	Consolidates 6 start/stop cycles (3 paper + 3 live) with timings
+/diagnostic-reports/phase-41f-b-queue-metrics.md	Queue depth, job latency, and error summaries
+/diagnostic-reports/phase-41f-b-console-trace.log	Extracted [41F-B] telemetry entries
+Success Criteria
+Metric	Target
+Start/Stop latency	< 3 s
+HTTP timeouts	0
+Duplicate job rejection	Only true duplicates
+Queue depth at idle	0
+Broadcast latency	< 500 ms
+Busy flag resets	Always true
+Job error rate	0%
+Execution Settings
+
+Run after Kraken maintenance window (ensure market data feed operational).
+
+Walter adapter remains disabled.
+
+Run automated tests overnight to capture multiple queue cycles with timestamps.
+
+If any validation fails, apply self-healing correction, restart workflow, and repeat.
+
+Outcome
+
+When Phase 41F-B completes successfully:
+
+All trading operations will be deduplicated, serialized, and resilient.
+
+UI broadcasts will execute independently of queue actions.
+
+Queue health telemetry will provide real-time observability.
+
+System will be production-safe for concurrent paper/live operations.
