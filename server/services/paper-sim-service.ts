@@ -11,6 +11,8 @@ import type { InsertPaperSimSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from './kraken.js';
 
+console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
+
 export interface PaperSimResult {
   success: boolean;
   message: string;
@@ -18,6 +20,22 @@ export interface PaperSimResult {
   error?: string;
   requiresConfirmation?: boolean; // Phase 27.F.14.D-POST: Indicates balance confirmation needed
   currentBalance?: number; // Phase 27.F.14.D-POST: Current balance for confirmation prompt
+}
+
+// Phase 41E-S: Track when busy flag was set to auto-clear stale locks
+let busyFlagSetAt: number | null = null;
+const BUSY_FLAG_STALE_THRESHOLD_MS = 30000; // 30 seconds
+
+// Phase 41E-S: Auto-clear stale busy flags
+function clearStaleBusyFlag() {
+  if (global.globalPaperSimBusyFlag && busyFlagSetAt) {
+    const age = Date.now() - busyFlagSetAt;
+    if (age > BUSY_FLAG_STALE_THRESHOLD_MS) {
+      console.log(`[SAFEGUARD] Cleared stale busy flag (age: ${age}ms)`);
+      global.globalPaperSimBusyFlag = false;
+      busyFlagSetAt = null;
+    }
+  }
 }
 
 /**
@@ -219,6 +237,9 @@ export async function startPaperSimulation(
   console.log(`[41D-DEBUG-1] startPaperSimulation entered (userId: ${userId}, balance: ${options?.startingBalance})`);
   
   try {
+    // Phase 41E-S: Auto-clear stale busy flags before checking
+    clearStaleBusyFlag();
+    
     // Phase 33.A: Fast busy check to prevent overlapping requests
     console.log(`[41D-DEBUG-2] Checking busy flag (t+${Date.now()-t0}ms)`);
     if (global.globalPaperSimBusyFlag) {
@@ -233,6 +254,7 @@ export async function startPaperSimulation(
     // Set busy flag
     console.log(`[41D-DEBUG-3] Setting busy flag (t+${Date.now()-t0}ms)`);
     global.globalPaperSimBusyFlag = true;
+    busyFlagSetAt = Date.now();
     
     // Wait for any pending operations to complete
     console.log(`[41D-DEBUG-4] Checking operation lock (t+${Date.now()-t0}ms)`);
@@ -435,7 +457,8 @@ export async function startPaperSimulation(
         throw error;
       } finally {
         global.globalPaperSimOperationLock = null;
-        global.globalPaperSimBusyFlag = false; // Phase 33.A: Clear busy flag
+        global.globalPaperSimBusyFlag = false;
+        busyFlagSetAt = null;
       }
     })();
 
@@ -445,7 +468,8 @@ export async function startPaperSimulation(
   } catch (error: any) {
     console.error('[PaperSimService] Error starting paper trading simulation:', error);
     global.globalPaperSimOperationLock = null;
-    global.globalPaperSimBusyFlag = false; // Phase 33.A: Clear busy flag on error
+    global.globalPaperSimBusyFlag = false;
+    busyFlagSetAt = null;
     return {
       success: false,
       message: `Error starting paper trading simulation: ${error.message}`,
@@ -463,6 +487,9 @@ export async function startPaperSimulation(
  */
 export async function stopPaperSimulation(userId: string): Promise<PaperSimResult> {
   try {
+    // Phase 41E-S: Auto-clear stale busy flags before checking
+    clearStaleBusyFlag();
+    
     // Phase 33.A: Fast busy check to prevent overlapping requests
     if (global.globalPaperSimBusyFlag) {
       console.log('[Phase-33.A] Engine busy, rejecting stop request');
@@ -475,6 +502,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
     
     // Set busy flag
     global.globalPaperSimBusyFlag = true;
+    busyFlagSetAt = Date.now();
     
     // Wait for any pending operations to complete
     if (global.globalPaperSimOperationLock) {
@@ -608,7 +636,8 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         throw error;
       } finally {
         global.globalPaperSimOperationLock = null;
-        global.globalPaperSimBusyFlag = false; // Phase 33.A: Clear busy flag
+        global.globalPaperSimBusyFlag = false;
+        busyFlagSetAt = null;
       }
     })();
 
@@ -618,7 +647,8 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
   } catch (error: any) {
     console.error('[PaperSimService] Error stopping paper trading simulation:', error);
     global.globalPaperSimOperationLock = null;
-    global.globalPaperSimBusyFlag = false; // Phase 33.A: Clear busy flag on error
+    global.globalPaperSimBusyFlag = false;
+    busyFlagSetAt = null;
     return {
       success: false,
       message: `Error stopping paper trading simulation: ${error.message}`,

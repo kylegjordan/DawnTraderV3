@@ -7,6 +7,8 @@ import { setupVite, serveStatic, log } from "./vite";
 import { databaseMonitor } from "./services/database-monitor";
 import { marketDataHealthCheck } from "./services/market-data-health-check";
 
+console.log('[BOOT]', process.env.COMMIT_SHA || 'local', new Date().toISOString());
+
 const app = express();
 
 // CORS Configuration - restrict access to allowed origins only
