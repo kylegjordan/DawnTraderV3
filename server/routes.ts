@@ -3657,11 +3657,27 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 41F-J: Manual test trade execution for portfolio reconciliation testing
+  // Phase 41F-J: Manual test trade execution for portfolio reconciliation testing  
+  console.log('[41F-J][REGISTRATION] Registering /paper/trade/test endpoint');
   apiRouter.post('/paper/trade/test', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    console.log('[41F-J][HANDLER] Endpoint handler executing!');
+    console.log('[41F-J][HANDLER] req.user:', req.user);
+    console.log('[41F-J][HANDLER] req.body:', req.body);
+    
     try {
-      const userId = req.user!.id;
-      const { symbol, action, amount } = req.body;
+      if (!req.user || !req.user.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+      
+      const userId = req.user.id;
+      
+      if (!req.body) {
+        return res.status(400).json({ error: 'Request body is missing' });
+      }
+      
+      const symbol = req.body.symbol;
+      const action = req.body.action;
+      const amount = req.body.amount;
 
       if (!symbol || !action || !amount) {
         return res.status(400).json({ error: 'Missing required fields: symbol, action, amount' });
