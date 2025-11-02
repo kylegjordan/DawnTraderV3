@@ -76,18 +76,16 @@ export default function EngineTelemetry() {
 
   // WebSocket listener for health_engine events
   useEffect(() => {
-    const healthMessages = messages.filter((msg: any) => msg.type === 'health_engine');
-    if (healthMessages.length > 0) {
-      const latest = healthMessages[healthMessages.length - 1];
-      setWsHealthData(latest.payload);
-      
-      // Track heartbeat latency for sparkline
-      if (latest.payload.lastLatencies?.broadcast) {
-        setHeartbeatHistory((prev) => {
-          const updated = [...prev, latest.payload.lastLatencies.broadcast];
-          return updated.slice(-20); // Keep last 20 data points
-        });
+    try {
+      const healthMessages = messages.filter((msg: any) => msg.type === 'health_engine');
+      if (healthMessages.length > 0) {
+        const latest = healthMessages[healthMessages.length - 1];
+        if (latest?.payload) {
+          setWsHealthData(latest.payload);
+        }
       }
+    } catch (error) {
+      console.error('[EngineTelemetry] WebSocket processing error:', error);
     }
   }, [messages]);
 
