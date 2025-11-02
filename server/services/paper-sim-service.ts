@@ -10,8 +10,10 @@ import { storage } from '../storage.js';
 import type { InsertPaperSimSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from './kraken.js';
+import { paperOperationQueue } from '../utils/operation-queue.js';
 
 console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
+console.log('[41F][QUEUE] Paper operation queue integrated');
 
 export interface PaperSimResult {
   success: boolean;
@@ -268,38 +270,12 @@ export async function startPaperSimulation(
   }
 ): Promise<PaperSimResult> {
   const t0 = Date.now();
-  console.log(`[41D-DEBUG-1] startPaperSimulation entered (userId: ${userId}, balance: ${options?.startingBalance})`);
+  console.log(`[41F][QUEUE] startPaperSimulation called (userId: ${userId}, balance: ${options?.startingBalance})`);
   
+  // Phase 41F: Use operation queue instead of busy flag and operation lock
   try {
-    // Phase 41E-S: Auto-clear stale busy flags before checking
-    await clearStaleBusyFlag();
-    
-    // Phase 33.A: Fast busy check to prevent overlapping requests
-    console.log(`[41D-DEBUG-2] Checking busy flag (t+${Date.now()-t0}ms)`);
-    if (global.globalPaperSimBusyFlag) {
-      console.log('[Phase-33.A] Engine busy, rejecting start request');
-      return {
-        success: false,
-        message: 'Engine is busy processing another request. Please wait...',
-        error: 'BUSY',
-      };
-    }
-    
-    // Set busy flag
-    console.log(`[41D-DEBUG-3] Setting busy flag (t+${Date.now()-t0}ms)`);
-    global.globalPaperSimBusyFlag = true;
-    busyFlagSetAt = Date.now();
-    
-    // Wait for any pending operations to complete
-    console.log(`[41D-DEBUG-4] Checking operation lock (t+${Date.now()-t0}ms)`);
-    if (global.globalPaperSimOperationLock) {
-      console.log(`[41D-DEBUG-4a] Waiting for pending operation (t+${Date.now()-t0}ms)`);
-      await global.globalPaperSimOperationLock;
-      console.log(`[41D-DEBUG-4b] Pending operation complete (t+${Date.now()-t0}ms)`);
-    }
-
-    // Create lock to serialize all start/stop operations
-    const startPromise = (async () => {
+    return await paperOperationQueue.enqueue(
+    async () => {
       try {
         console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
         // Phase 27.F.9: Prevent duplicates by checking both DB and global state atomically
@@ -489,24 +465,16 @@ export async function startPaperSimulation(
         
         console.error('[PaperSimService] Error during start, rollback complete:', error);
         throw error;
-      } finally {
-        global.globalPaperSimOperationLock = null;
-        global.globalPaperSimBusyFlag = false;
-        busyFlagSetAt = null;
-        operationLockSetAt = null; // Phase 41E-S: Clear timestamp
       }
-    })();
-
-    operationLockSetAt = Date.now(); // Phase 41E-S: Track when lock was set
-    global.globalPaperSimOperationLock = startPromise as any;
-    return await startPromise;
-    
+    },
+    {
+      userId,
+      mode: 'paper',
+      action: 'start',
+    }
+  );
   } catch (error: any) {
-    console.error('[PaperSimService] Error starting paper trading simulation:', error);
-    global.globalPaperSimOperationLock = null;
-    global.globalPaperSimBusyFlag = false;
-    busyFlagSetAt = null;
-    operationLockSetAt = null; // Phase 41E-S: Clear timestamp
+    console.error('[41F][QUEUE] startPaperSimulation queue error:', error);
     return {
       success: false,
       message: `Error starting paper trading simulation: ${error.message}`,
@@ -523,31 +491,12 @@ export async function startPaperSimulation(
  * - Emits cluster bus event on successful stop
  */
 export async function stopPaperSimulation(userId: string): Promise<PaperSimResult> {
+  console.log(`[41F][QUEUE] stopPaperSimulation called (userId: ${userId})`);
+  
+  // Phase 41F: Use operation queue instead of busy flag and operation lock
   try {
-    // Phase 41E-S: Auto-clear stale busy flags before checking
-    await clearStaleBusyFlag();
-    
-    // Phase 33.A: Fast busy check to prevent overlapping requests
-    if (global.globalPaperSimBusyFlag) {
-      console.log('[Phase-33.A] Engine busy, rejecting stop request');
-      return {
-        success: false,
-        message: 'Engine is busy processing another request. Please wait...',
-        error: 'BUSY',
-      };
-    }
-    
-    // Set busy flag
-    global.globalPaperSimBusyFlag = true;
-    busyFlagSetAt = Date.now();
-    
-    // Wait for any pending operations to complete
-    if (global.globalPaperSimOperationLock) {
-      await global.globalPaperSimOperationLock;
-    }
-
-    // Create lock to serialize all start/stop operations
-    const stopPromise = (async () => {
+    return await paperOperationQueue.enqueue(
+    async () => {
       try {
         // Check database for running session (single source of truth)
         const existingSession = await storage.getActivePaperSimSession(userId);
@@ -671,24 +620,16 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
       } catch (error: any) {
         console.error('[PaperSimService] Error during stop:', error);
         throw error;
-      } finally {
-        global.globalPaperSimOperationLock = null;
-        global.globalPaperSimBusyFlag = false;
-        busyFlagSetAt = null;
-        operationLockSetAt = null; // Phase 41E-S: Clear timestamp
       }
-    })();
-
-    operationLockSetAt = Date.now(); // Phase 41E-S: Track when lock was set
-    global.globalPaperSimOperationLock = stopPromise as any;
-    return await stopPromise;
-    
+    },
+    {
+      userId,
+      mode: 'paper',
+      action: 'stop',
+    }
+  );
   } catch (error: any) {
-    console.error('[PaperSimService] Error stopping paper trading simulation:', error);
-    global.globalPaperSimOperationLock = null;
-    global.globalPaperSimBusyFlag = false;
-    busyFlagSetAt = null;
-    operationLockSetAt = null; // Phase 41E-S: Clear timestamp
+    console.error('[41F][QUEUE] stopPaperSimulation queue error:', error);
     return {
       success: false,
       message: `Error stopping paper trading simulation: ${error.message}`,

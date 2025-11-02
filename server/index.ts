@@ -955,4 +955,21 @@ app.use((req, res, next) => {
       console.error('[AwarenessScheduler] ⚠️ Startup failed:', error);
     }
   });
+
+  // Phase 41F: Graceful shutdown for operation queues
+  const shutdownHandler = async (signal: string) => {
+    console.log(`[41F][QUEUE] Received ${signal}, shutting down gracefully...`);
+    try {
+      const { shutdownAllQueues } = await import('./utils/operation-queue.js');
+      await shutdownAllQueues();
+      console.log('[41F][QUEUE] Graceful shutdown complete');
+      process.exit(0);
+    } catch (error) {
+      console.error('[41F][QUEUE] Shutdown error:', error);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
+  process.on('SIGINT', () => shutdownHandler('SIGINT'));
 })();
