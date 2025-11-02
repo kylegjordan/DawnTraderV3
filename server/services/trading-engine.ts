@@ -569,13 +569,13 @@ export class TradingEngine {
     const closedTrade = await storage.closeTrade(targetTrade.id, exitPrice, exitFee, exitSlippage);
     
     // Phase 41F-I: Record trade closed event
+    const exitTimeMs = closedTrade.exitTime ? new Date(closedTrade.exitTime).getTime() : Date.now();
+    const entryTimeMs = closedTrade.entryTime ? new Date(closedTrade.entryTime).getTime() : exitTimeMs;
     await telemetryService.recordTradeEvent('trade_closed', {
       symbol: closedTrade.symbol,
       mode: this.mode,
-      result: closedTrade.profitLoss ? `${closedTrade.profitLoss} PnL` : reason,
-      durationMs: closedTrade.exitTime && closedTrade.entryTime 
-        ? new Date(closedTrade.exitTime).getTime() - new Date(closedTrade.entryTime).getTime()
-        : 0
+      result: reason,
+      durationMs: exitTimeMs - entryTimeMs
     });
     
     return closedTrade;

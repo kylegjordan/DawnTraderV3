@@ -1035,9 +1035,9 @@ export class StrategyEngine {
     
     console.log(`[DHMA] ✅ Signal ${longSignal ? 'long' : 'short'} - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}, Confidence: ${(confidence * 100).toFixed(0)}%`);
     
-    const signal = {
+    const signal: StrategySignal = {
       symbol: '',
-      strategy: 'dhma',
+      strategy: 'dhma' as const,
       entryPrice,
       stopPrice,
       targetPrice,
@@ -1055,12 +1055,12 @@ export class StrategyEngine {
       }
     };
     
-    // Phase 41F-I: Record signal emission metric
-    await telemetryService.recordTradeMetric('signal_emit', {
+    // Phase 41F-I: Record signal emission metric (non-blocking)
+    telemetryService.recordTradeMetric('signal_emit', {
       strategy: 'dhma',
       strength: confidence,
       direction: longSignal ? 'long' : 'short'
-    });
+    }).catch(err => console.error('[Strategy] Telemetry error:', err));
     
     return signal;
   }

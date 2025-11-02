@@ -224,6 +224,10 @@ class HealthMonitor extends EventEmitter {
   private circuitBreakerThreshold = 3; // Max recoveries in 10 minutes before circuit breaker activates
   private circuitBreakerWindow = 600000; // 10 minutes window for circuit breaker
   private circuitBreakerDuration = 600000; // 10 minutes circuit breaker suspension
+  
+  // Phase 41F-I: Trade telemetry tracking
+  private lastTradeTs: number | null = null; // Last trade activity timestamp
+  private engineActive = false; // Tracks if any trading engine is active
 
   constructor(config?: Partial<HealthMonitorConfig>) {
     super();
@@ -952,6 +956,22 @@ class HealthMonitor extends EventEmitter {
       });
     }
 
+    // Phase 41F-I: Check trade pipeline idle (60s without activity while engine active)
+    this.engineActive = beat.paper.engine.isRunning || beat.live.engine.isRunning;
+    const timeSinceLastTrade = this.lastTradeTs ? Date.now() - this.lastTradeTs : null;
+    if (this.engineActive && timeSinceLastTrade && timeSinceLastTrade > 60000) {
+      anomalies.push({
+        timestamp: now,
+        component: 'tradePipeline',
+        metric: 'idle',
+        value: timeSinceLastTrade,
+        threshold: 60000,
+        level: 'warning',
+        message: `No trade activity for ${Math.round(timeSinceLastTrade / 1000)}s while engine active`,
+        autoRecoveryAttempted: false,
+      });
+    }
+
     return anomalies;
   }
 
@@ -1059,6 +1079,43 @@ class HealthMonitor extends EventEmitter {
 
   trackKrakenError(): void {
     this.krakenLastError = Date.now();
+  }
+
+  /**
+   * Phase 41F-I: Handle trade events from telemetry service
+   */
+  handleTradeEvent(event: any): void {
+    if (event.type === 'trade_error') {
+      this.logAnomaly({
+        component: 'tradePipeline',
+        metric: 'error',
+        level: 'warning',
+        message: `Trade error detected: ${event.reason || 'Unknown'}`,
+        value: 0,
+        threshold: 0,
+        autoRecoveryAttempted: false
+      });
+    }
+    if (event.type === 'trade_opened' || event.type === 'trade_closed') {
+      this.lastTradeTs = Date.now();
+    }
+  }
+
+  /**
+   * Phase 41F-I: Manually log an anomaly
+   */
+  private logAnomaly(anomaly: Omit<Anomaly, 'timestamp'>): void {
+    const fullAnomaly: Anomaly = {
+      timestamp: new Date().toISOString(),
+      ...anomaly
+    };
+    
+    this.anomalyBuffer.push(fullAnomaly);
+    if (this.anomalyBuffer.length > 100) {
+      this.anomalyBuffer.shift();
+    }
+    
+    console.log(`[41F-I][ANOMALY] ${anomaly.component}:${anomaly.metric} - ${anomaly.message}`);
   }
 
   /**
