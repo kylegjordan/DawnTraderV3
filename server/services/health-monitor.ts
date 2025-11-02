@@ -145,9 +145,10 @@ export interface Anomaly {
 // ========================================
 
 // Phase 41F-F: Alert thresholds for anomaly detection
+// Phase 41F-I: Lifted broadcast warning threshold to 120ms based on burn-in results
 const ALERT_THRESHOLDS = {
   heartbeat: { warn: 200, crit: 400 }, // Heartbeat latency in ms
-  broadcast: { warn: 100, crit: 250 }, // Broadcast latency in ms
+  broadcast: { warn: 120, crit: 200 }, // Broadcast latency in ms (adjusted in 41F-I)
   queueDepth: { warn: 5, crit: 10 }, // Number of pending jobs
   jobAge: { warn: 15000, crit: 30000 }, // Age of executing job in ms
   wsSilence: { warn: 2, crit: 4 }, // Number of heartbeat cycles without WS activity

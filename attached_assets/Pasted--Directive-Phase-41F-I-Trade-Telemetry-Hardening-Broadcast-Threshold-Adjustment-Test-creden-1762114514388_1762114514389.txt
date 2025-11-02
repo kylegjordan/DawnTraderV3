@@ -1,0 +1,145 @@
+⚙️ Directive — Phase 41F-I : Trade Telemetry Hardening + Broadcast Threshold Adjustment
+
+Test credentials:
+username=testuser123 password=SecurePass123!
+
+A) Lift Broadcast Latency Threshold → 120 ms
+
+File: server/services/health-monitor.ts
+
+Search for the alert-thresholds block (created in 41F-F):
+
+const ALERT_THRESHOLDS = {
+  queue: { maxExecutionTimeMs: 3000, maxDepth: 20 },
+  engine: { maxTickGapMs: 60000, maxSignalGapMs: 300000 },
+  marketData: { maxStalenessMs: 20000 },
+  websocket: { maxSilenceMs: 60000 },
+  broadcast: { warningMs: 100, criticalMs: 200 }  // <— old
+};
+
+
+Replace only the broadcast line with:
+
+  broadcast: { warningMs: 120, criticalMs: 200 },
+
+
+✅ This removes the repetitive 105–110 ms warnings while keeping critical protection intact.
+No other values change.
+
+B) Phase 41F-I — Trade Telemetry Hardening
+
+Goal:
+Link every major trading-lifecycle event to the health-monitor pipeline so that anomalies and recoveries can include context from real trade flow.
+
+B1 . Telemetry Hooks
+
+Add hooks in these modules:
+
+File	Location	Action
+server/services/trading-engine.ts	after each order execution	emit telemetry.recordTradeEvent("trade_opened", {…})
+	after position close	emit telemetry.recordTradeEvent("trade_closed", {…})
+	in catch block for order failures	emit telemetry.recordTradeEvent("trade_error", {reason, durationMs})
+server/services/risk-manager.ts	after position sizing calc	telemetry.recordTradeMetric("risk_eval", {riskPct, symbol})
+server/services/strategy-engine.ts	after signal emission	telemetry.recordTradeMetric("signal_emit", {strategy, strength})
+
+Define these helpers in server/services/telemetry-service.ts:
+
+async recordTradeEvent(type, payload) {
+  const entry = { ts: Date.now(), type, ...payload };
+  this.eventBuffer.push(entry);
+  await contextBridge.broadcast({ type: "trade_event", payload: entry });
+  healthMonitor.handleTradeEvent(entry);   // cross-link to anomaly context
+}
+
+async recordTradeMetric(name, payload) {
+  const metric = { ts: Date.now(), name, ...payload };
+  this.metricBuffer.push(metric);
+}
+
+B2 . Health Monitor Integration
+
+Extend server/services/health-monitor.ts with:
+
+handleTradeEvent(event) {
+  if (event.type === "trade_error") {
+    this.logAnomaly({
+      component: "tradePipeline",
+      metric: "error",
+      level: "warning",
+      message: `Trade error detected: ${event.reason}`
+    });
+  }
+  if (event.type === "trade_opened" || event.type === "trade_closed") {
+    this.lastTradeTs = Date.now();
+  }
+}
+
+
+Add a 60-second watchdog check in evaluateAnomalies():
+
+if (Date.now() - (this.lastTradeTs || 0) > 60000 && this.engineActive) {
+  this.logAnomaly({
+    component: "tradePipeline",
+    metric: "idle",
+    level: "warning",
+    message: "No trade activity for >60 s while engine active"
+  });
+}
+
+
+✅ This ensures the anomaly system knows when trade flow stalls.
+
+B3 . WebSocket Event Types
+
+Add to server/services/context-bridge.ts:
+
+type: "trade_event",
+payload: { type, symbol, result, durationMs }
+
+
+Frontend listeners already parse unknown types safely.
+
+B4 . Validation Script (diagnostic-reports/phase-41F-I-trade-telemetry-test.sh)
+#!/usr/bin/env bash
+set -e
+USER=testuser123; PASS=SecurePass123!
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"'"$USER"'","password":"'"$PASS"'"}' | jq -r '.accessToken')
+
+echo "Starting Phase 41F-I telemetry test..."
+
+# Simulate three trade events
+curl -s -X POST http://localhost:5000/api/paper-sim/start -H "Authorization: Bearer $TOKEN" >/dev/null
+sleep 5
+curl -s -X POST http://localhost:5000/api/paper/trade/test -H "Authorization: Bearer $TOKEN" \
+  -d '{"symbol":"BTC/USD","action":"buy","amount":0.01}' -H "Content-Type: application/json"
+sleep 10
+curl -s -X POST http://localhost:5000/api/paper-sim/stop -H "Authorization: Bearer $TOKEN" >/dev/null
+
+echo "Checking anomalies and telemetry..."
+curl -s http://localhost:5000/api/health/anomalies?limit=10 -H "Authorization: Bearer $TOKEN" | jq '.anomalies[:3]'
+
+B5 . Pass/Fail Criteria
+
+✅ Pass if all true | ❌ Fail if any false
+
+Check	Expectation
+Broadcast latency avg < 120 ms	pass
+No critical anomalies	pass
+Trade events appear in anomalies log on error	pass
+Idle-pipeline warning fires after 60 s of no trade	pass
+System Status remains green/yellow, never red	pass
+B6 . Deliverables
+
+phase-41F-I-trade-telemetry-test.sh
+
+phase-41F-I-telemetry-validation.md
+
+Updated replit.md with:
+
+new broadcast threshold (120 ms)
+
+trade telemetry description
+
+updated pass/fail results
