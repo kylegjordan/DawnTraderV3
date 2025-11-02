@@ -24,6 +24,7 @@ import { FilteredPairsService } from './filtered-pairs-service';
 import { KrakenService } from './kraken';
 import { storage } from '../storage';
 import type { TradingSettings, ScreenerFilters, PriceData } from '@shared/schema';
+import { telemetryTrace } from './telemetry-trace.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -88,6 +89,7 @@ export class SignalOrchestrator {
   async start(onSignal: (signal: StrategySignal) => Promise<void>): Promise<void> {
     if (this.isRunning) {
       console.log(`[37.A][SignalOrchestrator][${this.mode}] Already running`);
+      telemetryTrace.trace('SignalOrchestrator', 'START_ALREADY_RUNNING', 'WARN', { mode: this.mode });
       return;
     }
 
@@ -95,6 +97,11 @@ export class SignalOrchestrator {
     this.onSignalCallback = onSignal;
     
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Starting with ${this.enabledStrategies.size} strategies, interval ${this.evaluationIntervalMs}ms`);
+    telemetryTrace.trace('SignalOrchestrator', 'START', 'INFO', { 
+      mode: this.mode, 
+      strategies: this.enabledStrategies.size, 
+      interval: this.evaluationIntervalMs 
+    });
 
     // Immediate evaluation pass
     await this.evaluateMarket();
@@ -105,6 +112,7 @@ export class SignalOrchestrator {
     }, this.evaluationIntervalMs);
 
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Started successfully`);
+    telemetryTrace.trace('SignalOrchestrator', 'START_SUCCESS', 'INFO', { mode: this.mode });
   }
 
   /**
@@ -115,6 +123,8 @@ export class SignalOrchestrator {
       return;
     }
 
+    telemetryTrace.trace('SignalOrchestrator', 'STOP', 'INFO', { mode: this.mode, stats: this.stats });
+
     if (this.evaluationTimer) {
       clearInterval(this.evaluationTimer);
       this.evaluationTimer = null;
@@ -124,6 +134,7 @@ export class SignalOrchestrator {
     this.onSignalCallback = null;
     
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Stopped`);
+    telemetryTrace.trace('SignalOrchestrator', 'STOP_SUCCESS', 'INFO', { mode: this.mode });
   }
 
   /**
@@ -147,18 +158,21 @@ export class SignalOrchestrator {
 
     const startTime = Date.now();
     console.log(`[37.A][SIGNAL] Strategy evaluation tick triggered [mode=${this.mode}]`);
+    telemetryTrace.trace('SignalOrchestrator', 'MARKET_EVALUATION_START', 'INFO', { mode: this.mode });
 
     try {
       // Get system context and filters for this mode
       const systemContext = await storage.getSystemContext(this.mode);
       if (!systemContext) {
         console.error(`[37.A][SIGNAL] No system context found for mode ${this.mode}`);
+        telemetryTrace.trace('SignalOrchestrator', 'NO_SYSTEM_CONTEXT', 'ERROR', { mode: this.mode });
         return;
       }
 
       const filters = await storage.getScreenerFilters({ mode: this.mode });
       if (!filters) {
         console.error(`[37.A][SIGNAL] No filters found for mode ${this.mode}`);
+        telemetryTrace.trace('SignalOrchestrator', 'NO_FILTERS', 'ERROR', { mode: this.mode });
         return;
       }
 
@@ -167,6 +181,10 @@ export class SignalOrchestrator {
       const eligibleSymbols = filteredPairsStats.filteredPairs.map(p => p.symbol);
 
       console.log(`[37.A][SIGNAL] Evaluating ${eligibleSymbols.length} eligible symbols`);
+      telemetryTrace.trace('SignalOrchestrator', 'SYMBOLS_LOADED', 'INFO', { 
+        mode: this.mode, 
+        count: eligibleSymbols.length 
+      });
 
       // Get trading settings from user who started the engine
       if (!systemContext.lastStartedBy) {

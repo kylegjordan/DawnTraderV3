@@ -4,6 +4,7 @@ import { StrategyEngine, StrategySignal } from './strategy-engine';
 import { SignalOrchestrator } from './signal-orchestrator';
 import { storage } from '../storage';
 import { Trade, TradingSettings } from '@shared/schema';
+import { telemetryTrace } from './telemetry-trace.js';
 
 export interface TradeSignal {
   symbol: string;
@@ -44,8 +45,11 @@ export class TradingEngine {
   }
 
   async start(): Promise<void> {
+    telemetryTrace.trace('TradingEngine', 'START_REQUESTED', 'INFO', { mode: this.mode });
+    
     this.isRunning = true;
     console.log(`[37.A][ENGINE][mode=${this.mode}] Trading engine started`);
+    telemetryTrace.trace('TradingEngine', 'ENGINE_STARTED', 'INFO', { mode: this.mode });
 
     // Phase 37: Start signal orchestrator for automatic signal generation
     this.signalOrchestrator = new SignalOrchestrator({
@@ -64,15 +68,24 @@ export class TradingEngine {
       ]
     });
 
+    telemetryTrace.trace('TradingEngine', 'SIGNAL_ORCHESTRATOR_INIT', 'INFO', { 
+      mode: this.mode,
+      interval: 30000,
+      strategies: 9
+    });
+
     await this.signalOrchestrator.start(async (signal: StrategySignal) => {
       // Forward generated signals to processSignal for trade execution
       await this.processSignal(signal as TradeSignal);
     });
 
     console.log(`[37.A][ENGINE][mode=${this.mode}] Signal orchestrator started`);
+    telemetryTrace.trace('TradingEngine', 'SIGNAL_ORCHESTRATOR_STARTED', 'INFO', { mode: this.mode });
   }
 
   async stop(): Promise<void> {
+    telemetryTrace.trace('TradingEngine', 'STOP_REQUESTED', 'INFO', { mode: this.mode });
+    
     this.isRunning = false;
     
     // Phase 37: Stop signal orchestrator
@@ -80,9 +93,11 @@ export class TradingEngine {
       this.signalOrchestrator.stop();
       this.signalOrchestrator = null;
       console.log(`[37.A][ENGINE][mode=${this.mode}] Signal orchestrator stopped`);
+      telemetryTrace.trace('TradingEngine', 'SIGNAL_ORCHESTRATOR_STOPPED', 'INFO', { mode: this.mode });
     }
     
     console.log(`[37.A][ENGINE][mode=${this.mode}] Trading engine stopped`);
+    telemetryTrace.trace('TradingEngine', 'ENGINE_STOPPED', 'INFO', { mode: this.mode });
   }
 
   private async calculateGoalAlignmentScore(signal: TradeSignal, mode: 'live' | 'paper'): Promise<number> {
