@@ -22,18 +22,52 @@ export interface PaperSimResult {
   currentBalance?: number; // Phase 27.F.14.D-POST: Current balance for confirmation prompt
 }
 
-// Phase 41E-S: Track when busy flag was set to auto-clear stale locks
+// Phase 41E-S: Track when busy flag and operation lock were set
 let busyFlagSetAt: number | null = null;
-const BUSY_FLAG_STALE_THRESHOLD_MS = 30000; // 30 seconds
+let operationLockSetAt: number | null = null;
+const BUSY_FLAG_STALE_THRESHOLD_MS = 10000; // 10 seconds (start/stop should complete within 3s)
+const OPERATION_LOCK_STALE_THRESHOLD_MS = 10000; // 10 seconds
 
-// Phase 41E-S: Auto-clear stale busy flags
-function clearStaleBusyFlag() {
+// Phase 41E-S: Auto-clear stale busy flags, operation locks, and orphaned managers
+async function clearStaleBusyFlag() {
+  // Clear stale busy flag (after 10 seconds)
   if (global.globalPaperSimBusyFlag && busyFlagSetAt) {
     const age = Date.now() - busyFlagSetAt;
     if (age > BUSY_FLAG_STALE_THRESHOLD_MS) {
       console.log(`[SAFEGUARD] Cleared stale busy flag (age: ${age}ms)`);
       global.globalPaperSimBusyFlag = false;
       busyFlagSetAt = null;
+    }
+  }
+  
+  // Clear stale operation locks (after 10 seconds - should complete within 3s)
+  if (global.globalPaperSimOperationLock && operationLockSetAt) {
+    const age = Date.now() - operationLockSetAt;
+    if (age > OPERATION_LOCK_STALE_THRESHOLD_MS) {
+      console.log(`[SAFEGUARD] Cleared stale operation lock (age: ${age}ms)`);
+      global.globalPaperSimOperationLock = null;
+      operationLockSetAt = null;
+    }
+  }
+  
+  // Phase 41E-S: Clear orphaned managers (manager exists but no DB session)
+  const hasManager = !!getGlobalPaperSimManager();
+  if (hasManager) {
+    const { db } = await import('../db.js');
+    const { paperSimSessions } = await import('../../shared/schema.js');
+    const { eq } = await import('drizzle-orm');
+    
+    const activeSessions = await db
+      .select()
+      .from(paperSimSessions)
+      .where(eq(paperSimSessions.status, 'running'))
+      .limit(1);
+    
+    const hasDbSession = activeSessions.length > 0;
+    
+    if (!hasDbSession) {
+      console.log(`[SAFEGUARD] Detected orphaned manager - clearing...`);
+      clearGlobalPaperSimManager();
     }
   }
 }
@@ -238,7 +272,7 @@ export async function startPaperSimulation(
   
   try {
     // Phase 41E-S: Auto-clear stale busy flags before checking
-    clearStaleBusyFlag();
+    await clearStaleBusyFlag();
     
     // Phase 33.A: Fast busy check to prevent overlapping requests
     console.log(`[41D-DEBUG-2] Checking busy flag (t+${Date.now()-t0}ms)`);
@@ -459,9 +493,11 @@ export async function startPaperSimulation(
         global.globalPaperSimOperationLock = null;
         global.globalPaperSimBusyFlag = false;
         busyFlagSetAt = null;
+        operationLockSetAt = null; // Phase 41E-S: Clear timestamp
       }
     })();
 
+    operationLockSetAt = Date.now(); // Phase 41E-S: Track when lock was set
     global.globalPaperSimOperationLock = startPromise as any;
     return await startPromise;
     
@@ -470,6 +506,7 @@ export async function startPaperSimulation(
     global.globalPaperSimOperationLock = null;
     global.globalPaperSimBusyFlag = false;
     busyFlagSetAt = null;
+    operationLockSetAt = null; // Phase 41E-S: Clear timestamp
     return {
       success: false,
       message: `Error starting paper trading simulation: ${error.message}`,
@@ -488,7 +525,7 @@ export async function startPaperSimulation(
 export async function stopPaperSimulation(userId: string): Promise<PaperSimResult> {
   try {
     // Phase 41E-S: Auto-clear stale busy flags before checking
-    clearStaleBusyFlag();
+    await clearStaleBusyFlag();
     
     // Phase 33.A: Fast busy check to prevent overlapping requests
     if (global.globalPaperSimBusyFlag) {
@@ -638,9 +675,11 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         global.globalPaperSimOperationLock = null;
         global.globalPaperSimBusyFlag = false;
         busyFlagSetAt = null;
+        operationLockSetAt = null; // Phase 41E-S: Clear timestamp
       }
     })();
 
+    operationLockSetAt = Date.now(); // Phase 41E-S: Track when lock was set
     global.globalPaperSimOperationLock = stopPromise as any;
     return await stopPromise;
     
@@ -649,6 +688,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
     global.globalPaperSimOperationLock = null;
     global.globalPaperSimBusyFlag = false;
     busyFlagSetAt = null;
+    operationLockSetAt = null; // Phase 41E-S: Clear timestamp
     return {
       success: false,
       message: `Error stopping paper trading simulation: ${error.message}`,

@@ -1,0 +1,147 @@
+Directive: Finalize and Validate Phase 41E-S (Paper & Live Modes)
+
+From: Kyle
+For: Replit Dev Environment – testuser / testuser123 / password TestPass123!
+Objective: Confirm the Phase 41E-S non-blocking service-layer refactor is executing correctly and fully validated in both paper and live trading modes.
+
+1️⃣ Environment and Build Verification
+
+Actions:
+
+Kill all node processes and clear caches.
+
+pkill -f node || true
+rm -rf dist .ts-node .cache
+tsc --build --force
+npm run start
+
+
+Confirm new code is active by verifying these in the startup log:
+
+[BOOT] <commit or timestamp>
+[41E-S][LIVE-CODE] paper-sim-service.ts loaded
+
+
+On startup, automatically clear stale busy flags and orphaned managers.
+
+Expect log: [SAFEGUARD] cleared stale busy flag.
+
+2️⃣ State Reset Before Validation
+
+Run the force-stop API once to guarantee a clean environment:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser","password":"TestPass123!"}' | jq -r '.accessToken')
+
+curl -s -X POST http://localhost:5000/api/trading/force-stop \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $TOKEN" \
+ -d '{"mode":"paper","reason":"Pre-Phase 41E-S validation reset"}' | jq '.'
+
+
+Expected:
+"message": "Force-stop executed successfully"
+and a log line: [SAFEGUARD] cleared stale busy flag.
+
+3️⃣ Paper-Mode Three-Cycle Validation
+
+Run three full start → status → stop cycles using different balances
+(to verify balance updates propagate and the new asynchronous code executes).
+
+Balances: $905, $910, $915
+
+For each balance:
+
+# START
+time curl -s -X POST http://localhost:5000/api/paper-sim/start \
+ -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+ -d "{\"mode\":\"paper\",\"startingBalance\":BALANCE}" | jq '.'
+
+# STATUS
+curl -s -X GET http://localhost:5000/api/paper-sim/status \
+ -H "Authorization: Bearer $TOKEN" | jq '{isRunning, sessionInfo}'
+
+# STOP
+time curl -s -X POST http://localhost:5000/api/paper-sim/stop \
+ -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+ -d '{"mode":"paper"}' | jq '.'
+
+
+Expected Results (each cycle):
+
+Start → HTTP 200 within < 3 s
+{"success": true, "pending": true}
+
+Log shows:
+[ENGINE_CHECKPOINT_12] Manager started successfully
+
+Stop → HTTP 200 within < 3 s
+Log lines:
+[41E-S][TIMING] State broadcast completed …
+[ENGINE_STOPPED]
+
+/status flips isRunning true → false.
+
+Busy flag auto-clears after stop.
+
+4️⃣ Live-Mode Three-Cycle Validation
+
+Run three start/stop cycles without modifying the Kraken portfolio balance.
+Use the actual live balance (≈ $834) as returned by the exchange — do not override it in the request.
+
+Commands:
+
+# START
+time curl -s -X POST http://localhost:5000/api/trading/start \
+ -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+ -d '{"mode":"live"}' | jq '.'
+
+# STATUS
+curl -s -X GET http://localhost:5000/api/trading/status \
+ -H "Authorization: Bearer $TOKEN" | jq '{isRunning, diagnostics}'
+
+# STOP
+time curl -s -X POST http://localhost:5000/api/trading/stop \
+ -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+ -d '{"mode":"live"}' | jq '.'
+
+
+Expected Results:
+
+Same < 3 s start/stop responses.
+
+Log shows [ENGINE_CHECKPOINT_12] and [ENGINE_STOPPED].
+
+[41E-S][TIMING] lines appear, confirming service-layer background completion.
+
+Live balance remains unchanged at its real value from Kraken (≈ $834).
+
+5️⃣ Deliverables / Evidence
+
+Please attach or paste:
+
+Log snippet showing [BOOT] and [41E-S][LIVE-CODE] on startup.
+
+Three-cycle test results for both modes (HTTP codes + durations).
+
+Example log segment with [ENGINE_CHECKPOINT_12], [ENGINE_STOPPED], [41E-S][TIMING].
+
+If any request takes > 3 s or hangs:
+
+Print [TRACE] entering service:start(paper) / leaving … and same for stop.
+
+Identify where the trace stops — this is the remaining blocking call.
+
+6️⃣ Completion Gate
+
+Once both modes pass all three cycles with the expected timing and logs, proceed to:
+
+15-minute telemetry run
+
+Paper mode with new balance $920
+
+Observe real-time TradingEngine telemetry events:
+ORDER_SUBMIT, ORDER_EXECUTED, PORTFOLIO_UPDATE.
+
+✅ End Goal: Confirm non-blocking behavior across all service layers, working busy-flag safeguards, correct state synchronization, and readiness for extended telemetry validation.
