@@ -118,6 +118,11 @@ export interface RecoveryAction {
   action: string;
   success: boolean;
   details: any;
+  // Phase 41F-G: Enhanced recovery tracking
+  result?: 'success' | 'failure' | 'skipped';
+  durationMs?: number;
+  cooldownUntil?: string;
+  circuitBreakerActive?: boolean;
 }
 
 // Phase 41F-F: Anomaly detection types
@@ -208,6 +213,16 @@ class HealthMonitor extends EventEmitter {
   private anomalyBuffer: Anomaly[] = []; // Rolling buffer of 100 anomalies
   private wsSilenceCounter = 0; // Tracks heartbeat cycles without WS activity
   private lastWsBroadcastCycle = 0; // Cycle number when last WS broadcast occurred
+  
+  // Phase 41F-G: Auto-recovery framework
+  private lastRecoveryTimestamp: number = 0; // Last recovery execution timestamp
+  private cooldownPeriodMs = 120000; // 120 seconds cool-down between recoveries
+  private circuitBreakerActive = false; // Circuit breaker state
+  private circuitBreakerUntil: number = 0; // Timestamp when circuit breaker expires
+  private recentRecoveries: { timestamp: number; component: string; metric: string }[] = []; // Last 10 minutes of recoveries
+  private circuitBreakerThreshold = 3; // Max recoveries in 10 minutes before circuit breaker activates
+  private circuitBreakerWindow = 600000; // 10 minutes window for circuit breaker
+  private circuitBreakerDuration = 600000; // 10 minutes circuit breaker suspension
 
   constructor(config?: Partial<HealthMonitorConfig>) {
     super();
@@ -1117,6 +1132,300 @@ class HealthMonitor extends EventEmitter {
         live: latest.live.queue.executingJobAgeMs || undefined,
         broadcast: latest.broadcasts.lastLatencyMs || undefined,
       },
+    };
+  }
+
+  // ========================================
+  // Phase 41F-G: Auto-Recovery Framework
+  // ========================================
+
+  /**
+   * Check if system is in cool-down period
+   */
+  private isInCooldown(): boolean {
+    const now = Date.now();
+    return now - this.lastRecoveryTimestamp < this.cooldownPeriodMs;
+  }
+
+  /**
+   * Check and update circuit breaker status
+   */
+  private checkCircuitBreaker(): { active: boolean; reason?: string; expiresAt?: string } {
+    const now = Date.now();
+
+    // Check if circuit breaker is currently active
+    if (this.circuitBreakerActive && now < this.circuitBreakerUntil) {
+      return {
+        active: true,
+        reason: 'Circuit breaker active - too many recoveries in short period',
+        expiresAt: new Date(this.circuitBreakerUntil).toISOString(),
+      };
+    }
+
+    // Circuit breaker expired, reset
+    if (this.circuitBreakerActive && now >= this.circuitBreakerUntil) {
+      console.log('[41F-G][CIRCUIT] Circuit breaker expired, resetting');
+      this.circuitBreakerActive = false;
+      this.circuitBreakerUntil = 0;
+      this.recentRecoveries = [];
+    }
+
+    // Clean up old recoveries outside the window
+    this.recentRecoveries = this.recentRecoveries.filter(
+      r => now - r.timestamp < this.circuitBreakerWindow
+    );
+
+    // Check if we should activate circuit breaker
+    if (this.recentRecoveries.length >= this.circuitBreakerThreshold) {
+      console.warn(`[41F-G][CIRCUIT] Activating circuit breaker - ${this.recentRecoveries.length} recoveries in ${this.circuitBreakerWindow / 60000}min`);
+      this.circuitBreakerActive = true;
+      this.circuitBreakerUntil = now + this.circuitBreakerDuration;
+      
+      // Broadcast circuit breaker activation
+      this.emit('circuit_breaker', {
+        active: true,
+        expiresAt: new Date(this.circuitBreakerUntil).toISOString(),
+        triggeringRecoveries: this.recentRecoveries.length,
+      });
+
+      return {
+        active: true,
+        reason: `Circuit breaker activated - ${this.recentRecoveries.length} recoveries in last ${this.circuitBreakerWindow / 60000} minutes`,
+        expiresAt: new Date(this.circuitBreakerUntil).toISOString(),
+      };
+    }
+
+    return { active: false };
+  }
+
+  /**
+   * Plan recovery action (dry-run mode)
+   */
+  planRecovery(component: string, metric: string, level: AlertLevel): {
+    canExecute: boolean;
+    plannedAction: string | null;
+    reason?: string;
+    cooldownRemaining?: number;
+    circuitBreaker?: { active: boolean; expiresAt?: string };
+  } {
+    // Check circuit breaker
+    const cbStatus = this.checkCircuitBreaker();
+    if (cbStatus.active) {
+      return {
+        canExecute: false,
+        plannedAction: null,
+        reason: cbStatus.reason,
+        circuitBreaker: { active: true, expiresAt: cbStatus.expiresAt },
+      };
+    }
+
+    // Check cool-down
+    if (this.isInCooldown()) {
+      const cooldownRemaining = this.cooldownPeriodMs - (Date.now() - this.lastRecoveryTimestamp);
+      return {
+        canExecute: false,
+        plannedAction: null,
+        reason: `Cool-down active (${Math.ceil(cooldownRemaining / 1000)}s remaining)`,
+        cooldownRemaining,
+      };
+    }
+
+    // Determine recovery action
+    let plannedAction: string | null = null;
+
+    if (component === 'broadcast' && metric === 'latency') {
+      plannedAction = 'log_latency_spike_for_monitoring';
+    } else if (component === 'websocket' && metric === 'silence') {
+      plannedAction = 'force_websocket_reconnect';
+    } else if (component.endsWith('_queue') && metric === 'depth') {
+      plannedAction = 'purge_old_queue_jobs';
+    } else if (component.endsWith('_queue') && metric === 'job_age') {
+      plannedAction = 'restart_stuck_job';
+    } else if (component === 'engine' && metric === 'stress') {
+      plannedAction = 'restart_trading_engine';
+    } else if (component === 'marketData' && metric === 'stress') {
+      plannedAction = 'reconnect_market_data_feed';
+    } else if (component === 'queue' && metric === 'stress') {
+      plannedAction = 'flush_operation_queue';
+    } else {
+      plannedAction = 'log_anomaly_for_review';
+    }
+
+    return {
+      canExecute: true,
+      plannedAction,
+      circuitBreaker: { active: false },
+    };
+  }
+
+  /**
+   * Execute recovery action (non-dry-run mode)
+   */
+  async executeRecovery(
+    component: string,
+    metric: string,
+    level: AlertLevel,
+    dryRun: boolean = false
+  ): Promise<RecoveryAction> {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+
+    // Plan the recovery
+    const plan = this.planRecovery(component, metric, level);
+
+    // If dry-run, return plan without executing
+    if (dryRun) {
+      return {
+        timestamp,
+        component,
+        issue: `${component}.${metric} anomaly (${level})`,
+        action: plan.plannedAction || 'none',
+        success: false,
+        result: 'skipped',
+        durationMs: 0,
+        details: {
+          dryRun: true,
+          canExecute: plan.canExecute,
+          reason: plan.reason,
+          cooldownRemaining: plan.cooldownRemaining,
+          circuitBreaker: plan.circuitBreaker,
+        },
+      };
+    }
+
+    // Check if we can execute
+    if (!plan.canExecute) {
+      return {
+        timestamp,
+        component,
+        issue: `${component}.${metric} anomaly (${level})`,
+        action: plan.plannedAction || 'none',
+        success: false,
+        result: 'skipped',
+        durationMs: Date.now() - startTime,
+        details: {
+          reason: plan.reason,
+          cooldownRemaining: plan.cooldownRemaining,
+          circuitBreaker: plan.circuitBreaker,
+        },
+        circuitBreakerActive: plan.circuitBreaker?.active,
+      };
+    }
+
+    // Execute recovery action
+    console.log(`[41F-G][RECOVERY] Executing: ${plan.plannedAction} for ${component}.${metric}`);
+    
+    // Emit recovery started event
+    this.emit('recovery_started', { component, metric, level, action: plan.plannedAction });
+
+    let success = false;
+    let errorMessage: string | null = null;
+
+    try {
+      // Execute based on planned action
+      if (plan.plannedAction === 'force_websocket_reconnect') {
+        console.log('[41F-G][RECOVERY] Triggering WebSocket reconnect (simulated)');
+        success = true; // Would trigger actual reconnect in production
+      } else if (plan.plannedAction === 'purge_old_queue_jobs') {
+        console.log('[41F-G][RECOVERY] Purging old queue jobs (simulated)');
+        success = true; // Would call queue.purge() in production
+      } else if (plan.plannedAction === 'restart_trading_engine') {
+        console.log('[41F-G][RECOVERY] Restarting trading engine (simulated)');
+        success = true; // Would restart engine in production
+      } else if (plan.plannedAction === 'reconnect_market_data_feed') {
+        console.log('[41F-G][RECOVERY] Reconnecting market data feed (simulated)');
+        success = true; // Would reconnect feed in production
+      } else if (plan.plannedAction === 'flush_operation_queue') {
+        console.log('[41F-G][RECOVERY] Flushing operation queue (simulated)');
+        success = true; // Would flush queue in production
+      } else {
+        console.log('[41F-G][RECOVERY] Logging anomaly for review');
+        success = true;
+      }
+
+      // Update recovery tracking
+      this.lastRecoveryTimestamp = Date.now();
+      this.recentRecoveries.push({
+        timestamp: this.lastRecoveryTimestamp,
+        component,
+        metric,
+      });
+
+      // Calculate cool-down expiry
+      const cooldownUntil = new Date(this.lastRecoveryTimestamp + this.cooldownPeriodMs).toISOString();
+
+      const action: RecoveryAction = {
+        timestamp,
+        component,
+        issue: `${component}.${metric} anomaly (${level})`,
+        action: plan.plannedAction || 'none',
+        success,
+        result: success ? 'success' : 'failure',
+        durationMs: Date.now() - startTime,
+        cooldownUntil,
+        details: {
+          metric,
+          level,
+          errorMessage,
+        },
+      };
+
+      // Add to recovery actions buffer
+      this.recoveryActions.push(action);
+      if (this.recoveryActions.length > 100) {
+        this.recoveryActions.shift();
+      }
+
+      // Emit recovery completed event
+      this.emit('recovery_completed', action);
+
+      return action;
+
+    } catch (error: any) {
+      errorMessage = error.message;
+      console.error(`[41F-G][RECOVERY] Error executing recovery:`, errorMessage);
+
+      const action: RecoveryAction = {
+        timestamp,
+        component,
+        issue: `${component}.${metric} anomaly (${level})`,
+        action: plan.plannedAction || 'none',
+        success: false,
+        result: 'failure',
+        durationMs: Date.now() - startTime,
+        details: {
+          metric,
+          level,
+          errorMessage,
+        },
+      };
+
+      this.recoveryActions.push(action);
+      if (this.recoveryActions.length > 100) {
+        this.recoveryActions.shift();
+      }
+
+      this.emit('recovery_completed', action);
+
+      return action;
+    }
+  }
+
+  /**
+   * Get circuit breaker status
+   */
+  getCircuitBreakerStatus(): {
+    active: boolean;
+    expiresAt?: string;
+    recentRecoveries: number;
+    threshold: number;
+  } {
+    const cbStatus = this.checkCircuitBreaker();
+    return {
+      active: cbStatus.active,
+      expiresAt: cbStatus.expiresAt,
+      recentRecoveries: this.recentRecoveries.length,
+      threshold: this.circuitBreakerThreshold,
     };
   }
 }

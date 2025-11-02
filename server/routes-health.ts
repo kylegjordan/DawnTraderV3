@@ -149,3 +149,46 @@ healthRouter.get('/anomalies', async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 });
+
+/**
+ * Phase 41F-G: POST /api/health/recovery/test
+ * Execute or plan recovery action (supports dry-run mode)
+ */
+healthRouter.post('/recovery/test', async (req, res) => {
+  try {
+    const { component, metric, level, dryRun } = req.body;
+
+    console.log(`[41F-G][API] Recovery test requested: ${component}.${metric} (${level}) dryRun=${dryRun}`);
+
+    // Execute recovery (or dry-run)
+    const result = await healthMonitor.executeRecovery(component, metric, level || 'critical', dryRun);
+
+    res.json({
+      ok: true,
+      ...result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('[41F-G][API] Error executing recovery test:', error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * Phase 41F-G: GET /api/health/circuit-breaker
+ * Returns circuit breaker status
+ */
+healthRouter.get('/circuit-breaker', async (req, res) => {
+  try {
+    const status = healthMonitor.getCircuitBreakerStatus();
+    
+    res.json({
+      ok: true,
+      ...status,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('[41F-G][API] Error fetching circuit breaker status:', error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
