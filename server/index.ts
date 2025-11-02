@@ -100,6 +100,14 @@ app.use((req, res, next) => {
   app.use('/api', apiRouter);
   console.log('[Server] API routes mounted at /api');
 
+  // Phase 41F-B-5: Initialize operation queues and clear orphaned state
+  try {
+    const { initializeQueues } = await import('./utils/operation-queue');
+    await initializeQueues();
+  } catch (error) {
+    console.error('[Queue] ⚠️ Initialization failed:', error);
+  }
+
   // Phase 27.F.8: Reset PaperSim service state FIRST (before any other services)
   try {
     const { resetPaperSimService } = await import('./services/paper-sim-service');

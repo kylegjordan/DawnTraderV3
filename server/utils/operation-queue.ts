@@ -262,3 +262,76 @@ export async function shutdownAllQueues(): Promise<void> {
   ]);
   console.log('[41F-B][QUEUE] All queues shut down successfully');
 }
+
+/**
+ * Phase 41F-B-5: Startup recovery - clear any orphaned state from previous runs
+ * This runs on server startup to ensure clean queue state
+ */
+export async function initializeQueues(): Promise<void> {
+  console.log('[41F-B][RECOVERY] Initializing operation queues on startup...');
+  
+  // Clear any orphaned jobs (server restart clears in-memory state automatically)
+  // But we log the initialization for observability
+  const paperStatus = paperOperationQueue.getStatus();
+  const liveStatus = liveOperationQueue.getStatus();
+  
+  console.log('[41F-B][RECOVERY] Paper queue status:', {
+    queueSize: paperStatus.queueSize,
+    processing: paperStatus.processing,
+  });
+  
+  console.log('[41F-B][RECOVERY] Live queue status:', {
+    queueSize: liveStatus.queueSize,
+    processing: liveStatus.processing,
+  });
+  
+  // Phase 41F-B-5: Clean up orphaned database sessions and managers
+  // This ensures database state matches in-memory queue state
+  try {
+    const { storage } = await import('../storage.js');
+    const { db } = await import('../db.js');
+    const { paperSimSessions } = await import('../../shared/schema.js');
+    const { eq } = await import('drizzle-orm');
+    
+    // Find any running paper sessions (these should have been stopped on previous shutdown)
+    const runningSessions = await db
+      .select()
+      .from(paperSimSessions)
+      .where(eq(paperSimSessions.status, 'running'));
+    
+    if (runningSessions.length > 0) {
+      console.warn(`[41F-B][RECOVERY] Found ${runningSessions.length} orphaned paper trading session(s) from previous run`);
+      
+      // Mark them as stopped (graceful recovery)
+      for (const session of runningSessions) {
+        await storage.updatePaperSimSession(session.id, {
+          status: 'stopped',
+          stoppedAt: new Date(),
+          runForMs: new Date().getTime() - new Date(session.startedAt).getTime(),
+        });
+        console.log(`[41F-B][RECOVERY] Marked orphaned session ${session.sessionId} as stopped`);
+      }
+    } else {
+      console.log('[41F-B][RECOVERY] No orphaned paper trading sessions found');
+    }
+    
+    // Clear any global manager state (should already be null on fresh start, but ensure it)
+    if ((global as any).globalPaperPortfolioManager) {
+      console.warn('[41F-B][RECOVERY] Clearing orphaned global paper portfolio manager');
+      (global as any).globalPaperPortfolioManager = null;
+    }
+    
+    if ((global as any).tradingEngines) {
+      const engineCount = (global as any).tradingEngines.size;
+      if (engineCount > 0) {
+        console.warn(`[41F-B][RECOVERY] Clearing ${engineCount} orphaned trading engine(s)`);
+        (global as any).tradingEngines.clear();
+      }
+    }
+    
+    console.log('[41F-B][RECOVERY] Queue initialization complete - system ready');
+  } catch (error) {
+    console.error('[41F-B][RECOVERY] Error during startup recovery:', error);
+    // Non-blocking - system can still start even if recovery fails
+  }
+}
