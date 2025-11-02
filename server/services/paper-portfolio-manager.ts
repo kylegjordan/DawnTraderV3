@@ -46,6 +46,7 @@ export class PaperPortfolioManager {
   private isRunning: boolean = false;
   private watchlistRefreshInterval: NodeJS.Timeout | null = null;
   private signalOrchestrator: SignalOrchestrator | null = null; // Phase 37: Signal generation
+  private isRefreshingWatchlist: boolean = false; // Phase 41F-E: Prevent overlapping refresh cycles
   
   // Portfolio-level guardrails
   private readonly MAX_DRAWDOWN_PERCENT = 20; // Max 20% drawdown
@@ -123,8 +124,11 @@ export class PaperPortfolioManager {
       () => this.refreshWatchlistData(),
       this.WATCHLIST_REFRESH_INTERVAL_MS
     );
-    // Run initial refresh immediately
-    await this.refreshWatchlistData();
+    // Phase 41F-E: Run initial refresh asynchronously (non-blocking) to prevent HTTP timeout
+    this.refreshWatchlistData().catch(err => {
+      console.error(`[PaperPortfolio:${this.userId}] Initial watchlist refresh failed:`, err);
+    });
+    console.log(`[PaperPortfolio:${this.userId}] Initial watchlist refresh triggered asynchronously`);
   }
 
   async stop(): Promise<void> {
@@ -158,6 +162,20 @@ export class PaperPortfolioManager {
   }
 
   private async refreshWatchlistData(): Promise<void> {
+    // Phase 41F-E: Early exit if engine stopped (prevent writes after stop)
+    if (!this.isRunning) {
+      console.log(`[PaperPortfolio:${this.userId}] Skipping watchlist refresh - engine not running`);
+      return;
+    }
+    
+    // Phase 41F-E: Prevent overlapping refresh cycles if previous one still running
+    if (this.isRefreshingWatchlist) {
+      console.log(`[PaperPortfolio:${this.userId}] Skipping watchlist refresh - previous cycle still in progress`);
+      return;
+    }
+    
+    this.isRefreshingWatchlist = true;
+    
     try {
       // Get user's paper mode watchlist
       const watchlist = await storage.getWatchlist({ userId: this.userId, mode: 'paper' });
@@ -213,6 +231,9 @@ export class PaperPortfolioManager {
       console.log(`[PaperPortfolio:${this.userId}] Watchlist refresh complete`);
     } catch (error) {
       console.error(`[PaperPortfolio:${this.userId}] Error refreshing watchlist:`, error);
+    } finally {
+      // Phase 41F-E: Always clear in-flight flag to allow next refresh
+      this.isRefreshingWatchlist = false;
     }
   }
 
