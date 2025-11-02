@@ -5105,10 +5105,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           return res.status(400).json({ error: result.message || result.error });
         }
         
-        // Phase 34: Use tradingStateSync.broadcastUserUpdate to include portfolioOverview
+        console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
+        
+        // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
         const { tradingStateSync } = await import('./services/trading-state-sync.js');
-        await tradingStateSync.broadcastUserUpdate(userId);
-        console.log('[Phase-34] Broadcasted paper trading_state_changed with portfolioOverview (active = true, new simulation)');
+        tradingStateSync.broadcastUserUpdate(userId)
+          .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (new simulation)'))
+          .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
+        
+        console.log('[41D-FIX] Broadcast triggered asynchronously');
         
         return res.json({ success: true, message: `New simulation started with $${balance.toFixed(2)}` });
       }
@@ -5152,16 +5157,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: result.message || result.error });
       }
       
-      // Phase 34: Use tradingStateSync.broadcastUserUpdate to include portfolioOverview
+      console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
+      
+      // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
-      await tradingStateSync.broadcastUserUpdate(userId);
-      console.log('[Phase-34] Broadcasted paper trading_state_changed with portfolioOverview (active = true)');
+      tradingStateSync.broadcastUserUpdate(userId)
+        .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (continue simulation)'))
+        .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
+      
+      console.log('[41D-FIX] Broadcast triggered asynchronously');
       
       res.json({ success: true, message: result.message });
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
       (global as any).globalPaperSimOperationLock = null;
       res.status(500).json({ error: error.message || 'Failed to start paper trading simulation' });
+    } finally {
+      // Phase 41D: Ensure busy flag is always cleared
+      (global as any).globalPaperSimBusyFlag = false;
+      console.log('[41D-FIX] Busy flag cleared in finally block');
     }
   });
 
@@ -5182,10 +5196,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ error: result.message || result.error });
       }
       
-      // Phase 34: Use tradingStateSync.broadcastUserUpdate to include portfolioOverview
+      console.log('[41D-FIX] Engine stop completed, preparing HTTP response...');
+      
+      // Phase 41D: Non-blocking WebSocket broadcast to prevent HTTP timeout
       const { tradingStateSync } = await import('./services/trading-state-sync.js');
-      await tradingStateSync.broadcastUserUpdate(userId);
-      console.log('[Phase-34] Broadcasted paper trading_state_changed with portfolioOverview (active = false)');
+      tradingStateSync.broadcastUserUpdate(userId)
+        .then(() => console.log('[41D-FIX] Broadcast completed asynchronously (stop)'))
+        .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
+      
+      console.log('[41D-FIX] Broadcast triggered asynchronously');
       
       res.json({ success: true, message: result.message });
     } catch (error: any) {

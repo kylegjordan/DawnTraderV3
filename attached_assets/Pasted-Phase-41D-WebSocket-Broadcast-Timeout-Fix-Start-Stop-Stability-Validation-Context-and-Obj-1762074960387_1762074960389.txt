@@ -1,0 +1,201 @@
+Phase 41D – WebSocket Broadcast Timeout Fix + Start/Stop Stability Validation
+
+
+---
+
+Context and Objective
+
+RAPID,
+during Phase 41C testing we identified that the /api/paper-sim/start endpoint successfully starts the trading engine but the HTTP request never returns because of a blocking call to:
+
+await tradingStateSync.broadcastUserUpdate(userId);
+
+This WebSocket broadcast attempts to notify connected clients that trading has started.
+However, it awaits acknowledgments from all connected sockets, and if even one is slow or unresponsive, the entire HTTP transaction hangs.
+That prevents the frontend from receiving confirmation, leaves the engine’s busy flag stuck, and causes subsequent “Engine is busy” errors.
+
+The trading actually starts in the background, but the client times out — producing false negatives.
+
+This phase’s goal is to:
+
+1. Implement a non-blocking broadcast fix that decouples WebSocket updates from HTTP responses.
+
+
+2. Guarantee proper cleanup (busyFlag, database session).
+
+
+3. Validate stability through three full start/stop cycles of the paper-trading engine to confirm that the system behaves consistently.
+
+
+
+
+---
+
+🧩 Implementation Tasks
+
+
+---
+
+1️⃣ Modify the Broadcast Call
+
+In server/routes.ts (within /api/paper-sim/start route handler):
+
+Replace:
+
+await tradingStateSync.broadcastUserUpdate(userId);
+
+With the non-blocking version:
+
+tradingStateSync.broadcastUserUpdate(userId)
+  .then(() => console.log('[41D-FIX] Broadcast completed asynchronously'))
+  .catch(err => console.warn('[41D-FIX] Broadcast error:', err.message));
+
+👉 This ensures the HTTP response is sent immediately after engine initialization.
+If the broadcast fails or stalls, it logs a warning but does not block the client.
+
+
+---
+
+2️⃣ Add Timeout Protection (Optional Enhancement)
+
+If you wish to retain a bounded wait:
+
+await Promise.race([
+  tradingStateSync.broadcastUserUpdate(userId),
+  new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Broadcast timeout after 2 s')), 2000)
+  )
+]).catch(err => console.warn('[41D-FIX] Broadcast timeout or error:', err.message));
+
+
+---
+
+3️⃣ Ensure Busy-Flag and Session Cleanup
+
+At the end of the same route, confirm there’s a final cleanup block:
+
+finally {
+  global.globalPaperSimBusyFlag = false;
+  console.log('[41D-FIX] Busy flag cleared');
+}
+
+This guarantees proper reset even if the broadcast or database operation fails.
+
+
+---
+
+4️⃣ Add Diagnostic Logging
+
+Insert explicit trace logs around the modified section:
+
+console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
+console.log('[41D-FIX] Broadcast triggered asynchronously');
+
+
+---
+
+🔁 Validation Procedure: Three Start/Stop Cycles
+
+After deploying the fix, run the following automated test sequence.
+
+Credentials
+
+username: testuser123
+password: SecurePass123!
+
+Test 1 – $845 Portfolio
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.token')
+
+curl -s -X POST http://localhost:5000/api/paper-sim/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-app-mode: paper" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"new","initialBalance":845}' | jq '.'
+
+sleep 5
+curl -s -X GET http://localhost:5000/api/paper-sim/status \
+  -H "Authorization: Bearer $TOKEN" -H "x-app-mode: paper" | jq '.'
+
+curl -s -X POST http://localhost:5000/api/paper-sim/stop \
+  -H "Authorization: Bearer $TOKEN" -H "x-app-mode: paper" | jq '.'
+
+Repeat the above sequence twice more using $850 and $855 balances.
+
+
+---
+
+Expected Behavior per Cycle
+
+Check	Expected Result
+
+/api/paper-sim/start	Returns JSON response < 3 s
+Backend logs	[41D-FIX] Broadcast triggered asynchronously then [41D-FIX] Busy flag cleared
+/api/paper-sim/status	isRunning: true → false after stop
+No “Engine is busy” errors	✅
+Portfolio balance	Matches entered amount
+WebSocket broadcast	Fires (non-blocking)
+HTTP timeouts	None
+
+
+
+---
+
+🧾 Reporting
+
+After successful completion, generate the following:
+
+File	Purpose
+
+/diagnostic-reports/phase-41d-broadcast-fix.md	Implementation details, code snippet, timing metrics
+/diagnostic-reports/phase-41d-start-stop-validation.md	Results of the three start/stop cycles
+/diagnostic-reports/phase-41d-console-trace.log	Relevant console excerpts showing [41D-FIX] entries
+
+
+Each report should include timestamps, request durations, and confirmation that the busy flag resets after each run.
+
+
+---
+
+✅ Success Criteria
+
+Metric	Target
+
+Start/Stop response time	< 3 s
+HTTP timeouts	0
+Busy flag resets after each run	✅
+WebSocket broadcast completes asynchronously	✅
+System state consistent across 3 cycles	✅
+No unhandled errors or hangs	✅
+
+
+
+---
+
+🔐 Execution Settings
+
+Run after Kraken maintenance completes.
+
+Keep Walter disabled.
+
+Use the same workspace and test user credentials.
+
+If the first cycle fails, log diagnostics, apply fix, restart, and re-run all three cycles.
+
+
+
+---
+
+🚀 Expected Outcome
+
+After applying this fix and completing the validation:
+
+The /api/paper-sim/start endpoint will respond instantly instead of hanging.
+
+The paper engine will start and stop reliably without leaving the system locked.
+
+All WebSocket broadcasts will execute asynchronously and safely.
+
+The system will be ready for the full simulation validation in the next phase.
