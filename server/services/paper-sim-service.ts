@@ -439,7 +439,7 @@ export async function startPaperSimulation(
       }
     })();
 
-    global.globalPaperSimOperationLock = startPromise;
+    global.globalPaperSimOperationLock = startPromise as any;
     return await startPromise;
     
   } catch (error: any) {
@@ -612,7 +612,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
       }
     })();
 
-    global.globalPaperSimOperationLock = stopPromise;
+    global.globalPaperSimOperationLock = stopPromise as any;
     return await stopPromise;
     
   } catch (error: any) {
