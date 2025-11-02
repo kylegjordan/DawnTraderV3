@@ -121,7 +121,7 @@ export default function EngineTelemetry() {
 
   // Phase 41F-F: Anomaly detection data
   const { data: anomaliesData } = useQuery<{ anomalies: any[] }>({
-    queryKey: ['/api/health/anomalies/recent'],
+    queryKey: ['/api/health/anomalies'],
     refetchInterval: 15000,
   });
 
@@ -555,7 +555,7 @@ export default function EngineTelemetry() {
                         )}
                       </div>
                       {anomaly.recovered && (
-                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" title="Auto-recovered" />
+                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                       )}
                     </div>
                   );
