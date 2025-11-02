@@ -1,0 +1,145 @@
+🧩 Phase 41F-D-Fix Directive — Engine Telemetry Rendering Stabilization
+🧠 Problem Summary
+
+The backend and WebSocket telemetry are confirmed healthy.
+However, the Engine Telemetry tab initially renders (you see metrics flash) and then goes blank.
+There are no JS console errors, meaning the component is failing silently — most likely due to:
+
+A state update loop (React repeatedly re-renders due to useEffect dependency mismanagement); or
+
+A JSON parsing / structure mismatch between WebSocket and REST fallback data; or
+
+A null-dereference in nested metric access (wsHealthData.paper.queue.ok) after data shape changes.
+
+🧩 Objective
+
+Identify and correct the rendering crash.
+
+Harden the component to never blank out (show fallback text if data fails).
+
+Add clear console diagnostics ([EngineTelemetry] prefixed).
+
+Validate that all tiles persist on screen continuously during 3 cycles.
+
+🔧 Step-by-Step Tasks
+1️⃣ Add Diagnostic Logging
+
+In
+client/src/components/monitoring/engine-telemetry.tsx,
+add top-level debug output around all data sources:
+
+useEffect(() => {
+  console.log("[EngineTelemetry] WS health data:", wsHealthData);
+  console.log("[EngineTelemetry] REST fallback:", restHealthData);
+}, [wsHealthData, restHealthData]);
+
+
+Then wrap main return in a try/catch-style boundary:
+
+try {
+  // render cards, charts, etc.
+} catch (err) {
+  console.error("[EngineTelemetry] Render failure:", err);
+  return <div className="p-4 text-red-500">Render error: {String(err)}</div>;
+}
+
+
+This will catch silent runtime errors that currently cause the white screen.
+
+2️⃣ Add Defensive Rendering for Optional Data
+
+Replace any direct deep access like:
+
+wsHealthData.paper.queue.ok
+
+
+with optional chaining + fallback:
+
+wsHealthData?.paper?.queue?.ok ?? "N/A"
+
+
+Repeat for engine, market, cache, broadcast, and database sections.
+
+3️⃣ Stabilize WebSocket Subscription Hook
+
+If the hook uses:
+
+useEffect(() => { ws.onmessage = ... }, [ws])
+
+
+remove ws from dependency array or memoize it with useRef to prevent re-registration loops.
+
+Add:
+
+useEffect(() => {
+  console.log("[EngineTelemetry] WS connected");
+  return () => console.log("[EngineTelemetry] WS disconnected");
+}, []);
+
+4️⃣ Add Graceful Fallback UI
+
+When neither WS nor REST returns valid data:
+
+if (!wsHealthData && !restHealthData)
+  return <div className="p-6 text-gray-400 italic">
+    Waiting for telemetry data (first heartbeat expected within 5 s)...
+  </div>;
+
+
+This ensures the user never sees an empty white screen.
+
+5️⃣ Run Live Console Validation
+
+After saving:
+
+Restart workflow (Start application)
+
+Wait 20 s, open app → System → Engine Telemetry
+
+Open browser console (F12 → Console tab)
+
+Look for:
+
+[EngineTelemetry] WS health data: objects updating every 5 s
+
+No red errors
+
+UI tiles staying visible continuously
+
+If you still get a blank screen:
+
+Copy any [EngineTelemetry] console logs
+
+Confirm if the final logged object before blanking is unusually large or undefined
+
+6️⃣ Generate Validation Report
+
+After the UI stays stable through three paper and three live cycles, create:
+
+diagnostic-reports/phase-41F-D-fix-validation.md
+Include:
+
+Screenshot of each visible tile
+
+Extracted console logs (showing successful WS updates)
+
+Confirmation that UI stayed stable for ≥ 1 minute per cycle
+
+✅ Acceptance Criteria
+Check	Pass Condition
+No blank white screen	Component continuously visible
+No unhandled React error	Console free of red errors
+Fallback text appears if data missing	“Waiting for telemetry data” shown
+WS updates log every 5 s	[EngineTelemetry] WS health data: visible
+Validation report created	File saved with screenshots
+🔐 Test Credentials
+Username: testuser123
+Password: SecurePass123!
+
+🚀 Expected Outcome
+
+✅ Engine Telemetry tab loads immediately
+✅ Data tiles remain visible and update every 5 s
+✅ No crash, blank, or silent failure
+✅ Full diagnostics visible in console
+✅ Validation report confirming stability created
