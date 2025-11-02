@@ -354,7 +354,11 @@ export async function startPaperSimulation(
           console.error('[ENGINE_ERROR] Manager start failed:', managerError);
           // Rollback on manager start failure
           clearGlobalPaperSimManager();
-          await storage.updatePaperSimSessionStatus(userId, sessionId, 'failed');
+          // Find the session we just created and mark it as failed
+          const failedSession = await storage.getPaperSimSessionBySessionId(sessionId);
+          if (failedSession) {
+            await storage.updatePaperSimSession(failedSession.id, { status: 'failed' });
+          }
           throw new Error(`Failed to start trading engine: ${managerError.message}`);
         }
         
@@ -400,10 +404,21 @@ export async function startPaperSimulation(
           },
         };
       } catch (error: any) {
-        // Phase 27.F.9: Rollback - clean up manager using synchronized API
+        // Phase 41C-FIX: Complete rollback - clean up manager AND database session
         clearGlobalPaperSimManager();
         
-        console.error('[PaperSimService] Error during start, rolling back:', error);
+        // Roll back database session if it was created
+        try {
+          const existingSession = await storage.getActivePaperSimSession(userId);
+          if (existingSession) {
+            console.log(`[PaperSimService] Rolling back database session: ${existingSession.sessionId}`);
+            await storage.updatePaperSimSession(existingSession.id, { status: 'failed' });
+          }
+        } catch (rollbackError) {
+          console.error('[PaperSimService] Failed to rollback database session:', rollbackError);
+        }
+        
+        console.error('[PaperSimService] Error during start, rollback complete:', error);
         throw error;
       } finally {
         global.globalPaperSimOperationLock = null;
