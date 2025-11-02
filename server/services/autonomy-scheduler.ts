@@ -596,9 +596,9 @@ schedulerRegistry.registerTask({
 
       // Broadcast via Context Bridge
       await contextBridge.broadcast({
-        event: 'performance_snapshot',
-        data: performance,
-      }, 'all');
+        type: 'performance_snapshot',
+        payload: performance,
+      });
 
       console.log(`[AutonomyScheduler] ✅ Performance snapshot complete`);
     } catch (error) {
@@ -698,14 +698,14 @@ schedulerRegistry.registerTask({
 
       // 4. Broadcast sync complete event
       await contextBridge.broadcast({
-        event: 'ethics_federation_sync_complete',
-        data: {
+        type: 'ethics_federation_sync_complete',
+        payload: {
           pendingUpdates: pendingUpdates.length,
           successCount: stats.successCount,
           failedCount: stats.failedCount,
           timestamp: new Date(),
         },
-      }, 'all');
+      });
 
       console.log(`[AutonomyScheduler] ✅ Federated ethics sync complete`);
     } catch (error) {
@@ -773,15 +773,15 @@ schedulerRegistry.registerTask({
 
       // 4. Broadcast conflict update
       await contextBridge.broadcast({
-        event: 'ethics_conflict_updated',
-        data: {
+        type: 'ethics_conflict_updated',
+        payload: {
           totalConflicts: conflicts.length,
           unresolvedCount: unresolvedConflicts.length - staleConflicts.length,
           highSeverityCount: highSeverityConflicts.length,
           autoResolvedCount: staleConflicts.length,
           timestamp: new Date(),
         },
-      }, 'all');
+      });
 
       console.log(`[AutonomyScheduler] ✅ Ethics conflict mediation complete`);
       console.log(`[AutonomyScheduler] - Total conflicts: ${conflicts.length}`);
