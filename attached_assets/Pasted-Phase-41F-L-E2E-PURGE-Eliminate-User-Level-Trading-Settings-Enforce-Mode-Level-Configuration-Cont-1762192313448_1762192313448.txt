@@ -1,0 +1,172 @@
+Phase 41F-L.E2E-PURGE — Eliminate User-Level Trading Settings; Enforce Mode-Level Configuration
+Context & urgency
+
+We are still seeing risk/portfolio values read and/or written at the user level (e.g., trading_settings joined to users). This contradicts the architecture we agreed and implemented many phases ago: configuration must be mode-scoped, not user-scoped. The canonical sources of truth are guardrails_v2 (risk/exposure limits) and portfolio_state (equity/holdings) via the Mode Registry. Any user-linked settings must be removed to avoid data drift, mistrust, and non-reproducible results between UI and engine. This purge is a prerequisite before we continue with SSOT counts, signal persistence, and Playwright visual proof.
+
+Test user (for smoke & SQL checks)
+
+username: testuser123
+
+password: SecurePass123!
+
+Objectives
+
+Remove all runtime reads/writes of user-level trading config (e.g., trading_settings).
+
+Guarantee risk% and portfolio balance come only from:
+
+guardrails_v2 (per mode)
+
+portfolio_state (per mode)
+
+Mode Registry (to select the active mode / context)
+
+Prove via smoke run + SQL that no user-linked settings influence execution.
+
+Step A — Discovery (show all references; don’t change code yet)
+
+List every reference to trading_settings and any per-user risk/portfolio fields:
+
+rg -n "trading_settings|risk_per_trade(_pct)?|portfolio_value" server --type ts
+rg -n "JOIN\\s+users\\b.*trading_settings" server --type ts
+
+
+For each hit, paste:
+
+File + line numbers,
+
+10 lines of context,
+
+Whether it’s read path or write path, and which runtime code calls it.
+
+List all code that computes risk amount / quantity:
+
+rg -n "getRiskPercentage|calculateRiskAmount|risk.*per.*trade|quantity\\s*=.*risk" server --type ts
+
+
+Indicate the inputs now used (expect guardrails_v2 + portfolio_state only).
+
+Deliverable A: A table mapping every reference → decision (delete / migrate / noop).
+
+Step B — Purge & Redirect
+
+Remove all runtime reads/writes to trading_settings. Replace with:
+
+Risk%: read from guardrails_v2 (by mode).
+
+Portfolio equity: read from portfolio_state (by mode).
+
+Risk helpers (getRiskPercentage, calculateRiskAmount) must accept values from guardrails + portfolio_state. No user-scope fallbacks.
+
+Mode Registry must be the only selector for which guardrails/portfolio_state to use (paper/live).
+
+Routes/Services:
+
+risk-manager, paper-execution, pre-execution-validator, trading-bob, any orchestration or route code that still touches per-user settings → refactor to mode-level accessors.
+
+Config literals: Any leftover 800/150 defaults in runtime paths must be removed. (Aspirational pace metadata is fine only if it doesn’t influence execution).
+
+Deliverable B: Diffs for each file changed, with before/after blocks for risk sourcing.
+
+Step C — Database migration (safe deprecation)
+
+Only after Step B compiles and passes unit checks.
+
+Rename the legacy table so accidental references break loudly:
+
+ALTER TABLE trading_settings RENAME TO trading_settings_legacy;
+
+
+Optional safety shim (only if needed for old admin tools): create a read-only view that returns empty/noop values so calls fail visibly in logs:
+
+CREATE OR REPLACE VIEW trading_settings AS
+SELECT NULL::uuid AS user_id, NULL::numeric AS portfolio_value,
+       NULL::numeric AS risk_per_trade, NULL::numeric AS risk_per_trade_pct
+WHERE false;
+
+
+(If not needed, skip the view. The point is: runtime code must not depend on this.)
+
+Deliverable C: The executed SQL and confirmation that app still starts.
+
+Step D — Compile-time & runtime guards
+
+Add a compile-time comment + test in risk helpers: if any caller attempts to pass user-scoped settings, the test fails.
+
+Add a runtime guard log (WARN) in risk helpers if a caller provides a userId instead of mode (should not happen).
+
+Deliverable D: Test snippet or assertion showing the guard in action.
+
+Step E — Smoke proof (engine running)
+
+Use the credentials above.
+
+Start paper engine:
+
+BASE="http://localhost:5000"
+TOKEN=$(curl -s -X POST "$BASE/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+curl -s -X POST "$BASE/api/guardrails-v2/kill-switch/reset?mode=paper" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -s -X POST "$BASE/api/paper-sim/start" \
+  -H "Authorization: Bearer $TOKEN"
+
+
+Wait one scan; return a SMOKE LOG showing (from runtime logs, not hand-computed):
+
+mode=paper
+
+portfolioValue (from portfolio_state)
+
+riskPct (from guardrails_v2)
+
+riskAmount = portfolioValue * riskPct
+
+For at least one signal: entry, stopDistance, computed quantity, notional.
+
+SQL facts after the scan:
+
+-- Prove legacy table is gone/unused
+SELECT to_regclass('public.trading_settings') AS still_exists;
+
+-- Active guardrails for paper mode
+SELECT mode, risk_per_trade AS risk_pct
+FROM guardrails_v2 WHERE mode='paper';
+
+-- Portfolio state for paper mode (testuser does not matter here; it's mode-scoped usage)
+SELECT user_id, mode, balance FROM portfolio_state WHERE mode='paper' LIMIT 5;
+
+
+Note: We don’t want any JOIN users to drive risk/balance. The smoke log must show sourcing from mode-level stores only.
+
+Deliverable E:
+
+Engine log snippet with the computed values and the source annotations,
+
+The three SQL result blocks above.
+
+Step F — UI spot-check (counts sanity)
+
+For the same scan cycle, paste one screenshot or JSON snapshot where:
+
+Filter Insights “Eligible” = X
+
+Filtered Pairs total = X
+(They should match for the current cycle. A proper SSOT fix is coming next phase, but this sanity check helps catch any remaining split sources.)
+
+Deliverable F: The snapshot with the two X values equal.
+
+Acceptance criteria
+
+No server code references or writes to trading_settings (or any user-scoped risk/portfolio fields).
+
+Risk helpers take values from guardrails_v2 + portfolio_state only.
+
+App starts after table rename; smoke run shows risk math sourced from mode-level stores.
+
+SQL confirms trading_settings table is gone/unused.
+
+Counts parity screenshot for the current cycle.
