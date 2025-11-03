@@ -3738,37 +3738,79 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const targetPrice = action === 'buy' ? mockPrice * 1.03 : mockPrice * 0.97;
       const tradeValue = mockPrice * amount;
 
-      // Create trade directly via storage
+      // Phase 41F-L.E2E: Use unified commit service for proper tracking
+      const { commitTradeAndUpdatePortfolio } = await import("./services/commitTradeAndUpdatePortfolio.js");
+      const { lineageService } = await import("./services/lineage.js");
+      
+      // Generate traceId for lineage tracking
+      const traceId = lineageService.generateTraceId();
+      
+      // Emit filter_snapshot (mock - test endpoint)
+      await lineageService.emitFilterSnapshot({
+        traceId,
+        symbol,
+        mode: 'paper',
+        universeTotal: 1500,
+        evaluated: 1500,
+        eligible: true,
+        filters: { test: true }
+      });
+      
+      // Emit signal_snapshot (mock - test endpoint)
+      await lineageService.emitSignalSnapshot({
+        traceId,
+        symbol,
+        mode: 'paper',
+        strategy: 'mean_reversion',
+        signal: action as 'buy' | 'sell',
+        confidence: 0.75
+      });
+      
+      // Emit order_submitted
       const tradeId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const trade = await storage.createTrade({
+      await lineageService.emitOrderSubmitted({
+        traceId,
+        symbol,
+        mode: 'paper',
+        orderId: tradeId,
+        side: action as 'buy' | 'sell',
+        quantity: amount,
+        price: entryPrice
+      });
+
+      // Commit trade with unified service (includes portfolio update, broadcasts, lineage)
+      const result = await commitTradeAndUpdatePortfolio({
         id: tradeId,
         userId,
         symbol,
-        quantity: amount, // Use quantity field name from schema
+        quantity: amount,
         entryPrice,
         stopPrice,
         targetPrice,
-        riskAmount: tradeValue * 0.02, // 2% risk
-        status: 'closed', // Immediately close for test
+        riskAmount: tradeValue * 0.02,
+        status: 'closed',
         exitPrice: entryPrice,
         exitTime: new Date(),
         realizedPL: 0,
         realizedPLPercent: 0,
-        strategy: 'mean_reversion', // Valid strategy enum value
+        strategy: 'mean_reversion',
         mode: 'paper'
+      }, traceId);
+
+      console.log("[41F-L.E2E] Trade committed with portfolio update:", {
+        tradeId: result.trade.id,
+        portfolioValue: result.portfolio.totalValue,
+        traceId
       });
-
-      console.log("[41F-L.3][INFO] Trade created via fallback:", trade.id);
-
-      // Note: Skipping WebSocket broadcast for test endpoint simplicity
-      // Production trades would broadcast via contextBridge.broadcast(...)
 
       return res.json({ 
         ok: true, 
         success: true, 
-        trade,
+        trade: result.trade,
+        portfolio: result.portfolio,
+        traceId,
         fallback: true,
-        message: "Trade executed via fallback path"
+        message: "Trade executed via unified commit service with lineage tracking"
       });
     } catch (err) {
       console.error("[41F-L.3][ERROR] Paper trade test failed:", err);
