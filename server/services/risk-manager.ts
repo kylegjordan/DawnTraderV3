@@ -880,15 +880,8 @@ export class RiskManager {
       return total + (parseFloat(trade.realizedPL || '0'));
     }, 0);
 
-    // Get base portfolio value from mode-based system context
-    let baseValue = 50000; // Default fallback
-    const systemContext = await storage.getSystemContext(mode);
-    if (systemContext) {
-      const settings = await storage.getTradingSettings(systemContext.id);
-      if (settings?.portfolioValue) {
-        baseValue = parseFloat(settings.portfolioValue.toString());
-      }
-    }
+    // Phase 41F-L.E2E-PURGE: Use mode-level portfolio balance
+    const baseValue = await getPortfolioBalanceV2(mode);
 
     // Total value = base + realized P/L + unrealized P/L
     const totalValue = baseValue + realizedPL + unrealizedPL;
@@ -977,19 +970,13 @@ export class RiskManager {
     
     const totalPL = realizedPL + unrealizedPL;
     
-    // ✅ FIXED: Use actual portfolio value from settings instead of hardcoded value
+    // Phase 41F-L.E2E-PURGE: Use mode-level portfolio balance
     let basePortfolioValue = 50000; // Fallback only
     if (settings?.portfolioValue) {
       basePortfolioValue = parseFloat(settings.portfolioValue.toString());
     } else {
-      // Try to get from storage if settings not provided
-      const systemContext = await storage.getSystemContext(mode);
-      if (systemContext) {
-        const userSettings = await storage.getTradingSettings(systemContext.id);
-        if (userSettings?.portfolioValue) {
-          basePortfolioValue = parseFloat(userSettings.portfolioValue.toString());
-        }
-      }
+      // Use mode-level portfolio balance (V2)
+      basePortfolioValue = await getPortfolioBalanceV2(mode);
     }
     
     const portfolioValueCurrent = basePortfolioValue + realizedPL + unrealizedPL;

@@ -191,7 +191,7 @@ class MetricsCollector {
       const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : 0;
       
       // Calculate drawdown (simplified - would need equity curve in reality)
-      const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
       const portfolioValue = parseFloat(settings?.portfolioValue || '50000');
       
       // Calculate 24h P/L

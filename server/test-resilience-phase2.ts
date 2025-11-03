@@ -16,7 +16,7 @@ async function runPhase2Tests() {
     console.log('─'.repeat(60));
     console.log('Goal: Verify partial fill settings are available\n');
 
-    const settings = await storage.getTradingSettings(TEST_USER_ID);
+// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(TEST_USER_ID);
     if (!settings) {
       throw new Error('Settings not found');
     }

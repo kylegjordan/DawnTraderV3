@@ -72,7 +72,7 @@ export class MarketAnalysisScheduler {
     const users = await storage.getAllUsers();
     let anyEnabled = false;
     for (const user of users) {
-      const settings = await storage.getTradingSettings(user.id);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(user.id);
       if (settings?.aiOpportunitiesEnabled) {
         anyEnabled = true;
         break;
@@ -127,7 +127,7 @@ export class MarketAnalysisScheduler {
     const users = await storage.getAllUsers();
     let anyEnabled = false;
     for (const user of users) {
-      const settings = await storage.getTradingSettings(user.id);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(user.id);
       if (settings?.aiOpportunitiesEnabled) {
         anyEnabled = true;
         break;

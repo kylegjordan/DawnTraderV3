@@ -52,7 +52,7 @@ export class StageBValidator {
     const startTime = Date.now();
     
     // Get user settings
-    let settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     let settings = await storage.getTradingSettings(userId);
     if (!settings) {
       console.log('   No existing settings found, creating defaults...');
       await storage.createTradingSettings({
@@ -61,7 +61,7 @@ export class StageBValidator {
         maxExposurePercent: '10',
         maxOpenTrades: 5
       });
-      settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       settings = await storage.getTradingSettings(userId);
       if (!settings) throw new Error('Failed to create settings');
     }
 
@@ -189,7 +189,7 @@ export class StageBValidator {
     const startTime = Date.now();
     
     // Get user settings or create defaults
-    let settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     let settings = await storage.getTradingSettings(userId);
     if (!settings) {
       console.log('   No existing settings found, creating defaults...');
       await storage.createTradingSettings({
@@ -198,7 +198,7 @@ export class StageBValidator {
         maxExposurePercent: '10',
         maxOpenTrades: 5
       });
-      settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       settings = await storage.getTradingSettings(userId);
       if (!settings) {
         throw new Error('Failed to create trading settings');
       }

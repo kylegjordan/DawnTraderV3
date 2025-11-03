@@ -190,7 +190,7 @@ class ContextRefreshCoordinator extends EventEmitter {
     const [portfolioState, strategies, settings, user] = await Promise.all([
       storage.getPortfolioState({ globalContextId, mode }),
       storage.listStrategySettings({ globalContextId, mode }),
-      storage.getTradingSettings(userId),
+// Phase 41F-L.E2E-PURGE: DISABLED -       storage.getTradingSettings(userId),
       storage.getUser(userId)
     ]);
 
@@ -295,7 +295,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       storage.getPortfolioState({ globalContextId, mode: 'paper' }),
       storage.listStrategySettings({ globalContextId, mode: 'live' }),
       storage.listStrategySettings({ globalContextId, mode: 'paper' }),
-      storage.getTradingSettings(userId),
+// Phase 41F-L.E2E-PURGE: DISABLED -       storage.getTradingSettings(userId),
       storage.getUser(userId)
     ]);
 

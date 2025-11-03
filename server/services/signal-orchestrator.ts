@@ -192,7 +192,7 @@ export class SignalOrchestrator {
         return;
       }
       
-      const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
       if (!settings) {
         console.error(`[37.A][SIGNAL] No trading settings found for user ${systemContext.lastStartedBy}`);
         return;

@@ -154,7 +154,7 @@ export async function fetchUserContext(userId: string): Promise<UserTradingConte
   try {
     // Fetch in parallel
     const [settings, user, activeTrades] = await Promise.all([
-      storage.getTradingSettings(userId),
+// Phase 41F-L.E2E-PURGE: DISABLED -       storage.getTradingSettings(userId),
       storage.getUser(userId),
       storage.getActiveTrades()
     ]);

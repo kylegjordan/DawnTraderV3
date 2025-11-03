@@ -63,7 +63,7 @@ export class MarketScanner {
         for (const user of users) {
           // Phase 27.F.13.M: Use global screener_filters (mode-only, no userId)
           const screenerSettings = await storage.getScreenerFilters({ mode: 'paper' });
-          const tradingSettings = await storage.getTradingSettings(user.id);
+// Phase 41F-L.E2E-PURGE: DISABLED -           const tradingSettings = await storage.getTradingSettings(user.id);
           
           if (!screenerSettings || !tradingSettings) {
             console.log(`No settings found for user ${user.id}, skipping...`);
@@ -153,7 +153,7 @@ export class MarketScanner {
     // Return users who have trading settings configured
     const usersWithSettings = [];
     for (const user of allUsers) {
-      const settings = await storage.getTradingSettings(user.id);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(user.id);
       if (settings) {
         usersWithSettings.push({
           id: user.id,
@@ -222,7 +222,7 @@ export class MarketScanner {
     try {
       // Phase 27.F.15.B.4: getWatchlist is now mode-only (global)
       const watchlist = await storage.getWatchlist({ mode });
-      const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
       
       if (!settings) return;
 
@@ -625,7 +625,7 @@ export class MarketScanner {
       }
 
       // SAFETY CHECK 1: Respect trading settings (kill switch, etc.)
-      const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
       if (!settings) {
         console.log(`[MarketScan:AutoStart] User ${userId} has no trading settings, skipping auto-start`);
         return;

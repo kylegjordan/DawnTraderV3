@@ -10,7 +10,7 @@ import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
 import { MarketScanner } from "./services/market-scanner";
-import { RiskManager } from "./services/risk-manager";
+import { RiskManager, buildSettingsFromModeLevel } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
 import { formulaAuditService } from "./services/formula-audit";
@@ -5703,19 +5703,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { getMarketEvaluationService } = await import('./services/market-evaluation.js');
       const { contextBridge } = await import('./services/context-bridge.js');
       
-      // Get trading settings for filters
-      const settings = await storage.getTradingSettings(userId);
-      if (!settings) {
-        return res.status(400).json({ error: 'Trading settings not found' });
+      // Phase 41F-L.E2E-PURGE: Get screener filters from mode-level config
+      const screenerFilters = await storage.getScreenerFilters({ mode });
+      if (!screenerFilters) {
+        return res.status(400).json({ error: 'Screener filters not configured for this mode' });
       }
       
       // Use SSOT market evaluation service
       const marketEval = getMarketEvaluationService();
-      const filters = settings.screenerFilters || {};
-      const result = await marketEval.evaluateMarketOnce(mode, {
-        ...filters,
-        quoteCurrencies: filters.quoteCurrencies || ['USDC', 'USDT']
-      });
+      const filters = {
+        minVolume: screenerFilters.minVolume,
+        minDailyRange: screenerFilters.minDailyRange,
+        minPrice: screenerFilters.minPrice,
+        maxPrice: screenerFilters.maxPrice,
+        maxBidAskSpread: screenerFilters.maxBidAskSpread,
+        excludeStablecoins: screenerFilters.excludeStablecoins,
+        rsiMin: screenerFilters.rsiMin,
+        rsiMax: screenerFilters.rsiMax,
+        volatilityMin: screenerFilters.volatilityMin,
+        volatilityMax: screenerFilters.volatilityMax,
+        quoteCurrencies: ['USDC', 'USDT']
+      };
+      const result = await marketEval.evaluateMarketOnce(mode, filters);
       
       // Transform to backward-compatible format
       const filteredPairs = result.eligiblePairs.map(pair => ({
@@ -6089,7 +6098,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.post('/kill-switch/create-analysis-chat', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { eventId } = req.body;
+      const { eventId, mode = 'paper' } = req.body;
       
       // Get kill switch event details
       const event = eventId 
@@ -6100,10 +6109,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(404).json({ error: 'No kill switch event found' });
       }
 
-      // Get settings at time of incident
-      const settings = await storage.getTradingSettings(userId);
+      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
+      const settings = await buildSettingsFromModeLevel(mode as 'live' | 'paper', userId);
       if (!settings) {
-        return res.status(404).json({ error: 'Settings not found' });
+        return res.status(404).json({ error: 'Settings not found for this mode' });
       }
 
       // Parse closed trades
@@ -7041,28 +7050,28 @@ Provide specific, actionable recommendations.`,
   apiRouter.post('/screener/test', async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user?.id;
+      const mode = (req.body.mode || req.query.mode || 'paper') as 'live' | 'paper';
       const kraken = new KrakenService();
       
       // Use request body if provided, otherwise load from database (NO HARDCODED DEFAULTS)
       let testSettings = req.body;
       
       if (!testSettings && userId) {
-        // Load user's actual filter settings from Goals Engine
-        const screenerSettings = await storage.getScreenerFilters({ mode: 'paper' });
-        const tradingSettings = await storage.getTradingSettings(userId);
+        // Phase 41F-L.E2E-PURGE: Load from mode-level screener filters
+        const screenerSettings = await storage.getScreenerFilters({ mode });
         
-        if (screenerSettings && tradingSettings) {
+        if (screenerSettings) {
           testSettings = {
             minVolume: screenerSettings.minVolume,
-            minDailyRange: tradingSettings.minDailyRange,
+            minDailyRange: screenerSettings.minDailyRange,
             minPrice: screenerSettings.minPrice,
             maxPrice: screenerSettings.maxPrice,
             maxBidAskSpread: screenerSettings.maxBidAskSpread,
             excludeStablecoins: screenerSettings.excludeStablecoins,
             allowedTradingPairs: [],
-            blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
-            whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
-            minHistoryDays: tradingSettings.minDataHistoryDays,
+            blacklistedSymbols: [],
+            whitelistedSymbols: [],
+            minHistoryDays: 30,
             rsiMin: screenerSettings.rsiMin,
             rsiMax: screenerSettings.rsiMax,
             volatilityMin: screenerSettings.volatilityMin,
@@ -7094,10 +7103,13 @@ Provide specific, actionable recommendations.`,
   apiRouter.post('/guardrails/test', async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const settings = await storage.getTradingSettings(userId);
+      const mode = (req.body.mode || req.query.mode || 'paper') as 'live' | 'paper';
+      
+      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
+      const settings = await buildSettingsFromModeLevel(mode, userId);
       
       if (!settings) {
-        return res.status(404).json({ error: 'Settings not found' });
+        return res.status(404).json({ error: 'Settings not found for this mode' });
       }
 
       console.log('\n🛡️  PORTFOLIO GUARDRAILS TEST');
@@ -7287,11 +7299,12 @@ Provide specific, actionable recommendations.`,
   apiRouter.post('/test/simulate-loss', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const { scenario } = req.body; // 'warning', 'kill', or custom loss %
+      const { scenario, mode = 'paper' } = req.body; // 'warning', 'kill', or custom loss %
       
-      const settings = await storage.getTradingSettings(userId);
+      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
+      const settings = await buildSettingsFromModeLevel(mode as 'live' | 'paper', userId);
       if (!settings) {
-        return res.status(404).json({ error: 'Settings not found' });
+        return res.status(404).json({ error: 'Settings not found for this mode' });
       }
 
       const killSwitchPercent = parseFloat(settings.dailyLossKillSwitch || '7.00');
@@ -7340,7 +7353,9 @@ Provide specific, actionable recommendations.`,
 
       // Check kill switch after creating the losing trade
       const result = await riskManager.checkKillSwitch(userId, settings);
-      const updatedSettings = await storage.getTradingSettings(userId);
+      
+      // Phase 41F-L.E2E-PURGE: Get updated settings from mode-level config
+      const updatedSettings = await buildSettingsFromModeLevel(mode as 'live' | 'paper', userId);
 
       res.json({
         success: true,
@@ -7359,10 +7374,13 @@ Provide specific, actionable recommendations.`,
   apiRouter.post('/test/attempt-trade', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const settings = await storage.getTradingSettings(userId);
+      const mode = (req.body.mode || req.query.mode || 'paper') as 'live' | 'paper';
+      
+      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
+      const settings = await buildSettingsFromModeLevel(mode, userId);
       
       if (!settings) {
-        return res.status(404).json({ error: 'Settings not found' });
+        return res.status(404).json({ error: 'Settings not found for this mode' });
       }
 
       // Create a test signal
@@ -7398,10 +7416,12 @@ Provide specific, actionable recommendations.`,
       const mode = req.mode!;
       const watchlist = await storage.getWatchlist({ mode });
       console.log('[Phase-27.F.15.B.1] Updated route /api/strategies/test → mode-based only');
-      const settings = await storage.getTradingSettings(userId);
+      
+      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
+      const settings = await buildSettingsFromModeLevel(mode, userId);
       
       if (!settings) {
-        return res.status(404).json({ error: 'Settings not found' });
+        return res.status(404).json({ error: 'Settings not found for this mode' });
       }
 
       console.log(`\n🧪 Testing strategies for ${watchlist.length} watchlist pairs...`);
@@ -9779,9 +9799,10 @@ Provide specific, actionable recommendations.`,
       const userId = req.user!.id;
       const { userMessage, mode = 'live' } = req.body;
 
-      const settings = await storage.getTradingSettings(userId);
+      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
+      const settings = await buildSettingsFromModeLevel(mode as 'live' | 'paper', userId);
       if (!settings) {
-        return res.status(404).json({ success: false, error: 'Trading settings not found' });
+        return res.status(404).json({ success: false, error: 'Trading settings not found for this mode' });
       }
 
       const currentGoals = mode === 'live'
@@ -11023,9 +11044,8 @@ Please:
         return res.status(403).json({ ok: false, error: 'Unauthorized' });
       }
       
-      // Get user's Walter memory depth setting for context windowing
-      const settings = await storage.getTradingSettings(userId);
-      const memoryDepth = settings?.walterMemoryDepth || 20;
+      // Phase 41F-L.E2E-PURGE: Use default memory depth (mode-level config doesn't need this user preference)
+      const memoryDepth = 20; // Default Walter memory depth
       
       // Apply context windowing: return only last N messages
       const messages = await storage.getWalterChatLogs(id, memoryDepth);
@@ -11299,9 +11319,8 @@ Please:
       });
       
       // Auto-summarization when chat exceeds threshold (Phase 5.5 Task 6/7)
-      // Check if auto-summarization is enabled in settings
-      const userSettings = await storage.getTradingSettings(userId);
-      const autoSummarizeEnabled = (userSettings as any)?.walterAutoSummarize ?? true;
+      // Phase 41F-L.E2E-PURGE: Auto-summarization enabled by default (removed user-level config)
+      const autoSummarizeEnabled = true;
       
       if (autoSummarizeEnabled && newMessageCount >= 50 && newMessageCount % 50 === 0) {
         summarizeChatSession(id, userId).catch(err => 
@@ -12445,8 +12464,9 @@ Summary:`;
       const dbStatus = await storage.getDatabaseStatus?.() || { current: { sizeMb: 0, sizeGb: 0 }, history: [] };
 
       // 3. Trading Engine Status - Phase 27.F.15.B.3: Use global engines
-      const settings = await storage.getTradingSettings(userId);
-      const tradingMode = settings?.tradingMode || 'paper';
+      // Phase 41F-L.E2E-PURGE: Get mode from user preferences, default to paper
+      const user = await storage.getUser(userId);
+      const tradingMode = user?.tradingMode || 'paper';
       
       const liveEngineStatus = globalLiveEngine.getStatus?.() || { tradingStatus: 'stopped' };
       
@@ -13256,9 +13276,12 @@ Important: Extract the exact field names and numeric values from the user's requ
 
             case 'start_paper':
             case 'start_live':
-              // Check if trading is suspended by kill switch
-              const settings = await storage.getTradingSettings(userId);
-              if (settings?.tradingSuspended) {
+              // Phase 41F-L.E2E-PURGE: Check if trading is suspended by kill switch using mode-level config
+              const targetModeCheck = interpretation.actionType === 'start_live' ? 'live' : 'paper';
+              const { guardrails_v2 } = await import('./services/guardrails-v2.js');
+              const killSwitchTripped = guardrails_v2.killSwitchTripped[targetModeCheck];
+              
+              if (killSwitchTripped) {
                 finalResponse = `${interpretation.response}\n\n⚠️ Cannot start trading: Kill switch is active. Trading has been suspended due to excessive losses. Please review your kill switch events and reset manually before resuming trading.`;
                 actionTaken = false;
               } else {

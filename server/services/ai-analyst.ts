@@ -580,7 +580,7 @@ export class AIAnalyst {
     }
 
     try {
-      const currentSettings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const currentSettings = await storage.getTradingSettings(userId);
       if (!currentSettings) {
         return { success: false, message: "User settings not found" };
       }

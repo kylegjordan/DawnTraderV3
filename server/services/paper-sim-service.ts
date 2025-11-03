@@ -150,14 +150,17 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
     
     console.log('[32.D-Fix.6] Empty watchlist detected - querying screener for eligible pairs');
     
-    // Get screener filters and trading settings
+    // Phase 41F-L.E2E-PURGE: Get mode-level settings
     const filters = await storage.getScreenerFilters({ mode });
-    const tradingSettings = await storage.getTradingSettings(userId);
     
-    if (!filters || !tradingSettings) {
-      console.log('[32.D-Fix.6] No filters or settings found - skipping watchlist population');
+    if (!filters) {
+      console.log('[32.D-Fix.6] No filters found - skipping watchlist population');
       return;
     }
+    
+    // Import required helper from risk-manager
+    const { buildSettingsFromModeLevel } = await import('./risk-manager.js');
+    const tradingSettings = await buildSettingsFromModeLevel(mode);
     
     // Initialize KrakenService
     const krakenService = new KrakenService();

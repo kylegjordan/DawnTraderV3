@@ -1,5 +1,5 @@
 import { KrakenService } from './kraken';
-import { RiskManager } from './risk-manager';
+import { RiskManager, buildSettingsFromModeLevel } from './risk-manager';
 import { StrategyEngine, StrategySignal } from './strategy-engine';
 import { SignalOrchestrator } from './signal-orchestrator';
 import { storage } from '../storage';
@@ -208,17 +208,10 @@ export class TradingEngine {
     }
 
     try {
-      // Phase 27.F.15.B.3: Get mode-based settings (global, not per-user)
-      const systemContext = await storage.getSystemContext(this.mode);
-      if (!systemContext) {
-        throw new Error(`System context not found for mode: ${this.mode}`);
-      }
-      if (!systemContext.lastStartedBy) {
-        throw new Error(`No user associated with ${this.mode} mode engine`);
-      }
-      const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
+      // Phase 41F-L.E2E-PURGE: Get mode-level settings from guardrails_v2
+      const settings = await buildSettingsFromModeLevel(this.mode);
       if (!settings) {
-        throw new Error(`Trading settings not found for user ${systemContext.lastStartedBy}`);
+        throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
 
       // Calculate goal alignment score and final score
@@ -301,7 +294,7 @@ export class TradingEngine {
       if (!systemContext) {
         throw new Error(`System context not found for mode: ${this.mode}`);
       }
-      const settings = await storage.getTradingSettings(systemContext.id);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(systemContext.id);
       if (!settings) {
         throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
@@ -510,12 +503,8 @@ export class TradingEngine {
       console.log(`   Trade ID: ${trade.id}`);
       console.log(`   Entry: $${trade.entryPrice}, Stop: $${trade.stopPrice}, Target: $${trade.targetPrice}`);
 
-      // Phase 27.F.15.B.3: Get mode-based settings (global)
-      const systemContext = await storage.getSystemContext(this.mode);
-      if (!systemContext) {
-        throw new Error(`System context not found for mode: ${this.mode}`);
-      }
-      const settings = await storage.getTradingSettings(systemContext.id);
+      // Phase 41F-L.E2E-PURGE: Get mode-level settings from guardrails_v2
+      const settings = await buildSettingsFromModeLevel(this.mode);
       if (!settings) {
         throw new Error(`Trading settings not found for mode: ${this.mode}`);
       }
@@ -678,11 +667,8 @@ export class TradingEngine {
   private async checkTradeExitConditions(trade: Trade): Promise<void> {
     try {
       const currentPrice = await this.getCurrentPrice(trade.symbol);
-      // Phase 27.F.15.B.3: Get mode-based settings (global)
-      const systemContext = await storage.getSystemContext(this.mode);
-      if (!systemContext) return;
-      const settings = await storage.getTradingSettings(systemContext.id);
-      
+      // Phase 41F-L.E2E-PURGE: Get mode-level settings from guardrails_v2
+      const settings = await buildSettingsFromModeLevel(this.mode);
       if (!settings) return;
 
       // Check strategy-specific exit conditions

@@ -11,7 +11,7 @@ export class DatabaseQueryService {
    * Get user's current risk settings
    */
   async getRiskSettings(userId: string): Promise<TradingSettings | null> {
-    const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(userId);
     return settings || null;
   }
 

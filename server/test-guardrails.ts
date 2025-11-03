@@ -36,7 +36,7 @@ async function runTests() {
 
   try {
     // Get current settings
-    const settings = await storage.getTradingSettings(TEST_USER_ID);
+// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(TEST_USER_ID);
     if (!settings) {
       console.error('❌ Settings not found for test user');
       return;
@@ -200,7 +200,7 @@ async function runTests() {
       console.log(`   Reason: ${riskCheckSuspended.reason}\n`);
       
       // Also test via TradingEngine
-      const settingsAfterSuspend = await storage.getTradingSettings(TEST_USER_ID);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settingsAfterSuspend = await storage.getTradingSettings(TEST_USER_ID);
       const trade4 = await tradingEngine.processSignal(signal4, 'paper');
       
       if (!trade4) {

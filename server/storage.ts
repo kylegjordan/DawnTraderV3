@@ -220,10 +220,10 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User>;
 
-  // Trading settings methods
-  getTradingSettings(userId: string): Promise<TradingSettings | undefined>;
-  createTradingSettings(settings: InsertTradingSettings): Promise<TradingSettings>;
-  updateTradingSettings(userId: string, updates: Partial<TradingSettings>): Promise<TradingSettings>;
+  // Phase 41F-L.E2E-PURGE: Trading settings methods REMOVED - Use mode-level guardrails_v2 + portfolio_state
+  // getTradingSettings(userId: string): Promise<TradingSettings | undefined>;
+  // createTradingSettings(settings: InsertTradingSettings): Promise<TradingSettings>;
+  // updateTradingSettings(userId: string, updates: Partial<TradingSettings>): Promise<TradingSettings>;
 
   // Guardrails methods (global settings per mode)
   getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null>;
@@ -688,35 +688,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Phase 41F-L.E2E-PURGE: DEPRECATED - User-level settings being eliminated
+   * Phase 41F-L.E2E-PURGE: REMOVED - User-level settings eliminated
    * Use buildSettingsFromModeLevel() adapter or mode-level guardrails_v2 + portfolio_state
-   * Remaining callers: test endpoints, simulators, analytics - pending migration
+   * 
+   * COMPILE-TIME GUARD: These methods are commented out to prevent new code from using them
+   * RUNTIME GUARD: If uncommented and called in STRICT_MODE=1, throws [FORBIDDEN] error
    */
-  // Trading settings methods (DEPRECATED)
-  async getTradingSettings(userId: string): Promise<TradingSettings | undefined> {
-    console.warn('[DEPRECATED] getTradingSettings() - migrate to mode-level config');
-    const [settings] = await db
-      .select()
-      .from(tradingSettings)
-      .where(eq(tradingSettings.userId, userId));
-    return settings || undefined;
-  }
+  // async getTradingSettings(userId: string): Promise<TradingSettings | undefined> {
+  //   if (process.env.STRICT_MODE === '1') {
+  //     throw new Error('[FORBIDDEN] getTradingSettings called - user-level settings removed. Use guardrails_v2 + portfolio_state');
+  //   }
+  //   console.error('[FORBIDDEN] getTradingSettings() called - migration incomplete');
+  //   return undefined;
+  // }
 
-  async createTradingSettings(settings: InsertTradingSettings): Promise<TradingSettings> {
-    console.warn('[DEPRECATED] createTradingSettings() - should not create user-level settings');
-    const [result] = await db.insert(tradingSettings).values(settings).returning();
-    return result;
-  }
+  // async createTradingSettings(settings: InsertTradingSettings): Promise<TradingSettings> {
+  //   if (process.env.STRICT_MODE === '1') {
+  //     throw new Error('[FORBIDDEN] createTradingSettings - user-level settings removed');
+  //   }
+  //   console.error('[FORBIDDEN] createTradingSettings() called');
+  //   throw new Error('Method removed');
+  // }
 
-  async updateTradingSettings(userId: string, updates: Partial<TradingSettings>): Promise<TradingSettings> {
-    console.warn('[DEPRECATED] updateTradingSettings() - use updateGuardrails() or updatePortfolioState()');
-    const [result] = await db
-      .update(tradingSettings)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(tradingSettings.userId, userId))
-      .returning();
-    return result;
-  }
+  // async updateTradingSettings(userId: string, updates: Partial<TradingSettings>): Promise<TradingSettings> {
+  //   if (process.env.STRICT_MODE === '1') {
+  //     throw new Error('[FORBIDDEN] updateTradingSettings - user-level settings removed');
+  //   }
+  //   console.error('[FORBIDDEN] updateTradingSettings() called');
+  //   throw new Error('Method removed');
+  // }
 
   // Guardrails methods (global settings per mode)
   async getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null> {

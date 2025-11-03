@@ -70,7 +70,7 @@ export class StageCValidator {
     const strategyEngine = new StrategyEngine();
 
     // Get or create user settings
-    let baseSettings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     let baseSettings = await storage.getTradingSettings(userId);
     if (!baseSettings) {
       await storage.createTradingSettings({
         userId,
@@ -78,7 +78,7 @@ export class StageCValidator {
         maxExposurePercent: '10',
         maxOpenTrades: 5
       });
-      baseSettings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       baseSettings = await storage.getTradingSettings(userId);
       if (!baseSettings) throw new Error('Failed to create settings');
     }
 

@@ -84,10 +84,17 @@ export class PaperSimDiagnosticService {
 
     // Phase 27.F.13.M: Get global screener filters (mode-only, no userId)
     const screenerSettings = await storage.getScreenerFilters({ mode });
-    const tradingSettings = await storage.getTradingSettings(userId);
     
-    if (!screenerSettings || !tradingSettings) {
-      throw new Error('No screener filters or trading settings found for user');
+    // Phase 41F-L.E2E-PURGE: User-level settings removed - using mode-level defaults
+    const tradingSettings = {
+      minDailyRange: '2.0',
+      allowedTradingPairs: [] as string[],
+      blacklistedSymbols: [] as string[],
+      whitelistedSymbols: [] as string[]
+    };
+    
+    if (!screenerSettings) {
+      throw new Error('No screener filters found for mode');
     }
 
     // Load raw Kraken universe

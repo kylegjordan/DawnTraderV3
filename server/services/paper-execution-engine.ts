@@ -313,7 +313,7 @@ export class PaperExecutionEngine {
     const cycleTimestamp = new Date().toISOString();
     
     try {
-      const settings = await storage.getTradingSettings("system");
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings("system");
       if (!settings) {
         console.warn(`[PaperExecution:${this.mode}] No trading settings found`);
         // Update summary even on early exit
@@ -857,7 +857,7 @@ export class PaperExecutionEngine {
       }
 
       // Get trading settings from the user who started the engine
-      const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
       if (!settings) {
         console.error(`[PaperExecution:${this.mode}] No trading settings found for user ${systemContext.lastStartedBy}`);
         return;

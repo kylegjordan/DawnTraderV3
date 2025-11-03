@@ -460,7 +460,7 @@ async function gatherContext(userId: string, chatId: string, userMessage: string
   try {
     // Get user settings for memory depth and trading mode
     const [settings, user] = await Promise.all([
-      storage.getTradingSettings(userId),
+// Phase 41F-L.E2E-PURGE: DISABLED -       storage.getTradingSettings(userId),
       storage.getUser(userId)
     ]);
     

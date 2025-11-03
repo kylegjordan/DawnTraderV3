@@ -235,9 +235,10 @@ class AIOrchestrator {
       if (users.length > 0) {
         const firstUser = users[0];
         
-        // Get trading settings which may include goals
+        // Phase 41F-L.E2E-PURGE: Get mode-level guardrails from guardrails_v2
         try {
-          const settings = await storage.getTradingSettings(firstUser.id);
+          const { buildSettingsFromModeLevel } = await import('../services/risk-manager.js');
+          const settings = await buildSettingsFromModeLevel('paper'); // Default to paper mode
           if (settings) {
             guardrails = {
               maxOpenTrades: settings.maxOpenTrades,

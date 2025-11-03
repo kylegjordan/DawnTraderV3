@@ -39,7 +39,7 @@ export class CommandRouter {
 
   async routeCommand(intent: ParsedIntent, userId: string): Promise<CommandResult> {
     // Validate command safety first
-    const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(userId);
     const safety = validateCommandSafety(intent, settings);
 
     if (!safety.safe) {
@@ -253,7 +253,7 @@ export class CommandRouter {
     // Switch mode
     if (action === 'switch' && entity === 'mode') {
       const mode = parameters.mode as 'live' | 'paper';
-      const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
       
       // Note: tradingMode field may not exist in settings table yet
       // This is a future enhancement that would require schema update
@@ -284,7 +284,7 @@ export class CommandRouter {
       }
 
       if (parameters.riskPercent !== undefined) {
-        const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -         const settings = await storage.getTradingSettings(userId);
         if (settings && settings.portfolioValue) {
           const portfolioValue = parseFloat(settings.portfolioValue);
           const riskAmount = (portfolioValue * parameters.riskPercent) / 100;
@@ -411,7 +411,7 @@ export class CommandRouter {
 
     // Settings
     if (entity === 'settings') {
-      const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
       
       return {
         success: true,

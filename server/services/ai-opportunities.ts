@@ -76,7 +76,7 @@ export class AIOpportunitiesService {
 
   private async isFeatureEnabledForAnyUser(users: Array<{ id: string }>): Promise<boolean> {
     for (const user of users) {
-      const settings = await storage.getTradingSettings(user.id);
+// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(user.id);
       if (settings?.aiOpportunitiesEnabled) {
         return true;
       }
@@ -117,7 +117,7 @@ export class AIOpportunitiesService {
     console.log(`\n👤 Generating AI opportunities for user ${userId}...`);
 
     // Get user settings
-    const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(userId);
     
     if (!settings || !settings.aiOpportunitiesEnabled) {
       console.log(`AI Opportunities disabled for user ${userId}, skipping...`);

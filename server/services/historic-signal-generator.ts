@@ -109,7 +109,7 @@ export class HistoricSignalGenerator {
     let apiCalls = 0;
 
     // Get user settings for strategy parameters
-    const userSettings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     const userSettings = await storage.getTradingSettings(userId);
     if (!userSettings) {
       throw new Error(`No trading settings found for user ${userId}`);
     }

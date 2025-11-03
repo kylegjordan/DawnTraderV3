@@ -131,7 +131,7 @@ class SystemTruthDiagnosticService {
       .sort();
 
     // Get trading settings
-    const settings = await storage.getTradingSettings(userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(userId);
 
     // Get engineActive from global session (same logic as /api/trading/status)
     const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;

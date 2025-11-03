@@ -413,7 +413,7 @@ export class Paper48HrSimulation {
   }
 
   private async analyzeRiskManagement(trades: any[]): Promise<any> {
-    const settings = await storage.getTradingSettings(this.userId);
+// Phase 41F-L.E2E-PURGE: DISABLED -     const settings = await storage.getTradingSettings(this.userId);
     return {
       riskPerTrade: parseFloat(settings?.riskPerTrade || '0'),
       maxExposurePercent: parseFloat(settings?.maxExposurePercent || '0'),
