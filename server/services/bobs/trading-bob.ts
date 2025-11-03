@@ -110,8 +110,22 @@ class TradingBob {
       const openTrades = activeTrades;
       
       const maxExposure = parseFloat(settings?.maxExposurePercent || '25');
+      // Phase 41F-L.E2E-FIX: Use percentage-based risk calculation
+      const { calculateRiskAmount } = await import('../risk-manager.js');
+      
+      // Proper fallback: percentage field → convert dollar to % → default
+      let riskPerTradePct: number;
+      if (settings?.riskPerTradePct) {
+        riskPerTradePct = parseFloat(String(settings.riskPerTradePct));
+      } else if (settings?.riskPerTrade) {
+        riskPerTradePct = (parseFloat(String(settings.riskPerTrade)) / portfolioHealth.totalEquity) * 100;
+      } else {
+        riskPerTradePct = 4.00;
+      }
+      
+      const riskPerTradeAmount = calculateRiskAmount(portfolioHealth.totalEquity, riskPerTradePct);
       const currentExposure = openTrades.length > 0 
-        ? (openTrades.length * parseFloat(settings?.riskPerTrade || '150') / portfolioHealth.totalEquity) * 100
+        ? (openTrades.length * riskPerTradeAmount / portfolioHealth.totalEquity) * 100
         : 0;
 
       const riskMetrics = {

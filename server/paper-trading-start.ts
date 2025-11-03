@@ -30,7 +30,7 @@ async function startPaperTrading() {
       // Create default paper trading settings (uses schema defaults for riskPerTradePct, etc.)
       settings = await storage.createTradingSettings({
         userId,
-        portfolioValue: STARTING_BALANCE_ENV,
+        portfolioValue: STARTING_BALANCE_ENV as string, // Type-safe after null check above
         maxExposurePercent: '50.00', // 50% max exposure
         maxOpenTrades: 3,
         dailyLossKillSwitch: '7.00', // 7% daily loss limit

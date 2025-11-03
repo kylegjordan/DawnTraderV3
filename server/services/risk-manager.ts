@@ -29,6 +29,47 @@ interface ActivePosition {
   avgPrice?: string;
 }
 
+/**
+ * Phase 41F-L.E2E-FIX: Helper function to calculate risk amount from percentage
+ * Replaces old dollar-based risk_per_trade with percentage-based calculation
+ * @param portfolioValue Current portfolio value in USD
+ * @param riskPerTradePct Risk percentage (e.g., 4.0 for 4%)
+ * @returns Risk amount in USD
+ */
+export function calculateRiskAmount(portfolioValue: number, riskPerTradePct: number): number {
+  if (portfolioValue <= 0 || riskPerTradePct <= 0) {
+    return 0;
+  }
+  return (portfolioValue * riskPerTradePct) / 100;
+}
+
+/**
+ * Phase 41F-L.E2E-FIX: Get risk percentage with proper fallback chain
+ * Handles: new percentage field → legacy dollar conversion → default 4%
+ * Guards against zero/invalid portfolio values
+ * @param settings Trading settings
+ * @param portfolioValue Current portfolio value in USD
+ * @returns Risk percentage (e.g., 4.0 for 4%)
+ */
+export function getRiskPercentage(
+  settings: TradingSettings,
+  portfolioValue: number
+): number {
+  // Primary: Use new percentage field if available
+  if (settings.riskPerTradePct && parseFloat(String(settings.riskPerTradePct)) > 0) {
+    return parseFloat(String(settings.riskPerTradePct));
+  }
+  
+  // Fallback: Convert old dollar amount to percentage (guard against zero portfolio)
+  if (settings.riskPerTrade && portfolioValue > 0) {
+    const dollarRisk = parseFloat(String(settings.riskPerTrade));
+    return (dollarRisk / portfolioValue) * 100;
+  }
+  
+  // Default: 4% (safe fallback)
+  return 4.00;
+}
+
 export class RiskManager {
   private krakenService: KrakenService;
   private assetCapabilitiesService: AssetCapabilitiesService;
@@ -234,8 +275,12 @@ export class RiskManager {
         return { approved: true };
       }
 
-      // For live trading, check actual Kraken balance
-      const riskAmount = parseFloat(settings.riskPerTrade || '0');
+      // Phase 41F-L.E2E-FIX: Get portfolio value and calculate risk from percentage
+      const portfolioMetrics = await this.getPortfolioMetrics(mode);
+      const portfolioValue = portfolioMetrics.totalValue || 50000;
+      const riskPerTradePct = getRiskPercentage(settings, portfolioValue);
+      const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
+      
       const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
       const positionSize = riskAmount / stopDistance;
       const requiredCapital = positionSize * signal.entryPrice;
@@ -277,7 +322,11 @@ export class RiskManager {
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
-    const riskAmount = parseFloat(settings.riskPerTrade || '0');
+    // Phase 41F-L.E2E-FIX: Calculate risk from percentage instead of dollar amount
+    const portfolioMetrics = await this.getPortfolioMetrics(mode);
+    const portfolioValue = portfolioMetrics.totalValue || 50000;
+    const riskPerTradePct = getRiskPercentage(settings, portfolioValue);
+    const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
     
     if (riskAmount <= 0) {
       return {
@@ -559,8 +608,9 @@ export class RiskManager {
       console.log(`[Phase-27.F.15.B.3][mode=${mode}] Final fallback to metrics: $${portfolioValue.toFixed(2)}`);
     }
     
-    // riskPerTrade is stored as a dollar amount in the database, not a percentage
-    const riskAmount = parseFloat(settings.riskPerTrade || '0');
+    // Phase 41F-L.E2E-FIX: Use percentage-based risk calculation with safe fallback
+    const riskPerTradePct = getRiskPercentage(settings, portfolioValue);
+    const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
     const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
     
     if (stopDistance === 0) {
@@ -575,7 +625,7 @@ export class RiskManager {
     const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
     const positionPercent = (positionValue / portfolioValue) * 100;
 
-    console.log(`[Phase-27.F.15.B.3][mode=${mode}] Risk=$${riskAmount.toFixed(2)}, Stop=${stopDistance.toFixed(4)}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
+    console.log(`[Phase-27.F.15.B.3][mode=${mode}] RiskPct=${riskPerTradePct.toFixed(2)}%, Risk=$${riskAmount.toFixed(2)}, Stop=${stopDistance.toFixed(4)}, Qty=${positionSize.toFixed(2)}, Value=$${positionValue.toFixed(0)} (${positionPercent.toFixed(1)}% of $${portfolioValue.toFixed(0)} portfolio), Max=${maxPositionPercent}%`);
 
     if (positionPercent > maxPositionPercent) {
       return {

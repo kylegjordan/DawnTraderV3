@@ -89,13 +89,28 @@ export class PaperExecutionService {
         return null;
       }
 
-      // Phase 27.F.13.B: Calculate position size (database-driven, no hardcoded fallbacks)
-      if (!settings.riskPerTrade) {
-        console.error(`[PaperExecution] Trading settings missing riskPerTrade for user ${this.userId}`);
+      // Phase 41F-L.E2E-FIX: Calculate position size using percentage-based risk
+      const portfolioValue = parseFloat(settings.portfolioValue);
+      
+      // Proper fallback: percentage field → convert dollar to % → default
+      let riskPerTradePct: number;
+      if (settings.riskPerTradePct) {
+        riskPerTradePct = parseFloat(String(settings.riskPerTradePct));
+      } else if (settings.riskPerTrade) {
+        riskPerTradePct = (parseFloat(String(settings.riskPerTrade)) / portfolioValue) * 100;
+      } else {
+        riskPerTradePct = 4.00;
+      }
+      
+      // Import calculateRiskAmount helper
+      const { calculateRiskAmount } = await import('./risk-manager.js');
+      const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
+      
+      if (riskAmount <= 0) {
+        console.error(`[PaperExecution] Invalid risk amount (${riskAmount}) for user ${this.userId}`);
         return null;
       }
       
-      const riskAmount = parseFloat(settings.riskPerTrade);
       const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
       const quantity = riskAmount / stopDistance;
 
