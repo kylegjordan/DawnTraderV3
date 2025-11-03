@@ -1,10 +1,10 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-11-03T14:33:06.554Z",
+    "timestamp": "2025-11-03T14:33:36.554Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-11-03T14:33:06.553Z",
+        "lastUpdate": "2025-11-03T14:33:36.553Z",
         "stale": false,
         "hitRate": "72.1%",
         "cacheSize": 2,
@@ -12,7 +12,7 @@
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-11-03T14:33:06.553Z",
+        "lastUpdate": "2025-11-03T14:33:36.553Z",
         "stale": false,
         "hitRate": "72.1%",
         "cacheSize": 2,
@@ -20,7 +20,7 @@
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-11-03T14:33:06.553Z",
+        "lastUpdate": "2025-11-03T14:33:36.553Z",
         "stale": false,
         "hitRate": "72.1%",
         "cacheSize": 2,
@@ -28,7 +28,7 @@
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-11-03T14:33:06.553Z",
+        "lastUpdate": "2025-11-03T14:33:36.553Z",
         "stale": false,
         "hitRate": "72.1%",
         "cacheSize": 2,
@@ -36,7 +36,7 @@
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-11-03T14:33:06.553Z",
+        "lastUpdate": "2025-11-03T14:33:36.553Z",
         "stale": false,
         "hitRate": "72.1%",
         "cacheSize": 2,
@@ -44,7 +44,7 @@
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-11-03T14:33:06.553Z",
+        "lastUpdate": "2025-11-03T14:33:36.553Z",
         "stale": false,
         "hitRate": "72.1%",
         "cacheSize": 2,
@@ -52,7 +52,7 @@
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-11-03T14:33:06.553Z",
+        "lastUpdate": "2025-11-03T14:33:36.553Z",
         "stale": false,
         "hitRate": "72.1%",
         "cacheSize": 2,
@@ -63,8 +63,8 @@
       "modulesActive": 7,
       "totalCacheSize": 2,
       "overallHitRate": "72.1%",
-      "totalHits": 8234,
-      "totalMisses": 3188
+      "totalHits": 8271,
+      "totalMisses": 3206
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -75,23 +75,23 @@
       ],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-11-03T14:33:06.554Z",
+        "timestamp": "2025-11-03T14:33:36.554Z",
         "system": {
           "cpuUsage": 52.9,
           "memoryUsage": {
             "total": 67433574400,
-            "used": 28145627136,
-            "free": 39287947264,
+            "used": 28092739584,
+            "free": 39340834816,
             "percentUsed": 42
           },
-          "uptime": 5799
+          "uptime": 5829
         },
         "cache": {
           "hitRate": 72,
           "missRate": 28,
-          "totalRequests": 11420,
-          "hits": 8234,
-          "misses": 3186
+          "totalRequests": 11475,
+          "hits": 8271,
+          "misses": 3204
         },
         "latency": {
           "cortex": null,
@@ -100,11 +100,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 5799,
-            "lastRun": "2025-11-03T14:32:36.555Z"
+            "uptime": 5829,
+            "lastRun": "2025-11-03T14:33:06.556Z"
           },
           "analytics": {
-            "uptime": 5799,
+            "uptime": 5829,
             "lastRun": "2025-11-03T14:26:36.994Z"
           }
         },
@@ -138,7 +138,7 @@
         },
         "execution": {
           "marketDataSource": "rest_fallback",
-          "lastTickAgeMs": 7344,
+          "lastTickAgeMs": 7342,
           "avgSubmitAckMs": 0,
           "avgSlippageBps": 0,
           "avgFeesPerTrade": 0,
@@ -160,10 +160,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-11-03T14:33:06.553Z"
+      "timestamp": "2025-11-03T14:33:36.553Z"
     }
   },
-  "last_sync": "2025-11-03T14:33:06.554Z",
+  "last_sync": "2025-11-03T14:33:36.554Z",
   "memory": {
     "analytics_paper_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
