@@ -61,19 +61,10 @@ export class PreExecutionValidator {
       );
 
       // Phase 41F-L.E2E-FIX: Use percentage-based risk calculation
-      const { calculateRiskAmount } = await import('./risk-manager.js');
+      const { getRiskPercentage, calculateRiskAmount } = await import('./risk-manager.js');
       const portfolioValue = parseFloat(settings.portfolioValue);
-      
-      // Proper fallback: percentage field → convert dollar to % → default
-      let riskPerTradePct: number;
-      if (settings.riskPerTradePct) {
-        riskPerTradePct = parseFloat(String(settings.riskPerTradePct));
-      } else if (settings.riskPerTrade) {
-        riskPerTradePct = (parseFloat(String(settings.riskPerTrade)) / portfolioValue) * 100;
-      } else {
-        riskPerTradePct = 4.00;
-      }
-      const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
+      const pct = getRiskPercentage(settings, portfolioValue);
+      const riskAmount = calculateRiskAmount(portfolioValue, pct);
       const stopDistance = Math.abs(request.signal.entryPrice - request.signal.stopPrice);
       const quantity = riskAmount / stopDistance;
 

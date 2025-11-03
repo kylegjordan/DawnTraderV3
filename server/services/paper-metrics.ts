@@ -51,8 +51,10 @@ export class PaperMetricsService {
       return total + (parseFloat(trade.realizedPL || '0'));
     }, 0);
 
-    // Starting paper balance (configurable, default $800)
-    const startingBalance = 800;
+    // Phase 41F-L.E2E-FIX: Get starting balance from trading settings
+    const userId = await import('../utils/system-user-cache.js').then(m => m.SystemUserCache.getOrResolve('testuser123'));
+    const settings = await storage.getTradingSettings(userId);
+    const startingBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
     const totalValue = startingBalance + realizedPL + unrealizedPL;
     
     // Calculate cash vs crypto allocation
@@ -346,7 +348,10 @@ export class PaperMetricsService {
       new Date(a.exitTime!).getTime() - new Date(b.exitTime!).getTime()
     );
 
-    const startingBalance = 800;
+    // Phase 41F-L.E2E-FIX: Get starting balance from trading settings
+    const userId = await import('../utils/system-user-cache.js').then(m => m.SystemUserCache.getOrResolve('testuser123'));
+    const settings = await storage.getTradingSettings(userId);
+    const startingBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
     const equityCurve: { date: string; balance: number; dayPL: number }[] = [];
     
     // Group trades by day

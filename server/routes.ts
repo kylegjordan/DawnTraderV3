@@ -2946,7 +2946,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const period = (req.query.period as string) || '1M';
       
-      const initialBalance = 800;
+      // Phase 41F-L.E2E-FIX: Read initial balance from trading settings
+      const settings = await storage.getTradingSettings(userId);
+      const initialBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
       
       const now = new Date();
       let startDate = new Date();
@@ -3031,7 +3033,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const period = (req.query.period as string) || '30d';
       
-      const initialBalance = 800;
+      // Phase 41F-L.E2E-FIX: Read initial balance from trading settings
+      const settings = await storage.getTradingSettings(userId);
+      const initialBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
       
       const now = new Date();
       let startDate = new Date();
@@ -3109,7 +3113,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       
-      const initialBalance = 800;
+      // Phase 41F-L.E2E-FIX: Read initial balance from trading settings
+      const settings = await storage.getTradingSettings(userId);
+      const initialBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
       
       const mode = (req.query.mode as string) || 'live';
       const allTrades = await storage.getTrades(mode, {});
@@ -7203,8 +7209,12 @@ Provide specific, actionable recommendations.`,
         const riskCheck = await riskManager.checkPreTradeRisk(userId, signal, settings);
         
         if (riskCheck.approved) {
-          // Calculate position details
-          const riskAmount = parseFloat(settings.riskPerTrade || '150');
+          // Phase 41F-L.E2E-FIX: Calculate position details using percentage-based risk
+          const { getRiskPercentage, calculateRiskAmount } = await import('./services/risk-manager.js');
+          const portfolioMetrics = await riskManager.getPortfolioMetrics(userId);
+          const portfolioValue = portfolioMetrics.totalValue || 50000;
+          const pct = getRiskPercentage(settings, portfolioValue);
+          const riskAmount = calculateRiskAmount(portfolioValue, pct);
           const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
           const quantity = riskAmount / stopDistance;
           const positionValue = signal.entryPrice * quantity;
@@ -7392,8 +7402,12 @@ Provide specific, actionable recommendations.`,
         return res.status(400).json({ error: 'Invalid scenario. Use "warning", "kill", or provide lossPercent' });
       }
 
-      // Create a simulated losing trade to reach the target loss
-      const riskAmount = parseFloat(settings.riskPerTrade || '150');
+      // Phase 41F-L.E2E-FIX: Create simulated trade using percentage-based risk
+      const { getRiskPercentage, calculateRiskAmount } = await import('./services/risk-manager.js');
+      const portfolioMetrics = await riskManager.getPortfolioMetrics(userId);
+      const portfolioValue = portfolioMetrics.totalValue || 50000;
+      const pct = getRiskPercentage(settings, portfolioValue);
+      const riskAmount = calculateRiskAmount(portfolioValue, pct);
       const lossAmount = (riskAmount / 0.01) * (targetLossPercent / 100); // Scale up the loss
       
       const simulatedTrade = await storage.createTrade({

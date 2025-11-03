@@ -909,11 +909,12 @@ export class AIAnalyst {
     return worstDay;
   }
 
-  private calculateMonthlyGrowth(trades: Trade[]): number {
-    // Simplified growth calculation
+  private async calculateMonthlyGrowth(trades: Trade[], userId: string): Promise<number> {
+    // Phase 41F-L.E2E-FIX: Calculate growth using actual portfolio value
     const totalPL = trades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
-    const assumedStartingBalance = 800;
-    return Math.round((totalPL / assumedStartingBalance) * 100 * 100) / 100;
+    const settings = await storage.getTradingSettings(userId);
+    const startingBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
+    return Math.round((totalPL / startingBalance) * 100 * 100) / 100;
   }
 
   private calculateMaxDrawdown(trades: Trade[]): number {
