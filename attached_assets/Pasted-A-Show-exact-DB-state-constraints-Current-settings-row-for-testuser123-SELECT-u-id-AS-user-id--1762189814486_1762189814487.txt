@@ -1,0 +1,101 @@
+A. Show exact DB state & constraints
+
+Current settings row for testuser123:
+
+SELECT u.id AS user_id, u.username, s.portfolio_value, s.risk_per_trade, s.risk_per_trade_pct, s.updated_at
+FROM trading_settings s
+JOIN users u ON u.id = s.user_id
+WHERE u.username = 'testuser123';
+
+
+Uniqueness proof:
+
+-- Expect 1 row total for testuser123
+SELECT COUNT(*) FROM trading_settings s
+JOIN users u ON u.id = s.user_id
+WHERE u.username = 'testuser123';
+
+-- Show the unique constraint name
+SELECT conname, conkey FROM pg_constraint WHERE conrelid = 'trading_settings'::regclass AND contype = 'u';
+
+
+Global dup check (sanity):
+
+SELECT u.username, COUNT(*) AS rows
+FROM trading_settings s
+JOIN users u ON u.id = s.user_id
+GROUP BY u.username
+HAVING COUNT(*) > 1;
+
+B. Prove all call sites use percent-based risk
+
+For each of these files, show the exact diff (old → new) that computes risk via %:
+
+server/services/risk-manager.ts (all three methods they touched)
+
+server/services/paper-execution.ts
+
+server/services/pre-execution-validator.ts
+
+server/services/trading-bob.ts
+
+Any other file where riskPerTrade was previously used
+
+I want to see a single shared helper used everywhere, e.g.:
+
+// expected pattern
+const pct = getRiskPercentage(settings, portfolioValue); // returns % (e.g., 1.0)
+const riskAmount = calculateRiskAmount(portfolioValue, pct); // dollars
+
+C. Eliminate $800 / $150 defaults (evidence)
+
+Provide the code snippets (or git diff) showing:
+
+server/paper-trading-start.ts: no $800 or $150 writes unless ALLOW_SETTINGS_SEED=true.
+
+server/routes.ts (/api/paper-sim/reset): newBalance is required; no || 800.
+
+server/services/paper-sim-service.ts: no $800 balance fallback.
+
+A final grep to prove no remaining literals:
+
+rg -n "=\s*800\b|\"800\"|riskPerTrade[^_A-Za-z0-9]*150" server | wc -l
+
+
+(Report the count and any remaining matches.)
+
+D. SSOT for counts (the big credibility fix)
+
+Show the new unified endpoint/contract returning the single snapshot (the one we specified), and the frontend changes where:
+
+Filter Insights and Filtered Pairs and Ready-to-Buy list all read from this snapshot (or from APIs derived from it), including asOf/snapshotId.
+
+Include a HAR or console log where the counts/badges match across tabs after one scan cycle.
+
+E. Signal persistence (before risk)
+
+Show the code path where a strategy emits a signal and it is inserted with status='new' before risk checks, then updated to 'ready' | 'rejected' | 'executed' with a reason code. Include:
+
+Table schema (columns for status, reason, trace_id, timestamps).
+
+The update code that sets reason on rejections like exchange_min_notional, risk_exceeds_limit.
+
+F. Mini runtime smoke (not Playwright yet)
+
+With testuser123 temporarily set to a rational profile (e.g., portfolio_value = 5000, risk_per_trade_pct = 1.0):
+
+Start paper mode and run one scan.
+
+Provide:
+
+GET /api/trading/filter-insights/snapshot response (eligible/evaluated totals)
+
+GET /api/trading/filtered-pairs?page=1&pageSize=25 (total equals eligible)
+
+A sample trading_signals row created (status='new' then 'ready' or 'rejected' with reason)
+
+A log snippet showing the new %**-based** risk calc being applied (print portfolioValue, riskPct, riskAmount, quantity, notional`)
+
+G. Confirm live-mode parity plan
+
+Confirm if these fixes are applied to both paper and live paths (where relevant), or provide the plan/branch to mirror them to live immediately after we validate paper.
