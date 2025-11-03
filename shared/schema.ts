@@ -723,6 +723,20 @@ export const safetyTelemetry = pgTable("safety_telemetry", {
   userModeTimestampIdx: uniqueIndex("safety_telemetry_user_mode_timestamp_idx").on(table.userId, table.mode, table.timestamp),
 }));
 
+// Phase 41F-L.E2E: Lineage tracking for complete data flow audit trail
+export const telemetryLineage = pgTable("telemetry_lineage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  traceId: varchar("trace_id", { length: 100 }).notNull(),
+  stage: varchar("stage", { length: 50 }).notNull(), // filter_snapshot, signal_snapshot, order_submitted, order_filled, portfolio_update
+  symbol: varchar("symbol", { length: 20 }),
+  mode: tradingModeEnum("mode").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).notNull(),
+  metadata: jsonb("metadata"), // Stage-specific data
+}, (table) => ({
+  traceIdIdx: index("telemetry_lineage_trace_id_idx").on(table.traceId),
+  timestampIdx: index("telemetry_lineage_timestamp_idx").on(table.timestamp),
+}));
+
 // AI opportunity runs (hourly batch runs)
 export const aiOpportunityRuns = pgTable("ai_opportunity_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

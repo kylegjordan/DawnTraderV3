@@ -104,6 +104,7 @@ import {
   safetyTelemetry,
   type SafetyTelemetry,
   type InsertSafetyTelemetry,
+  telemetryLineage,
   type AIOpportunityRun,
   type InsertAIOpportunityRun,
   type AIOpportunity,
@@ -250,6 +251,11 @@ export interface IStorage {
   // Filter diagnostics methods
   getFilterDiagnostics(params: { mode: 'live' | 'paper'; hours?: number }): Promise<any[]>;
   logFilterDiagnostic(data: { mode: 'live' | 'paper'; pairsScanned: number; eligiblePairs: number; topFailureReason: string; failurePercent: string }): Promise<void>;
+
+  // Phase 41F-L.E2E: Lineage tracking methods
+  createLineageEvent(event: { traceId: string; stage: string; symbol: string | null; mode: 'live' | 'paper'; timestamp: Date; metadata: Record<string, any> }): Promise<void>;
+  getLineageByTraceId(traceId: string): Promise<Array<{ traceId: string; stage: string; symbol: string | null; mode: string; timestamp: Date; metadata: any }>>;
+  getIncompleteLineageTraces(since: Date): Promise<string[]>;
 
   // Filter calibration methods
   getLatestCalibration(params: { mode: 'live' | 'paper'; maxAgeHours?: number }): Promise<FilterCalibrationLog | null>;
@@ -1013,6 +1019,72 @@ export class DatabaseStorage implements IStorage {
       topFailureReason: data.topFailureReason,
       failurePercent: data.failurePercent
     });
+  }
+
+  // Phase 41F-L.E2E: Lineage tracking methods
+  async createLineageEvent(event: {
+    traceId: string;
+    stage: string;
+    symbol: string | null;
+    mode: 'live' | 'paper';
+    timestamp: Date;
+    metadata: Record<string, any>;
+  }): Promise<void> {
+    await db.insert(telemetryLineage).values({
+      traceId: event.traceId,
+      stage: event.stage,
+      symbol: event.symbol,
+      mode: event.mode,
+      timestamp: event.timestamp,
+      metadata: event.metadata as any
+    });
+  }
+
+  async getLineageByTraceId(traceId: string): Promise<Array<{
+    traceId: string;
+    stage: string;
+    symbol: string | null;
+    mode: string;
+    timestamp: Date;
+    metadata: any;
+  }>> {
+    const results = await db
+      .select()
+      .from(telemetryLineage)
+      .where(eq(telemetryLineage.traceId, traceId))
+      .orderBy(asc(telemetryLineage.timestamp));
+
+    return results.map(r => ({
+      traceId: r.traceId,
+      stage: r.stage,
+      symbol: r.symbol,
+      mode: r.mode as 'live' | 'paper',
+      timestamp: r.timestamp,
+      metadata: r.metadata
+    }));
+  }
+
+  async getIncompleteLineageTraces(since: Date): Promise<string[]> {
+    // Find traces that don't have a portfolio_update event
+    const allTraces = await db
+      .selectDistinct({ traceId: telemetryLineage.traceId })
+      .from(telemetryLineage)
+      .where(gte(telemetryLineage.timestamp, since));
+
+    const completedTraces = await db
+      .selectDistinct({ traceId: telemetryLineage.traceId })
+      .from(telemetryLineage)
+      .where(
+        and(
+          gte(telemetryLineage.timestamp, since),
+          eq(telemetryLineage.stage, 'portfolio_update')
+        )
+      );
+
+    const completedSet = new Set(completedTraces.map(t => t.traceId));
+    return allTraces
+      .map(t => t.traceId)
+      .filter(id => !completedSet.has(id));
   }
 
   // Filter calibration methods (Phase 27.F.15.A - GLOBAL)
