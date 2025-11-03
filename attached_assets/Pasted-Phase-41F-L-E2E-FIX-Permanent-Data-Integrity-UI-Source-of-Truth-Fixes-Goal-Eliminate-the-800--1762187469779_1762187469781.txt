@@ -1,0 +1,169 @@
+Phase 41F-L.E2E-FIX — Permanent Data Integrity + UI Source-of-Truth Fixes
+
+Goal: Eliminate the $800 and $150 pitfalls, unify counts across Trading tabs, persist signals for traceability, and ensure dashboard/widgets refresh from the same source of truth. This is a production change for both Paper and Live modes.
+
+Test user:
+
+username: testuser123
+
+password: SecurePass123!
+
+A. Database integrity & migrations
+
+Unique settings per user
+
+Add a unique constraint to ensure exactly one trading_settings row per user.
+
+Keep newest row; delete the rest.
+
+Risk stored as percentage (not dollars)
+
+Introduce risk_per_trade_pct DECIMAL(5,2) NOT NULL DEFAULT 4.00.
+
+Backfill from old dollar field where needed:
+
+If risk_per_trade > 100, treat as dollars and migrate risk_per_trade_pct = ROUND((risk_per_trade / portfolio_value) * 100, 2).
+
+Else if 0 < risk_per_trade <= 100, assume it was already a percent and copy to risk_per_trade_pct.
+
+Mark risk_per_trade as deprecated (keep for backward compatibility short-term), and switch all reads to the % column.
+
+Cleanup for testuser123
+
+Deduplicate trading_settings to a single record (keep newest).
+
+Ensure portfolio_value uses the user’s explicit value; do not override to $800.
+
+Ensure risk_per_trade_pct = 4.00 unless specified otherwise.
+
+B. Remove/neutralize hardcoded fallbacks
+
+Standalone script (paper-trading-start.ts)
+
+Remove $800 default and $150 assignment. Honor env value if supplied; otherwise do not write any settings.
+
+Script must be read-only for settings unless ALLOW_SETTINGS_SEED=true.
+
+Paper reset route (/api/paper-sim/reset)
+
+Replace parseFloat(newBalance) || 800 with:
+
+If newBalance missing → 400 Bad Request (“newBalance required”).
+
+If present → validate and set; never backfill $800.
+
+Service fallbacks (read paths)
+
+paper-sim-service.ts must not default to $800 for balance checks. If state missing → return { required: true } without injecting a numeric value.
+
+C. Risk, sizing, and guardrails (runtime)
+
+Everywhere we compute risk, read risk_per_trade_pct and compute risk_amount = portfolio_value * (risk_per_trade_pct / 100).
+
+Keep 10% notional guardrail, but compute quantity using exchange min notional / tick / lot constraints before order creation. Reject at signal → “rejected: exchange_min_notional” with reason, not silently.
+
+D. Signals & “Ready to Buy” consistency
+
+Persist signals first
+
+When a strategy emits a signal, insert a row in trading_signals immediately with status='new'.
+
+After risk/exchange checks, update to status='ready' | 'rejected' | 'executed' with a reason field for rejected (e.g., risk_exceeds_limit, exchange_min_notional, thin_liquidity).
+
+UI data sources
+
+Single Source of Truth: Make MarketEvaluationService (and its cache) the SSOT for:
+
+Filter Insights totals (Total Universe, Evaluated, Eligible)
+
+Filtered Pairs list + count
+
+“Ready to Buy” derives from trading_signals.status='ready' joined to current evaluations.
+
+Remove any parallel diagnostic or ad-hoc endpoints returning diverging counts. All Trading tabs should tap the same counts payload shape.
+
+Counts semantics
+
+Total Universe: number of symbols Kraken currently lists (from Kraken metadata snapshot).
+
+Evaluated: number evaluated in the last scan cycle (updates each cycle).
+
+Eligible: current count of pairs passing all filters in that same cycle.
+
+The Filtered Pairs table count must equal the “Eligible” badge. Add pagination but show the same total.
+
+E. Dashboard & widgets refresh
+
+Portfolio widget, Earnings, and “Trading Activity & Results” must consume the same store updated by the unified commit service (commitTradeAndUpdatePortfolio).
+
+On order_executed lineage event:
+
+Update DB (trade + portfolio),
+
+Emit WebSocket portfolio_update + trade_event,
+
+Frontend listeners refresh Dashboard KPIs, Reports → Trade History (latest N), and Trading → Open Trades/Ready to Buy.
+
+F. Kill-switch & paper-start UX
+
+Expose kill-switch state on UI with a clear badge; if enabled, “Start Paper Trading” should show actionable guidance (disable toggle/reset endpoint).
+
+Start button should not silently fail if kill-switch is on.
+
+G. Acceptance tests (must pass)
+
+DB integrity
+
+trading_settings.user_id is unique.
+
+risk_per_trade_pct populated for all users; testuser123 has exactly one settings row.
+
+No hardcoded $800 paths
+
+Grep shows no $800 write defaults; reset requires explicit newBalance.
+
+Standalone script no longer writes settings unless ALLOW_SETTINGS_SEED=true.
+
+Counts consistency
+
+Start paper mode. After one scan:
+
+Filter Insights: Eligible = X
+
+Filtered Pairs table shows X rows total (with pagination).
+
+“Evaluated” changes each cycle and matches last scan set size.
+
+Signals lifecycle
+
+At least one symbol produces a persisted signal row (status='new' → ready or rejected') with reason when rejected.
+
+“Ready to Buy” tab reflects status='ready' rows.
+
+End-to-end trade
+
+With guardrails and risk set to realistic values (e.g., portfolio=$5,000, risk_per_trade_pct=1.0), at least one trade executes in paper mode within two cycles.
+
+Dashboard KPIs, Reports → Trade History, and Trading → Open Trades update within 5s of the trade_event.
+
+WebSocket audit
+
+For the executed trade: lineage includes filter_snapshot → signal_snapshot → order_submitted → order_filled → portfolio_update with a single traceId.
+
+H. Deliverables
+
+Migration SQL (or Drizzle) scripts: unique constraint, new column, backfill, dedupe for testuser123.
+
+PR touching: shared/schema.ts, server/services/* (risk calc, MarketEvaluationService), server/routes.ts (reset route), server/paper-trading-start.ts, trading-engine, signal orchestration, and WebSocket emitters.
+
+Updated API contract for unified counts payload.
+
+Short RUNBOOK.md: how to start paper mode, how counts are defined, and how to diagnose empty “Ready to Buy”.
+
+Notes & guardrails
+
+Do not remove risk_per_trade column yet; keep it marked deprecated until after rollout.
+
+Apply all fixes to both Paper and Live code paths where applicable (risk calc, signals persistence, counts source).
+
+Keep lineage events on for both modes.

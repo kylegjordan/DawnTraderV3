@@ -170,7 +170,8 @@ export const tradingSettings = pgTable("trading_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   userId: varchar("user_id").references(() => users.id),
-  riskPerTrade: decimal("risk_per_trade", { precision: 10, scale: 2 }).default("150.00"),
+  riskPerTrade: decimal("risk_per_trade", { precision: 10, scale: 2 }).default("150.00"), // DEPRECATED: Use riskPerTradePct instead
+  riskPerTradePct: decimal("risk_per_trade_pct", { precision: 5, scale: 2 }).default("4.00"), // Risk per trade as % of portfolio
   maxExposurePercent: decimal("max_exposure_percent", { precision: 5, scale: 2 }).default("25.00"),
   maxOpenTrades: integer("max_open_trades").default(3),
   slippageToleranceMajors: decimal("slippage_tolerance_majors", { precision: 5, scale: 2 }).default("0.50"),
@@ -241,7 +242,9 @@ export const tradingSettings = pgTable("trading_settings", {
   showSystemAlerts: boolean("show_system_alerts").default(true), // Toggle non-critical notifications
   
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  uniqueUserId: uniqueIndex("trading_settings_user_id_idx").on(table.userId),
+}));
 
 // Guardrails (mode-isolated risk parameters) - GLOBAL per mode
 export const guardrails = pgTable("guardrails", {
