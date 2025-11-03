@@ -1,0 +1,113 @@
+ChatGPT said:
+
+Perfect — here’s exactly how we’ll handle this.
+This directive will tell Replit to perform a true independent end-to-end validation — not just checking that the code compiles, but verifying that real data moves correctly through the entire Dawn Trader pipeline, from Kraken input to dashboard output.
+
+🧭 Directive: Phase 41F-L.E2E-VALIDATE-FLOW
+Objective
+
+Confirm that the post-purge system behaves correctly end-to-end — not just structurally, but functionally.
+This test must prove that market data from Kraken is successfully evaluated, filtered, converted into signals, executed in paper mode, and reflected accurately in the portfolio, trade history, and dashboard widgets.
+
+Context and Urgency
+
+Despite multiple previous “cleanups,” Dawn Trader’s user interface still shows inconsistent data — static universe counts, mismatched eligible pairs, missing trades, and no visible portfolio updates.
+Although the latest purge eliminated user-level settings and legacy code, those changes only verify architecture.
+We now need to confirm that the actual runtime data flow — Kraken → filters → signals → trades → portfolio → dashboard — is working as intended.
+
+This validation must expose any gaps between the backend and the UI, confirm data consistency across all tabs, and produce hard evidence of whether the new mode-level foundation truly functions in live execution.
+
+Test Credentials
+username: testuser123
+password: SecurePass123!
+
+Test Requirements
+
+Replit must:
+
+Start the application normally in paper-mode with the kill-switch off.
+
+Use Playwright for visual, cursor-based interaction (not scripts).
+
+Log in as testuser123.
+
+Start the paper trading engine from the UI (exactly as a user would).
+
+Keep recording the entire session.
+
+Observe and record the following sequence:
+
+Kraken data load: universe count appears.
+
+Filter Insights tab: “Total Universe,” “Evaluated,” and “Eligible” numbers update each scan.
+
+Filtered Pairs tab: eligible pairs list refreshes — the number at the top matches the table below.
+
+Ready-to-Buy tab: signals appear (or, if empty, a clear reason why).
+
+Trades tab and Reports tab: executed paper trades appear with correct quantities and prices.
+
+Dashboard widgets (Portfolio Value, Active Trades, Daily PnL) update after each executed trade.
+
+Backend verification (automated):
+
+Confirm telemetry_lineage and lineage_trace.ndjson contain full event chains:
+filter_snapshot → signal_snapshot → order_submitted → order_filled → portfolio_update
+
+Verify portfolio_state.balance changes to reflect simulated trades.
+
+Confirm guardrails_v2 risk parameters are applied correctly.
+
+Cross-validation:
+
+Each tab’s displayed numbers must match live API data (/api/trading/filter-insights/snapshot, /api/paper/portfolio/state, /api/trading/reports).
+
+If any mismatch exceeds 1%, log both values in the report.
+
+Capture output:
+
+Full Playwright video replay.
+
+Console logs for both frontend and backend.
+
+Database snapshot (post-test).
+
+Deliverables
+
+Replit must produce:
+
+diagnostic-reports/phase-41F-L.E2E-VALIDATE-FLOW.md — full written report
+
+✅ Evidence for each stage (UI + backend parity)
+
+❌ Explicitly mark any mismatches or failed syncs
+
+Include SQL queries, response payloads, and screenshots.
+
+diagnostic-reports/phase-41F-L.E2E-VALIDATE-FLOW.ndjson — lineage event trace
+
+Playwright video replay showing user-visible behavior.
+
+Success Criteria
+
+✅ Pass:
+
+Three or more paper trades execute end-to-end.
+
+Portfolio and dashboard reflect updates instantly.
+
+All lineage events appear in correct order.
+
+All UI counts match backend snapshot.
+
+❌ Fail:
+
+No trades execute despite active signals.
+
+UI counts remain static or inconsistent.
+
+Portfolio/dash widgets fail to update.
+
+Missing lineage stages.
+
+If the test fails, Replit must include an anomaly table specifying where the data flow breaks (e.g., between MarketScanner → SignalOrchestrator, or PortfolioService → WebSocket broadcast).
