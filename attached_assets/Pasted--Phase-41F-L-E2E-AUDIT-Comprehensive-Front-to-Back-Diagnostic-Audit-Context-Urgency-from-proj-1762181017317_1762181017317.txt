@@ -1,0 +1,126 @@
+⚙️ Phase 41F-L.E2E-AUDIT — Comprehensive Front-to-Back Diagnostic Audit
+Context & Urgency (from project owner)
+
+The Trading UI is still showing inconsistent and unreliable information.
+Even after the backend refactors and lineage integration, the following remain unresolved:
+
+Inconsistent universe and eligible counts between “Filter Insights” and “Filtered Pairs” (e.g., Universe = 1485, Eligible = 584 vs 593 vs 7 visible).
+
+The “Ready to Buy” tab fails to load with vague errors and no meaningful reasons.
+
+No active trades appear in Trade History or affect the Dashboard portfolio.
+
+Position sizing errors (e.g., $13 650) are blocking all signals despite guardrails being correct.
+
+This destroys trust in the system: we cannot tell whether the engine isn’t finding valid trades or if the data pipeline and UI are simply out of sync.
+The goal of this audit is to map exactly where truth breaks down—from Kraken data → filters → signals → trade execution → portfolio → UI widgets.
+
+This is not a code-fix directive.
+It is a diagnostic audit that will output a clear list of discrepancies, their sources, and supporting evidence so we can fix them in the next phase.
+
+Objective
+
+Perform a full audit of data flow and UI consistency across all trading tabs.
+Confirm what each UI element is showing, where the data originates, and why numbers and statuses diverge.
+
+Credentials for this test
+Username: testuser123
+Password: SecurePass123!
+
+
+Use these credentials for authentication in any scripts or API calls during this audit.
+
+Step A – Immediate Audit Tasks
+1️⃣ Universe & Eligible Counts
+
+Trace the data sources for:
+
+Filter Insights > Universe Overview
+
+Filtered Pairs (header counts)
+
+Filtered Pairs (list items)
+
+For each, record:
+
+API endpoint used
+
+Query parameters (mode, page, size, filters)
+
+SQL or service method providing the count
+
+Timestamp or snapshot ID (if any)
+
+Output: concise note listing all three data paths and how/why their results diverge.
+
+2️⃣ “Ready to Buy” Errors
+
+Identify the backend endpoint used by the “Ready to Buy” tab.
+
+Capture full request and response logs, including error payloads or stack traces.
+
+Note whether the endpoint emits structured error codes or generic errors.
+
+Determine whether the cause is:
+
+Risk/position guardrail,
+
+Empty signal set,
+
+Backend failure,
+
+Or missing data binding in the UI.
+
+3️⃣ Risk Sizing Rejections
+
+When a signal is rejected, log:
+
+symbol, price, stopDistance, calcQty, calcNotional,
+portfolioValue, maxPctAllowed, reasonCode, traceId
+
+
+Identify which formula or rule produces extreme position sizes (e.g., $13 650 vs $900 portfolio).
+
+Confirm whether this matches Kraken’s min notional and tick/step rules.
+
+4️⃣ Commit Path Validation
+
+Confirm the paper-mode engine path actually calls commitTradeAndUpdatePortfolio().
+
+List any other commit functions still writing directly to the trades table.
+
+If legacy paths exist, flag them as bypassing unified commit.
+
+5️⃣ WebSocket → UI Audit
+
+Enumerate all WebSocket topics the UI subscribes to (portfolio_update, trade_committed, etc.).
+
+Verify whether those topics are emitted in paper mode during a normal cycle.
+
+Note which reducers/components consume each event and whether they update state properly.
+
+Expected Deliverables
+
+diagnostic-reports/phase-41F-L.E2E-AUDIT.md
+
+Table mapping each UI element → data source → endpoint → discrepancy (if any).
+
+Screenshots or HAR captures of API calls showing mismatched counts.
+
+Sample console/log excerpts for “Ready to Buy” errors and risk-sizing rejections.
+
+Confirmation of WebSocket topic emission and UI subscription coverage.
+
+diagnostic-reports/phase-41F-L.E2E-AUDIT.har (optional but preferred)
+
+Captured Trading-page API calls during one refresh cycle.
+
+Next Phases (for context only)
+
+After this audit:
+
+Phase 41F-L.E2E-FIX — Apply corrections for all discrepancies found and unify data sources.
+
+Phase 41F-L.E2E-VISUAL — Run the Playwright end-to-end validation with visible trades and synchronized UI updates.
+
+Run the audit thoroughly and document every mismatch so the fix phase can be precise and permanent.
