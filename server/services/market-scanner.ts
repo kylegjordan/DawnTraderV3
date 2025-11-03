@@ -451,6 +451,25 @@ export class MarketScanner {
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 24);
 
+      // Phase 41F-L.E2E: Lineage tracking - generate traceId and emit signal_snapshot
+      const { lineageService } = await import('./lineage.js');
+      const traceId = lineageService.getTraceId(signal.symbol, mode);
+      
+      await lineageService.emitSignalSnapshot({
+        traceId,
+        symbol: signal.symbol,
+        mode,
+        strategy: signal.strategy,
+        signal: 'buy', // Market scanner generates buy signals
+        confidence: signal.confidence,
+        metadata: {
+          entryPrice: signal.entryPrice,
+          stopPrice: signal.stopPrice,
+          targetPrice: signal.targetPrice,
+          detectedBy: 'market_scanner'
+        }
+      });
+
       // Phase 27.F.15.B.4: saveTradingSignal is now mode-only (global)
       await storage.saveTradingSignal({
         mode,
@@ -470,11 +489,15 @@ export class MarketScanner {
         expiresAt,
         metadata: {
           detectedBy: 'market_scanner',
-          scanCycle: new Date().toISOString()
+          scanCycle: new Date().toISOString(),
+          traceId // Preserve traceId for linking to trades
         }
       });
 
-      console.log(`✅ Trading signal saved to database for ${signal.symbol}`);
+      console.log(`✅ [41F-L.E2E] Trading signal saved with lineage tracking:`, {
+        symbol: signal.symbol,
+        traceId
+      });
       
       // Clean up expired signals for this mode (older than 24 hours)
       // Phase 27.F.15.B.4: expireOldSignals is now mode-only (global)

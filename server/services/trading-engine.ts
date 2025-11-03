@@ -421,7 +421,21 @@ export class TradingEngine {
       return simulatedTrade;
     }
 
-    // Phase 27.F.15.B.3: Create mode-based trade record (no userId)
+    // Phase 41F-L.E2E: Lineage tracking - emit order_submitted
+    const { lineageService } = await import('./lineage.js');
+    const traceId = signal.metadata?.traceId || lineageService.getTraceId(signal.symbol, this.mode);
+    
+    await lineageService.emitOrderSubmitted({
+      traceId,
+      symbol: signal.symbol,
+      mode: this.mode,
+      orderId: entryOrderId || `order-${Date.now()}`,
+      side: 'buy',
+      quantity: filledQuantity,
+      price: actualEntryPrice
+    });
+
+    // Phase 27.F.15.B.3 + 41F-L.E2E: Create trade with unified commit service
     const tradeData = {
       mode: this.mode,
       symbol: signal.symbol,
@@ -438,11 +452,21 @@ export class TradingEngine {
         ...signal.metadata,
         signalConfidence: signal.confidence,
         goalAlignmentScore: signal.goalAlignmentScore,
-        finalScore: signal.finalScore
+        finalScore: signal.finalScore,
+        traceId // Preserve traceId in trade metadata
       }
     };
 
-    const trade = await storage.createTrade(tradeData);
+    // Phase 41F-L.E2E: Use unified commit service for atomic portfolio updates
+    const { commitTradeAndUpdatePortfolio } = await import('./commitTradeAndUpdatePortfolio.js');
+    const result = await commitTradeAndUpdatePortfolio(tradeData as any, traceId);
+    const trade = result.trade;
+    
+    console.log(`[41F-L.E2E][mode=${this.mode}] Trade committed with portfolio update:`, {
+      tradeId: trade.id,
+      portfolioValue: result.portfolio.totalValue,
+      traceId
+    });
 
     // Phase 41F-I: Record trade opened event
     await telemetryService.recordTradeEvent('trade_opened', {
