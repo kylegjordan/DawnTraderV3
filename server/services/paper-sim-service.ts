@@ -78,15 +78,15 @@ async function clearStaleBusyFlag() {
  * Phase 27.F.14.D-POST: Check if portfolio balance confirmation is required
  * Returns true if balance hasn't been confirmed in the last 24 hours
  */
-export async function checkBalanceConfirmationRequired(mode: 'live' | 'paper' = 'paper'): Promise<{ required: boolean; currentBalance: number }> {
+export async function checkBalanceConfirmationRequired(mode: 'live' | 'paper' = 'paper'): Promise<{ required: boolean; currentBalance: number | null }> {
   try {
     // Get system context to check last confirmation time
     const context = await storage.getSystemContext(mode);
     const balanceLastConfirmed = context?.balanceLastConfirmed;
     
-    // Get current portfolio balance
+    // Phase 41F-L.E2E-FIX: Don't inject $800 fallback, return null if missing
     const portfolioState = await storage.getPortfolioState({ mode });
-    const currentBalance = portfolioState ? parseFloat(portfolioState.balance) : 800; // Default to $800
+    const currentBalance = portfolioState ? parseFloat(portfolioState.balance) : null;
     
     // Check if confirmation is missing or stale (>24 hours old)
     if (!balanceLastConfirmed) {
@@ -104,8 +104,8 @@ export async function checkBalanceConfirmationRequired(mode: 'live' | 'paper' = 
     return { required: false, currentBalance };
   } catch (error) {
     console.error('[PaperSim] Error checking balance confirmation:', error);
-    // Default to requiring confirmation on error
-    return { required: true, currentBalance: 800 };
+    // Phase 41F-L.E2E-FIX: Return null instead of $800 fallback
+    return { required: true, currentBalance: null };
   }
 }
 

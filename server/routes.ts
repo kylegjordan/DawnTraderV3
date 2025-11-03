@@ -5477,7 +5477,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     const { newBalance } = req.body;
     
     try {
-      const balance = parseFloat(newBalance) || 800; // Default to $800 if not provided
+      // Phase 41F-L.E2E-FIX: Require explicit newBalance, no hardcoded $800 fallback
+      if (!newBalance || isNaN(parseFloat(newBalance))) {
+        return res.status(400).json({ 
+          error: 'newBalance parameter required',
+          message: 'Please provide a valid newBalance value to reset the paper trading simulation.'
+        });
+      }
+      
+      const balance = parseFloat(newBalance);
       
       console.log(`[PaperSim] Resetting simulation for user ${userId} with balance $${balance}`);
       
