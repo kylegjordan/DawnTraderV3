@@ -43,10 +43,9 @@ export class AIAnalyst {
   async generateDailyReport(userId: string): Promise<AIReport> {
     try {
       // Gather trading data
-      // Phase 27.F.15.A: Global mode-based queries (no userId)
-      const [trades, settings, activeTrades] = await Promise.all([
+      // Phase 41F-L.E2E-PURGE: Mode-based queries only (no user-level settings)
+      const [trades, activeTrades] = await Promise.all([
         storage.getTrades({ status: 'closed', limit: 50 }),
-        storage.getTradingSettings(userId),
         storage.getActiveTrades()
       ]);
       console.log('[Phase-27.F.15.B.2] Updated service ai-analyst → mode-based only');
@@ -59,8 +58,8 @@ export class AIAnalyst {
       // Calculate metrics
       const metrics = this.calculateMetrics(todayTrades, activeTrades);
       
-      // Generate AI analysis
-      const analysis = await this.generateAnalysis(metrics, todayTrades, settings || null);
+      // Generate AI analysis (no longer needs user-level settings)
+      const analysis = await this.generateAnalysis(metrics, todayTrades, null);
       
       // Create report
       const report = await storage.createAIReport({
@@ -550,12 +549,29 @@ export class AIAnalyst {
     }
   }
 
+  /**
+   * Phase 41F-L.E2E-PURGE: DEPRECATED - User-level settings being eliminated
+   * TODO: Refactor to update guardrails_v2 (mode-level) instead of trading_settings (user-level)
+   * AI-driven settings changes need to target mode-level guardrails:
+   * - portfolioRiskPerTradePct (risk %)
+   * - maxOpenPositions (trade limits)
+   * - dailyLossKillSwitchPct (kill switch threshold)
+   * - symbolCooldownMinutes (cooldown period)
+   */
   async applySettingsChange(
     userId: string,
     settingName: string,
     newValue: any,
     confirmation: boolean
   ): Promise<{ success: boolean; message: string; auditLogId?: string }> {
+    console.warn('[DEPRECATED] applySettingsChange() - User-level settings updates disabled during migration to mode-level configuration');
+    
+    return {
+      success: false,
+      message: "Settings updates temporarily disabled during system migration. Please use the Guardrails tab to adjust risk parameters."
+    };
+    
+    /* ORIGINAL CODE - COMMENTED OUT DURING PURGE
     if (!confirmation) {
       return {
         success: false,
@@ -609,6 +625,7 @@ export class AIAnalyst {
         message: "Failed to apply settings change"
       };
     }
+    */
   }
 
   async diagnoseError(errorId: string, userId: string): Promise<{
@@ -909,11 +926,11 @@ export class AIAnalyst {
     return worstDay;
   }
 
-  private async calculateMonthlyGrowth(trades: Trade[], userId: string): Promise<number> {
-    // Phase 41F-L.E2E-FIX: Calculate growth using actual portfolio value
+  private async calculateMonthlyGrowth(trades: Trade[], userId: string, mode: 'live' | 'paper' = 'paper'): Promise<number> {
+    // Phase 41F-L.E2E-PURGE: Get portfolio value from portfolio_state (mode-level)
     const totalPL = trades.reduce((sum, t) => sum + parseFloat(t.realizedPL || '0'), 0);
-    const settings = await storage.getTradingSettings(userId);
-    const startingBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
+    const { getPortfolioBalanceV2 } = await import('./risk-manager.js');
+    const startingBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
     return Math.round((totalPL / startingBalance) * 100 * 100) / 100;
   }
 

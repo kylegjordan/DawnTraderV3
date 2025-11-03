@@ -41,10 +41,13 @@ export class PreExecutionValidator {
     console.log(`[PreValidator:${traceId}] Validating trade: ${request.signal.symbol} ${request.signal.strategy}`);
 
     try {
-      const settings = await storage.getTradingSettings(request.userId);
-      if (!settings) {
-        throw new Error('Trading settings not found');
-      }
+      // Phase 41F-L.E2E-PURGE: Build complete settings from mode-level data
+      const { buildSettingsFromModeLevel, calculateRiskAmount } = await import('./risk-manager.js');
+      const settings = await buildSettingsFromModeLevel(request.mode, request.userId);
+      
+      const portfolioValue = parseFloat(settings.portfolioValue);
+      const riskPct = parseFloat(settings.riskPerTradePct);
+      const riskAmount = calculateRiskAmount(portfolioValue, riskPct);
 
       const goalAlignmentScore = await this.calculateGoalAlignmentScore(
         request.userId,
@@ -54,17 +57,13 @@ export class PreExecutionValidator {
 
       const goalAlignmentPercent = Math.round(goalAlignmentScore * 100);
       
+      // Pre-trade risk checks (uses complete settings from mode-level adapter)
       const riskCheckResult = await this.riskManager.checkPreTradeRisk(
-        request.userId,
+        request.mode,
         request.signal,
         settings
       );
 
-      // Phase 41F-L.E2E-FIX: Use percentage-based risk calculation
-      const { getRiskPercentage, calculateRiskAmount } = await import('./risk-manager.js');
-      const portfolioValue = parseFloat(settings.portfolioValue);
-      const pct = getRiskPercentage(settings, portfolioValue);
-      const riskAmount = calculateRiskAmount(portfolioValue, pct);
       const stopDistance = Math.abs(request.signal.entryPrice - request.signal.stopPrice);
       const quantity = riskAmount / stopDistance;
 

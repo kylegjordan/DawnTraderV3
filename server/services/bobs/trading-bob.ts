@@ -72,7 +72,7 @@ class TradingBob {
       const activeStrategies = strategyCount.length;
 
       // Get portfolio metrics
-      const settings = await storage.getTradingSettings(userId);
+      // Phase 41F-L.E2E-PURGE: Removed getTradingSettings - using mode-level config
       let portfolioHealth = {
         totalEquity: 0,
         totalPL: 0,
@@ -108,13 +108,14 @@ class TradingBob {
       // Phase 27.F.15.B.4-Prep: Use mode-based storage methods
       const activeTrades = await storage.getActiveTrades(mode);
       const openTrades = activeTrades;
+      // Phase 41F-L.E2E-PURGE: Use mode-level risk calculation (guardrails_v2)
+      const guardrails = await storage.getGuardrailsV2({ mode });
+      const { getRiskPercentageV2, calculateRiskAmount } = await import('../risk-manager.js');
+      const riskPct = guardrails ? getRiskPercentageV2(mode, guardrails) : 4.00;
+      const riskPerTradeAmount = calculateRiskAmount(portfolioHealth.totalEquity, riskPct);
       
-      const maxExposure = parseFloat(settings?.maxExposurePercent || '25');
-      // Phase 41F-L.E2E-FIX: Use percentage-based risk calculation
-      const { getRiskPercentage, calculateRiskAmount } = await import('../risk-manager.js');
-      const pct = getRiskPercentage(settings || {} as any, portfolioHealth.totalEquity);
-      const riskPerTradeAmount = calculateRiskAmount(portfolioHealth.totalEquity, pct);
-      const currentExposure = openTrades.length > 0 
+      // Fix: Guard against zero equity to prevent NaN
+      const currentExposure = (openTrades.length > 0 && portfolioHealth.totalEquity > 0)
         ? (openTrades.length * riskPerTradeAmount / portfolioHealth.totalEquity) * 100
         : 0;
 

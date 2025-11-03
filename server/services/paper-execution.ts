@@ -54,15 +54,29 @@ export class PaperExecutionService {
     console.log(`[PaperExecution:${this.userId}] Processing signal for ${signal.symbol} - ${signal.strategy}`);
 
     try {
-      // Get user settings
-      const settings = await storage.getTradingSettings(this.userId);
-      if (!settings) {
-        throw new Error('Trading settings not found');
+      // Phase 41F-L.E2E-PURGE: Fetch mode-level configuration (guardrails_v2 + portfolio_state)
+      const mode = 'paper'; // PaperExecutionService is always paper mode
+      const guardrails = await storage.getGuardrailsV2({ mode });
+      if (!guardrails) {
+        throw new Error('Guardrails not configured for paper mode');
       }
 
-      // Pre-trade risk checks (Phase 27.F.13.A: Now uses actual balance from portfolio_state)
+      // Phase 41F-L.E2E-PURGE: Build complete settings from mode-level data
+      const { buildSettingsFromModeLevel, calculateRiskAmount } = await import('./risk-manager.js');
+      const settings = await buildSettingsFromModeLevel(mode, this.userId);
+      
+      const portfolioValue = parseFloat(settings.portfolioValue);
+      const riskPct = parseFloat(settings.riskPerTradePct);
+      const riskAmount = calculateRiskAmount(portfolioValue, riskPct);
+      
+      if (riskAmount <= 0) {
+        console.error(`[PaperExecution] Invalid risk amount (${riskAmount}) for mode=${mode}`);
+        return null;
+      }
+      
+      // Pre-trade risk checks (uses complete settings from mode-level adapter)
       const riskCheck = await this.riskManager.checkPreTradeRisk(
-        this.userId,
+        mode,
         signal,
         settings
       );
@@ -88,24 +102,11 @@ export class PaperExecutionService {
         
         return null;
       }
-
-      // Phase 41F-L.E2E-FIX: Calculate position size using percentage-based risk
-      const portfolioValue = parseFloat(settings.portfolioValue);
-      
-      // Use shared helpers for consistent risk calculation
-      const { getRiskPercentage, calculateRiskAmount } = await import('./risk-manager.js');
-      const pct = getRiskPercentage(settings, portfolioValue);
-      const riskAmount = calculateRiskAmount(portfolioValue, pct);
-      
-      if (riskAmount <= 0) {
-        console.error(`[PaperExecution] Invalid risk amount (${riskAmount}) for user ${this.userId}`);
-        return null;
-      }
       
       const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
       const quantity = riskAmount / stopDistance;
 
-      // Simulate trade execution (Milestone 18: Now writes to paper_sim_trades + paper_sim_open_positions)
+      // Simulate trade execution
       const trade = await this.simulateExecution(signal, quantity, riskAmount, settings);
       
       console.log(`[PaperExecution] Simulated trade created: ${trade.id} for ${signal.symbol}`);

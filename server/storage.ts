@@ -687,8 +687,14 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  // Trading settings methods
+  /**
+   * Phase 41F-L.E2E-PURGE: DEPRECATED - User-level settings being eliminated
+   * Use buildSettingsFromModeLevel() adapter or mode-level guardrails_v2 + portfolio_state
+   * Remaining callers: test endpoints, simulators, analytics - pending migration
+   */
+  // Trading settings methods (DEPRECATED)
   async getTradingSettings(userId: string): Promise<TradingSettings | undefined> {
+    console.warn('[DEPRECATED] getTradingSettings() - migrate to mode-level config');
     const [settings] = await db
       .select()
       .from(tradingSettings)
@@ -697,11 +703,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTradingSettings(settings: InsertTradingSettings): Promise<TradingSettings> {
+    console.warn('[DEPRECATED] createTradingSettings() - should not create user-level settings');
     const [result] = await db.insert(tradingSettings).values(settings).returning();
     return result;
   }
 
   async updateTradingSettings(userId: string, updates: Partial<TradingSettings>): Promise<TradingSettings> {
+    console.warn('[DEPRECATED] updateTradingSettings() - use updateGuardrails() or updatePortfolioState()');
     const [result] = await db
       .update(tradingSettings)
       .set({ ...updates, updatedAt: new Date() })

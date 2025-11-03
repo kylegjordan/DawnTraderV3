@@ -50,11 +50,14 @@ export function calculateRiskAmount(portfolioValue: number, riskPerTradePct: num
  * @param settings Trading settings
  * @param portfolioValue Current portfolio value in USD
  * @returns Risk percentage (e.g., 4.0 for 4%)
+ * @deprecated Use getRiskPercentageV2() for mode-level configuration
  */
 export function getRiskPercentage(
   settings: TradingSettings,
   portfolioValue: number
 ): number {
+  console.warn('[DEPRECATED] getRiskPercentage(settings, portfolioValue) called. Migrate to getRiskPercentageV2(mode, guardrails)');
+  
   // Primary: Use new percentage field if available
   if (settings.riskPerTradePct && parseFloat(String(settings.riskPerTradePct)) > 0) {
     return parseFloat(String(settings.riskPerTradePct));
@@ -68,6 +71,109 @@ export function getRiskPercentage(
   
   // Default: 4% (safe fallback)
   return 4.00;
+}
+
+// ============================================================================
+// Phase 41F-L.E2E-PURGE: Mode-Level Helper Functions (V2)
+// Pure mode-level configuration - NO user-scoped settings
+// ============================================================================
+
+/**
+ * Phase 41F-L.E2E-PURGE: Get risk percentage from mode-level guardrails
+ * Single source of truth: guardrails_v2.portfolio_risk_per_trade_pct
+ * @param mode Trading mode (live/paper)
+ * @param guardrails Guardrails configuration for the mode
+ * @returns Risk percentage (e.g., 4.0 for 4%)
+ */
+export function getRiskPercentageV2(
+  mode: 'live' | 'paper',
+  guardrails: { portfolioRiskPerTradePct: string | number } | null
+): number {
+  if (!guardrails) {
+    console.warn(`[getRiskPercentageV2] No guardrails provided for mode=${mode}, using default 4%`);
+    return 4.00;
+  }
+
+  const riskPct = Number(guardrails.portfolioRiskPerTradePct);
+  if (riskPct <= 0 || isNaN(riskPct)) {
+    console.warn(`[getRiskPercentageV2] Invalid risk percentage (${riskPct}) for mode=${mode}, using default 4%`);
+    return 4.00;
+  }
+
+  return riskPct;
+}
+
+/**
+ * Phase 41F-L.E2E-PURGE: Get portfolio balance from mode-level portfolio_state
+ * Single source of truth: portfolio_state.balance (per mode + user)
+ * @param mode Trading mode (live/paper)
+ * @param userId User ID
+ * @param globalContextId Optional global context ID
+ * @returns Portfolio balance in USD, or 0 if not found
+ */
+export async function getPortfolioBalanceV2(
+  mode: 'live' | 'paper',
+  userId?: string,
+  globalContextId?: string
+): Promise<number> {
+  try {
+    const state = await storage.getPortfolioState({ 
+      mode, 
+      userId, 
+      globalContextId 
+    });
+    
+    if (!state) {
+      console.warn(`[getPortfolioBalanceV2] No portfolio_state found for mode=${mode}, userId=${userId}`);
+      return 0;
+    }
+
+    const balance = Number(state.balance);
+    if (balance <= 0 || isNaN(balance)) {
+      console.warn(`[getPortfolioBalanceV2] Invalid balance (${balance}) for mode=${mode}, userId=${userId}`);
+      return 0;
+    }
+
+    return balance;
+  } catch (error) {
+    console.error(`[getPortfolioBalanceV2] Error fetching portfolio balance for mode=${mode}:`, error);
+    return 0;
+  }
+}
+
+/**
+ * Phase 41F-L.E2E-PURGE: Build settings-compatible object from mode-level data
+ * TEMPORARY ADAPTER until all risk check methods are refactored to V2
+ * Fetches guardrails_v2 + portfolio_state and builds a TradingSettings-like object
+ * @param mode Trading mode
+ * @param userId User ID
+ * @param globalContextId Optional global context ID
+ * @returns Settings-compatible object with all fields populated from mode-level sources
+ */
+export async function buildSettingsFromModeLevel(
+  mode: 'live' | 'paper',
+  userId?: string,
+  globalContextId?: string
+): Promise<any> {
+  const guardrails = await storage.getGuardrailsV2({ mode });
+  if (!guardrails) {
+    throw new Error(`No guardrails configured for mode=${mode}`);
+  }
+
+  const portfolioValue = await getPortfolioBalanceV2(mode, userId, globalContextId);
+  const riskPct = getRiskPercentageV2(mode, guardrails);
+
+  // Build complete settings object from mode-level data
+  return {
+    portfolioValue: portfolioValue.toString(),
+    riskPerTradePct: riskPct.toString(),
+    tradingSuspended: guardrails.killSwitchTripped || false,
+    maxOpenTrades: Number(guardrails.maxOpenPositions) || 5,
+    dailyLossKillSwitch: guardrails.dailyLossKillSwitchPct ? guardrails.dailyLossKillSwitchPct.toString() : '7.00',
+    maxExposurePercent: '50.00', // Not in guardrails_v2, using safe default
+    autoTrade: false,
+    // Add other fields as needed for compatibility
+  };
 }
 
 export class RiskManager {

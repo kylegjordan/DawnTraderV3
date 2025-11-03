@@ -623,8 +623,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         tradingStatus: 'stopped'
       });
       
-      // Create default trading settings for the new user
-      await storage.createTradingSettings({ userId: user.id });
+      // Phase 41F-L.E2E-PURGE: No user-level settings - users inherit mode-level guardrails/portfolio_state
       
       res.json({ success: true, userId: user.id });
     } catch (error) {
@@ -837,8 +836,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         tradingStatus: 'stopped'
       });
       
-      // Create default trading settings for the new user
-      await storage.createTradingSettings({ userId: user.id });
+      // Phase 41F-L.E2E-PURGE: No user-level settings - users inherit mode-level guardrails/portfolio_state
       
       res.json({ 
         success: true, 
@@ -927,17 +925,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Trading Settings
+  // Phase 41F-L.E2E-PURGE: Settings now sourced from mode-level guardrails_v2 + portfolio_state
+  // This endpoint provides backward compatibility using buildSettingsFromModeLevel adapter
   apiRouter.get('/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
-      let settings = await storage.getTradingSettings(userId);
-      
-      if (!settings) {
-        // Create default settings
-        settings = await storage.createTradingSettings({ userId });
-      }
+      // Source settings from mode-level guardrails_v2 + portfolio_state
+      const { buildSettingsFromModeLevel } = await import('./services/risk-manager.js');
+      const settings = await buildSettingsFromModeLevel(mode, userId);
       
       // Check if environment secrets are configured
       const hasKrakenApiKey = !!process.env.KRAKEN_API_KEY;
@@ -956,27 +953,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // Phase 41F-L.E2E-PURGE: DEPRECATED - User-level settings updates disabled
+  // Risk parameters now controlled via Guardrails tab (/api/guardrails-v2)
+  // Portfolio balance controlled via mode-level portfolio_state
   apiRouter.put('/settings', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      
-      // Update trading settings (credentials are now only stored in environment secrets)
-      const validatedData = insertTradingSettingsSchema.omit({ userId: true }).parse(req.body);
-      const settings = await storage.updateTradingSettings(userId, validatedData);
-      
-      // Broadcast config update via Context Bridge
-      await contextBridge.broadcast({
-        type: 'config_update',
-        payload: { settings },
-        userId,
-        mode: settings.currentMode as 'live' | 'paper'
-      });
-      
-      res.json(settings);
-    } catch (error) {
-      console.error('Error updating settings:', error);
-      res.status(500).json({ error: 'Failed to update settings' });
-    }
+    res.status(410).json({ 
+      error: 'This endpoint is deprecated',
+      message: 'Settings now managed at mode-level. Use the Guardrails tab to adjust risk parameters (risk %, max positions, kill switch, cooldown). Portfolio balance managed via /api/portfolio-state.',
+      migration: 'User-level settings eliminated in Phase 41F-L.E2E-PURGE',
+      alternatives: {
+        guardrails: 'PUT /api/guardrails-v2?mode=paper or mode=live',
+        portfolioBalance: 'PUT /api/portfolio-state?mode=paper or mode=live'
+      }
+    });
   });
 
   // Phase 27.F.14: Local Heuristic Trader Service API Endpoints
@@ -2033,9 +2022,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         strategies: false
       });
 
-      // Phase 27.F.15.B: Get screener filter thresholds
+      // Phase 41F-L.E2E-PURGE: Get screener filter thresholds (mode-level only)
       const screenerSettings = await storage.getScreenerFilters({ mode });
-      const tradingSettings = await storage.getTradingSettings(userId);
 
       // Calculate top failure reason from breakdown
       const breakdown = scanResult.breakdown;
@@ -2079,10 +2067,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           volatilityMax: screenerSettings.volatilityMax,
           minLiquidity: screenerSettings.minLiquidity,
           excludeStablecoins: screenerSettings.excludeStablecoins,
-          allowRegulatedOnly: screenerSettings.allowRegulatedOnly,
-          minDailyRange: tradingSettings?.minDailyRange,
-          allowedTradingPairs: tradingSettings?.allowedTradingPairs,
-          minDataHistoryDays: tradingSettings?.minDataHistoryDays
+          allowRegulatedOnly: screenerSettings.allowRegulatedOnly
+          // Phase 41F-L.E2E-PURGE: User-level filter fields removed (minDailyRange, allowedTradingPairs, minDataHistoryDays)
         } : null
       });
     } catch (error) {
@@ -2223,15 +2209,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       console.log('[ENGINE_VALIDATED_CONFIG] Kraken credentials present');
       
-      // Phase 27.F.13.I: Pre-flight checks before engine startup
+      // Phase 41F-L.E2E-PURGE: Pre-flight checks using mode-level configuration only
       console.log('[PREFLIGHT] Running pre-flight validation checks...');
       const preflightErrors: string[] = [];
       
       try {
-        // 1. Validate Goals Engine configuration exists
-        const [filters, settings, guardrails] = await Promise.all([
+        // 1. Validate Goals Engine configuration exists (mode-level)
+        const [filters, guardrails] = await Promise.all([
           storage.getScreenerFilters({ mode }),
-          storage.getTradingSettings(userId),
           storage.getGuardrails({ mode })
         ]);
         
@@ -2241,16 +2226,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           console.log('[PREFLIGHT] ✅ Screener filters loaded');
         }
         
-        if (!settings) {
-          preflightErrors.push('Trading settings not configured - please configure settings before starting');
-        } else {
-          console.log('[PREFLIGHT] ✅ Trading settings loaded');
-        }
-        
         if (!guardrails) {
           preflightErrors.push('Guardrails not configured - please configure risk limits before starting');
         } else {
-          console.log('[PREFLIGHT] ✅ Guardrails loaded');
+          console.log('[PREFLIGHT] ✅ Guardrails loaded (mode-level)');
         }
         
         // 2. Validate database portfolio state exists
@@ -2945,10 +2924,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       const period = (req.query.period as string) || '1M';
+      const mode = (req.query.mode as 'live' | 'paper') || 'live';
       
-      // Phase 41F-L.E2E-FIX: Read initial balance from trading settings
-      const settings = await storage.getTradingSettings(userId);
-      const initialBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
+      // Phase 41F-L.E2E-PURGE: Read portfolio balance from portfolio_state (mode-level)
+      const { getPortfolioBalanceV2 } = await import('./services/risk-manager.js');
+      const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
       
       const now = new Date();
       let startDate = new Date();
@@ -2970,8 +2950,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           startDate = new Date(now.getFullYear() - 2, 0, 1);
           break;
       }
-      
-      const mode = (req.query.mode as string) || 'live';
       const allTrades = await storage.getTrades(mode, {});
       console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/history → mode-based only');
       const closedTrades = allTrades.filter(t => 
@@ -3032,10 +3010,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       const period = (req.query.period as string) || '30d';
+      const mode = (req.query.mode as 'live' | 'paper') || 'live';
       
-      // Phase 41F-L.E2E-FIX: Read initial balance from trading settings
-      const settings = await storage.getTradingSettings(userId);
-      const initialBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
+      // Phase 41F-L.E2E-PURGE: Read portfolio balance from portfolio_state (mode-level)
+      const { getPortfolioBalanceV2 } = await import('./services/risk-manager.js');
+      const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
       
       const now = new Date();
       let startDate = new Date();
@@ -3054,8 +3033,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           startDate = new Date(now.getFullYear() - 2, 0, 1);
           break;
       }
-      
-      const mode = (req.query.mode as string) || 'live';
       const allTrades = await storage.getTrades(mode, {});
       console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/value-history → mode-based only');
       const closedTrades = allTrades.filter(t => 
@@ -3112,12 +3089,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/portfolio/stats', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
+      const mode = (req.query.mode as 'live' | 'paper') || 'live';
       
-      // Phase 41F-L.E2E-FIX: Read initial balance from trading settings
-      const settings = await storage.getTradingSettings(userId);
-      const initialBalance = settings ? parseFloat(settings.portfolioValue) : 50000;
-      
-      const mode = (req.query.mode as string) || 'live';
+      // Phase 41F-L.E2E-PURGE: Read portfolio balance from portfolio_state (mode-level)
+      const { getPortfolioBalanceV2 } = await import('./services/risk-manager.js');
+      const initialBalance = await getPortfolioBalanceV2(mode, userId) || 50000;
       const allTrades = await storage.getTrades(mode, {});
       console.log('[Phase-27.F.15.B.1] Updated route /api/portfolio/stats → mode-based only');
       const closedTrades = allTrades.filter(t => t.status === 'closed' && t.exitTime);
@@ -6531,11 +6507,7 @@ Provide specific, actionable recommendations.`,
     try {
       const userId = req.user!.id;
       
-      // Check if feature is enabled for this user
-      const settings = await storage.getTradingSettings(userId);
-      if (!settings?.aiOpportunitiesEnabled) {
-        return res.status(403).json({ error: 'AI Opportunities feature is disabled for this user' });
-      }
+      // Phase 41F-L.E2E-PURGE: AI features enabled by default (no user-level feature flags)
       
       // Generate for this user only (with cooldown protection)
       await aiOpportunitiesService.generateOpportunitiesForSingleUser(userId);
@@ -6607,11 +6579,7 @@ Provide specific, actionable recommendations.`,
         return res.status(400).json({ error: 'Invalid mode. Must be "live" or "paper"' });
       }
       
-      // Check if feature is enabled for this user
-      const settings = await storage.getTradingSettings(userId);
-      if (!settings?.aiOpportunitiesEnabled) {
-        return res.status(403).json({ error: 'AI features are disabled for this user' });
-      }
+      // Phase 41F-L.E2E-PURGE: AI features enabled by default (no user-level feature flags)
       
       // Manually trigger market analysis
       const { runAiMarketAnalysis } = await import('./services/ai-market-analyzer');
@@ -7275,88 +7243,30 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // Kill Switch endpoints
+  // Phase 41F-L.E2E-PURGE: DEPRECATED - Use /api/guardrails-v2/kill-switch endpoints instead
+  // Legacy Kill Switch endpoints - replaced by mode-level guardrails_v2 API
   apiRouter.get('/kill-switch/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const settings = await storage.getTradingSettings(userId);
-      
-      if (!settings) {
-        return res.status(404).json({ error: 'Settings not found' });
-      }
-
-      const pl24h = await riskManager.calculate24hPL(userId);
-      const latestEvent = await storage.getLatestKillSwitchEvent(userId);
-
-      res.json({
-        tradingSuspended: settings.tradingSuspended || false,
-        dailyLossKillSwitch: settings.dailyLossKillSwitch,
-        dailyLossWarningTrigger: settings.dailyLossWarningTrigger,
-        current24hPL: pl24h,
-        latestEvent
-      });
-    } catch (error: any) {
-      console.error('Kill switch status error:', error);
-      res.status(500).json({ error: error.message });
-    }
+    res.status(410).json({ 
+      error: 'This endpoint is deprecated',
+      message: 'Kill switch now operates at mode-level. Use GET /api/guardrails-v2?mode=paper or /api/guardrails-v2?mode=live to check kill_switch_tripped status.',
+      migration: 'User-level settings eliminated in Phase 41F-L.E2E-PURGE'
+    });
   });
 
   apiRouter.post('/kill-switch/check', async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const settings = await storage.getTradingSettings(userId);
-      
-      if (!settings) {
-        return res.status(404).json({ error: 'Settings not found' });
-      }
-
-      const result = await riskManager.checkKillSwitch(userId, settings);
-      
-      // Refetch settings to get updated tradingSuspended status
-      const updatedSettings = await storage.getTradingSettings(userId);
-      
-      res.json({
-        ...result,
-        tradingSuspended: updatedSettings?.tradingSuspended || false
-      });
-    } catch (error: any) {
-      console.error('Kill switch check error:', error);
-      res.status(500).json({ error: error.message });
-    }
+    res.status(410).json({ 
+      error: 'This endpoint is deprecated',
+      message: 'Kill switch monitoring is now automatic via risk manager. Check status with GET /api/guardrails-v2?mode=paper or /api/guardrails-v2?mode=live',
+      migration: 'User-level settings eliminated in Phase 41F-L.E2E-PURGE'
+    });
   });
 
   apiRouter.post('/kill-switch/reset', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { notes } = req.body;
-      
-      const settings = await storage.getTradingSettings(userId);
-      if (!settings) {
-        return res.status(404).json({ error: 'Settings not found' });
-      }
-
-      if (!settings.tradingSuspended) {
-        return res.status(400).json({ error: 'Trading is not suspended' });
-      }
-
-      const latestEvent = await storage.getLatestKillSwitchEvent(userId);
-      if (latestEvent && !latestEvent.resolved) {
-        await storage.resolveKillSwitchEvent(latestEvent.id, 'manual_ui', notes);
-      }
-
-      await storage.updateTradingSettings(userId, { tradingSuspended: false });
-
-      console.log(`✅ Kill Switch reset for user ${userId}`);
-      
-      res.json({
-        success: true,
-        message: 'Trading resumed. Kill switch has been reset.',
-        tradingSuspended: false
-      });
-    } catch (error: any) {
-      console.error('Kill switch reset error:', error);
-      res.status(500).json({ error: error.message });
-    }
+    res.status(410).json({ 
+      error: 'This endpoint is deprecated',
+      message: 'Use POST /api/guardrails-v2/kill-switch/reset?mode=paper or mode=live to reset the kill switch.',
+      migration: 'User-level settings eliminated in Phase 41F-L.E2E-PURGE'
+    });
   });
 
   apiRouter.get('/kill-switch/events', authenticateToken, async (req: AuthenticatedRequest, res) => {

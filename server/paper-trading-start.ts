@@ -13,38 +13,39 @@ async function startPaperTrading() {
     // Phase 31.I: Get user ID dynamically (no hardcoded UUIDs)
     const userId = process.env.PAPER_TRADING_USER_ID || await SystemUserCache.getOrResolve('testuser123');
 
-    // Verify user exists and has trading settings
-    let settings = await storage.getTradingSettings(userId);
+    // Phase 41F-L.E2E-PURGE: Use mode-level configuration (portfolio_state + guardrails_v2)
+    const mode = 'paper';
     
-    if (!settings) {
+    // Get portfolio state for starting balance
+    let portfolioState = await storage.getPortfolioState({ userId, mode });
+    let STARTING_BALANCE: number;
+    
+    if (!portfolioState) {
       if (!ALLOW_SETTINGS_SEED) {
-        throw new Error('No trading settings found for user. Set ALLOW_SETTINGS_SEED=true to initialize defaults.');
+        throw new Error('No portfolio state found for user. Set ALLOW_SETTINGS_SEED=true to initialize defaults.');
       }
       
       if (!STARTING_BALANCE_ENV) {
         throw new Error('STARTING_BALANCE_USD environment variable required when ALLOW_SETTINGS_SEED=true');
       }
       
-      console.log('⚙️  Creating default trading settings (ALLOW_SETTINGS_SEED=true)...');
+      console.log('⚙️  Initializing portfolio_state (ALLOW_SETTINGS_SEED=true)...');
+      STARTING_BALANCE = parseFloat(STARTING_BALANCE_ENV);
       
-      // Create default paper trading settings (uses schema defaults for riskPerTradePct, etc.)
-      settings = await storage.createTradingSettings({
-        userId,
-        portfolioValue: STARTING_BALANCE_ENV as string, // Type-safe after null check above
-        maxExposurePercent: '50.00', // 50% max exposure
-        maxOpenTrades: 3,
-        dailyLossKillSwitch: '7.00', // 7% daily loss limit
-        slippageToleranceMajors: '0.15'
-        // riskPerTradePct uses schema default of 4.00%
-      });
+      // Initialize paper trading (creates portfolio_state)
+      await storage.initializePaperTrading(userId, STARTING_BALANCE);
+      portfolioState = await storage.getPortfolioState({ userId, mode });
+    } else {
+      STARTING_BALANCE = parseFloat(portfolioState.balance);
     }
     
-    // Get starting balance from existing settings
-    const STARTING_BALANCE = parseFloat(settings.portfolioValue);
+    // Get risk percentage from guardrails_v2
+    const guardrails = await storage.getGuardrailsV2({ mode });
+    const riskPct = guardrails ? parseFloat(guardrails.portfolioRiskPerTradePct) : 4.00;
 
     console.log(`👤 User: ${userId}`);
-    console.log(`💰 Starting Balance: $${STARTING_BALANCE} (from user settings)`);
-    console.log(`📊 Risk per Trade: ${settings.riskPerTradePct || 4.00}% of portfolio`);
+    console.log(`💰 Starting Balance: $${STARTING_BALANCE} (from portfolio_state)`);
+    console.log(`📊 Risk per Trade: ${riskPct}% of portfolio (from guardrails_v2)`);
     console.log(`📅 Duration: 48 hours\n`);
 
     // Create and start simulation
