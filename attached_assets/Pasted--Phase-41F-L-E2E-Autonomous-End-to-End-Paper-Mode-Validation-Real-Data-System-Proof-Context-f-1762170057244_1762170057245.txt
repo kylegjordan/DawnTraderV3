@@ -1,0 +1,123 @@
+⚙️ Phase 41F-L.E2E — Autonomous End-to-End Paper-Mode Validation (Real-Data System Proof)
+Context (from project owner)
+
+Recent tests show that no trade data or live updates are appearing in the UI — Trade History remains empty, the Portfolio Balance never changes, and Dashboard metrics stay static.
+Although the backend reports successful trade execution, none of it is visible or verifiable in the frontend. Likewise, Filtered Insights and Filtered Pairs tabs display conflicting numbers (e.g., Universe Total 1485 vs only 7 eligible pairs).
+This lack of synchronization erodes trust: if data is generated or trades occur, the user must see proof of it in real time.
+
+This phase exists to audit and verify the entire system — from Kraken data ingestion → universe filters → strategy signals → trade execution → portfolio updates → live UI broadcasts — to confirm that every layer is accurate, synchronized, and visible.
+The outcome must demonstrate full alignment between backend truth, frontend visualization, and telemetry so that Dawn Trader can be safely advanced toward live-mode validation.
+
+Objective
+
+Run a real-data paper-mode session proving that:
+
+Live Kraken data populates filters and strategies.
+
+“Ready to Buy” signals emerge from genuine strategy evaluations.
+
+At least three trades open automatically or via Playwright “human” actions.
+
+Each trade updates the DB, recomputes the portfolio, and triggers WebSocket broadcasts.
+
+UI dashboards and reports immediately reflect those updates.
+
+A complete lineage trace records every stage so any missing link can be diagnosed.
+
+A) Minimal code changes (traceability + consistency)
+A1) Correlation & Lineage
+
+Add a traceId per evaluation cycle and symbol.
+Emit/persist:
+
+filter_snapshot, signal_snapshot, order_submitted, order_filled, portfolio_update
+to both
+• diagnostic-reports/phase-41F-L-e2e-lineage.ndjson and
+• telemetry_lineage DB table.
+
+A2) Single commit path
+export async function commitTradeAndUpdatePortfolio(trade) {
+  const saved = await tradesRepo.insert(trade);
+  const p = await portfolioService.recalculate(trade.userId,"paper");
+  contextBridge.broadcast({ type:"trade_event", payload:{event:"trade_committed",tradeId:saved.id,symbol:saved.symbol,mode:"paper",ts:Date.now()}});
+  contextBridge.broadcast({ type:"portfolio_update", payload:p });
+  lineage.emit("portfolio_update",{ portfolio:p, tradeId:saved.id });
+  return { saved, portfolio:p };
+}
+
+
+Used by both the trading engine and any UI/API trade endpoint.
+
+A3) Filter Insights consistency
+
+One endpoint returning both totals + paged list, e.g.:
+
+{
+  "universeTotal":1485,"evaluated":1485,"eligibleTotal":565,
+  "page":1,"pageSize":50,"eligible":[...],"asOf":173...,
+  "predicatesHash":"abc123"
+}
+
+
+UI shows “Showing 50 of 565 eligible (as of HH:MM)” and updates when hash/asOf changes.
+
+B) Test orchestration (Playwright + scripted fallback)
+B1 Preconditions
+
+DRYRUN_TRADING=false, ACTIVE_MODE=paper, build from /dist.
+
+B2 Playwright “human” test
+
+Steps:
+
+Login (testuser123).
+
+Dashboard → record baseline portfolio.
+
+Trading → Filter Insights → verify totals = list total, pagination works.
+
+Wait ≤ 10 min for ≥ 3 “ready to buy” signals (poll 15 s).
+  If none appear → FAIL with diagnostics.
+
+Execute top 3 signals (click Buy etc.). For each, expect: HTTP 200, trade_event + portfolio_update received, dashboard value change ≠ 0 within 5 s.
+
+Reports → Trade History → ≥ 3 trades listed.
+
+Capture screenshots, video, HAR, WS logs.
+
+Artifacts:
+phase-41F-L-e2e-playwright-report.html, HAR, screens, phase-41F-L-e2e-browser-console.ndjson.
+
+B3 Scripted fallback
+
+If Playwright unavailable:
+start engine → poll /api/trading/signals/ready?limit=3 → POST real trade endpoints → verify broadcast + portfolio changes.
+
+C) Assertions
+Category	Must Hold
+Data flow	Kraken tick → filter_snapshot → signal_snapshot → order → portfolio_update (same traceId)
+UI truth	Dashboard value changes ≤ 5 s; Reports shows ≥ 3 trades; Filter counts = table
+Realtime events	Each trade → 1 trade_event + 1 portfolio_update, <120 ms latency
+Persistence	3 new DB trades (paper); portfolio_overview updated_at > last trade
+Lineage	All stages present in phase-41F-L-e2e-lineage.ndjson
+D) Deliverables
+
+server/services/lineage.ts
+
+server/services/commitTradeAndUpdatePortfolio.ts
+
+Unified Filter Insights endpoint + UI update
+
+tests/phase-41F-L-e2e.spec.ts (Playwright)
+
+diagnostic-reports/phase-41F-L-e2e-* (HAR, screens, lineage, DB snapshots)
+
+phase-41F-L-e2e-validation.md (one-page PASS/FAIL matrix)
+
+E) Success Criteria
+
+✅ Portfolio and Reports reflect real trades.
+✅ Filter metrics accurate & consistent.
+✅ Lineage shows complete path Kraken → Signal → Trade → Portfolio.
+✅ Zero critical anomalies; ≤ 1 transient warning.
+✅ End-to-end latency under 120 ms.
