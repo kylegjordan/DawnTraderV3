@@ -453,7 +453,7 @@ export const watchlistPairs = pgTable("watchlist_pairs", {
   isActive: boolean("is_active").default(true),
   addedAt: timestamp("added_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueModeSymbol: uniqueIndex("watchlist_pairs_mode_symbol_idx").on(table.mode, table.symbol),
+  uniqueModeSymbol: unique("watchlist_pairs_mode_symbol_unique").on(table.mode, table.symbol),
 }));
 
 // Trading Signals - Active trading opportunities waiting to be executed - GLOBAL per mode
