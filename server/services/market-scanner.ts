@@ -150,19 +150,13 @@ export class MarketScanner {
     // The scanner updates watchlists for all users, not just those actively trading
     const allUsers = await storage.getAllUsers();
     
-    // Return users who have trading settings configured
-    const usersWithSettings = [];
-    for (const user of allUsers) {
-// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(user.id);
-      if (settings) {
-        usersWithSettings.push({
-          id: user.id,
-          tradingStatus: user.tradingStatus || 'stopped'
-        });
-      }
-    }
+    // Return all users (settings check disabled in Phase 41F-L.E2E-PURGE)
+    const usersWithSettings = allUsers.map(user => ({
+      id: user.id,
+      tradingStatus: user.tradingStatus || 'stopped'
+    }));
     
-    console.log(`[MarketScan] Found ${usersWithSettings.length} users with trading settings`);
+    console.log(`[MarketScan] Found ${usersWithSettings.length} users`);
     return usersWithSettings;
   }
 
