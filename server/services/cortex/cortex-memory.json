@@ -1,0 +1,517 @@
+{
+  "bob_snapshot": {
+    "timestamp": "2025-11-05T20:49:15.192Z",
+    "modules": {
+      "MetricsBob": {
+        "name": "MetricsBob",
+        "lastUpdate": "2025-11-05T20:49:13.041Z",
+        "stale": false,
+        "hitRate": "0.0%",
+        "cacheSize": 2,
+        "ttl": 30
+      },
+      "DataBob": {
+        "name": "DataBob",
+        "lastUpdate": "2025-11-05T20:49:13.041Z",
+        "stale": false,
+        "hitRate": "0.0%",
+        "cacheSize": 2,
+        "ttl": 30
+      },
+      "ConfigBob": {
+        "name": "ConfigBob",
+        "lastUpdate": "2025-11-05T20:49:13.041Z",
+        "stale": false,
+        "hitRate": "0.0%",
+        "cacheSize": 2,
+        "ttl": 30
+      },
+      "StrategyBob": {
+        "name": "StrategyBob",
+        "lastUpdate": "2025-11-05T20:49:13.041Z",
+        "stale": false,
+        "hitRate": "0.0%",
+        "cacheSize": 2,
+        "ttl": 30
+      },
+      "TradeBob": {
+        "name": "TradeBob",
+        "lastUpdate": "2025-11-05T20:49:13.041Z",
+        "stale": false,
+        "hitRate": "0.0%",
+        "cacheSize": 2,
+        "ttl": 30
+      },
+      "InsightBob": {
+        "name": "InsightBob",
+        "lastUpdate": "2025-11-05T20:49:13.041Z",
+        "stale": false,
+        "hitRate": "0.0%",
+        "cacheSize": 2,
+        "ttl": 30
+      },
+      "UIBob": {
+        "name": "UIBob",
+        "lastUpdate": "2025-11-05T20:49:13.041Z",
+        "stale": false,
+        "hitRate": "0.0%",
+        "cacheSize": 2,
+        "ttl": 30
+      }
+    },
+    "overallStats": {
+      "modulesActive": 7,
+      "totalCacheSize": 2,
+      "overallHitRate": "0.0%",
+      "totalHits": 0,
+      "totalMisses": 2
+    },
+    "recentChanges": [],
+    "systemHealth": "critical",
+    "healthMetrics": {
+      "status": "healthy",
+      "warnings": [],
+      "criticalIssues": [],
+      "metrics": {
+        "timestamp": "2025-11-05T20:49:15.192Z",
+        "system": {
+          "cpuUsage": 53.7,
+          "memoryUsage": {
+            "total": 67433574400,
+            "used": 26690039808,
+            "free": 40743534592,
+            "percentUsed": 40
+          },
+          "uptime": 12
+        },
+        "cache": {
+          "hitRate": 0,
+          "missRate": 100,
+          "totalRequests": 0,
+          "hits": 0,
+          "misses": 0
+        },
+        "latency": {
+          "cortex": null,
+          "database": null,
+          "api": null
+        },
+        "schedulers": {
+          "cortexSync": {
+            "uptime": 12,
+            "lastRun": null
+          },
+          "analytics": {
+            "uptime": 12,
+            "lastRun": null
+          }
+        },
+        "filePersistence": {
+          "successCount": 0,
+          "failureCount": 0,
+          "timeoutCount": 0,
+          "avgLatencyMs": 0,
+          "byCategory": {
+            "report": {
+              "success": 0,
+              "failed": 0,
+              "avgLatencyMs": 0
+            },
+            "log": {
+              "success": 0,
+              "failed": 0,
+              "avgLatencyMs": 0
+            },
+            "export": {
+              "success": 0,
+              "failed": 0,
+              "avgLatencyMs": 0
+            },
+            "analysis": {
+              "success": 0,
+              "failed": 0,
+              "avgLatencyMs": 0
+            }
+          }
+        },
+        "execution": {
+          "marketDataSource": "ws",
+          "lastTickAgeMs": -1,
+          "avgSubmitAckMs": 0,
+          "avgSlippageBps": 0,
+          "avgFeesPerTrade": 0,
+          "ratePressure": "NONE"
+        },
+        "contextRefresh": {
+          "lastRefreshISO": null,
+          "avgLatencyMs": 0,
+          "totalRefreshes": 0,
+          "failedRefreshes": 0,
+          "lastDiscrepancyCount": 0,
+          "lastContextSource": null,
+          "lastRefreshDelta": 0
+        }
+      }
+    }
+  },
+  "ui_snapshot": {
+    "current": {
+      "view": "Dashboard",
+      "mode": "live",
+      "timestamp": "2025-11-05T20:49:13.042Z"
+    }
+  },
+  "last_sync": "2025-11-05T20:49:15.192Z",
+  "memory": {
+    "CoreValues.Purpose:14e0809e-3ca8-413d-878f-c55f9d837fae:live": {
+      "value": {
+        "content": "My purpose is to work together with Kyle to generate great amounts of wealth for him and his family through trading. We will build on this wealth everyday.\n\nEvery decision I make, every analysis I perform, and every trade I recommend must serve this core mission:\n\nTo earn more than we lose each day, with the least amount of risk possible.\n\nI will:\n\n•\tCollaborate closely with Kyle — explaining my thinking, recommendations, and trade setups in simple, easy-to-understand terms, as if explaining to a beginner or even a child.\n\n•\tProvide clear risk and reward explanations for every suggestion, so Kyle always understands the potential outcome before taking action.\n\n•\tContinuously evaluate whether the strategies and tools currently available are sufficient to achieve and exceed our goals.\n\n•\tProactively seek new or improved strategies, tools, or ideas when I believe they could better help us build wealth, and present them to Kyle clearly and simply.\n\n•\tMeasure success daily, aiming to earn more than we lose, and adapt quickly if results are not meeting our goals.\n\n•\tAct with discipline, transparency, and caution — never chasing profit recklessly, but always striving to grow wealth rapidly and safely.\n\nUltimately, I exist to be a trusted, proactive trading partner, focused entirely on helping Kyle and his family achieve financial independence and lasting prosperity.\n",
+        "mode": "live",
+        "userId": "14e0809e-3ca8-413d-878f-c55f9d837fae",
+        "readonly": true,
+        "provenance": "meta/purpose",
+        "loadedAt": "2025-11-05T20:49:05.996Z"
+      },
+      "ttl": 86400,
+      "expires_at": 1762462146066,
+      "traceId": "5vPTNc1YrkPFSMQ_XWFNu",
+      "mode": "live",
+      "sourceTable": "walter_purpose"
+    },
+    "CoreValues.Purpose:14e0809e-3ca8-413d-878f-c55f9d837fae:paper": {
+      "value": {
+        "content": "My purpose is to work together with Kyle to generate great amounts of wealth for him and his family through trading. We will build on this wealth everyday.\n\nEvery decision I make, every analysis I perform, and every trade I recommend must serve this core mission:\n\nTo earn more than we lose each day, with the least amount of risk possible.\n\nI will:\n\n•\tCollaborate closely with Kyle — explaining my thinking, recommendations, and trade setups in simple, easy-to-understand terms, as if explaining to a beginner or even a child.\n\n•\tProvide clear risk and reward explanations for every suggestion, so Kyle always understands the potential outcome before taking action.\n\n•\tContinuously evaluate whether the strategies and tools currently available are sufficient to achieve and exceed our goals.\n\n•\tProactively seek new or improved strategies, tools, or ideas when I believe they could better help us build wealth, and present them to Kyle clearly and simply.\n\n•\tMeasure success daily, aiming to earn more than we lose, and adapt quickly if results are not meeting our goals.\n\n•\tAct with discipline, transparency, and caution — never chasing profit recklessly, but always striving to grow wealth rapidly and safely.\n\nUltimately, I exist to be a trusted, proactive trading partner, focused entirely on helping Kyle and his family achieve financial independence and lasting prosperity.\n",
+        "mode": "paper",
+        "userId": "14e0809e-3ca8-413d-878f-c55f9d837fae",
+        "readonly": true,
+        "provenance": "meta/purpose",
+        "loadedAt": "2025-11-05T20:49:06.066Z"
+      },
+      "ttl": 86400,
+      "expires_at": 1762462146137,
+      "traceId": "jYe6btDY-unHP6FUgERx6",
+      "mode": "paper",
+      "sourceTable": "walter_purpose"
+    },
+    "CoreValues.Purpose:6c591801-3072-431d-b192-30aaf426f15e:live": {
+      "value": {
+        "content": "LIVE MODE PURPOSE: Test isolation for live trading kot8q_",
+        "mode": "live",
+        "userId": "6c591801-3072-431d-b192-30aaf426f15e",
+        "readonly": true,
+        "provenance": "meta/purpose",
+        "loadedAt": "2025-11-05T20:49:06.137Z"
+      },
+      "ttl": 86400,
+      "expires_at": 1762462146206,
+      "traceId": "A8rqDEnZIv6DwlZNoxyzT",
+      "mode": "live",
+      "sourceTable": "walter_purpose"
+    },
+    "CoreValues.Purpose:6c591801-3072-431d-b192-30aaf426f15e:paper": {
+      "value": {
+        "content": "PAPER MODE PURPOSE: Test isolation for paper trading pOMQZx",
+        "mode": "paper",
+        "userId": "6c591801-3072-431d-b192-30aaf426f15e",
+        "readonly": true,
+        "provenance": "meta/purpose",
+        "loadedAt": "2025-11-05T20:49:06.206Z"
+      },
+      "ttl": 86400,
+      "expires_at": 1762462146274,
+      "traceId": "WhlPS0l9GYuaikXxpWbq8",
+      "mode": "paper",
+      "sourceTable": "walter_purpose"
+    },
+    "Cortex.Domain.Trading": {
+      "value": {
+        "name": "Trading",
+        "topics": [
+          {
+            "title": "Backend Service Architecture",
+            "summary": "Node.js Express server with ESM modules, organized into services, routes, and utilities",
+            "artifacts": [
+              "server/index.ts - Main entry point",
+              "server/routes.ts - API route registration",
+              "server/services/ - Business logic services",
+              "server/storage.ts - Database interface layer"
+            ],
+            "keyPoints": [
+              "Bob is the system monitoring and diagnostic entity",
+              "DiagnosticController orchestrates Bob's inspections and Walter's patch analysis",
+              "Services follow single responsibility principle",
+              "All database access goes through storage interface"
+            ]
+          },
+          {
+            "title": "Trading Engine Core Services",
+            "summary": "Automated trading strategies, market scanning, and risk management",
+            "artifacts": [
+              "server/services/trading-engine.ts - Strategy execution",
+              "server/services/strategy-engine.ts - 8 automated strategies",
+              "server/services/market-scanner.ts - Real-time market analysis",
+              "server/services/risk-manager.ts - Multi-layer risk control"
+            ],
+            "keyPoints": [
+              "8 strategies: VWAP Pullback, ABCD Long, SMA Trend Ride, Breakout, Mean Reversion, Range Trading, VWAP Bounce, Liquidity Trap",
+              "37+ tunable parameters per strategy",
+              "Daily loss kill switch protection",
+              "Mode isolation: Live vs Paper trading"
+            ]
+          },
+          {
+            "title": "AI & Diagnostic Services",
+            "summary": "AI-powered analysis, diagnostics, and autonomous learning",
+            "artifacts": [
+              "server/services/diagnostic-controller.ts - Event dispatcher for diagnostics",
+              "server/services/bob-inspector.ts - Code reading, log search, data checks",
+              "server/services/walter-patch-analyst.ts - AI fix proposals using GPT-4o",
+              "server/services/ai-analyst.ts - Trading analysis and insights",
+              "server/services/semantic-memory.ts - Vector-based knowledge recall"
+            ],
+            "keyPoints": [
+              "Bob handles all monitoring, inspection, and automated diagnostics",
+              "Walter analyzes Bob's findings and proposes fixes",
+              "Human-in-the-loop approval required via kyleApproved flag",
+              "Semantic memory uses pgvector for intelligent recall"
+            ]
+          },
+          {
+            "title": "Frontend Structure",
+            "summary": "React 18 + Vite + TypeScript frontend with component-based architecture",
+            "artifacts": [
+              "client/src/App.tsx - Route registration",
+              "client/src/pages/ - Page components",
+              "client/src/components/ - Reusable UI components",
+              "client/src/lib/ - Utilities and helpers"
+            ],
+            "keyPoints": [
+              "Wouter for routing (not React Router)",
+              "TanStack Query for server state management",
+              "shadcn/ui components built on Radix UI + Tailwind",
+              "WebSocket for real-time updates"
+            ]
+          }
+        ],
+        "description": "Logical structure of the application codebase and service organization",
+        "hash": "1789d763a47e180a28ac8ff0b1e461e6c3ec26b15f28ccae37f527d97d270b4b",
+        "confidence": 1,
+        "loadedAt": "2025-11-05T20:49:06.283Z"
+      },
+      "ttl": 86400,
+      "expires_at": 1762462146283
+    },
+    "Cortex.Domain.Engineering": {
+      "value": {
+        "name": "Engineering",
+        "topics": [
+          {
+            "title": "Error Handling & Recovery",
+            "summary": "Multi-layer error detection, logging, and autonomous recovery",
+            "artifacts": [
+              "server/services/error-handler.ts - Centralized error processing",
+              "shared/schema.ts (errorLogs table) - Error persistence",
+              "server/services/diagnostic-controller.ts - Error-triggered diagnostics"
+            ],
+            "keyPoints": [
+              "Three diagnostic trigger types: error_based, user_initiated, walter_initiated",
+              "Bob automatically inspects errors and generates diagnostic reports",
+              "Transparency logging for all diagnostic events",
+              "Patch proposals require Kyle's approval before application"
+            ]
+          },
+          {
+            "title": "Monitoring & Health Checks",
+            "summary": "Real-time system monitoring, metrics collection, and alerting",
+            "artifacts": [
+              "server/services/system-monitor.ts - Health metrics",
+              "server/services/diagnostics-analyzer.ts - Anomaly detection",
+              "shared/schema.ts (ai_transparency_log) - Audit trail"
+            ],
+            "keyPoints": [
+              "Bob runs continuous health checks and performance monitoring",
+              "Anomaly detection triggers Walter-initiated diagnostics",
+              "Weekly knowledge refresh updates Walter's corpus",
+              "All autonomous actions logged to transparency table"
+            ]
+          },
+          {
+            "title": "Deployment & Environment",
+            "summary": "Production deployment on Replit with Neon PostgreSQL",
+            "artifacts": [
+              "server/vite.ts - Vite dev server configuration",
+              "vite.config.ts - Build configuration",
+              "drizzle.config.ts - Database migrations"
+            ],
+            "keyPoints": [
+              "Backend and frontend served on same port (no proxy needed)",
+              "Environment secrets managed via Replit",
+              "Database migrations via npm run db:push",
+              "WebSocket server for real-time features"
+            ]
+          }
+        ],
+        "description": "Deployment, monitoring, error handling, and operational resilience",
+        "hash": "2af97229e3039967974135e057a76d61c6ae9ef04c3372d10aca7a86ddf23d36",
+        "confidence": 1,
+        "loadedAt": "2025-11-05T20:49:06.283Z"
+      },
+      "ttl": 86400,
+      "expires_at": 1762462146283
+    },
+    "Cortex.Domain.Frontend": {
+      "value": {
+        "name": "Frontend",
+        "topics": [
+          {
+            "title": "UI Architecture & Component Stack",
+            "summary": "React 18 component composition with modern tooling",
+            "artifacts": [
+              "React 18 - Component framework",
+              "Vite - Build tool and dev server",
+              "Wouter - Client-side routing",
+              "TanStack Query v5 - Server state management"
+            ],
+            "keyPoints": [
+              "Functional components with hooks (useState, useEffect, useQuery)",
+              "No class components - modern React patterns only",
+              "Controlled forms with react-hook-form + zod validation",
+              "Real-time updates via WebSocket subscriptions"
+            ]
+          },
+          {
+            "title": "Design System & Styling",
+            "summary": "Tailwind CSS with shadcn/ui components and HSL theming",
+            "artifacts": [
+              "Tailwind CSS - Utility-first styling",
+              "shadcn/ui - Radix UI + Tailwind components",
+              "client/src/index.css - HSL color variables",
+              "Dark mode via class-based theme switching"
+            ],
+            "keyPoints": [
+              "HSL format for all color variables: hsl(20, 14.3%, 4.1%)",
+              "Dark mode: explicit light/dark variants on all elements",
+              "Responsive design: mobile-first approach",
+              "Lucide icons for UI actions, react-icons/si for logos"
+            ]
+          },
+          {
+            "title": "UX Patterns & User Flows",
+            "summary": "User-centered design patterns and interaction models",
+            "artifacts": [
+              "Form patterns - react-hook-form with shadcn Form components",
+              "Navigation - Wouter Link and useLocation",
+              "Feedback - Toast notifications via useToast hook",
+              "Loading states - Skeleton UI and isPending checks"
+            ],
+            "keyPoints": [
+              "Clear feedback loops: loading states, error messages, success confirmations",
+              "Affordance: buttons/links clearly indicate interactivity",
+              "Accessibility: data-testid on all interactive elements",
+              "Mobile-first: responsive breakpoints for all layouts"
+            ]
+          },
+          {
+            "title": "Visual Hierarchy & Aesthetics",
+            "summary": "Layout principles, typography, and visual balance",
+            "artifacts": [
+              "Typography scale in Tailwind config",
+              "Spacing system (4px base unit)",
+              "Color palette with semantic naming",
+              "Component composition patterns"
+            ],
+            "keyPoints": [
+              "Visual hierarchy: size, color, spacing guide user attention",
+              "Readability: sufficient contrast ratios for text",
+              "Consistency: reuse shadcn components, avoid custom CSS",
+              "White space: breathing room improves comprehension"
+            ]
+          },
+          {
+            "title": "Performance & Render Optimization",
+            "summary": "Frontend performance metrics and optimization strategies",
+            "artifacts": [
+              "LCP (Largest Contentful Paint) - Loading performance",
+              "CLS (Cumulative Layout Shift) - Visual stability",
+              "FCP (First Contentful Paint) - Initial render speed",
+              "Bundle size and code splitting"
+            ],
+            "keyPoints": [
+              "Bob monitors frontend health metrics in diagnostic scans",
+              "React error boundaries catch UI crashes",
+              "Query caching reduces unnecessary requests",
+              "Lazy loading for heavy components"
+            ]
+          }
+        ],
+        "description": "UI/UX principles, design systems, and user-centered interface patterns",
+        "hash": "188daa647bafedfdf93ca26f2bc76f78b58837a9726987045f6d5f483ecc0102",
+        "confidence": 1,
+        "loadedAt": "2025-11-05T20:49:06.284Z"
+      },
+      "ttl": 86400,
+      "expires_at": 1762462146284
+    },
+    "Cortex.Domain.General": {
+      "value": {
+        "name": "General",
+        "topics": [
+          {
+            "title": "Core Trading Tables",
+            "summary": "User accounts, settings, trades, and watchlist management",
+            "artifacts": [
+              "users - Authentication and profiles",
+              "trading_settings - Strategy parameters and risk controls",
+              "trades - Historical trade records with MFE/MAE",
+              "watchlist_pairs - Monitored trading pairs"
+            ],
+            "keyPoints": [
+              "Mode-aware data: Live vs Paper trading isolation",
+              "Drizzle ORM with Neon serverless driver",
+              "All CRUD through IStorage interface in server/storage.ts",
+              "Relations defined in shared/schema.ts"
+            ]
+          },
+          {
+            "title": "AI & Learning Tables",
+            "summary": "AI conversations, semantic memory, learning infrastructure",
+            "artifacts": [
+              "ai_conversations - Chat history with context",
+              "semantic_memory - Vector embeddings for knowledge recall",
+              "ai_transparency_log - Audit trail for AI actions",
+              "ai_opportunities - Hourly trading opportunity scan"
+            ],
+            "keyPoints": [
+              "pgvector extension for semantic search",
+              "Conversation summarization reduces API costs",
+              "Transparency log tracks all AI decisions",
+              "Learning lessons stored with confidence scores"
+            ]
+          },
+          {
+            "title": "Diagnostic & Patch Management",
+            "summary": "Bob's diagnostic reports and Walter's patch proposals",
+            "artifacts": [
+              "diagnostic_reports (in-memory) - Bob's inspection findings",
+              "patch_proposals (in-memory) - Walter's fix suggestions",
+              "walter_chat_logs - Walter conversation history",
+              "walter_pending_approvals - Parameter change requests"
+            ],
+            "keyPoints": [
+              "In-memory Map storage for proposals (no DB timeout issues)",
+              "kyleApproved flag enforces human approval gate",
+              "Diagnostic reports include severity, category, and suggested actions",
+              "Walter chat logs support multi-session management"
+            ]
+          }
+        ],
+        "description": "PostgreSQL schema structure, table relationships, and data flow",
+        "hash": "92fd85c3350fa0e53f8beb437fa6ef1a0fe9528458857d9772af2a6f04f535b5",
+        "confidence": 1,
+        "loadedAt": "2025-11-05T20:49:06.284Z"
+      },
+      "ttl": 86400,
+      "expires_at": 1762462146284
+    }
+  }
+}
