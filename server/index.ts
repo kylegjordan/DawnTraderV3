@@ -226,12 +226,12 @@ app.use((req, res, next) => {
       });
     });
 
-    // Start AI Orchestrator (async, non-blocking)
-    import('./orchestrator/orchestrator').then(({ aiOrchestrator }) => {
-      aiOrchestrator.start().catch((error) => {
-        console.error('[Server] Failed to start AI Orchestrator:', error);
-      });
-    });
+    // Phase 0: Removed AI Orchestrator (legacy module)
+    // import('./orchestrator/orchestrator').then(({ aiOrchestrator }) => {
+    //   aiOrchestrator.start().catch((error) => {
+    //     console.error('[Server] Failed to start AI Orchestrator:', error);
+    //   });
+    // });
 
     // Start Walter Health Monitor (async, non-blocking)
     import('./services/walter-health-monitor').then(({ walterHealthMonitor }) => {

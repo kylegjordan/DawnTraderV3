@@ -24,7 +24,8 @@ import { marketDataService } from "./services/market-data";
 import { actuationPolicyService } from "./services/actuation-policy";
 import { assetCapabilitiesService } from "./services/asset-capabilities";
 import { manageChatLifecycle, summarizeChatSession } from "./services/walter-chat-lifecycle";
-import { generateWalterResponse, ensureNaturalLanguageResponse } from "./services/walter-response";
+// Phase 0: Removed legacy walter-response import
+// import { generateWalterResponse, ensureNaturalLanguageResponse } from "./services/walter-response";
 import { chatLogging } from "./middleware/chat-logging";
 import { parseIntent } from "./services/intent-parser";
 import { CommandRouter } from "./services/command-router";
