@@ -1,11 +1,12 @@
 # Phase 30.FX.4–6 Report
-Generated: 2025-11-05T21:32:23.980Z
+Generated: 2025-11-05T21:34:37.102Z
 
 ## Overview
 This report summarizes the Lottie Oversight and Cross-Strategy Optimization activities.
 
 ## Lottie Oversight Log (Last 20 Events)
 
+- 2025-11-05T21:34:36.836Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-11-05T21:32:23.676Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-11-05T21:31:26.817Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-11-05T21:29:32.898Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
@@ -25,7 +26,6 @@ This report summarizes the Lottie Oversight and Cross-Strategy Optimization acti
 - 2025-11-04T14:50:23.491Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 - 2025-11-04T14:45:23.492Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 - 2025-11-04T14:40:23.493Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T14:35:23.493Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 
 ## Strategy Mix Changes (Last 20)
 
@@ -56,8 +56,8 @@ This report summarizes the Lottie Oversight and Cross-Strategy Optimization acti
 - Total events: 20
 - Active strategies: 1
 - Status breakdown:
-  - suspended: 14
-  - error: 6
+  - suspended: 15
+  - error: 5
 
 ### Strategy Mix
 - Total changes: 20

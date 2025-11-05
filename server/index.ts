@@ -821,10 +821,10 @@ app.use((req, res, next) => {
         console.log(`[Audit] GuardrailsCoherence ${liveGuardrailsStatus.status} | mode=live | total=${liveGuardrailsStatus.paramCount} | lattiManaged=${liveGuardrailsStatus.lattiManaged} | manualOverride=${liveGuardrailsStatus.manualOverride} | coherent=${liveGuardrailsStatus.coherent}`);
         
         // If any params are manually locked, log which ones
-        if (paperGuardrailsStatus.manualOverride > 0) {
+        if (paperGuardrailsStatus.manualOverride > 0 && paperGuardrailsStatus.lockedParams) {
           console.log(`[Audit]   Paper locked params: ${paperGuardrailsStatus.lockedParams.join(', ')}`);
         }
-        if (liveGuardrailsStatus.manualOverride > 0) {
+        if (liveGuardrailsStatus.manualOverride > 0 && liveGuardrailsStatus.lockedParams) {
           console.log(`[Audit]   Live locked params: ${liveGuardrailsStatus.lockedParams.join(', ')}`);
         }
       } catch (error) {
