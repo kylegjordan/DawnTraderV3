@@ -1,11 +1,19 @@
 # Phase 30.FX.4–6 Report
-Generated: 2025-11-05T20:50:31.152Z
+Generated: 2025-11-05T21:29:33.201Z
 
 ## Overview
 This report summarizes the Lottie Oversight and Cross-Strategy Optimization activities.
 
 ## Lottie Oversight Log (Last 20 Events)
 
+- 2025-11-05T21:29:32.898Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-11-05T21:25:31.352Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-11-05T21:20:31.284Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-11-05T21:15:31.295Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-11-05T21:10:31.288Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-11-05T21:05:31.297Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-11-05T21:00:31.295Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
+- 2025-11-05T20:55:31.292Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-11-05T20:50:30.918Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-11-05T20:49:17.117Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
 - 2025-11-04T15:10:23.278Z: **lottie_oversight** - Strategy: dhma - Status: suspended (metrics_out_of_bounds (hitRate=0.00, toxicity=0.00, spread=0.0, entries=0))
@@ -18,14 +26,6 @@ This report summarizes the Lottie Oversight and Cross-Strategy Optimization acti
 - 2025-11-04T14:35:23.493Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 - 2025-11-04T14:30:23.487Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 - 2025-11-04T14:25:23.501Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T14:20:23.488Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T14:15:23.488Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T14:10:23.489Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T14:05:23.487Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T14:00:23.489Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T13:55:23.486Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T13:50:23.487Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
-- 2025-11-04T13:45:23.487Z: **lottie_oversight** - Strategy: dhma - Status: error (health_check_failed: Cannot find package 'axios' imported from /home/runner/workspace/server/services/lottie-oversight-service.ts)
 
 ## Strategy Mix Changes (Last 20)
 
@@ -56,8 +56,8 @@ This report summarizes the Lottie Oversight and Cross-Strategy Optimization acti
 - Total events: 20
 - Active strategies: 1
 - Status breakdown:
-  - suspended: 4
-  - error: 16
+  - suspended: 12
+  - error: 8
 
 ### Strategy Mix
 - Total changes: 20

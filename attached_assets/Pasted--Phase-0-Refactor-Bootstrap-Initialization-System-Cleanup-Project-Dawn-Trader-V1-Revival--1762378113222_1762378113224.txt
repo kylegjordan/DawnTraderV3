@@ -1,0 +1,156 @@
+⚙️ Phase 0 — Refactor Bootstrap (Initialization & System Cleanup)
+
+Project: Dawn Trader V1 Revival (Bootstrap Branch)
+Credentials:
+
+username=testuser123  
+password=SecurePass123!
+
+🎯 Objective
+
+Stabilize the restored V1 environment by removing legacy dependencies, verifying backend/frontend integrity, and ensuring all services load cleanly on port 5000 without ghost imports or dead modules.
+This establishes the V1.9 baseline before modernization begins.
+
+🧱 Scope of Work
+
+Purge Legacy & Unused Modules
+
+Remove any of the following if still present:
+
+/server/walter*  
+/server/ai-orchestrator*  
+/server/conversation*  
+/client/src/pages/chat*  
+/client/src/services/walter*  
+
+
+Delete unreferenced imports (e.g., WalterResponse, CortexBridge, AIOrchestrator) from any remaining files.
+
+Verify package.json for ghost dependencies: remove openai, cohere, gpt-3, socket.io-client, or any non-used AI SDKs.
+
+Verify Core Middleware and Service Registration
+
+In /server/index.ts, confirm the order:
+
+app.use(cors());
+app.use(express.json());
+app.use("/api", routes);
+
+
+Ensure each service is properly imported and initialized once:
+TradingEngine, GoalsEngine, GuardrailPolicy, LATTIService, Scheduler.
+
+Remove any duplicate initialize() or register() calls.
+
+Validate Database Connections & Seeds
+
+Confirm single active DB file: /server/db/dev.db.
+
+Delete duplicates like dev(1).db, test.db, or backup.db.
+
+Run migration and seed scripts once:
+
+npm run db:migrate  
+npm run db:seed
+
+
+Ensure users table contains only two records:
+
+kylegjordan
+testuser123
+
+
+Clean Environment Variables
+
+Open .env → keep only:
+
+NODE_ENV=development
+PORT=5000
+DATABASE_URL=file:./server/db/dev.db
+JWT_SECRET=development-temp-secret
+
+
+Remove legacy API keys (Kraken, OpenAI, etc.) until re-added in modernization phases.
+
+Frontend Audit (React/Vite)
+
+Check vite.config.ts for allowedHosts: [".replit.dev"].
+
+Confirm entry in /client/src/main.tsx mounts App cleanly with no references to deprecated components.
+
+Delete unused routes or pages:
+
+/client/src/pages/debug/
+/client/src/pages/conversation/
+/client/src/pages/ai/
+
+
+Verify each tab (Dashboard, Goals, LATTI, System Monitor) loads without 404s or console errors.
+
+Dependency Integrity Check
+
+Run:
+
+npm install
+npm audit fix
+npm run build
+
+
+Capture dependency tree snapshot:
+
+npm ls --depth=1 > logs/phase0-dependency-tree.txt
+
+
+Performance & Log Validation
+
+Start backend + frontend concurrently:
+
+npm run dev
+
+
+Verify logs:
+
+✅ Server running on port 5000
+
+✅ Database connected successfully
+
+✅ LATTI / GoalsEngine / TradingEngine initialized
+
+❌ No “module not found” or “duplicate context bridge” warnings.
+
+🧪 Validation Checklist
+Test	Command	Expected Result
+API health	`curl -s http://localhost:5000/api/status
+	jq`
+Auth	Login with test credentials	JWT token returned
+LATTI/Goals	Visit /goals tab	No console errors, guardrails load
+Scheduler	Observe console	[Scheduler] Cycle initialized every 60 s
+System Monitor	/monitor	LATTI metrics visible, no 404 calls
+🧾 Deliverables
+
+After completion, create:
+/audit/phase0-refactor-bootstrap.md containing:
+
+List of deleted modules/files.
+
+Final verified service initialization order.
+
+Dependency snapshot summary.
+
+Screenshot of clean server startup (no errors).
+
+Timestamped verification output of /api/status.
+
+✅ Exit Criteria
+
+Backend + frontend start with zero console errors.
+
+Only the five core modules remain active (LATTI, Goals Engine, Trading Scheduler, Provenance Debugger, Guardrail Policy).
+
+Database seeds and environment cleaned.
+
+All tabs render correctly with no broken links.
+
+When complete, mark the branch as:
+
+Tag: dt-v1.9-bootstrap-stable

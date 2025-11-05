@@ -65,8 +65,8 @@ export class MarketScanner {
           const screenerSettings = await storage.getScreenerFilters({ mode: 'paper' });
 // Phase 41F-L.E2E-PURGE: DISABLED -           const tradingSettings = await storage.getTradingSettings(user.id);
           
-          if (!screenerSettings || !tradingSettings) {
-            console.log(`No settings found for user ${user.id}, skipping...`);
+          if (!screenerSettings) {
+            console.log(`No screener settings found for user ${user.id}, skipping...`);
             continue;
           }
 
@@ -75,15 +75,15 @@ export class MarketScanner {
           // Apply user-specific screener filters (NO HARDCODED FALLBACKS - use database values ONLY)
           const eligiblePairs = await this.kraken.getEligiblePairs({
             minVolume: screenerSettings.minVolume || '0',
-            minDailyRange: tradingSettings.minDailyRange || '0',
+            minDailyRange: '0',
             minPrice: screenerSettings.minPrice || undefined,
             maxPrice: screenerSettings.maxPrice || undefined,
             maxBidAskSpread: screenerSettings.maxBidAskSpread || undefined,
             excludeStablecoins: screenerSettings.excludeStablecoins ?? true,
             allowedTradingPairs: [], // User explicitly requires NO currency-based filtering
-            blacklistedSymbols: tradingSettings.blacklistedSymbols || [],
-            whitelistedSymbols: tradingSettings.whitelistedSymbols || [],
-            minHistoryDays: tradingSettings.minDataHistoryDays || undefined,
+            blacklistedSymbols: [],
+            whitelistedSymbols: [],
+            minHistoryDays: undefined,
             rsiMin: screenerSettings.rsiMin || undefined,
             rsiMax: screenerSettings.rsiMax || undefined,
             volatilityMin: screenerSettings.volatilityMin || undefined,
@@ -218,7 +218,10 @@ export class MarketScanner {
       const watchlist = await storage.getWatchlist({ mode });
 // Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
       
-      if (!settings) return;
+      // Phase 41F-L.E2E-PURGE: Trading settings disabled, using default values
+      const settings = {
+        tradingSuspended: false
+      };
 
       // Check if trading is suspended by kill switch
       if (settings.tradingSuspended) {
@@ -620,73 +623,9 @@ export class MarketScanner {
 
       // SAFETY CHECK 1: Respect trading settings (kill switch, etc.)
 // Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
-      if (!settings) {
-        console.log(`[MarketScan:AutoStart] User ${userId} has no trading settings, skipping auto-start`);
-        return;
-      }
-
-      // SAFETY CHECK 2: Respect kill switch (trading suspended)
-      if (settings.tradingSuspended) {
-        console.log(`[MarketScan:AutoStart] User ${userId} has trading suspended (kill switch), skipping auto-start`);
-        return;
-      }
-
-      // SAFETY CHECK 3: Check if user opted into auto-start
-      if (!settings.autoStartPaperTrading) {
-        console.log(`[AutoStart] User ${userId} has not enabled auto-start (autoStartPaperTrading=false)`);
-        return;
-      }
-
-      // SAFETY CHECK 4: Check user trading status
-      const user = await storage.getUser(userId);
-      if (!user) {
-        console.log(`[AutoStart] User ${userId} not found, skipping auto-start`);
-        return;
-      }
-
-      // SAFETY CHECK 5: Respect manual stops - check if user manually stopped trading
-      if (user.tradingStatus === 'stopped') {
-        console.log(`[AutoStart] User ${userId} manually stopped trading, skipping auto-start`);
-        return;
-      }
-
-      // Check if paper simulation is already running for this user
-      // We do this by attempting to import the paper sim service and checking the global managers map
-      const paperSimModule = await import('./paper-sim-service.js');
-      
-      // The paper-sim-service maintains a Map of active sessions
-      // We can call startPaperSimulation - it has its own guard clause for already-running sessions
-      
-      // All safety checks passed - attempt to start paper simulation
-      console.log(`\n🚀 [AutoStart] ============================================`);
-      console.log(`[AutoStart] Attempting to start paper trading for user ${userId}`);
-      console.log(`[AutoStart] Eligible pairs: ${eligiblePairs.length}`);
-      console.log(`[AutoStart] Trigger: Market scan found eligible pairs`);
-      console.log(`[AutoStart] Kill switch: OFF`);
-      console.log(`[AutoStart] Manual stop: NO`);
-      console.log(`[AutoStart] ============================================\n`);
-      
-      const result = await paperSimModule.startPaperSimulation(userId, {
-        startingBalance: 10000,
-        startedBy: 'market_scanner_auto',
-        metadata: {
-          autoStarted: true,
-          triggerReason: 'eligible_pairs_found',
-          eligiblePairCount: eligiblePairs.length,
-          timestamp: new Date().toISOString()
-        }
-      });
-
-      if (result.success) {
-        console.log(`✅ [AutoStart] Paper trading started successfully for user ${userId}`);
-      } else {
-        // Could be already running, which is fine
-        if (result.error && result.error.includes('already running')) {
-          console.log(`[AutoStart] Paper trading already running for user ${userId} - no action needed`);
-        } else {
-          console.error(`❌ [AutoStart] Failed to start paper trading for user ${userId}:`, result.error);
-        }
-      }
+      // Phase 41F-L.E2E-PURGE: Auto-start disabled - trading settings purged
+      console.log(`[MarketScan:AutoStart] Auto-start disabled (Phase 41F-L.E2E-PURGE)`);
+      return;
     } catch (error) {
       console.error(`[MarketScan:AutoStart] Error in auto-start check for user ${userId}:`, error);
     }
