@@ -5,6 +5,8 @@
  */
 
 import { storage } from '../storage';
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
 
 export interface SystemHealthStatus {
   backend: string;
@@ -29,8 +31,10 @@ export class SystemHealthService {
   /**
    * Get comprehensive system health status for AI analysis
    * This is used by Walter & Bob for diagnostics and alerts
+   * 
+   * Phase 3: Removed userId parameter (single-tenant architecture)
    */
-  async getHealthStatus(userId: string): Promise<SystemHealthStatus> {
+  async getHealthStatus(): Promise<SystemHealthStatus> {
     const healthData: SystemHealthStatus = {
       backend: 'OK',
       paperTrading: {
@@ -68,8 +72,9 @@ export class SystemHealthService {
     }
 
     // Check database connectivity
+    // Phase 3: Use simple ping query instead of user lookup
     try {
-      await storage.getUser(userId);
+      await db.execute(sql`SELECT 1 AS health_check`);
       healthData.database = 'OK';
     } catch (error) {
       console.error('[SystemHealth] Database check failed:', error);

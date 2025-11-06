@@ -45,9 +45,8 @@ class MetricsBobModule {
     console.log(`[${this.MODULE_NAME}] 🔍 Fetching system health (mode: ${context.mode})${context.traceId ? ` [trace: ${context.traceId.substring(0, 12)}...]` : ''}`);
 
     try {
-      // Use a default userId if not provided (for system-wide health)
-      const userId = context.userId || '00000000-0000-0000-0000-000000000000';
-      const health = await systemHealthService.getHealthStatus(userId);
+      // Phase 3: Removed userId parameter (single-tenant architecture)
+      const health = await systemHealthService.getHealthStatus();
       const duration = Date.now() - startTime;
       
       // Phase 8.6.4: BoB deep-trace logging
