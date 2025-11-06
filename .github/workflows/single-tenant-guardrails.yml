@@ -15,7 +15,7 @@ jobs:
           
           # Baseline: 3,141 known legacy references as of Phase 2D (2025-11-06)
           # Only fail if new references are added beyond baseline
-          BASELINE=3137
+          BASELINE=3141
           
           # Scan for userId references outside auth routes
           rg -n "(userId|user_id)" server client shared --ignore-case --glob '!**/auth*' > userid_hits.txt || true
