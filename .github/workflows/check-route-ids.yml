@@ -1,0 +1,18 @@
+name: check-route-ids
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail on new :userId mounts (outside admin)
+        run: |
+          echo "Scanning for :userId mounts outside admin endpoints..."
+          rg -n "/:userId" server client shared --ignore-case \
+            | grep -v "/admin/users/" > route_hits.txt || true
+          if [ -s route_hits.txt ]; then
+            echo "❌ New :userId routes found outside admin scope:" && cat route_hits.txt && exit 1
+          else
+            echo "✅ No new :userId mounts detected (admin-only references allowed)."
+          fi

@@ -1,0 +1,70 @@
+# Operational Tables Schema Dump
+# Generated: 2025-11-06 (Phase 2E)
+# Method: information_schema query
+
+TABLE: guardrails_v2
+  - id (varchar)
+  - mode (enum: paper|live)
+  - portfolio_risk_per_trade_pct (numeric)
+  - symbol_cooldown_minutes (integer)
+  - max_open_positions (integer)
+  - daily_loss_kill_switch_pct (numeric)
+  - [14 total columns, NO user_id]
+
+TABLE: paper_sim_sessions
+  - id (varchar)
+  - session_id (varchar)
+  - mode (varchar)
+  - status (varchar)
+  - started_at (timestamptz)
+  - [8 total columns, NO user_id]
+
+TABLE: portfolio_state
+  - id (varchar)
+  - mode (enum: paper|live)
+  - balance (numeric)
+  - global_context_id (varchar) - ALWAYS 'default'
+  - [6 total columns, NO user_id]
+
+TABLE: strategies
+  - id (integer)
+  - name (varchar)
+  - description (text)
+  - enabled (boolean)
+  - [7 total columns, NO user_id]
+
+TABLE: strategy_settings
+  - id (varchar)
+  - mode (enum: paper|live)
+  - strategy (enum)
+  - params (jsonb)
+  - global_context_id (varchar) - ALWAYS 'default'
+  - [9 total columns, NO user_id]
+
+TABLE: system_context
+  - id (varchar)
+  - trading_mode (enum: paper|live)
+  - is_engine_active (boolean)
+  - [28 total columns, NO user_id in operational fields]
+
+TABLE: telemetry_state
+  - id (integer)
+  - mode (varchar)
+  - cycle_count (integer)
+  - [7 total columns, NO user_id]
+
+TABLE: trade_logs
+  - id (integer)
+  - mode (varchar)
+  - symbol (varchar)
+  - side (varchar)
+  - quantity (numeric)
+  - price (numeric)
+  - [9 total columns, NO user_id]
+
+VERIFICATION:
+✅ All operational tables use mode-based isolation
+✅ Zero user_id columns in operational tables
+✅ global_context_id always set to 'default'
+✅ Mode isolation enforced at database level
+

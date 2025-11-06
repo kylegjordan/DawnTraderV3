@@ -1,0 +1,158 @@
+⚙️ Phase 1 — Initialize V1.9 Core Scaffolding Modernization
+
+Project: Dawn Trader V1 Revival → V1.9 Baseline
+Credentials:
+
+username=testuser123  
+password=SecurePass123!
+
+🎯 Objective
+
+Re-establish a clean, modular system skeleton for the revived V1 codebase—introducing standardized folder structure, consistent imports, service registration order, and a verified /api/status route.
+This creates the formal foundation for all subsequent modernization phases (V2-style modularity on a stable V1 core).
+
+🧱 Scope of Work
+
+Create Modern Folder Structure
+
+/server/
+  ├─ services/
+  ├─ routes/
+  ├─ utils/
+  ├─ db/
+  ├─ middleware/
+/client/
+  ├─ src/
+      ├─ components/
+      ├─ pages/
+      ├─ hooks/
+      └─ utils/
+/shared/
+  └─ types/
+
+
+Move stray logic files (e.g., logger.ts, context-bridge.ts) into /utils/.
+
+Verify all imports update automatically (tsconfig.json → paths aliases).
+
+Add Core Health and Info Routes
+
+/api/status → returns { ok:true, version:"1.9.0", timestamp }
+
+/api/health → returns { db:true, services:["LATTI","GoalsEngine","TradingEngine"], uptime }
+
+Implement Unified Service Loader
+
+Create /server/startup.ts:
+
+import { initLATTI } from "./services/latti";
+import { initGoals } from "./services/goals";
+import { initTradingEngine } from "./services/trading-engine";
+export async function initializeServices() {
+  await initLATTI();
+  await initGoals();
+  await initTradingEngine();
+  console.log("✅ Core services initialized");
+}
+
+
+Import in server/index.ts and call before app.listen().
+
+Introduce Version Metadata
+
+Add /server/version.json:
+
+{ "version": "1.9.0", "branch": "dt-v1-revival-bootstrap", "phase": "1-core-scaffolding" }
+
+
+Include this in /api/status.
+
+Standardize Environment and Config
+
+Create /server/config/index.ts exporting typed env object:
+
+export const env = {
+  NODE_ENV: process.env.NODE_ENV || "development",
+  PORT: parseInt(process.env.PORT || "5000"),
+  DATABASE_URL: process.env.DATABASE_URL || "file:./server/db/dev.db",
+  JWT_SECRET: process.env.JWT_SECRET || "development-temp-secret"
+};
+
+
+Replace all direct process.env calls with env.*.
+
+Re-Register Middleware and Routes
+
+In server/index.ts, enforce:
+
+app.use(cors());
+app.use(express.json());
+app.use("/api/auth", authRouter);
+app.use("/api/status", statusRouter);
+app.use("/api/health", healthRouter);
+app.use(errorHandler);
+
+
+Confirm order: middleware → auth → routes → error handler.
+
+Frontend Verification
+
+Update client App.tsx to display version from /api/status.
+
+Ensure each page component (Dashboard, Goals, LATTI, Monitor) loads via clean routes:
+
+/
+/goals
+/latti
+/monitor
+
+
+Dependency Sync & Type Check
+
+Run:
+
+npm install
+npm run build
+npx tsc --noEmit
+
+
+Resolve any missing typings under /shared/types.
+
+🧪 Validation Checklist
+Test	Command	Expected Result
+API status	`curl -s http://localhost:5000/api/status
+	jq`
+Health check	`curl -s http://localhost:5000/api/health
+	jq`
+DB connectivity	check logs	“Database connected successfully”
+Frontend version display	open Dashboard	“Dawn Trader v1.9.0 active” footer
+LSP errors	run TS compile	0 errors
+🧾 Deliverables
+
+Create /audit/phase1-core-scaffolding.md containing:
+
+Folder structure diff (before/after).
+
+Verified service initialization order.
+
+Screenshot or log of /api/status and /api/health.
+
+Build output (npm run build success message).
+
+Timestamp of first clean startup on port 5000.
+
+✅ Exit Criteria
+
+All core routes respond successfully.
+
+No LSP or runtime errors.
+
+Service loader and config module working.
+
+Frontend reads version info from API.
+
+Architect approval for “Phase 1 Complete → Proceed to Phase 2 (Database Consolidation)”.
+
+Tag branch after completion:
+
+Tag: dt-v1.9-core-scaffolding-stable

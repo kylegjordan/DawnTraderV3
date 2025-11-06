@@ -9,15 +9,15 @@
  */
 
 import type { Express } from 'express';
-import type { AuthenticatedRequest } from './routes';
+import type { AuthenticatedRequest } from '../routes';
 import { 
   secureCoreService,
   learningAlignmentService,
   paperLiveTransferService,
   feedbackIntegrationService
-} from './services/phase-8.6.5-enhancements';
-import { purposeLayer } from './services/purpose-layer';
-import { corpusDomainService } from './services/corpus-domain-service';
+} from '../services/phase-8.6.5-enhancements';
+import { purposeLayer } from '../services/purpose-layer';
+import { corpusDomainService } from '../services/corpus-domain-service';
 
 export function registerPhase865Routes(app: Express) {
   
@@ -236,21 +236,11 @@ export function registerPhase865Routes(app: Express) {
     }
   });
 
-  // Purpose Layer Access (Task 1)
-  app.get('/api/walter/purpose/:userId/:mode', async (req: AuthenticatedRequest, res) => {
-    try {
-      const { userId, mode } = req.params;
-      const purpose = purposeLayer.getPurpose(userId, mode as 'live' | 'paper');
-      
-      if (!purpose) {
-        return res.status(404).json({ error: 'Purpose not found' });
-      }
-      
-      res.json({ purpose });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // [DEPRECATED][SINGLE-TENANT] Purpose Layer Access (Task 1)
+  // Legacy user-specific purpose route removed in Phase 2E (ADR-001).
+  // Reason: Single-tenant architecture eliminates per-user routing.
+  // Replacement: Create mode-only route GET /api/walter/purpose?mode=paper|live
+  // Documentation: audit/phase2e-route-changes.md
 
   // Corpus Domains Access (Task 2)
   app.get('/api/walter/corpus-domain/:domainName', async (req: AuthenticatedRequest, res) => {

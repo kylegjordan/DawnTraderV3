@@ -1,0 +1,200 @@
+==> /tmp/logs/Start_application_20251106_085251_225.log <==
+<workflow>
+<workflow_name>Start application</workflow_name>
+<status>FAILED</status><run_id>_HZTJ4RcXVv3KYIUxZO-m</run_id><timestamp>2025-11-06T08:52:51.183659+00:00</timestamp>
+<logs>> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+[ContextBridge] Service initialized
+[ContextBridge] Cleanup scheduler started (runs every hour)
+[35.3][SYNC] Reconciliation interval = 30s (reduced from 15s to optimize performance)
+[41F-B][QUEUE] paper-trading initialized (queue_depth=0)
+[41F-B][QUEUE] live-trading initialized (queue_depth=0)
+[41E-S][LIVE-CODE] paper-sim-service.ts loaded
+[41F][QUEUE] Paper operation queue integrated
+[NLAI-Registry] Registered action: start_paper_simulation (simulation)
+[NLAI-Registry] Registered action: stop_paper_simulation (simulation)
+[NLAI-Registry] Registered action: start_live_trading (simulation)
+[NLAI-Registry] Registered action: stop_live_trading (simulation)
+[NLAI-Registry] Registered action: check_live_trading_status (simulation)
+[NLAI-Registry] Registered action: check_system_health (system)
+[NLAI-Registry] Registered action: generate_report (report)
+[NLAI-Registry] Registered action: check_simulation_status (simulation)
+[NLAI-Registry] Registered action: refresh_context (system)
+[NLAI-Registry] Registered action: check_system_truth (system)
+[NLAI-Registry] Registered action: update_risk_per_trade (system)
+[NLAI-Registry] Registered action: update_max_drawdown (system)
+[NLAI-Registry] Registered action: update_max_daily_loss (system)
+[NLAI-Registry] Registered action: update_screener_liquidity (system)
+[NLAI-Registry] Registered action: update_trading_goal (system)
+[NLAI-Registry] Registered action: set_default_watchlist (system)
+[NLAI-Registry] Registered action: add_to_watchlist (system)
+[NLAI-Registry] Registered action: get_watchlist (system)
+[MD-WS] Connecting to wss://ws.kraken.com...
+[SystemHealthMonitor] ✅ Initialized - System health monitoring active
+[BobCore] 📦 Registering module: MetricsBob with 3 functions
+[BobCore] 📦 Registering module: DataBob with 2 functions
+[BobCore] 📦 Registering module: ConfigBob with 5 functions
+[BobCore] 📦 Registering module: StrategyBob with 3 functions
+[TradeBob] Constructor called - ENABLED: true
+[BobCore] 📦 Registering module: TradeBob with 2 functions
+[TradeBob] ✅ Initialized with event-driven invalidation
+[InsightBob] Constructor called - ENABLED: true
+[BobCore] 📦 Registering module: InsightBob with 1 functions
+[InsightBob] ✅ Initialized - System introspection ready
+[UIBob] Constructor called - ENABLED: true
+[BobCore] 📦 Registering module: UIBob with 1 functions
+[UIBob] ✅ Initialized - UI tracking ready
+[CortexCore] Constructor called - ENABLED: true
+[NLAI-ExecutionBroker] Initialized with ExecutionPolicyController
+[41F-C][HEARTBEAT] HealthMonitor initialized
+[41F-C][HEARTBEAT] Config: { intervalMs: 5000, autoRecovery: true, broadcastNonblocking: true }
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[BOOT] local 2025-11-06T08:52:38.273Z
+[BOOT] DawnTrader v1.9.0 - Phase 1-core-scaffolding
+[Server] Numeric normalization middleware applied to API router
+Starting 10-minute market scanning...
+🔍 Performing market scan...
+[41F-L.3][REGISTRATION] /api/paper/trade/test endpoint with fallback
+[Phase 1] Status routes mounted at /api/status
+[41F-D] Health routes mounted at /api/health
+[Server] API routes mounted at /api
+[41F-B][RECOVERY] Initializing operation queues on startup...
+[41F-B][RECOVERY] Paper queue status: { queueSize: 0, processing: false }
+[41F-B][RECOVERY] Live queue status: { queueSize: 0, processing: false }
+[41F-B][RECOVERY] No orphaned paper trading sessions found
+[41F-B][RECOVERY] Queue initialization complete - system ready
+[PaperSimService] Resetting service state...
+[PaperSimService] ✅ Reset complete - clean state confirmed
+[PaperSimService] Initialized - no active sessions
+[PaperSimService] State: { hasManager: false, hasDbSession: false }
+[MarketScan] Found 5 users
+👤 Processing user 3ace5ebb-06f2-4116-8e60-f130425bab52 with custom screener filters...
+[Startup] Error seeding test user: error: duplicate key value violates unique constraint "users_username_unique"
+    at file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async NeonPreparedQuery.execute (/home/runner/workspace/node_modules/src/neon-serverless/session.ts:102:18)
+    at async DatabaseStorage.createUser (/home/runner/workspace/server/storage.ts:681:20)
+    at async seedTestUser (/home/runner/workspace/server/startup/test-user-seeder.ts:44:22)
+    at async <anonymous> (/home/runner/workspace/server/index.ts:140:3) {
+  length: 215,
+  severity: 'ERROR',
+  code: '23505',
+  detail: 'Key (username)=(testuser) already exists.',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'users',
+  column: undefined,
+  dataType: undefined,
+  constraint: 'users_username_unique',
+  file: 'nbtinsert.c',
+  line: '666',
+  routine: '_bt_check_unique'
+}
+[PermissionCache] Initializing permission cache...
+[PermissionCache] Loaded permission matrix:
+  - owner: 21 permissions
+  - editor: 21 permissions
+  - admin: 15 permissions
+  - trader: 10 permissions
+  - viewer: 4 permissions
+[PermissionCache] ✅ Permission cache initialized
+[TradingStateSync] Recovering trading state for 5 user(s)...
+[TradingStateSync] Initialized (mode=paper)
+[MD-WS] ✅ Connected to Kraken WebSocket
+[MD-Coordinator] WebSocket connected, fallback disabled
+📊 Screener: 181 pairs passed basic filters, checking history...
+[32.D-Fix.6] Startup reconciliation complete (paper engine: false , live engine: false )
+[TradingStateSync] Initialized (mode=paper)
+[32.D-Fix.6] Startup reconciliation complete (paper engine: false , live engine: false )
+[TradingStateSync] Initialized (mode=paper)
+[32.D-Fix.6] Startup reconciliation complete (paper engine: false , live engine: false )
+[TradingStateSync] Initialized (mode=paper)
+[32.D-Fix.6] Startup reconciliation complete (paper engine: false , live engine: false )
+[TradingStateSync] Initialized (mode=paper)
+[32.D-Fix.6] Startup reconciliation complete (paper engine: false , live engine: false )
+[TradingStateSync] ✅ Trading state recovery complete
+[Ethics] Seeding default ethical principles...
+[Ethics] ⏭️  Principle already exists: transparency
+[Ethics] ⏭️  Principle already exists: harm_prevention
+[Ethics] ⏭️  Principle already exists: fairness
+[Ethics] ⏭️  Principle already exists: autonomy_bounds
+[Ethics] ⏭️  Principle already exists: accountability
+[Ethics] Ethical principles seeding complete
+[StrategySync] Starting global strategy sync...
+[StrategySync] Completed in 197ms: global context processed, 0 strategies added
+[PortfolioInit] Checking portfolio_state table...
+[PortfolioInit] ✓ Live-mode entry exists: $834.11
+[PortfolioInit] ✓ Paper-mode entry exists: $5000.00
+[PortfolioInit] ✅ Portfolio state initialization complete
+[PurposeLayer] Initializing purpose nodes...
+[ProvenanceLogger] Lineage logged: walter → cortex (trace: 9EdeKMgm3Iu7...)
+[PurposeLayer] ✅ Purpose node loaded → CoreValues.Purpose:14e0809e-3ca8-413d-878f-c55f9d837fae:live (protected, read-only)
+[ProvenanceLogger] Lineage logged: walter → cortex (trace: oQLiSZt66Ry7...)
+[PurposeLayer] ✅ Purpose node loaded → CoreValues.Purpose:14e0809e-3ca8-413d-878f-c55f9d837fae:paper (protected, read-only)
+[ProvenanceLogger] Lineage logged: walter → cortex (trace: 0oJeZMaHMzQ4...)
+[PurposeLayer] ✅ Purpose node loaded → CoreValues.Purpose:6c591801-3072-431d-b192-30aaf426f15e:live (protected, read-only)
+[ProvenanceLogger] Lineage logged: walter → cortex (trace: 1cNVouilHRdE...)
+[PurposeLayer] ✅ Purpose node loaded → CoreValues.Purpose:6c591801-3072-431d-b192-30aaf426f15e:paper (protected, read-only)
+[PurposeLayer] Initialization complete: 4 purpose nodes loaded
+[CorpusDomains] Initializing domain knowledge modules...
+[Cortex] Domain validated: Trading | hash=1789d763 | confidence=1.0
+[Cortex] Domain validated: Engineering | hash=2af97229 | confidence=1.0
+[Cortex] Domain validated: Frontend | hash=188daa64 | confidence=1.0
+[Cortex] Domain validated: General | hash=92fd85c3 | confidence=1.0
+[CorpusDomains] ✅ Initialization complete: 4/4 domains active
+[ContextLoader] Starting context ingestion...
+[ContextLoader] Parsed replit.md — 4 entries
+[ContextLoader] Parsed DEVELOPMENT_PRINCIPLES.md — 27 entries
+[ContextLoader] Parsed MISSION_STATEMENT.md — 5 entries
+[ContextLoader] Parsed PHASE_27_STATUS.md — 9 entries
+[ContextLoader] Parsed WALTER_CAPABILITIES.md — 17 entries
+[ContextLoader] ✅ Loaded 62 context records
+[Phase 8.6.5] API routes registered successfully
+[ProvenanceDebugAPI] ✅ Provenance debug API routes registered
+🔍 ═══════════════════════════════════════════════════════════
+🔍 PROVENANCE DEBUG MODE ENABLED
+🔍 Tracking: Database → BoB → Cortex → Walter → UI
+🔍 ═══════════════════════════════════════════════════════════
+[FilePersistence] Running startup self-test...
+[FilePersistence] ✅ Self-test: OK (persistent write verified)
+[DatabaseMonitor] Starting daily database size checks
+[MarketDataHealthCheck] Starting daily health checks...
+[MarketDataHealthCheck] Running health check...
+[Walter] Standby mode – AI adjustment disabled
+[MemoryLifecycle] Starting initialization sequence...
+[MemoryLifecycle] Wiping volatile memory...
+[MemoryLifecycle] ✅ Volatile memory wiped
+[MemoryLifecycle] Rehydrating memory from verified sources...
+[HeuristicEngine] ✅ Registered 5 default heuristic rules
+[LATTI] Module loaded - creating dual-mode instances...
+[HeuristicEngine] ✅ Registered 5 default heuristic rules
+[HeuristicEngine] ✅ Registered 5 default heuristic rules
+[LATTI] Paper and Live instances created
+[LATTIManager] 🚀 Starting LATTI dual-mode operation...
+[HeuristicTrader] 🚀 Starting Local Heuristic Trader Service (paper mode)...
+[HeuristicTrader] 🚀 Starting Local Heuristic Trader Service (live mode)...
+[LATTIManager] Both LATTI instances active (Paper, Live)
+[BOOT] Verifying single-tenant database invariants...
+[DatabaseMonitor] Database size: 474.38 MB (0.4633 GB)
+[ReasoningOrchestrator] Domain registered: devops
+[ReasoningOrchestrator] Domain registered: fullstack
+[ReasoningOrchestrator] Domain registered: ux
+[ReasoningOrchestrator] Domain registered: trading
+[ReasoningOrchestrator] Default domains registered (DevOps, FullStack, UX, Trading)
+[ReasoningOrchestrator] Worker started (interval: 2000ms, worker: worker_yakKr4YX)
+[MemoryLifecycle] ✅ Memory rehydrated: 0 fragments, 2 portfolio entries, 16 strategies
+[MemoryLifecycle] Checksum computed: 6b523e23b7d83cde766ef20bb9e85c677adaa4eb573be34f3d386a7308d5036f
+[LearningFeedback] Job registered with scheduler (runs at 2 AM)
+[CognitiveTuningJob] ❌ Disabled via COGNITIVE_TUNING_ENABLED env
+[FormulaAuditJob] ⏰ Scheduling daily audit: 0 3 * * * (UTC)
+[FormulaAuditJob] ✅ Job registered successfully (timezone: UTC)
+[FeedIntegrity] Initializing auto-check with schedule: */5 * * * *
+[FeedIntegrity] ✅ Auto-check enabled
+[FeedIntegrity] ✅ Engine state change listener registered
+[SchedulerRegistry] All autonomous tasks started successfully
+[MemoryLifecycle] ✅ Checksum logged: 6b523e23b7d83cde766ef20bb9e85c677adaa4eb573be34f3d386a7308d5036f (status: VERIFIED)
+[MemoryLifecycle] ✅ Initialization complete - memory VERIFIED

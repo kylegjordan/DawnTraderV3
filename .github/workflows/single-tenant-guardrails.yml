@@ -1,0 +1,108 @@
+name: single-tenant-guardrails
+on: [push, pull_request]
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Ban userId outside auth
+        run: |
+          # Install ripgrep if not available
+          which rg || sudo apt-get update && sudo apt-get install -y ripgrep
+          
+          # Baseline: 3,137 known legacy references as of Phase 2D (2025-11-06)
+          # Only fail if new references are added beyond baseline
+          BASELINE=3137
+          
+          # Scan for userId references outside auth routes
+          rg -n "(userId|user_id)" server client shared --ignore-case --glob '!**/auth*' > userid_hits.txt || true
+          
+          # Count current references
+          CURRENT=$(wc -l < userid_hits.txt || echo 0)
+          
+          echo "📊 userId Reference Check:"
+          echo "  Baseline: $BASELINE (legacy code, documented)"
+          echo "  Current:  $CURRENT"
+          
+          if [ "$CURRENT" -gt "$BASELINE" ]; then
+            NEW=$((CURRENT - BASELINE))
+            echo ""
+            echo "❌ FAILURE: $NEW NEW userId reference(s) detected!"
+            echo "This violates single-tenant architecture."
+            echo ""
+            echo "New references (above baseline $BASELINE):"
+            tail -n "$NEW" userid_hits.txt
+            exit 1
+          elif [ "$CURRENT" -lt "$BASELINE" ]; then
+            REMOVED=$((BASELINE - CURRENT))
+            echo ""
+            echo "✅ IMPROVEMENT: $REMOVED userId reference(s) removed!"
+            echo "Consider updating baseline in workflow file."
+          else
+            echo ""
+            echo "✅ No new userId references (baseline maintained)"
+          fi
+      
+      - name: Block schema reintroduction
+        run: |
+          # Check for attempts to add user_id columns back
+          rg -n "ADD COLUMN .*user_id" migrations/ server/db --ignore-case > schema_violations.txt || true
+          
+          if [ -s schema_violations.txt ]; then
+            echo "❌ Attempt to reintroduce user_id columns detected:"
+            cat schema_violations.txt
+            exit 1
+          else
+            echo "✅ No schema violations detected"
+          fi
+      
+      - name: Route contract audit
+        run: |
+          # Baseline: 2 known acceptable req.user.id usages (auth checking, metrics)
+          BASELINE_ROUTES=2
+          
+          # Check for req.user.id usage outside auth routes
+          rg -n "req\\.user\\.id" server --glob '!**/routes/auth*' > route_violations.txt || true
+          
+          CURRENT_ROUTES=$(wc -l < route_violations.txt || echo 0)
+          
+          echo "📊 Route Contract Check:"
+          echo "  Baseline: $BASELINE_ROUTES (acceptable usages)"
+          echo "  Current:  $CURRENT_ROUTES"
+          
+          if [ "$CURRENT_ROUTES" -gt "$BASELINE_ROUTES" ]; then
+            NEW=$((CURRENT_ROUTES - BASELINE_ROUTES))
+            echo ""
+            echo "❌ FAILURE: $NEW NEW req.user.id usage(s) detected!"
+            echo "New usages (above baseline $BASELINE_ROUTES):"
+            tail -n "$NEW" route_violations.txt
+            exit 1
+          elif [ "$CURRENT_ROUTES" -lt "$BASELINE_ROUTES" ]; then
+            REMOVED=$((BASELINE_ROUTES - CURRENT_ROUTES))
+            echo ""
+            echo "✅ IMPROVEMENT: $REMOVED req.user.id usage(s) removed!"
+          else
+            echo ""
+            echo "✅ No new route violations (baseline maintained)"
+          fi
+      
+      - name: Verify operational tables
+        if: false  # Disabled - requires database access
+        run: |
+          # This check requires database connection, disabled in CI
+          # Run manually: psql $DATABASE_URL -c "SELECT table_name, column_name FROM information_schema.columns WHERE column_name ILIKE 'user_id' AND table_name IN ('portfolio_state', 'strategy_settings', 'paper_sim_sessions', 'system_context', 'trading_settings_legacy');"
+          echo "⏭️  Database check skipped (requires DB access)"
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "═══════════════════════════════════════════"
+          echo "Single-Tenant Guardrails Summary"
+          echo "═══════════════════════════════════════════"
+          echo "Phase: 2D Vertical Refactor Hardening"
+          echo "Date: $(date)"
+          echo "Commit: ${{ github.sha }}"
+          echo "═══════════════════════════════════════════"

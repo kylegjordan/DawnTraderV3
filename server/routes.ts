@@ -16272,8 +16272,13 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 1: Mount status routes into apiRouter
+  const { statusRouter } = await import('./routes/status.js');
+  apiRouter.use('/status', statusRouter);
+  console.log('[Phase 1] Status routes mounted at /api/status');
+
   // Phase 41F-D: Mount health monitoring routes into apiRouter
-  const { healthRouter } = await import('./routes-health.js');
+  const { healthRouter } = await import('./routes/health.js');
   apiRouter.use('/health', healthRouter);
   console.log('[41F-D] Health routes mounted at /api/health');
 

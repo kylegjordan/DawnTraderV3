@@ -407,10 +407,10 @@ export const screenerFilters = pgTable("screener_filters", {
 }));
 
 // Strategy Settings (per mode, per user, per strategy)
+// Phase 2C: Single-tenant - userId removed
 export const strategySettings = pgTable("strategy_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
-  userId: varchar("user_id").references(() => users.id),
   mode: tradingModeEnum("mode").notNull(),
   strategy: strategyTypeEnum("strategy").notNull(),
   enabled: boolean("enabled").notNull().default(true),
@@ -1075,10 +1075,10 @@ export const filterDiagnostics = pgTable("filter_diagnostics", {
 });
 
 // Portfolio state (Phase 8.5 Addendum F - unified portfolio tracking)
+// Phase 2C: Single-tenant - userId removed
 export const portfolioState = pgTable("portfolio_state", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
-  userId: varchar("user_id").references(() => users.id),
   mode: tradingModeEnum("mode").notNull(),
   balance: decimal("balance", { precision: 20, scale: 2 }).notNull().default("1000.00"),
   lastUpdate: timestamp("last_update", { withTimezone: true }).defaultNow(),
@@ -1649,10 +1649,10 @@ export const paperSimTradeLogs = pgTable("paper_sim_trade_logs", {
 }));
 
 // Paper Sim Sessions - Persistent tracking of simulation start/stop sessions
+// Phase 2C: Single-tenant - userId removed
 export const paperSimSessions = pgTable("paper_sim_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sessionId: varchar("session_id", { length: 100 }).notNull().unique(),
-  userId: varchar("user_id").references(() => users.id).notNull(),
   mode: varchar("mode", { length: 10 }).notNull().default("paper"), // Always 'paper' but included for consistency
   status: varchar("status", { length: 20 }).notNull(), // 'running', 'stopped', 'crashed'
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1664,7 +1664,6 @@ export const paperSimSessions = pgTable("paper_sim_sessions", {
   startedBy: varchar("started_by", { length: 50 }).default("manual"), // 'manual', 'api', 'scheduled'
   metadata: jsonb("metadata"), // Additional session context
 }, (table) => ({
-  userIdx: index("paper_sim_sessions_user_idx").on(table.userId),
   statusIdx: index("paper_sim_sessions_status_idx").on(table.status),
   sessionIdIdx: uniqueIndex("paper_sim_sessions_session_id_idx").on(table.sessionId),
   startedAtIdx: index("paper_sim_sessions_started_at_idx").on(table.startedAt),
@@ -4022,9 +4021,9 @@ export const parameterBaseline = pgTable("parameter_baseline", {
 // IMPORTANT: userId preserved for audit trail only, NOT used for business logic
 // Primary isolation: tradingMode ('live' | 'paper')
 // Exactly 2 rows total: 1 for paper mode, 1 for live mode
+// Phase 2C: Single-tenant - userId removed
 export const systemContext = pgTable("system_context", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id), // LEGACY: Audit only, no longer unique constraint
   tradingMode: tradingModeEnum("trading_mode").notNull().default("paper"),
   lastSafeState: jsonb("last_safe_state").notNull().default(sql`'{}'`),
   isEngineActive: boolean("is_engine_active").notNull().default(false),

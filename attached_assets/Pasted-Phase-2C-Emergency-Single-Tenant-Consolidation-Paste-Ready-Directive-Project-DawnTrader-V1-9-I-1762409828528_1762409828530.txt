@@ -1,0 +1,171 @@
+Phase 2C — Emergency Single-Tenant Consolidation (Paste-Ready Directive)
+
+Project: DawnTrader V1.9
+Intent: Convert architecture from multi-user → single global portfolio shared by all logins.
+Credentials:
+
+username=testuser123
+password=SecurePass123!
+
+A) Schema Hard Cutover (drop user_id from ops tables)
+
+Create migration 2025-11-06_single_tenant.sql
+(Keep users/sessions only; remove user_id elsewhere. Preserve mode.)
+
+-- 1) Freeze writes (app-level maintenance mode recommended)
+-- BEGIN;
+
+-- 2) Choose canonical owner (for merge). We'll retain rows with this user_id when dedup needed:
+--   SELECT id FROM users WHERE username='kylegjordan';
+
+-- 3) Backup impacted tables
+CREATE TABLE IF NOT EXISTS __backup__portfolio_state AS SELECT * FROM portfolio_state;
+CREATE TABLE IF NOT EXISTS __backup__trade_logs AS SELECT * FROM trade_logs;
+CREATE TABLE IF NOT EXISTS __backup__guardrails_v2 AS SELECT * FROM guardrails_v2;
+CREATE TABLE IF NOT EXISTS __backup__strategies AS SELECT * FROM strategies;
+CREATE TABLE IF NOT EXISTS __backup__telemetry_state AS SELECT * FROM telemetry_state;
+
+-- 4) Deduplicate by (mode, natural keys), keeping latest per key
+--   Repeat for each table; example for guardrails_v2:
+WITH ranked AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY mode ORDER BY updated_at DESC NULLS LAST, id DESC) rn
+  FROM guardrails_v2
+)
+DELETE FROM guardrails_v2 WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
+
+-- 5) Drop user_id column from operational tables
+ALTER TABLE portfolio_state DROP COLUMN IF EXISTS user_id;
+ALTER TABLE trade_logs      DROP COLUMN IF EXISTS user_id;
+ALTER TABLE guardrails_v2   DROP COLUMN IF EXISTS user_id;
+ALTER TABLE strategies      DROP COLUMN IF EXISTS user_id;
+ALTER TABLE telemetry_state DROP COLUMN IF EXISTS user_id;
+
+-- 6) Add strict single-tenant constraints & indices
+-- Only mode partitions remain
+CREATE UNIQUE INDEX IF NOT EXISTS ux_guardrails_v2_mode ON guardrails_v2(mode);
+CREATE INDEX IF NOT EXISTS ix_trade_logs_mode_ts ON trade_logs(mode, timestamp);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_portfolio_state_mode ON portfolio_state(mode);
+
+-- 7) Verify no operational table contains user_id
+-- (Replit script will also run this, but keep a DB-side assert)
+-- COMMIT;
+
+
+Run migration + verify:
+
+psql < migrations/2025-11-06_single_tenant.sql
+
+B) Backend Refactor (remove userId everywhere outside auth)
+
+Config flag to assert single-tenant at runtime
+/server/config/index.ts
+
+export const env = {
+  SINGLE_TENANT: true, // assert
+  // ...existing
+};
+
+
+Middleware: hard-fail if any route tries to use userId
+/server/middleware/singleTenantGuard.ts
+
+import { Request, Response, NextFunction } from "express";
+import { env } from "../config";
+export function singleTenantGuard(req: Request, _res: Response, next: NextFunction) {
+  if (!env.SINGLE_TENANT) return next();
+  // Block non-auth access to req.user.id influence
+  if ((req as any).user?.id && req.path.startsWith("/api") && !req.path.startsWith("/api/auth")) {
+    // If handlers read userId for anything but logging, we will catch it in service layer assertions below.
+  }
+  next();
+}
+
+
+Service assertions: no userId parameters
+In each service (TradingEngine, RiskManager, Strategies, Portfolio, Guardrails), delete userId params & add assertion helper:
+
+/server/utils/invariants.ts
+
+export function assertSingleTenant<T extends object>(obj: T) {
+  if (Object.prototype.hasOwnProperty.call(obj, "userId")) {
+    throw new Error("[SingleTenantViolation] userId present in service call");
+  }
+}
+
+
+Use at service boundaries:
+
+assertSingleTenant(args);
+
+
+Queries: remove WHERE user_id = $1
+
+Replace all repository queries to filter only by mode.
+
+Centralize repo functions: /server/db/repo/*.ts with signatures that accept { mode } only.
+
+Auth stays for permissions only
+
+/api/auth/* unchanged (login/logout).
+
+No downstream use of req.user.id for data access, only for “who changed config” audit notes.
+
+C) API Contract Simplification (global endpoints)
+
+Replace user-scoped endpoints with global ones:
+
+/api/guardrails → returns single record per mode
+
+/api/portfolio → single shared portfolio by mode
+
+/api/strategies → shared strategy set by mode
+
+If any handler still reads userId, fail with [SingleTenantViolation].
+
+D) Frontend Alignment
+
+Remove any client code that attaches userId to requests.
+
+Ensure all fetches supply only ?mode=paper|live.
+
+E) Verification (blockers, not suggestions)
+
+Code scan (must be zero outside auth):
+
+rg -n "(userId|user_id)" server client shared --ignore-case --glob '!**/auth*' > diagnostics/userid_refs_postfix.txt
+test $(wc -l < diagnostics/userid_refs_postfix.txt) -eq 0 || (echo "❌ userId refs remain"; exit 1)
+
+
+Schema scan (must be zero in ops tables):
+
+SELECT table_name, column_name
+FROM information_schema.columns
+WHERE column_name ILIKE '%user_id%'
+  AND table_name NOT IN ('users', 'user_sessions');
+
+
+Expected rows: 0
+
+Runtime trap (fatal if seen):
+Middleware logs any object containing userId crossing API/service boundary:
+
+if (JSON.stringify(req.body).match(/"userId"\s*:/i)) {
+  throw new Error("[SingleTenantViolation] userId detected in request body");
+}
+
+
+Dual-login truth test:
+
+Login as kylegjordan and testuser123 simultaneously.
+
+Change a guardrail (e.g., Risk %) in one session → confirm the other session immediately sees the exact same value after server broadcast.
+
+Open positions/portfolio must match 1:1 in both sessions.
+
+Deliverables written automatically
+
+/audit/phase2c-single-tenant-cutover.md
+  - schema diff (before/after)
+  - list of files modified
+  - scan outputs (0 refs confirmed)
+  - screenshots/logs of dual-login truth test

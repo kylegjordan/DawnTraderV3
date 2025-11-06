@@ -5,8 +5,8 @@
  */
 
 import express from 'express';
-import { provenanceDebug } from './services/provenance-debug';
-import { provenanceLogger } from './services/provenance-logger';
+import { provenanceDebug } from '../services/provenance-debug';
+import { provenanceLogger } from '../services/provenance-logger';
 
 const router = express.Router();
 

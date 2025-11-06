@@ -1,0 +1,172 @@
+server/paper-trading-start.ts:20:    let portfolioState = await storage.getPortfolioState({ userId, mode });
+server/paper-trading-start.ts:37:      portfolioState = await storage.getPortfolioState({ userId, mode });
+server/routes.ts:1008:          const guardrailsData = await configBob.getGuardrails(userId, mode);
+server/routes.ts:1105:      console.log(`[Guardrails:${requestId}] User ${userId} updating ${mode} mode:`, sanitizedPayload);
+server/routes.ts:1121:        const existingPolicy = await storage.getTuningPolicy({ userId, mode });
+server/routes.ts:2110:          const screenerData = await configBob.getScreeners(userId, mode);
+server/routes.ts:2158:      console.info(`[Screeners] User ${userId} updated screener filters for ${mode} mode`);
+server/routes.ts:2185:      console.log('[ENGINE_START_INITIATED]', { userId, mode, timestamp: new Date().toISOString() });
+server/routes.ts:2195:      console.log(`[TradingStart] User ${userId} requesting start in ${mode} mode`);
+server/routes.ts:2237:        const portfolioState = await storage.getPortfolioState({ globalContextId: 'default', mode });
+server/routes.ts:2314:      await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
+server/routes.ts:2339:      console.log(`[TradingStart] Completed start for user ${userId} mode=${mode} active=true`);
+server/routes.ts:2395:      console.log(`[TradingStop] User ${userId} requesting stop for ${mode} mode`);
+server/routes.ts:2441:      console.log(`[TradingStop] Completed stop for user ${userId} mode=${currentMode} active=false`);
+server/routes.ts:2486:      console.log(`[ForceStop] Admin ${userId} forcing stop for ${mode} mode, reason: ${reason || 'emergency_recovery'}`);
+server/routes.ts:2576:        console.log(`[DX-TRADING] Request payload:`, JSON.stringify({ userId, username, mode, reason }, null, 2));
+server/routes.ts:2623:      await storage.updateUser(userId, { tradingMode: mode });
+server/routes.ts:2688:      const globalContextId = 'default';
+server/routes.ts:2721:        storage.getPortfolioState({ globalContextId, mode: 'live' }),
+server/routes.ts:2722:        storage.getPortfolioState({ globalContextId, mode: 'paper' }),
+server/routes.ts:2723:        storage.listStrategySettings({ globalContextId, mode: 'live' }),
+server/routes.ts:2724:        storage.listStrategySettings({ globalContextId, mode: 'paper' }),
+server/routes.ts:3214:      const validatedData = insertWatchlistPairSchema.parse({ ...req.body, userId, mode });
+server/routes.ts:3611:      const portfolioState = await storage.getPortfolioState({ userId, mode: 'paper' });
+server/routes.ts:4011:      const policy = await storage.getTuningPolicy({ userId, mode: mode as 'live' | 'paper' });
+server/routes.ts:4048:      const guardrails = await storage.getGuardrails(userId, mode);
+server/routes.ts:4247:      const uiState = await uiBob.getUIState(userId, mode);
+server/routes.ts:4261:      uiBob.updateUIState(userId, { view, subView, mode, filters });
+server/routes.ts:4288:      await dataBob.prefetchForMode(userId, mode as 'live' | 'paper', 'today');
+server/routes.ts:4291:      await configBob.prefetchForMode(userId, mode as 'live' | 'paper');
+server/routes.ts:4295:      await strategyBob.prefetchForMode(userId, mode as 'live' | 'paper', includeSignals);
+server/routes.ts:4299:        await tradeBob.prefetchForMode(userId, mode as 'live' | 'paper');
+server/routes.ts:4371:        return await uiBob.getUIState(userId, mode);
+server/routes.ts:4829:      const truthComparison = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+server/routes.ts:4857:      const truthComparison = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+server/routes.ts:4880:      const result = await contextRefreshCoordinator.refresh(userId, mode, 'api');
+server/routes.ts:5243:    console.log(`[41D-ROUTE-2] userId: ${userId}, mode: ${mode}, balance: ${initialBalance}`);
+server/routes.ts:5488:        globalContextId: systemContext!.id,
+server/routes.ts:7971:      console.log(`[WALTER-ACTIONS] Fetching actions for user ${userId} (mode: ${mode}, status: ${status || 'all'}, source: ${source || 'all'})`);
+server/routes.ts:7974:      const actions = await WalterOpsEngine.getActions(userId, mode, { status, source, limit });
+server/routes.ts:8057:      console.log(`[WALTER-ACTIONS] User ${userId} (${req.user?.role}) approving action ${actionId} (mode: ${mode})`);
+server/routes.ts:8060:      const result = await WalterOpsEngine.approveAction(actionId, userId, mode);
+server/routes.ts:8107:      console.log(`[WALTER-ACTIONS] User ${userId} (${req.user?.role}) rejecting action ${actionId} (mode: ${mode})`);
+server/routes.ts:8110:      const result = await WalterOpsEngine.rejectAction(actionId, userId, mode, reason);
+server/routes.ts:8157:      console.log(`[WALTER-ACTIONS] User ${userId} (${req.user?.role}) acknowledging action ${actionId} (mode: ${mode})`);
+server/routes.ts:8160:      const result = await WalterOpsEngine.acknowledgeAction(actionId, userId, mode);
+server/routes.ts:8187:      console.log(`[EXECUTION-CONFIG] Fetching configs for user ${userId} (mode: ${mode})`);
+server/routes.ts:8189:      const configs = await storage.getExecutionConfigs(userId, mode);
+server/routes.ts:8221:      console.log(`[EXECUTION-CONFIG] Upserting config for user ${userId} (mode: ${mode}, actionType: ${actionType}, autoExecute: ${autoExecuteEnabled})`);
+server/routes.ts:8562:        const latest = await storage.getLatestCalibration({ userId, mode, maxAgeHours: hours });
+server/routes.ts:8567:          storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: hours }),
+server/routes.ts:8568:          storage.getLatestCalibration({ userId, mode: 'paper', maxAgeHours: hours })
+server/routes.ts:8588:      const adjustments = await storage.getIntradayAdjustments(userId, { mode, hours, limit });
+server/routes.ts:8606:      const lessons = await storage.getAILessons(userId, { mode, strategy, hours, limit });
+server/routes.ts:8623:      const adjustments = await storage.getPortfolioAdjustments(userId, { mode, hours, limit });
+server/routes.ts:8701:        storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 168 }),
+server/routes.ts:8702:        storage.getLatestCalibration({ userId, mode: 'paper', maxAgeHours: 168 }),
+server/routes.ts:8894:      const calibrationLive = await storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 24 });
+server/routes.ts:8946:      const liveCalibration = await storage.getLatestCalibration({ userId, mode: 'live', maxAgeHours: 24 });
+server/routes.ts:9302:      const signalWeights = await storage.getSignalWeights(userId, strategy, mode);
+server/routes.ts:9379:      const accuracy = await storage.getPredictionAccuracy(userId, mode, strategy, days);
+server/routes.ts:9401:      const insights = await signalWeightOptimizerService.getWeightInsights(userId, mode);
+server/routes.ts:9421:      const weights = await storage.getSignalWeights(userId, strategy, mode);
+server/routes.ts:9489:      await signalWeightOptimizerService.optimizeUserWeights(userId, mode as 'live' | 'paper');
+server/routes.ts:9528:      console.log(`[Goals] Fetching all goals for user ${userId} in ${mode} mode`);
+server/routes.ts:9570:          const goalsData = await configBob.getGoals(userId, mode as 'live' | 'paper');
+server/routes.ts:9578:      console.log(`[Goals] Fetching goals summary for user ${userId} in ${mode} mode`);
+server/routes.ts:9615:        console.log(`[DX-GOALS] Request payload:`, JSON.stringify({ userId, mode, goalsCount: goals.length, goals, portfolioBalance, exploratoryMode }, null, 2));
+server/routes.ts:9618:      console.log(`[Goals] Saving ${goals.length} goals for user ${userId} in ${mode} mode:`, JSON.stringify(goals));
+server/routes.ts:9632:          feasibilityResult = await feasibilityService.evaluateGoal(userId, mode as 'live' | 'paper', {
+server/routes.ts:10045:          const averagesData = await dataBob.getAverages(userId, mode as 'live' | 'paper');
+server/routes.ts:10136:          const resultsData = await dataBob.getResults(userId, mode as 'live' | 'paper', period as any);
+server/routes.ts:10299:      const globalContextId = 'default';
+server/routes.ts:10303:      const row = await storage.getStrategySettings({ globalContextId, mode, strategy });
+server/routes.ts:10315:      const globalContextId = 'default';
+server/routes.ts:10322:          const rows = await configBob.getStrategies(globalContextId, mode);
+server/routes.ts:10330:      const rows = await storage.listStrategySettings({ globalContextId, mode });
+server/routes.ts:10363:      const globalContextId = 'default';
+server/routes.ts:10376:      const prev = await storage.getStrategySettings({ globalContextId, mode, strategy });
+server/routes.ts:10471:        globalContextId,
+server/routes.ts:10496:        globalContextId
+server/routes.ts:10610:          globalContextId: 'default'
+server/routes.ts:10630:      console.log(`[Walter Approval] Approved ${id} by user ${userId} (mode: ${approval.mode})`);
+server/routes.ts:10678:      console.log(`[Walter Approval] Rejected ${id} by user ${userId} (mode: ${approval.mode})`);
+server/routes.ts:10760:          globalContextId: 'default'
+server/routes.ts:10802:      console.log(`[Phase 27.2] Approved ${traceId} by user ${userId} (mode: ${approval.mode})`);
+server/routes.ts:11352:          const purpose = await configBob.getPurpose(userId, mode);
+server/routes.ts:12286:        ? await storage.getPendingAdjustments(userId, mode)
+server/routes.ts:12917:          globalContextId: 'default'
+server/routes.ts:13251:                    globalContextId: 'default'
+server/routes.ts:13401:      const alerts = await AlertsService.getUnacknowledgedAlerts(userId, mode);
+server/routes.ts:13460:      console.log(`[AlertAPI] Acknowledging all alerts for user ${userId} in ${mode} mode`);
+server/routes.ts:13463:      const alerts = await AlertsService.acknowledgeAll(userId, mode);
+server/routes.ts:13501:      const alerts = await AlertsService.muteLowSeverity(userId, mode);
+server/routes.ts:15851:      const portfolioBalance = await storage.getPortfolioBalance({ userId, mode });
+server/routes.ts:17024:        storage.getPortfolioState({ globalContextId: userId, mode })
+server/routes.ts:17122:    const portfolioState = await storage.getPortfolioState({ globalContextId: userId, mode });
+server/routes/phase-8.6.5.ts:83:      const globalContextId = 'default';
+server/routes/phase-8.6.5.ts:87:        globalContextId,
+server/routes/phase-8.6.5.ts:99:      const globalContextId = 'default';
+server/routes/phase-8.6.5.ts:103:        globalContextId,
+server/routes/phase-8.6.5.ts:126:      const globalContextId = 'default';
+server/routes/phase-8.6.5.ts:129:        globalContextId,
+server/routes/phase-8.6.5.ts:142:      const globalContextId = 'default';
+server/routes/phase-8.6.5.ts:145:        globalContextId,
+server/routes/phase-8.6.5.ts:158:      const globalContextId = 'default';
+server/routes/phase-8.6.5.ts:161:      const crossModeLessons = await paperLiveTransferService.findCrossModeLessons(globalContextId, 5);
+server/routes/phase-8.6.5.ts:162:      const livePatterns = await feedbackIntegrationService.aggregatePatternReports(globalContextId, 'live');
+server/routes/phase-8.6.5.ts:163:      const paperPatterns = await feedbackIntegrationService.aggregatePatternReports(globalContextId, 'paper');
+server/routes/phase-8.6.5.ts:244:  app.get('/api/walter/purpose/:userId/:mode', async (req: AuthenticatedRequest, res) => {
+server/routes/phase-8.6.5.ts:246:      const { userId, mode } = req.params;
+server/routes/phase-8.6.5.ts:247:      const purpose = purposeLayer.getPurpose(userId, mode as 'live' | 'paper');
+server/storage.ts:273:  getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null>;
+server/storage.ts:274:  listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]>;
+server/storage.ts:363:  getTransparencyLogs(filters?: { userId?: string; taskName?: string; mode?: 'live' | 'paper'; limit?: number }): Promise<AITransparencyLog[]>;
+server/storage.ts:375:  createTradingAuditLog(data: { userId: string; action: string; mode: string; triggeredBy?: string; metadata?: any }): Promise<void>;
+server/storage.ts:415:  getSignalWeights(userId: string, strategy?: string, mode?: string): Promise<SignalWeight[]>;
+server/storage.ts:416:  getSignalWeight(userId: string, strategy: string, mode: string, signalName: string): Promise<SignalWeight | undefined>;
+server/storage.ts:430:  getPredictionOutcomes(userId: string, filters?: { mode?: string; strategy?: string; fromDate?: Date; toDate?: Date; limit?: number }): Promise<PredictionOutcome[]>;
+server/storage.ts:431:  getPredictionAccuracy(userId: string, mode: string, strategy?: string, days?: number): Promise<{ accuracy: number; totalPredictions: number; correctPredictions: number }>;
+server/storage.ts:435:  getIntradayAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<IntradayAdjustment[]>;
+server/storage.ts:439:  getAILessons(userId: string, filters?: { mode?: string; strategy?: string; hours?: number; limit?: number }): Promise<AILesson[]>;
+server/storage.ts:443:  getPortfolioAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]>;
+server/storage.ts:476:  getGoalAuditLogs(userId: string, mode?: 'live' | 'paper', limit?: number): Promise<GoalAuditLog[]>;
+server/storage.ts:480:  getUserGoalsAudit(userId: string, mode?: 'live' | 'paper', limit?: number): Promise<UserGoalsAudit[]>;
+server/storage.ts:501:  getPendingAdjustments(userId: string, mode: 'live' | 'paper'): Promise<ProposedAdjustment[]>;
+server/storage.ts:608:  getWalterExecutionLogs(userId: string, options?: { limit?: number; mode?: 'live' | 'paper' }): Promise<WalterExecutionLog[]>;
+server/storage.ts:619:  getPortfolioState(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined>;
+server/storage.ts:620:  upsertPortfolioState(data: InsertPortfolioState & { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState>;
+server/storage.ts:621:  updatePortfolioBalance(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; balance: number }): Promise<PortfolioState>;
+server/storage.ts:624:  getTuningPolicy(params: { userId: string; mode: 'live' | 'paper' }): Promise<any | null>;
+server/storage.ts:626:  getTuningEvents(params: { userId: string; mode?: string; limit?: number }): Promise<any[]>;
+server/storage.ts:636:  getWalterActions(userId: string, mode: 'live' | 'paper', filters?: { status?: string; source?: string; limit?: number }): Promise<WalterAction[]>;
+server/storage.ts:637:  getWalterActionById(actionId: string, userId: string, mode: 'live' | 'paper'): Promise<WalterAction | undefined>;
+server/storage.ts:638:  updateWalterAction(actionId: string, userId: string, mode: 'live' | 'paper', updates: Partial<WalterAction>): Promise<WalterAction>;
+server/storage.ts:641:  getExecutionConfigs(userId: string, mode: 'live' | 'paper'): Promise<ExecutionConfig[]>;
+server/storage.ts:642:  getExecutionConfig(userId: string, mode: 'live' | 'paper', actionType: string): Promise<ExecutionConfig | undefined>;
+server/storage.ts:1197:  async getStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; strategy: string }): Promise<StrategySettings | null> {
+server/storage.ts:1198:    const contextId = params.globalContextId || 'default';
+server/storage.ts:1204:          eq(strategySettings.globalContextId, contextId),
+server/storage.ts:1212:  async listStrategySettings(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<StrategySettings[]> {
+server/storage.ts:1213:    const contextId = params.globalContextId || 'default';
+server/storage.ts:1219:          eq(strategySettings.globalContextId, contextId),
+server/storage.ts:1231:        target: [strategySettings.globalContextId, strategySettings.mode, strategySettings.strategy],
+server/storage.ts:1945:    filters?: { userId?: string; taskName?: string; mode?: 'live' | 'paper'; limit?: number }
+server/storage.ts:2050:  async createTradingAuditLog(data: { userId: string; action: string; mode: string; triggeredBy?: string; metadata?: any }): Promise<void> {
+server/storage.ts:2366:  async getSignalWeights(userId: string, strategy?: string, mode?: string): Promise<SignalWeight[]> {
+server/storage.ts:2383:  async getSignalWeight(userId: string, strategy: string, mode: string, signalName: string): Promise<SignalWeight | undefined> {
+server/storage.ts:2474:  async getPredictionOutcomes(userId: string, filters?: { mode?: string; strategy?: string; fromDate?: Date; toDate?: Date; limit?: number }): Promise<PredictionOutcome[]> {
+server/storage.ts:2503:  async getPredictionAccuracy(userId: string, mode: string, strategy?: string, days: number = 30): Promise<{ accuracy: number; totalPredictions: number; correctPredictions: number }> {
+server/storage.ts:2529:  async getIntradayAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<IntradayAdjustment[]> {
+server/storage.ts:2560:  async getAILessons(userId: string, filters?: { mode?: string; strategy?: string; hours?: number; limit?: number }): Promise<AILesson[]> {
+server/storage.ts:2594:  async getPortfolioAdjustments(userId: string, filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]> {
+server/storage.ts:2796:  async getGoalAuditLogs(userId: string, mode?: 'live' | 'paper', limit: number = 100): Promise<GoalAuditLog[]> {
+server/storage.ts:2800:      .where(mode ? and(eq(goalAuditLog.userId, userId), eq(goalAuditLog.mode, mode)) : eq(goalAuditLog.userId, userId))
+server/storage.ts:2813:  async getUserGoalsAudit(userId: string, mode?: 'live' | 'paper', limit: number = 100): Promise<UserGoalsAudit[]> {
+server/storage.ts:2817:      .where(mode ? and(eq(userGoalsAudit.userId, userId), eq(userGoalsAudit.mode, mode)) : eq(userGoalsAudit.userId, userId))
+server/storage.ts:2931:  async getPendingAdjustments(userId: string, mode: 'live' | 'paper'): Promise<ProposedAdjustment[]> {
+server/storage.ts:3590:  async getPortfolioState(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined> {
+server/storage.ts:3591:    const contextId = params.globalContextId || 'default';
+server/storage.ts:3594:        eq(portfolioState.globalContextId, contextId),
+server/storage.ts:3600:  async upsertPortfolioState(data: InsertPortfolioState & { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState> {
+server/storage.ts:3601:    const contextId = data.globalContextId || 'default';
+server/storage.ts:3602:    const existing = await this.getPortfolioState({ globalContextId: contextId, mode: data.mode });
+server/storage.ts:3615:          eq(portfolioState.globalContextId, contextId),
+server/storage.ts:3622:        .values({ ...data, globalContextId: contextId })
+server/storage.ts:3628:  async updatePortfolioBalance(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; balance: number }): Promise<PortfolioState> {
+server/storage.ts:3631:      globalContextId: params.globalContextId || 'default',
+server/storage.ts:3682:  async getTuningPolicy(params: { userId: string; mode: 'live' | 'paper' }): Promise<any | null> {
+server/storage.ts:3697:    const existing = await this.getTuningPolicy({ userId: data.userId, mode: data.mode });
+server/storage.ts:3712:  async getTuningEvents(params: { userId: string; mode?: string; limit?: number }): Promise<any[]> {
+server/storage.

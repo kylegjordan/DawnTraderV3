@@ -1,0 +1,140 @@
+Goal
+Build an upgraded external verification bundle (“external-pack-v2”) reflecting the single-tenant architecture, and close gaps flagged by Code Copilot:
+• Remove or prove unmounted the legacy route /api/walter/purpose/:userId/:mode
+• Normalize any route contract that still passes globalContextId (userId alias)
+• Produce route map, ORM metadata, SQL traces, DB schema dumps, guard logs, and endpoint captures
+
+A) Remove legacy :userId route (or prove not mounted)
+1) Search for the route file:
+   rg -n "purpose/:userId" server | tee diagnostics/phase2e_legacy_route_hits.txt
+2) If server/routes/phase-8.6.5.ts exists, do ONE of:
+   • EITHER comment its export and add a top-of-file banner:
+// [DEPRECATED][SINGLE-TENANT] This route accepted :userId and is now disabled. Do not mount.
+   • OR delete the file and record its removal in audit/phase2e-route-changes.md
+3) In server/index.ts dump the route mount map (see section C) to prove it’s not mounted.
+
+B) Normalize route parameters to mode-only
+1) Sweep for any storage calls that forward globalContextId/userId alongside mode:
+   rg -n "globalContextId|userId.*mode" server | tee diagnostics/phase2e_globalContext_hits.txt
+2) For any trading/state call sites (portfolio, balances, strategies, risk-manager):
+   • Update signatures to accept `{ mode }` only.
+   • Add TS compile-time errors if userId appears in these call types (use never).
+   Example (server/db/repo/portfolio.ts):
+     export async function getPortfolioState(args: { mode: "paper" | "live" }) { ... }
+3) Rebuild and ensure 0 TS errors:
+   npm run build
+
+C) Produce a definitive route mount map & middleware chain
+1) Add a temporary utility to print routes at boot:
+   File: server/startup/printRoutes.ts
+   ----------------------------------------------------
+   import type { Express } from "express";
+   export function printRoutes(app: Express) {
+     const routes: string[] = [];
+     function collect(layer: any, prefix="") {
+       if (layer.route && layer.route.path) {
+         const methods = Object.keys(layer.route.methods).join(",").toUpperCase();
+         routes.push(`${methods.padEnd(6)} ${prefix}${layer.route.path}`);
+       } else if (layer.name === "router" && layer.handle?.stack) {
+         const m = layer.regexp?.fast_slash ? "" : layer.regexp?.toString() || "";
+         layer.handle.stack.forEach((l: any) => collect(l, prefix));
+       }
+     }
+     // @ts-ignore
+     (app as any)._router?.stack?.forEach((l: any) => collect(l, ""));
+     console.log("[ROUTES]\\n" + routes.sort().join("\\n"));
+   }
+   ----------------------------------------------------
+2) In server/index.ts, after all app.use(...) and before app.listen():
+   import { printRoutes } from "./startup/printRoutes";
+   printRoutes(app);
+3) Restart and capture:
+   sleep 2; grep -A 200 "^\[ROUTES\]" -n /tmp/logs/Start_application_* | tail -200 \
+      > diagnostics/phase2e_route_map.txt
+
+D) ORM metadata & compiled SQL proofs
+1) Dump operational table definitions from information_schema:
+   psql "$DATABASE_URL" <<'SQL' > diagnostics/phase2e_operational_schema.txt
+   SELECT table_name, column_name, data_type
+   FROM information_schema.columns
+   WHERE table_name IN ('portfolio_state','trade_logs','guardrails_v2','strategies','telemetry_state')
+   ORDER BY table_name, ordinal_position;
+   SQL
+2) Enable lightweight SQL logging for 1 minute and hit key endpoints:
+   • Paper portfolio:  curl -s "http://localhost:5000/api/portfolio?mode=paper" -H "Authorization: Bearer <TEST_TOKEN>" > /tmp/paper.json
+   • Live portfolio:   curl -s "http://localhost:5000/api/portfolio?mode=live"  -H "Authorization: Bearer <TEST_TOKEN>" > /tmp/live.json
+   If SQL logging is disabled, run targeted queries and capture them in a probe script:
+   File: server/scripts/sql_probes.ts
+   ----------------------------------------------------
+   import { db } from "../utils/db";
+   import { sql } from "drizzle-orm";
+   async function main(){
+     const q1 = await db.execute(sql`EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM portfolio_state WHERE mode = 'paper' LIMIT 5`);
+     const q2 = await db.execute(sql`EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM portfolio_state WHERE mode = 'live' LIMIT 5`);
+     console.log("-- Q1:", JSON.stringify(q1)); console.log("-- Q2:", JSON.stringify(q2));
+   }
+   main().catch(e=>{console.error(e);process.exit(1)});
+   ----------------------------------------------------
+   node server/scripts/sql_probes.ts > diagnostics/phase2e_sql_probes.json
+   # This demonstrates WHERE mode = ? without any user_id predicate.
+
+E) Runtime traces & guard evidence
+1) Boot invariant already prints “0 user_id columns in operational tables”.
+   Capture last boot lines:
+   grep -E "Single-tenant|user_id columns|Mode isolation" -n /tmp/logs/Start_application_* | tail -50 \
+     > diagnostics/phase2e_boot_guard_evidence.txt
+2) Capture first 100 request logs (redact tokens if logged):
+   tail -n 500 /tmp/logs/Start_application_* | head -n 200 \
+     > diagnostics/phase2e_first_requests.txt
+
+F) Endpoint captures & contract docs
+1) Create a minimal contract doc for state/trading endpoints:
+   File: audit/phase2e-openapi-notes.md
+   - List: /api/portfolio (GET, query: mode)
+           /api/guardrails (GET/PUT, body excludes userId)
+           /api/strategies (GET/PUT, body excludes userId)
+   - Note: no paths accept :userId; authentication via Authorization header only.
+2) Capture representative calls (paper/live):
+   curl -sv "http://localhost:5000/api/portfolio?mode=paper" -H "Authorization: Bearer <TEST_TOKEN>" \
+     > diagnostics/phase2e_capture_portfolio_paper.txt 2>&1
+   curl -sv "http://localhost:5000/api/portfolio?mode=live"  -H "Authorization: Bearer <TEST_TOKEN>" \
+     > diagnostics/phase2e_capture_portfolio_live.txt 2>&1
+   # If needed, add similar captures for /api/guardrails and /api/strategies.
+
+G) Package “external-pack-v2” and update prompt
+1) Build the new pack:
+   mkdir -p diagnostics/external-pack-v2
+   cp diagnostics/userid_refs_source.txt              diagnostics/external-pack-v2/
+   cp diagnostics/userid_refs_compiled.txt            diagnostics/external-pack-v2/
+   cp diagnostics/postfix_schema_scan.txt             diagnostics/external-pack-v2/
+   cp diagnostics/phase2d-summary.json                diagnostics/external-pack-v2/
+   cp diagnostics/phase2e_route_map.txt               diagnostics/external-pack-v2/
+   cp diagnostics/phase2e_operational_schema.txt      diagnostics/external-pack-v2/
+   cp diagnostics/phase2e_sql_probes.json             diagnostics/external-pack-v2/
+   cp diagnostics/phase2e_boot_guard_evidence.txt     diagnostics/external-pack-v2/
+   cp diagnostics/phase2e_first_requests.txt          diagnostics/external-pack-v2/
+   cp diagnostics/phase2e_capture_portfolio_paper.txt diagnostics/external-pack-v2/
+   cp diagnostics/phase2e_capture_portfolio_live.txt  diagnostics/external-pack-v2/
+   cp audit/phase2c-single-tenant-cutover.md          diagnostics/external-pack-v2/
+   cp audit/phase2d-stabilize-and-guard.md            diagnostics/external-pack-v2/
+   cp audit/phase2e-openapi-notes.md                  diagnostics/external-pack-v2/
+2) Replace the context prompt with the auditor’s requested framing:
+   File: diagnostics/external-pack-v2/context-prompt-single-tenant.md
+   ----------------------------------------------------
+   Project: DawnTrader V1.9 — single-tenant (shared global portfolio), partitioned only by mode (paper/live).
+   Please verify:
+   • No non-auth userId usage across source, compiled JS, route contracts, and DB schema.
+   • Boot invariant + request guard enforce single-tenant invariants in production.
+   • Route map shows no :userId paths mounted.
+   • SQL probes and endpoint captures prove WHERE mode = ? only (no user_id predicates).
+   Tell us what additional artifacts you require (ORM metadata dumps, more traces, endpoint list) to complete an independent attestation.
+   ----------------------------------------------------
+
+H) Write the audit & summarize
+1) Create/append audit/phase2e-attestation-pack.md with:
+   - What was removed/disabled (legacy route)
+   - Diffs for any updated call signatures
+   - Route map excerpt (top 20 lines)
+   - Counts from diagnostics files
+   - Path to diagnostics/external-pack-v2
+2) Print “Phase 2E complete” with a one-line summary of any remaining open nits.

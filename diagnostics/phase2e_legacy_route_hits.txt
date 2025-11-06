@@ -1,0 +1,1 @@
+server/routes/phase-8.6.5.ts:240:  app.get('/api/walter/purpose/:userId/:mode', async (req: AuthenticatedRequest, res) => {

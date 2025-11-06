@@ -1,0 +1,75 @@
+{
+  "scanTimestamp": "2025-11-06T05:08:56.000Z",
+  "phase": "2-userid-verification",
+  "project": "DawnTrader V1.9",
+  "branch": "dt-v1-revival-bootstrap",
+  
+  "results": {
+    "sourceCodeScan": {
+      "totalMatches": 3125,
+      "status": "⚠️ FAILED",
+      "severity": "CRITICAL",
+      "notes": "Found 3,125 userId/user_id references in source code (excluding auth files)"
+    },
+    "databaseSchemaScan": {
+      "tablesWithUserId": 81,
+      "status": "⚠️ FAILED",
+      "severity": "CRITICAL",
+      "notes": "81 tables contain user_id columns with foreign key references to users table"
+    },
+    "runtimeAudit": {
+      "totalMatches": 1,
+      "authRelatedMatches": 1,
+      "nonAuthMatches": 0,
+      "status": "✅ PASSED",
+      "severity": "NONE",
+      "notes": "Runtime clean - only expected auth-context userId found"
+    }
+  },
+  
+  "overallStatus": "❌ VERIFICATION FAILED",
+  "criticalIssue": "Mode-scoped isolation NOT achieved - extensive user_id coupling remains",
+  
+  "findings": {
+    "schemaIssue": "Database schema contains 81 tables with user_id foreign keys",
+    "sourceIssue": "3,125 userId references across server/client/shared code",
+    "runtimeStatus": "Clean - no non-auth userId in runtime objects",
+    "architecturalDiscrepancy": "System claims mode-scoped isolation but schema shows user-centric design"
+  },
+  
+  "affectedTables": [
+    "actuation_policies", "ai_audit_log", "ai_chat_logs", "ai_conversations",
+    "ai_lessons", "ai_opportunities", "ai_reports", "walter_actions",
+    "walter_memory", "walter_purpose", "safety_telemetry", "trading_settings",
+    "portfolio_state", "strategy_settings", "execution_config", "system_alerts",
+    "paper_sim_sessions", "daily_briefs", "context_chats", "response_cache",
+    "...and 61 more tables"
+  ],
+  
+  "verifiedBy": ["Replit Agent"],
+  "nextStep": "URGENT: Architect review required - fundamental schema vs. design mismatch",
+  "recommendedAction": "Re-evaluate Phase 2 objectives or execute schema migration to remove user_id columns",
+  
+  "exitCriteria": {
+    "sourceMatches": {
+      "expected": 0,
+      "actual": 3125,
+      "passed": false
+    },
+    "schemaColumns": {
+      "expected": 0,
+      "actual": 81,
+      "passed": false
+    },
+    "runtimeMatches": {
+      "expected": 0,
+      "actual": 0,
+      "passed": true
+    },
+    "externalValidation": {
+      "expected": 2,
+      "actual": 0,
+      "passed": false
+    }
+  }
+}

@@ -6,9 +6,13 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { databaseMonitor } from "./services/database-monitor";
 import { marketDataHealthCheck } from "./services/market-data-health-check";
-import { healthRouter } from "./routes-health.js"; // Phase 41F-D/F: Health monitoring routes
+import { healthRouter } from "./routes/health.js"; // Phase 41F-D/F: Health monitoring routes
+import { statusRouter } from "./routes/status.js"; // Phase 1: Status and version routes
+import { env } from "./config/index.js"; // Phase 1: Typed environment config
+import version from "./version.json";
 
 console.log('[BOOT]', process.env.COMMIT_SHA || 'local', new Date().toISOString());
+console.log(`[BOOT] DawnTrader v${version.version} - Phase ${version.phase}`);
 
 const app = express();
 
@@ -39,6 +43,10 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+
+// Phase 2D: Single-tenant guard middleware (crash fast on userId violations)
+import { singleTenantGuard } from "./middleware/singleTenantGuard";
+app.use(singleTenantGuard);
 
 // Phase 34.A: Enhanced debug logging for all API endpoints
 app.use((req, res, next) => {
@@ -99,6 +107,9 @@ app.use((req, res, next) => {
 
   // Mount API router BEFORE Vite middleware to ensure backend routes take precedence
   app.use('/api', apiRouter);
+  
+  // Phase 1: Mount core status routes
+  app.use('/api/status', statusRouter);
   
   // Phase 41F-D/F: Mount health monitoring routes
   app.use('/api/health', healthRouter);
@@ -176,11 +187,11 @@ app.use((req, res, next) => {
   await contextLoader.initialize();
 
   // Phase 8.6.5: Register API routes for enhancements
-  const { registerPhase865Routes } = await import('./routes-phase-8.6.5');
+  const { registerPhase865Routes } = await import('./routes/phase-8.6.5');
   registerPhase865Routes(app);
 
   // Phase 8.6.5 Validation: Register provenance debug routes and enable verbose mode
-  const provenanceDebugRoutes = await import('./routes-provenance-debug');
+  const provenanceDebugRoutes = await import('./routes/provenance-debug');
   app.use(provenanceDebugRoutes.default);
   const { provenanceDebug } = await import('./services/provenance-debug');
   provenanceDebug.enableVerboseMode();
@@ -464,6 +475,15 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
   
+  // Phase 2D: Verify single-tenant database invariants before starting server
+  try {
+    const { assertSingleTenantDB } = await import('./startup/invariants');
+    await assertSingleTenantDB();
+  } catch (error) {
+    console.error('[BOOT] ❌ Single-tenant verification failed:', error);
+    process.exit(1);
+  }
+  
   // Check if port is already in use before listening
   server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
@@ -473,6 +493,11 @@ app.use((req, res, next) => {
       throw err;
     }
   });
+
+  // Phase 2E/2F: Print route map for external verification
+  const { printRoutes, dumpRoutes } = await import('./startup/printRoutes');
+  printRoutes(app);
+  dumpRoutes(app);
 
   server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);

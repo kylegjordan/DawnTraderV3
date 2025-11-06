@@ -1,0 +1,131 @@
+⚙️ Phase 2 Directive — User ID Verification & Schema Integrity Audit
+
+Project: Dawn Trader V1 Revival → V1.9 Baseline
+Credentials:
+
+username=testuser123  
+password=SecurePass123!
+
+🎯 Objective
+
+Prove conclusively that all non-auth uses of userId or user_id have been eliminated and that every table and service now operates purely under mode-scoped isolation (paper | live).
+Generate a machine-readable verification pack and invite multiple external AI analyzers to review it, requesting their additional requirements.
+
+🧱 Scope of Work
+
+Generate the Verification Pack
+
+/diagnostics/
+  ├─ phase2-userid-verification.sh      # searches source & build
+  ├─ phase2-schema-scan.sql             # DB column check
+  ├─ phase2-runtime-audit.ts            # logs runtime contexts
+  ├─ phase2-summary.json                # totals + hashes
+  └─ phase2-context-prompt.md           # explainer for external AIs
+
+
+Each file auto-generates with Replit commands below.
+
+Create Search Script
+
+#!/bin/bash
+echo "🔍 Scanning source for userId/user_id..."
+rg -n "(userId|user_id)" server client shared \
+  --ignore-case --glob '!**/auth*' > diagnostics/userid_refs.txt
+echo "🔍 Searching compiled JS..."
+rg -n "(userId|user_id)" dist --ignore-case >> diagnostics/userid_refs.txt
+
+
+Create Schema Integrity Script
+
+SELECT table_name, column_name
+FROM information_schema.columns
+WHERE column_name ILIKE '%user_id%'
+ORDER BY table_name;
+
+
+Runtime Audit Script
+
+During app startup, hook telemetry to log any object containing keys matching userId or user_id.
+
+Output snapshot to /tmp/runtime_userid_audit.log.
+
+Context Prompt File (phase2-context-prompt.md)
+
+## Project Context
+Dawn Trader V1.9 is an automated trading platform refactored from a
+per-user architecture to a mode-scoped architecture.
+We are verifying the total removal of user-specific state except
+inside authentication.
+
+## What We Request
+1. Confirm that no code or schema still depends on userId/user_id.
+2. Confirm no runtime object or API returns a userId outside /auth.
+3. Identify any hidden coupling (implicit or indirect user references).
+4. Tell us if additional files, logs, or performance metrics are needed
+   for full verification.
+
+## Attachments
+- phase2-userid-verification.sh
+- phase2-schema-scan.sql
+- runtime_userid_audit.log
+- phase2-summary.json
+
+
+Execution & Packaging
+
+chmod +x diagnostics/phase2-userid-verification.sh
+./diagnostics/phase2-userid-verification.sh
+psql < diagnostics/phase2-schema-scan.sql > diagnostics/schema-scan-output.txt
+node diagnostics/phase2-runtime-audit.ts
+
+
+Create Summary File
+
+{
+  "scanTimestamp": "<auto>",
+  "sourceMatches": "<count>",
+  "schemaColumnsFound": "<count>",
+  "runtimeMatches": "<count>",
+  "verifiedBy": ["Replit"],
+  "nextStep": "External AI validation"
+}
+
+
+Push to GitHub & Notify External Auditors
+
+Commit the /diagnostics folder.
+
+Run CodeQL analysis in GitHub.
+
+Share the same pack with Codex, Copilot, and any chosen external AI (Claude, Lovable, Gemini) using the included prompt.
+
+Record each engine’s feedback in /audit/phase2-verification-feedback.md.
+
+🧪 Validation Checklist
+Test	Command	Expected Result
+Source scan	wc -l diagnostics/userid_refs.txt	0 lines
+Schema scan	inspect output	0 rows
+Runtime audit	grep in log	0 matches
+External AI feedback	review file	all engines confirm “no non-auth userId references”
+CI integration	GitHub Actions log	passes userId-scan job
+🧾 Deliverables
+
+diagnostics/ pack uploaded and versioned.
+
+audit/phase2-userid-verification.md summary.
+
+audit/phase2-verification-feedback.md listing outside AI confirmations and any extra data they requested.
+
+✅ Exit Criteria
+
+0 non-auth userId references in source, build, schema, and runtime.
+
+At least two independent AI systems confirm results.
+
+External feedback incorporated into next phase plan.
+
+CI guardrails enabled to auto-block any reintroduction.
+
+Tag after approval:
+
+Tag: dt-v1.9-userid-audit-stable

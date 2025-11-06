@@ -1,0 +1,2 @@
+server/routes.ts:3809:      if (!req.user || !req.user.id) {
+server/routes.ts:12075:      const metrics = await cognitiveWeightAdjuster.getHealthMetrics(req.user.id);

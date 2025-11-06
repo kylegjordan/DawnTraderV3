@@ -1,0 +1,220 @@
+I will complete the vertical refactor hardening:
+
+A) Drizzle migration (reproducible)
+B) Runtime guards (crash fast if userId reappears)
+C) Build/cache sanitation + compiled-JS scan
+D) Source/API/SQL verification
+E) Widget stabilization (stop dashboard flicker)
+F) External verification pack for Codex/Copilot/Claude
+G) (Prep) CI guardrails file content for GitHub
+
+––––––––––––––––––––––––––––––––––––––––––––––––––––––
+A) CREATE REPRODUCIBLE DRIZZLE MIGRATION
+1) Add manual SQL migration file recording the 2C changes.
+
+Create:  migrations/2025-11-06_single_tenant.sql
+Content:
+----------------------------------------------------
+-- Single-tenant cutover (record of live changes)
+-- Drops user_id from operational tables; keeps mode.
+ALTER TABLE IF EXISTS portfolio_state  DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS trade_logs       DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS guardrails_v2    DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS strategies       DROP COLUMN IF EXISTS user_id;
+ALTER TABLE IF EXISTS telemetry_state  DROP COLUMN IF EXISTS user_id;
+
+-- Mode-only constraints / indexes (idempotent)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_portfolio_state_mode ON portfolio_state(mode);
+CREATE INDEX        IF NOT EXISTS ix_trade_logs_mode_ts   ON trade_logs(mode, timestamp);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_guardrails_v2_mode    ON guardrails_v2(mode);
+----------------------------------------------------
+
+2) Apply it explicitly so schema and source are in sync:
+psql "$DATABASE_URL" < migrations/2025-11-06_single_tenant.sql
+
+3) Freeze previous drift: add a note so future devs never run db:push blindly.
+Create: audit/NOTE_migrations_chain.md
+- “Live DB is authoritative; start new chain at 2025-11-06_single_tenant.sql.”
+
+––––––––––––––––––––––––––––––––––––––––––––––––––––––
+B) RUNTIME GUARDS (CRASH FAST ON REGRESSION)
+1) Add config flag:
+File: server/config/index.ts  (create if missing)
+----------------------------------------------------
+export const env = {
+  NODE_ENV: process.env.NODE_ENV || "development",
+  PORT: parseInt(process.env.PORT || "5000"),
+  DATABASE_URL: process.env.DATABASE_URL!,
+  JWT_SECRET: process.env.JWT_SECRET || "development-temp-secret",
+  SINGLE_TENANT: true,
+};
+----------------------------------------------------
+
+2) Boot-time invariant (scan ORM/introspection for user_id in ops tables):
+File: server/startup/invariants.ts
+----------------------------------------------------
+import { env } from "../config";
+import { sql } from "drizzle-orm";
+import { db } from "../utils/db"; // existing Drizzle client
+
+export async function assertSingleTenantDB() {
+  if (!env.SINGLE_TENANT) return;
+  const rows = await db.execute(sql`
+    SELECT table_name, column_name
+    FROM information_schema.columns
+    WHERE column_name ILIKE 'user_id'
+      AND table_name NOT IN ('users','user_sessions')
+  `);
+  if ((rows as any).rows?.length) {
+    throw new Error("[SingleTenantViolation] user_id column detected in operational tables");
+  }
+}
+----------------------------------------------------
+
+3) Wire invariant into server boot **before** app.listen:
+File: server/index.ts
+----------------------------------------------------
+// after db/init and before app.listen(...)
+import { assertSingleTenantDB } from "./startup/invariants";
+await assertSingleTenantDB();
+----------------------------------------------------
+
+4) API request trap (blocks any body containing userId outside /auth):
+File: server/middleware/singleTenantGuard.ts
+----------------------------------------------------
+import { Request, Response, NextFunction } from "express";
+import { env } from "../config";
+export function singleTenantGuard(req: Request, _res: Response, next: NextFunction) {
+  if (!env.SINGLE_TENANT) return next();
+  if (!req.path.startsWith("/api/auth")) {
+    const raw = JSON.stringify({ body: req.body, query: req.query });
+    if (/"userId"\s*:/i.test(raw)) {
+      throw new Error("[SingleTenantViolation] userId detected in request payload");
+    }
+  }
+  next();
+}
+----------------------------------------------------
+Register it high in the middleware stack:
+app.use(singleTenantGuard);
+----------------------------------------------------
+
+––––––––––––––––––––––––––––––––––––––––––––––––––––––
+C) BUILD/CACHE SANITATION + COMPILED JS SCAN
+1) Clean and rebuild to purge ghosts:
+rm -rf dist node_modules && npm ci && npx tsc
+
+2) Scan both source AND compiled output:
+mkdir -p diagnostics
+rg -n "(userId|user_id)" server client shared --ignore-case --glob '!**/auth*' > diagnostics/userid_refs_source.txt
+rg -n "(userId|user_id)" dist   --ignore-case                                   > diagnostics/userid_refs_compiled.txt
+# Expect BOTH files to be empty (0 lines). If not, list paths in the audit.
+
+––––––––––––––––––––––––––––––––––––––––––––––––––––––
+D) VERIFICATION SUITE (SCHEMA / ROUTES / RUNTIME)
+1) Schema re-scan (DB-level):
+psql "$DATABASE_URL" <<'SQL' > diagnostics/postfix_schema_scan.txt
+SELECT table_name, column_name
+FROM information_schema.columns
+WHERE column_name ILIKE 'user_id'
+  AND table_name NOT IN ('users','user_sessions')
+ORDER BY table_name;
+SQL
+
+2) Route contract sweep (disallow req.user.id outside auth):
+rg -n "req\\.user\\.id" server --glob '!**/routes/auth*' > diagnostics/route_userid_refs.txt
+
+3) Runtime guard log (should be empty after boot):
+touch diagnostics/runtime_guard_violations.log
+# middleware throws on violation; also capture server console to this file if supported.
+
+4) Summarize:
+node -e "const fs=require('fs');const sum=(p)=>fs.existsSync(p)?fs.readFileSync(p,'utf8').trim().split('\n').filter(Boolean).length:0;const o={ts:new Date().toISOString(),sourceRefs:sum('diagnostics/userid_refs_source.txt'),compiledRefs:sum('diagnostics/userid_refs_compiled.txt')};fs.writeFileSync('diagnostics/phase2d-summary.json',JSON.stringify(o,null,2));console.log(o);"
+
+Write final report:
+Create/append: audit/phase2d-stabilize-and-guard.md
+- Paste counts from diagnostics/*.txt
+- Paste first 10 lines of any non-empty file
+- Confirm server boot passes assertSingleTenantDB()
+
+––––––––––––––––––––––––––––––––––––––––––––––––––––––
+E) DASHBOARD WIDGET STABILIZATION (STOP FLICKER)
+1) Throttle polling to a fixed interval and suppress render until “data ready”.
+File: client/src/utils/polling.ts (new helper)
+----------------------------------------------------
+export async function poll<T>(fn: ()=>Promise<T>, ms=4000, onData?:(v:T)=>void){
+  let timer:any; async function tick(){ try{ const v=await fn(); onData?.(v);} finally{ timer=setTimeout(tick, ms);} }
+  tick(); return ()=>clearTimeout(timer);
+}
+----------------------------------------------------
+
+2) Use a “ready” flag in widgets before first render:
+Example file(s): client/src/components/Dashboard/PortfolioCard.tsx
+----------------------------------------------------
+const [ready, setReady] = useState(false);
+useEffect(()=> {
+  const stop = poll(fetchPortfolio, 4000, () => setReady(true));
+  return stop;
+}, []);
+if(!ready) return <Skeleton /* existing skeleton card */ />;
+----------------------------------------------------
+
+3) Ensure only one polling source per card; if you used SWR/React Query, set:
+staleTime: 5_000, refetchInterval: 4_000, refetchOnWindowFocus: false
+
+Rebuild frontend:
+npm run build && npm run dev
+Visually confirm the flicker stops after first successful fetch.
+
+––––––––––––––––––––––––––––––––––––––––––––––––––––––
+F) EXTERNAL VERIFICATION PACK (FOR CODEX/COPILOT/CLAUDE)
+Create folder: diagnostics/external-pack/
+Include:
+- diagnostics/userid_refs_source.txt
+- diagnostics/userid_refs_compiled.txt
+- diagnostics/postfix_schema_scan.txt
+- diagnostics/phase2d-summary.json
+- audit/phase2c-single-tenant-cutover.md
+- audit/phase2d-stabilize-and-guard.md
+- context-prompt:
+File: diagnostics/external-pack/context-prompt-single-tenant.md
+----------------------------------------------------
+Project: DawnTrader V1.9 — single-tenant (shared global portfolio), partitioned only by mode (paper/live).
+Ask: Confirm zero non-auth userId usage across code, compiled JS, routes, and DB schema; confirm runtime guards enforce single-tenant invariants.
+Please also tell us what additional artifacts (logs, ORM metadata, traces) you require to complete an independent audit.
+----------------------------------------------------
+
+––––––––––––––––––––––––––––––––––––––––––––––––––––––
+G) (PREP) CI GUARDRAILS — PROVIDE FILE CONTENT FOR GITHUB
+I will output a file you can paste into GitHub later:
+Path: .github/workflows/single-tenant-guardrails.yml
+Content:
+----------------------------------------------------
+name: single-tenant-guardrails
+on: [push, pull_request]
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ban userId outside auth
+        run: |
+          rg -n "(userId|user_id)" server client shared --ignore-case --glob '!**/auth*' > userid_hits.txt || true
+          if [ -s userid_hits.txt ]; then
+            echo "userId refs found outside auth:" && cat userid_hits.txt && exit 1
+          fi
+      - name: Block schema reintroduction
+        run: |
+          rg -n "ADD COLUMN .*user_id" migrations/ server/db --ignore-case && exit 1 || true
+      - name: Route contract audit
+        run: |
+          rg -n "req\\.user\\.id" server --glob '!**/routes/auth*' && exit 1 || true
+----------------------------------------------------
+
+EXPECTED OUTPUT
+- Server boots and passes assertSingleTenantDB()
+- diagnostics/* scans show 0 non-auth userId in source and compiled JS
+- postfix_schema_scan.txt shows 0 operational user_id columns
+- Widgets render steadily (no flicker) after initial data fetch
+- external-pack prepared for Codex/Copilot/Claude
+- audit/phase2d-stabilize-and-guard.md updated

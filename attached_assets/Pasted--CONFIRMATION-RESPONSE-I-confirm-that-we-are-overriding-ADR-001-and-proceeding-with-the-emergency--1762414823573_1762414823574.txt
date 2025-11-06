@@ -1,0 +1,51 @@
+✅ CONFIRMATION RESPONSE
+I confirm that we are overriding ADR-001 and proceeding with the emergency single-tenant consolidation.
+
+Option A: Proceed with Phase 2C emergency single-tenant migration ⚠️ DESTRUCTIVE  
+I understand this will delete or merge all user data into one canonical owner.  
+Canonical user to preserve during deduplication: **kylegjordan**.  
+All other user data should be merged or discarded as specified.  
+We have a verified PostgreSQL backup (neon_backup_20251106_073341.sql) safely stored.  
+Please proceed immediately.
+
+---
+
+🚀 PHASE 2C – SINGLE-TENANT CONSOLIDATION (POSTGRESQL)
+
+✅ Objective  
+Convert DawnTrader V1.9 from multi-user to single-tenant architecture, maintaining one shared global portfolio for all authenticated logins.  
+Database: PostgreSQL (Neon)  
+Canonical owner: kylegjordan
+
+🧱 Steps  
+1️⃣ Use the active PostgreSQL connection ($DATABASE_URL) and run migration scripts to:  
+   • Drop all user_id columns from operational tables:  
+     `portfolio_state`, `trade_logs`, `guardrails_v2`, `strategies`, `telemetry_state`.  
+   • Deduplicate rows per mode, keeping the most recent per key.  
+   • Retain canonical owner metadata for `kylegjordan`.  
+   • Recreate indexes on `(mode)` and timestamp fields.  
+
+2️⃣ Update backend services to remove userId parameters from all non-auth routes and repositories.  
+   • Replace any `WHERE user_id = ...` filters with `WHERE mode = $1`.  
+   • Assert `SINGLE_TENANT=true` in config.  
+
+3️⃣ Validate runtime behavior:  
+   • Both `kylegjordan` and `testuser123` sessions show identical portfolio, guardrail, and strategy data.  
+   • Mode isolation (`paper` vs `live`) remains intact.  
+   • No route or service references `req.user.id` outside `/api/auth`.  
+
+4️⃣ Run automated verification scans:  
+   • **Source scan** → 0 userId references outside auth.  
+   • **Schema scan** → 0 user_id columns except in `users` and `user_sessions`.  
+   • **Runtime guard** → no `[SingleTenantViolation]` errors logged.  
+
+5️⃣ Generate deliverables automatically:  
+   • `/audit/phase2c-single-tenant-cutover.md` — summary, schema diff, verification results.  
+   • `/diagnostics/single-tenant-pack/` — scan outputs and runtime logs.  
+
+🧾 Expected Confirmation  
+✅ Migration executed successfully.  
+✅ All operational tables single-tenant.  
+✅ Source scan clean (0 non-auth userId).  
+✅ Both user sessions synchronized.  
+✅ Deliverables written and verified.
