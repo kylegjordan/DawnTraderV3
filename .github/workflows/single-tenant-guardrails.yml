@@ -13,7 +13,7 @@ jobs:
           # Install ripgrep if not available
           which rg || sudo apt-get update && sudo apt-get install -y ripgrep
           
-          # Baseline: 3,137 known legacy references as of Phase 2D (2025-11-06)
+          # Baseline: 3,141 known legacy references as of Phase 2D (2025-11-06)
           # Only fail if new references are added beyond baseline
           BASELINE=3137
           
