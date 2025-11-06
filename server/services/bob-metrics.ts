@@ -61,7 +61,7 @@ class MetricsBobModule {
           cacheHit: false,
           executionTimeMs: duration,
           rowCount: 1,
-          metadata: { userId, health: health }
+          metadata: { health: health } // Phase 3: Removed userId (single-tenant)
         });
       }
       

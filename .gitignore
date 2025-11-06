@@ -3,4 +3,24 @@ dist
 .DS_Store
 server/public
 vite.config.ts.*
-*.tar.gzbackups/*.sql
+
+# Phase 3: Repo hygiene - block large SQL/dump files
+*.tar.gz
+backups/*.sql
+*.sql.gz
+*.sql.bz2
+*.dump
+*.backup
+*.bak
+*.old
+diagnostic-dumps/
+backup-*.sql
+temp-*.sql
+migration-backup-*.sql
+
+# Large log files
+*.log.gz
+*.log.bak
+
+# Compiled diagnostics (keep source, exclude large outputs)
+dist/diagnostics/*.json
