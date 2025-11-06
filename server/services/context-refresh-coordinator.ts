@@ -17,12 +17,14 @@ import { provenanceLogger } from './provenance-logger'; // Phase 8.6.3: Provenan
 
 const MODULE_NAME = 'ContextRefresh';
 
+// Phase 3: Canonical user ID for single-tenant setup
+const CANONICAL_USER_ID = 'kylegjordan';
+
 export interface RefreshResult {
   success: boolean;
   latencyMs: number;
   source: 'api' | 'direct' | 'resync';
   timestamp: string;
-  userId: string;
   mode: 'live' | 'paper';
   discrepanciesFound: number;
   error?: string;
@@ -84,13 +86,15 @@ class ContextRefreshCoordinator extends EventEmitter {
   private readonly MAX_LATENCY_SAMPLES = 100;
   
   // Phase 8.5 Addendum J: Track last context to prevent duplicate memory entries
-  private lastContextByUser: Map<string, string> = new Map();
+  // Phase 3: Refactored to mode-based tracking (single-tenant)
+  private lastContextByMode: Map<'live' | 'paper', string> = new Map();
 
   /**
-   * Refresh live context for a user - fetch from backend, update Cortex, emit events
+   * Refresh live context - fetch from backend, update Cortex, emit events
+   * Phase 3: Removed userId parameter (single-tenant architecture)
    */
-  async refresh(userId: string, mode: 'live' | 'paper', source: 'api' | 'direct' | 'resync' = 'direct'): Promise<RefreshResult> {
-    console.log(`[${this.MODULE_NAME}] 🔄 Refreshing context for user ${userId} (${mode}, source=${source})`);
+  async refresh(mode: 'live' | 'paper', source: 'api' | 'direct' | 'resync' = 'direct'): Promise<RefreshResult> {
+    console.log(`[${this.MODULE_NAME}] 🔄 Refreshing context (${mode}, source=${source})`);
     const start = Date.now();
 
     // Phase 8.6.3: Generate trace ID for provenance tracking
@@ -98,23 +102,23 @@ class ContextRefreshCoordinator extends EventEmitter {
 
     try {
       // Fetch fresh data from backend
-      const freshData = await this.fetchFreshData(userId, mode, traceId);
+      const freshData = await this.fetchFreshData(mode, traceId);
 
       // Update Cortex cache with fresh data
-      await this.updateCortex(userId, mode, freshData, traceId);
+      await this.updateCortex(mode, freshData, traceId);
 
       // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
-      await this.updateWalterMemory(userId, mode, freshData, traceId);
+      await this.updateWalterMemory(mode, freshData, traceId);
 
       // Run truth check to detect any remaining discrepancies
-      const truthCheck = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+      const truthCheck = await systemTruthDiagnostic.runTruthCheck(mode);
       const discrepanciesFound = truthCheck.discrepancies.length;
 
       // Phase 8.5 Addendum I: Auto-resync if discrepancies detected
       if (discrepanciesFound > 0 && source !== 'resync') {
         console.log(`[${this.MODULE_NAME}] [TruthSync] mismatch detected (${discrepanciesFound} discrepancies) → forced resync`);
         // Trigger secondary refresh to resolve misalignments
-        return await this.refresh(userId, mode, 'resync');
+        return await this.refresh(mode, 'resync');
       }
 
       // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
@@ -127,7 +131,6 @@ class ContextRefreshCoordinator extends EventEmitter {
 
       // Emit WebSocket event for real-time UI updates
       this.emit('contextRefreshed', {
-        userId,
         mode,
         source,
         timestamp: new Date().toISOString(),
@@ -137,7 +140,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       });
 
       // Phase 8.5 Addendum J: Emit contextUpdated event for Walter rehydration
-      this.emit('contextUpdated', userId);
+      this.emit('contextUpdated', mode);
 
       console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${latencyMs}ms (${discrepanciesFound} discrepancies detected)`);
 
@@ -146,7 +149,6 @@ class ContextRefreshCoordinator extends EventEmitter {
         latencyMs,
         source,
         timestamp: new Date().toISOString(),
-        userId,
         mode,
         discrepanciesFound
       };
@@ -167,7 +169,6 @@ class ContextRefreshCoordinator extends EventEmitter {
         latencyMs,
         source,
         timestamp: new Date().toISOString(),
-        userId,
         mode,
         discrepanciesFound: 0,
         error: errorMessage
@@ -179,18 +180,21 @@ class ContextRefreshCoordinator extends EventEmitter {
    * Fetch fresh data from backend (portfolio, strategies, settings)
    * Phase 8.5 Addendum K.3: Uses global context for shared data
    * Phase 8.6.3: Added traceId for provenance tracking
+   * Phase 3: Removed userId parameter (single-tenant architecture)
    */
-  private async fetchFreshData(userId: string, mode: 'live' | 'paper', traceId?: string) {
+  private async fetchFreshData(mode: 'live' | 'paper', traceId?: string) {
     const fetchStartTime = Date.now(); // Phase 8.6.3: Track execution time for BoB trace
     console.log(`[${this.MODULE_NAME}] [ContextSource] live-api ✓ (global context)${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const globalContextId = 'default';
     
+    // Phase 3: Use canonical user ID for single-tenant setup
+    const userId = CANONICAL_USER_ID;
+    
     // Fetch in parallel - using global context for shared data
-    const [portfolioState, strategies, settings, user] = await Promise.all([
+    const [portfolioState, strategies, user] = await Promise.all([
       storage.getPortfolioState({ globalContextId, mode }),
       storage.listStrategySettings({ globalContextId, mode }),
-// Phase 41F-L.E2E-PURGE: DISABLED -       storage.getTradingSettings(userId),
       storage.getUser(userId)
     ]);
 
@@ -220,10 +224,11 @@ class ContextRefreshCoordinator extends EventEmitter {
       activeStrategies,
       activeStrategiesCount: activeStrategies.length,
       engineActive,
-      mode: (user?.tradingMode || mode) as 'live' | 'paper',
-      riskPerTrade: settings?.riskPerTrade ? parseFloat(settings.riskPerTrade.toString()) : 0,
-      dailyLossKillSwitch: settings?.dailyLossKillSwitch ? parseFloat(settings.dailyLossKillSwitch.toString()) : 7.0,
-      maxExposurePercent: settings?.maxExposurePercent ? parseFloat(settings.maxExposurePercent.toString()) : 100,
+      mode,
+      // Phase 3: Default risk settings (no trading_settings table)
+      riskPerTrade: 0,
+      dailyLossKillSwitch: 7.0,
+      maxExposurePercent: 100,
       timestamp: new Date().toISOString(),
       source: 'live-api' as const
     };
@@ -274,13 +279,17 @@ class ContextRefreshCoordinator extends EventEmitter {
    * Phase 8.5 Addendum K.4: Fetch BOTH live and paper mode data simultaneously
    * This ensures Walter and dashboard always have complete visibility regardless of engine status
    * Phase 8.6.3: Added traceId for provenance tracking
+   * Phase 3: Removed userId parameter (single-tenant architecture)
    */
-  private async fetchDualModeData(userId: string, traceId?: string): Promise<DualModeData> {
+  private async fetchDualModeData(traceId?: string): Promise<DualModeData> {
     const fetchStartTime = Date.now(); // Phase 8.6.3: Track execution time for BoB trace
     console.log(`[${this.MODULE_NAME}] [Addendum-K.4] Fetching dual-mode data (live + paper)${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
     
     const globalContextId = 'default';
     const now = new Date().toISOString();
+    
+    // Phase 3: Use canonical user ID for single-tenant setup
+    const userId = CANONICAL_USER_ID;
     
     // Fetch all data in parallel for both modes
     const [
@@ -288,14 +297,12 @@ class ContextRefreshCoordinator extends EventEmitter {
       paperPortfolioState,
       liveStrategies,
       paperStrategies,
-      settings,
       user
     ] = await Promise.all([
       storage.getPortfolioState({ globalContextId, mode: 'live' }),
       storage.getPortfolioState({ globalContextId, mode: 'paper' }),
       storage.listStrategySettings({ globalContextId, mode: 'live' }),
       storage.listStrategySettings({ globalContextId, mode: 'paper' }),
-// Phase 41F-L.E2E-PURGE: DISABLED -       storage.getTradingSettings(userId),
       storage.getUser(userId)
     ]);
 
@@ -355,9 +362,10 @@ class ContextRefreshCoordinator extends EventEmitter {
         contextAge: paperContextAge
       },
       settings: {
-        riskPerTrade: settings?.riskPerTrade ? parseFloat(settings.riskPerTrade.toString()) : 0,
-        dailyLossKillSwitch: settings?.dailyLossKillSwitch ? parseFloat(settings.dailyLossKillSwitch.toString()) : 7.0,
-        maxExposurePercent: settings?.maxExposurePercent ? parseFloat(settings.maxExposurePercent.toString()) : 100
+        // Phase 3: Default risk settings (no trading_settings table)
+        riskPerTrade: 0,
+        dailyLossKillSwitch: 7.0,
+        maxExposurePercent: 100
       },
       timestamp: now,
       source: 'live-api'
@@ -449,9 +457,13 @@ class ContextRefreshCoordinator extends EventEmitter {
   /**
    * Update Cortex cache with fresh data
    * Phase 8.6.3: Added traceId for provenance tracking
+   * Phase 3: Removed userId parameter (single-tenant architecture)
    */
-  private async updateCortex(userId: string, mode: 'live' | 'paper', freshData: any, traceId?: string) {
-    console.log(`[${this.MODULE_NAME}] 💾 Updating Cortex cache for user ${userId} (${mode})`);
+  private async updateCortex(mode: 'live' | 'paper', freshData: any, traceId?: string) {
+    console.log(`[${this.MODULE_NAME}] 💾 Updating Cortex cache (${mode})`);
+
+    // Phase 3: Use canonical user ID for analytics computation
+    const userId = CANONICAL_USER_ID;
 
     // Recompute analytics with fresh data
     const strategySnapshot = await strategyAnalytics.computeStrategyAnalytics(userId, mode);
@@ -463,13 +475,13 @@ class ContextRefreshCoordinator extends EventEmitter {
 
     // Cache in Cortex with 15-minute TTL
     const ttl = 900; // 15 minutes
-    const cacheKey = `analytics_${mode}_${userId}`;
+    // Phase 3: Mode-based cache key only (single-tenant)
+    const cacheKey = `analytics_${mode}`;
     
     const cortexData = {
       strategy_analytics: strategySnapshot,
       portfolio_summary: portfolioSnapshot,
       computed_at: new Date().toISOString(),
-      user_id: userId,
       mode,
       refreshed_by: 'ContextRefreshCoordinator'
     };
@@ -499,15 +511,19 @@ class ContextRefreshCoordinator extends EventEmitter {
   /**
    * Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H + J)
    * Phase 8.5 Addendum J: Only creates memory if context has changed (prevents duplicate entries)
+   * Phase 3: Removed userId parameter, mode-based tracking (single-tenant)
    */
-  private async updateWalterMemory(userId: string, mode: 'live' | 'paper', freshData: any, traceId?: string) {
-    console.log(`[${this.MODULE_NAME}] 🧠 Checking Walter memory for user ${userId} (${mode})${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
+  private async updateWalterMemory(mode: 'live' | 'paper', freshData: any, traceId?: string) {
+    console.log(`[${this.MODULE_NAME}] 🧠 Checking Walter memory (${mode})${traceId ? ` [trace: ${traceId.substring(0, 12)}...]` : ''}`);
+
+    // Phase 3: Use canonical user ID for memory creation
+    const userId = CANONICAL_USER_ID;
 
     const memoryContent = `Context refreshed: Portfolio balance $${freshData.portfolioBalance}, ${freshData.activeStrategiesCount} strategies active (${freshData.activeStrategies.join(', ')}), engine ${freshData.engineActive ? 'running' : 'stopped'}, mode: ${mode}`;
 
     // Phase 8.5 Addendum J: Check if context has changed
-    const userKey = `${userId}:${mode}`;
-    const lastContext = this.lastContextByUser.get(userKey);
+    // Phase 3: Mode-based tracking instead of user+mode
+    const lastContext = this.lastContextByMode.get(mode);
     
     if (lastContext === memoryContent) {
       console.log(`[${this.MODULE_NAME}] ⏭️  Context unchanged, skipping duplicate memory entry`);
@@ -529,7 +545,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       }
     );
 
-    this.lastContextByUser.set(userKey, memoryContent);
+    this.lastContextByMode.set(mode, memoryContent);
     
     // Phase 8.6.3: Log provenance - Walter → UI data flow
     if (traceId) {
@@ -576,10 +592,11 @@ class ContextRefreshCoordinator extends EventEmitter {
   }
 
   /**
-   * Get context age in seconds for a user
+   * Get context age in seconds
+   * Phase 3: Removed userId parameter (single-tenant, mode-based cache keys)
    */
-  getContextAge(userId: string, mode: 'live' | 'paper'): number | null {
-    const cacheKey = `analytics_${mode}_${userId}`;
+  getContextAge(mode: 'live' | 'paper'): number | null {
+    const cacheKey = `analytics_${mode}`;
     const analytics = cortexCore.get(cacheKey);
 
     if (!analytics || !analytics.computed_at) {
@@ -595,9 +612,10 @@ class ContextRefreshCoordinator extends EventEmitter {
 
   /**
    * Check if context needs refresh (age > threshold)
+   * Phase 3: Removed userId parameter (single-tenant)
    */
-  needsRefresh(userId: string, mode: 'live' | 'paper', thresholdSeconds: number = 30): boolean {
-    const age = this.getContextAge(userId, mode);
+  needsRefresh(mode: 'live' | 'paper', thresholdSeconds: number = 30): boolean {
+    const age = this.getContextAge(mode);
     
     if (age === null) {
       // No context exists - needs refresh
@@ -627,20 +645,21 @@ class ContextRefreshCoordinator extends EventEmitter {
   /**
    * Phase 8.5 Addendum J: Force live context refresh (always refreshes, no staleness check)
    * Returns both refresh result and fresh data payload to avoid redundant fetches
+   * Phase 3: Removed userId parameter (single-tenant)
    * 
    * @deprecated Use ensureFreshDualContext() for full live+paper visibility (Addendum K.4)
    */
-  async ensureFreshContext(userId: string, mode: 'live' | 'paper' = 'paper'): Promise<{ refreshResult: RefreshResult; freshData: any }> {
-    console.log(`[${this.MODULE_NAME}] [Addendum-J] Forcing live context refresh for user ${userId}`);
+  async ensureFreshContext(mode: 'live' | 'paper' = 'paper'): Promise<{ refreshResult: RefreshResult; freshData: any }> {
+    console.log(`[${this.MODULE_NAME}] [Addendum-J] Forcing live context refresh`);
     
     // Phase 8.6.3: Generate trace ID for provenance tracking
     const traceId = provenanceLogger.generateTraceId();
     
     // Fetch fresh data once
-    const freshData = await this.fetchFreshData(userId, mode, traceId);
+    const freshData = await this.fetchFreshData(mode, traceId);
     
     // Perform full refresh using that data (Phase 8.6.3: pass traceId for correlation)
-    const refreshResult = await this.performRefreshWithData(userId, mode, freshData, 'direct', traceId);
+    const refreshResult = await this.performRefreshWithData(mode, freshData, 'direct', traceId);
     
     return { refreshResult, freshData };
   }
@@ -648,9 +667,10 @@ class ContextRefreshCoordinator extends EventEmitter {
   /**
    * Phase 8.5 Addendum K.4: Ensure fresh dual-mode context (BOTH live and paper)
    * This guarantees Walter and UI always see complete system state regardless of engine status
+   * Phase 3: Removed userId parameter (single-tenant)
    */
-  async ensureFreshDualContext(userId: string): Promise<{ dualModeData: DualModeData; latencyMs: number }> {
-    console.log(`[${this.MODULE_NAME}] [Addendum-K.4] Forcing dual-mode context refresh for user ${userId}`);
+  async ensureFreshDualContext(): Promise<{ dualModeData: DualModeData; latencyMs: number }> {
+    console.log(`[${this.MODULE_NAME}] [Addendum-K.4] Forcing dual-mode context refresh`);
     
     const start = Date.now();
     // Phase 8.6.3: Generate trace ID for provenance tracking
@@ -658,11 +678,11 @@ class ContextRefreshCoordinator extends EventEmitter {
     
     try {
       // Fetch both live and paper data simultaneously (Phase 8.6.3: with traceId)
-      const dualModeData = await this.fetchDualModeData(userId, traceId);
+      const dualModeData = await this.fetchDualModeData(traceId);
       
       // Update Cortex cache for both modes in parallel (Phase 8.6.3: with traceId)
       await Promise.all([
-        this.updateCortex(userId, 'live', {
+        this.updateCortex('live', {
           portfolioBalance: dualModeData.live.portfolioBalance,
           activeStrategies: dualModeData.live.activeStrategies,
           activeStrategiesCount: dualModeData.live.activeStrategiesCount,
@@ -672,7 +692,7 @@ class ContextRefreshCoordinator extends EventEmitter {
           timestamp: dualModeData.timestamp,
           source: 'live-api' as const
         }, traceId),
-        this.updateCortex(userId, 'paper', {
+        this.updateCortex('paper', {
           portfolioBalance: dualModeData.paper.portfolioBalance,
           activeStrategies: dualModeData.paper.activeStrategies,
           activeStrategiesCount: dualModeData.paper.activeStrategiesCount,
@@ -686,14 +706,14 @@ class ContextRefreshCoordinator extends EventEmitter {
       
       // Update Walter's memory for both modes (Phase 8.6.3: with traceId)
       await Promise.all([
-        this.updateWalterMemory(userId, 'live', {
+        this.updateWalterMemory('live', {
           portfolioBalance: dualModeData.live.portfolioBalance,
           activeStrategies: dualModeData.live.activeStrategies,
           activeStrategiesCount: dualModeData.live.activeStrategiesCount,
           engineActive: dualModeData.live.engineActive,
           mode: 'live'
         }, traceId),
-        this.updateWalterMemory(userId, 'paper', {
+        this.updateWalterMemory('paper', {
           portfolioBalance: dualModeData.paper.portfolioBalance,
           activeStrategies: dualModeData.paper.activeStrategies,
           activeStrategiesCount: dualModeData.paper.activeStrategiesCount,
@@ -706,7 +726,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       this.updateMetrics(latencyMs, true);
       
       // Emit contextUpdated event for Walter rehydration
-      this.emit('contextUpdated', userId);
+      this.emit('contextUpdated', 'dual');
       
       console.log(`[${this.MODULE_NAME}] ✅ Dual-mode context refreshed in ${latencyMs}ms`);
       
@@ -722,28 +742,29 @@ class ContextRefreshCoordinator extends EventEmitter {
   /**
    * Internal method: Perform refresh using already-fetched data (avoids redundant fetch)
    * Phase 8.6.3: Accepts optional traceId from caller to maintain provenance chain
+   * Phase 3: Removed userId parameter (single-tenant)
    */
-  private async performRefreshWithData(userId: string, mode: 'live' | 'paper', freshData: any, source: 'api' | 'direct' | 'resync', traceId?: string): Promise<RefreshResult> {
+  private async performRefreshWithData(mode: 'live' | 'paper', freshData: any, source: 'api' | 'direct' | 'resync', traceId?: string): Promise<RefreshResult> {
     const start = Date.now();
     // Phase 8.6.3: Use provided traceId or generate new one
     const finalTraceId = traceId || provenanceLogger.generateTraceId();
 
     try {
       // Update Cortex cache with fresh data
-      await this.updateCortex(userId, mode, freshData, finalTraceId);
+      await this.updateCortex(mode, freshData, finalTraceId);
 
       // Update Walter's semantic memory with refreshed context (Phase 8.5 Addendum H)
-      await this.updateWalterMemory(userId, mode, freshData, finalTraceId);
+      await this.updateWalterMemory(mode, freshData, finalTraceId);
 
       // Run truth check to detect any remaining discrepancies
-      const truthCheck = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+      const truthCheck = await systemTruthDiagnostic.runTruthCheck(mode);
       const discrepanciesFound = truthCheck.discrepancies.length;
 
       // Phase 8.5 Addendum I: Auto-resync if discrepancies detected
       if (discrepanciesFound > 0 && source !== 'resync') {
         console.log(`[${this.MODULE_NAME}] [TruthSync] mismatch detected (${discrepanciesFound} discrepancies) → forced resync`);
         // Trigger secondary refresh to resolve misalignments
-        return await this.refresh(userId, mode, 'resync');
+        return await this.refresh(mode, 'resync');
       }
 
       // Calculate latency and update metrics (Phase 8.5 Addendum I: track lastLivePortfolio)
@@ -756,7 +777,6 @@ class ContextRefreshCoordinator extends EventEmitter {
 
       // Emit WebSocket event for real-time UI updates
       this.emit('contextRefreshed', {
-        userId,
         mode,
         source,
         timestamp: new Date().toISOString(),
@@ -766,7 +786,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       });
 
       // Phase 8.5 Addendum J: Emit contextUpdated event for Walter rehydration
-      this.emit('contextUpdated', userId);
+      this.emit('contextUpdated', mode);
 
       console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${latencyMs}ms (${discrepanciesFound} discrepancies detected)`);
 
@@ -775,7 +795,6 @@ class ContextRefreshCoordinator extends EventEmitter {
         latencyMs,
         source,
         timestamp: new Date().toISOString(),
-        userId,
         mode,
         discrepanciesFound
       };
@@ -796,7 +815,6 @@ class ContextRefreshCoordinator extends EventEmitter {
         latencyMs,
         source,
         timestamp: new Date().toISOString(),
-        userId,
         mode,
         discrepanciesFound: 0,
         error: errorMessage

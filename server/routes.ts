@@ -4854,7 +4854,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       const { systemTruthDiagnostic } = await import('./services/system-truth-diagnostic');
       
-      const truthComparison = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+      // Phase 3: runTruthCheck now uses mode only (single-tenant)
+      const truthComparison = await systemTruthDiagnostic.runTruthCheck(mode);
       const markdownReport = systemTruthDiagnostic.generateMarkdownReport(truthComparison);
       
       res.type('text/markdown').send(markdownReport);
@@ -4877,7 +4878,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       const { contextRefreshCoordinator } = await import('./services/context-refresh-coordinator');
       
-      const result = await contextRefreshCoordinator.refresh(userId, mode, 'api');
+      // Phase 3: refresh now uses mode only (single-tenant)
+      const result = await contextRefreshCoordinator.refresh(mode, 'api');
       
       res.json({
         ok: result.success,

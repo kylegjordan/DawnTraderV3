@@ -62,13 +62,15 @@ class ConfigChangeHandler {
 
       // Step 4: Trigger ContextRefreshCoordinator to re-sync all layers
       // This ensures Walter AI gets fresh data
-      const refreshResult = await contextRefreshCoordinator.refresh(userId, mode, source);
+      // Phase 3: refresh now uses mode only (single-tenant)
+      const refreshResult = await contextRefreshCoordinator.refresh(mode, source);
       console.log(`[${this.MODULE_NAME}] ✅ Context refreshed in ${refreshResult.latencyMs}ms`);
 
       // Step 5: If this is a strategy change, notify EngineSettingsBus
+      // Phase 3: EngineSettingsBus now uses mode only (single-tenant)
       if (configType === 'strategies') {
         const { EngineSettingsBus } = await import('./trading-engine');
-        await EngineSettingsBus.publish({ userId, mode });
+        await EngineSettingsBus.publish({ mode });
         console.log(`[${this.MODULE_NAME}] ✅ EngineSettingsBus notified for strategy change`);
       }
 
@@ -114,7 +116,8 @@ class ConfigChangeHandler {
     stateAwarenessService.invalidateCache(userId);
     
     // Trigger full context refresh
-    await contextRefreshCoordinator.refresh(userId, mode, 'direct');
+    // Phase 3: refresh now uses mode only (single-tenant)
+    await contextRefreshCoordinator.refresh(mode, 'direct');
     
     console.log(`[${this.MODULE_NAME}] ✅ All config invalidated for ${mode} mode`);
   }

@@ -57,17 +57,18 @@ class SystemTruthDiagnosticService {
 
   /**
    * Run comprehensive truth check across all system layers
+   * Phase 3: Removed userId parameter (single-tenant)
    */
-  async runTruthCheck(userId: string, mode: 'live' | 'paper'): Promise<TruthComparison> {
-    console.log(`[${this.MODULE_NAME}] 🔍 Running truth check for user ${userId} (${mode})`);
+  async runTruthCheck(mode: 'live' | 'paper'): Promise<TruthComparison> {
+    console.log(`[${this.MODULE_NAME}] 🔍 Running truth check (${mode})`);
     const start = Date.now();
 
     try {
       // Fetch snapshots in parallel
       const [backendSnapshot, cortexSnapshot, walterSnapshot] = await Promise.all([
-        this.getBackendSnapshot(userId, mode),
-        this.getCortexSnapshot(userId, mode),
-        this.getWalterSnapshot(userId, mode)
+        this.getBackendSnapshot(mode),
+        this.getCortexSnapshot(mode),
+        this.getWalterSnapshot(mode)
       ]);
 
       // Detect discrepancies
