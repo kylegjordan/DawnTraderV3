@@ -1,12 +1,12 @@
 import fs from "fs";
-import os from "os";
 import path from "path";
-import { metricsService } from "../services/metrics-service";
 
 console.log("📓 Starting Observation Logger (Phase 7A)");
 
 const logsDir = path.join(process.cwd(), "logs");
 const logFile = path.join(logsDir, "observation_log.csv");
+const API_URL = process.env.API_URL || "http://localhost:5000";
+const METRICS_ENDPOINT = `${API_URL}/api/metrics/snapshot`;
 
 // Ensure logs directory exists
 if (!fs.existsSync(logsDir)) {
@@ -22,27 +22,32 @@ if (!fs.existsSync(logFile)) {
   console.log(`✅ Created observation log: ${logFile}`);
 }
 
-// Helper function to get most recent metric value
-function getRecentMetric(metrics: any[], defaultValue: number = 0): number {
-  if (!metrics || metrics.length === 0) return defaultValue;
-  return metrics[metrics.length - 1]?.value || defaultValue;
+// Fetch metrics from running backend
+async function fetchMetrics(): Promise<any> {
+  try {
+    const response = await fetch(METRICS_ENDPOINT);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error: any) {
+    throw new Error(`Failed to fetch metrics from ${METRICS_ENDPOINT}: ${error.message}`);
+  }
 }
 
-// Collect and log metrics every 5 minutes
-function logObservation() {
+// Collect and log metrics
+async function logObservation() {
   try {
-    const systemMetrics = metricsService.getSystemMetrics();
-    const subsystemMetrics = metricsService.getSubsystemMetrics();
-
-    const timestamp = Date.now();
-    const uptime = Math.floor(process.uptime());
-    const cpuLoad = os.loadavg()[0].toFixed(2);
-    const rssMB = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
+    const metrics = await fetchMetrics();
     
-    const signalLatency = getRecentMetric(subsystemMetrics.signalLatency);
-    const orderLatency = getRecentMetric(subsystemMetrics.orderLatency);
-    const queueDepth = getRecentMetric(subsystemMetrics.queueDepth);
-    const eventLoopLag = systemMetrics.eventLoopLag;
+    const timestamp = metrics.timestamp || Date.now();
+    const uptime = metrics.uptime || 0;
+    const cpuLoad = metrics.cpuLoad?.toFixed(2) || '0.00';
+    const rssMB = metrics.rss?.toFixed(1) || '0.0';
+    const signalLatency = metrics.signalLatency || 0;
+    const orderLatency = metrics.orderLatency || 0;
+    const queueDepth = metrics.queueDepth || 0;
+    const eventLoopLag = metrics.eventLoopLag || 0;
 
     const line = `${timestamp},${uptime},${cpuLoad},${rssMB},${signalLatency},${orderLatency},${queueDepth},${eventLoopLag}\n`;
     
@@ -58,13 +63,15 @@ function logObservation() {
       eventLoopLag,
     });
   } catch (error: any) {
-    console.error("❌ Error logging observation:", error.message);
+    console.error(`❌ Error logging observation: ${error.message}`);
+    console.error(`   Make sure the backend is running at ${API_URL}`);
   }
 }
 
 // Log initial observation immediately
+console.log(`📡 Connecting to backend at ${METRICS_ENDPOINT}...`);
 console.log("📊 Logging initial observation...");
-logObservation();
+await logObservation();
 
 // Log every 5 minutes (300,000 ms)
 const intervalMs = 5 * 60 * 1000;

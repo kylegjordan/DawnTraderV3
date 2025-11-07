@@ -46,6 +46,15 @@
     ]
   },
   {
+    "path": "/api/metrics/snapshot",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/system/health",
     "methods": [
       "GET"

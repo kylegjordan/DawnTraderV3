@@ -10,19 +10,25 @@ Augment the 48-hour Paper-Mode Stability Test (Phase 7) with automated logging o
 
 ## Implementation
 
-### Files Created
+### Files Created/Modified
 
 1. **`server/scripts/phase7-observation-logger.ts`**
    - Automated metric collection script
+   - Fetches metrics from running backend via HTTP API
    - Logs observations every 5 minutes (300,000ms)
    - Writes to CSV format for easy analysis
 
-2. **`server/scripts/validate-phase7.ts`**
+2. **`server/routes.ts`**
+   - Added `/api/metrics/snapshot` endpoint
+   - Returns real-time metrics from MetricsService singleton
+   - Enables external monitoring without shared state
+
+3. **`server/scripts/validate-phase7.ts`**
    - Post-test analysis and validation script
    - Computes averages, P95, and max values
    - Validates against SLO thresholds
 
-3. **`audit/phase7a-automated-observation-logger-directive.md`**
+4. **`audit/phase7a-automated-observation-logger-directive.md`**
    - This documentation file
 
 ### Metrics Collected
@@ -39,6 +45,41 @@ The observation logger captures the following metrics every 5 minutes:
 | `orderLatency` | Order processing latency (ms) | `MetricsService` |
 | `queueDepth` | Current queue depth | `MetricsService` |
 | `eventLoopLag` | Event loop lag (ms) | `MetricsService` |
+
+### Architecture
+
+The observation logger uses an **API-based architecture** to ensure it captures real metrics from the running backend:
+
+```
+┌─────────────────────┐
+│  Backend Server     │
+│  (npm run dev)      │
+│                     │
+│  ┌───────────────┐  │
+│  │ MetricsService│  │◄─── Records actual metrics
+│  └───────┬───────┘  │
+│          │          │
+│   GET /api/metrics/ │
+│       snapshot      │
+└─────────┬───────────┘
+          │
+          │ HTTP
+          ▼
+┌─────────────────────┐
+│ Observation Logger  │
+│ (standalone tsx)    │
+│                     │
+│  ├─ Fetch every 5min│
+│  ├─ Write to CSV    │
+│  └─ Log to console  │
+└─────────────────────┘
+```
+
+**Key Design Decision**: The logger runs as a separate process and fetches metrics via HTTP instead of importing MetricsService directly. This ensures:
+- ✅ Logger captures **real metrics** from the running backend
+- ✅ Logger can run/stop independently without affecting backend
+- ✅ No shared state issues between processes
+- ✅ Easy to monitor multiple backends by changing API_URL
 
 ### Output Format
 
@@ -143,9 +184,12 @@ Phase 7A complements the 48-hour Paper-Mode Stability Test by:
 
 - [x] Observation logger script created
 - [x] Validation script created
+- [x] API endpoint `/api/metrics/snapshot` implemented
 - [x] CSV format matches specification
 - [x] Logs directory auto-created
-- [x] Metrics collected from MetricsService
+- [x] Metrics fetched from running backend (not isolated instance)
+- [x] Real-time metrics verified (uptime, CPU, memory, event loop lag)
+- [x] End-to-end test successful
 - [x] Documentation complete
 
 ## Phase 7A Status: ✅ COMPLETE

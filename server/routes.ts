@@ -60,6 +60,8 @@ import { getPaperSimulationStatus } from './services/paper-sim-service';
 import { numericNormalizationMiddleware } from './utils/numeric-normalizer.js';
 import { contextBridge } from './services/context-bridge.js';
 import { getCache, setCache, coalesce } from './services/cache';
+import { metricsService } from './services/metrics-service';
+import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -460,6 +462,34 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error: any) {
       console.error('[Phase 6][Config] Error updating config:', error);
       res.status(500).json({ error: 'Failed to update config', message: error.message });
+    }
+  });
+
+  // Phase 7A: Metrics snapshot endpoint for observation logger
+  apiRouter.get('/metrics/snapshot', async (_req, res) => {
+    try {
+      const systemMetrics = metricsService.getSystemMetrics();
+      const subsystemMetrics = metricsService.getSubsystemMetrics();
+      
+      // Helper to get most recent metric value
+      const getRecentMetric = (metrics: any[], defaultValue: number = 0): number => {
+        if (!metrics || metrics.length === 0) return defaultValue;
+        return metrics[metrics.length - 1]?.value || defaultValue;
+      };
+      
+      res.json({
+        timestamp: Date.now(),
+        uptime: Math.floor(process.uptime()),
+        cpuLoad: os.loadavg()[0],
+        rss: process.memoryUsage().rss / 1024 / 1024,
+        signalLatency: getRecentMetric(subsystemMetrics.signalLatency),
+        orderLatency: getRecentMetric(subsystemMetrics.orderLatency),
+        queueDepth: getRecentMetric(subsystemMetrics.queueDepth),
+        eventLoopLag: systemMetrics.eventLoopLag,
+      });
+    } catch (error: any) {
+      console.error('[Phase 7A][Metrics] Error fetching metrics snapshot:', error);
+      res.status(500).json({ error: 'Failed to fetch metrics snapshot', message: error.message });
     }
   });
 
