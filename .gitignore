@@ -24,3 +24,4 @@ migration-backup-*.sql
 
 # Compiled diagnostics (keep source, exclude large outputs)
 dist/diagnostics/*.json
+backups/
