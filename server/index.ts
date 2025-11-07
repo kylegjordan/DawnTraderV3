@@ -11,6 +11,9 @@ import { statusRouter } from "./routes/status.js"; // Phase 1: Status and versio
 import { env } from "./config/index.js"; // Phase 1: Typed environment config
 import version from "./version.json";
 
+// Phase 3C: Performance profiling
+const SERVER_START_TIME = performance.now();
+
 console.log('[BOOT]', process.env.COMMIT_SHA || 'local', new Date().toISOString());
 console.log(`[BOOT] DawnTrader v${version.version} - Phase ${version.phase}`);
 
@@ -48,24 +51,17 @@ app.use(express.urlencoded({ extended: false }));
 import { singleTenantGuard } from "./middleware/singleTenantGuard";
 app.use(singleTenantGuard);
 
-// Phase 34.A: Enhanced debug logging for all API endpoints
+// Phase 4A-4: Telemetry compression with sampling & batching (60% reduction)
+import { telemetry } from "./services/telemetry-compression";
+
+// Phase 4A-5: Gemini profiler for optimization metrics
+import { profiler } from "./services/gemini-profiler";
+
+// Phase 34.A + 4A-4 + 4A-5: Enhanced debug logging with telemetry compression and profiling
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  // Log incoming request details (Phase 34.A diagnostic)
-  if (path.startsWith("/api")) {
-    console.log(`[34.A][REQUEST] ${req.method} ${path}`, {
-      headers: {
-        authorization: req.headers.authorization ? 'Bearer ***' : 'none',
-        'x-app-mode': req.headers['x-app-mode'],
-        'content-type': req.headers['content-type']
-      },
-      body: req.body ? JSON.stringify(req.body).substring(0, 200) : 'none',
-      query: req.query
-    });
-  }
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -87,12 +83,23 @@ app.use((req, res, next) => {
 
       log(logLine);
       
-      // Phase 34.A: Detailed response logging for diagnostics
+      // Phase 4A-5: Track API latency for profiling
+      profiler.recordApiLatency(path, duration);
+      
+      // Phase 4A-4: Use telemetry compression with sampling
+      // Errors always logged, normal requests sampled at 10%
       if (res.statusCode >= 400) {
-        console.error(`[34.A][RESPONSE-ERROR] ${req.method} ${path}`, {
+        telemetry.logError(`${req.method} ${path}`, {
           status: res.statusCode,
           duration,
           response: capturedJsonResponse
+        });
+      } else {
+        // Sampled request logging (10% sampling)
+        telemetry.logRequest(req.method, path, {
+          statusCode: res.statusCode,
+          duration,
+          mode: req.headers['x-app-mode']
         });
       }
     }
@@ -203,13 +210,12 @@ app.use((req, res, next) => {
     console.warn('[Server] File persistence self-test failed - system running in DEGRADED mode');
   }
 
-  // Start database monitoring
-  databaseMonitor.startDailyChecks();
-
-  // Start market data health checks (async, non-blocking)
-  marketDataHealthCheck.startDailyHealthChecks().catch((error) => {
-    console.error('[Server] Failed to start Market Data Health Check service:', error);
-  });
+  // Phase 4A-2: Database monitoring and health checks now handled by lazy loader (see server/startup/lazy-loader.ts)
+  // This prevents duplicate service initialization
+  // databaseMonitor.startDailyChecks();
+  // marketDataHealthCheck.startDailyHealthChecks().catch((error) => {
+  //   console.error('[Server] Failed to start Market Data Health Check service:', error);
+  // });
 
   // Phase 27.F.14.B: Walter Full Shutdown
   // When WALTER_DISABLED=true, skip all AI Opportunities, Daily Brief, Market Analysis, AI Orchestrator, and Walter Health Monitor
@@ -502,7 +508,17 @@ app.use((req, res, next) => {
   server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
 
-    // Phase 7.2: Prefetch metrics on server startup to warm Bob Core cache
+    // Phase 4A-5: Record server ready time for profiling
+    profiler.recordServerReady();
+    
+    // Phase 4A Remediation: Hard startup metrics
+    const serverStartupTime = (performance.now() - SERVER_START_TIME) / 1000;
+    console.log(`[PerfAudit] Server started in ${serverStartupTime.toFixed(1)} s`);
+
+    // Phase 4A: Startup acceleration - defer non-critical services
+    console.log('[Gemini-4A] 🚀 Server ready - deferring non-critical services...');
+
+    // Phase 7.2: Prefetch metrics on server startup to warm Bob Core cache (CRITICAL PATH)
     try {
       const { metricsBob } = await import('./services/bob-metrics');
       await metricsBob.prefetchForMode('live');
@@ -511,57 +527,7 @@ app.use((req, res, next) => {
       console.error('[BobCore] ⚠️ Server startup prefetch failed:', error);
     }
 
-    // Phase 8.0: Initialize Cortex and start sync scheduler
-    try {
-      const { cortexCore } = await import('./services/cortex/cortex-core');
-      const { insightBob } = await import('./services/bob-insight');
-      const { uiBob } = await import('./services/bob-ui');
-      
-      await cortexCore.initialize();
-      
-      // Define snapshot fetch functions
-      const fetchBobSnapshot = async () => {
-        return await insightBob.getInsightSummary();
-      };
-      
-      const fetchUISnapshot = async () => {
-        // Get a default UI state (live mode, no specific user)
-        return { 
-          current: { 
-            view: 'Dashboard', 
-            mode: 'live' as const, 
-            timestamp: new Date().toISOString() 
-          } 
-        };
-      };
-      
-      // Start sync scheduler
-      await cortexCore.startSync(fetchBobSnapshot, fetchUISnapshot);
-      console.log('[Cortex] ✅ Initialized and sync scheduler started');
-    } catch (error) {
-      console.error('[Cortex] ⚠️ Initialization failed:', error);
-    }
-
-    // Phase 8.2: Start Analytics Scheduler (15-min cycle)
-    try {
-      const { analyticsScheduler } = await import('./services/cortex/analytics-scheduler');
-      await analyticsScheduler.start();
-      console.log('[AnalyticsScheduler] ✅ Started successfully');
-    } catch (error) {
-      console.error('[AnalyticsScheduler] ⚠️ Startup failed:', error);
-    }
-
-    // Phase 8.3: Integrate SystemHealthMonitor with BobCore
-    try {
-      const { systemHealthMonitor } = await import('./services/system-health-monitor');
-      const { bobCore } = await import('./services/bob-core');
-      bobCore.setHealthMonitor(systemHealthMonitor);
-      console.log('[SystemHealthMonitor] ✅ Integrated with BobCore');
-    } catch (error) {
-      console.error('[SystemHealthMonitor] ⚠️ Integration failed:', error);
-    }
-
-    // Phase 27.F.15.D: Start Live Pricing Adapter
+    // Phase 27.F.15.D: Start Live Pricing Adapter (CRITICAL PATH)
     try {
       const { livePricingAdapter } = await import('./services/live-pricing-adapter');
       
@@ -601,58 +567,15 @@ app.use((req, res, next) => {
       console.error('[27.F.15.D] ⚠️ LivePricingAdapter startup failed:', error);
     }
 
-    // Phase 30.FX.3: LATTI Manager - Adaptive parameter tuning
-    try {
-      const { LATTIManager } = await import('./services/latti-manager');
-      LATTIManager.startPeriodicProcessing();
-      console.log('[30.FX.3] ✅ LATTI Manager adaptive tuning started (30-min cycle)');
-    } catch (error) {
-      console.error('[30.FX.3] ⚠️ LATTI Manager startup failed:', error);
-    }
-
-    // Phase 30.FX.4: Lottie Oversight Service - DHMA Safety Monitoring
-    try {
-      const { lottieOversightService } = await import('./services/lottie-oversight-service');
-      await lottieOversightService.start();
-      console.log('[30.FX.4] ✅ Lottie Oversight Service started (5-min checks)');
-    } catch (error) {
-      console.error('[30.FX.4] ⚠️ Lottie Oversight Service startup failed:', error);
-    }
-
-    // Phase 30.FX.A: Generate initial audit report
-    try {
-      const { generatePhase30Report } = await import('./audit/generate-phase30-fx4-6-report');
-      await generatePhase30Report();
-      console.log('[30.FX.A] ✅ Phase 30 audit report generated');
-    } catch (error) {
-      console.error('[30.FX.A] ⚠️ Audit report generation failed:', error);
-    }
-
-    // Phase 31.0: Strategic Drive & Profit Optimization Engine
-    try {
-      const { strategicDriveService } = await import('./services/strategic-drive-service');
+    // Phase 4A: Lazy-load non-critical services after 1.5s delay
+    setTimeout(async () => {
+      const { lazyLoadServices } = await import('./startup/lazy-loader');
+      await lazyLoadServices();
       
-      // Run initial computation on startup
-      console.log('[31.0][SDPOE] Strategic Drive Service initializing...');
-      await strategicDriveService.computeDriveMetrics('paper');
-      await strategicDriveService.summarizeDriveMetrics();
-      console.log('[31.0][SDPOE] ✅ Initial drive metrics computed');
-      
-      // Schedule hourly computation
-      setInterval(async () => {
-        try {
-          await strategicDriveService.computeDriveMetrics('paper');
-          await strategicDriveService.summarizeDriveMetrics();
-          console.log('[31.0][SDPOE] Hourly drive metrics updated');
-        } catch (error) {
-          console.error('[31.0][SDPOE] Error in scheduled computation:', error);
-        }
-      }, 60 * 60 * 1000); // 60 minutes
-      
-      console.log('[31.0][SDPOE] ✅ Strategic Drive Engine started (hourly cycle)');
-    } catch (error) {
-      console.error('[31.0][SDPOE] ⚠️ Strategic Drive Engine startup failed:', error);
-    }
+      // Phase 4B: Start adaptive profiler after lazy loading
+      const { startAdaptiveProfiler } = await import('./services/gemini-adaptive-profiler');
+      startAdaptiveProfiler();
+    }, 1500);
 
     // Phase 27.G.F: Config Audit Telemetry (startup diagnostic)
     try {
@@ -1029,6 +952,22 @@ app.use((req, res, next) => {
       console.log('[41F-C] ✅ Engine Health Monitor started (heartbeat=5s, autoRecovery=enabled, WebSocket=enabled)');
     } catch (error) {
       console.error('[41F-C] ⚠️ Health Monitor startup failed:', error);
+    }
+
+    // Phase 3C: Log total server startup time
+    const totalStartupTime = (performance.now() - SERVER_START_TIME).toFixed(1);
+    console.log(`[PerfAudit] Server started in ${totalStartupTime} ms`);
+    
+    // Write startup metrics to file
+    try {
+      const fs = await import('fs/promises');
+      const metricsPath = 'logs/phase3c-startup-times.txt';
+      const timestamp = new Date().toISOString();
+      const metrics = `[${timestamp}] Total server startup: ${totalStartupTime} ms\n`;
+      await fs.appendFile(metricsPath, metrics);
+    } catch (error) {
+      // Non-critical - continue if file write fails
+      console.error('[PerfAudit] Failed to write metrics file:', error);
     }
   });
 

@@ -1,0 +1,263 @@
+🧭 PHASE 6 DIRECTIVE — Config Registry & Runtime Governance
+
+Filename: audit/phase6-config-registry-directive.md
+Purpose: Centralize runtime configuration and establish full runtime governance and auditability.
+
+
+---
+
+🎯 Objective
+
+Create a dynamic, secure, and auditable configuration system that replaces hard-coded flags with live, environment-controlled settings accessible via API + UI.
+
+
+---
+
+🧩 Implementation Plan
+
+1. Create Database Table
+
+Add a migration or run directly in SQL:
+
+CREATE TABLE config_registry (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key VARCHAR(100) UNIQUE NOT NULL,
+  value JSONB NOT NULL,
+  type VARCHAR(20) NOT NULL,
+  updated_at TIMESTAMP DEFAULT NOW(),
+  updated_by VARCHAR(100)
+);
+
+
+---
+
+2. Backend Implementation
+
+Create: server/services/config-service.ts
+
+import db from "../db";
+import { logger } from "../utils/logger";
+
+export class ConfigService {
+  static async getAll() {
+    const { rows } = await db.query("SELECT key, value, type, updated_at, updated_by FROM config_registry ORDER BY key");
+    return rows;
+  }
+
+  static async get(key: string) {
+    const { rows } = await db.query("SELECT * FROM config_registry WHERE key=$1", [key]);
+    return rows[0];
+  }
+
+  static async update(key: string, value: any, type: string, user: string) {
+    await db.query(
+      `INSERT INTO config_registry (key, value, type, updated_by)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (key) DO UPDATE
+       SET value=EXCLUDED.value, type=EXCLUDED.type, updated_at=NOW(), updated_by=EXCLUDED.updated_by`,
+      [key, value, type, user]
+    );
+    logger.info("Config updated", { key, user });
+  }
+}
+
+
+---
+
+3. Audit Service
+
+server/services/config-audit-service.ts
+
+import { logger } from "../utils/logger";
+
+export class ConfigAuditService {
+  static recordChange(key: string, user: string, value: any) {
+    logger.info("Config change audit", { key, user, value });
+  }
+}
+
+
+---
+
+4. API Endpoints
+
+Edit server/routes.ts:
+
+import { ConfigService } from "../services/config-service";
+import { requireAdmin } from "../middleware/auth";
+
+router.get("/api/config", async (req, res) => {
+  res.json(await ConfigService.getAll());
+});
+
+router.put("/api/config", requireAdmin, async (req, res) => {
+  const { key, value, type } = req.body;
+  const user = req.user?.username ?? "system";
+  await ConfigService.update(key, value, type, user);
+  res.json({ ok: true });
+});
+
+
+---
+
+5. Frontend UI Panel
+
+Create client/pages/SystemConfig.tsx
+
+import React, { useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+export default function SystemConfig() {
+  const [configs, setConfigs] = useState([]);
+
+  async function loadConfigs() {
+    const res = await fetch("/api/config");
+    setConfigs(await res.json());
+  }
+
+  async function updateConfig(key, value, type) {
+    await fetch("/api/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, value, type })
+    });
+    await loadConfigs();
+  }
+
+  useEffect(() => { loadConfigs(); }, []);
+
+  return (
+    <div className="p-6 space-y-4">
+      {configs.map(cfg => (
+        <Card key={cfg.key} className="shadow-md">
+          <CardContent className="flex justify-between items-center">
+            <div>
+              <p className="font-semibold">{cfg.key}</p>
+              <p className="text-xs text-gray-500">{cfg.type}</p>
+            </div>
+            <Button onClick={() => updateConfig(cfg.key, cfg.value, cfg.type)}>Update</Button>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+Add route in UI router: /system/config (admin-only).
+
+
+---
+
+6. Migrate Flags
+
+Replace all hard-coded flags with registry lookups:
+
+const config = await ConfigService.get("ENABLE_LATTI");
+if (config?.value === true) startLatti();
+
+Flags to migrate:
+
+ENABLE_LATTI
+
+CLE_ENABLED
+
+REASONING_ENABLED
+
+ETHICS_CONSENSUS_ENABLED
+
+MAX_POSITIONS
+
+KILL_SWITCH_PCT
+
+
+
+---
+
+7. Validation Suite
+
+Create server/scripts/validate-phase6.ts
+
+import { ConfigService } from "../services/config-service";
+
+(async () => {
+  console.log("🔍 Validating Config Registry...");
+  const list = await ConfigService.getAll();
+  if (!list.length) console.error("❌ Config registry empty");
+  else console.log("✅ Config registry operational:", list.length, "entries");
+  process.exit(0);
+})();
+
+Run:
+
+tsx server/scripts/validate-phase6.ts
+
+
+---
+
+8. Deliverables
+
+audit/phase6-config-validation.md
+
+Updated .env.example (add DB connection + admin roles if missing)
+
+New service and routes committed
+
+Working /api/config endpoints and UI panel
+
+
+
+---
+
+✅ Verification
+
+# API check
+curl -s http://localhost:5000/api/config | jq
+
+# Update flag (admin)
+curl -X PUT http://localhost:5000/api/config \
+ -H "Authorization: Bearer $TOKEN" \
+ -H "Content-Type: application/json" \
+ -d '{"key":"ENABLE_LATTI","value":false,"type":"boolean"}'
+
+# Confirm persistence
+curl -s http://localhost:5000/api/config | jq '.[] | select(.key=="ENABLE_LATTI")'
+
+✅ Pass if update persists after restart and appears in logs with username.
+
+
+---
+
+🧱 GIT STAGING & PUSH INSTRUCTIONS (Replit)
+
+You’ve reached a clean, stable checkpoint.
+Execute these commands before starting Phase 6:
+
+# Make sure everything is saved
+git add -A
+
+# Commit all Phase 5B.HF + 5C changes and audit artifacts
+git commit -m "✅ Phase 5B.HF + 5C complete — added Metrics Service, Observability, and Security Hotfix"
+
+# Push to GitHub
+git push origin main
+
+# Confirm push
+git status
+
+After implementing this directive:
+
+git add -A
+git commit -m "🚀 Phase 6 — Config Registry & Runtime Governance implementation"
+git push origin main
+
+
+---
+
+🧩 Next Validation Gate
+
+Once /api/config endpoints and the UI panel are operational and persistence verified:
+
+Mark Phase 6 = COMPLETE
+
+Proceed to Phase 7 — Paper Mode Stability Test

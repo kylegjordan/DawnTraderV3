@@ -1,0 +1,107 @@
+Phase 4A — Remediation Mini-Directive (Close the Gaps)
+
+Project: DawnTrader v1.9.5-dev
+Creds: testuser123 / SecurePass123!
+Goal: Raise cache hit ≥ 0.85, API avg ≤ 110 ms, telemetry −60%, and confirm startup ≤ 8 s with hard logs.
+
+1) BobCore cache: unify TTLs + coalescing + quieter logs
+
+Files: server/services/bob-core.ts, server/services/cache.ts
+
+Set default TTLs:
+
+symbol metadata / config: 90s
+
+portfolio snapshots: 90s
+
+diagnostics / scan results: 45s
+
+Use the existing coalesce(key, fn) for all BobCore read paths.
+
+Reduce noise: gate [Gemini-Cache] logs behind process.env.CACHE_DEBUG === "true".
+
+Pass check: in a 60s burst, hit ratio in [Gemini-Profile] climbs from ~0.56 → ≥0.85.
+
+2) Add caching to slow endpoints (diagnostics / scans)
+
+File: server/routes.ts (same place you added /system/config & /portfolio/overview)
+
+Wrap these handlers:
+
+/api/diagnostics/scan → key: diag:scan:${mode}
+
+/api/telemetry/summary (response, not stream) → key: telemetry:summary:${mode}
+
+Use setCache(key, data, 45000) and coalesce(key, () => expensiveCall()).
+
+Pass check: second/third calls return in ≤ 30 ms; API latency pack shows ≤ 110 ms avg.
+
+3) Telemetry reduction: sampling + category filters to reach 60%
+
+Files: server/services/telemetry-compression.ts, server/services/bob-core.ts, server/services/universe-scan.ts
+
+Add category sampling:
+
+BobRouting, UniverseScan, CacheDebug → keep 1 in 10 (90% drop).
+
+Keep errors/warnings at 100%.
+
+Keep batching/gzip in telemetry-compression (you already have ~86% payload compression).
+
+Remove [34.A][REQUEST] style per-request logs in production; keep only summarized batch lines.
+
+Pass check: log line count reduction ≥ 60% over a 5-min window (compare wc -l before/after).
+
+4) Hard startup metrics (cold start + lazy complete)
+
+Files: server/index.ts, server/startup/lazy-loader.ts
+
+At boot:
+console.log('[PerfAudit] Server started in X.Y s')
+
+At lazy completion (after all 7 services):
+console.log('[Gemini-4A] Lazy-loaded N services in X.Y s')
+
+Ensure no duplicate starts (you fixed this) and confirm method names match (start() vs custom).
+
+Pass check: logs show Server started ≤ 8.0 s and lazy loader completes independently.
+
+5) Run validation & archive results
+
+After rebuild:
+
+# Auth
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+# API latency quick-run (status/portfolio/config/diagnostics/telemetry summary)
+for ep in status portfolio system/config diagnostics/scan telemetry/summary; do
+  t=$(curl -s -w "%{time_total}" -o /dev/null -H "Authorization: Bearer $TOKEN" \
+      "http://localhost:5000/api/$ep")
+  printf "%-22s %s sec\n" "$ep" "$t"
+done | tee logs/phase4a-remediation-api.csv
+
+# Cache hit & profile
+grep "\[Gemini-Profile\]" /tmp/logs/Start_application_* | tail -6 | tee logs/phase4a-remediation-profile.txt
+
+# Telemetry reduction (compare before/after 5-min windows)
+find /tmp/logs -name "Start_application_*.log" -mmin -5 -print -exec wc -l {} \; \
+ | tee logs/phase4a-remediation-telemetry.txt
+
+
+Pass criteria (all must hold):
+
+CacheHit ≥ 0.85
+
+Avg API ≤ 0.110 s
+
+Startup ≤ 8 s (PerfAudit log)
+
+Telemetry lines −60% vs baseline (Phase 4A early logs)
+
+6) Reporting & tag
+
+Append results to audit/phase4a-gemini-optimization.md under “Remediation Results”.
+
+Tag branch: dt-v1.9.5-optimized.

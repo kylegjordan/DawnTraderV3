@@ -74,6 +74,15 @@ export default function EngineTelemetry() {
   const [heartbeatHistory, setHeartbeatHistory] = useState<number[]>([]);
   const { messages } = useWebSocket();
   const wsConnectedRef = useRef(false);
+  
+  // Phase 4C: Adaptive telemetry refresh (1s - 1.5s based on latency)
+  const [refreshInterval, setRefreshInterval] = useState(1000);
+  // Use ref to track previous metrics for trend calculation without causing re-renders
+  const previousMetricsRef = useRef<{
+    latency?: number;
+    cacheHit?: number;
+    cpu?: number;
+  }>({});
 
   // Diagnostic logging - track connection state
   useEffect(() => {
@@ -107,23 +116,47 @@ export default function EngineTelemetry() {
     }
   }, [messages]);
 
-  // REST fallback - fetch health summary every 15s
+  // Phase 4C: Adaptive refresh - fetch health summary with dynamic interval
   const { data: healthSummary, isLoading: summaryLoading } = useQuery<HealthSummary>({
     queryKey: ['/api/health/summary'],
-    refetchInterval: 15000,
+    refetchInterval: refreshInterval,
   });
 
-  // Recovery actions
+  // Recovery actions (less frequent updates)
   const { data: recoveryData } = useQuery<{ actions: any[] }>({
     queryKey: ['/api/health/recovery'],
-    refetchInterval: 30000,
+    refetchInterval: refreshInterval * 2,
   });
 
-  // Phase 41F-F: Anomaly detection data
+  // Phase 41F-F: Anomaly detection data (adaptive refresh)
   const { data: anomaliesData } = useQuery<{ anomalies: any[] }>({
     queryKey: ['/api/health/anomalies'],
-    refetchInterval: 15000,
+    refetchInterval: refreshInterval,
   });
+  
+  // Phase 4C: Adaptive refresh interval based on latency
+  useEffect(() => {
+    if (!healthSummary) return;
+    
+    const latency = healthSummary.lastLatencies?.broadcast || 0;
+    
+    // Adaptive rule: latency < 120ms → 1s refresh, otherwise 1.5s refresh
+    const adaptiveInterval = latency < 120 ? 1000 : 1500;
+    if (adaptiveInterval !== refreshInterval) {
+      setRefreshInterval(adaptiveInterval);
+      console.log(`[EngineTelemetry][Phase4C] Adaptive refresh: ${adaptiveInterval}ms (latency: ${latency}ms)`);
+    }
+    
+    // Update previousMetrics ref with current snapshot for next comparison
+    // Using ref prevents infinite loops and ensures trends reflect immediate delta
+    if (healthSummary.lastLatencies?.broadcast !== undefined) {
+      previousMetricsRef.current = {
+        latency: healthSummary.lastLatencies.broadcast,
+        cacheHit: previousMetricsRef.current.cacheHit,
+        cpu: previousMetricsRef.current.cpu,
+      };
+    }
+  }, [healthSummary, refreshInterval]);
 
   // Diagnostic logging for data sources
   useEffect(() => {
@@ -136,6 +169,14 @@ export default function EngineTelemetry() {
   }, [wsHealthData, healthSummary]);
 
   const latestData = wsHealthData || healthSummary;
+
+  // Phase 4C: Helper function to calculate trend arrows
+  const getTrend = (current?: number, previous?: number): string => {
+    if (current === undefined || previous === undefined) return "→";
+    if (current > previous) return "↑";
+    if (current < previous) return "↓";
+    return "→";
+  };
 
   // Show loading state only if query is actively loading and no data exists yet
   if (summaryLoading && !latestData) {
@@ -595,6 +636,30 @@ export default function EngineTelemetry() {
             </CardContent>
           </Card>
         )}
+
+        {/* Phase 4C: UI Telemetry Footer - Refresh interval and trend metrics */}
+        <div className="mt-6 pt-4 border-t border-border">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <Clock className="h-3 w-3" />
+              Refresh: {refreshInterval}ms
+              {refreshInterval < 1500 ? " (fast mode)" : " (efficient mode)"}
+            </span>
+            <span className="flex items-center gap-3">
+              {healthSummary?.lastLatencies?.broadcast !== undefined && (
+                <span className="flex items-center gap-1">
+                  Latency: {healthSummary.lastLatencies.broadcast}ms
+                  <span className="font-mono">{getTrend(healthSummary.lastLatencies.broadcast, previousMetricsRef.current.latency)}</span>
+                </span>
+              )}
+              {healthSummary?.recentRecoveries !== undefined && (
+                <span>
+                  Recoveries: {healthSummary.recentRecoveries}
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
       </div>
     );
   } catch (err) {

@@ -1,0 +1,137 @@
+⚙️ Phase 4C — Frontend Load Optimization & UI Telemetry Polish
+
+Project: Dawn Trader v1.9.5-adaptive
+Branch: dt-v1-revival-bootstrap
+Credentials: username=testuser123 password=SecurePass123!
+
+🎯 Objective
+
+Reduce frontend initial load time and optimize real-time UI telemetry updates.
+Targets:
+
+Startup render ≤ 3 s (vs current ≈ 4–5 s)
+
+Bundle ≤ 300 KB gzipped
+
+UI telemetry refresh ≤ 1 s (smoother data updates & reduced CPU overhead)
+
+🧱 Scope of Work
+1️⃣ Frontend Bundle Optimization (Vite + React)
+
+Files: client/vite.config.ts, client/src/main.tsx
+
+Enable esbuild minification & code splitting (default in Vite but make explicit):
+
+export default defineConfig({
+  build: {
+    minify: "esbuild",
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          latti: ["./src/components/LattiWidget.tsx"],
+          telemetry: ["./src/components/TelemetryPanel.tsx"],
+        },
+      },
+    },
+  },
+});
+
+
+Verify dynamic import of LATTI and Telemetry components:
+
+const LattiWidget = lazy(() => import("./components/LattiWidget"));
+const TelemetryPanel = lazy(() => import("./components/TelemetryPanel"));
+
+
+✅ Expected: bundle size ≈ 270 KB gzipped, initial paint ≤ 3 s.
+
+2️⃣ UI Telemetry Refresh Loop Optimization
+
+File: client/src/components/monitoring/engine-telemetry.tsx
+
+Replace setInterval(..., 1000) with an adaptive refresh using Gemini feedback:
+
+const interval = latency < 120 ? 1000 : 1500;
+useEffect(() => {
+  const id = setInterval(fetchTelemetry, interval);
+  return () => clearInterval(id);
+}, [latency]);
+
+
+Add FPS-like indicator in UI footer:
+
+<span className="text-xs text-muted-foreground">
+  Refresh {interval} ms | CacheHit {(cacheHit*100).toFixed(0)}%
+</span>
+
+
+✅ Expected: smooth real-time update w/ CPU usage ≤ 25 %.
+
+3️⃣ Loading Skeletons & Deferred Widgets
+
+Files: client/src/components/Dashboard.tsx, client/src/components/LattiWidget.tsx
+
+Add React <Suspense> wrappers with simple skeletons to avoid blocking paint.
+
+<Suspense fallback={<div className="animate-pulse p-4">Loading LATTI…</div>}>
+  <LattiWidget />
+</Suspense>
+
+
+✅ Expected: first paint within 2 s even if services load later.
+
+4️⃣ UI Telemetry Color + Trend Enhancement
+
+File: client/src/components/monitoring/engine-telemetry.tsx
+
+Add trend arrows ↑/↓ based on last two telemetry points for CPU, Latency, CacheHit.
+
+const trend = val > prev ? "↑" : val < prev ? "↓" : "→";
+<span>{trend}</span>
+
+
+✅ Expected: visual trend feedback for operators (helps Phase 4D comparison).
+
+5️⃣ Validation Commands
+# Frontend build test
+npm run build --workspace=client | grep "dist"
+
+# Bundle size
+du -h client/dist/assets/* | grep "KB"
+
+# UI telemetry response time
+grep "\[Gemini-Profile\]" /tmp/logs/Start_application_* | tail -5
+
+
+✅ Pass Criteria:
+
+Build < 30 s
+
+Bundle ≤ 300 KB gzipped
+
+UI refresh visible in ≤ 1 s
+
+No console errors during dashboard load
+
+🧾 Deliverables
+
+audit/phase4c-frontend-optimization.md
+
+Bundle metrics (before/after)
+
+UI load timings & trend visuals
+
+Screenshots (optional)
+
+Logs: logs/phase4c-build.txt
+
+Branch tag → dt-v1.9.5-frontend-optimized
+
+✅ Exit Criteria
+Metric	Target
+Initial Render	≤ 3 s
+Bundle Size (gz)	≤ 300 KB
+UI Telemetry Latency	≤ 1 s
+CPU Usage	≤ 25 %
+Errors / Warnings	0

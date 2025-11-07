@@ -1,0 +1,62 @@
+# Phase 5C – Observability Setup Directive
+
+## Objective
+Implement full observability and monitoring across DawnTrader services to make SLOs measurable and enforceable.
+
+## Scope
+Applies to all backend services:
+- server/index.ts (startup instrumentation)
+- server/services/*
+- server/modules/trading/, reasoning/, analytics/, ethics/
+- telemetry-compression.ts, gemini-profiler.ts, cache.ts
+
+## Tasks
+1. **Metrics Layer**
+   - Integrate Prometheus (or lightweight node-metrics module).
+   - Expose /metrics endpoint secured by API key.
+   - Instrument:
+     - Signal tick latency
+     - Order submission latency
+     - Portfolio update latency
+     - Queue depth/age
+     - Cache hit ratio
+     - DB query latency
+     - Event-loop lag
+   - Use labels {service, phase, mode, status}.
+
+2. **Dashboards & Alerts**
+   - Create dashboards for each SLO.
+   - Red threshold = >20 % over target for 5 minutes.
+   - Amber threshold = >10 % over target.
+   - Integrate alert hooks (console + webhook placeholder).
+
+3. **Logging Enhancements**
+   - Add structured JSON logs for all metrics.
+   - Ensure TelemetryCompression batches emit summary line:
+     [Gemini-Telemetry][Phase5C] Flushed N logs, avgLatency=X ms, cacheHit=Y %.
+
+4. **Backups / Disaster Recovery**
+   - Enable point-in-time recovery for DB.
+   - Snapshot every 24 h (min 7-day retention).
+   - Add `backup:verify` script to CI pipeline.
+
+5. **Validation Tests**
+   - Simulate 15 min traffic; verify all metrics appear and update.
+   - Confirm alerts trigger at thresholds.
+   - Verify /metrics endpoint secured and reachable.
+
+## Acceptance Criteria
+- All metrics endpoints responding under 200 ms.
+- Dashboards show real-time updates for latency, cache, and queue depth.
+- Alerts fire under synthetic overload conditions.
+- PITR backup verified in CI logs.
+- No regression in startup time (< +1 s vs Phase 4D).
+
+## Deliverables
+- server/services/metrics.ts
+- dashboards/phase5c.json
+- ci/tasks/backup-verify.yml
+- audit/phase5c-observability-verification.md (auto-generated summary)
+
+## Time Estimate
+≈ 1 day implementation + 0.5 day validation.

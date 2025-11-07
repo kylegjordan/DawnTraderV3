@@ -1,5 +1,6 @@
 /**
  * Phase 8.5 Addendum G - System Truth Diagnostic Service
+ * Phase 3B: Single-tenant refactor - removed all userId parameters
  * 
  * Compares portfolio, strategies, engineActive, and risk settings
  * across Backend, Cortex, and Walter layers to detect discrepancies.
@@ -8,6 +9,9 @@
 import { storage } from '../storage';
 import { cortexCore } from './cortex/cortex-core';
 import { fetchUserContext } from './behavioral-template';
+
+// Phase 3B: Canonical user ID for single-tenant architecture
+const CANONICAL_USER_ID = 'kylegjordan';
 
 // SimulationSession type (defined in routes.ts)
 interface SimulationSession {
@@ -57,10 +61,10 @@ class SystemTruthDiagnosticService {
 
   /**
    * Run comprehensive truth check across all system layers
-   * Phase 3: Removed userId parameter (single-tenant)
+   * Phase 3B: Removed userId parameter - uses canonical user ID
    */
   async runTruthCheck(mode: 'live' | 'paper'): Promise<TruthComparison> {
-    console.log(`[${this.MODULE_NAME}] 🔍 Running truth check (${mode})`);
+    console.log(`[${this.MODULE_NAME}] 🔍 Running truth check for mode ${mode} (single-tenant)`);
     const start = Date.now();
 
     try {
@@ -118,14 +122,15 @@ class SystemTruthDiagnosticService {
   /**
    * Get backend truth snapshot from database and /api/trading/status equivalent
    * Phase 8.5 Addendum I: Uses live API source - matches /api/trading/status exactly
+   * Phase 3B: Removed userId parameter - uses canonical user ID
    */
-  private async getBackendSnapshot(userId: string, mode: 'live' | 'paper'): Promise<TruthSnapshot> {
+  private async getBackendSnapshot(mode: 'live' | 'paper'): Promise<TruthSnapshot> {
     // Get portfolio state - NO FALLBACK to 1000 (Phase 8.5 Addendum I)
-    const portfolioState = await storage.getPortfolioState({ userId, mode });
+    const portfolioState = await storage.getPortfolioState({ userId: CANONICAL_USER_ID, mode });
     const portfolioBalance = portfolioState ? parseFloat(portfolioState.balance) : 0;
 
     // Get active strategies
-    const strategies = await storage.listStrategySettings({ userId, mode });
+    const strategies = await storage.listStrategySettings({ userId: CANONICAL_USER_ID, mode });
     const activeStrategies = strategies
       .filter(s => s.enabled)
       .map(s => s.strategy)
@@ -146,22 +151,24 @@ class SystemTruthDiagnosticService {
       activeStrategiesCount: activeStrategies.length,
       engineActive,
       mode,
-      riskPerTrade: settings?.riskPerTrade ? parseFloat(settings.riskPerTrade.toString()) : 0,
-      dailyLossKillSwitch: settings?.dailyLossKillSwitch ? parseFloat(settings.dailyLossKillSwitch.toString()) : 7.0,
-      maxExposurePercent: settings?.maxExposurePercent ? parseFloat(settings.maxExposurePercent.toString()) : 100
+      // Phase 41F-L.E2E-PURGE: Default values since trading_settings table disabled
+      riskPerTrade: 0,
+      dailyLossKillSwitch: 7.0,
+      maxExposurePercent: 100
     };
   }
 
   /**
    * Get Cortex truth snapshot from cached analytics data
+   * Phase 3B: Removed userId parameter - uses mode-only cache key
    */
-  private async getCortexSnapshot(userId: string, mode: 'live' | 'paper'): Promise<TruthSnapshot> {
-    // Get analytics from Cortex cache
-    const cacheKey = `analytics_${mode}_${userId}`;
+  private async getCortexSnapshot(mode: 'live' | 'paper'): Promise<TruthSnapshot> {
+    // Get analytics from Cortex cache (Phase 3B: mode-only cache key)
+    const cacheKey = `analytics_${mode}`;
     const analytics = cortexCore.get(cacheKey);
 
     if (!analytics) {
-      console.warn(`[${this.MODULE_NAME}] No Cortex analytics found for user ${userId} (${mode}) - returning empty snapshot`);
+      console.warn(`[${this.MODULE_NAME}] No Cortex analytics found for mode ${mode} - returning empty snapshot`);
       return {
         source: 'cortex',
         timestamp: new Date().toISOString(),
@@ -205,9 +212,10 @@ class SystemTruthDiagnosticService {
 
   /**
    * Get Walter truth snapshot from current context
+   * Phase 3B: Removed userId parameter - uses canonical user ID
    */
-  private async getWalterSnapshot(userId: string, mode: 'live' | 'paper'): Promise<TruthSnapshot> {
-    const context = await fetchUserContext(userId);
+  private async getWalterSnapshot(mode: 'live' | 'paper'): Promise<TruthSnapshot> {
+    const context = await fetchUserContext(CANONICAL_USER_ID);
 
     return {
       source: 'walter',

@@ -61,6 +61,7 @@ export const awarenessEmotionalStateEnum = pgEnum("awareness_emotional_state", [
 export const alignmentStatusEnum = pgEnum("alignment_status", ["compliant", "at_risk", "violated"]);
 export const policyTypeEnum = pgEnum("policy_type", ["ethical", "functional", "operational", "risk"]);
 export const alignmentVerificationResultEnum = pgEnum("alignment_verification_result", ["approved", "flagged", "rejected"]);
+export const valueCategoryEnum = pgEnum("value_category", ["safety", "fairness", "transparency", "accountability", "user_welfare"]);
 export const planStatusEnum = pgEnum("plan_status", ["draft", "active", "paused", "completed"]);
 export const learningPhaseEnum = pgEnum("learning_phase", ["observation", "adjustment", "evaluation"]);
 
@@ -2907,6 +2908,25 @@ export const alignmentAuditLog = pgTable("alignment_audit_log", {
   verificationResultIdx: index("alignment_audit_log_verification_result_idx").on(table.verificationResult),
 }));
 
+// Phase 9.5: Value Alignment Matrix - Objective to Value Category Mapping
+// Phase 3B: Migrated from user_id to mode for single-tenant architecture
+export const valueAlignmentMatrix = pgTable("value_alignment_matrix", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: tradingModeEnum("mode").notNull(), // Phase 3B: Replaced user_id with mode
+  objectiveName: varchar("objective_name").notNull(),
+  valueCategory: valueCategoryEnum("value_category").notNull(),
+  alignmentScore: doublePrecision("alignment_score").notNull(),
+  weighting: doublePrecision("weighting").default(1.0).notNull(),
+  constraints: jsonb("constraints"),
+  lastEvaluated: timestamp("last_evaluated", { withTimezone: true }),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  modeObjectiveIdx: index("value_alignment_matrix_mode_objective_idx").on(table.mode, table.objectiveName),
+  valueCategoryIdx: index("value_alignment_matrix_value_category_idx").on(table.valueCategory),
+}));
+
 // Phase 9.0: Goal Alignment Profile - Current Objectives and Weights
 export const goalAlignmentProfile = pgTable("goal_alignment_profile", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -4482,3 +4502,21 @@ export const insertSystemConfigSchema = createInsertSchema(systemConfig).omit({
 
 export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
 export type SystemConfig = typeof systemConfig.$inferSelect;
+
+// Phase 6: Config Registry (Runtime Configuration Management)
+export const configRegistry = pgTable("config_registry", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key", { length: 100 }).unique().notNull(),
+  value: jsonb("value").notNull(),
+  type: varchar("type", { length: 20 }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedBy: varchar("updated_by", { length: 100 }),
+});
+
+export const insertConfigRegistrySchema = createInsertSchema(configRegistry).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertConfigRegistry = z.infer<typeof insertConfigRegistrySchema>;
+export type ConfigRegistry = typeof configRegistry.$inferSelect;

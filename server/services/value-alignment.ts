@@ -1,5 +1,6 @@
 // server/services/value-alignment.ts
 // Phase 9.5: Value Alignment Service
+// Phase 3B: Migrated from userId to mode for single-tenant architecture
 
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
@@ -7,10 +8,11 @@ import { contextBridge } from './context-bridge';
 import { nanoid } from 'nanoid';
 
 type ValueCategory = 'safety' | 'fairness' | 'transparency' | 'accountability' | 'user_welfare';
+type TradingMode = 'live' | 'paper';
 
 interface AlignmentMatrix {
   id: string;
-  userId: string | null;
+  mode: TradingMode; // Phase 3B: Replaced userId with mode
   objectiveName: string;
   valueCategory: ValueCategory;
   alignmentScore: number;
@@ -28,9 +30,10 @@ interface AlignmentMatrix {
  */
 class ValueAlignmentService {
   /**
-   * Initialize default value alignment matrix for a user
+   * Initialize default value alignment matrix for a mode
+   * Phase 3B: Changed from userId to mode parameter
    */
-  async initializeDefaultMatrix(userId: string): Promise<void> {
+  async initializeDefaultMatrix(mode: TradingMode): Promise<void> {
     const defaultObjectives = [
       {
         objectiveName: 'maximize_profit',
@@ -72,11 +75,11 @@ class ValueAlignmentService {
     for (const obj of defaultObjectives) {
       await db.execute(sql`
         INSERT INTO value_alignment_matrix (
-          id, user_id, objective_name, value_category, 
+          id, mode, objective_name, value_category, 
           alignment_score, weighting, constraints
         ) VALUES (
           ${`align_${nanoid(12)}`},
-          ${userId},
+          ${mode}::trading_mode,
           ${obj.objectiveName},
           ${obj.valueCategory}::value_category,
           ${obj.alignmentScore},
@@ -90,15 +93,16 @@ class ValueAlignmentService {
 
   /**
    * Evaluate alignment for a specific objective
+   * Phase 3B: Changed from userId to mode parameter
    */
   async evaluateObjective(
-    userId: string,
+    mode: TradingMode,
     objectiveName: string,
     actionData: Record<string, any>
   ): Promise<{ aligned: boolean; score: number; issues: string[] }> {
     const result = await db.execute(sql`
       SELECT * FROM value_alignment_matrix
-      WHERE user_id = ${userId} AND objective_name = ${objectiveName}
+      WHERE mode = ${mode}::trading_mode AND objective_name = ${objectiveName}
     `);
 
     if (result.rows.length === 0) {
@@ -139,9 +143,10 @@ class ValueAlignmentService {
 
   /**
    * Get overall alignment status across all objectives
+   * Phase 3B: Changed from userId to mode parameter
    */
   async getOverallAlignment(
-    userId: string
+    mode: TradingMode
   ): Promise<{
     averageScore: number;
     byCategory: Record<ValueCategory, number>;
@@ -149,7 +154,7 @@ class ValueAlignmentService {
   }> {
     const result = await db.execute(sql`
       SELECT * FROM value_alignment_matrix
-      WHERE user_id = ${userId}
+      WHERE mode = ${mode}::trading_mode
     `);
 
     const objectives = result.rows as unknown as AlignmentMatrix[];
@@ -200,9 +205,10 @@ class ValueAlignmentService {
 
   /**
    * Update alignment score for an objective
+   * Phase 3B: Changed from userId to mode parameter
    */
   async updateAlignment(
-    userId: string,
+    mode: TradingMode,
     objectiveName: string,
     newScore: number
   ): Promise<void> {
@@ -212,15 +218,15 @@ class ValueAlignmentService {
         alignment_score = ${newScore},
         last_evaluated = now(),
         updated_at = now()
-      WHERE user_id = ${userId} AND objective_name = ${objectiveName}
+      WHERE mode = ${mode}::trading_mode AND objective_name = ${objectiveName}
     `);
 
     await contextBridge.broadcast({
       type: 'state_update',
-      userId,
       payload: {
         source: 'value_alignment',
         action: 'alignment_updated',
+        mode,
         objectiveName,
         newScore,
       },
@@ -228,12 +234,13 @@ class ValueAlignmentService {
   }
 
   /**
-   * Get alignment matrix for a user
+   * Get alignment matrix for a mode
+   * Phase 3B: Changed from userId to mode parameter
    */
-  async getMatrix(userId: string): Promise<AlignmentMatrix[]> {
+  async getMatrix(mode: TradingMode): Promise<AlignmentMatrix[]> {
     const result = await db.execute(sql`
       SELECT * FROM value_alignment_matrix
-      WHERE user_id = ${userId}
+      WHERE mode = ${mode}::trading_mode
       ORDER BY weighting DESC, value_category
     `);
 

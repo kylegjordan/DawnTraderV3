@@ -1,0 +1,122 @@
+⚙️ Phase 3C — Performance Verification & Post-Migration Optimization
+
+Project: Dawn Trader v1.9.2  Branch: dt-v1-revival-bootstrap
+Credentials: username=testuser123 password=SecurePass123!
+
+🎯 Objective
+
+Measure and tune performance after Phase 3B’s schema and service refactors.
+Confirm that single-tenant, mode-scoped execution adds no latency and that build, runtime, and database cycles remain optimized.
+
+🧱 Scope of Work
+1️⃣ Runtime Performance Audit
+
+Enable profiling logs in /server/index.ts:
+
+const start = performance.now();
+app.listen(PORT, () => {
+  console.log(`[PerfAudit] Server started in ${(performance.now()-start).toFixed(1)} ms`);
+});
+
+
+Add timestamps for key subsystems (TradingEngine, GoalsEngine, LATTIService, Scheduler) in their .initialize() methods.
+
+Capture metrics into /logs/phase3c-startup-times.txt.
+
+✅ Expected: Total startup < 6 s; each core service < 1 s.
+
+2️⃣ API Latency Benchmark
+
+Create /scripts/phase3c-api-benchmark.sh containing:
+
+#!/bin/bash
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+for ep in status goals portfolio telemetry; do
+  t=$(curl -s -w "%{time_total}" -o /dev/null \
+  -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/$ep)
+  echo "$ep,$t" >> logs/phase3c-api-latency.csv
+done
+
+
+✅ Expected: Average endpoint latency ≤ 120 ms (local).
+
+3️⃣ Database Optimization
+
+Run: EXPLAIN QUERY PLAN SELECT * FROM value_alignment_matrix WHERE mode='paper';
+
+Verify index usage (mode_objective_idx).
+
+If SCAN TABLE appears → add index (CREATE INDEX IF NOT EXISTS value_alignment_mode_idx ON value_alignment_matrix(mode);).
+
+Record results in logs/phase3c-db-index-check.txt.
+
+4️⃣ Memory & CPU Profiling
+
+Use Node profiler:
+
+node --inspect --prof server/index.js & sleep 30 && kill $!
+node --prof-process isolate-*.log > logs/phase3c-cpu-profile.txt
+
+
+✅ Expected: TradingEngine < 40 % CPU, Memory < 250 MB.
+
+5️⃣ Frontend Performance Pass
+
+Run npm run build --workspace=client → verify bundle ≤ 4 MB.
+
+Lighthouse test (Replit Preview or local):
+
+Performance ≥ 90
+
+Accessibility ≥ 95
+
+Best Practices ≥ 95
+
+SEO ≥ 90
+Save JSON report as logs/phase3c-lighthouse.json.
+
+6️⃣ Cache & Telemetry Validation
+
+Confirm /api/system/config returns cached mode values within 1 query cycle.
+
+Add log marker in MetricsCore to print [Perf3C] Cache hit every time metrics reuse cached data.
+✅ Expected: ≥ 70 % cache-hit ratio during 10-min run.
+
+🧪 Validation Checklist
+Test	Command	Target	Pass Criteria
+Build	npm run build	Compilation	0 errors ≤ 30 s
+Startup Speed	Logs	< 6 s	✅
+API Latency	bash scripts/phase3c-api-benchmark.sh	≤ 120 ms avg	✅
+DB Index	EXPLAIN	Uses index	✅
+CPU Profile	Node prof	< 40 % CPU	✅
+Frontend Build	Lighthouse	≥ 90 perf score	✅
+Cache Hit	MetricsCore logs	≥ 70 %	✅
+🧾 Deliverables
+
+Create /audit/phase3c-performance-verification.md containing:
+
+Startup and API timings
+
+DB index plan output
+
+CPU/memory summary
+
+Cache-hit ratio
+
+Lighthouse scores
+
+Final grade (A/B/C)
+
+✅ Exit Criteria
+
+All performance benchmarks within targets.
+
+No new schema or runtime errors.
+
+Documentation and logs archived.
+
+Once Phase 3C is validated, the branch tag becomes:
+dt-v1.9.3-perf-verified

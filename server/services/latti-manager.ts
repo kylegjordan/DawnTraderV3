@@ -505,8 +505,10 @@ export class LATTIManager {
       const axios = (await import("axios")).default;
       
       const strategies = ["dhma", "quantflow", "trendpulse", "volsurf", "momentumx"];
-      const username = "testuser123";
-      const password = "SecurePass123!";
+      
+      // Phase 5B.HF: Use environment-based test credentials
+      const { getTestCredentials } = await import("../config/test-credentials");
+      const { username, password } = getTestCredentials();
       
       let token: string;
       try {

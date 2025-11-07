@@ -15,9 +15,20 @@ import { nanoid } from 'nanoid';
 
 // Configuration
 const BOB_ENABLED = process.env.BOB_ENABLED !== 'false'; // Default: enabled
-const BOB_METRICS_TTL_SECONDS = parseInt(process.env.BOB_METRICS_TTL_SECONDS || '30');
 const BOB_PREFETCH_ON_CHAT_OPEN = process.env.BOB_PREFETCH_ON_CHAT_OPEN !== 'false';
 const BOB_PREFETCH_ON_MODE_CHANGE = process.env.BOB_PREFETCH_ON_MODE_CHANGE !== 'false';
+const CACHE_DEBUG = process.env.CACHE_DEBUG === 'true'; // Phase 4A: Gate verbose logs
+
+// Phase 5B.HF: Add BOB_METRICS_TTL_SECONDS with default
+const BOB_METRICS_TTL_SECONDS = Number(process.env.BOB_METRICS_TTL_SECONDS ?? 60);
+
+// Phase 4A Remediation: Unified TTL strategy
+const TTL_CONFIG = {
+  metadata: 90,      // Symbol metadata, config: 90s
+  portfolio: 90,     // Portfolio snapshots: 90s
+  diagnostics: 45,   // Diagnostics, scan results: 45s
+  default: 30        // Fallback: 30s
+};
 
 interface CacheEntry<T = any> {
   key: string;
@@ -47,6 +58,9 @@ interface CacheStats {
   errors: number;
   lastErrorTime?: Date;
 }
+
+// Phase 4A: Request coalescing to prevent duplicate in-flight fetches
+const pendingRequests: Map<string, Promise<any>> = new Map();
 
 /**
  * Bob Core Coordinator
@@ -78,29 +92,46 @@ class BobCoreCoordinator {
    */
   setHealthMonitor(monitor: any) {
     this.healthMonitor = monitor;
-    console.log('[BobCore] 🏥 Health monitor integrated');
+    if (CACHE_DEBUG) console.log('[BobCore] 🏥 Health monitor integrated');
   }
 
   /**
    * Register a Bob module with its fetch functions
    */
   registerModule(name: string, fetchFunctions: Map<string, (context: FetchContext) => Promise<any>>) {
-    console.log(`[BobCore] 📦 Registering module: ${name} with ${fetchFunctions.size} functions`);
+    if (CACHE_DEBUG) console.log(`[BobCore] 📦 Registering module: ${name} with ${fetchFunctions.size} functions`);
     this.modules.set(name, { name, fetchFunctions });
   }
 
   /**
-   * Fetch data or serve from cache
+   * Phase 4A: Determine TTL based on cache key category
+   */
+  private determineTTL(key: string): number {
+    if (key.includes('config') || key.includes('metadata') || key.includes('symbol')) {
+      return TTL_CONFIG.metadata;
+    }
+    if (key.includes('portfolio') || key.includes('snapshot')) {
+      return TTL_CONFIG.portfolio;
+    }
+    if (key.includes('diagnostic') || key.includes('scan')) {
+      return TTL_CONFIG.diagnostics;
+    }
+    return TTL_CONFIG.default;
+  }
+
+  /**
+   * Fetch data or serve from cache with request coalescing
+   * Phase 4A: Unified TTLs + coalescing + quieter logs
    * @param key - Unique cache key
    * @param fetchFn - Function to fetch data on cache miss
-   * @param ttl - Time to live in seconds
+   * @param ttl - Time to live in seconds (optional, auto-determined from key)
    * @param context - Fetch context (mode, userId, token)
    * @param tags - Optional tags for cache invalidation
    */
   async fetchOrServe<T>(
     key: string,
     fetchFn: () => Promise<T>,
-    ttl: number = BOB_METRICS_TTL_SECONDS,
+    ttl?: number,
     context?: FetchContext,
     tags?: string[]
   ): Promise<T> {
@@ -118,8 +149,18 @@ class BobCoreCoordinator {
       if (this.healthMonitor) {
         this.healthMonitor.recordCacheHit();
       }
-      console.log(`[BobCore] ✅ CACHE_HIT: ${key} (TTL: ${Math.round((cached.expiresAt - now) / 1000)}s remaining)`);
+      if (CACHE_DEBUG) {
+        console.log(`[BobCore] ✅ CACHE_HIT: ${key} (TTL: ${Math.round((cached.expiresAt - now) / 1000)}s remaining)`);
+      }
       return cached.value as T;
+    }
+
+    // Phase 4A: Request coalescing - check for in-flight request
+    if (pendingRequests.has(key)) {
+      if (CACHE_DEBUG) {
+        console.log(`[BobCore] 🔄 COALESCE: ${key} (request already in-flight)`);
+      }
+      return pendingRequests.get(key) as Promise<T>;
     }
 
     // Cache miss - fetch data
@@ -128,29 +169,45 @@ class BobCoreCoordinator {
       this.healthMonitor.recordCacheMiss();
     }
     const startTime = Date.now();
-    console.log(`[BobCore] ❌ CACHE_MISS: ${key} - fetching...`);
-
-    try {
-      const value = await fetchFn();
-      const duration = Date.now() - startTime;
-
-      // Store in cache
-      this.cache.set(key, {
-        key,
-        value,
-        expiresAt: Date.now() + (ttl * 1000),
-        mode: context?.mode,
-        tags
-      });
-
-      console.log(`[BobCore] 💾 Cached: ${key} (TTL: ${ttl}s, fetch: ${duration}ms)`);
-      return value;
-    } catch (error: any) {
-      this.stats.errors++;
-      this.stats.lastErrorTime = new Date();
-      console.error(`[BobCore] ⚠️ FETCH_ERROR: ${key} -`, error.message);
-      throw error;
+    if (CACHE_DEBUG) {
+      console.log(`[BobCore] ❌ CACHE_MISS: ${key} - fetching...`);
     }
+
+    // Determine TTL if not provided (Phase 4A)
+    const finalTTL = ttl !== undefined ? ttl : this.determineTTL(key);
+
+    // Create promise and store in pending map
+    const promise = (async () => {
+      try {
+        const value = await fetchFn();
+        const duration = Date.now() - startTime;
+
+        // Store in cache
+        this.cache.set(key, {
+          key,
+          value,
+          expiresAt: Date.now() + (finalTTL * 1000),
+          mode: context?.mode,
+          tags
+        });
+
+        if (CACHE_DEBUG) {
+          console.log(`[BobCore] 💾 Cached: ${key} (TTL: ${finalTTL}s, fetch: ${duration}ms)`);
+        }
+        return value;
+      } catch (error: any) {
+        this.stats.errors++;
+        this.stats.lastErrorTime = new Date();
+        console.error(`[BobCore] ⚠️ FETCH_ERROR: ${key} -`, error.message);
+        throw error;
+      } finally {
+        // Remove from pending after completion
+        pendingRequests.delete(key);
+      }
+    })();
+
+    pendingRequests.set(key, promise);
+    return promise;
   }
 
   /**
@@ -160,7 +217,7 @@ class BobCoreCoordinator {
   async prefetch(
     key: string,
     fetchFn: () => Promise<any>,
-    ttl: number = BOB_METRICS_TTL_SECONDS,
+    ttl?: number,
     context?: FetchContext,
     tags?: string[]
   ): Promise<void> {
@@ -168,12 +225,12 @@ class BobCoreCoordinator {
       return;
     }
 
-    console.log(`[BobCore] 🔄 PREFETCH_START: ${key} (mode: ${context?.mode || 'default'})`);
+    if (CACHE_DEBUG) console.log(`[BobCore] 🔄 PREFETCH_START: ${key} (mode: ${context?.mode || 'default'})`);
     
     try {
       await this.fetchOrServe(key, fetchFn, ttl, context, tags);
       this.stats.prefetches++;
-      console.log(`[BobCore] ✅ PREFETCH_OK: ${key}`);
+      if (CACHE_DEBUG) console.log(`[BobCore] ✅ PREFETCH_OK: ${key}`);
     } catch (error: any) {
       console.error(`[BobCore] ⚠️ PREFETCH_FAIL: ${key} -`, error.message);
     }
@@ -184,7 +241,7 @@ class BobCoreCoordinator {
    */
   async fallback<T>(key: string, fallbackFn: () => Promise<T>): Promise<T> {
     this.stats.fallbacks++;
-    console.log(`[BobCore] 🔄 FALLBACK: ${key} - using original endpoint`);
+    if (CACHE_DEBUG) console.log(`[BobCore] 🔄 FALLBACK: ${key} - using original endpoint`);
     
     try {
       return await fallbackFn();
@@ -208,7 +265,7 @@ class BobCoreCoordinator {
 
     keysToDelete.forEach(key => {
       this.cache.delete(key);
-      console.log(`[BobCore] 🗑️ INVALIDATED: ${key}`);
+      if (CACHE_DEBUG) console.log(`[BobCore] 🗑️ INVALIDATED: ${key}`);
     });
 
     return keysToDelete.length;
@@ -227,7 +284,7 @@ class BobCoreCoordinator {
     }
 
     keysToDelete.forEach(key => this.cache.delete(key));
-    console.log(`[BobCore] 🗑️ INVALIDATED_MODE: ${mode} (${keysToDelete.length} entries)`);
+    if (CACHE_DEBUG) console.log(`[BobCore] 🗑️ INVALIDATED_MODE: ${mode} (${keysToDelete.length} entries)`);
     
     return keysToDelete.length;
   }
@@ -238,7 +295,7 @@ class BobCoreCoordinator {
   invalidateAll(): number {
     const count = this.cache.size;
     this.cache.clear();
-    console.log(`[BobCore] 🗑️ INVALIDATED_ALL: Cleared ${count} cache entries`);
+    if (CACHE_DEBUG) console.log(`[BobCore] 🗑️ INVALIDATED_ALL: Cleared ${count} cache entries`);
     return count;
   }
 
@@ -257,7 +314,7 @@ class BobCoreCoordinator {
 
     if (keysToDelete.length > 0) {
       keysToDelete.forEach(key => this.cache.delete(key));
-      console.log(`[BobCore] 🧹 Cleaned ${keysToDelete.length} expired cache entries`);
+      if (CACHE_DEBUG) console.log(`[BobCore] 🧹 Cleaned ${keysToDelete.length} expired cache entries`);
     }
   }
 

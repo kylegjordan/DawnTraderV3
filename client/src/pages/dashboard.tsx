@@ -14,15 +14,22 @@ import TradingActivityWidget from "@/components/goals/trading-activity-widget";
 import AveragesWidget from "@/components/goals/averages-widget";
 import { FilterHealthWidget } from "@/components/dashboard/filter-health-widget";
 import { BaselineStatusWidget } from "@/components/dashboard/baseline-status-widget";
-import { DashboardLATTiWidget } from "@/components/dashboard/dashboard-latti-widget";
 import AlertBanner from "@/components/alerts/alert-banner";
 import { useSystemHealth } from "@/hooks/use-system-health";
 import { PortfolioProvider, type PortfolioOverview } from "@/contexts/portfolio-context";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWebSocket } from "@/hooks/use-websocket";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, lazy, Suspense } from "react";
 import { unstable_batchedUpdates } from "react-dom";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Phase 4C: Lazy load LATTI widget for code splitting and bundle optimization
+const DashboardLATTiWidget = lazy(() => 
+  import("@/components/dashboard/dashboard-latti-widget").then(module => ({
+    default: module.DashboardLATTiWidget
+  }))
+);
 
 export default function Dashboard() {
   // Enable auto-resync polling every 12s (detects backend changes and auto-refreshes widgets)
@@ -98,7 +105,19 @@ export default function Dashboard() {
       </section>
 
       {/* Phase 4: Unified LATTi Goals & Guardrails Widget */}
-      <DashboardLATTiWidget />
+      {/* Phase 4C: Suspense wrapper for lazy-loaded LATTI widget */}
+      <Suspense fallback={
+        <div className="rounded-lg border bg-card p-6 animate-pulse">
+          <div className="h-6 w-48 bg-muted rounded mb-4"></div>
+          <div className="space-y-3">
+            <div className="h-4 w-full bg-muted rounded"></div>
+            <div className="h-4 w-3/4 bg-muted rounded"></div>
+            <div className="h-4 w-5/6 bg-muted rounded"></div>
+          </div>
+        </div>
+      }>
+        <DashboardLATTiWidget />
+      </Suspense>
 
       {/* Daily Trading Brief (includes Market Insights) */}
       <DailyBriefCard />

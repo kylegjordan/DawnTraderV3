@@ -1,0 +1,141 @@
+⚙️ Phase 4A-3 — Cache Optimization (Gemini-Guided Tier)
+
+Project: Dawn Trader v1.9.5-dev
+Branch: dt-v1-revival-bootstrap
+Credentials: username=testuser123 password=SecurePass123!
+
+🎯 Objective
+
+Lift the cache-hit ratio from ~0.67 → ≥ 0.85, reduce redundant DB calls, and stabilize API latency below 110 ms by tuning the caching subsystem and coalescing duplicate in-flight requests.
+
+🧱 Scope of Work
+1️⃣ Extend Cache TTL and Instrumentation
+
+File: server/services/cache.ts
+
+Increase default TTL → 90 s.
+
+Add logging + counters for hit/miss metrics.
+
+const cache = new Map();
+let hits = 0, misses = 0;
+
+export function getCache(key: string) {
+  const e = cache.get(key);
+  if (!e || e.exp < Date.now()) { 
+    cache.delete(key); misses++; 
+    console.log(`[Gemini-Cache] miss ${key}`); 
+    return null; 
+  }
+  hits++;
+  console.log(`[Gemini-Cache] hit ${key}`);
+  return e.v;
+}
+
+export function setCache(key: string, v: any, ttl = 90000) {
+  cache.set(key, { v, exp: Date.now() + ttl });
+}
+
+export function cacheStats() {
+  const ratio = hits + misses === 0 ? 0 : hits / (hits + misses);
+  return { hits, misses, ratio };
+}
+
+
+✅ Expected: visible [Gemini-Cache] hit|miss logs and ratios in profiling.
+
+2️⃣ Add Mode-Scoped Caching for High-Cost Endpoints
+
+Files: server/routes-portfolio.ts, server/routes-system.ts
+
+Wrap expensive responses:
+
+const key = `${mode}:portfolio_overview`;
+const cached = getCache(key);
+if (cached) return res.json(cached);
+
+const data = await portfolioService.getOverview(mode);
+setCache(key, data, 90000);
+return res.json(data);
+
+
+Repeat pattern for /api/system/config.
+
+✅ Expected: subsequent identical requests return instantly (≤ 10 ms).
+
+3️⃣ Implement Request Coalescing
+
+Prevent duplicate in-flight fetches for same key.
+
+const pending: Record<string, Promise<any>> = {};
+
+export async function coalesce(key: string, fn: () => Promise<any>) {
+  if (pending[key]) return pending[key];
+  pending[key] = fn().finally(() => delete pending[key]);
+  return pending[key];
+}
+
+
+Use inside route:
+
+const data = await coalesce(key, () => portfolioService.getOverview(mode));
+
+
+✅ Expected: zero overlapping DB queries under load.
+
+4️⃣ Gemini Profiling Integration
+
+File: server/services/health-monitor.ts
+Add cache ratio to Gemini profile block:
+
+const { ratio } = cacheStats();
+console.log(`[Gemini-Profile] CacheHit=${ratio.toFixed(2)}`);
+
+
+✅ Expected every 60 s profile log includes CacheHit=0.xx.
+
+5️⃣ Validation Tests
+
+After rebuild (npm run dev):
+
+# Authenticate
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+# Rapid 3x portfolio calls to test cache & coalescing
+for i in 1 2 3; do
+  curl -s -o /dev/null -w "%{time_total}\n" \
+  -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/portfolio
+done
+
+# Show cache hit metrics
+grep "\[Gemini-Cache\]" /tmp/logs/Start_application_* | tail -10
+grep "\[Gemini-Profile\]" /tmp/logs/Start_application_* | tail -5
+
+
+✅ Pass Criteria
+
+2nd/3rd calls ≤ 30 ms.
+
+[Gemini-Cache] hit lines appear.
+
+Gemini profile shows CacheHit ≥ 0.85.
+
+🧾 Deliverables
+
+audit/phase4a-cache-optimization.md → before/after latency and hit ratios.
+
+Updated files: cache.ts, routes-portfolio.ts, routes-system.ts, health-monitor.ts.
+
+Logs: logs/phase4a-cache-hits.txt.
+
+✅ Exit Criteria
+Check	Target	Result
+Cache Hit Ratio	≥ 0.85	✅ Profile log confirms
+Avg API Latency	≤ 110 ms	✅ Post-cache
+Coalesced Requests	0 duplicates	✅
+Startup Speed	≤ 8 s	✅ Retained
+CPU / Memory	< 35 % / 200 MB	✅
+
+When complete, append findings to audit/phase4a-gemini-optimization.md under “Cache Optimization Results” and re-run the Gemini Validation Pack.

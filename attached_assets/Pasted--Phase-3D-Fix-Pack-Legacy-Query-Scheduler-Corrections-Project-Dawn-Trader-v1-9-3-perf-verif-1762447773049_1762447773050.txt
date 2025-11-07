@@ -1,0 +1,111 @@
+⚙️ Phase 3D — Fix-Pack: Legacy Query & Scheduler Corrections
+
+Project: Dawn Trader v1.9.3-perf-verified  Branch: dt-v1-revival-bootstrap
+Credentials: username=testuser123 password=SecurePass123!
+
+🎯 Objective
+
+Eliminate the two pre-existing non-blocking issues to achieve a clean, error-free runtime baseline for Phase 4 optimization.
+
+🧱 Scope of Work
+1️⃣ PaperSimService → getActivePaperSimSession (SQL Fix)
+
+File: server/services/paper-sim-service.ts
+
+Current Issue: Legacy SQL still references user_id or uses ambiguous join syntax, causing null sessions.
+
+Fix Steps
+
+Locate method:
+
+async getActivePaperSimSession(userId?: string)
+
+
+Replace body with mode-scoped query:
+
+async getActivePaperSimSession(mode: "paper" | "live") {
+  const session = await db.select().from(paperSimSessions)
+    .where(and(eq(paperSimSessions.mode, mode), eq(paperSimSessions.status, "active")))
+    .limit(1);
+  return session?.[0] || null;
+}
+
+
+Update all call sites to pass mode instead of userId.
+
+Verify that /api/paper-sim/status and /api/paper-sim/start return active session objects correctly.
+
+✅ Expected:
+
+curl …/paper-sim/status returns "status":"active" after start.
+
+No SQL warnings in logs.
+
+2️⃣ AnalyticsScheduler → strategy-analytics.ts Parameter Mismatch
+
+File: server/services/strategy-analytics.ts
+Issue: Scheduler calls analyzeStrategyPerformance(userId, timeframe) but function expects (mode, timeframe).
+
+Fix Steps
+
+Rename function signature:
+
+async analyzeStrategyPerformance(mode: "paper" | "live", timeframe: string)
+
+
+Update all invocations (in AnalyticsScheduler, routes-analytics.ts, and tests) to pass mode.
+
+Add mode parameter propagation in the scheduler:
+
+const mode = systemFlags.activeMode || "paper";
+await this.analytics.analyzeStrategyPerformance(mode, timeframe);
+
+
+✅ Expected:
+
+No undefined parameter logs.
+
+/api/analytics/summary returns valid JSON object with strategy metrics.
+
+3️⃣ Validation & Regression Check
+
+Run in Shell:
+
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+ -H "Content-Type: application/json" \
+ -d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken')
+
+echo "=== PaperSim Status ==="
+curl -s http://localhost:5000/api/paper-sim/status -H "Authorization: Bearer $TOKEN" | jq '.status'
+
+echo "=== Analytics Summary ==="
+curl -s http://localhost:5000/api/analytics/summary -H "Authorization: Bearer $TOKEN" | jq '.summary'
+
+
+✅ Expected Output
+
+"active"
+{ "strategies": [ ... ], "timeframe": "24h", ... }
+
+
+✅ Logs show: [3D] PaperSim query fixed, [3D] Analytics scheduler mode propagated.
+
+🧾 Deliverables
+
+Create /audit/phase3d-fixpack-verification.md containing:
+
+Before & after log snippets.
+
+API response validation.
+
+Confirmation of zero SQL warnings.
+
+✅ Exit Criteria
+Check	Result
+PaperSim active session query	returns valid object
+Analytics summary endpoint	returns data, no errors
+Build & runtime	0 warnings, 0 SQL errors
+CI guardrails	pass (no schema changes)
+
+Upon completion:
+Tag the branch → dt-v1.9.4-stability-verified.

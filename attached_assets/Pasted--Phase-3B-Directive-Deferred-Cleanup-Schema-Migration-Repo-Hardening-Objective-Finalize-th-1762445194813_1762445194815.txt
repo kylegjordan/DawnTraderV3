@@ -1,0 +1,92 @@
+🧭 Phase 3B Directive — Deferred Cleanup + Schema Migration + Repo Hardening
+
+Objective:
+Finalize the single-tenant cleanup by removing all residual userId references in
+system-truth-diagnostic.ts and value-alignment.ts, perform the corresponding schema migration,
+and integrate a permanent GitHub push filter that blocks oversized files and database dumps.
+
+🧩 Scope of Work
+1. system-truth-diagnostic.ts
+
+Remove all userId parameters from runTruthCheck(), evaluateIntegrity(), and internal helpers.
+
+Replace any userId lookups with mode-scoped context calls.
+
+Verify logic still passes existing diagnostic tests.
+
+2. value-alignment.ts
+
+Drop user_id column from related alignment tables.
+
+Add mode column ('paper' | 'live') for proper partitioning.
+
+Create migration file migrations/2025-11-06_value_alignment_mode.sql.
+
+Update ORM schema (Drizzle) and ensure db:push --force applies cleanly.
+
+3. Repository Hardening
+
+Implement GitHub push-filter script to block large files:
+
+Files > 100 MB rejected automatically.
+
+.sql, .dump, and .tar.gz > 50 MB flagged.
+
+Add safe fallback .git/info/attributes rules for Git LFS if needed.
+
+Run cleanup of existing .sql or dump traces from history.
+
+4. Testing & Verification
+
+Rebuild project (npm run build).
+
+Run all runtime health checks.
+
+Execute CI guardrails workflow.
+
+Generate audit/phase3b-final-verification.md documenting:
+
+Removed userId references.
+
+Successful schema migration.
+
+Passing CI and runtime stability.
+
+Confirmation of Git push-filter activation.
+
+🛠️ Directive (paste into Replit chat)
+Phase 3B Directive — Execute Deferred Cleanup + Schema Migration + Large File Protection
+
+Tasks:
+1️⃣ Refactor system-truth-diagnostic.ts to remove all userId references.
+2️⃣ Perform schema migration in value-alignment.ts (dropping user_id, adding mode).
+3️⃣ Apply migration via npm run db:push --force and verify schema.
+4️⃣ Create scripts/git-push-filter.sh to block large files:
+   - Reject files > 100 MB.
+   - Warn for .sql/.dump > 50 MB.
+   - Integrate pre-push hook via .cp scripts/git-push-filter.sh .git/hooks/pre-push && chmod +x.
+5️⃣ Run npm run build && npm test to verify runtime integrity.
+6️⃣ Run CI guardrails workflow to confirm no new userId references.
+7️⃣ Generate audit/phase3b-final-verification.md with results and system summary.
+
+📦 Deliverables
+
+migrations/2025-11-06_value_alignment_mode.sql
+
+audit/phase3b-final-verification.md
+
+scripts/git-push-filter.sh
+
+Updated .git/hooks/pre-push
+
+Updated ORM schema (no userId in value alignment tables)
+
+✅ Expected Outcome
+
+Zero non-auth userId references across entire system.
+
+Verified schema fully mode-scoped (paper | live).
+
+No future GitHub push failures from large files.
+
+Build & runtime verified stable → tag v1.9.2-phase3b-complete.

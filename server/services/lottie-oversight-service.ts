@@ -1,11 +1,10 @@
 import { db } from "../db";
 import { lottieOversightLog } from "../../shared/schema";
+import { getTestCredentials } from "../config/test-credentials";
 
 export class LottieOversightService {
   private checkInterval: NodeJS.Timeout | null = null;
   private readonly INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-  private readonly username = "testuser123";
-  private readonly password = "SecurePass123!";
 
   async start() {
     console.log("[30.FX.4][LottieOversight] Service initialized ✅");
@@ -88,10 +87,12 @@ export class LottieOversightService {
   }
 
   private async getAuthToken(): Promise<string> {
+    // Phase 5B.HF: Use environment-based test credentials
+    const { username, password } = getTestCredentials();
     const axios = (await import("axios")).default;
     const response = await axios.post("http://localhost:5000/api/auth/login", {
-      username: this.username,
-      password: this.password,
+      username,
+      password,
     }, {
       timeout: 5000,
     });

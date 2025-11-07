@@ -1,0 +1,54 @@
+Dawn Trader is an advanced autonomous trading application designed to trade at better-than-expert human levels. Its purpose is to intelligently grow portfolio value as fast and as much as possible within defined risk boundaries.
+The system includes a deterministic trading engine, risk management guardrails, adaptive intelligence (LATTI), and coordination layers (Orchestrators). LATTI’s role is to provide continual learning and a programmed motivation to make real-time adjustments — observing the market, adjusting behaviors – to drive as much portfolio value growth as possible as fast as possible within the set risk parameters.
+Our goal is not to strip down or remove functionality, but to get the system working as it was intended — efficiently, reliably, and sustainably. If we have to remove components, this can be accepted, but we would like to preserve as much of the intended functionality, features and operating capabilities and stability that allows us to achieve the intended objectives/results as possible. Over time, the system accumulated layers of legacy code, hard-coded values, and multi-user artifacts from previous rebuilds (v2), which compromised stability. We’ve rolled back to a single-tenant architecture and are refactoring to restore a solid, modular foundation.
+Your task is to review the current state and produce the best possible technical plan to make the system stable and high-performing using the components already built, as well as the existing UI design. You may recommend changes to the connections, design, or structure to improve efficiency — but the focus is on making it reliably and stably operational and optimizing that, not replacing or introducing new technologies.
+If additional code snippets, configuration files, or implementation details are needed, ask for them — we’ll provide whatever you need to make your analysis accurate and actionable.
+________________________________________
+📘 Task
+Read and review:
+DawnTrader_Comprehensive_Architectural_Report_v1.9.6.md
+Provide a detailed technical analysis and implementation plan covering:
+1. System Architecture Evaluation
+•	Assess the current modular structure for soundness, maintainability, and scalability.
+•	Identify coupling, redundancy, or dependency risks among components (Trading Engine, LATTI, Orchestrators, Telemetry).
+2. Retention vs. Removal
+•	Validate the current classification of components (retain, refactor, remove).
+•	Recommend what should be kept, repaired, or reconnected to meet the system’s intended functionality.
+3. Refactoring & Stabilization Plan
+•	Review the proposed Phase 5–8 roadmap.
+•	Recommend the most efficient sequence of work to reach a stable, performant, and modular system.
+•	Suggest improvements to configuration, feature-flag control, or module interfaces.
+4. Data Flow & Trading Logic Integrity
+•	Confirm that the end-to-end data path (feed → filters → strategies → orders → portfolio → telemetry) is intact.
+•	Identify any missing or broken connections that would prevent correct execution or adaptive behavior.
+•	Ensure LATTI and Orchestrators can reattach cleanly without breaking the trading engine.
+5. Adaptive Intelligence Reintegration
+•	Provide recommendations for retaining and optimizing LATTI’s learning, motivational, and adaptive oversight features.
+•	Suggest safe refactoring patterns to reconnect her and required subsystems for efficiency and maintainability.
+6. Risk & Technical Debt Review
+•	Identify remaining instability risks or ghost dependencies.
+•	Recommend monitoring, observability, or testing strategies to confirm true stability before end-to-end trading tests.
+7. Final Deliverables
+•	A technical engineering plan that:
+o	Uses and optimizes what’s already built,
+o	Retains necessary infrastructure for LATTI and Orchestrators,
+o	Eliminates legacy instability,
+o	Produces a fully functioning, self-contained, stable system.
+________________________________________
+🧠 Output Format
+# Dawn Trader Technical Review and Refactor Plan
+
+## 1. Executive Summary
+## 2. Architecture Assessment
+## 3. Refactor & Stabilization Strategy
+## 4. Adaptive Intelligence (LATTI) Retention Plan
+## 5. Risk & Technical Debt Review
+## 6. Action Priorities (1–5)
+## 7. Recommended Next Steps
+________________________________________
+⚙️ Guidance
+•	The goal is stability and functionality using existing components — not rebuilding or adding new tools.
+•	Assume access to the audit folder (LATTI + Orchestrator reports).
+•	The tech stack is Node.js / TypeScript / React / PostgreSQL (Drizzle ORM).
+•	Please focus on how to make the system perform as intended, not on adding new external intelligence systems.
+

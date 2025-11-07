@@ -59,6 +59,7 @@ import { randomUUID } from 'crypto';
 import { getPaperSimulationStatus } from './services/paper-sim-service';
 import { numericNormalizationMiddleware } from './utils/numeric-normalizer.js';
 import { contextBridge } from './services/context-bridge.js';
+import { getCache, setCache, coalesce } from './services/cache';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
 export const loginLimiter = rateLimit({
@@ -366,6 +367,100 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       uptime: process.uptime(),
       env: process.env.NODE_ENV || 'development'
     });
+  });
+
+  // Phase 5C: Observability endpoints
+  // Metrics endpoint - Prometheus-style metrics with SLO tracking
+  apiRouter.get('/metrics', async (_req, res) => {
+    try {
+      const { metricsService } = await import('./services/metrics-service');
+      const systemMetrics = metricsService.getSystemMetrics();
+      const subsystemMetrics = metricsService.getSubsystemMetrics();
+      const sloStatus = metricsService.getSLOStatus();
+
+      res.json({
+        system: systemMetrics,
+        subsystems: subsystemMetrics,
+        slo: sloStatus,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[Phase 5C][Metrics] Error fetching metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch metrics', message: error.message });
+    }
+  });
+
+  // Phase 5C: SLO status endpoint (lightweight)
+  apiRouter.get('/metrics/slo', async (_req, res) => {
+    try {
+      const { metricsService } = await import('./services/metrics-service');
+      const sloStatus = metricsService.getSLOStatus();
+      
+      res.json({
+        slos: sloStatus,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[Phase 5C][SLO] Error fetching SLO status:', error);
+      res.status(500).json({ error: 'Failed to fetch SLO status', message: error.message });
+    }
+  });
+
+  // Phase 5C: Recent logs endpoint (last 100 entries)
+  apiRouter.get('/logs/recent', async (_req, res) => {
+    try {
+      // TODO: Implement log buffer/storage
+      // For now, return placeholder
+      res.json({
+        logs: [],
+        message: 'Log buffer not yet implemented',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[Phase 5C][Logs] Error fetching logs:', error);
+      res.status(500).json({ error: 'Failed to fetch logs', message: error.message });
+    }
+  });
+
+  // Phase 6: Config Registry endpoints
+  apiRouter.get('/config', async (_req, res) => {
+    try {
+      const { ConfigService } = await import('./services/config-service');
+      const configs = await ConfigService.getAll();
+      res.json(configs);
+    } catch (error: any) {
+      console.error('[Phase 6][Config] Error fetching configs:', error);
+      res.status(500).json({ error: 'Failed to fetch configs', message: error.message });
+    }
+  });
+
+  apiRouter.put('/config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { ConfigService } = await import('./services/config-service');
+      const { ConfigAuditService } = await import('./services/config-audit-service');
+      const { key, value, type } = req.body;
+      
+      if (!key || value === undefined || !type) {
+        return res.status(400).json({ 
+          error: 'Missing required fields',
+          message: 'key, value, and type are required'
+        });
+      }
+
+      const updatedBy = req.user?.username || 'system';
+      const oldConfig = await ConfigService.get(key);
+      
+      await ConfigService.update(key, value, type, updatedBy);
+      
+      if (oldConfig) {
+        ConfigAuditService.recordChange(key, updatedBy, oldConfig.value, value);
+      }
+      
+      res.json({ ok: true, key, value, type, updatedBy });
+    } catch (error: any) {
+      console.error('[Phase 6][Config] Error updating config:', error);
+      res.status(500).json({ error: 'Failed to update config', message: error.message });
+    }
   });
 
   // Phase 27.F.15.B.4 + 27.F.15.C: Production system health endpoint with live telemetry and dual-mode metrics
@@ -2005,23 +2100,40 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Filter diagnostics endpoint - fetches LIVE metrics from diagnostic service
   // Phase 27.F.21: Migrated from legacy filter_diagnostics table to live diagnostic service
   // This ensures FilterHealthWidget shows same data as Filter Insights tab
+  // Phase 4A Remediation: Added caching with 45s TTL
   apiRouter.get('/filters/diagnostics', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = req.mode!;
 
-      // Import diagnostic service
-      const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+      // Phase 4A: Check cache first
+      const { getCache, setCache, coalesce } = await import('./services/cache.js');
+      const cacheKey = `diag:filters:${mode}`;
       
-      // Get live scan results from diagnostic service (same source as Filter Insights)
-      // Phase 27.F.21: Use limit=9999 to evaluate ENTIRE universe (same as all other endpoints)
-      const scanResult = await paperSimDiagnosticService.performUniverseScan({
-        userId,
-        mode,
-        limit: 9999,
-        trace: false,
-        strategies: false
+      const cached = getCache(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      // Phase 4A: Use coalescing to prevent duplicate scans
+      const result = await coalesce(cacheKey, async () => {
+        // Import diagnostic service
+        const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+        
+        // Get live scan results from diagnostic service (same source as Filter Insights)
+        // Phase 27.F.21: Use limit=9999 to evaluate ENTIRE universe (same as all other endpoints)
+        const scanResult = await paperSimDiagnosticService.performUniverseScan({
+          userId,
+          mode,
+          limit: 9999,
+          trace: false,
+          strategies: false
+        });
+
+        return scanResult;
       });
+
+      const scanResult = result;
 
       // Phase 41F-L.E2E-PURGE: Get screener filter thresholds (mode-level only)
       const screenerSettings = await storage.getScreenerFilters({ mode });
@@ -2049,7 +2161,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         ? ((scanResult.ineligible_count / scanResult.universe_count) * 100)
         : 0;
 
-      res.json({
+      const response = {
         pairsScanned: scanResult.universe_count,
         eligiblePairs: scanResult.eligible_count,
         topFailureReason: topFailure.reason,
@@ -2071,7 +2183,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           allowRegulatedOnly: screenerSettings.allowRegulatedOnly
           // Phase 41F-L.E2E-PURGE: User-level filter fields removed (minDailyRange, allowedTradingPairs, minDataHistoryDays)
         } : null
-      });
+      };
+
+      // Phase 4A: Cache the response (45s TTL for diagnostics)
+      setCache(cacheKey, response, 45000);
+      
+      res.json(response);
     } catch (error) {
       console.error('Error fetching filter diagnostics:', error);
       res.status(500).json({ error: 'Failed to fetch filter diagnostics' });
@@ -2829,69 +2946,83 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Portfolio and Metrics - Mode-aware endpoint
+  // Portfolio and Metrics - Mode-aware endpoint (Phase 4A-3: Cached)
   apiRouter.get('/portfolio/overview', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
-      // Get mode-specific balance
-      let totalValue: number;
-      let cash: number;
-      let crypto: number;
-      let syncTimestamp: Date | undefined;
-      let balanceSource: string;
-      let balanceError: string | undefined;
-      
-      if (mode === 'paper') {
-        // Paper mode - get simulated portfolio state
-        const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
-        
-        if (!portfolioState || !portfolioState.balance) {
-          console.error('[Portfolio/Overview] Paper portfolio state not found or balance is null');
-          return res.status(404).json({ error: 'Paper portfolio state not found' });
-        }
-        
-        const balance = parseFloat(portfolioState.balance);
-        const cryptoValue = parseFloat(portfolioState.cryptoValue || '0');
-        const cashValue = parseFloat(portfolioState.cash || balance.toString());
-        
-        totalValue = balance;
-        cash = cashValue;
-        crypto = cryptoValue;
-        syncTimestamp = undefined;
-        balanceSource = 'paper-sim';
-        balanceError = undefined;
-      } else {
-        // Live mode - get Kraken balance
-        const liveBalance = await riskManager.getLiveKrakenBalance(userId);
-        totalValue = liveBalance.totalValueUSD;
-        cash = liveBalance.cashUSD;
-        crypto = liveBalance.cryptoUSD;
-        syncTimestamp = liveBalance.syncTimestamp;
-        balanceSource = liveBalance.source;
-        balanceError = liveBalance.error;
+      // Phase 4A-3: Check cache first
+      const cacheKey = `portfolio:overview:${mode}:${userId}`;
+      const cached = getCache(cacheKey);
+      if (cached) {
+        return res.json(cached);
       }
       
-      // Get mode-specific metrics
-      const metrics = await riskManager.getPortfolioMetrics(mode);
-      const winRateData = await riskManager.getWinRate(mode, 30);
-      
-      res.json({
-        totalValue,
-        unrealizedPL: metrics.unrealizedPL,
-        realizedPL: metrics.realizedPL,
-        currentExposure: metrics.currentExposure,
-        openTradesCount: metrics.openTradesCount,
-        ...winRateData,
-        cash,
-        crypto,
-        cashPercent: totalValue > 0 ? (cash / totalValue) * 100 : 0,
-        cryptoPercent: totalValue > 0 ? (crypto / totalValue) * 100 : 0,
-        syncTimestamp,
-        balanceSource,
-        balanceError
+      // Phase 4A-3: Use request coalescing to prevent duplicate fetches
+      const data = await coalesce(cacheKey, async () => {
+        // Get mode-specific balance
+        let totalValue: number;
+        let cash: number;
+        let crypto: number;
+        let syncTimestamp: Date | undefined;
+        let balanceSource: string;
+        let balanceError: string | undefined;
+        
+        if (mode === 'paper') {
+          // Paper mode - get simulated portfolio state
+          const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
+          
+          if (!portfolioState || !portfolioState.balance) {
+            console.error('[Portfolio/Overview] Paper portfolio state not found or balance is null');
+            throw new Error('Paper portfolio state not found');
+          }
+          
+          const balance = parseFloat(portfolioState.balance);
+          const cryptoValue = parseFloat(portfolioState.cryptoValue || '0');
+          const cashValue = parseFloat(portfolioState.cash || balance.toString());
+          
+          totalValue = balance;
+          cash = cashValue;
+          crypto = cryptoValue;
+          syncTimestamp = undefined;
+          balanceSource = 'paper-sim';
+          balanceError = undefined;
+        } else {
+          // Live mode - get Kraken balance
+          const liveBalance = await riskManager.getLiveKrakenBalance(userId);
+          totalValue = liveBalance.totalValueUSD;
+          cash = liveBalance.cashUSD;
+          crypto = liveBalance.cryptoUSD;
+          syncTimestamp = liveBalance.syncTimestamp;
+          balanceSource = liveBalance.source;
+          balanceError = liveBalance.error;
+        }
+        
+        // Get mode-specific metrics
+        const metrics = await riskManager.getPortfolioMetrics(mode);
+        const winRateData = await riskManager.getWinRate(mode, 30);
+        
+        return {
+          totalValue,
+          unrealizedPL: metrics.unrealizedPL,
+          realizedPL: metrics.realizedPL,
+          currentExposure: metrics.currentExposure,
+          openTradesCount: metrics.openTradesCount,
+          ...winRateData,
+          cash,
+          crypto,
+          cashPercent: totalValue > 0 ? (cash / totalValue) * 100 : 0,
+          cryptoPercent: totalValue > 0 ? (crypto / totalValue) * 100 : 0,
+          syncTimestamp,
+          balanceSource,
+          balanceError
+        };
       });
+      
+      // Phase 4A-3: Cache the result (90s TTL)
+      setCache(cacheKey, data, 90000);
+      res.json(data);
     } catch (error) {
       console.error('Error fetching portfolio overview:', error);
       res.status(500).json({ error: 'Failed to fetch portfolio data' });
@@ -4702,35 +4833,49 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 31.H/32.D-Fix.2: Get System Configuration
+  // Phase 31.H/32.D-Fix.2: Get System Configuration (Phase 4A-3: Cached)
   apiRouter.get('/system/config', async (_, res) => {
     try {
-      const { systemConfigService } = await import('./services/system-config');
-      const { tradingStateSync } = await import('./services/trading-state-sync');
-      const config = await systemConfigService.getConfig();
+      // Phase 4A-3: Check cache first (short TTL since this changes with engine state)
+      const cacheKey = 'system:config';
+      const cached = getCache(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
       
-      // Phase 32.D-Fix.2: Get current trading mode and engine states
-      const currentMode = tradingStateSync.getTradingMode('system-reconciliation');
-      const paperContext = await storage.getSystemContext('paper');
-      const liveContext = await storage.getSystemContext('live');
-      
-      const isEngineActivePaper = paperContext?.isEngineActive || false;
-      const isEngineActiveLive = liveContext?.isEngineActive || false;
-      
-      // Phase 32.D-Fix.2: Compute passive mode based on engine state alone
-      // Show passive badge only when passive learning enabled AND neither engine is active
-      const passiveMode = config.passiveLearning && !isEngineActivePaper && !isEngineActiveLive;
-      
-      res.json({
-        ok: true,
-        systemFlags: {
-          passiveLearning: config.passiveLearning, // Original flag
-          passiveMode, // Computed flag (respects paper mode override)
-          activeMode: currentMode,
-          isEngineActivePaper,
-          isEngineActiveLive,
-        },
+      // Phase 4A-3: Use request coalescing
+      const data = await coalesce(cacheKey, async () => {
+        const { systemConfigService } = await import('./services/system-config');
+        const { tradingStateSync } = await import('./services/trading-state-sync');
+        const config = await systemConfigService.getConfig();
+        
+        // Phase 32.D-Fix.2: Get current trading mode and engine states
+        const currentMode = tradingStateSync.getTradingMode('system-reconciliation');
+        const paperContext = await storage.getSystemContext('paper');
+        const liveContext = await storage.getSystemContext('live');
+        
+        const isEngineActivePaper = paperContext?.isEngineActive || false;
+        const isEngineActiveLive = liveContext?.isEngineActive || false;
+        
+        // Phase 32.D-Fix.2: Compute passive mode based on engine state alone
+        // Show passive badge only when passive learning enabled AND neither engine is active
+        const passiveMode = config.passiveLearning && !isEngineActivePaper && !isEngineActiveLive;
+        
+        return {
+          ok: true,
+          systemFlags: {
+            passiveLearning: config.passiveLearning, // Original flag
+            passiveMode, // Computed flag (respects paper mode override)
+            activeMode: currentMode,
+            isEngineActivePaper,
+            isEngineActiveLive,
+          },
+        };
       });
+      
+      // Phase 4A-3: Cache the result (60s TTL - shorter since engine state changes frequently)
+      setCache(cacheKey, data, 60000);
+      res.json(data);
     } catch (error: any) {
       console.error("[31.H] System config GET error:", error);
       res.status(500).json({ 
@@ -4818,6 +4963,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // ==================== Phase 8.5 Addendum G + H: System Truth & Context Refresh ====================
 
   // GET /api/system/truth-check - Compare backend, Cortex, and Walter snapshots
+  // Phase 3B: Removed userId parameter - single-tenant architecture
   apiRouter.get('/system/truth-check', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -4826,7 +4972,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       const { systemTruthDiagnostic } = await import('./services/system-truth-diagnostic');
       
-      const truthComparison = await systemTruthDiagnostic.runTruthCheck(userId, mode);
+      const truthComparison = await systemTruthDiagnostic.runTruthCheck(mode);
       
       res.json({
         ok: true,
@@ -4846,6 +4992,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // GET /api/system/truth-check/report - Get truth check as Markdown report
+  // Phase 3B: Removed userId parameter - single-tenant architecture
   apiRouter.get('/system/truth-check/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -4854,7 +5001,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       const { systemTruthDiagnostic } = await import('./services/system-truth-diagnostic');
       
-      // Phase 3: runTruthCheck now uses mode only (single-tenant)
       const truthComparison = await systemTruthDiagnostic.runTruthCheck(mode);
       const markdownReport = systemTruthDiagnostic.generateMarkdownReport(truthComparison);
       
@@ -5771,6 +5917,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 27.F.12: Universe Scan & Filter Trace (read-only diagnostic, admin/owner only)
+  // Phase 4A Remediation: Added caching with 45s TTL
   apiRouter.get('/paper-sim/diagnostics/scan', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       // Check for admin or owner role
@@ -5784,16 +5931,33 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       const userId = req.user!.id;
       const { mode, limit, trace, strategies } = req.query;
+      const scanMode = (mode as 'paper' | 'live') || 'paper';
+      const scanLimit = limit ? parseInt(limit as string) : 500;
       
-      const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+      // Phase 4A: Check cache first (cache key includes mode + limit for proper invalidation)
+      const { getCache, setCache, coalesce } = await import('./services/cache.js');
+      const cacheKey = `diag:scan:${scanMode}:${scanLimit}`;
       
-      const scanResult = await paperSimDiagnosticService.performUniverseScan({
-        userId,
-        mode: (mode as 'paper' | 'live') || 'paper',
-        limit: limit ? parseInt(limit as string) : 500,
-        trace: trace === 'true' || trace === undefined,
-        strategies: strategies === 'true' || strategies === undefined
+      const cached = getCache(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      // Phase 4A: Use coalescing to prevent duplicate scans
+      const scanResult = await coalesce(cacheKey, async () => {
+        const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+        
+        return await paperSimDiagnosticService.performUniverseScan({
+          userId,
+          mode: scanMode,
+          limit: scanLimit,
+          trace: trace === 'true' || trace === undefined,
+          strategies: strategies === 'true' || strategies === undefined
+        });
       });
+      
+      // Phase 4A: Cache the response (45s TTL for diagnostics)
+      setCache(cacheKey, scanResult, 45000);
       
       res.json(scanResult);
     } catch (error) {
@@ -14745,11 +14909,14 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 3B: Migrated from userId to mode
   apiRouter.get('/alignment/matrix', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { valueAlignmentService } = await import('./services/value-alignment');
+      const user = await storage.getUser(req.user!.id);
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
       
-      const matrix = await valueAlignmentService.getMatrix(req.user!.id);
+      const matrix = await valueAlignmentService.getMatrix(mode);
       
       res.json({ ok: true, matrix });
     } catch (error: any) {
@@ -14758,11 +14925,14 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 3B: Migrated from userId to mode
   apiRouter.get('/alignment/overall', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { valueAlignmentService } = await import('./services/value-alignment');
+      const user = await storage.getUser(req.user!.id);
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
       
-      const alignment = await valueAlignmentService.getOverallAlignment(req.user!.id);
+      const alignment = await valueAlignmentService.getOverallAlignment(mode);
       
       res.json({ ok: true, alignment });
     } catch (error: any) {
@@ -14771,11 +14941,14 @@ Important: Extract the exact field names and numeric values from the user's requ
     }
   });
 
+  // Phase 3B: Migrated from userId to mode
   apiRouter.post('/alignment/init', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { valueAlignmentService } = await import('./services/value-alignment');
+      const user = await storage.getUser(req.user!.id);
+      const mode = (user?.tradingMode || 'paper') as 'live' | 'paper';
       
-      await valueAlignmentService.initializeDefaultMatrix(req.user!.id);
+      await valueAlignmentService.initializeDefaultMatrix(mode);
       
       res.json({ ok: true, message: 'Default value alignment matrix initialized' });
     } catch (error: any) {

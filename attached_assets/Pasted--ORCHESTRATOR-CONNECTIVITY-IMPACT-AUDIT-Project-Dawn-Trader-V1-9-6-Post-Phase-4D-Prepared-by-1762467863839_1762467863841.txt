@@ -1,0 +1,93 @@
+⚙️ ORCHESTRATOR CONNECTIVITY & IMPACT AUDIT
+
+Project: Dawn Trader V1.9.6 (Post-Phase 4D)
+Prepared by: GPT-5 (Dawn Trader Oversight)
+Objective:
+Map every dependency, service interaction, and configuration path related to the Orchestrator layer, determine what it controls, where it connects to the rest of the system (including Lottie), and assess the impact of isolating or removing it.
+
+🎯 Primary Goals
+
+Identify what the Orchestrator controls, schedules, or triggers.
+
+Determine all inbound and outbound connections (services, modules, database, or UI).
+
+Detect links between Orchestrator and Lottie/LATTI, if any.
+
+Assess runtime footprint and potential breakage risks if isolated or removed.
+
+Produce a complete audit report (audit/orchestrator-connectivity-audit.md) and dependency graph for review by CodeCopilot, Jim, and other AI collaborators.
+
+🧭 REDWOOD DIRECTIVE – ORCHESTRATOR CONNECTIVITY & IMPACT AUDIT
+
+Paste this prompt directly into Redwood:
+
+# Orchestrator Connectivity & Impact Audit
+Objective: Map all code, runtime, and configuration connections for the Orchestrator layer, evaluate its control scope, and measure the impact of isolating or removing it.
+
+Steps:
+
+1. Codebase Search
+   - Search recursively for: "Orchestrator", "orchestration", "Orchestra", "Scheduler", "JobManager", "SystemOrchestrator"
+   - Include both server and client directories.
+   - Output file paths + 5 lines context per hit.
+
+2. Structural Mapping
+   - For each file found:
+       • List exported classes/functions
+       • Identify imported modules/services
+       • Describe primary responsibilities (startup, scheduling, orchestration logic)
+   - Produce dependency graph (Mermaid or Graphviz DOT) showing Orchestrator → Services interactions.
+
+3. Service & Job Control
+   - Locate where Orchestrator starts, stops, or coordinates:
+       • Scheduled tasks (cron, setInterval, jobQueue)
+       • Service initialization sequences (e.g., Analytics, Telemetry, Lottie/LATTI, DatabaseMonitor)
+       • System health checks or resets
+   - Record intervals, triggers, and dependent services.
+
+4. API Endpoints & External Connections
+   - Identify all routes registered under `/api/orchestrator`, `/api/system/orchestra`, or any orchestration-related paths.
+   - Search for HTTP/axios/fetch requests made by Orchestrator.
+   - Note any outbound network calls (especially external APIs).
+
+5. Database / Config Dependencies
+   - Locate any database tables or config keys used by Orchestrator (search for `db.*orchestrator*`, `schema.orchestrator*`, or config lookups).
+   - Record what data it reads/writes.
+
+6. Lottie/LATTI Interaction Check
+   - Identify whether Orchestrator:
+       • Starts or monitors LATTI/Lottie services
+       • Calls any `/api/system/latti*` or `AdaptiveGuardrailsService`
+       • Shares tables (learning_history, behavioral_log, etc.)
+   - Flag direct dependencies for risk assessment.
+
+7. Resource & Runtime Profiling
+   - Capture performance logs:
+       • CPU/memory usage attributed to Orchestrator
+       • Startup time contribution
+       • Any recurring errors/warnings in logs related to orchestration
+   - Summarize runtime overhead.
+
+8. Risk Analysis
+   - For each dependency, estimate risk of isolation/removal:
+       Low – pure scheduler/monitor
+       Medium – coordinates startup or jobs
+       High – directly manages trading or adaptive behavior
+
+9. Output Deliverables
+   - Save report to: `audit/orchestrator-connectivity-audit.md`
+   - Include:
+       - File inventory
+       - Service dependency graph
+       - Database/config dependency table
+       - Runtime metrics summary
+       - Isolation/removal risk analysis
+       - Recommendations: *Isolate*, *Refactor*, *Retain*, or *Remove*
+       - Executive summary for non-technical reviewers
+
+Deliverables:
+✅ audit/orchestrator-connectivity-audit.md  
+✅ dependency-graph-orchestrator.svg  
+✅ raw search & log extracts (optional)
+
+End.

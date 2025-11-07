@@ -281,8 +281,9 @@ export async function startPaperSimulation(
     async () => {
       try {
         console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
-        // Phase 27.F.9: Prevent duplicates by checking both DB and global state atomically
-        const existingSession = await storage.getActivePaperSimSession(userId);
+        // Phase 27.F.9 + Phase 3D: Mode-based session lookup
+        const mode = 'paper';
+        const existingSession = await storage.getActivePaperSimSession(mode);
         console.log(`[41D-DEBUG-6] DB check complete - exists: ${!!existingSession} (t+${Date.now()-t0}ms)`);
         
         const existingManager = getGlobalPaperSimManager();
@@ -311,7 +312,7 @@ export async function startPaperSimulation(
           // Reconcile: DB session exists but manager was lost (e.g., server restart)
           console.log('[PaperSimService] Reconciling manager from database session');
           const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
-          const mode = 'paper'; // Phase 27.F.13.O: Use mode instead of userId
+          // Phase 27.F.13.O + Phase 3D: Use mode instead of userId
           const manager = new PaperPortfolioManager(mode, userId);
           setGlobalPaperSimManager(manager);
           await manager.start();
@@ -364,8 +365,7 @@ export async function startPaperSimulation(
         console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
 
         // Phase 41F-B: Move broadcast-triggering calls OUTSIDE queue job
-        // State updates will be done, but broadcasts happen after queue completes
-        const mode = 'paper';
+        // State updates will be done, but broadcasts happen after queue completes (mode already declared above)
         console.log('[ENGINE_CHECKPOINT_4] Queued job - skipping broadcasts (will fire after queue completion)');
         
         // Phase 32.D-Fix.6 Fix #3: Populate watchlist asynchronously in background
@@ -454,7 +454,8 @@ export async function startPaperSimulation(
         
         // Roll back database session if it was created
         try {
-          const existingSession = await storage.getActivePaperSimSession(userId);
+          const mode = 'paper';
+          const existingSession = await storage.getActivePaperSimSession(mode);
           if (existingSession) {
             console.log(`[PaperSimService] Rolling back database session: ${existingSession.sessionId}`);
             await storage.updatePaperSimSession(existingSession.id, { status: 'failed' });
@@ -516,8 +517,9 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
     const queueResult = await paperOperationQueue.enqueue(
     async () => {
       try {
-        // Check database for running session (single source of truth)
-        const existingSession = await storage.getActivePaperSimSession(userId);
+        // Phase 3D: Mode-based session lookup
+        const mode = 'paper';
+        const existingSession = await storage.getActivePaperSimSession(mode);
         
         if (!existingSession) {
           // IDEMPOTENT: No running session, return success
@@ -666,8 +668,9 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
  */
 export async function getPaperSimulationStatus(userId: string): Promise<any> {
   try {
-    // Get session from database (single source of truth)
-    const dbSession = await storage.getActivePaperSimSession(userId);
+    // Phase 3D: Get session from database using mode (single source of truth)
+    const mode = 'paper';
+    const dbSession = await storage.getActivePaperSimSession(mode);
     
     // Get in-memory manager state (check for both null and undefined)
     const hasManager = !!global.globalPaperPortfolioManager;

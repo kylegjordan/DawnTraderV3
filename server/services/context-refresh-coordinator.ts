@@ -111,7 +111,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       await this.updateWalterMemory(mode, freshData, traceId);
 
       // Run truth check to detect any remaining discrepancies
-      const truthCheck = await systemTruthDiagnostic.runTruthCheck(mode);
+      const truthCheck = await systemTruthDiagnostic.runTruthCheck(CANONICAL_USER_ID, mode);
       const discrepanciesFound = truthCheck.discrepancies.length;
 
       // Phase 8.5 Addendum I: Auto-resync if discrepancies detected
@@ -757,7 +757,7 @@ class ContextRefreshCoordinator extends EventEmitter {
       await this.updateWalterMemory(mode, freshData, finalTraceId);
 
       // Run truth check to detect any remaining discrepancies
-      const truthCheck = await systemTruthDiagnostic.runTruthCheck(mode);
+      const truthCheck = await systemTruthDiagnostic.runTruthCheck(CANONICAL_USER_ID, mode);
       const discrepanciesFound = truthCheck.discrepancies.length;
 
       // Phase 8.5 Addendum I: Auto-resync if discrepancies detected

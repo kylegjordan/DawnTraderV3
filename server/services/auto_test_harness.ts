@@ -151,8 +151,9 @@ class AutoTestHarness {
             // Verify result success
             if (!result.success) return false;
 
-            // Verify database session created
-            const session = await storage.getActivePaperSimSession(this.testUserId);
+            // Verify database session created (Phase 3D: mode-based query)
+            const mode = 'paper';
+            const session = await storage.getActivePaperSimSession(mode);
             return !!session && session.status === 'running';
           },
         },
@@ -176,8 +177,9 @@ class AutoTestHarness {
             // Verify result success
             if (!result.success) return false;
 
-            // Verify database session stopped
-            const session = await storage.getActivePaperSimSession(this.testUserId);
+            // Verify database session stopped (Phase 3D: mode-based query)
+            const mode = 'paper';
+            const session = await storage.getActivePaperSimSession(mode);
             return !session; // Should be no active session
           },
         },

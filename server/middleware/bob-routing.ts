@@ -9,6 +9,9 @@ import { Request, Response, NextFunction } from 'express';
 import { bobCore } from '../services/bob-core';
 import { metricsBob } from '../services/bob-metrics';
 
+// Phase 4A Remediation: 10% sampling for verbose logs (90% reduction)
+const shouldSampleLog = () => Math.random() < 0.1;
+
 interface AuthenticatedRequest extends Request {
   userId?: string;
 }
@@ -31,7 +34,10 @@ export async function interceptSystemHealth(
   const userId = req.userId;
 
   try {
-    console.log('[BobRouting] 🎯 Intercepting /api/system/health');
+    // Phase 4A: Sample 10% of routing logs (reduce noise)
+    if (shouldSampleLog()) {
+      console.log('[BobRouting] 🎯 Intercepting /api/system/health');
+    }
     
     const healthData = await metricsBob.getSystemHealth(
       mode as 'live' | 'paper',
@@ -64,7 +70,10 @@ export async function interceptPaperSimStatus(
   }
 
   try {
-    console.log('[BobRouting] 🎯 Intercepting /api/paper-sim/status');
+    // Phase 4A: Sample 10% of routing logs (reduce noise)
+    if (shouldSampleLog()) {
+      console.log('[BobRouting] 🎯 Intercepting /api/paper-sim/status');
+    }
     
     const status = await metricsBob.getPaperSimStatus();
 

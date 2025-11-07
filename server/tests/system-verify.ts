@@ -18,9 +18,9 @@ let testUserId: string | null = null;
 async function authenticate(): Promise<void> {
   console.log('\n🔐 Authenticating...');
   
-  // Use username-only login (NOT email)
-  const username = 'testuser123';
-  const password = 'SecurePass123!';
+  // Phase 5B.HF: Use environment-based test credentials
+  const { getTestCredentials } = await import('../config/test-credentials');
+  const { username, password } = getTestCredentials();
   
   const response = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',

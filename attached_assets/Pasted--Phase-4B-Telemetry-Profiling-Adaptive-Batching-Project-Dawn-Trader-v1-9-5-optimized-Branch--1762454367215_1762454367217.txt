@@ -1,0 +1,111 @@
+⚙️ Phase 4B — Telemetry Profiling & Adaptive Batching
+
+Project: Dawn Trader v1.9.5-optimized
+Branch: dt-v1-revival-bootstrap
+Credentials: username=testuser123 password=SecurePass123!
+
+🎯 Objective
+
+Introduce Gemini Adaptive Profiling so that system telemetry not only records but learns from runtime behavior.
+This phase establishes the self-regulation layer that will feed into the Phase 4D comparative performance audit.
+
+🧱 Scope of Work
+1️⃣ Create Adaptive Profiler Core
+
+File: server/services/gemini-adaptive-profiler.ts
+
+import { cacheStats, setCache } from "./cache";
+import { recordTradeMetric } from "./telemetry-service";
+
+let statsHistory: any[] = [];
+
+export async function geminiAdaptiveTick() {
+  const snapshot = {
+    ts: Date.now(),
+    cacheHit: cacheStats().ratio,
+    latency: global.avgLatency || 0,
+    cpu: process.cpuUsage().user / 1e6,
+    mem: process.memoryUsage().rss / 1024 / 1024,
+  };
+  statsHistory.push(snapshot);
+  if (statsHistory.length > 30) statsHistory.shift();
+
+  // === Adaptive Logic ===
+  if (snapshot.cacheHit < 0.8) process.env.DEFAULT_CACHE_TTL = "120000";
+  else if (snapshot.cacheHit > 0.9) process.env.DEFAULT_CACHE_TTL = "60000";
+
+  const avgLatency = statsHistory.map(s => s.latency).reduce((a,b)=>a+b,0)/statsHistory.length || 0;
+  if (avgLatency > 140) process.env.TELEMETRY_BATCH_MS = "3000";
+  else process.env.TELEMETRY_BATCH_MS = "2000";
+
+  console.log(`[Gemini-Adaptive] cache=${snapshot.cacheHit.toFixed(2)} ttl=${process.env.DEFAULT_CACHE_TTL} batch=${process.env.TELEMETRY_BATCH_MS}`);
+  recordTradeMetric({ metric:"adaptive_tick", ...snapshot });
+}
+setInterval(geminiAdaptiveTick, 60000);
+
+
+✅ Expected: A new [Gemini-Adaptive] log line every 60 s with cache ratio and adaptive TTL adjustments.
+
+2️⃣ Integrate with Telemetry Compression Service
+
+File: server/services/telemetry-compression.ts
+
+Replace fixed interval with dynamic one:
+
+const BATCH_MS = Number(process.env.TELEMETRY_BATCH_MS) || 2000;
+setInterval(flush, BATCH_MS);
+
+
+✅ Expected: Batching frequency now responds to adaptive profiler decisions.
+
+3️⃣ Enhance Profiler Metrics for Dashboard
+
+File: server/services/health-monitor.ts
+Append to existing Gemini profile log:
+
+[Gemini-Profile] CPU=18% | Mem=195 MB | Lat=108 ms | CacheHit=0.91 | BatchMS=2000 | TTL=90000
+
+
+✅ Expected: Full line appears every minute in logs and UI Telemetry Dashboard.
+
+4️⃣ Dynamic TTL Binding in Cache Service
+
+File: server/services/cache.ts
+
+Replace static TTL default with:
+
+export function setCache(key:string,v:any,ttl?:number){
+  const adaptiveTTL = ttl || Number(process.env.DEFAULT_CACHE_TTL)||90000;
+  cache.set(key,{v,exp:Date.now()+adaptiveTTL});
+}
+
+
+✅ Expected: Cache entries reflect adaptive TTL based on Gemini feedback.
+
+5️⃣ Validation & Observation
+
+Run for ~3 minutes after restart, then execute:
+
+grep "\[Gemini-Profile\]\|\[Gemini-Adaptive\]" /tmp/logs/Start_application_* | tail -10
+
+
+✅ Expected output:
+
+[Gemini-Profile] CPU=… | Lat=… | CacheHit=…
+[Gemini-Adaptive] cache=0.88 ttl=120000 batch=3000
+
+🧾 Deliverables
+
+audit/phase4b-adaptive-profiling.md → includes 3 consecutive profile snapshots, adaptive TTL changes, and analysis.
+
+Logs: logs/phase4b-profile.txt (auto-generated).
+
+✅ Exit Criteria
+Metric	Target	Validation
+Gemini Adaptive Loop	Runs every 60 s	✅ “Gemini-Adaptive” logs visible
+TTL Adjustment	Dynamic (60–120 s range)	✅ logs show change
+Batch Interval	2 s → 3 s based on latency	✅ logs confirm
+Cache Hit Stability	≥ 0.85 sustained	✅ Profile log
+CPU Impact	< 35 % avg	✅ Profiler readout
+
+Branch Tag on Completion: dt-v1.9.5-adaptive

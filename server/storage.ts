@@ -572,7 +572,7 @@ export interface IStorage {
   updatePaperSimSession(id: string, updates: Partial<PaperSimSession>): Promise<PaperSimSession>;
   getPaperSimSession(id: string): Promise<PaperSimSession | undefined>;
   getPaperSimSessionBySessionId(sessionId: string): Promise<PaperSimSession | undefined>;
-  getActivePaperSimSession(userId: string): Promise<PaperSimSession | undefined>;
+  getActivePaperSimSession(mode: 'live' | 'paper'): Promise<PaperSimSession | undefined>;
   getActivePaperSimSessions(): Promise<PaperSimSession[]>; // Get all active sessions (for heartbeat)
   getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]>;
   
@@ -3353,11 +3353,12 @@ export class DatabaseStorage implements IStorage {
     return session || undefined;
   }
 
-  async getActivePaperSimSession(userId: string): Promise<PaperSimSession | undefined> {
+  async getActivePaperSimSession(mode: 'live' | 'paper'): Promise<PaperSimSession | undefined> {
+    console.log('[3D] PaperSim query fixed: mode-based session lookup');
     const [session] = await db.select()
       .from(paperSimSessions)
       .where(and(
-        eq(paperSimSessions.userId, userId),
+        eq(paperSimSessions.mode, mode),
         eq(paperSimSessions.status, 'running')
       ))
       .orderBy(desc(paperSimSessions.startedAt))

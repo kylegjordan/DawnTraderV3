@@ -10,6 +10,9 @@ import { storage } from '../storage.js';
 import { toCanonical, canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
 import type { TradingSettings, PriceData } from '@shared/schema';
 
+// Phase 4A Remediation: 10% sampling for verbose logs (90% reduction)
+const shouldSampleLog = () => Math.random() < 0.1;
+
 interface UniverseScanOptions {
   mode: 'paper' | 'live';
   limit?: number;
@@ -80,7 +83,10 @@ export class PaperSimDiagnosticService {
       userId
     } = options;
 
-    console.log(`[UniverseScan] Starting diagnostic scan (mode=${mode}, limit=${limit}, trace=${trace}, strategies=${strategies})`);
+    // Phase 4A: Sample 10% of scan logs (reduce noise)
+    if (shouldSampleLog()) {
+      console.log(`[UniverseScan] Starting diagnostic scan (mode=${mode}, limit=${limit}, trace=${trace}, strategies=${strategies})`);
+    }
 
     // Phase 27.F.13.M: Get global screener filters (mode-only, no userId)
     const screenerSettings = await storage.getScreenerFilters({ mode });
@@ -98,7 +104,10 @@ export class PaperSimDiagnosticService {
     }
 
     // Load raw Kraken universe
-    console.log('[UniverseScan] Loading Kraken universe...');
+    // Phase 4A: Sample 10% of scan logs (reduce noise)
+    if (shouldSampleLog()) {
+      console.log('[UniverseScan] Loading Kraken universe...');
+    }
     const [tickers, pairs] = await Promise.all([
       this.krakenService.getTicker(),
       this.krakenService.getTradablePairs()
@@ -106,7 +115,10 @@ export class PaperSimDiagnosticService {
     
     const universeCount = Object.keys(tickers).length;
     const evaluated = Math.min(limit, universeCount);
-    console.log(`[UniverseLoad] kraken_pairs=${universeCount} evaluated=${evaluated}`);
+    // Phase 4A: Sample 10% of scan logs (reduce noise)
+    if (shouldSampleLog()) {
+      console.log(`[UniverseLoad] kraken_pairs=${universeCount} evaluated=${evaluated}`);
+    }
 
     // Parse settings from database (NO HARDCODED FALLBACKS - Goals Engine is single source of truth)
     const minVolume = parseFloat(screenerSettings.minVolume);

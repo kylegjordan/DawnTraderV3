@@ -1,0 +1,68 @@
+# Lottie Connectivity & Impact Audit
+Objective: Identify all code, runtime, and configuration connections related to “Lottie” or “Latti” (backend, frontend, telemetry, trading, analytics).
+
+Steps:
+1. Codebase search
+   - Grep or ripgrep for: "lottie", "latti", "Lottie", "Latti", "aiAnalyzer", "ai_analyzer", "adaptive", "autoAdjust"
+   - Output file paths + surrounding 5 lines of context for each hit.
+
+2. Dependency map
+   - For each file found, list:
+     • Functions or classes defined (names, exports)
+     • Functions called from/to those modules
+     • Imports/exports referencing other services (e.g., analytics, telemetry, trading-engine)
+   - Produce a dependency graph (.mermaid or .dot format).
+
+3. Runtime analysis
+   - Search recent logs for: "Lottie", "Latti", "Analyzer", "autoAdjust", "adaptive"
+   - Note: error frequency, warnings, performance timing (ms per call if available).
+
+4. API call inspection
+   - Within those files, look for any of the following:
+       fetch( / axios / https / http.request / API_KEY / Authorization / endpoint / POST / GET )
+   - Record the endpoint, URL pattern, and payload fields.
+
+5. Resource footprint
+   - Identify any scheduled jobs or long-running loops created by Lottie-related modules (setInterval, cron, scheduler.register).
+   - Estimate CPU/memory impact (from profiler if available).
+
+6. Data touchpoints
+   - List every DB table, config key, or telemetry stream read or written by Lottie modules.
+   - Note if they reference userId, mode, or other deprecated fields.
+
+7. UI audit
+   - Search client/src for “Lottie”, “Auto (Lottie)”, “Adaptive”, or “passive learning”.
+   - Identify which components render these controls and what API routes they hit.
+
+8. Summarize
+   - Produce a table:
+
+     | Layer | File(s) | Connected To | Read/Write | External API? | Impact/Notes |
+     |--------|----------|--------------|-------------|----------------|--------------|
+
+   - Include Mermaid diagram:
+       graph TD
+         Lottie["Lottie Core"] --> Telemetry
+         Lottie --> Analytics
+         Lottie --> TradingEngine
+         Telemetry --> Database
+         UI["Dashboard UI"] --> Lottie
+
+9. Output
+   - Save to: `audit/lottie-connectivity-audit.md`
+   - Include:
+       - Full file list
+       - Dependency graph
+       - Runtime log summary
+       - Performance summary (CPU/mem impact)
+       - API summary
+       - Clear separation of local vs external interactions
+       - Recommendation section: 
+           *Isolate*, *Refactor in place*, *Remove safely*, or *Replace connector*.
+
+Deliverables:
+✅ audit/lottie-connectivity-audit.md
+✅ dependency-graph-lottie.svg
+✅ raw search logs (optional)
+
+End.

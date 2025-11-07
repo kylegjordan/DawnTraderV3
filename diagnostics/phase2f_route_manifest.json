@@ -9,6 +9,43 @@
     ]
   },
   {
+    "path": "/api/metrics",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/metrics/slo",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/logs/recent",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/config",
+    "methods": [
+      "GET",
+      "PUT"
+    ],
+    "middlewares": [
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/system/health",
     "methods": [
       "GET"

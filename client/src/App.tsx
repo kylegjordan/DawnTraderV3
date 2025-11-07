@@ -31,6 +31,7 @@ const BriefingsPage = lazy(() => import("@/pages/briefings"));
 const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
 const SystemsPage = lazy(() => import("@/pages/systems"));
 const AITransparencyPage = lazy(() => import("@/pages/ai-transparency"));
+const SystemConfigPage = lazy(() => import("@/pages/system-config"));
 
 function LoadingFallback() {
   return (
@@ -92,6 +93,7 @@ function getPageContext(location: string): string {
     '/systems': 'System Monitoring',
     '/ai-transparency': 'AI Transparency',
     '/settings': 'Settings',
+    '/system/config': 'System Configuration',
     '/kill-switch': 'Kill Switch',
     '/walter': 'Walter Chat'
   };
@@ -174,6 +176,7 @@ function Router() {
               <Route path="/goals-engine" component={GoalsEnginePage} />
               <Route path="/ai-transparency" component={AITransparencyPage} />
               <Route path="/settings" component={Settings} />
+              <Route path="/system/config" component={SystemConfigPage} />
               <Route path="/kill-switch" component={KillSwitchScreen} />
               <Route path="/:rest*">
                 <Redirect to="/" />
