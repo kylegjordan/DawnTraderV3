@@ -1,0 +1,40 @@
+injected.js:27 The above error occurred in the <SystemConfigPage> component:
+
+    at SystemConfigPage (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/pages/system-config.tsx?t=1762523132348:29:33)
+    at Route (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=edf64814:323:16)
+    at Switch (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.…/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=edf64814:379:17)
+    at Suspense
+    at main
+    at div
+    at RequireAuth (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/App.tsx?t=1762523132348&v=U3is1rnve-UpnKzHduKkY:84:24)
+    at Router (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/App.tsx?t=1762523132348&v=U3is1rnve-UpnKzHduKkY:152:41)
+    at div
+    at Provider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.…unner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=edf64814:38:15)
+    at TooltipProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.…rkspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=edf64814:63:5)
+    at RequestTraceProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/hooks/use-request-trace.tsx:21:40)
+    at TradingModeProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/src/contexts/trading-mode-context.tsx:23:39)
+    at QueryClientProvider (https://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.…rkspace/node_modules/.vite/deps/@tanstack_react-query.js?v=edf64814:2805:3)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+chunk-RPCDYKBN.js?v=edf64814:19413 Uncaught Error: Rendered more hooks than during the previous render.
+    at system-config.tsx:168:49
+    at Array.map (<anonymous>)
+    at SystemConfigPage (system-config.tsx:167:28)
+injected.js:27 [34A][WS] Subscriber #2 unmounted (remaining: 4)
+injected.js:27 [34A][WS] Subscriber #1 unmounted (remaining: 3)
+injected.js:27 [34A][WS] Subscriber #3 unmounted (remaining: 2)
+injected.js:27 [34A][WS] Subscriber #4 unmounted (remaining: 1)
+injected.js:27 [34A][WS] Subscriber #5 unmounted (remaining: 0)
+injected.js:27 [34A][WS] Last subscriber unmounted - closing singleton connection
+use-websocket.tsx:176 WebSocket connection to 'wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae' failed: WebSocket is closed before the connection is established.
+injected.js:27 [ContextBridge] WebSocket error: 
+Event
+injected.js:27 [ContextBridge] WebSocket disconnected
+injected.js:27 [ContextBridge] Reconnecting in 1000ms (attempt 1)...
+injected.js:27 [34A][WS] singleton opened once
+injected.js:27 [ContextBridge] Connecting to WebSocket: wss://66dcd496-0974-4ab6-b0bf-174ce5b27c58-00-35f1bssedvrny.spock.replit.dev/ws?userId=14e0809e-3ca8-413d-878f-c55f9d837fae
+injected.js:27 [ContextBridge] WebSocket connected (userId: 14e0809e-3ca8-413d-878f-c55f9d837fae)
+jquery.js:1040 [Violation] Permissions policy violation: unload is not allowed in this document.
+﻿

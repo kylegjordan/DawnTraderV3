@@ -1,0 +1,96 @@
+🧭 Phase 7A Directive — Automated Observation Logger Integration
+
+Objective:
+Augment the 48-hour Paper-Mode Stability Test with automated logging of runtime metrics (CPU, memory, latency, queue depth, event-loop lag) every 5 minutes.
+
+This lets Replit collect a complete observational log without manual input during the soak test.
+
+🧩 Implementation Steps
+1️⃣ Create the Logger Script
+
+Create: server/scripts/phase7-observation-logger.ts
+
+import fs from "fs";
+import os from "os";
+import { MetricsService } from "../services/metrics-service";
+
+(async () => {
+  console.log("📓 Starting Observation Logger (Phase 7A)");
+
+  const header =
+    "timestamp,uptime(s),cpu(1m avg),rss(MB),signalLatency,orderLatency,queueDepth,eventLoopLag\n";
+  if (!fs.existsSync("./logs/observation_log.csv"))
+    fs.writeFileSync("./logs/observation_log.csv", header);
+
+  setInterval(() => {
+    const m = MetricsService.collectSnapshot();
+    const mem = process.memoryUsage().rss / 1024 / 1024;
+    const line = `${Date.now()},${process.uptime().toFixed(0)},${os
+      .loadavg()[0]
+      .toFixed(2)},${mem.toFixed(1)},${m.signalLatency},${m.orderLatency},${m.queueDepth},${m.eventLoopLag}\n`;
+    fs.appendFileSync("./logs/observation_log.csv", line);
+  }, 5 * 60_000); // every 5 minutes
+})();
+
+2️⃣ Add a Convenience NPM Script (optional)
+
+In package.json:
+
+"scripts": {
+  "phase7:logger": "tsx server/scripts/phase7-observation-logger.ts"
+}
+
+3️⃣ Run Concurrently with the Paper-Mode Soak
+
+Start your main app in paper mode and the logger together:
+
+npm run dev & npm run phase7:logger
+
+
+or, without the npm shortcut:
+
+npm run dev & tsx server/scripts/phase7-observation-logger.ts
+
+
+Both processes will run in Replit’s console; the logger writes to
+logs/observation_log.csv automatically.
+
+4️⃣ Verify Log Creation
+
+After 5 minutes:
+
+tail -n 5 logs/observation_log.csv
+
+
+Expected output:
+
+timestamp,uptime(s),cpu(1m avg),rss(MB),signalLatency,orderLatency,queueDepth,eventLoopLag
+1736449200000,300,0.22,312.4,385,910,4,18
+...
+
+5️⃣ 48-Hour Run & Validation
+
+Let the system run for 48 hours.
+The CSV file will contain ~576 rows (1 every 5 minutes × 48 hours).
+
+At the end:
+
+tsx server/scripts/validate-phase7.ts
+
+
+to compute averages.
+
+6️⃣ Deliverables
+File	Purpose
+logs/observation_log.csv	Automated observation dataset
+audit/phase7a-automated-observation-logger-directive.md	Directive record
+server/scripts/phase7-observation-logger.ts	Logger implementation
+🧱 Commit & Push when ready
+git add server/scripts/phase7-observation-logger.ts logs/observation_log.csv audit/phase7a-automated-observation-logger-directive.md
+git commit -m "🩵 Phase 7A – Automated Observation Logger integrated for 48-hour soak test"
+git push origin dt-v1-revival-bootstrap
+
+🧭 Next Phase Preview
+
+Once Phase 7 + 7A finish successfully, proceed to
+Phase 8 — Controlled Autonomy Re-Enable (reactivate LATTI + CLE modules under guarded supervision).

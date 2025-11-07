@@ -16,7 +16,6 @@ interface ConfigEntry {
   updatedBy?: string;
 }
 
-// Separate component for number configs to avoid hooks in map
 function NumberConfigRow({ 
   config, 
   saving, 
@@ -27,6 +26,11 @@ function NumberConfigRow({
   onUpdate: (key: string, value: number) => void;
 }) {
   const [editValue, setEditValue] = useState(String(config.value));
+
+  // Sync editValue when config.value changes (after reload)
+  useEffect(() => {
+    setEditValue(String(config.value));
+  }, [config.value]);
 
   return (
     <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
@@ -64,7 +68,6 @@ function NumberConfigRow({
   );
 }
 
-// Separate component for string configs to avoid hooks in map
 function StringConfigRow({ 
   config, 
   saving, 
@@ -75,6 +78,11 @@ function StringConfigRow({
   onUpdate: (key: string, value: string) => void;
 }) {
   const [editValue, setEditValue] = useState(String(config.value));
+
+  // Sync editValue when config.value changes (after reload)
+  useEffect(() => {
+    setEditValue(String(config.value));
+  }, [config.value]);
 
   return (
     <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
@@ -111,7 +119,7 @@ function StringConfigRow({
   );
 }
 
-export default function SystemConfigPage() {
+export default function SystemConfigTab() {
   const [configs, setConfigs] = useState<ConfigEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -186,7 +194,7 @@ export default function SystemConfigPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+      <div className="flex h-96 items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
           <p className="text-muted-foreground">Loading configuration...</p>
@@ -200,12 +208,12 @@ export default function SystemConfigPage() {
   const otherConfigs = configs.filter((c) => c.type !== "boolean" && c.type !== "number");
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">System Configuration</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage runtime configuration and feature flags
+          <h3 className="text-xl font-bold tracking-tight">Runtime Configuration</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage feature flags and system parameters without code deployments
           </p>
         </div>
         <Button onClick={loadConfigs} variant="outline" size="sm">

@@ -34,7 +34,8 @@ import {
   Globe,
   ScanLine,
   BookOpen,
-  Server
+  Server,
+  Settings
 } from "lucide-react";
 import ClusterTab from "./cluster-tab";
 import LearningNetworkTab from "./learning-network-tab";
@@ -44,6 +45,7 @@ import { SystemTruthPanel } from "@/components/dashboard/system-truth-panel";
 import SystemHealthSummary from "@/components/system-health-summary";
 import LottieTuningTab from "@/components/monitoring/lottie-tuning-tab";
 import EngineTelemetry from "@/components/monitoring/engine-telemetry";
+import SystemConfigTab from "./system-config-tab";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SystemMetrics {
@@ -371,6 +373,10 @@ export default function EnhancedSystemMonitoring() {
           <TabsTrigger value="engine-telemetry" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-engine-telemetry" title="Engine Telemetry">
             <Server className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Engine Telemetry</span>
+          </TabsTrigger>
+          <TabsTrigger value="system-config" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-system-config" title="System Configuration">
+            <Settings className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">System Config</span>
           </TabsTrigger>
           <TabsTrigger value="system-ai" className="text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-system-ai" title="System & AI">
             <Activity className="w-4 h-4 sm:mr-2" />
@@ -1139,6 +1145,11 @@ export default function EnhancedSystemMonitoring() {
         {/* Phase 41F-D: Engine Telemetry Tab */}
         <TabsContent value="engine-telemetry" className="space-y-6 mt-6" data-testid="content-engine-telemetry">
           <EngineTelemetry />
+        </TabsContent>
+
+        {/* Phase 6: System Configuration Tab */}
+        <TabsContent value="system-config" className="space-y-6 mt-6" data-testid="content-system-config">
+          <SystemConfigTab />
         </TabsContent>
       </Tabs>
     </div>
