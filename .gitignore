@@ -25,3 +25,4 @@ migration-backup-*.sql
 # Compiled diagnostics (keep source, exclude large outputs)
 dist/diagnostics/*.json
 backups/
+diagnostic-reports/phase-41F-L-trace.ndjson
