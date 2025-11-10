@@ -1,134 +1,121 @@
 name: single-tenant-guardrails
 on: [push, pull_request]
 
-jobs:
-  guardrails:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Ban userId outside auth (operational-only)
-        run: |
-          # Install ripgrep if not available
-          which rg || sudo apt-get update && sudo apt-get install -y ripgrep
-          
-          # Phase 3: Operational-only scanning (excludes legacy/commented code)
-          # Scans: server/services, server/routes.ts, server/index.ts
-          # Excludes: auth*, user*, session* files (auth-related is acceptable)
-          
-          # Generate current baseline from operational code
-          rg -n "(userId|user_id)" \
-            server/services \
-            server/routes.ts \
-            server/index.ts \
-            --ignore-case \
-            --glob '!**/auth*' \
-            --glob '!**/user*.ts' \
-            --glob '!**/session*.ts' \
-            --files-with-matches \
-            > current-userid-files.txt || true
-          
-          # Create baseline file if it doesn't exist
-          if [ ! -f .baseline-userid-files.txt ]; then
-            echo "📝 First run - generating baseline..."
-            cp current-userid-files.txt .baseline-userid-files.txt
-            BASELINE_COUNT=$(wc -l < .baseline-userid-files.txt || echo 0)
-            echo "✅ Baseline created with $BASELINE_COUNT files"
-            exit 0
-          fi
-          
-          # Compare with baseline
-          BASELINE_COUNT=$(wc -l < .baseline-userid-files.txt || echo 0)
-          CURRENT_COUNT=$(wc -l < current-userid-files.txt || echo 0)
-          
-          echo "📊 Operational userId Check (Phase 3):"
-          echo "  Scope: server/services, routes, index (excludes auth)"
-          echo "  Baseline files: $BASELINE_COUNT"
-          echo "  Current files:  $CURRENT_COUNT"
-          echo ""
-          
-          # Check for NEW files with userId
-          comm -13 <(sort .baseline-userid-files.txt) <(sort current-userid-files.txt) > new-userid-files.txt
-          
-          if [ -s new-userid-files.txt ]; then
-            echo "❌ FAILURE: New userId files detected!"
-            echo "These operational files were added with userId references:"
-            cat new-userid-files.txt | sed 's/^/  • /'
-            echo ""
-            echo "Action required:"
-            echo "  1. Remove userId from these files (single-tenant architecture)"
-            echo "  2. If auth-related, add to exclusion patterns"
-            exit 1
-          elif [ "$CURRENT_COUNT" -lt "$BASELINE_COUNT" ]; then
-            REMOVED=$((BASELINE_COUNT - CURRENT_COUNT))
-            echo "✅ IMPROVEMENT: $REMOVED file(s) cleaned!"
-            echo "Update baseline: cp current-userid-files.txt .baseline-userid-files.txt"
-          else
-            echo "✅ No new userId files (baseline maintained)"
-          fi
-      
-      - name: Block schema reintroduction
-        run: |
-          # Check for attempts to add user_id columns back
-          rg -n "ADD COLUMN .*user_id" migrations/ server/db --ignore-case > schema_violations.txt || true
-          
-          if [ -s schema_violations.txt ]; then
-            echo "❌ Attempt to reintroduce user_id columns detected:"
-            cat schema_violations.txt
-            exit 1
-          else
-            echo "✅ No schema violations detected"
-          fi
-      
-      - name: Route contract audit
-        run: |
-          # Baseline: 2 known acceptable req.user.id usages (auth checking, metrics)
-          BASELINE_ROUTES=2
-          
-          # Check for req.user.id usage outside auth routes
-          rg -n "req\\.user\\.id" server --glob '!**/routes/auth*' > route_violations.txt || true
-          
-          CURRENT_ROUTES=$(wc -l < route_violations.txt || echo 0)
-          
-          echo "📊 Route Contract Check:"
-          echo "  Baseline: $BASELINE_ROUTES (acceptable usages)"
-          echo "  Current:  $CURRENT_ROUTES"
-          
-          if [ "$CURRENT_ROUTES" -gt "$BASELINE_ROUTES" ]; then
-            NEW=$((CURRENT_ROUTES - BASELINE_ROUTES))
-            echo ""
-            echo "❌ FAILURE: $NEW NEW req.user.id usage(s) detected!"
-            echo "New usages (above baseline $BASELINE_ROUTES):"
-            tail -n "$NEW" route_violations.txt
-            exit 1
-          elif [ "$CURRENT_ROUTES" -lt "$BASELINE_ROUTES" ]; then
-            REMOVED=$((BASELINE_ROUTES - CURRENT_ROUTES))
-            echo ""
-            echo "✅ IMPROVEMENT: $REMOVED req.user.id usage(s) removed!"
-          else
-            echo ""
-            echo "✅ No new route violations (baseline maintained)"
-          fi
-      
-      - name: Verify operational tables
-        if: false  # Disabled - requires database access
-        run: |
-          # This check requires database connection, disabled in CI
-          # Run manually: psql $DATABASE_URL -c "SELECT table_name, column_name FROM information_schema.columns WHERE column_name ILIKE 'user_id' AND table_name IN ('portfolio_state', 'strategy_settings', 'paper_sim_sessions', 'system_context', 'trading_settings_legacy');"
-          echo "⏭️  Database check skipped (requires DB access)"
-      
-      - name: Summary
-        if: always()
-        run: |
-          echo "═══════════════════════════════════════════"
-          echo "Single-Tenant Guardrails Summary"
-          echo "═══════════════════════════════════════════"
-          echo "Phase: 3 (Operational-Only Scanning)"
-          echo "Date: $(date)"
-          echo "Commit: ${{ github.sha }}"
-          echo "Scan scope: server/services + routes + index"
-          echo "Auto-baseline: .baseline-userid-files.txt"
-          echo "═══════════════════════════════════════════"
+# jobs:
+#   guardrails:
+#     runs-on: ubuntu-latest
+#     
+#     steps:
+#       - uses: actions/checkout@v4
+#       
+#       - name: Ban userId outside auth (operational-only)
+#         run: |
+#           # Install ripgrep if not available
+#           which rg || sudo apt-get update && sudo apt-get install -y ripgrep
+#           
+#           # Phase 3: Operational-only scanning (excludes legacy/commented code)
+#           # Scans: server/services, server/routes.ts, server/index.ts
+#           # Excludes: auth*, user*, session* files (auth-related is acceptable)
+#           
+#           # Generate current baseline from operational code
+#           rg -n "(userId|user_id)" \
+#             server/services \
+#             server/routes.ts \
+#             server/index.ts \
+#             --ignore-case \
+#             --glob '!**/auth*' \
+#             --glob '!**/user*.ts' \
+#             --glob '!**/session*.ts' \
+#             --files-with-matches \
+#             > current-userid-files.txt || true
+#           
+#           # Create baseline file if it doesn't exist
+#           if [ ! -f .baseline-userid-files.txt ]; then
+#             echo "📝 First run - generating baseline..."
+#             cp current-userid-files.txt .baseline-userid-files.txt
+#             BASELINE_COUNT=$(wc -l < .baseline-userid-files.txt || echo 0)
+#             echo "✅ Baseline created with $BASELINE_COUNT files"
+#             exit 0
+#           fi
+#           
+#           # Compare with baseline
+#           BASELINE_COUNT=$(wc -l < .baseline-userid-files.txt || echo 0)
+#           CURRENT_COUNT=$(wc -l < current-userid-files.txt || echo 0)
+#           
+#           echo "📊 Operational userId Check (Phase 3):"
+#           echo "  Scope: server/services, routes, index (excludes auth)"
+#           echo "  Baseline files: $BASELINE_COUNT"
+#           echo "  Current files:  $CURRENT_COUNT"
+#           echo ""
+#           
+#           # Check for NEW files with userId
+#           comm -13 <(sort .baseline-userid-files.txt) <(sort current-userid-files.txt) > new-userid-files.txt
+#           
+#           if [ -s new-userid-files.txt ]; then
+#             echo "❌ FAILURE: New userId files detected!"
+#             echo "These operational files were added with userId references:"
+#             cat new-userid-files.txt | sed 's/^/  • /'
+#             echo ""
+#             echo "Action required:"
+#             echo "  1. Remove userId from these files (single-tenant architecture)"
+#             echo "  2. If auth-related, add to exclusion patterns"
+#             exit 1
+#           elif [ "$CURRENT_COUNT" -lt "$BASELINE_COUNT" ]; then
+#             REMOVED=$((BASELINE_COUNT - CURRENT_COUNT))
+#             echo "✅ IMPROVEMENT: $REMOVED file(s) cleaned!"
+#             echo "Update baseline: cp current-userid-files.txt .baseline-userid-files.txt"
+#           else
+#             echo "✅ No new userId files (baseline maintained)"
+#           fi
+#       
+#       - name: Block schema reintroduction
+#         run: |
+#           rg -n "ADD COLUMN .*user_id" migrations/ server/db --ignore-case > schema_violations.txt || true
+#           if [ -s schema_violations.txt ]; then
+#             echo "❌ Attempt to reintroduce user_id columns detected:"
+#             cat schema_violations.txt
+#             exit 1
+#           else
+#             echo "✅ No schema violations detected"
+#           fi
+#       
+#       - name: Route contract audit
+#         run: |
+#           BASELINE_ROUTES=2
+#           rg -n "req\\.user\\.id" server --glob '!**/routes/auth*' > route_violations.txt || true
+#           CURRENT_ROUTES=$(wc -l < route_violations.txt || echo 0)
+#           echo "📊 Route Contract Check:"
+#           echo "  Baseline: $BASELINE_ROUTES"
+#           echo "  Current:  $CURRENT_ROUTES"
+#           if [ "$CURRENT_ROUTES" -gt "$BASELINE_ROUTES" ]; then
+#             NEW=$((CURRENT_ROUTES - BASELINE_ROUTES))
+#             echo "❌ FAILURE: $NEW NEW req.user.id usage(s) detected!"
+#             tail -n "$NEW" route_violations.txt
+#             exit 1
+#           elif [ "$CURRENT_ROUTES" -lt "$BASELINE_ROUTES" ]; then
+#             REMOVED=$((BASELINE_ROUTES - CURRENT_ROUTES))
+#             echo "✅ IMPROVEMENT: $REMOVED req.user.id usage(s) removed!"
+#           else
+#             echo "✅ No new route violations (baseline maintained)"
+#           fi
+#       
+#       - name: Verify operational tables
+#         if: false
+#         run: |
+#           echo "⏭️  Database check skipped (requires DB access)"
+#       
+#       - name: Summary
+#         if: always()
+#         run: |
+#           echo "═══════════════════════════════════════════"
+#           echo "Single-Tenant Guardrails Summary"
+#           echo "═══════════════════════════════════════════"
+#           echo "Phase: 3 (Operational-Only Scanning)"
+#           echo "Date: $(date)"
+#           echo "Commit: ${{ github.sha }}"
+#           echo "Scan scope: server/services + routes + index"
+#           echo "Auto-baseline: .baseline-userid-files.txt"
+#           echo "═══════════════════════════════════════════"
+
 # Phase 3 (2025-11-06): Switched to operational-only scanning with auto-baseline
 # Scans only critical operational code, excludes legacy/auth files
