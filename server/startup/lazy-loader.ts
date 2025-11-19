@@ -24,7 +24,7 @@ export async function lazyLoadServices() {
           const { cortexCore } = await import('../services/cortex/cortex-core');
           const { insightBob } = await import('../services/bob-insight');
           
-          await cortexCore.initialize();
+       //   await cortexCore.initialize();
           
           const fetchBobSnapshot = async () => {
             return await insightBob.getInsightSummary();
@@ -40,7 +40,7 @@ export async function lazyLoadServices() {
             };
           };
           
-          await cortexCore.startSync(fetchBobSnapshot, fetchUISnapshot);
+       //   await cortexCore.startSync(fetchBobSnapshot, fetchUISnapshot);
           return 'Cortex';
         } catch (error) {
           console.error('[Lazy] Cortex initialization failed:', error);
