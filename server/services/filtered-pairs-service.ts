@@ -119,6 +119,12 @@ export class FilteredPairsService {
       vwap: pair.vwap ?? null,
       lastUpdate: new Date(),
     }));
+
+    // ===== PHASE 8.8.1 AUDIT LOGGING =====
+    console.log("[8.8.1][AUDIT][FilteredPairs] Eligible sample:", filteredPairs.slice(0, 5));
+    console.log("[8.8.1][AUDIT][FilteredPairs] Total eligible:", filteredPairs.length);
+    console.log("[8.8.1][AUDIT][FilteredPairs] Field check (first pair):", filteredPairs[0] ? Object.keys(filteredPairs[0]) : 'none');
+    // ===== END PHASE 8.8.1 AUDIT LOGGING =====
     
     // Calculate data freshness
     const freshnessAgeMs = 0; // Just fetched, so fresh

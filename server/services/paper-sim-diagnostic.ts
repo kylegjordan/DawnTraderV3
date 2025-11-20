@@ -321,6 +321,12 @@ export class PaperSimDiagnosticService {
     const ineligibleCount = evaluated - eligiblePairs.length;
     console.log(`[FilterEval] eligible=${eligiblePairs.length} ineligible=${ineligibleCount} by_rule={vol:${breakdown.failed_min_volume}, spread:${breakdown.failed_spread}, range:${breakdown.failed_daily_range}, history:${breakdown.failed_history}}`);
 
+    // ===== PHASE 8.8.1 AUDIT LOGGING =====
+    console.log("[8.8.1][AUDIT] Eligible sample:", eligiblePairs.slice(0, 5));
+    console.log("[8.8.1][AUDIT] Breakdown keys:", Object.keys(breakdown));
+    console.log("[8.8.1][AUDIT] Breakdown counts:", breakdown);
+    // ===== END PHASE 8.8.1 AUDIT LOGGING =====
+
     // Phase 27.F.19b: Calculate next scan time (10-minute interval)
     const SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
     const nextScanAt = new Date(Date.now() + SCAN_INTERVAL_MS).toISOString();
