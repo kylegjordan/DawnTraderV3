@@ -17,6 +17,7 @@
 
 import { storage } from '../storage.js';
 import { FilteredPairsService } from './filtered-pairs-service.js';
+import { KrakenService } from './kraken.js';
 import { updateStage3Cache } from './stage3-state-cache.js';
 import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
 import type { ScreenerFilters } from '@shared/schema';
@@ -36,12 +37,14 @@ interface ScanResult {
 
 export class Fx5ScannerService {
   private filteredPairsService: FilteredPairsService;
+  private krakenService: KrakenService;
   private paperTimer: NodeJS.Timeout | null = null;
   private liveTimer: NodeJS.Timeout | null = null;
   private isRunning = false;
 
   constructor() {
     this.filteredPairsService = new FilteredPairsService();
+    this.krakenService = new KrakenService();
   }
 
   /**
@@ -118,13 +121,25 @@ export class Fx5ScannerService {
       // Execute FX5 filtering via FilteredPairsService
       const result = await this.filteredPairsService.getValidPairs(mode, filters, true);
       
-      // Get total universe count (all tradable pairs)
-      const evaluatedCount = result.totalPairs;
-      const eligibleCount = result.eligiblePairs;
-      const ineligibleCount = evaluatedCount - eligibleCount;
-
-      // Compute breakdown from filter results
-      const breakdown = await this.computeBreakdown(mode, filters);
+      // Compute breakdown from filter results (includes evaluated count)
+      const diagnosticData = await this.computeBreakdown(mode, filters);
+      const breakdown = diagnosticData.breakdown;
+      
+      // Calculate counts from breakdown to satisfy truth constraint
+      // eligibleCount = pairs that passed ALL filters (includes active trades)
+      // ineligibleCount = pairs that failed ANY filter
+      const evaluatedCount = diagnosticData.evaluated;
+      const eligibleCount = breakdown.passed_all_filters + breakdown.already_active;
+      const ineligibleCount = 
+        breakdown.failed_min_volume +
+        breakdown.failed_spread +
+        breakdown.failed_daily_range +
+        breakdown.failed_min_price +
+        breakdown.failed_stablecoin +
+        breakdown.failed_quote_currency +
+        breakdown.failed_history +
+        breakdown.failed_market_cap +
+        breakdown.failed_guardrail_risk;
 
       // Get active trades count
       const activeTrades = await storage.getActiveTrades(mode);
@@ -175,48 +190,132 @@ export class Fx5ScannerService {
 
   /**
    * Compute filter breakdown from FX5 results
-   * This mirrors the diagnostic logic but uses real-time data
+   * Engine-agnostic: Uses KrakenService directly without user context
    */
   private async computeBreakdown(
     mode: 'paper' | 'live',
     filters: ScreenerFilters
-  ): Promise<FilterBreakdown> {
-    // Get all eligible and ineligible pairs with reasons
-    // For now, use diagnostic service to get breakdown
-    // TODO: Implement direct breakdown computation from FilteredPairsService
+  ): Promise<{ breakdown: FilterBreakdown; evaluated: number }> {
+    // Get all tradable pairs and tickers from Kraken
+    const [tickers, pairsObj] = await Promise.all([
+      this.krakenService.getTicker(),
+      this.krakenService.getTradablePairs()
+    ]);
     
-    const systemContext = await storage.getSystemContext(mode);
-    if (!systemContext?.lastStartedBy) {
-      // Return empty breakdown if no context
-      return {
-        failed_min_volume: 0,
-        failed_spread: 0,
-        failed_daily_range: 0,
-        failed_min_price: 0,
-        failed_stablecoin: 0,
-        failed_quote_currency: 0,
-        failed_history: 0,
-        failed_market_cap: 0,
-        failed_guardrail_risk: 0,
-        already_active: 0,
-        passed_all_filters: 0,
-      };
+    // Get active trades to exclude from eligible pool
+    const activeTrades = await storage.getActiveTrades(mode);
+    const activeSymbols = new Set(activeTrades.map(t => t.symbol));
+
+    // Initialize breakdown counters
+    const breakdown: FilterBreakdown = {
+      failed_min_volume: 0,
+      failed_spread: 0,
+      failed_daily_range: 0,
+      failed_min_price: 0,
+      failed_stablecoin: 0,
+      failed_quote_currency: 0,
+      failed_history: 0,
+      failed_market_cap: 0,
+      failed_guardrail_risk: 0,
+      already_active: 0,
+      passed_all_filters: 0,
+    };
+
+    // Extract filter criteria
+    const minVolume = parseFloat(filters.minVolume ?? '1000000.00');
+    const minDailyRange = parseFloat(filters.volatilityMin ?? '0.50');
+    const minPrice = parseFloat(filters.minPrice ?? '0.01');
+    const maxBidAskSpread = parseFloat(filters.maxBidAskSpread ?? '1.00');
+    const excludeStablecoins = filters.excludeStablecoins ?? true;
+    const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'UST'];
+    
+    // Parse allowed quote currencies
+    let allowedQuotes: string[] = [];
+    try {
+      allowedQuotes = typeof filters.quoteCurrencies === 'string'
+        ? JSON.parse(filters.quoteCurrencies)
+        : (filters.quoteCurrencies ?? []);
+    } catch {
+      allowedQuotes = [];
     }
 
-    // Temporary: Use diagnostic service for breakdown
-    // In production, this should compute breakdown directly from FX5 filtering
-    const { PaperSimDiagnosticService } = await import('./paper-sim-diagnostic.js');
-    const diagnosticService = new PaperSimDiagnosticService();
-    
-    const diagnosticResult = await diagnosticService.performUniverseScan({
-      mode,
-      limit: 1546, // Full universe
-      trace: false,
-      strategies: false, // Just filter breakdown
-      userId: systemContext.lastStartedBy,
+    // Evaluate each pair against filters (using ticker data + pair info)
+    let evaluated = 0;
+    Object.entries(tickers).forEach(([pairName, ticker]) => {
+      const pairInfo = pairsObj[pairName];
+      if (!pairInfo) return;
+
+      evaluated++;
+      
+      // Extract pair data
+      const baseCurrency = pairInfo.base;
+      const quoteCurrency = pairInfo.quote;
+      const normalizedQuote = quoteCurrency?.startsWith('Z') ? quoteCurrency.slice(1) : quoteCurrency;
+      const currentPrice = parseFloat(ticker.c[0]);
+      const volume24h = parseFloat(ticker.v[1]);
+      const high24h = parseFloat(ticker.h[1]);
+      const low24h = parseFloat(ticker.l[1]);
+      const dailyRange = ((high24h - low24h) / low24h) * 100;
+      const askPrice = parseFloat(ticker.a[0]);
+      const bidPrice = parseFloat(ticker.b[0]);
+      const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 100;
+      
+      // Get canonical symbol (e.g., BTCUSD instead of XXBTZUSD)
+      const symbol = pairInfo.wsname || pairName;
+      
+      let rejected = false;
+
+      // Filter 1: Quote currency
+      if (!rejected && allowedQuotes.length > 0 && !allowedQuotes.includes(normalizedQuote || '')) {
+        breakdown.failed_quote_currency++;
+        rejected = true;
+      }
+
+      // Filter 2: Stablecoins
+      if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
+        breakdown.failed_stablecoin++;
+        rejected = true;
+      }
+
+      // Filter 3: Min volume
+      if (!rejected && volume24h < minVolume) {
+        breakdown.failed_min_volume++;
+        rejected = true;
+      }
+
+      // Filter 4: Daily range (volatility)
+      if (!rejected && dailyRange < minDailyRange) {
+        breakdown.failed_daily_range++;
+        rejected = true;
+      }
+
+      // Filter 5: Min price
+      if (!rejected && currentPrice < minPrice) {
+        breakdown.failed_min_price++;
+        rejected = true;
+      }
+
+      // Filter 6: Bid-ask spread
+      if (!rejected && bidAskSpread > maxBidAskSpread) {
+        breakdown.failed_spread++;
+        rejected = true;
+      }
+
+      // Pair passed all filters
+      if (!rejected) {
+        // Check if already active
+        if (activeSymbols.has(symbol)) {
+          breakdown.already_active++;
+        } else {
+          breakdown.passed_all_filters++;
+        }
+      }
     });
 
-    return diagnosticResult.breakdown;
+    return {
+      breakdown,
+      evaluated,
+    };
   }
 }
 
