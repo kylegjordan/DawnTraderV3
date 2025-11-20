@@ -3,8 +3,6 @@ import { StrategyEngine } from './strategy-engine';
 import { storage } from '../storage';
 import { WatchlistPair } from '@shared/schema';
 import { strategyAlerts } from './strategy-alerts';
-import { stage3Cache } from './stage3-state-cache.js';
-import { stage3Emitter } from './stage3-emitter.js';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 
 export class MarketScanner {
@@ -120,9 +118,6 @@ export class MarketScanner {
           await this.scanForSignals(user.id, 'live');
         }
       }
-      
-      // Phase 8.8.2A: Update Stage-3 state and emit events
-      await this.updateStage3State();
       
       // Dawn Trader Phase 27.F.13.F: Enhanced automatic cleanup (runs every 10 minutes with scan)
       console.log('\n🧹 Running comprehensive cleanup...');
@@ -639,85 +634,4 @@ export class MarketScanner {
     }
   }
 
-  /**
-   * Phase 8.8.2A: Update Stage-3 state cache and emit events
-   * Runs once per scan cycle for both paper and live modes
-   */
-  private async updateStage3State(): Promise<void> {
-    console.log('\n📡 [Stage3] Updating Stage-3 state and emitting events...');
-    
-    try {
-      const users = await this.getAllActiveUsers();
-      if (users.length === 0) {
-        console.log('[Stage3] No users found, skipping Stage-3 update');
-        return;
-      }
-
-      // Use first user for now (Phase 41F-L.E2E-PURGE: single-user system)
-      const userId = users[0].id;
-
-      // Update Stage-3 for both modes
-      for (const mode of ['paper', 'live'] as const) {
-        try {
-          // Get diagnostic data with full breakdown
-          const diagnosticResult = await this.diagnosticService.performUniverseScan({
-            mode,
-            limit: 1546, // Full universe
-            trace: false,
-            strategies: false, // Don't run strategy checks, just filter breakdown
-            userId
-          });
-
-          // Get active trades count
-          const activeTrades = await storage.getActiveTrades(mode);
-          const activePoolCount = activeTrades.length;
-
-          // Get screener settings for rotation info
-          const screenerSettings = await storage.getScreenerFilters({ mode });
-          const universeSize = screenerSettings?.universeSize || 100;
-
-          // Calculate rotation stats (Phase 8.9 will expand this)
-          // For now, we use universe_count as topEndUniverseSize
-          const topNCount = diagnosticResult.eligible_count;
-          const tierBCount = 0; // Not implemented yet
-
-          // Update Stage-3 cache
-          const stage3State = stage3Cache.updateState(mode, {
-            evaluatedCount: diagnosticResult.evaluated,
-            eligibleCount: diagnosticResult.eligible_count,
-            ineligibleCount: diagnosticResult.ineligible_count,
-            activePoolCount,
-            topNCount,
-            tierBCount,
-            rotation: {
-              topEndUniverseSize: universeSize,
-              tierBUniverseSize: 0
-            },
-            latestEligibleSymbols: diagnosticResult.top_candidates.slice(0, 10).map(c => c.symbol)
-          });
-
-          console.log(`[Stage3] Updated ${mode} state:`, {
-            cycleId: stage3State.cycleId,
-            evaluated: stage3State.evaluatedCount,
-            eligible: stage3State.eligibleCount,
-            activePool: stage3State.activePoolCount
-          });
-
-          // Emit scan_tick (lightweight heartbeat)
-          stage3Emitter.emitScanTick(mode);
-
-          // Emit scanner:breakdown (heavy diagnostic with truth constraint validation)
-          stage3Emitter.emitScannerBreakdown(mode, diagnosticResult.breakdown);
-
-        } catch (error) {
-          console.error(`[Stage3] Error updating ${mode} state:`, error);
-        }
-      }
-
-      console.log('✅ [Stage3] State update complete');
-
-    } catch (error) {
-      console.error('[Stage3] Error in updateStage3State:', error);
-    }
-  }
 }

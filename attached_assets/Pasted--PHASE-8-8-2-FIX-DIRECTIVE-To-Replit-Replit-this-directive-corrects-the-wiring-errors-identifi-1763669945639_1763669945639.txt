@@ -1,0 +1,289 @@
+🧩 PHASE 8.8.2 FIX DIRECTIVE — To Replit
+
+Replit, this directive corrects the wiring errors identified in the previous implementation of Phase 8.8.2.
+
+Please follow all steps exactly as written.
+Do not skip, reinterpret, or redesign any part of this directive.
+
+🔷 SECTION 1 — Disconnect Stage-3 from the Legacy 10-Minute Scanner
+1.1 Locate the legacy 10-minute scanner file
+
+Search for:
+
+setInterval(
+
+10 * 60 * 1000
+
+schedule(“*/10 * * * *”)
+
+“market scan” (old log phrasing)
+
+Document the file path in:
+reports/phase-8.8/8.8.2-fix-scanner-disconnect.md
+
+1.2 Remove ALL Stage-3 wiring from this file
+
+You must:
+
+Remove updateStage3State() calls
+
+Remove any event emissions
+
+Remove any Stage-3 state initialization
+
+1.3 Check if the 10-minute scanner can be deleted
+
+Search entire codebase:
+
+rg -i "ten\|10-minute\|market-scan\|marketScanner" -n server/
+rg -i "scan" -n client/
+
+
+If no UI, no REST endpoint, and no other service uses it:
+
+➡️ Delete the file completely
+
+If anything imports it:
+
+➡️ Document the dependency and DO NOT delete the file yet
+➡️ Add a comment at the top saying “LEGACY — not part of FX5 — remove during Phase 8.12 refactor”
+
+🔷 SECTION 2 — Connect Stage-3 to the Real FX5 30-Second Scanner
+2.1 Identify the FX5 scanner loop
+
+Locate:
+
+The code that runs every 30 seconds
+
+The batching logic (topN + tierB)
+
+The part where eligibleSymbols are written to DB or cache
+
+Example search:
+
+rg -i "every 30" -n server/services
+rg -i "setInterval" -n server/services
+rg -i "kraken" -n server/services
+rg -i "eligibleSymbols" -n server/
+
+2.2 Insert Stage-3 update in the correct location
+
+Immediately AFTER FX5 has:
+
+Evaluated symbols
+
+Built breakdown
+
+Determined topN + tierB
+
+Updated eligibleSymbols dataset
+
+Insert:
+
+await stage3Emitter.updateAndBroadcast(mode, {
+   evaluatedCount,
+   eligibleCount,
+   ineligibleCount,
+   topNCount,
+   tierBCount,
+   rotation,
+   activePoolCount,
+   cycleStartTimestamp
+});
+
+2.3 Ensure Stage-3 fires exactly ONCE per 30-second cycle
+
+It must NOT fire:
+
+once per tier
+
+once per user
+
+once per strategy
+
+once per watchlist
+
+in any background job
+
+🔷 SECTION 3 — Implement Option A (Full scan_tick Schema)
+
+Update stage3-emitter.ts to ensure:
+
+type ScanTickEvent = {
+   type: "scan_tick";
+   payload: {
+      cycleId: number;
+      cycleStartTimestamp: string;
+      evaluatedCount: number;
+      eligibleCount: number;
+      ineligibleCount: number;
+      topNCount: number;
+      tierBCount: number;
+      rotation: {
+         topEndUniverseSize: number;
+         tierBUniverseSize: number;
+      };
+      activePoolCount: number;
+      mode: "paper" | "live";
+   };
+};
+
+
+Ensure:
+
+All number fields are numbers
+
+No breakdown included here
+
+No heavy arrays included here
+
+🔷 SECTION 4 — Fix Breakdown Emission
+4.1 Apply corrected FilterBreakdown schema
+
+Breakdown MUST include:
+
+failed_market_cap
+failed_universe_size     ❌ REMOVE (not a filter)
+already_active
+passed_all_filters
+
+
+DEV NOTE FROM KYLE:
+❗ “failed_universe_size” must NOT be a breakdown category
+Universe selection is NOT a filter.
+
+4.2 Remove deprecated keys
+
+Remove:
+
+failed_blacklist
+
+failed_whitelist
+
+strategy_none_triggered
+
+4.3 Truth Constraint Enforcement
+
+Truth constraint applies ONLY to scanner:breakdown:<mode> events:
+
+evaluatedCount = sum(all failures) + passed_all_filters
+
+
+If mismatch:
+
+Log warning
+
+DO NOT prevent event emission
+
+🔷 SECTION 5 — Generate Events Every 30 Seconds
+
+Stage-3 must emit:
+
+A) Lightweight scan_tick
+
+For Trading UI and Ready-to-Buy.
+
+B) Detailed scanner:breakdown:<mode>
+
+For Filter Insights.
+
+Events must fire for:
+
+paper
+
+live
+
+🔷 SECTION 6 — Test Procedure (MANDATORY)
+
+Use Test User Credentials:
+
+username: testuser123
+password: SecurePass123!
+
+
+Login:
+
+POST /api/auth/login
+
+
+Include the token for all requests.
+
+6.1 Verify Stage-3 Events Fire (WS Test)
+
+Connect via WebSocket client and observe:
+
+Within 30 seconds, you MUST receive:
+
+scan_tick
+
+scanner:breakdown:paper
+
+If you receive ANY of the following:
+
+events at 10-minute intervals
+
+duplicate events
+
+breakdown events missing
+
+scan_tick missing
+
+events from unknown source
+
+→ STOP & fix immediately.
+
+6.2 Verify Truth Constraint
+
+Call:
+
+GET /api/paper-sim/diagnostics/scan?trace=true
+
+
+Verify:
+
+evaluated = breakdownSum + passed_all_filters
+
+No missing categories
+
+No deprecated categories
+
+🔷 SECTION 7 — Deliverables
+
+Create:
+
+reports/phase-8.8/8.8.2-fix-scanner-disconnect.md
+reports/phase-8.8/8.8.2-fix-scan-tick-test.md
+reports/phase-8.8/8.8.2-fix-breakdown-test.md
+
+
+Each must include:
+
+Code paths updated
+
+Event samples
+
+Truth constraint validation
+
+Whether 10-min scanner was deleted
+
+🛑 ABSOLUTE RESTRICTIONS
+
+Do NOT:
+
+Modify FX5 logic
+
+Modify strategy engine
+
+Modify trading engine
+
+Modify guardrails
+
+Rework UI
+
+Add new filters
+
+Attach Stage-3 to any other loop
+
+Emit breakdown in scan_tick
+
+Only do what is explicitly listed in this directive.
