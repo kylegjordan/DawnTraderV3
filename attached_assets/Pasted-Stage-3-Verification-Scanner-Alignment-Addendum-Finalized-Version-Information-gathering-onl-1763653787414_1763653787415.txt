@@ -1,0 +1,251 @@
+Stage-3 Verification & Scanner Alignment Addendum (Finalized Version)”
+
+🔒 Information-gathering only — No architecture changes allowed.
+
+PHASE 8.8.1A — Full Mini-Audit Before Phase 8.8.2
+
+Replit, excellent work on the Phase 8.8.1 scanner audit.
+
+Before we begin Phase 8.8.2 (Signal Engine Audit), we need a targeted information-gathering mini-phase to reconcile a few mismatches between:
+
+Your 8.8.1 findings
+
+The TE–SE–LT refactor
+
+The Stage-3 architecture already defined earlier
+
+Expected event flows for Phase 8.8.2
+
+This phase focuses solely on:
+
+observation
+
+discovery
+
+documentation
+
+verification
+
+No changes should be made yet.
+
+✅ 1. Identify All Stage-3 Components in the Codebase
+
+Search for — and list the exact paths and functions of:
+
+stage3-state-emitter.ts
+
+stage3-state-cache.ts
+
+context-bridge.ts
+
+any emitter sending:
+
+scan_tick
+
+scan:tick
+
+scanner:*
+
+stage3:*
+
+any service connecting scanner → Stage-3
+
+any UI hooks consuming scan_tick
+
+any shared event type definitions:
+
+shared/stage3-events
+
+shared/event-types
+
+shared/state-events
+
+Deliverable
+
+Create:
+
+reports/phase-8.8/8.8.1A-stage3-locations.md
+
+
+Include for each file:
+
+file path
+
+purpose
+
+whether it is active
+
+whether it is imported anywhere
+
+whether it interacts with Stage-3
+
+✅ 2. Capture a Full Live WebSocket Trace (2–3 cycles)
+
+Run paper mode:
+
+POST /api/trading/start?mode=paper
+
+
+Capture all WS events for ≈2 full scan cycles.
+
+Record every WS event whose type contains:
+
+scan
+
+tick
+
+stage3
+
+breakdown
+
+scanner
+
+ready
+
+cycle
+
+Deliverable
+
+Create:
+
+reports/phase-8.8/8.8.1A-ws-events.md
+
+
+Include:
+
+Raw event names
+
+Raw payload examples
+
+Timestamps
+
+List of any events expected but not fired
+
+scan_tick frequency (interval)
+
+Any sign of duplicate/legacy emitters
+
+✅ 3. Confirm Stage-3 vs Diagnostics Breakdown Behavior
+
+Document:
+
+actual breakdown WS events (if any)
+
+actual diagnostic breakdown keys
+
+whether the WS breakdown matches diagnostic breakdown
+
+whether WS breakdown is partial, cached, or outdated
+
+whether any breakdown event is firing at all
+
+whether breakdown is tied to Stage-3 or diagnostics only
+
+Append these results to:
+
+reports/phase-8.8/8.8.1A-ws-events.md
+
+✅ 4. Document Truth-Constraint Behavior
+
+Record:
+
+evaluated count
+
+eligible count
+
+ineligible count
+
+sum of all breakdown categories
+
+identify which categories account for missing items
+
+note any intermediate gating logic (e.g., universe sizing, active-list filtering)
+
+Deliverable:
+reports/phase-8.8/8.8.1A-truth-constraint.md
+
+✅ 5. Confirm Stage-3 Cache Behavior
+
+Document:
+
+whether a stage3StateCache (or equivalent) exists
+
+what fields it stores
+
+whether scanner output is being injected
+
+whether the cache timestamps increment
+
+whether the cache feeds scan_tick
+
+Add this to the stage3-locations.md file (Section 1).
+
+✅ 6. Confirm ReadyToBuyService Integration With Stage-3
+
+Document:
+
+whether ReadyToBuyService listens to scan_tick or receives scanner output
+
+whether it produces WS updates
+
+whether it updates Stage-3 cache
+
+whether active candidates reflect scanner cycles
+
+Append to stage3-locations.md.
+
+❗ Restrictions / Safety Rules
+
+During this phase:
+
+🚫 Do not modify any Stage-3 code
+🚫 Do not build a new scan_tick system
+🚫 Do not rewrite breakdown logic
+🚫 Do not modify scanner output
+🚫 Do not adjust schemas
+🚫 Do not remove or add filters
+🚫 Do not refactor any event emitters
+
+This is information gathering only.
+
+📦 Final Deliverables Summary
+
+Please create the following files:
+
+1. 8.8.1A-stage3-locations.md
+
+all Stage-3 file paths
+
+functions
+
+cache details
+
+ReadyToBuyService integration
+
+2. 8.8.1A-ws-events.md
+
+WS event traces
+
+scan_tick behavior
+
+breakdown WS behavior
+
+timestamps
+
+anomalies
+
+3. 8.8.1A-truth-constraint.md
+
+evaluated / eligible / breakdown details
+
+explanation of mismatch
+
+Once these deliverables are completed, we will:
+
+validate the real Stage-3 implementation
+
+ensure consistency with TE–SE–LT architecture
+
+correct scanner breakdown and truth constraints
+
+begin Phase 8.8.2 (Signal Engine Audit) cleanly
