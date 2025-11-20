@@ -1,0 +1,383 @@
+🌙 PHASE 8.8.2 DIRECTIVE — Stage-3 Foundation + Breakdown Fixes + Signal Engine Audit
+
+To Replit:
+
+Great work completing Phase 8.8.1 and Phase 8.8.1A.
+We now have the complete picture of the existing codebase:
+
+Stage-3 infrastructure does NOT exist
+
+No scan_tick events exist
+
+No scanner:* events exist
+
+No server-side ReadyToBuyService exists
+
+Breakdown schema is mismatched
+
+Truth constraint is violated
+
+The UI is polling instead of receiving real-time trading signals
+
+This next phase — 8.8.2 — is where we begin constructing the foundation that the entire real-time trading engine depends on.
+
+Please follow this directive exactly.
+Do not go beyond the scope.
+
+🧠 CONTEXT: What This Phase Does & What It Does NOT Do
+✔ What Phase 8.8.2 WILL do:
+
+Build the Stage-3 State Cache
+
+Build the Stage-3 Event Emitter
+
+Implement real scan_tick WebSocket events (lightweight)
+
+Implement scanner:breakdown:<mode> WebSocket events (heavy diagnostic event)
+
+Fix the FX5 FilterBreakdown schema (remove 3 keys, add 3 correct ones)
+
+Fix the truth-constraint calculation
+
+Wire Scanner → Stage-3 Cache → WebSocket Events
+
+THEN perform the Signal Engine Audit (observation-only)
+
+❌ What Phase 8.8.2 WILL NOT do:
+
+Do NOT modify strategy logic
+
+Do NOT modify trading engine
+
+Do NOT implement Ready-To-Buy (that is Phase 8.8.4)
+
+Do NOT modify UI
+
+Do NOT rewrite filters
+
+Do NOT add new guardrails
+
+Do NOT implement Lottie or Walter integration
+
+🔷 THE STRUCTURE OF PHASE 8.8.2
+8.8.2A — Build Stage-3 Foundation
+
+(Required before anything else)
+
+8.8.2B — Correct Breakdown Schema & Truth Constraint
+8.8.2C — Signal Engine Audit
+
+(Using Stage-3 output as the source of truth)
+
+Each sub-phase contains strict deliverables.
+
+🔶 8.8.2A — Build Stage-3 Foundation Layer
+🧩 1. Create server/services/stage3-state-cache.ts
+
+This module will hold per-mode real-time state:
+
+Required fields:
+{
+  cycleId: string,
+  completedAt: string,      // ISO timestamp
+  evaluatedCount: number,
+  eligibleCount: number,
+  ineligibleCount: number,
+
+  activePoolCount: number,  // from DB or trading engine
+  topNCount: number,        // how many came from top-end tiers
+  tierBCount: number,       // how many came from tier-B tiers
+
+  rotation: {
+    topEndUniverseSize: number,
+    tierBUniverseSize: number,
+  },
+
+  // Optional but recommended:
+  latestEligibleSymbols?: string[],
+}
+
+Requirements:
+
+Must be in-memory
+
+Must be per-mode (paper, live)
+
+Must only be updated once per scan cycle
+
+Must be the source of data for WebSocket events
+
+🧩 2. Create server/services/stage3-emitter.ts
+
+This module is responsible for:
+
+A) Emitting scan_tick (lightweight)
+
+Event: scan_tick
+Send via contextBridge.broadcast({...})
+
+Payload must include:
+
+{
+  type: 'scan_tick',
+  payload: {
+    mode,
+    cycleId,
+    completedAt,
+    evaluatedCount,
+    eligibleCount,
+    ineligibleCount,
+    activePoolCount,
+    topNCount,
+    tierBCount,
+    rotation: {
+      topEndUniverseSize,
+      tierBUniverseSize
+    }
+  },
+  mode
+}
+
+❗Important:
+
+DO NOT include:
+
+breakdown
+
+full eligibleSymbols[]
+
+large arrays
+
+diagnostic data
+
+B) Emitting scanner:breakdown:<mode> (heavy diagnostic)
+
+Event name must be:
+
+scanner:breakdown:paper
+scanner:breakdown:live
+
+
+Payload must include:
+
+all breakdown keys (corrected schema)
+
+evaluatedCount
+
+eligibleCount
+
+ineligibleCount
+
+truthConstraintOk
+
+🧩 3. Wire Scanner → Stage-3 Cache → Events
+
+At the end of each scanner cycle:
+
+Build new state object
+
+Update Stage-3 Cache
+
+Emit scan_tick
+
+Emit scanner:breakdown:<mode>
+
+Make sure:
+
+Only one update per cycle
+
+No duplicate events
+
+No race conditions
+
+🔶 8.8.2B — Fix Breakdown Schema & Truth Constraint
+
+Using the blueprint, audits, and your corrected instructions:
+
+❌ REMOVE these keys:
+
+failed_blacklist
+
+failed_whitelist
+
+strategy_none_triggered
+
+✔ KEEP these valid keys:
+
+failed_min_volume
+
+failed_spread
+
+failed_daily_range
+
+failed_min_price
+
+failed_stablecoin
+
+failed_quote_currency
+
+failed_history
+
+failed_guardrail_risk
+
+⭐ ADD these keys:
+1. failed_market_cap
+
+Track marketCap failures.
+
+2. already_active
+
+Track pairs removed because they’re in open trades.
+
+3. passed_all_filters
+
+Mirror count of eligible pairs.
+
+❌ DO NOT ADD:
+
+failed_universe_size (you correctly clarified this)
+
+⭐ Required Truth Constraint:
+
+For diagnostics & breakdown events:
+
+evaluatedCount = passed_all_filters + sum(failure keys)
+
+
+If not true:
+
+truthConstraintOk = false
+
+
+Add logging to identify missing categories.
+
+🔶 8.8.2C — Signal Engine Audit (No Fixes Yet)
+
+Once Stage-3 is emitting correct state, perform the audit only.
+
+Audit Objectives:
+
+Which signals still trigger?
+
+Which depend on missing indicators?
+
+Which still use V1/V2 fields?
+
+Which are dead/no-op?
+
+Which produce malformed output?
+
+Which rely on deprecated structures?
+
+Audit Deliverables:
+
+Create:
+
+reports/phase-8.8/8.8.2-signal-engine-audit.md
+
+
+Must include:
+
+List of all strategies
+
+Which indicators each strategy uses
+
+Which indicators are missing
+
+Which strategies never fire
+
+Which ones still use legacy scoring
+
+Which ones reference deleted filter fields
+
+A dependency map
+
+A list of strategies ready for Phase 8.10 minimal fixes
+
+❗ No code changes yet.
+
+Fixes come in 8.8.3 (Strategy Audit) and 8.8.10.
+
+🔐 Test User Credentials
+
+Use the test user for cycle tests:
+
+username: testuser123
+password: SecurePass123!
+
+To start paper mode:
+POST /api/trading/start
+{
+  "mode": "paper"
+}
+
+
+Then watch WS logs for:
+
+scan_tick
+
+scanner:breakdown:paper
+
+🚫 RESTRICTIONS
+
+During Phase 8.8.2:
+
+❌ Do not modify strategies
+❌ Do not modify trading engine
+❌ Do not modify UI
+❌ Do not re-enable filters
+❌ Do not touch guardrails
+❌ Do not implement Ready-To-Buy
+❌ Do not create new schemas outside blueprint
+❌ Do not alter client logic
+❌ Do not introduce new event types beyond blueprint
+
+👉 This phase is Structural Foundation + Breakdown Fixing + Signal Engine Audit only.
+
+📦 PHASE 8.8.2 REQUIRED DELIVERABLES
+
+Create all files in:
+
+/reports/phase-8.8/
+
+1. 8.8.2A-stage3-implementation-notes.md
+
+Document:
+
+stage3-state-cache.ts
+
+stage3-emitter.ts
+
+scanner integration
+
+WS event emission tests
+
+2. 8.8.2B-breakdown-truth-constraint-report.md
+
+Document:
+
+corrected schema
+
+updated counts
+
+truthConstraintOk tests
+
+any edge-case failures
+
+3. 8.8.2C-signal-engine-audit.md
+
+Document:
+
+full signal engine audit
+
+dependency map
+
+which strategies are broken
+
+4. System logs showing:
+
+at least one valid scan_tick event
+
+at least one valid scanner:breakdown:<mode> event
+
+🏁 END OF PHASE 8.8.2 DIRECTIVE

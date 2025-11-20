@@ -28,11 +28,11 @@ interface FilterBreakdown {
   failed_min_price: number;
   failed_stablecoin: number;
   failed_quote_currency: number;
-  failed_blacklist: number;
-  failed_whitelist: number;
   failed_history: number;
+  failed_market_cap: number;
   failed_guardrail_risk: number;
-  strategy_none_triggered: number;
+  already_active: number;
+  passed_all_filters: number;
 }
 
 interface CandidateSnapshot {
@@ -140,11 +140,11 @@ export class PaperSimDiagnosticService {
       failed_min_price: 0,
       failed_stablecoin: 0,
       failed_quote_currency: 0,
-      failed_blacklist: 0,
-      failed_whitelist: 0,
       failed_history: 0,
+      failed_market_cap: 0,
       failed_guardrail_risk: 0,
-      strategy_none_triggered: 0
+      already_active: 0,
+      passed_all_filters: 0
     };
 
     const eligiblePairs: any[] = [];
@@ -177,18 +177,19 @@ export class PaperSimDiagnosticService {
       let rejected = false;
       let rejectReason = '';
 
-      // Filter 1: Whitelist (compare canonical symbols)
+      // Filter 1: Whitelist (DEPRECATED - Phase 8.8.2B - removed from breakdown)
+      // Whitelist/blacklist are not user-configurable guardrails per blueprint
       if (!rejected && whitelist.length > 0 && !whitelist.includes(canonicalSymbol)) {
-        breakdown.failed_whitelist++;
+        // No longer tracked in breakdown
         rejected = true;
-        rejectReason = 'failed_whitelist';
+        rejectReason = 'whitelist_not_matched';
       }
 
-      // Filter 2: Blacklist (compare canonical symbols)
+      // Filter 2: Blacklist (DEPRECATED - Phase 8.8.2B - removed from breakdown)
       if (!rejected && blacklist.includes(canonicalSymbol)) {
-        breakdown.failed_blacklist++;
+        // No longer tracked in breakdown
         rejected = true;
-        rejectReason = 'failed_blacklist';
+        rejectReason = 'blacklist_hit';
       }
 
       // Filter 3: Quote currency (use normalized quote) - Phase 27.F.13.B: Empty array means no restrictions
@@ -248,6 +249,9 @@ export class PaperSimDiagnosticService {
       }
 
       if (!rejected) {
+        // Phase 8.8.2B: Track passed_all_filters count
+        breakdown.passed_all_filters++;
+        
         eligiblePairs.push({
           symbol: pairName,
           baseCurrency: pairInfo.base,
@@ -258,6 +262,26 @@ export class PaperSimDiagnosticService {
           vwap: parseFloat(ticker.p[1])
         });
       }
+    }
+    
+    // Phase 8.8.2B: Check for already_active pairs (pairs with existing open trades)
+    try {
+      const activeTrades = await storage.getActiveTrades(mode);
+      const activeSymbols = new Set(activeTrades.map((t: any) => t.symbol));
+      
+      // Remove pairs that are already active and track in breakdown
+      for (let i = eligiblePairs.length - 1; i >= 0; i--) {
+        if (activeSymbols.has(eligiblePairs[i].symbol)) {
+          breakdown.already_active++;
+          breakdown.passed_all_filters--; // Adjust passed count since we're removing this pair
+          eligiblePairs.splice(i, 1);
+        }
+      }
+      
+      console.log(`[Phase8.8.2B] Already active pairs removed: ${breakdown.already_active}`);
+    } catch (error) {
+      console.warn(`[Phase8.8.2B] Could not check for already_active pairs:`, error);
+      // Continue without already_active check
     }
 
     // Run strategy prechecks on eligible pairs
@@ -287,7 +311,8 @@ export class PaperSimDiagnosticService {
       }
 
       breakdown.failed_guardrail_risk = guardrailRejectCount;
-      breakdown.strategy_none_triggered = noStrategyCount;
+      // Phase 8.8.2B: strategy_none_triggered removed from breakdown (strategy-level, not filter-level)
+      // noStrategyCount tracked for diagnostics but not included in FX5 breakdown
 
       topCandidates.sort((a, b) => {
         const aConf = parseFloat(a.reasons.find(r => r.includes(':'))?.split(':')[1] || '0');
