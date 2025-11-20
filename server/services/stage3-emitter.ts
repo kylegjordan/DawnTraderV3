@@ -20,8 +20,8 @@ export type FilterBreakdown = {
 
 export type ScanTickPayload = {
   mode: 'paper' | 'live';
-  cycleId: string;
-  completedAt: string;
+  cycleId: number;
+  cycleStartTimestamp: string;
   evaluatedCount: number;
   eligibleCount: number;
   ineligibleCount: number;
@@ -36,7 +36,7 @@ export type ScanTickPayload = {
 
 export type ScannerBreakdownPayload = {
   mode: 'paper' | 'live';
-  cycleId: string;
+  cycleId: number;
   window: 'last_cycle' | '24h';
   evaluatedCount: number;
   eligibleCount: number;
@@ -60,7 +60,7 @@ class Stage3Emitter {
     const payload: ScanTickPayload = {
       mode,
       cycleId: state.cycleId,
-      completedAt: state.completedAt,
+      cycleStartTimestamp: state.cycleStartTimestamp,
       evaluatedCount: state.evaluatedCount,
       eligibleCount: state.eligibleCount,
       ineligibleCount: state.ineligibleCount,

@@ -1,8 +1,6 @@
-import { nanoid } from 'nanoid';
-
 export type Stage3State = {
-  cycleId: string;
-  completedAt: string;
+  cycleId: number;
+  cycleStartTimestamp: string;
   evaluatedCount: number;
   eligibleCount: number;
   ineligibleCount: number;
@@ -19,17 +17,26 @@ export type Stage3State = {
 class Stage3StateCache {
   private paperState: Stage3State | null = null;
   private liveState: Stage3State | null = null;
+  private paperCycleCounter: number = 0;
+  private liveCycleCounter: number = 0;
 
   getState(mode: 'paper' | 'live'): Stage3State | null {
     return mode === 'paper' ? this.paperState : this.liveState;
   }
 
   updateState(mode: 'paper' | 'live', state: Partial<Stage3State>): Stage3State {
-    const currentState = this.getState(mode);
+    // Increment cycle counter for this mode
+    if (mode === 'paper') {
+      this.paperCycleCounter++;
+    } else {
+      this.liveCycleCounter++;
+    }
+    
+    const currentCycleId = mode === 'paper' ? this.paperCycleCounter : this.liveCycleCounter;
     
     const newState: Stage3State = {
-      cycleId: state.cycleId || nanoid(),
-      completedAt: state.completedAt || new Date().toISOString(),
+      cycleId: state.cycleId ?? currentCycleId,
+      cycleStartTimestamp: state.cycleStartTimestamp || new Date().toISOString(),
       evaluatedCount: state.evaluatedCount ?? 0,
       eligibleCount: state.eligibleCount ?? 0,
       ineligibleCount: state.ineligibleCount ?? 0,
@@ -51,7 +58,7 @@ class Stage3StateCache {
 
     console.log(`[Stage3Cache] Updated ${mode} state:`, {
       cycleId: newState.cycleId,
-      completedAt: newState.completedAt,
+      cycleStartTimestamp: newState.cycleStartTimestamp,
       evaluatedCount: newState.evaluatedCount,
       eligibleCount: newState.eligibleCount,
       ineligibleCount: newState.ineligibleCount,
