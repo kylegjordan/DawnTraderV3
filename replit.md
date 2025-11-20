@@ -6,6 +6,11 @@ This project is a long-only, spot-trading cryptocurrency day trading web applica
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+### Phase 8.8.2 FIX - Standalone Helper Functions (November 20, 2025)
+Refactored Stage-3 integration to use standalone helper functions instead of direct class method calls. Created `updateStage3Cache()` in `stage3-state-cache.ts` and `emitStage3Events()` in `stage3-emitter.ts`. Updated `signal-orchestrator.ts` to import and use these helpers, ensuring cache updates precede event emissions. Stage-3 now fires events every 30 seconds ONLY when trading engines are active, with per-mode cycle counter increments and truth constraint validation. Architect approved. See `reports/phase-8.8/8.8.2-STANDALONE-HELPERS-FINAL.md` for full details.
+
 ## System Architecture
 The application features a React, TypeScript, Vite frontend with a mobile-first, responsive design, and a Node.js/Express backend providing a RESTful API and WebSocket support. PostgreSQL, utilizing Neon serverless driver and Drizzle ORM, handles data persistence. Authentication is managed via username/password, bcrypt, JWT, and WebAuthn.
 

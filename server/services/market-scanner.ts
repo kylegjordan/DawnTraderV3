@@ -5,6 +5,10 @@ import { WatchlistPair } from '@shared/schema';
 import { strategyAlerts } from './strategy-alerts';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 
+// LEGACY — Do NOT wire to Stage-3.
+// TODO: Remove in Phase 8.12 (auth+role+stability cleanup)
+// This 10-minute scanner is no longer the source of truth for real-time market data.
+// Stage-3 is now connected to the FX5 30-second batch scanner instead.
 export class MarketScanner {
   private kraken: KrakenService;
   private strategyEngine: StrategyEngine;

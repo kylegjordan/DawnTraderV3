@@ -1,0 +1,297 @@
+🔷 PHASE 8.8.2 — FINAL CORRECTION DIRECTIVE
+Stage-3 Real-Time Engine Alignment
+(FX5 30-Second Scanner → Stage-3 Cache → WS Events)
+🧭 Context (Read Carefully)
+
+This directive corrects the Stage-3 implementation to ensure it matches:
+
+the future-state blueprint
+
+the Phase 8.8 architecture
+
+the FX5 real-time scanner design
+
+the audit findings from 8.8.1A
+
+your instructions for disconnection from the 10-minute scanner
+
+The PRIOR 8.8.2 implementation made three critical mistakes:
+
+❌ Stage-3 was wired to the 10-minute scanner
+❌ Stage-3 only fired when the trading engine was running
+❌ Stage-3 breakdown used the diagnostics engine instead of FX5 output
+
+This directive fixes all three.
+
+This directive is NOT allowed to:
+
+modify strategy logic
+
+modify trading engine logic
+
+modify filters
+
+modify heuristics
+
+implement new guardrails
+
+modify UI
+
+This directive is strictly Stage-3 corrections, nothing more.
+
+🧪 Test User Credentials
+
+Use these in all verification steps:
+
+username: testuser123
+password: SecurePass123!
+
+
+Token retrieval example:
+
+curl -s -X POST http://localhost:5000/api/auth/login \
+-H 'Content-Type: application/json' \
+-d '{"username":"testuser123","password":"SecurePass123!"}' | jq -r '.accessToken'
+
+🔥 CORRECTION SCOPE (WHAT MUST BE FIXED NOW)
+
+Disconnect Stage-3 from the 10-minute scanner entirely.
+
+Delete the 10-minute scanner ONLY if no dependencies exist.
+Otherwise → mark it LEGACY and disable ALL Stage-3 wiring.
+
+Connect Stage-3 ONLY to the FX5 30-second batch scanner.
+
+Stage-3 must ALWAYS run, even if trading engines are OFF.
+
+Use FX5 scanner breakdown ONLY — never diagnostics.
+
+Fix breakdown schema
+
+Remove: failed_universe_size, failed_blacklist, failed_whitelist, strategy_none_triggered
+
+Add: failed_market_cap, already_active, passed_all_filters
+
+Fix truth constraint:
+evaluatedCount === passed_all_filters + already_active + sum(all failures)
+
+Implement rotation + tier counts in scan_tick
+(Option A selected)
+
+Ensure Stage-3 WS events fire every 30 seconds
+
+scan_tick:<mode>
+
+scanner:breakdown:<mode>
+
+🔷 SECTION 1 — REMOVE THE 10-MINUTE SCANNER CONNECTIONS
+✔ REQUIRED
+❗ DO NOT DELETE THE 10-MINUTE SCANNER YET.
+
+You must:
+
+1. Remove ALL Stage-3 references from:
+market-scanner.ts
+
+Search for any mention of:
+
+updateStage3State
+
+emitStage3Events
+
+nextScan
+
+scheduleNextScan
+
+10 or 600000
+
+setTimeout that triggers scanning
+
+DELETE ONLY the Stage-3 calls.
+
+Keep everything else intact until Phase 8.12.
+
+2. Mark the 10-minute scanner as legacy in comments:
+// LEGACY — Do NOT wire to Stage-3.
+// TODO: Remove in Phase 8.12 (auth+role+stability cleanup)
+
+3. Ensure NO Stage-3 import remains in the file.
+
+Search:
+
+rg -n "stage3" server/services/market-scanner.ts
+
+
+All results must be removed.
+
+🔷 SECTION 2 — CONNECT STAGE-3 TO THE FX5 30-SECOND SCANNER ONLY
+
+The 30-second real-time scan runs in:
+
+scanner-engine.ts, filtered-pairs-service.ts, or fx5-service.ts
+
+(whichever file emits each 30-sec batch)
+
+You must hook Stage-3 right after each FX5 batch is produced.
+
+Look for code shaped like:
+
+const eligibleSymbols = await scanner.runBatch(...);
+
+
+or
+
+this.emitEligibleSymbols(...)
+
+
+or
+
+onBatchComplete(result)
+
+Insert immediately after:
+await updateStage3Cache({
+   mode,
+   evaluatedCount,
+   eligibleCount,
+   ineligibleCount,
+   topNCount,
+   tierBCount,
+   rotation: {
+      topEndUniverseSize,
+      tierBUniverseSize
+   },
+   activePoolCount,
+   timestamp: Date.now()
+});
+
+await emitStage3Events(mode);
+
+🔷 SECTION 3 — REMOVE “IS ENGINE RUNNING?” GATING
+
+Search:
+
+rg -n "isRunning" server/services/signal-orchestrator.ts
+rg -n "isRunning" server/services
+
+
+Remove any logic like:
+
+if (!this.isRunning) return;
+
+
+Stage-3 must fire ALWAYS.
+
+🔷 SECTION 4 — FIX BREAKDOWN SOURCE (NO DIAGNOSTICS ALLOWED)
+
+Search for use of diagnostics:
+
+rg -n "paperSimDiagnostic" server/services
+
+
+DELETE all usage inside Stage-3.
+
+Replace with:
+
+const breakdown = result.breakdown; // directly from scanner
+
+
+Breakdown MUST come from FX5 scanner output.
+
+🔷 SECTION 5 — FIX BREAKDOWN SCHEMA
+
+Correct shape is:
+
+export interface FilterBreakdown {
+  failed_market_cap: number;
+  failed_liquidity: number;
+  failed_spread: number;
+  failed_min_price: number;
+  failed_volatility: number;
+  already_active: number;
+  passed_all_filters: number;
+}
+
+
+No other keys allowed.
+
+🔷 SECTION 6 — FIX TRUTH CONSTRAINT
+
+Truth constraint must pass before emitting breakdown.
+
+Insert:
+
+const calculated = breakdown.failed_market_cap +
+                   breakdown.failed_liquidity +
+                   breakdown.failed_spread +
+                   breakdown.failed_min_price +
+                   breakdown.failed_volatility +
+                   breakdown.already_active +
+                   breakdown.passed_all_filters;
+
+if (calculated !== evaluatedCount) {
+   console.warn(
+     `[Stage3][TruthConstraint] Mismatch: evaluated=${evaluatedCount}, sum=${calculated}`
+   );
+}
+
+🔷 SECTION 7 — UPDATE EVENT SCHEMAS (FINAL VERSION)
+scan_tick:<mode> payload:
+{
+  cycleId: number;
+  timestamp: number;
+
+  evaluatedCount: number;
+  eligibleCount: number;
+  ineligibleCount: number;
+
+  topNCount: number;
+  tierBCount: number;
+
+  rotation: {
+    topEndUniverseSize: number;
+    tierBUniverseSize: number;
+  };
+
+  activePoolCount: number;
+}
+
+scanner:breakdown:<mode> payload:
+{
+  cycleId: number;
+  timestamp: number;
+  breakdown: FilterBreakdown;
+}
+
+🔷 SECTION 8 — TESTING PLAN
+Step 1 — Restart server
+Step 2 — Log in as testuser123
+Step 3 — Start paper engine (optional)
+Step 4 — Observe WS logs
+
+Run:
+
+grep -i "scan_tick" /tmp/logs/Start_application* | tail -30
+
+
+then:
+
+grep -i "scanner:breakdown" /tmp/logs/Start_application* | tail -30
+
+EXPECTED:
+
+Every 30 seconds you MUST see:
+
+[Stage3Emitter] Emitted scan_tick:paper
+[Stage3Emitter] Emitted scanner:breakdown:paper
+
+🔷 SECTION 9 — SUCCESS CRITERIA
+✔ Stage-3 fires every 30 seconds
+✔ Stage-3 no longer depends on trading engines
+✔ Stage-3 does not depend on 10-minute scanner
+✔ Stage-3 does not use diagnostics
+✔ Truth constraint matches evaluatedCount
+✔ Breakdown schema matches blueprint
+✔ Rotation + tier counts included
+✔ No references to legacy scanners remain
+✔ No LSP errors
+✔ All tests pass

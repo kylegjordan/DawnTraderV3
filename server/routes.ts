@@ -356,6 +356,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     console.error('[MarketScanner] Failed to start:', error);
   });
 
+  // Phase 8.8.2: Start FX5 Scanner (always-on 30-second scanner for Stage-3)
+  // Runs independently of trading engine state
+  const { fx5Scanner } = await import('./services/fx5-scanner');
+  fx5Scanner.start().catch((error) => {
+    console.error('[FX5Scanner] Failed to start:', error);
+  });
+
   // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
   apiRouter.use(diagnosticTraceMiddleware);
 
