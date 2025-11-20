@@ -1,0 +1,214 @@
+✅ PHASE 8.8.1 DIRECTIVE — Scanner Output Audit
+(with full context for Phase 8.8)
+💠 Context: Where Phase 8.8.1 Fits in the Overall Phase 8.8 Plan
+
+Phase 8.8 — Build Real-Time Data Pipeline is a multi-stage stabilization phase whose goal is:
+
+To make DawnTrader capable of executing a full end-to-end simulated trade using real FX5 filtered data in real time, with a clean, audited, reliable event pipeline.
+
+Phase 8.8 is split into the following components:
+
+Subphase	Purpose
+8.8.1	Scanner Output Audit (start here)
+8.8.2	Signal Engine Audit
+8.8.3	Strategy Engine Audit
+8.8.4	Ready-To-Buy Audit
+8.8.5	Trading Engine Audit
+8.8.6	Portfolio/DB Sync Audit
+8.8.7	Tick Concurrency Fixes
+8.8.8	Guardrail Enforcement Validation
+8.8.9	"Green Path" test: full end-to-end paper trade
+8.8.10	Backwards-compatibility contract for Phase 9
+8.8.11	Throughput preparation: 300–500 batch support
+🔷 8.8.1 is the foundation.
+
+Every later step uses the scanner output as its data source.
+If this output is incomplete, inconsistent, or polluted with legacy fields,
+ALL downstream systems (signals, strategies, ready-to-buy, trading) will malfunction.
+
+So 8.8.1 must be done first and must be extremely thorough.
+
+🟦 PHASE 8.8.1 — Scanner Output Audit
+Directive to Replit (Copy/Paste Exactly)
+🚀 DIRECTIVE — Phase 8.8.1 Scanner Output Audit
+
+This directive describes EXACTLY what to do, step-by-step.
+
+📘 Objective
+
+Audit and document the complete structure of FX5 scanner output, ensuring:
+
+eligibleSymbols is clean, consistent, typed correctly
+
+breakdown is correct and aligned with UI & downstream expectations
+
+Stage 3 scan_tick emits correct, complete payloads
+
+NO legacy or deprecated fields exist
+
+NO missing fields
+
+NO undefined values
+
+NO NaN
+
+NO stale V1/V2 attributes
+
+This ensures the data pipeline is strong before signals → strategies → trades begin.
+
+🔷 STEP 1 — Inspect scanner output structures
+
+Open and inspect these files:
+
+server/services/market-scanner.ts
+server/services/stage3/stage3-state-cache.ts
+server/services/stage3/stage3-state-emitter.ts
+server/services/filtering/fx5.ts
+server/services/filtering/fx5-breakdown.ts
+
+
+Confirm:
+
+eligibleSymbols[] must only contain:
+symbol: string
+baseCurrency: string
+quoteCurrency: string
+volume24h: number
+currentPrice: number
+dailyRange: number
+vwap: number | null
+
+Breakdown keys must be exactly:
+failed_min_volume
+failed_spread
+failed_daily_range
+failed_min_price
+failed_stablecoin
+failed_quote_currency
+failed_history
+failed_market_cap
+failed_guardrail_risk
+failed_universe_size
+already_active
+passed_all_filters
+
+Must also confirm:
+
+✔ NO "score"
+✔ NO "confidence"
+✔ NO "reason"
+✔ NO "priority"
+✔ NO "trend"
+✔ NO V1/V2 fields
+
+🔷 STEP 2 — Add temporary audit logging
+
+Add the following logging inside:
+
+market-scanner.ts → inside runUnifiedCycle(), right after eligibleSymbols is created:
+
+console.log("[8.8.1][AUDIT] Eligible sample:", eligibleSymbols.slice(0, 5));
+
+
+Add this logging after breakdown is constructed:
+
+console.log("[8.8.1][AUDIT] Breakdown keys:", Object.keys(breakdown));
+
+
+Add this logging in Stage 3 emitter:
+
+stage3-state-emitter.ts → emitStage3ScanTick()
+
+console.log("[8.8.1][AUDIT][STAGE3] scan_tick payload:", {
+  evaluated: payload.evaluated,
+  eligible: payload.eligible,
+  sample: payload.eligibleSymbols.slice(0, 5)
+});
+
+🔷 STEP 3 — Validate Stage 3 scan_tick payload
+
+Call this endpoint:
+
+GET /api/market-scanner/scan-summary?mode=paper
+GET /api/market-scanner/24h-activity?mode=paper
+
+
+Check:
+
+evaluatedCount exists
+
+eligibleCount exists
+
+ineligibleCount exists
+
+breakdown count matches breakdown keys above
+
+eligibleSymbols array contains only valid fields
+
+🔷 STEP 4 — Run controlled tests using test user
+TEST USER
+username: testuser123
+password: SecurePass123!
+
+Get token:
+curl -s -X POST http://localhost:5000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"testuser123","password":"SecurePass123!"}'
+
+
+Extract:
+
+accessToken
+
+Enable active paper trading:
+curl -X POST http://localhost:5000/api/trading/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"paper"}'
+
+
+Wait 3 scan cycles (≈ 90 sec).
+
+Then verify:
+
+GET /api/market-scanner/scan-summary?mode=paper
+GET /api/market-scanner/24h-activity?mode=paper
+
+
+Confirm that:
+
+✔ eligibleSymbols only contains the correct fields
+✔ breakdown keys match the official list
+✔ evaluatedCount = 60
+✔ truth constraint holds (failures + eligible + cooldown = evaluated)
+
+🔷 STEP 5 — Create Audit Report
+
+Create a new file:
+
+/reports/phase-8.8/8.8.1-scanner-audit.md
+
+
+Include:
+
+Sample eligibleSymbols dump (first 10 entries)
+
+Breakdown keys and counts
+
+Confirmation that no deprecated fields exist
+
+Any anomalies found
+
+Notes for Phase 8.8.2
+
+🔷 STEP 6 — Completion Criteria
+
+Phase 8.8.1 is complete when:
+
+✔ eligibleSymbols is clean & typed correctly
+✔ breakdown categories are correct
+✔ Stage 3 scan_tick emits full & correct payload
+✔ 8.8.1 audit report is written
+✔ No deprecated fields appear anywhere
+✔ Test user endpoint checks all pass
+✔ Logs show audit blocks running cleanly
