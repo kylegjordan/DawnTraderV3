@@ -161,3 +161,14 @@ class Stage3Emitter {
 }
 
 export const stage3Emitter = new Stage3Emitter();
+
+/**
+ * Helper function to emit Stage-3 events after FX5 scanner cycle completes
+ * Call this from signal-orchestrator after updating the cache
+ */
+export async function emitStage3Events(
+  mode: 'paper' | 'live',
+  breakdown: FilterBreakdown
+): Promise<void> {
+  stage3Emitter.emitScanComplete(mode, breakdown);
+}

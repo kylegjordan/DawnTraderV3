@@ -86,3 +86,14 @@ class Stage3StateCache {
 }
 
 export const stage3Cache = new Stage3StateCache();
+
+/**
+ * Helper function to update Stage-3 cache with FX5 scanner data
+ * Call this from signal-orchestrator after batch construction and filtering
+ */
+export async function updateStage3Cache(
+  mode: 'paper' | 'live',
+  data: Partial<Stage3State>
+): Promise<Stage3State> {
+  return stage3Cache.updateState(mode, data);
+}

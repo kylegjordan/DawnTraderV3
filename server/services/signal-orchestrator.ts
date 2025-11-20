@@ -25,8 +25,8 @@ import { KrakenService } from './kraken';
 import { storage } from '../storage';
 import type { TradingSettings, ScreenerFilters, PriceData } from '@shared/schema';
 import { telemetryTrace } from './telemetry-trace.js';
-import { stage3Emitter } from './stage3-emitter.js';
-import { stage3Cache } from './stage3-state-cache.js';
+import { updateStage3Cache } from './stage3-state-cache.js';
+import { emitStage3Events } from './stage3-emitter.js';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 
 export interface SignalOrchestratorConfig {
@@ -216,7 +216,7 @@ export class SignalOrchestrator {
           const tierBCount = 0; // Future enhancement (Phase 8.9)
 
           // Update Stage-3 cache first
-          stage3Cache.updateState(this.mode, {
+          await updateStage3Cache(this.mode, {
             evaluatedCount: diagnosticResult.evaluated,
             eligibleCount: diagnosticResult.eligible_count,
             ineligibleCount: diagnosticResult.ineligible_count,
@@ -231,7 +231,7 @@ export class SignalOrchestrator {
           });
 
           // Emit scan_tick and scanner:breakdown events
-          stage3Emitter.emitScanComplete(this.mode, diagnosticResult.breakdown);
+          await emitStage3Events(this.mode, diagnosticResult.breakdown);
 
           console.log(`[Stage3][FX5] ✅ Stage-3 updated (mode=${this.mode}, eligible=${diagnosticResult.eligible_count})`);
         }
