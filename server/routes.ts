@@ -2176,6 +2176,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const screenerSettings = await storage.getScreenerFilters({ mode });
 
       // Calculate top failure reason from breakdown
+      // Phase 8.8.2: Corrected FilterBreakdown schema
       const breakdown = scanResult.breakdown;
       const failureReasons = [
         { reason: 'Min Volume', count: breakdown.failed_min_volume },
@@ -2183,11 +2184,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         { reason: 'Daily Range', count: breakdown.failed_daily_range },
         { reason: 'Min Price', count: breakdown.failed_min_price },
         { reason: 'Stablecoin', count: breakdown.failed_stablecoin },
-        { reason: 'Blacklist', count: breakdown.failed_blacklist },
-        { reason: 'Whitelist', count: breakdown.failed_whitelist },
+        { reason: 'Quote Currency', count: breakdown.failed_quote_currency },
         { reason: 'History', count: breakdown.failed_history },
+        { reason: 'Market Cap', count: breakdown.failed_market_cap },
         { reason: 'Risk Too High', count: breakdown.failed_guardrail_risk },
-        { reason: 'No Strategy Match', count: breakdown.strategy_none_triggered }
+        { reason: 'Already Active', count: breakdown.already_active }
       ];
 
       const topFailure = failureReasons.reduce((max, curr) => 

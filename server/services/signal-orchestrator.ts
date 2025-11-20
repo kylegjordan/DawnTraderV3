@@ -25,8 +25,6 @@ import { KrakenService } from './kraken';
 import { storage } from '../storage';
 import type { TradingSettings, ScreenerFilters, PriceData } from '@shared/schema';
 import { telemetryTrace } from './telemetry-trace.js';
-import { updateStage3Cache } from './stage3-state-cache.js';
-import { emitStage3Events } from './stage3-emitter.js';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 
 export interface SignalOrchestratorConfig {
@@ -191,54 +189,8 @@ export class SignalOrchestrator {
         count: eligibleSymbols.length 
       });
 
-      // ===== Phase 8.8.2-FIX: Update Stage-3 state (FX5 30-second scanner) =====
-      try {
-        // Ensure we have a userId
-        if (!systemContext.lastStartedBy) {
-          console.warn(`[Stage3][FX5] No userId available, skipping Stage-3 update`);
-        } else {
-          // Get diagnostic data with full breakdown
-          const diagnosticResult = await this.diagnosticService.performUniverseScan({
-            mode: this.mode,
-            limit: 1546, // Full universe
-            trace: false,
-            strategies: false, // Just filter breakdown, no strategy checks
-            userId: systemContext.lastStartedBy
-          });
-
-          // Get active trades count
-          const activeTrades = await storage.getActiveTrades(this.mode);
-          const activePoolCount = activeTrades.length;
-
-          // Calculate rotation stats
-          const universeSize = filters.universeSize || 100;
-          const topNCount = diagnosticResult.eligible_count;
-          const tierBCount = 0; // Future enhancement (Phase 8.9)
-
-          // Update Stage-3 cache first
-          await updateStage3Cache(this.mode, {
-            evaluatedCount: diagnosticResult.evaluated,
-            eligibleCount: diagnosticResult.eligible_count,
-            ineligibleCount: diagnosticResult.ineligible_count,
-            topNCount,
-            tierBCount,
-            rotation: {
-              topEndUniverseSize: universeSize,
-              tierBUniverseSize: 0
-            },
-            activePoolCount,
-            latestEligibleSymbols: eligibleSymbols.slice(0, 10)
-          });
-
-          // Emit scan_tick and scanner:breakdown events
-          await emitStage3Events(this.mode, diagnosticResult.breakdown);
-
-          console.log(`[Stage3][FX5] ✅ Stage-3 updated (mode=${this.mode}, eligible=${diagnosticResult.eligible_count})`);
-        }
-      } catch (stage3Error) {
-        console.error(`[Stage3][FX5] Error updating Stage-3 state:`, stage3Error);
-      }
-      // ===== END Phase 8.8.2-FIX =====
+      // Phase 8.8.2: Stage-3 updates now handled by dedicated FX5Scanner service
+      // This service focuses solely on strategy signal evaluation
 
       // Get trading settings from user who started the engine
       if (!systemContext.lastStartedBy) {
