@@ -25,6 +25,9 @@ import { KrakenService } from './kraken';
 import { storage } from '../storage';
 import type { TradingSettings, ScreenerFilters, PriceData } from '@shared/schema';
 import { telemetryTrace } from './telemetry-trace.js';
+import { stage3Emitter } from './stage3-emitter.js';
+import { stage3Cache } from './stage3-state-cache.js';
+import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -46,6 +49,7 @@ export class SignalOrchestrator {
   private strategyEngine: StrategyEngine;
   private filteredPairsService: FilteredPairsService;
   private kraken: KrakenService;
+  private diagnosticService: PaperSimDiagnosticService;
   private isRunning: boolean = false;
   private evaluationTimer: NodeJS.Timeout | null = null;
   private readonly evaluationIntervalMs: number;
@@ -80,6 +84,7 @@ export class SignalOrchestrator {
     this.strategyEngine = new StrategyEngine();
     this.filteredPairsService = new FilteredPairsService();
     this.kraken = new KrakenService();
+    this.diagnosticService = new PaperSimDiagnosticService();
   }
 
   /**
@@ -186,17 +191,71 @@ export class SignalOrchestrator {
         count: eligibleSymbols.length 
       });
 
+      // ===== Phase 8.8.2-FIX: Update Stage-3 state (FX5 30-second scanner) =====
+      try {
+        // Ensure we have a userId
+        if (!systemContext.lastStartedBy) {
+          console.warn(`[Stage3][FX5] No userId available, skipping Stage-3 update`);
+        } else {
+          // Get diagnostic data with full breakdown
+          const diagnosticResult = await this.diagnosticService.performUniverseScan({
+            mode: this.mode,
+            limit: 1546, // Full universe
+            trace: false,
+            strategies: false, // Just filter breakdown, no strategy checks
+            userId: systemContext.lastStartedBy
+          });
+
+          // Get active trades count
+          const activeTrades = await storage.getActiveTrades(this.mode);
+          const activePoolCount = activeTrades.length;
+
+          // Calculate rotation stats
+          const universeSize = filters.universeSize || 100;
+          const topNCount = diagnosticResult.eligible_count;
+          const tierBCount = 0; // Future enhancement (Phase 8.9)
+
+          // Update Stage-3 cache first
+          stage3Cache.updateState(this.mode, {
+            evaluatedCount: diagnosticResult.evaluated,
+            eligibleCount: diagnosticResult.eligible_count,
+            ineligibleCount: diagnosticResult.ineligible_count,
+            topNCount,
+            tierBCount,
+            rotation: {
+              topEndUniverseSize: universeSize,
+              tierBUniverseSize: 0
+            },
+            activePoolCount,
+            latestEligibleSymbols: eligibleSymbols.slice(0, 10)
+          });
+
+          // Emit scan_tick and scanner:breakdown events
+          stage3Emitter.emitScanComplete(this.mode, diagnosticResult.breakdown);
+
+          console.log(`[Stage3][FX5] ✅ Stage-3 updated (mode=${this.mode}, eligible=${diagnosticResult.eligible_count})`);
+        }
+      } catch (stage3Error) {
+        console.error(`[Stage3][FX5] Error updating Stage-3 state:`, stage3Error);
+      }
+      // ===== END Phase 8.8.2-FIX =====
+
       // Get trading settings from user who started the engine
       if (!systemContext.lastStartedBy) {
         console.error(`[37.A][SIGNAL] No user associated with ${this.mode} mode engine`);
         return;
       }
       
-// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
-      if (!settings) {
-        console.error(`[37.A][SIGNAL] No trading settings found for user ${systemContext.lastStartedBy}`);
-        return;
-      }
+      // Phase 41F-L.E2E-PURGE: Use default settings for single-user system
+      const settings = {
+        smaLength: 20,
+        riskPerTradePercent: 2.0,
+        maxOpenPositions: 5,
+        dailyLossLimitPercent: 10.0,
+        whitelistedSymbols: [],
+        blacklistedSymbols: [],
+        allowedTradingPairs: [],
+      } as any; // Minimal settings for strategy evaluation
 
       // Evaluate each symbol
       let symbolsEvaluated = 0;
