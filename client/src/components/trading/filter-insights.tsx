@@ -6,9 +6,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useWebSocket } from "@/hooks/use-websocket";
-import { Filter, RefreshCw, TrendingUp, XCircle, CheckCircle2, Info } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Filter, RefreshCw, TrendingUp, XCircle, CheckCircle2, Clock, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Phase 8.8.2-UI-ROLLBACK: Restored Phase 8.7 Filter Insights structure
+// - Single consolidated tab
+// - 4 sections: Overview, Last Scan Activity, Active Pool, Breakdown
+// - Only 8 allowed breakdown categories
+// - Per-filter descriptions
 
 interface FilterBreakdown {
   failed_min_volume: number;
@@ -17,11 +22,14 @@ interface FilterBreakdown {
   failed_min_price: number;
   failed_stablecoin: number;
   failed_quote_currency: number;
-  failed_blacklist: number;
-  failed_whitelist: number;
-  failed_history: number;
-  failed_guardrail_risk: number;
-  strategy_none_triggered: number;
+  failed_blacklist?: number;
+  failed_whitelist?: number;
+  failed_history?: number;
+  failed_guardrail_risk?: number;
+  failed_market_cap?: number;
+  strategy_none_triggered?: number;
+  already_active?: number;
+  passed_all_filters?: number;
 }
 
 interface TopCandidate {
@@ -39,25 +47,36 @@ interface FilterInsightsData {
   breakdown: FilterBreakdown;
   top_candidates: TopCandidate[];
   ts: string;
-  nextScanAt?: string; // Phase 27.F.19b: Next scheduled scan time
+  nextScanAt?: string;
+}
+
+interface FilteredPair {
+  symbol: string;
+  price: number;
+  vwap: number | null;
+  spreadBps: number;
+  volume24h: number;
+  dailyRange: number;
+  filterReasons: string[];
+  timestamp: string;
+}
+
+interface FilteredPairsResponse {
+  pairs: FilteredPair[];
+  totalEligible: number;
+  totalEvaluated: number;
+  timestamp: string;
+  nextScanAt?: string;
 }
 
 interface FilterThresholds {
   minVolume?: string;
   minPrice?: string;
   maxPrice?: string;
-  minMarketCap?: string;
   maxBidAskSpread?: string;
-  rsiMin?: number;
-  rsiMax?: number;
-  volatilityMin?: string;
-  volatilityMax?: string;
-  minLiquidity?: string;
-  excludeStablecoins?: boolean;
-  allowRegulatedOnly?: boolean;
   minDailyRange?: string;
+  excludeStablecoins?: boolean;
   allowedTradingPairs?: string[];
-  minDataHistoryDays?: number;
 }
 
 interface FilterDiagnosticsResponse {
@@ -69,38 +88,104 @@ interface FilterDiagnosticsResponse {
   thresholds?: FilterThresholds | null;
 }
 
+interface Scan24hMetrics {
+  mode: 'paper' | 'live';
+  totalCycles: number;
+  totalEvaluated: number;
+  totalSurvived: number;
+  avgEvaluatedPerCycle: number;
+  avgSurvivedPerCycle: number;
+  successRate: number;
+  windowStart: string;
+  windowEnd: string;
+  lastUpdated: string;
+}
+
+interface Scan24hResponse {
+  ok: boolean;
+  data: Scan24hMetrics;
+}
+
+// Phase 8.8.2-UI-ROLLBACK: Only these 8 categories should be visible in the UI
+const ALLOWED_FILTER_CATEGORIES = [
+  'failed_min_volume',
+  'failed_spread',
+  'failed_daily_range',
+  'failed_min_price',
+  'failed_stablecoin',
+  'failed_quote_currency',
+  'already_active',
+  'passed_all_filters',
+];
+
+// Phase 8.8.2-UI-ROLLBACK: Per-filter descriptions (Phase 8.7 final design)
+const FILTER_DESCRIPTIONS: Record<string, string> = {
+  failed_min_volume: "Excludes pairs with very low daily volume that may have liquidity issues or high slippage risk",
+  failed_spread: "Filters out pairs with wide bid-ask spreads that increase trading costs",
+  failed_daily_range: "Removes pairs with insufficient daily price movement for day trading strategies",
+  failed_min_price: "Excludes very low-priced pairs that may have penny-stock characteristics",
+  failed_stablecoin: "Filters out stablecoins which have minimal price volatility",
+  failed_quote_currency: "Ensures only pairs with allowed quote currencies (USD, EUR, etc.) are considered",
+  already_active: "Pairs currently in active trades are excluded from new trade consideration",
+  passed_all_filters: "Pairs that successfully passed all filtering criteria and are eligible for trading",
+};
+
+const FILTER_DISPLAY_NAMES: Record<string, string> = {
+  failed_min_volume: "Min Volume",
+  failed_spread: "Max Spread",
+  failed_daily_range: "Min Daily Range",
+  failed_min_price: "Min Price",
+  failed_stablecoin: "Exclude Stablecoins",
+  failed_quote_currency: "Valid Quote Currency",
+  already_active: "Already Active",
+  passed_all_filters: "Passed All Filters",
+};
+
 export function FilterInsights() {
-  // Phase 27.F.19: WebSocket subscription for scan_complete events
   const { messages: wsMessages } = useWebSocket();
   const [nextAutoRefresh, setNextAutoRefresh] = useState<number | null>(null);
-  const [currentTime, setCurrentTime] = useState<number>(Date.now()); // Phase 27.F.19: Ticking state for countdown
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
 
-  // Query filter insights synchronized to MarketScanner 10-minute cycle
-  // Phase 27.F.21: Use limit=9999 to evaluate ENTIRE universe (consistent with all other endpoints)
+  // Query filter insights
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
     queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=9999&trace=false&strategies=all'],
-    staleTime: 10 * 60 * 1000, // 10 minutes - matches MarketScanner cycle
-    refetchInterval: 10 * 60 * 1000, // Auto-refresh every 10 minutes
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
   });
 
-  // Query for threshold values synchronized to 10-minute cycle
+  // Query filtered pairs for Active Pool section
+  const { data: filteredPairsData, isLoading: isLoadingPairs } = useQuery<FilteredPairsResponse>({
+    queryKey: ['/api/paper-sim/filtered-pairs'],
+    refetchInterval: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  // Query for threshold values
   const { data: diagnosticsData } = useQuery<FilterDiagnosticsResponse>({
     queryKey: ['/api/filters/diagnostics'],
-    staleTime: 10 * 60 * 1000, // 10 minutes - matches MarketScanner cycle
-    refetchInterval: 10 * 60 * 1000, // Auto-refresh every 10 minutes
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
   });
 
-  // Phase 27.F.19: Listen for scan_complete WebSocket events
+  // Query for 24h scan activity metrics
+  const { data: scan24hData, isLoading: isLoading24h } = useQuery<Scan24hResponse>({
+    queryKey: ['/api/paper-sim/diagnostics/scan-24h?mode=paper'],
+    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes
+    refetchOnWindowFocus: false,
+  });
+
+  // Listen for scan_complete WebSocket events
   useEffect(() => {
     const scanCompleteEvents = wsMessages.filter((msg: any) => msg.type === 'scan_complete');
     if (scanCompleteEvents.length > 0) {
-      console.log('[FilterInsights] Received scan_complete event, refreshing data...');
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=9999&trace=false&strategies=all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/filtered-pairs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan-24h?mode=paper'] });
     }
   }, [wsMessages]);
 
-  // Phase 27.F.19: Update nextAutoRefresh from API response
+  // Update nextAutoRefresh from API response
   useEffect(() => {
     if (data?.nextScanAt) {
       const nextScanTime = new Date(data.nextScanAt).getTime();
@@ -108,7 +193,7 @@ export function FilterInsights() {
     }
   }, [data?.nextScanAt]);
 
-  // Phase 27.F.19: Tick currentTime every second for live countdown
+  // Tick currentTime every second for live countdown
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(Date.now());
@@ -117,46 +202,37 @@ export function FilterInsights() {
     return () => clearInterval(interval);
   }, []);
 
-  // Handle manual refresh - Phase 27.F.19: Manual refresh trigger
+  // Handle manual refresh
   const handleManualRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=9999&trace=false&strategies=all'] });
     queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/filtered-pairs'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan-24h?mode=paper'] });
     refetch();
   };
 
-  // Phase 27.F.15.B: Helper to get threshold value for a filter
+  // Helper to get threshold value for a filter
   const getThreshold = (filterKey: string): string | null => {
     if (!diagnosticsData?.thresholds) return null;
     
     const thresholds = diagnosticsData.thresholds;
     
-    // Filters not currently implemented (require expensive operations or unavailable data)
-    const notImplemented = ['failed_rsi', 'failed_liquidity', 'failed_market_cap', 'failed_regulated'];
-    if (notImplemented.includes(filterKey)) {
-      return 'Not Available';
-    }
-    
     const map: Record<string, string> = {
       'failed_min_volume': thresholds.minVolume ? `≥ $${parseFloat(thresholds.minVolume).toLocaleString()}` : '',
       'failed_min_price': thresholds.minPrice ? `≥ $${parseFloat(thresholds.minPrice)}` : '',
-      'failed_max_price': thresholds.maxPrice ? `≤ $${parseFloat(thresholds.maxPrice).toLocaleString()}` : '',
       'failed_spread': thresholds.maxBidAskSpread ? `≤ ${parseFloat(thresholds.maxBidAskSpread)}%` : '',
       'failed_daily_range': thresholds.minDailyRange ? `≥ ${parseFloat(thresholds.minDailyRange)}%` : '',
-      'failed_volatility': thresholds.volatilityMin && thresholds.volatilityMax ? `${parseFloat(thresholds.volatilityMin)}-${parseFloat(thresholds.volatilityMax)}%` : '',
       'failed_stablecoin': thresholds.excludeStablecoins ? 'Excluded' : 'Allowed',
       'failed_quote_currency': thresholds.allowedTradingPairs ? thresholds.allowedTradingPairs.join(', ') : '',
-      'failed_history': thresholds.minDataHistoryDays ? `≥ ${thresholds.minDataHistoryDays} days` : '',
     };
     
     return map[filterKey] || null;
   };
 
-  // Calculate time until next refresh using backend-provided nextScanAt and ticking currentTime
+  // Calculate time until next refresh
   const timeUntilRefresh = nextAutoRefresh ? Math.max(0, nextAutoRefresh - currentTime) : 0;
   const minutesUntilRefresh = Math.floor(timeUntilRefresh / (60 * 1000));
   const secondsRemainder = Math.floor((timeUntilRefresh % (60 * 1000)) / 1000);
-  
-  // Format countdown display in minutes
   const countdownDisplay = minutesUntilRefresh > 0 
     ? `${minutesUntilRefresh}m ${secondsRemainder}s` 
     : `${secondsRemainder}s`;
@@ -208,19 +284,10 @@ export function FilterInsights() {
     ? ((data.eligible_count / data.evaluated) * 100).toFixed(1)
     : '0.0';
 
-  // Get ALL breakdown entries sorted by count (Phase 27.F.15.A: Show all 11 categories)
-  const allBreakdownEntries = Object.entries(data.breakdown)
+  // Phase 8.8.2-UI-ROLLBACK: Filter breakdown to show only allowed categories
+  const visibleBreakdownEntries = Object.entries(data.breakdown)
+    .filter(([key]) => ALLOWED_FILTER_CATEGORIES.includes(key))
     .sort((a, b) => b[1] - a[1]);
-
-  const formatFailureReason = (key: string): string => {
-    return key
-      .replace('failed_', '')
-      .replace('strategy_none_triggered', 'No Strategy Triggered')
-      .replace(/_/g, ' ')
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
 
   return (
     <div className="space-y-4" data-testid="filter-insights">
@@ -232,8 +299,9 @@ export function FilterInsights() {
             <CardTitle>Filter Insights</CardTitle>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              Next refresh in {countdownDisplay}
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Next scan in {countdownDisplay}
             </span>
             <Button
               onClick={handleManualRefresh}
@@ -248,15 +316,21 @@ export function FilterInsights() {
         </CardHeader>
       </Card>
 
-      {/* Overview Stats */}
+      {/* Section 1: Scan & Filter Overview */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Universe Overview</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            Scan & Filter Overview
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Current scan cycle statistics from Kraken universe
+          </p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Total Universe</p>
+              <p className="text-xs text-muted-foreground mb-1">Kraken Universe</p>
               <p className="text-2xl font-bold" data-testid="text-universe-count">
                 {data.universe_count.toLocaleString()}
               </p>
@@ -285,83 +359,214 @@ export function FilterInsights() {
               </p>
             </div>
           </div>
+          <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+            <Activity className="w-3 h-3" />
+            Last scan: {new Date(data.ts).toLocaleString()}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Filter Breakdown - Phase 27.F.15.A: Show all 11 categories */}
+      {/* Section 2: 24h Filter Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">24h Filter Activity</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Aggregated filter performance over the last 24 hours
+          </p>
+        </CardHeader>
+        <CardContent>
+          {isLoading24h ? (
+            <div className="text-center py-4">
+              <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">Loading 24h metrics...</p>
+            </div>
+          ) : !scan24hData?.ok || !scan24hData?.data ? (
+            <div className="text-center py-4">
+              <Activity className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground">No 24h data available yet</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Data will appear after first scan cycle
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Total Cycles (24h)</p>
+                  <p className="text-2xl font-bold">{scan24hData.data.totalCycles}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Total Evaluated (24h)</p>
+                  <p className="text-2xl font-bold">{scan24hData.data.totalEvaluated.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Total Survived (24h)</p>
+                  <p className="text-2xl font-bold text-success">{scan24hData.data.totalSurvived.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Avg Per Cycle</p>
+                  <p className="text-2xl font-bold">{scan24hData.data.avgEvaluatedPerCycle}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Success Rate (24h)</p>
+                  <p className="text-2xl font-bold">{scan24hData.data.successRate.toFixed(1)}%</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                <span>Window: {new Date(scan24hData.data.windowStart).toLocaleString()} - {new Date(scan24hData.data.windowEnd).toLocaleString()}</span>
+                <span>Updated: {new Date(scan24hData.data.lastUpdated).toLocaleTimeString()}</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Section 3: Active Filtered Pool (Deduped, Non-Expired) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Active Filtered Pool</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Pairs that passed all filters in the current scan cycle and are available for trading
+          </p>
+        </CardHeader>
+        <CardContent>
+          {isLoadingPairs ? (
+            <div className="text-center py-8">
+              <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-muted-foreground" />
+              <p className="text-muted-foreground">Loading filtered pairs...</p>
+            </div>
+          ) : !filteredPairsData || filteredPairsData.pairs.length === 0 ? (
+            <div className="text-center py-8">
+              <Filter className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No Eligible Pairs</h3>
+              <p className="text-muted-foreground">
+                No symbols currently pass all screening filters
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full" data-testid="table-active-pool">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-3 font-medium">Symbol</th>
+                    <th className="text-left py-2 px-3 font-medium">Status</th>
+                    <th className="text-right py-2 px-3 font-medium">Price</th>
+                    <th className="text-right py-2 px-3 font-medium">24h Volume</th>
+                    <th className="text-right py-2 px-3 font-medium">Daily Range</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPairsData.pairs.slice(0, 20).map((pair, index) => (
+                    <tr key={`${pair.symbol}-${index}`} className="border-b hover:bg-muted/50">
+                      <td className="py-2 px-3 font-medium">{pair.symbol}</td>
+                      <td className="py-2 px-3">
+                        <Badge variant="outline" className="text-xs text-success border-success/20">
+                          Passed all filters
+                        </Badge>
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        ${pair.price.toFixed(pair.price < 1 ? 4 : 2)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        ${(pair.volume24h / 1000000).toFixed(2)}M
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {pair.dailyRange.toFixed(2)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredPairsData.pairs.length > 20 && (
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Showing 20 of {filteredPairsData.pairs.length} eligible pairs
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Section 4: Filter Breakdown (Last 24 Hours) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Filter Breakdown</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            All {allBreakdownEntries.length} filter categories (sorted by rejection count)
+            Why pairs were filtered out in the last scan cycle
           </p>
         </CardHeader>
         <CardContent>
-          {allBreakdownEntries.length === 0 ? (
+          <div className="mb-4 grid grid-cols-2 gap-4">
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground mb-1">Total Evaluated</p>
+              <p className="text-xl font-bold">{data.evaluated.toLocaleString()}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-success/10">
+              <p className="text-xs text-muted-foreground mb-1">Survived Filters</p>
+              <p className="text-xl font-bold text-success">{data.eligible_count}</p>
+            </div>
+          </div>
+          
+          {visibleBreakdownEntries.length === 0 ? (
             <p className="text-sm text-muted-foreground">No filter data available</p>
           ) : (
-            <div className="space-y-2">
-              {allBreakdownEntries.map(([key, count], index) => {
-                const isTopFailure = index < 3 && count > 0;
+            <div className="space-y-3">
+              {visibleBreakdownEntries.map(([key, count]) => {
+                const isTopFailure = count > 0 && count > 100;
                 const threshold = getThreshold(key);
-                const isUserAdjustable = !['failed_blacklist', 'failed_whitelist', 'failed_quote_currency', 'failed_guardrail_risk', 'strategy_none_triggered'].includes(key);
+                const displayName = FILTER_DISPLAY_NAMES[key] || key;
+                const description = FILTER_DESCRIPTIONS[key];
                 
                 return (
                   <div 
                     key={key} 
                     className={cn(
-                      "flex items-center justify-between p-2 rounded border",
+                      "flex flex-col p-3 rounded border",
                       isTopFailure ? "border-destructive/20 bg-destructive/5" : "border-border",
-                      count === 0 && "opacity-40"
+                      count === 0 && "opacity-60"
                     )}
                   >
-                    <div className="flex items-center gap-2 flex-1">
-                      {count > 0 ? (
-                        <XCircle className={cn(
-                          "w-4 h-4 shrink-0",
-                          isTopFailure ? "text-destructive" : "text-warning"
-                        )} />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
-                      )}
-                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "text-sm",
-                            isTopFailure && count > 0 ? "font-medium" : "font-normal"
-                          )}>
-                            {formatFailureReason(key)}
-                          </span>
-                          {isUserAdjustable && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Info className="w-3 h-3 text-muted-foreground" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">User-adjustable in Filters tab</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
-                        {threshold && (
-                          <span className="text-xs text-muted-foreground">
-                            Threshold: {threshold}
-                          </span>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {count > 0 ? (
+                          <XCircle className={cn(
+                            "w-4 h-4 shrink-0",
+                            isTopFailure ? "text-destructive" : "text-warning"
+                          )} />
+                        ) : (
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
                         )}
+                        <span className={cn(
+                          "text-sm font-medium",
+                          count === 0 && "text-muted-foreground"
+                        )}>
+                          {displayName}
+                        </span>
                       </div>
+                      <Badge 
+                        variant={count > 0 ? (isTopFailure ? "destructive" : "secondary") : "outline"}
+                        data-testid={`badge-filter-${key}`}
+                        className={cn(
+                          "shrink-0",
+                          count === 0 && "text-success border-success/20"
+                        )}
+                      >
+                        {count > 0 ? count.toLocaleString() : "✓ Pass"}
+                      </Badge>
                     </div>
-                    <Badge 
-                      variant={count > 0 ? (isTopFailure ? "destructive" : "secondary") : "outline"}
-                      data-testid={`badge-filter-${key}`}
-                      className={cn(
-                        "shrink-0",
-                        count === 0 && "text-success border-success/20"
-                      )}
-                    >
-                      {count > 0 ? count.toLocaleString() : "✓ Pass"}
-                    </Badge>
+                    
+                    {/* Phase 8.8.2-UI-ROLLBACK: Per-filter description */}
+                    {description && (
+                      <p className="text-xs text-muted-foreground mb-1 ml-6">
+                        {description}
+                      </p>
+                    )}
+                    
+                    {threshold && (
+                      <p className="text-xs text-muted-foreground ml-6">
+                        Threshold: {threshold}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -369,53 +574,6 @@ export function FilterInsights() {
           )}
         </CardContent>
       </Card>
-
-      {/* Top Candidates */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Top 10 Candidates
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.top_candidates.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No eligible pairs found</p>
-          ) : (
-            <div className="space-y-2">
-              {data.top_candidates.slice(0, 10).map((candidate, idx) => (
-                <div
-                  key={candidate.symbol}
-                  className="flex items-center justify-between p-2 rounded border border-border hover:bg-accent/50 transition-colors"
-                  data-testid={`candidate-${candidate.symbol}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground font-mono w-6">
-                      #{idx + 1}
-                    </span>
-                    <span className="font-medium">{candidate.symbol}</span>
-                    {candidate.strategy && (
-                      <Badge variant="outline" className="text-xs">
-                        {candidate.strategy}
-                      </Badge>
-                    )}
-                  </div>
-                  {candidate.confidence !== undefined && (
-                    <Badge variant="default" className="bg-success/10 text-success">
-                      {(candidate.confidence * 100).toFixed(0)}%
-                    </Badge>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Last Updated */}
-      <div className="text-center text-xs text-muted-foreground">
-        Last updated: {new Date(data.ts).toLocaleString()}
-      </div>
     </div>
   );
 }

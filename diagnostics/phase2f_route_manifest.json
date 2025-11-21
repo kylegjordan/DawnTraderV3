@@ -1462,6 +1462,16 @@
     ]
   },
   {
+    "path": "/api/paper-sim/diagnostics/scan-24h",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/paper-sim/last-cycle",
     "methods": [
       "GET"

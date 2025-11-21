@@ -363,6 +363,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     console.error('[FX5Scanner] Failed to start:', error);
   });
 
+  // Phase 8.8.2-UI-ROLLBACK: Initialize 24h scan aggregator for Filter Insights Section 2
+  const { scan24hAggregator } = await import('./services/scan-24h-aggregator');
+  scan24hAggregator.initialize();
+  console.log('[Scan24hAggregator] Initialized - listening to Stage-3 events');
+
   // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
   apiRouter.use(diagnosticTraceMiddleware);
 
@@ -6001,6 +6006,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error) {
       console.error('Error performing universe scan:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to perform scan' });
+    }
+  });
+
+  // Phase 8.8.2-UI-ROLLBACK: 24-hour scan activity metrics for Filter Insights Section 2
+  apiRouter.get('/paper-sim/diagnostics/scan-24h', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { scan24hAggregator } = await import('./services/scan-24h-aggregator.js');
+      const { mode } = req.query;
+      const scanMode = (mode as 'paper' | 'live') || 'paper';
+      
+      const metrics = scan24hAggregator.getMetrics(scanMode);
+      
+      res.json({
+        ok: true,
+        data: metrics,
+      });
+    } catch (error) {
+      console.error('[Scan24h] Error:', error);
+      res.status(500).json({ 
+        ok: false, 
+        error: error instanceof Error ? error.message : 'Failed to fetch 24h metrics' 
+      });
     }
   });
 
