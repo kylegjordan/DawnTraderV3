@@ -170,10 +170,19 @@ class Stage3Emitter {
 
   /**
    * Emit both scan_tick and scanner:breakdown in one call
+   * 
+   * Phase 8.8.2-UI-FINAL-RESTORE: Now accepts symbol arrays for 24h unique tracking
    */
-  emitScanComplete(mode: 'paper' | 'live', breakdown: FilterBreakdown): void {
+  emitScanComplete(
+    mode: 'paper' | 'live', 
+    breakdown: FilterBreakdown,
+    scanData?: {
+      evaluatedSymbols?: string[];
+      survivedSymbols?: string[];
+    }
+  ): void {
     this.emitScanTick(mode);
-    this.emitScannerBreakdown(mode, breakdown);
+    this.emitScannerBreakdown(mode, breakdown, 'last_cycle', scanData);
   }
 }
 
@@ -182,10 +191,16 @@ export const stage3Emitter = new Stage3Emitter();
 /**
  * Helper function to emit Stage-3 events after FX5 scanner cycle completes
  * Call this from signal-orchestrator after updating the cache
+ * 
+ * Phase 8.8.2-UI-FINAL-RESTORE: Now accepts symbol arrays for 24h unique tracking
  */
 export async function emitStage3Events(
   mode: 'paper' | 'live',
-  breakdown: FilterBreakdown
+  breakdown: FilterBreakdown,
+  scanData?: {
+    evaluatedSymbols?: string[];
+    survivedSymbols?: string[];
+  }
 ): Promise<void> {
-  stage3Emitter.emitScanComplete(mode, breakdown);
+  stage3Emitter.emitScanComplete(mode, breakdown, scanData);
 }

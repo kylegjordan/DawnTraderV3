@@ -52,6 +52,8 @@ export class Fx5ScannerService {
    * This runs independently of trading engine state
    */
   async start(): Promise<void> {
+    console.log('[FX5Scanner][DEBUG] start() method called - isRunning:', this.isRunning);
+    
     if (this.isRunning) {
       console.log('[FX5Scanner] Already running');
       return;
@@ -61,7 +63,9 @@ export class Fx5ScannerService {
     console.log('[FX5Scanner] Starting 30-second scanner for paper and live modes');
 
     // Run initial scan for both modes
+    console.log('[FX5Scanner][DEBUG] About to run initial paper scan');
     await this.scanMode('paper');
+    console.log('[FX5Scanner][DEBUG] About to run initial live scan');
     await this.scanMode('live');
 
     // Schedule recurring scans
@@ -122,8 +126,10 @@ export class Fx5ScannerService {
       const result = await this.filteredPairsService.getValidPairs(mode, filters, true);
       
       // Compute breakdown from filter results (includes evaluated count)
+      // Phase 8.8.2-UI-FINAL-RESTORE: Now includes symbol arrays for unique tracking
       const diagnosticData = await this.computeBreakdown(mode, filters);
       const breakdown = diagnosticData.breakdown;
+      const { evaluatedSymbols, survivedSymbols } = diagnosticData;
       
       // Calculate counts from breakdown to satisfy truth constraint
       // eligibleCount = pairs that passed ALL filters (includes active trades)
@@ -177,7 +183,8 @@ export class Fx5ScannerService {
       });
 
       // Emit Stage-3 WebSocket events SECOND
-      await emitStage3Events(mode, breakdown);
+      // Phase 8.8.2-UI-FINAL-RESTORE: Pass symbol arrays for unique 24h tracking
+      await emitStage3Events(mode, breakdown, { evaluatedSymbols, survivedSymbols });
 
       console.log(`[FX5Scanner][${mode}] ✅ Scan complete (evaluated=${evaluatedCount}, eligible=${eligibleCount})`);
 
@@ -191,11 +198,18 @@ export class Fx5ScannerService {
   /**
    * Compute filter breakdown from FX5 results
    * Engine-agnostic: Uses KrakenService directly without user context
+   * 
+   * Phase 8.8.2-UI-FINAL-RESTORE: Now returns symbol arrays for unique tracking in 24h aggregator
    */
   private async computeBreakdown(
     mode: 'paper' | 'live',
     filters: ScreenerFilters
-  ): Promise<{ breakdown: FilterBreakdown; evaluated: number }> {
+  ): Promise<{ 
+    breakdown: FilterBreakdown; 
+    evaluated: number;
+    evaluatedSymbols: string[];
+    survivedSymbols: string[];
+  }> {
     // Get all tradable pairs and tickers from Kraken
     const [tickers, pairsObj] = await Promise.all([
       this.krakenService.getTicker(),
@@ -220,6 +234,10 @@ export class Fx5ScannerService {
       already_active: 0,
       passed_all_filters: 0,
     };
+
+    // Phase 8.8.2-UI-FINAL-RESTORE: Track symbols for unique 24h metrics
+    const evaluatedSymbols: string[] = [];
+    const survivedSymbols: string[] = [];
 
     // Extract filter criteria
     const minVolume = parseFloat(filters.minVolume ?? '1000000.00');
@@ -262,6 +280,9 @@ export class Fx5ScannerService {
       
       // Get canonical symbol (e.g., BTCUSD instead of XXBTZUSD)
       const symbol = pairInfo.wsname || pairName;
+      
+      // Phase 8.8.2-UI-FINAL-RESTORE: Track evaluated symbol
+      evaluatedSymbols.push(symbol);
       
       let rejected = false;
 
@@ -309,12 +330,17 @@ export class Fx5ScannerService {
         } else {
           breakdown.passed_all_filters++;
         }
+        
+        // Phase 8.8.2-UI-FINAL-RESTORE: Track survived symbol (passed all filters)
+        survivedSymbols.push(symbol);
       }
     });
 
     return {
       breakdown,
       evaluated,
+      evaluatedSymbols,
+      survivedSymbols,
     };
   }
 }

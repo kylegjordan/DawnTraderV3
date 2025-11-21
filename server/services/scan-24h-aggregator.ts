@@ -151,11 +151,24 @@ class Scan24hAggregator {
       survivedSymbols?: string[];
     }
   ): void {
+    // Phase 8.8.2-DIAGNOSTIC: Log what we receive
+    console.log('[Scan24hAggregator][recordCycle] Received:', {
+      mode,
+      cycleId: data.cycleId,
+      evaluatedCount: data.evaluatedCount,
+      eligibleCount: data.eligibleCount,
+      evaluatedSymbolsLength: data.evaluatedSymbols?.length ?? 0,
+      survivedSymbolsLength: data.survivedSymbols?.length ?? 0,
+      evaluatedSymbolsSample: data.evaluatedSymbols?.slice(0, 3),
+      survivedSymbolsSample: data.survivedSymbols?.slice(0, 3),
+    });
+
     // Gate: only record if engine is ACTIVE for this mode
     const isActive = mode === 'paper' ? this.paperEngineActive : this.liveEngineActive;
     
     if (!isActive) {
       // Silent skip - we don't record passive learning scans
+      console.log(`[Scan24hAggregator][recordCycle] Skipped - ${mode} engine is STOPPED`);
       return;
     }
 
