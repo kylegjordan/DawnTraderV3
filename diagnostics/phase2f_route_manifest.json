@@ -460,6 +460,17 @@
     ]
   },
   {
+    "path": "/api/settings/filters",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "validateMode",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/screeners/calibration",
     "methods": [
       "GET"

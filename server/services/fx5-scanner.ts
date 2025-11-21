@@ -18,11 +18,12 @@
 import { storage } from '../storage.js';
 import { FilteredPairsService } from './filtered-pairs-service.js';
 import { KrakenService } from './kraken.js';
-import { updateStage3Cache } from './stage3-state-cache.js';
+import { updateStage3Cache, ActiveFilteredPair } from './stage3-state-cache.js';
 import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
 import type { ScreenerFilters } from '@shared/schema';
 
 const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
+const CYCLES_PER_HOUR = Math.round(3600000 / SCAN_INTERVAL_MS); // 120 for 30s intervals
 
 interface ScanResult {
   mode: 'paper' | 'live';
@@ -163,8 +164,25 @@ export class Fx5ScannerService {
         activePoolCount,
       };
 
-      // Update Stage-3 cache FIRST
+      // Phase 8.8.2-MAP-FINAL: Build activeFilteredPool with full pair details
+      const activeFilteredPool: ActiveFilteredPair[] = result.filteredPairs.slice(0, 60).map(pair => ({
+        symbol: pair.symbol,
+        price: pair.currentPrice,
+        volume24h: pair.volume24h,
+        dailyRange: pair.dailyRange || 0,
+        firstSeen: pair.lastUpdate.toISOString(),
+        lastUpdated: pair.lastUpdate.toISOString(),
+      }));
+
+      const cycleStartTimestamp = new Date().toISOString();
+      const cycleEndTimestamp = new Date().toISOString();
+      const krakenUniverseSize = evaluatedCount; // Total pairs evaluated from Kraken
+
+      // Update Stage-3 cache FIRST with all Phase 8.8.2-MAP-FINAL fields
       await updateStage3Cache(mode, {
+        cycleStartTimestamp,
+        cycleEndTimestamp,
+        krakenUniverseSize,
         evaluatedCount,
         eligibleCount,
         ineligibleCount,
@@ -174,7 +192,11 @@ export class Fx5ScannerService {
           topEndUniverseSize: universeSize,
           tierBUniverseSize: 0,
         },
+        cyclesPerHour: CYCLES_PER_HOUR,
+        cycleFrequencyMs: SCAN_INTERVAL_MS,
+        nextScanInMs: SCAN_INTERVAL_MS,
         activePoolCount,
+        activeFilteredPool,
         latestEligibleSymbols: result.filteredPairs.slice(0, 10).map(p => p.symbol),
       });
 
