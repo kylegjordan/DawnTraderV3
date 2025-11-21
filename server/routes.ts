@@ -2256,18 +2256,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return parseFloat(val);
       };
 
-      // Get allowed quote currencies from user settings
-      const userSettings = await storage.getUserSettings({ userId: req.user!.id });
-      const allowedQuoteCurrencies = userSettings?.allowedTradingPairs 
-        ? userSettings.allowedTradingPairs.split(',').map(p => p.trim())
-        : ['USD', 'EUR', 'USDT'];
+      // Parse allowed quote currencies from screener filters
+      let allowedQuoteCurrencies: string[] = ['USD', 'EUR', 'USDT'];
+      try {
+        allowedQuoteCurrencies = typeof screenerFilters.quoteCurrencies === 'string'
+          ? JSON.parse(screenerFilters.quoteCurrencies)
+          : (screenerFilters.quoteCurrencies ?? ['USD', 'EUR', 'USDT']);
+      } catch {
+        // Keep default if parsing fails
+      }
 
       const response = {
         mode,
         filters: {
           minVolume: parseNumber(screenerFilters.minVolume),
           maxBidAskSpread: parseNumber(screenerFilters.maxBidAskSpread),
-          minDailyRange: userSettings?.minDailyRange ? parseFloat(userSettings.minDailyRange) : 0.02,
+          minDailyRange: parseNumber(screenerFilters.volatilityMin) || 0.02,
           minPrice: parseNumber(screenerFilters.minPrice),
           excludeStablecoins: screenerFilters.excludeStablecoins ?? true,
           allowedQuoteCurrencies,
