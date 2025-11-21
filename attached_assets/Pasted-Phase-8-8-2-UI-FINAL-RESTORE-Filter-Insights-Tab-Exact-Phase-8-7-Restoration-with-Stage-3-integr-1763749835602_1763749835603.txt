@@ -1,0 +1,782 @@
+Phase 8.8.2-UI-FINAL-RESTORE
+
+Filter Insights Tab – Exact Phase 8.7 Restoration (with Stage-3 integration)
+
+0. Purpose & Scope
+
+This phase does not change any trading logic.
+
+It is only for:
+
+Restoring the Filter Insights tab to the Phase 8.7 final UI (layout, styling, wording, and behavior).
+
+Ensuring that this restored UI is fed by the new Stage-3 FX5 scanner (30-second cycles) and truth-constraint-correct metrics.
+
+Cleaning up the temporary 24h aggregator implementation so it’s solid, explicit, and not monkey-patched.
+
+We are not changing:
+
+Strategy engine behavior
+
+Ready-to-Buy logic
+
+Trading engine logic
+
+Guardrails
+
+Only the Filter Insights tab + its supporting diagnostics endpoints / Stage-3 hooks.
+
+1. High-Level Requirements
+1.1 Tabs & Routing
+
+On the Trading page, the header tabs must be:
+
+Open Trades
+
+Ready to Buy
+
+Filter Insights
+
+There must be no fourth “Filtered Pairs” tab and no other duplicates of this content.
+
+1.2 Filter Insights – Four Sections (Exact Layout)
+
+Filter Insights must contain exactly these 4 sections in this order:
+
+Scan & Filter Overview
+
+24h Filter Activity
+
+Active Filtered Pool (Deduped, Non-Expired)
+
+Filter Breakdown (Last 24 Hours)
+
+The layout, fonts, colors, spacing and header copy should match the Phase 8.7 screenshots Kyle shared (those with “Scan & Filter Overview / 24h Filter Activity / Active Filtered Pool / Filter Breakdown (Last 24 Hours)” in one tab).
+
+You already had this layout in 8.7 – we are going back to that, not inventing a new design.
+
+2. Section-by-Section Specification
+2.1 Section 1 – Scan & Filter Overview
+
+This section shows a snapshot for the current / last FX5 scan cycle.
+
+2.1.1 Layout
+
+Use the same layout as the 8.7 screenshots:
+
+Card title: “Scan & Filter Overview”
+
+Within the card: 3 stacked sub-blocks
+
+Kraken Universe
+
+Cycle Info
+
+Last Scan Result
+
+Each sub-block is a two-column row: label on left, metrics on right.
+
+2.1.2 Data Fields & Mapping
+
+A. Kraken Universe
+
+Label: “Kraken Universe”
+
+Sub-label: “Total Kraken Trading Pairs:”
+
+Value:
+
+Field: krakenUniverseSize
+
+Source: same endpoint / contract used in Phase 8.7 (you previously implemented this cache in market-scanner and exposed it via /api/market-scanner/scan-summary).
+
+If that field was renamed, re-align so this row shows the total count of all tradable pairs on Kraken, not per-scan evaluatedCount.
+
+B. Cycle Info
+
+Fields (all must be present):
+
+Last Scan Cycle ID:
+
+Example: cycle_paper_u7z0yhW0Bv3
+
+Source: Stage-3 cache cycleId for the current mode (paper / live).
+
+Last Scan Time:
+
+ISO timestamp converted to user’s local timezone, matching previous formatting.
+
+Source: Stage-3 cache lastScanEndTimestamp for the current mode.
+
+Next Scan In:
+
+Countdown in seconds to the next FX5 scan.
+
+Based on fixed 30-second schedule and lastScanEndTimestamp.
+
+If scanner or engine is stopped, show "—" or a gray “Not scheduled” label.
+
+Cycles per Hour:
+
+Display Stage-3’s computed value.
+
+Expected ~0.3–0.9 depending on rotation & engine state.
+
+Source: Stage-3 cache cyclesPerHour (for the mode).
+
+Scan Frequency:
+
+Static text: “every 30 seconds”
+
+This is purely informational and should not be computed from the backend.
+
+C. Last Scan Result
+
+Rows:
+
+Evaluated This Scan:
+
+The number of pairs evaluated in the last FX5 scan for this mode.
+
+Source: Stage-3 evaluatedCount for last cycle.
+
+Eligible This Scan:
+
+Number of pairs that passed all FX5 filters in the last scan.
+
+Source: Stage-3 eligibleCount.
+
+Display format:
+
+Main number (e.g., 48)
+
+Small percentage next to it: (xx.x%) where:
+
+eligiblePct = eligibleCount / evaluatedCount * 100 rounded to 1 decimal.
+
+Ineligible This Scan:
+
+Number of pairs that failed at least one filter in the last scan.
+
+ineligibleCount = evaluatedCount - eligibleCount.
+
+Display:
+
+Main number
+
+Small percentage: (xx.x%) where:
+
+ineligiblePct = ineligibleCount / evaluatedCount * 100.
+
+Percentages must sum to ~100% (rounding tolerance ±0.1%).
+
+2.1.3 Behavior – ACTIVE vs STOPPED
+
+When Paper mode is ACTIVE (trading engine running):
+
+All fields above must be live and updated every 30 seconds via Stage-3 scan events.
+
+When Paper mode is STOPPED (passive learning only):
+
+Behavior must mimic Phase 8.7:
+
+Kraken Universe: still shown (it’s static).
+
+Cycle Info:
+
+Show Next Scan In and Scan Frequency as before (we still scan every 30s).
+
+Last Scan Cycle ID and Last Scan Time may still show the last cycle, but it’s OK.
+
+Last Scan Result:
+
+Counts must remain very small or zero, not accumulate massive values.
+
+You can leave the per-scan numbers as they are (0–3 is fine), but don’t allow them to be misinterpreted as “trading activity.”
+
+Key rule: No accumulating 24h totals, no large numbers from passive scans in this section.
+
+2.2 Section 2 – 24h Filter Activity
+
+This is the “rolling 24 hours” summary, same as Phase 8.7.
+
+2.2.1 Layout
+
+Card title: “24h Filter Activity”
+
+Four columns at the top (left/right two-column layout exactly like previous screenshots):
+
+Left side:
+
+Total Evaluated (24h)
+
+Total Survived Filters (24h)
+
+Right side:
+
+Unique Evaluated (24h)
+
+Unique Survived Filters (24h)
+
+Then a row:
+
+Cycles (24h) – number of scan cycles in last 24 hours.
+
+All formatting (font size, spacing, color) should match 8.7 screenshots.
+
+2.2.2 Data Source & Aggregation
+
+We are OK using the /api/paper-sim/diagnostics/scan-24h endpoint you just built, but you must harden it as follows:
+
+No monkey-patching contextBridge.
+
+Replace the “patch broadcast to intercept events” approach with a explicit subscription:
+
+Stage-3 emitter should explicitly call a Scan24hAggregator.recordCycle(mode, scanSummary) or similar when a scan is completed.
+
+This can be wired where you already emit scanner:breakdown:<mode>.
+
+Aggregator semantics:
+
+For each FX5 scan cycle (per mode):
+
+evaluatedCount – total evaluated in that cycle
+
+eligibleCount – total passed all filters
+
+Aggregator maintains a rolling window of last 24 hours only for cycles while trading engine is ACTIVE (see gating below).
+
+Total Evaluated (24h)
+
+sum(evaluatedCount) for all cycles in last 24h (ACTIVE only).
+
+Total Survived Filters (24h)
+
+sum(eligibleCount) for all cycles in last 24h (ACTIVE only).
+
+Unique Evaluated (24h)
+
+Count of distinct symbols seen at least once in any cycle in the last 24 hours.
+
+Unique Survived Filters (24h)
+
+Distinct symbols that passed all filters at least once in last 24 hours.
+
+Cycles (24h)
+
+Count of scan cycles seen in last 24 hours.
+
+Engine-state gating (critical):
+
+Aggregator must only record cycles when paper mode is ACTIVE.
+
+Obtain state from existing trading engine state (you already emit trading_state_changed).
+
+When state is STOPPED for a mode, aggregator must not record new cycles.
+
+On transition from ACTIVE → STOPPED for a mode:
+
+Either:
+
+Reset the window (clear stored cycles), or
+
+Mark a boundary so the next ACTIVE session starts from a clean 24h view.
+
+Result: When trading is STOPPED (passive learning only), the 24h metrics will be empty or near zero, as in Phase 8.7.
+
+Endpoint contract:
+
+GET /api/paper-sim/diagnostics/scan-24h?mode=paper
+
+Respond with JSON:
+
+{
+  mode: "paper" | "live",
+  windowStart: string, // ISO timestamp, 24h ago
+  windowEnd: string,   // ISO timestamp, now
+  totalCycles: number,
+  totalEvaluated: number,
+  totalSurvived: number,
+  uniqueEvaluated: number,
+  uniqueSurvived: number
+}
+
+
+Same structure for mode=live if used.
+
+2.2.3 UI Behavior
+
+ACTIVE (paper):
+
+All metrics above populated and updating as scans occur.
+
+Numbers should reflect realistic ranges (hundreds to a few thousands, not 128k from days of passive scans).
+
+STOPPED (paper):
+
+Either:
+
+Show zeros, or
+
+Show a muted empty state:
+
+“24h metrics will start accumulating when paper trading is ACTIVE.”
+
+In any case, do not display large carried-over values from previous passive runs.
+
+2.3 Section 3 – Active Filtered Pool (Deduped, Non-Expired)
+
+This section is mostly correct in your current rollback, but must match 8.7 behavior.
+
+2.3.1 Layout
+
+Card title:
+“Active Filtered Pool (Deduped, Non-Expired)”
+
+Sub-label:
+“Total Active Filtered Pairs:” + count.
+
+Table columns (same as in 8.7):
+
+Symbol
+
+Status (badge: “Passed all filters”)
+
+Price
+
+24h Volume
+
+Daily Range
+
+Optionally First Seen (this window), Last Updated (this cycle) if present in Phase 8.7 (screenshots suggest these were visible; keep them if they already exist).
+
+2.3.2 Data Source
+
+List of symbols that currently:
+
+Passed all FX5 filters in at least one recent scan,
+
+Have not expired from the active window,
+
+Have been deduped (one row per symbol),
+
+Are in the paper active filtered pool for the mode.
+
+This should reuse the same backend data source you used in Phase 8.7 (you already had this working).
+
+2.3.3 Behavior
+
+ACTIVE (paper):
+
+Table shows the current active filtered pool.
+
+Rows update each cycle as new symbols are added / removed.
+
+“Total Active Filtered Pairs” matches row count.
+
+STOPPED (paper) – Passive Learning:
+
+No rows should be shown.
+
+Show the same 8.7 empty state text:
+
+“No active filtered pairs at this time.”
+
+This is important: passive learning should not populate the active filtered pool.
+
+2.4 Section 4 – Filter Breakdown (Last 24 Hours)
+
+This must match the final 8.7 version, not the current interim version.
+
+2.4.1 Layout
+
+Card title: “Filter Breakdown (Last 24 Hours)”
+
+Header row:
+
+Total Evaluated (24h) (left)
+
+Total Survived Filters (24h) (right)
+
+Then:
+
+Sub-header: “Breakdown by Filter (24h)”
+
+A list of cards (collapsible rows or simple rows), one per filter category, in this exact order:
+
+Min Volume
+
+Max Spread
+
+Min Daily Range
+
+Min Price
+
+Exclude Stablecoins
+
+Valid Quote Currency
+
+Already Active
+
+Passed All Filters
+
+Each row:
+
+Left: category title
+
+Below title: description text (one short paragraph)
+
+Right: count of pairs that were filtered (or survived, in the case of “Passed All Filters”).
+
+You already had this format in Phase 8.7 (with descriptions under each row) — we want that back.
+
+2.4.2 Filter Categories – Allowed vs Disallowed
+
+Allowed (must be shown, in this order):
+
+Min Volume
+
+Max Spread
+
+Min Daily Range
+
+Min Price
+
+Exclude Stablecoins
+
+Valid Quote Currency
+
+Already Active
+
+Passed All Filters
+
+Disallowed (must NOT appear at all, even with 0 counts):
+
+History
+
+Market Cap
+
+Guardrail Risk
+
+Universe Size
+
+Blacklist
+
+Whitelist
+
+“No Strategy Triggered” / “strategy_none_triggered” or similar
+
+Any other internal / legacy breakdown categories
+
+If the backend currently emits these extra keys, that is fine for diagnostics, but:
+
+The Filter Insights UI must not show them.
+
+If needed, implement a whitelist on the frontend (and/or backend) so only the 8 allowed categories appear in this card.
+
+2.4.3 Descriptions & Thresholds (Yes + thresholds)
+
+For each category, use the existing 8.7 descriptions (paraphrased here) and add thresholds only when they come from real filter settings.
+
+Suggested text (tune wording to match existing 8.7 copy in your codebase):
+
+Min Volume
+Description:
+
+Excludes pairs with very low daily trading volume that may cause liquidity issues or high slippage.
+Threshold:
+
+Show: Threshold: ≥ $X (or whatever unit you use)
+
+Source: FX5 min volume setting used in the filter.
+
+Max Spread
+Description:
+
+Filters out pairs with wide bid–ask spreads that increase trading costs.
+Threshold:
+
+Threshold: ≤ Y% (spread percentage).
+
+Min Daily Range
+Description:
+
+Removes pairs with insufficient daily price movement for intraday trading strategies.
+Threshold:
+
+Threshold: ≥ Z% (daily high/low percent).
+
+Min Price
+Description:
+
+Excludes very low-priced pairs that may behave like illiquid “penny” assets.
+Threshold:
+
+Threshold: ≥ $P (minimum base asset price).
+
+Exclude Stablecoins
+Description:
+
+Filters out stablecoins, which typically show minimal price volatility.
+Threshold:
+
+No numerical threshold (just the description).
+
+Valid Quote Currency
+Description:
+
+Keeps only pairs quoted in the allowed fiat or major crypto currencies list.
+Threshold:
+
+No numerical threshold; rely on the whitelist.
+
+Already Active
+Description:
+
+Prevents duplicates by excluding pairs that are already in the active filtered pool.
+Threshold:
+
+None (logical condition).
+
+Passed All Filters
+Description:
+
+Pairs that successfully passed every FX5 filter and are eligible for strategy evaluation.
+Threshold:
+
+None.
+
+Display format per row:
+
+Title (e.g. “Min Volume”)
+
+Description line (smaller, gray text)
+
+Optional “Threshold: …” line under description (same small font)
+
+Right-aligned count (e.g. 191)
+
+2.4.4 Data Aggregation & Truth Constraint
+
+Back-end rule (already implemented in Stage-3 – make sure UI uses it correctly):
+
+For each 24-hour window (ACTIVE cycles only):
+
+Let evaluated24h be the total evaluated across all cycles.
+
+For each failure category, have a count (e.g. failed_min_volume, failed_spread, …).
+
+already_active24h – pairs rejected because they are already active.
+
+passed_all_filters24h – total survivors.
+
+The truth constraint must hold:
+
+evaluated24h
+  =
+sum(all failure category counts across the 7 failure categories)
+  + passed_all_filters24h
+
+
+Notes:
+
+“Passed All Filters” is not a failure category; it’s the success bucket.
+
+“Already Active” is considered a “failure bucket” for the purpose of accounting (i.e., these are pairs not allowed into the new active pool).
+
+The frontend:
+
+Must display:
+
+Total Evaluated (24h): evaluated24h
+
+Total Survived Filters (24h): passed_all_filters24h
+
+Per-category counts for the 7 filter buckets plus “Passed All Filters.”
+
+MUST NOT show any counts that break the truth constraint; if the backend reports mismatches, show a small “data out of sync” warning rather than rendering wrong numbers.
+
+2.4.5 Behavior – ACTIVE vs STOPPED
+
+ACTIVE: show 24h breakdown normally (aggregating only ACTIVE cycles).
+
+STOPPED: may show old values from the last ACTIVE run, or show an empty state.
+
+It must not keep growing due to passive scans.
+
+3. Implementation Details & File Touchpoints
+3.1 Likely Frontend Files
+
+(Names based on your logs; adjust if different)
+
+client/src/components/trading/filter-insights.tsx
+
+Any related sub-components for:
+
+Scan & Filter Overview
+
+24h Filter Activity
+
+Active Filtered Pool
+
+Filter Breakdown
+
+Action:
+
+Restore the Phase 8.7 layout & styling using the code from that era as reference (or from the screenshots + directives you have).
+
+Replace any ad-hoc changes done during 8.8.2 UI rollback that introduced:
+
+New card titles / wording
+
+Different column ordering
+
+Percentages or fields not requested
+
+Grayed-out “pass with checkmark only” rows in breakdown for Valid Quote / Already Active, etc.
+
+Implement the whitelist so only the 8 allowed breakdown categories are rendered.
+
+3.2 Backend Files
+
+server/services/stage3-state-cache.ts
+
+server/services/stage3-emitter.ts
+
+server/services/fx5-scanner.ts (or whichever now emits Stage-3 scan events)
+
+server/services/scan24h-aggregator.ts (or equivalent file you created)
+
+server/routes.ts
+
+Actions:
+
+Remove monkey-patching of contextBridge.broadcast. Replace with a clean call chain:
+
+When a scan completes in Stage-3:
+
+recordScanFor24h(mode, {
+  cycleId,
+  evaluatedCount,
+  eligibleCount,
+  timestamp,
+  // if needed: uniqueSymbols, etc.
+});
+
+
+recordScanFor24h lives in a dedicated 24h aggregator module.
+
+Ensure aggregator is gated by engine ACTIVE state and resets or bounds on STOPPED.
+
+Leave Stage-3 scan events (scan_tick, scanner:breakdown:<mode>) untouched except for sending the extra call to the aggregator.
+
+Ensure /api/paper-sim/diagnostics/scan-24h uses this aggregator as the single source of truth.
+
+4. Verification Checklist
+
+Replit must provide a report (e.g. reports/phase-8.8/8.8.2-UI-FINAL-RESTORE.md) including:
+
+4.1 UI Snapshot Tests
+
+Screenshot of Filter Insights showing:
+
+Scan & Filter Overview with:
+
+Kraken Universe
+
+Last Scan Cycle ID
+
+Last Scan Time
+
+Next Scan In
+
+Cycles per Hour
+
+Scan Frequency: “every 30 seconds”
+
+Last Scan Result with Evaluated / Eligible / Ineligible (+ percentages)
+
+24h Filter Activity with:
+
+Total Evaluated (24h)
+
+Total Survived Filters (24h)
+
+Unique Evaluated (24h)
+
+Unique Survived Filters (24h)
+
+Cycles (24h)
+
+Active Filtered Pool list, with deduped rows.
+
+Filter Breakdown (Last 24 Hours) with:
+
+Only the 8 allowed categories
+
+Descriptions under each
+
+Threshold lines for Min Volume / Max Spread / Min Daily Range / Min Price
+
+Correct counts.
+
+4.2 Behavior Tests
+
+Passive Learning (STOPPED)
+
+Paper engine STOPPED.
+
+Observe Filter Insights for a few minutes.
+
+Confirm:
+
+24h Filter Activity stays zero or shows stale but non-increasing values.
+
+Active Filtered Pool is empty with the Phase 8.7 “No active filtered pairs at this time” text.
+
+No huge “Total Evaluated 128,712 / Total Survived 61,336” style values.
+
+Active Trading
+
+Enable paper ACTIVE trading with testuser123 / SecurePass123!.
+
+Let it run for at least 10–20 cycles.
+
+Confirm:
+
+24h metrics increasing reasonably.
+
+Active Filtered Pool fills.
+
+Filter Breakdown shows non-zero counts that respect the truth constraint.
+
+Truth Constraint Check
+
+For one snapshot from /api/paper-sim/diagnostics/scan-24h, show:
+
+evaluated24h
+
+All 7 failure buckets
+
+passed_all_filters24h
+
+Compute and confirm:
+
+evaluated24h = sum(failure buckets) + passed_all_filters24h
+
+
+Tab Structure
+
+Confirm only 3 tabs in the Trading header (Open Trades / Ready to Buy / Filter Insights).
+
+5. Guardrails Against Future Regression
+
+Add a small regression test note in replit.md or equivalent:
+
+“Before merging any UI branch touching Trading → Filter Insights, verify the tab layout and section structure exactly match Phase 8.7 Filter Insights spec.”
+
+Optionally add a UI snapshot/cypress test that asserts:
+
+Filter Insights page contains all four section headers.
+
+Filter Breakdown list has exactly 8 categories.

@@ -1,5 +1,6 @@
 import { contextBridge } from './context-bridge.js';
 import { stage3Cache, Stage3State } from './stage3-state-cache.js';
+import { scan24hAggregator } from './scan-24h-aggregator.js';
 
 // Phase 8.8.2B: Corrected FilterBreakdown schema (per future-state blueprint)
 // Removed: failed_blacklist, failed_whitelist, strategy_none_triggered
@@ -88,11 +89,17 @@ class Stage3Emitter {
 
   /**
    * Emit heavy scanner:breakdown:<mode> event for diagnostics and Filter Insights UI
+   * 
+   * Phase 8.8.2-UI-FINAL-RESTORE: Also records cycle in 24h aggregator (explicit call, no monkey-patching)
    */
   emitScannerBreakdown(
     mode: 'paper' | 'live',
     breakdown: FilterBreakdown,
-    window: 'last_cycle' | '24h' = 'last_cycle'
+    window: 'last_cycle' | '24h' = 'last_cycle',
+    scanData?: {
+      evaluatedSymbols?: string[];
+      survivedSymbols?: string[];
+    }
   ): void {
     const state = stage3Cache.getState(mode);
     
@@ -141,6 +148,16 @@ class Stage3Emitter {
       type: `scanner:breakdown:${mode}`,
       payload,
       mode,
+    });
+
+    // Phase 8.8.2-UI-FINAL-RESTORE: Explicitly record cycle in 24h aggregator
+    // (replaces monkey-patching approach with clean explicit call)
+    scan24hAggregator.recordCycle(mode, {
+      cycleId: state.cycleId,
+      evaluatedCount: state.evaluatedCount,
+      eligibleCount: state.eligibleCount,
+      evaluatedSymbols: scanData?.evaluatedSymbols,
+      survivedSymbols: scanData?.survivedSymbols,
     });
 
     console.log(`[Stage3Emitter] Emitted scanner:breakdown:${mode}:`, {

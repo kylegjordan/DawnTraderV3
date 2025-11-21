@@ -363,10 +363,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     console.error('[FX5Scanner] Failed to start:', error);
   });
 
-  // Phase 8.8.2-UI-ROLLBACK: Initialize 24h scan aggregator for Filter Insights Section 2
+  // Phase 8.8.2-UI-FINAL-RESTORE: Initialize 24h scan aggregator for Filter Insights Section 2
+  // Now with engine-state gating and explicit Stage-3 subscription (no monkey-patching)
   const { scan24hAggregator } = await import('./services/scan-24h-aggregator');
-  scan24hAggregator.initialize();
-  console.log('[Scan24hAggregator] Initialized - listening to Stage-3 events');
+  await scan24hAggregator.initialize();
+  console.log('[Scan24hAggregator] Initialized - monitoring engine states and ready for explicit scan records');
 
   // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
   apiRouter.use(diagnosticTraceMiddleware);
