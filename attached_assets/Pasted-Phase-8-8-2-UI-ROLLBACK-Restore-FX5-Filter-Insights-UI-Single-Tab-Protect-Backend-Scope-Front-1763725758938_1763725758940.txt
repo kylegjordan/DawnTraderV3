@@ -1,0 +1,326 @@
+Phase 8.8.2-UI-ROLLBACK
+
+Restore FX5 Filter Insights UI (Single Tab) & Protect Backend
+
+Scope: Front-end + wiring verification only.
+Non-Goals: No changes to Stage-3 cache/emitter, scanner logic, or breakdown schema / truth-constraint.
+
+1. Context – What Went Wrong
+
+During Phase 8.8.2 / 8.8.2-D we correctly:
+
+Implemented Stage-3 cache + emitter
+
+Wired FX5 scanner to Stage-3
+
+Fixed the FilterBreakdown schema and truth constraint
+
+Verified singletons & runtime behavior
+
+However, somewhere in that process the Trading → Filter Insights UI regressed:
+
+A separate “Filter Pairs” tab was re-introduced.
+
+The merged “Filter Insights” tab (from Phase 8.7 final) was broken apart.
+
+Extra breakdown categories (History, Market Cap, Guardrail Risk, Universe Size) reappeared in the 24h Filter Breakdown section.
+
+The per-filter descriptions under each breakdown row disappeared.
+
+None of this was requested. Phase 8.7 had already delivered a single, consolidated Filter Insights tab, ready for production. This directive restores that UI and locks it to the current backend.
+
+2. Ground Truth – What the Final Filter Insights Tab MUST Be
+
+Use these as requirements, not suggestions. When in doubt, consult:
+
+docs/phase_8.7_completion.md (or equivalent Phase 8.7 summary)
+
+docs/architecture/future-state-blueprint.md
+
+Any Filter Insights mapping docs created at the end of 8.7
+
+2.1 Tab Layout (Trading Page)
+
+Under Trading (PAPER / LIVE):
+
+Sub-tabs MUST be:
+
+Open Trades
+
+Ready to Buy
+
+Filter Insights
+
+There must NOT be a separate Filter Pairs tab.
+
+If it currently exists, remove/hide it and its route/component.
+
+2.2 Sections Inside “Filter Insights”
+
+Inside the Filter Insights tab, restore the four-section layout (as in Phase 8.7 final):
+
+Scan & Filter Overview
+
+Kraken universe size (total trading pairs)
+
+Last scan cycle ID
+
+Last scan time
+
+Next scan countdown
+
+Cycles per hour (or equivalent cadence metric)
+
+Last scan result counts (evaluated / eligible / ineligible)
+
+24h Filter Activity
+
+Total evaluated (24h)
+
+Total survived filters (24h)
+
+Unique evaluated (24h)
+
+Unique survived (24h)
+
+Cycles (24h)
+
+Active Filtered Pool (Deduped, Non-Expired)
+
+Table of active filtered pairs, including at least:
+
+Symbol
+
+Status (e.g., “Passed all filters”)
+
+First seen (this window)
+
+Last updated (this cycle)
+
+Retain or restore the short explanatory paragraph under/above the table that describes what this pool represents.
+
+Filter Breakdown (Last 24 Hours)
+
+Top-level totals:
+
+Total Evaluated (24h)
+
+Total Survived Filters (24h)
+
+Per-filter breakdown rows (see 2.3)
+
+Each row must include a description line (as in the Phase 8.7 final UX).
+
+2.3 Visible 24h Filter Breakdown Categories
+
+The UI breakdown list must show only these categories:
+
+Min Volume (failed_min_volume)
+
+Spread / Max Spread (failed_spread)
+
+Daily Range / Min Daily Range (failed_daily_range)
+
+Min Price (failed_min_price)
+
+Exclude Stablecoins (failed_stablecoin)
+
+Valid Quote Currency (failed_quote_currency)
+
+Already Active (already_active)
+
+Passed All Filters (passed_all_filters)
+
+The following categories must NOT be shown in the Filter Insights breakdown UI, even if the backend tracks them:
+
+failed_history (History)
+
+failed_market_cap (Market Cap)
+
+failed_guardrail_risk (Guardrail Risk)
+
+failed_universe_size (Universe Size)
+
+Important:
+These keys may still exist in Stage-3 / diagnostics for internal accounting, but they are not part of the user-facing breakdown in Filter Insights. The 24h breakdown list is intentionally simplified for user clarity.
+
+2.4 Per-Filter Descriptions (Mandatory)
+
+For each visible filter row (items 1–8 above):
+
+Restore the description text that appeared under the label in the Phase 8.7 final design.
+
+e.g., “This filter excludes pairs with very low daily volume…” (exact wording should be recovered from the old React file / git history, not re-invented).
+
+If you cannot easily reconstruct the original copy from memory, you must:
+
+Use git to pull the last commit/state that was marked as “Phase 8.7 READY FOR PRODUCTION” (see docs/phase_8.7_completion.md).
+
+Extract the filter-insights React component from that commit (or the file that contains these descriptions).
+
+Re-apply the description mapping into the current Filter Insights component, keeping all Phase 8.8 backend wiring intact.
+
+3. Constraints & Non-Goals (Must NOT Break 8.8.2 / 8.8.2D)
+
+This sub-phase is UI rollback + mapping check only.
+
+You must not:
+
+Change Stage-3 cache logic (stage3-state-cache.ts)
+
+Change Stage-3 emitter logic (stage3-emitter.ts)
+
+Change the FilterBreakdown schema or truth-constraint logic (those were already corrected in 8.8.2)
+
+Change FX5 scanner cadence or behavior
+
+Change filter semantics (i.e., what fails what)
+
+Change any trading engine, strategy, or guardrail code
+
+It is acceptable for the backend to still maintain counts for:
+
+failed_history, failed_market_cap, failed_guardrail_risk, failed_universe_size
+
+…but the Filter Insights UI must ignore those keys.
+
+4. Tasks
+Task 1 – Identify & Document UI Regression
+
+Use git log / git diff to identify when the separate Filter Pairs tab came back and when the Filter Insights breakdown list changed.
+
+Compare the current Trading tab layout + Filter Insights implementation against the Phase 8.7 completion state (commit referenced in docs/phase_8.7_completion.md, or the last commit before Phase 8.8 started).
+
+Create a short markdown report:
+
+reports/phase-8.8/8.8.2-UI-rollback-analysis.md
+
+Include:
+
+Files that differ (e.g. client/.../TradingPage.tsx, filter-insights.tsx, tab router, etc.)
+
+Summary of what regressed (extra tab, extra breakdown keys, missing descriptions, etc.).
+
+Explicit confirmation that no backend files from 8.8.2/8.8.2D need to change.
+
+Task 2 – Restore Single Filter Insights Tab
+
+Update the Trading layout component so the sub-tabs are exactly:
+
+Open Trades | Ready to Buy | Filter Insights
+
+Remove or hide the separate Filter Pairs tab and its route/component.
+
+Do not delete useful code yet; just ensure it is not referenced or mounted in the live UI.
+
+Ensure the Filter Insights tab uses the merged, Phase-8.7-style component that renders all four sections (Overview, 24h Activity, Active Pool, Breakdown).
+
+Task 3 – Restore Final Filter Insights Layout & Descriptions
+
+Using git history for the Phase 8.7 completion:
+
+Recover the last known-good Filter Insights component with:
+
+Scan & Filter Overview
+
+24h Filter Activity
+
+Active Filtered Pool
+
+Filter Breakdown with per-filter descriptions
+
+Re-apply that layout into the current Filter Insights component, while:
+
+Keeping all Stage-3 wiring introduced in 8.8.2 intact.
+
+Ensuring the data sources for metrics remain:
+
+Stage-3 events (scan_tick, scanner:breakdown:<mode>)
+
+Any REST endpoints used for 24h activity / pool (as defined in the mapping docs).
+
+For the Filter Breakdown section, make sure:
+
+Only the 8 visible keys listed in §2.3 appear.
+
+Each has its restored description text.
+
+Summaries at the top (Total Evaluated 24h, Total Survived 24h) still match the counts.
+
+Task 4 – Verify Backend Wiring Was Not Broken
+
+Using testuser123:
+
+Username: testuser123
+
+Password: SecurePass123!
+
+Log in and open the Trading → PAPER → Filter Insights tab.
+
+Verify:
+
+Scan section updates every 30 seconds (or whatever cadence is configured).
+
+The numbers in Scan & Filter Overview match the Stage-3 event payloads.
+
+The 24h Filter Activity numbers match the 24h API / Stage-3 data.
+
+The Active Filtered Pool table shows reasonable symbols and updates over time.
+
+The Filter Breakdown list shows only the allowed categories, with descriptions.
+
+Confirm via logs:
+
+Stage-3 scan_tick and scanner:breakdown:<mode> events still fire as before.
+
+Truth constraint remains true for live/paper scans (no regression).
+
+Task 5 – Documentation & Evidence
+
+Create a final report:
+
+reports/phase-8.8/8.8.2-UI-rollback-final.md
+
+Include:
+
+A short summary of:
+
+What was regressed
+
+What was restored
+
+Which files were touched
+
+Explicit statements that:
+
+No Stage-3 cache/emitter logic was changed
+
+No FilterBreakdown schema changes were made
+
+No strategy/guardrail/trading engine code was touched
+
+Paste or describe two screenshots (or their filenames):
+
+Full Filter Insights tab (showing all four sections at once, if possible).
+
+Close-up of the Filter Breakdown section showing the correct categories and descriptions.
+
+5. Acceptance Criteria
+
+Phase 8.8.2-UI-ROLLBACK is complete when:
+
+Trading has one Filter Insights tab (no Filter Pairs tab).
+
+The Filter Insights tab matches the Phase 8.7 final layout and behavior.
+
+Breakdown list shows only the allowed 8 categories and per-filter descriptions.
+
+All Stage-3 behavior from 8.8.2/8.8.2D remains intact (verified via logs & UI).
+
+The two markdown reports exist:
+
+8.8.2-UI-rollback-analysis.md
+
+8.8.2-UI-rollback-final.md
+
+Once this is done and you confirm the UI looks right again, we can safely resume with 8.8.3, knowing that both the backend (Stage-3) and the Filter Insights front-end are aligned and stable.
