@@ -313,101 +313,21 @@ export class PaperExecutionEngine {
     const cycleTimestamp = new Date().toISOString();
     
     try {
-// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings("system");
-      if (!settings) {
-        console.warn(`[PaperExecution:${this.mode}] No trading settings found`);
-        // Update summary even on early exit
-        this.lastCycleSummary = {
-          timestamp: cycleTimestamp,
-          readyToBuyCount: 0,
-          pulledCount: 0,
-          evaluatedSymbols: [],
-          tradesExecuted: 0,
-          mode: this.mode
-        };
-        return;
-      }
-
-      // Get watchlist pairs (Ready-to-Buy candidates)
-      const watchlist = await storage.getWatchlist({ mode: this.mode });
-      if (watchlist.length === 0) {
-        console.log(`[PaperExecution:${this.mode}] No watchlist pairs configured`);
-        // Update summary even on early exit
-        this.lastCycleSummary = {
-          timestamp: cycleTimestamp,
-          readyToBuyCount: 0,
-          pulledCount: 0,
-          evaluatedSymbols: [],
-          tradesExecuted: 0,
-          mode: this.mode
-        };
-        return;
-      }
-
-      // [27.F.14.DIAG] DIAGNOSTIC: Execution cycle start with Ready-to-Buy pairs
-      const readyToBuySymbols = watchlist.map(p => p.symbol);
-      console.log(`[Exec] cycle_start {mode:${this.mode}, readyToBuyCount:${watchlist.length}, symbols:${readyToBuySymbols.join(',')}}`);
-      contextBridge.broadcast({
-        type: 'exec_cycle_start' as any,
-        mode: this.mode,
-        payload: {
-          readyToBuyCount: watchlist.length,
-          symbols: readyToBuySymbols
-        }
-      });
-
-      let tradesExecuted = 0;
-      const evaluatedSymbols: string[] = [];
-
-      // Scan each symbol
-      for (const pair of watchlist) {
-        try {
-          const executed = await this.checkSymbolForSignal(pair.symbol, settings);
-          evaluatedSymbols.push(pair.symbol);
-          if (executed) tradesExecuted++;
-        } catch (error) {
-          console.error(`[PaperExecution:${this.mode}] Error scanning ${pair.symbol}:`, error);
-        }
-      }
-
-      // [27.F.14.DIAG] DIAGNOSTIC: Pulled for evaluation summary
-      console.log(`[Exec] pulled_for_evaluation {count:${evaluatedSymbols.length}, symbols:${evaluatedSymbols.join(',')}}`);
-      contextBridge.broadcast({
-        type: 'exec_pulled_for_eval' as any,
-        mode: this.mode,
-        payload: {
-          count: evaluatedSymbols.length,
-          symbols: evaluatedSymbols
-        }
-      });
-
-      // [27.F.14.B] PAPER_FORCE_TRADE_SYMBOL: Deterministic Testing
-      // MSI Guard: Only inject forced trades in paper mode
-      if (this.mode === 'paper' && tradesExecuted === 0) {
-        const forceSymbol = process.env.PAPER_FORCE_TRADE_SYMBOL;
-        if (forceSymbol) {
-          console.log(`[27.F.14.B][PaperSim] No qualified trades. Injecting forced trade: ${forceSymbol}`);
-          try {
-            await this.injectForcedTrade(forceSymbol, settings);
-          } catch (error) {
-            console.error(`[27.F.14.B][PaperSim] Failed to inject forced trade:`, error);
-          }
-        }
-      }
-
-      // [27.F.14.DIAG] Cache last cycle summary for telemetry
-      // Clone evaluatedSymbols for thread safety
+      // Phase 41F-L.E2E-PURGE: getTradingSettings method removed
+      // Signal scanning temporarily disabled pending migration to guardrails_v2
+      console.log(`[PaperExecution:${this.mode}] Signal scanning disabled (pending guardrails_v2 migration)`);
+      
+      // Update summary with disabled state
       this.lastCycleSummary = {
         timestamp: cycleTimestamp,
-        readyToBuyCount: watchlist.length,
-        pulledCount: evaluatedSymbols.length,
-        evaluatedSymbols: [...evaluatedSymbols], // Defensive copy for thread safety
-        tradesExecuted: tradesExecuted,
+        readyToBuyCount: 0,
+        pulledCount: 0,
+        evaluatedSymbols: [],
+        tradesExecuted: 0,
         mode: this.mode
       };
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Error in signal scanning:`, error);
-      // [27.F.14.DIAG] Update summary even on error to prevent stale data
       this.lastCycleSummary = {
         timestamp: cycleTimestamp,
         readyToBuyCount: 0,
@@ -856,16 +776,10 @@ export class PaperExecutionEngine {
         return;
       }
 
-      // Get trading settings from the user who started the engine
-// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(systemContext.lastStartedBy);
-      if (!settings) {
-        console.error(`[PaperExecution:${this.mode}] No trading settings found for user ${systemContext.lastStartedBy}`);
-        return;
-      }
-
-      // Execute the trade
-      console.log(`[PaperExecution:${this.mode}] Processing external signal for ${signal.symbol}`);
-      await this.executeSimulatedTrade(signal, settings);
+      // Phase 41F-L.E2E-PURGE: getTradingSettings method removed
+      // Signal processing temporarily disabled pending migration to guardrails_v2
+      console.log(`[PaperExecution:${this.mode}] Signal processing disabled (pending guardrails_v2 migration) for ${signal.symbol}`);
+      return;
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Error processing signal for ${signal.symbol}:`, error);
     }

@@ -1,6 +1,18 @@
+// Phase 8.8.2-MAP-FINAL: ActiveFilteredPair for detailed pool tracking
+export type ActiveFilteredPair = {
+  symbol: string;
+  price: number;
+  volume24h: number;
+  dailyRange: number;
+  firstSeen: string;
+  lastUpdated: string;
+};
+
 export type Stage3State = {
   cycleId: number;
   cycleStartTimestamp: string;
+  cycleEndTimestamp: string;
+  krakenUniverseSize: number;
   evaluatedCount: number;
   eligibleCount: number;
   ineligibleCount: number;
@@ -11,6 +23,10 @@ export type Stage3State = {
     topEndUniverseSize: number;
     tierBUniverseSize: number;
   };
+  cyclesPerHour: number;
+  cycleFrequencyMs: number;
+  nextScanInMs: number;
+  activeFilteredPool: ActiveFilteredPair[];
   latestEligibleSymbols?: string[];
 };
 
@@ -33,10 +49,17 @@ class Stage3StateCache {
     }
     
     const currentCycleId = mode === 'paper' ? this.paperCycleCounter : this.liveCycleCounter;
+    const now = new Date().toISOString();
+    
+    // Phase 8.8.2-MAP-FINAL: Default cycle frequency is 30 seconds
+    const cycleFrequencyMs = state.cycleFrequencyMs ?? 30000;
+    const cyclesPerHour = state.cyclesPerHour ?? Math.round(3600000 / cycleFrequencyMs);
     
     const newState: Stage3State = {
       cycleId: state.cycleId ?? currentCycleId,
-      cycleStartTimestamp: state.cycleStartTimestamp || new Date().toISOString(),
+      cycleStartTimestamp: state.cycleStartTimestamp || now,
+      cycleEndTimestamp: state.cycleEndTimestamp || now,
+      krakenUniverseSize: state.krakenUniverseSize ?? 0,
       evaluatedCount: state.evaluatedCount ?? 0,
       eligibleCount: state.eligibleCount ?? 0,
       ineligibleCount: state.ineligibleCount ?? 0,
@@ -47,6 +70,10 @@ class Stage3StateCache {
         topEndUniverseSize: 0,
         tierBUniverseSize: 0,
       },
+      cyclesPerHour,
+      cycleFrequencyMs,
+      nextScanInMs: state.nextScanInMs ?? cycleFrequencyMs,
+      activeFilteredPool: state.activeFilteredPool || [],
       latestEligibleSymbols: state.latestEligibleSymbols,
     };
 
@@ -63,6 +90,7 @@ class Stage3StateCache {
       eligibleCount: newState.eligibleCount,
       ineligibleCount: newState.ineligibleCount,
       activePoolCount: newState.activePoolCount,
+      krakenUniverseSize: newState.krakenUniverseSize,
     });
 
     return newState;

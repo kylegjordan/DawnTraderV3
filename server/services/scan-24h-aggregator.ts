@@ -83,8 +83,12 @@ class Scan24hAggregator {
         storage.getSystemContext('live'),
       ]);
 
-      this.paperEngineActive = paperContext?.isEngineActive || false;
-      this.liveEngineActive = liveContext?.isEngineActive || false;
+      const paperActive = paperContext?.isEngineActive || false;
+      const liveActive = liveContext?.isEngineActive || false;
+
+      // Use setEngineState to trigger ACTIVE→STOPPED reset logic if needed
+      this.setEngineState('paper', paperActive);
+      this.setEngineState('live', liveActive);
 
       console.log('[Scan24hAggregator] Synced engine states from DB:', {
         paper: this.paperEngineActive,
@@ -92,9 +96,9 @@ class Scan24hAggregator {
       });
     } catch (error) {
       console.error('[Scan24hAggregator] Error syncing engine states from DB:', error);
-      // Default to STOPPED
-      this.paperEngineActive = false;
-      this.liveEngineActive = false;
+      // Default to STOPPED using setEngineState
+      this.setEngineState('paper', false);
+      this.setEngineState('live', false);
     }
   }
 
@@ -102,10 +106,11 @@ class Scan24hAggregator {
    * Setup listeners for trading engine state changes
    */
   private setupStateListeners(): void {
-    // Note: contextBridge is a singleton that broadcasts to WebSocket clients
-    // We need to monitor the database context updates instead
-    // This will be called periodically via manual sync or we check on each recordCycle
-    setInterval(() => this.syncEngineStatesFromDB(), 10000); // Sync every 10 seconds
+    // Phase 8.8.2-UI-PAPER-FIX: Poll engine states from database every 5 seconds
+    // This replaces the original 10-second polling with faster 5-second updates
+    setInterval(() => this.syncEngineStatesFromDB(), 5000); // Sync every 5 seconds
+    
+    console.log('[Scan24hAggregator] Polling engine states every 5 seconds');
   }
 
   /**

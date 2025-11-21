@@ -1,0 +1,688 @@
+Phase 8.8.2-MAP-FINAL
+
+Filter Insights Tab – Canonical Field Mapping (Phase 8.7 Restoration + Thresholds)
+
+This directive replaces the current mapping you discovered in filter-insights.tsx.
+The goal is to restore the Phase 8.7 behavior exactly, with threshold text added under each filter badge — and to make Stage-3 the single source of truth for scanner stats.
+
+You already have most of the backend pieces in place (Stage-3 cache, Stage-3 emitter, scan_tick, scanner:breakdown, 24h aggregator).
+This directive tells you exactly how to wire the Filter Insights UI to those sources.
+
+Please treat this as the canonical mapping spec and adjust your implementation accordingly.
+
+0. High-level rules (apply everywhere)
+
+Use Stage-3 as source of truth for:
+
+Last scan / current cycle stats
+
+Kraken universe size
+
+Cycle timing (30s, next scan, cycles/hour)
+
+Active filtered pool (top-end + tier-B rotation)
+
+Per-cycle filter breakdown counts
+
+Use the 24h aggregator ONLY for Section 2 (24h Filter Activity), and only with engine ACTIVE gating.
+
+Do NOT derive “evaluated” by re-summing breakdown on the client.
+Always use the evaluatedCount coming from Stage-3 / backend.
+(The backend already enforces truth-constraint.)
+
+Universe size is not a filter, and market cap / guardrail / universe size must not appear in the breakdown card.
+
+Threshold text comes from the existing filter settings endpoint (same one used by the Filters config UI), not from a diagnostics endpoint.
+
+STOPPED vs ACTIVE:
+
+Scanner still runs every 30s in passive learning → Section 1 & 4 continue to update.
+
+Section 2 (24h) and Section 3 (Active Pool) only count / display data when engine is ACTIVE.
+
+1. Data sources (backend contracts)
+
+These are the only sources the Filter Insights tab should use:
+
+Stage-3 scan_tick events (WebSocket)
+
+Event type: scan_tick
+
+Payload (ScanTickPayload, per mode):
+
+interface ScanTickPayload {
+  mode: 'paper' | 'live';
+  cycleId: number;
+  krakenUniverseSize: number;
+
+  evaluatedCount: number;
+  eligibleCount: number;
+  ineligibleCount: number;
+
+  cyclesPerHour: number;      // derived in backend from cycleFrequencyMs
+  cycleFrequencyMs: number;   // expected ~30000
+  nextScanInMs: number;
+  cycleStartTimestamp: string; // ISO
+  cycleEndTimestamp: string;   // ISO
+
+  topNCount: number;
+  tierBCount: number;
+  rotation: {
+    topEndUniverseSize: number;
+    tierBUniverseSize: number;
+  };
+
+  activePoolCount: number;
+}
+
+
+Stage-3 scanner breakdown events (WebSocket)
+
+Event type: scanner:breakdown:<mode> (e.g. scanner:breakdown:paper)
+
+Payload (ScannerBreakdownPayload):
+
+interface FilterBreakdown {
+  failed_min_volume: number;
+  failed_spread: number;
+  failed_daily_range: number;
+  failed_min_price: number;
+  failed_stablecoin: number;
+  failed_quote_currency: number;
+  already_active: number;
+  passed_all_filters: number;
+  // NO failed_universe_size, NO failed_market_cap, NO guardrail keys
+}
+
+interface ScannerBreakdownPayload {
+  mode: 'paper' | 'live';
+  cycleId: number;
+
+  evaluatedCount: number; // same as ScanTickPayload.evaluatedCount
+  eligibleCount: number;  // same as ScanTickPayload.eligibleCount
+  breakdown: FilterBreakdown;
+
+  truthConstraintOk: boolean;
+}
+
+
+24h Filter Activity Aggregator (backend)
+
+Endpoint: GET /api/paper-sim/diagnostics/scan-24h?mode=paper
+
+Payload (per mode):
+
+interface Scan24hResponse {
+  mode: 'paper' | 'live';
+  totalCycles: number;
+
+  totalEvaluated: number; // sum of evaluatedCount across ACTIVE cycles
+  totalSurvived: number;  // sum of eligibleCount across ACTIVE cycles
+
+  uniqueEvaluated: number; // distinct symbols evaluated in ACTIVE cycles
+  uniqueSurvived: number;  // distinct symbols that passed all filters
+
+  windowStart: string; // ISO
+  windowEnd: string;   // ISO
+}
+
+
+MUST already be gated so it only records cycles when engine is ACTIVE.
+
+Filter Settings (thresholds)
+
+Endpoint: existing filters settings endpoint (same as Filters config panel uses).
+For example (names may differ slightly, but intent is):
+
+interface FiltersSettingsResponse {
+  mode: 'paper' | 'live';
+  filters: {
+    minVolume: number;          // in quote currency
+    maxBidAskSpread: number;    // fraction or %
+    minDailyRange: number;      // fraction or %
+    minPrice: number;           // in quote currency
+    excludeStablecoins: boolean;
+    allowedQuoteCurrencies: string[]; // [ 'USD', 'EUR', 'USDT', ... ]
+  };
+}
+
+
+Trading engine state (WebSocket)
+
+Event type: trading_state_changed
+
+Payload:
+
+interface TradingStateChangedPayload {
+  mode: 'paper' | 'live';
+  isEngineActive: boolean;
+  // or equivalent `active` flag, but please normalize to isEngineActive in UI
+}
+
+2. Section 1 – Scan & Filter Overview (per-cycle)
+2.1. UI layout summary
+
+Header text: “Scan & Filter Overview”
+
+First row (Kraken Universe + core counts):
+
+Kraken Universe
+
+Evaluated (this scan)
+
+Eligible (this scan, with % badge)
+
+Ineligible (this scan)
+
+Second row (cycle info):
+
+Last scan (timestamp)
+
+Last scan cycle ID
+
+Cycles per hour
+
+Scan frequency
+
+Next scan in (countdown)
+
+2.2. Field-by-field mapping
+
+Source for ALL metrics in Section 1:
+LATEST scan_tick event for mode='paper'
+
+You must not use /api/paper-sim/diagnostics/scan for these.
+
+2.2.1. “Kraken Universe”
+
+Backend source: scan_tick.payload.krakenUniverseSize
+
+Transform: toLocaleString()
+
+Notes:
+
+This must match the actual FX5 universe size (e.g., 1,546).
+
+2.2.2. “Evaluated (this scan)”
+
+Backend source: scan_tick.payload.evaluatedCount
+
+Transform: toLocaleString()
+
+Do NOT recompute as sum of breakdown on the client.
+
+2.2.3. “Eligible (this scan)” and Eligible % badge
+
+Count source: scan_tick.payload.eligibleCount
+
+Display: eligibleCount.toLocaleString()
+
+% badge:
+
+eligiblePct = (eligibleCount / evaluatedCount) * 100
+
+evaluatedCount = scan_tick.payload.evaluatedCount
+
+Format: eligiblePct.toFixed(1) + '%' (e.g. 41.2%)
+
+2.2.4. “Ineligible (this scan)”
+
+Backend source: scan_tick.payload.ineligibleCount
+
+Transform: toLocaleString()
+
+2.2.5. “Last scan”
+
+Backend source: scan_tick.payload.cycleEndTimestamp (or start if that’s what you expose)
+
+Transform: new Date(cycleEndTimestamp).toLocaleString()
+(Use local browser time.)
+
+2.2.6. “Last scan cycle ID”
+
+Backend source: scan_tick.payload.cycleId
+
+Transform: '#' + cycleId or just the numeric value.
+
+2.2.7. “Cycles per hour”
+
+Prefer backend field if available:
+
+Backend source: scan_tick.payload.cyclesPerHour
+
+Otherwise, derive:
+
+cyclesPerHour = Math.round(3600_000 / cycleFrequencyMs)
+
+cycleFrequencyMs = scan_tick.payload.cycleFrequencyMs
+
+Do NOT hardcode “120”. It must match whatever the backend reports.
+
+2.2.8. “Scan frequency”
+
+Backend source: scan_tick.payload.cycleFrequencyMs
+
+Transform:
+
+If 30000 → "Every 30s"
+
+Else → "Every Xs" where X = cycleFrequencyMs / 1000.
+
+2.2.9. “Next scan in”
+
+Backend source: scan_tick.payload.nextScanInMs
+
+Transform (client-side):
+
+Set up a setInterval every 1s, subtracting elapsed time from nextScanInMs.
+
+Display as:
+
+Xm Ys if > 60s
+
+Xs if < 60s
+
+On each new scan_tick, reset timer with the new nextScanInMs.
+
+3. Section 2 – 24h Filter Activity
+3.1. Behavior rules
+
+Gated by engine ACTIVE state:
+
+When isEngineActive === false for paper:
+
+Show STOPPED badge.
+
+Show all metrics as 0.
+
+When isEngineActive === true:
+
+Use values from 24h endpoint.
+
+3.2. Data source
+
+Endpoint: GET /api/paper-sim/diagnostics/scan-24h?mode=paper
+
+Payload: Scan24hResponse as defined above.
+
+3.3. Field-by-field mapping
+3.3.1. “Total Cycles (24h)”
+
+Source: data.totalCycles
+
+Transform: toLocaleString()
+
+3.3.2. “Total Evaluated (24h)”
+
+Source: data.totalEvaluated
+
+Transform: toLocaleString()
+
+3.3.3. “Total Survived (24h)”
+
+Source: data.totalSurvived
+
+Transform: toLocaleString()
+
+3.3.4. “Unique Evaluated (24h)”
+
+Source: data.uniqueEvaluated
+
+Transform: toLocaleString()
+
+3.3.5. “Unique Survived (24h)”
+
+Source: data.uniqueSurvived
+
+Transform: toLocaleString()
+
+3.3.6. “Window: [start – end]”
+
+Source: data.windowStart, data.windowEnd
+
+Transform:
+
+new Date(windowStart).toLocaleString()
+
+new Date(windowEnd).toLocaleString()
+
+3.4. Engine gating
+
+Track engine state from trading_state_changed WebSocket:
+
+Maintain engineActive.paper boolean.
+
+If engineActive.paper === false:
+
+Show STOPPED badge.
+
+Render counts as 0 even if endpoint returns non-zero data.
+
+If engineActive.paper === true:
+
+Render endpoint values.
+
+4. Section 3 – Active Filtered Pool
+4.1. Behavior
+
+Only the pool of pairs that passed all filters AND are currently in the active pool.
+
+Uses Stage-3 rotation, NOT /api/paper-sim/filtered-pairs.
+
+Gated by engine ACTIVE state as in Section 2:
+
+STOPPED → show empty state.
+
+ACTIVE → show pool.
+
+4.2. Data source
+
+Source: scan_tick payload (same event as Section 1), extended with active pool details, e.g.:
+
+interface ActiveFilteredPair {
+  symbol: string;
+  price: number;
+  volume24h: number;
+  dailyRange: number; // fraction (0.12) or %, depending on backend
+  firstSeen: string;  // ISO
+  lastUpdated: string;// ISO
+}
+
+interface ScanTickPayload {
+  // ...fields above...
+  activeFilteredPool: ActiveFilteredPair[];
+  activePoolCount: number;
+}
+
+4.3. Field mappings
+
+STOPPED badge:
+
+Source: engineActive.paper from trading_state_changed.
+
+Show when false.
+
+Table rows:
+
+Source: scan_tick.payload.activeFilteredPool
+
+Limit: show first N (e.g. 20) in UI; show “Showing 20 of X”.
+
+Columns:
+
+Symbol: pair.symbol (string)
+
+Status: Hardcoded “Passed all filters”
+
+Price:
+
+Source: pair.price
+
+Format:
+
+>= 1 → price.toFixed(2)
+
+< 1 → price.toFixed(4)
+
+24h Volume:
+
+Source: pair.volume24h
+
+Format:
+
+(volume24h / 1_000_000).toFixed(2) + 'M'
+
+Daily Range:
+
+Source: pair.dailyRange
+
+If backend provides fraction (e.g. 0.14), display dailyRange * 100 as % with toFixed(2).
+
+“Showing X of Y eligible pairs”:
+
+X = activeFilteredPool.length (after slicing to UI max)
+
+Y = scan_tick.payload.activePoolCount
+
+5. Section 4 – Filter Breakdown
+5.1. Behavior
+
+Shows current cycle breakdown (same cycle as Section 1).
+
+Shows exactly 8 filter categories:
+
+Min Volume
+
+Max Spread
+
+Min Daily Range
+
+Min Price
+
+Exclude Stablecoins
+
+Valid Quote Currency
+
+Already Active
+
+Passed All Filters
+
+NO Market Cap / Guardrail / Universe Size keys here.
+
+5.2. Data source
+
+Primary source: latest scanner:breakdown:paper event
+(ScannerBreakdownPayload).
+
+5.3. Summary line (“Total evaluated / Survived filters”)
+
+Total evaluated:
+
+Source: payload.evaluatedCount
+
+Transform: toLocaleString()
+
+Survived filters:
+
+Source: payload.eligibleCount
+
+Transform: toLocaleString()
+
+5.4. Per-filter badges & thresholds
+
+You should have something like:
+
+const FILTERS: {
+  key: keyof FilterBreakdown;
+  label: string;
+  description: string;   // from Phase 8.7 text
+  thresholdKind: 'volume' | 'spread' | 'range' | 'price' | 'stablecoin' | 'quote' | 'already_active' | 'passed';
+}[] = [ ... ];
+
+5.4.1. Count badge (top line in each pill)
+
+For each category:
+
+Count:
+
+Source: payload.breakdown[filter.key]
+
+Behavior:
+
+If count > 0: show count.toLocaleString()
+
+If count === 0: show ✓ Pass
+
+5.4.2. Description line (second line)
+
+Use the same English text we used in Phase 8.7.
+(You have those in the 8.7 directives / prior implementation — reuse them verbatim.)
+
+Examples (paraphrased — please use exact originals from 8.7):
+
+Min Volume: “Pairs failing the minimum 24h volume requirement.”
+
+Max Spread: “Pairs with bid/ask spread wider than allowed.”
+
+Min Daily Range: “Pairs without enough intraday movement.”
+
+Min Price: “Pairs priced below the minimum tradable level.”
+
+Exclude Stablecoins: “Stablecoins and quasi-stable assets are excluded.”
+
+Valid Quote Currency: “Only pairs quoted in allowed currencies (USD, EUR, etc.).”
+
+Already Active: “Pairs already in an open position.”
+
+Passed All Filters: “Pairs that passed every filter this cycle.”
+
+5.4.3. Threshold line (third line)
+
+From Filters settings endpoint (Section 1.4):
+
+Min Volume:
+
+Source: filters.minVolume
+
+Text: ≥ $X (format with toLocaleString() and no decimals or 0/2 depending on your style)
+
+Max Spread:
+
+Source: filters.maxBidAskSpread
+
+If stored as fraction (0.01) → ≤ 1.0%
+
+If stored as % (1) → ≤ 1%
+(Normalize to ≤ X%.)
+
+Min Daily Range:
+
+Source: filters.minDailyRange
+
+Same pattern as spread: ≥ X%.
+
+Min Price:
+
+Source: filters.minPrice
+
+Text: ≥ $X with standard price formatting.
+
+Exclude Stablecoins:
+
+Source: filters.excludeStablecoins
+
+Text:
+
+If true → “Excluded”
+
+If false → “Allowed”
+
+Valid Quote Currency:
+
+Source: filters.allowedQuoteCurrencies
+
+Text: codes.join(', ') (e.g. “USD, EUR, USDT”).
+
+Already Active:
+
+Threshold is conceptual (“already in active trades”) — not a numeric setting:
+
+Text: “Any pair already in an open trade will be excluded.”
+
+Passed All Filters:
+
+Threshold is conceptual (no setting):
+
+Text: “No extra rules — count of pairs that passed every filter this scan.”
+
+6. WebSocket & refresh wiring
+6.1. scan_tick subscription
+
+Subscribe once at page load (or via your existing WS hook).
+
+On each scan_tick:paper:
+
+Update Section 1.
+
+Update Section 3 (Active Pool).
+
+Optionally trigger a lazy refresh of Section 2 if engine active (but not strictly required).
+
+Keep Section 4 in sync by matching cycleId with the latest breakdown event.
+
+6.2. scanner:breakdown subscription
+
+Subscribe to scanner:breakdown:paper.
+
+Maintain a small in-memory map of { cycleId → breakdownPayload }.
+
+When you render Section 4:
+
+Use the breakdown for the latest scan_tick.cycleId, if present.
+
+If breakdown for that cycleId not yet received, you can briefly show a “Loading breakdown…” state.
+
+6.3. trading_state_changed subscription
+
+Subscribe to trading_state_changed.
+
+Maintain engineActive.paper.
+
+Use it to gate:
+
+Section 2 (24h) content vs STOPPED state.
+
+Section 3 (Active Pool) content vs STOPPED state.
+
+7. Cleanup / deprecations
+
+To avoid regressions and confusion:
+
+Filter Insights must NOT use:
+
+/api/paper-sim/diagnostics/scan for core per-cycle UI metrics.
+
+/api/paper-sim/filtered-pairs for Active Filtered Pool.
+
+/api/filters/diagnostics for thresholds.
+
+If these are still used elsewhere (e.g., debugging screens), keep them, but do not wire them into Filter Insights.
+
+Truth constraint enforcement stays in the backend (as you already have in Stage-3 emitter). The UI simply trusts:
+
+evaluatedCount
+
+eligibleCount
+
+breakdown
+and displays them consistently.
+
+8. Deliverables
+
+Please provide:
+
+A short markdown report:
+
+reports/phase-8.8/8.8.2-MAP-FINAL-filter-insights-wiring.md
+
+Containing:
+
+A table for each section:
+
+UI label → backend source (event/endpoint + field) → notes.
+
+Confirmation that:
+
+Section 1 uses scan_tick only.
+
+Section 2 uses 24h endpoint + engine gating.
+
+Section 3 uses scan_tick.activeFilteredPool + engine gating.
+
+Section 4 uses scanner:breakdown:paper + Phase 8.7 descriptions + thresholds from filter settings.
+
+A screenshot of the Filter Insights tab after implementation, with:
+
+Engine STOPPED and engine ACTIVE cases (two screenshots).
+
+At least 10+ cycles elapsed so 24h stats and breakdown have reasonable values.

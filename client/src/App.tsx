@@ -32,6 +32,7 @@ const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
 const SystemsPage = lazy(() => import("@/pages/systems"));
 const AITransparencyPage = lazy(() => import("@/pages/ai-transparency"));
 const SystemConfigPage = lazy(() => import("@/pages/system-config"));
+const FilterInsightsPage = lazy(() => import("@/pages/filter-insights"));
 
 function LoadingFallback() {
   return (
@@ -175,6 +176,7 @@ function Router() {
               <Route path="/briefings" component={BriefingsPage} />
               <Route path="/goals-engine" component={GoalsEnginePage} />
               <Route path="/ai-transparency" component={AITransparencyPage} />
+              <Route path="/insights" component={FilterInsightsPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/system/config" component={SystemConfigPage} />
               <Route path="/kill-switch" component={KillSwitchScreen} />

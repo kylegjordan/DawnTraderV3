@@ -1,5 +1,5 @@
 import { contextBridge } from './context-bridge.js';
-import { stage3Cache, Stage3State } from './stage3-state-cache.js';
+import { stage3Cache, Stage3State, ActiveFilteredPair } from './stage3-state-cache.js';
 import { scan24hAggregator } from './scan-24h-aggregator.js';
 
 // Phase 8.8.2B: Corrected FilterBreakdown schema (per future-state blueprint)
@@ -19,20 +19,27 @@ export type FilterBreakdown = {
   passed_all_filters: number;
 };
 
+// Phase 8.8.2-MAP-FINAL: Complete ScanTickPayload per directive
 export type ScanTickPayload = {
   mode: 'paper' | 'live';
   cycleId: number;
-  cycleStartTimestamp: string;
+  krakenUniverseSize: number;
   evaluatedCount: number;
   eligibleCount: number;
   ineligibleCount: number;
-  activePoolCount: number;
+  cyclesPerHour: number;
+  cycleFrequencyMs: number;
+  nextScanInMs: number;
+  cycleStartTimestamp: string;
+  cycleEndTimestamp: string;
   topNCount: number;
   tierBCount: number;
   rotation: {
     topEndUniverseSize: number;
     tierBUniverseSize: number;
   };
+  activePoolCount: number;
+  activeFilteredPool: ActiveFilteredPair[];
 };
 
 export type ScannerBreakdownPayload = {
@@ -50,6 +57,9 @@ class Stage3Emitter {
   /**
    * Emit lightweight scan_tick event for real-time UI updates
    */
+  /**
+   * Phase 8.8.2-MAP-FINAL: Emit scan_tick with all required fields for Filter Insights
+   */
   emitScanTick(mode: 'paper' | 'live'): void {
     const state = stage3Cache.getState(mode);
     
@@ -61,17 +71,23 @@ class Stage3Emitter {
     const payload: ScanTickPayload = {
       mode,
       cycleId: state.cycleId,
-      cycleStartTimestamp: state.cycleStartTimestamp,
+      krakenUniverseSize: state.krakenUniverseSize,
       evaluatedCount: state.evaluatedCount,
       eligibleCount: state.eligibleCount,
       ineligibleCount: state.ineligibleCount,
-      activePoolCount: state.activePoolCount,
+      cyclesPerHour: state.cyclesPerHour,
+      cycleFrequencyMs: state.cycleFrequencyMs,
+      nextScanInMs: state.nextScanInMs,
+      cycleStartTimestamp: state.cycleStartTimestamp,
+      cycleEndTimestamp: state.cycleEndTimestamp,
       topNCount: state.topNCount,
       tierBCount: state.tierBCount,
       rotation: {
         topEndUniverseSize: state.rotation.topEndUniverseSize,
         tierBUniverseSize: state.rotation.tierBUniverseSize,
       },
+      activePoolCount: state.activePoolCount,
+      activeFilteredPool: state.activeFilteredPool,
     };
 
     contextBridge.broadcast({
@@ -84,6 +100,8 @@ class Stage3Emitter {
       cycleId: payload.cycleId,
       evaluated: payload.evaluatedCount,
       eligible: payload.eligibleCount,
+      krakenUniverse: payload.krakenUniverseSize,
+      activePoolSize: payload.activeFilteredPool.length,
     });
   }
 

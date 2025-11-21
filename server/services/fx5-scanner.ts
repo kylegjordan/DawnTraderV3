@@ -52,8 +52,6 @@ export class Fx5ScannerService {
    * This runs independently of trading engine state
    */
   async start(): Promise<void> {
-    console.log('[FX5Scanner][DEBUG] start() method called - isRunning:', this.isRunning);
-    
     if (this.isRunning) {
       console.log('[FX5Scanner] Already running');
       return;
@@ -63,9 +61,7 @@ export class Fx5ScannerService {
     console.log('[FX5Scanner] Starting 30-second scanner for paper and live modes');
 
     // Run initial scan for both modes
-    console.log('[FX5Scanner][DEBUG] About to run initial paper scan');
     await this.scanMode('paper');
-    console.log('[FX5Scanner][DEBUG] About to run initial live scan');
     await this.scanMode('live');
 
     // Schedule recurring scans

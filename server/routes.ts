@@ -356,18 +356,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     console.error('[MarketScanner] Failed to start:', error);
   });
 
+  // Phase 8.8.2-UI-FINAL-RESTORE: Initialize 24h scan aggregator BEFORE FX5Scanner starts
+  // This ensures aggregator is ready to receive Stage-3 emissions immediately
+  const { scan24hAggregator } = await import('./services/scan-24h-aggregator');
+  await scan24hAggregator.initialize();
+  console.log('[Scan24hAggregator] Initialized - monitoring engine states and ready for explicit scan records');
+
   // Phase 8.8.2: Start FX5 Scanner (always-on 30-second scanner for Stage-3)
   // Runs independently of trading engine state
+  // MUST start AFTER scan24hAggregator.initialize() to avoid race condition
   const { fx5Scanner } = await import('./services/fx5-scanner');
   fx5Scanner.start().catch((error) => {
     console.error('[FX5Scanner] Failed to start:', error);
   });
-
-  // Phase 8.8.2-UI-FINAL-RESTORE: Initialize 24h scan aggregator for Filter Insights Section 2
-  // Now with engine-state gating and explicit Stage-3 subscription (no monkey-patching)
-  const { scan24hAggregator } = await import('./services/scan-24h-aggregator');
-  await scan24hAggregator.initialize();
-  console.log('[Scan24hAggregator] Initialized - monitoring engine states and ready for explicit scan records');
 
   // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
   apiRouter.use(diagnosticTraceMiddleware);
@@ -2236,6 +2237,47 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error) {
       console.error('Error fetching filter diagnostics:', error);
       res.status(500).json({ error: 'Failed to fetch filter diagnostics' });
+    }
+  });
+
+  // Phase 8.8.2-MAP-FINAL: Filter settings endpoint for Filter Insights thresholds
+  apiRouter.get('/settings/filters', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.mode!;
+
+      const screenerFilters = await storage.getScreenerFilters({ mode });
+      if (!screenerFilters) {
+        return res.status(404).json({ error: 'No screener filters found for mode: ' + mode });
+      }
+
+      // Parse numeric string values to numbers
+      const parseNumber = (val: string | null): number => {
+        if (!val) return 0;
+        return parseFloat(val);
+      };
+
+      // Get allowed quote currencies from user settings
+      const userSettings = await storage.getUserSettings({ userId: req.user!.id });
+      const allowedQuoteCurrencies = userSettings?.allowedTradingPairs 
+        ? userSettings.allowedTradingPairs.split(',').map(p => p.trim())
+        : ['USD', 'EUR', 'USDT'];
+
+      const response = {
+        mode,
+        filters: {
+          minVolume: parseNumber(screenerFilters.minVolume),
+          maxBidAskSpread: parseNumber(screenerFilters.maxBidAskSpread),
+          minDailyRange: userSettings?.minDailyRange ? parseFloat(userSettings.minDailyRange) : 0.02,
+          minPrice: parseNumber(screenerFilters.minPrice),
+          excludeStablecoins: screenerFilters.excludeStablecoins ?? true,
+          allowedQuoteCurrencies,
+        },
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching filter settings:', error);
+      res.status(500).json({ error: 'Failed to fetch filter settings' });
     }
   });
 
