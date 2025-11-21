@@ -1,0 +1,276 @@
+🔷 Phase 8.8.2-D — Stage-3 Helper Integrity & Singleton Enforcement (Correction Sub-Phase)
+
+Directive for Replit
+
+🧭 Context & Why This Sub-Phase Exists
+
+During 8.8.2-FINAL, you created the Stage-3 helper functions:
+
+updateStage3Cache()
+
+emitStage3Events()
+
+This was correct and aligned with the architect’s request.
+However, we must now verify that these helpers:
+
+1. DO NOT introduce any hidden global state, beyond the one approved Stage-3 state cache
+2. DO NOT instantiate or reference duplicate Stage-3 caches or emitters
+3. DO NOT accidentally recreate or shadow Stage-3 singleton instances
+4. Exactly follow the future-state blueprint contract
+
+If any of these occur, Stage-3 risks:
+
+desynchronization
+
+duplicate cycle counters
+
+mismatched truth constraints
+
+incorrect events
+
+Ready-to-Buy corruption
+
+non-deterministic trading behavior
+
+This sub-phase is verification + correction only.
+There should be no redesign, no new features, and no additional architectural additions.
+
+🎯 Goal of 8.8.2-D
+
+Ensure that:
+
+Stage-3 cache = one and only one global state instance
+
+Stage-3 emitter = one and only one global emitter instance
+
+All helper functions route to those single instances, not new ones
+
+No file in the system imports the Stage-3 classes directly
+
+No duplicate instances are created via new
+
+No circular imports exist
+
+No hidden state exists outside the cache
+
+When this sub-phase is complete, the Stage-3 system must meet:
+
+✔ Singleton Enforcement
+✔ Blueprint Conformance
+✔ No Duplicate State
+✔ Predictable Event Stream
+✔ Safe for 8.8.3 → 9 → 11 Execution Engine Work
+📌 8.8.2-D — Required Tasks
+Task 1 — Verify Stage-3 Singleton Integrity
+
+Search the entire codebase for any instantiation of:
+
+new Stage3StateCache
+
+new Stage3Emitter
+
+These must not exist anywhere except the official singleton definitions.
+
+Deliverable
+
+Create:
+
+reports/phase-8.8/8.8.2D-singleton-scan.md
+
+
+Include:
+
+Every file that references Stage-3
+
+Whether it uses helper functions or imports singletons
+
+Whether any instantiation exists (must be zero)
+
+Task 2 — Verify Helper Functions Route to the Correct Singletons
+
+Open:
+
+server/services/stage3-state-cache.ts
+
+server/services/stage3-emitter.ts
+
+Inspect:
+
+updateStage3Cache()
+
+emitStage3Events()
+
+Confirm:
+
+They directly call the approved singleton instance
+
+They do not instantiate new objects
+
+They do not maintain internal state outside the singleton
+
+They do not import each other incorrectly
+
+Deliverable
+
+Append to the same report:
+
+reports/phase-8.8/8.8.2D-singleton-scan.md
+
+
+Document:
+
+The helper function paths
+
+The resolved singletons
+
+Any corrections made
+
+Task 3 — Check for Hidden Global State
+
+Search for any Stage-3-related globals:
+
+static variables
+
+module-level variables
+
+cached state outside the official singleton
+
+private in-file caches
+
+unused legacy Stage-3 variables
+
+Deliverable
+
+Append to the report:
+
+Hidden global state: FOUND / NOT FOUND
+
+
+If FOUND:
+
+Identify file
+
+Provide snippet
+
+Remove or correct it
+
+Task 4 — Validate All Imports
+
+Run:
+
+rg "import .*stage3" -n server
+
+
+For every result:
+
+Ensure:
+
+Only signal-orchestrator.ts imports Stage-3 helpers
+
+No other module imports singletons or Stage-3 classes directly
+
+No other file incorrectly calls helper functions
+
+If any file imports:
+
+stage3-state-cache.ts
+
+stage3-emitter.ts
+
+Stage3StateCache
+
+Stage3Emitter
+
+…that MUST be corrected.
+
+Task 5 — Ensure Correct Event Ordering
+
+Stage-3 must always:
+
+1. Update cache
+2. Emit events
+
+Verify in signal-orchestrator.ts:
+
+await updateStage3Cache(...)
+await emitStage3Events(...)
+
+
+Correct it if reversed.
+
+Task 6 — Runtime Verification (Test User Required)
+Test User Credentials
+username: testuser123
+password: SecurePass123!
+
+Steps:
+
+Login
+
+Start paper engine
+
+Capture 2 scan cycles
+
+Verify only one set of events is produced per cycle
+
+Confirm cycleId increments predictably
+
+Confirm no duplicate scan_tick events
+
+Confirm no duplicate breakdown events
+
+Collect:
+
+Raw WS logs
+
+Server console logs
+
+Deliverable
+
+Create:
+
+reports/phase-8.8/8.8.2D-runtime-verification.md
+
+🛑 ABSOLUTE RESTRICTIONS (Do NOT Do These)
+
+This is verification only.
+
+❌ No changes to scanner filtering
+❌ No changes to Cycle timing
+❌ No changes to Signal Engine
+❌ No changes to Strategy Engine
+❌ No Ready-To-Buy changes
+❌ No Trading Engine changes
+❌ No guardrail logic changes
+❌ No new Stage-3 fields
+❌ No refactors
+❌ No caching redesign
+✔ Completion Criteria
+
+8.8.2-D is complete when:
+
+One and only one Stage-3 cache exists
+
+One and only one Stage-3 emitter exists
+
+All helper functions point to these
+
+No hidden state exists
+
+No extra imports exist
+
+Events are emitted exactly once per cycle
+
+cycleId increments predictably
+
+Test user validations pass
+
+All findings are documented in the two reports
+
+🏁 Submit these files to complete Phase 8.8.2-D
+
+reports/phase-8.8/8.8.2D-singleton-scan.md
+
+reports/phase-8.8/8.8.2D-runtime-verification.md
+
+Once these are delivered and approved, we can safely begin Phase 8.8.3.

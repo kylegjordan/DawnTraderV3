@@ -8,8 +8,31 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
-### Phase 8.8.2 FIX - Standalone Helper Functions (November 20, 2025)
-Refactored Stage-3 integration to use standalone helper functions instead of direct class method calls. Created `updateStage3Cache()` in `stage3-state-cache.ts` and `emitStage3Events()` in `stage3-emitter.ts`. Updated `signal-orchestrator.ts` to import and use these helpers, ensuring cache updates precede event emissions. Stage-3 now fires events every 30 seconds ONLY when trading engines are active, with per-mode cycle counter increments and truth constraint validation. Architect approved. See `reports/phase-8.8/8.8.2-STANDALONE-HELPERS-FINAL.md` for full details.
+### Phase 8.8.2 COMPLETE - FX5 30-Second Scanner Service (November 20, 2025)
+Implemented standalone FX5 scanner service (`Fx5ScannerService`) that runs independently every 30 seconds for both paper and live modes, completely decoupled from trading engine state. Stage-3 now serves as the single source of truth for scan cycle state, emitting `scan_tick` and `scanner:breakdown` WebSocket events every 30 seconds ALWAYS (regardless of engine activity). 
+
+**Critical Architecture Changes:**
+- Created `server/services/fx5-scanner.ts` - autonomous 30-second scanner service
+- Removed Stage-3 dependencies from `signal-orchestrator.ts` (no longer tied to 10-minute scanner)
+- Fixed truth constraint violation by deriving eligible/ineligible counts from breakdown categories
+- Truth constraint equation: `evaluatedCount = (passed_all_filters + already_active) + (sum of all failed_*)`
+
+**Breakdown Counting Contract:**
+Every evaluated pair must increment exactly ONE breakdown category to maintain truth constraint. The `computeBreakdown()` function ensures:
+- `eligibleCount = breakdown.passed_all_filters + breakdown.already_active`
+- `ineligibleCount = sum of all breakdown.failed_* categories`
+- `evaluatedCount = eligibleCount + ineligibleCount` (always true)
+
+**Implementation Pattern:**
+Use `Object.entries(tickers)` when iterating Kraken API responses (object indexed by pair name, not array).
+
+**Runtime Validation:**
+✅ Truth constraint satisfied: evaluated=1382, breakdownSum=1382, truthConstraintOk=true
+✅ Both paper and live modes scanning independently every 30 seconds
+✅ Events fire regardless of trading engine state
+✅ Architect approved with runtime evidence validation
+
+See `reports/phase-8.8/8.8.2-FINAL-CORRECTION-DIRECTIVE.txt` for full implementation details.
 
 ## System Architecture
 The application features a React, TypeScript, Vite frontend with a mobile-first, responsive design, and a Node.js/Express backend providing a RESTful API and WebSocket support. PostgreSQL, utilizing Neon serverless driver and Drizzle ORM, handles data persistence. Authentication is managed via username/password, bcrypt, JWT, and WebAuthn.
