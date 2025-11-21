@@ -93,12 +93,10 @@ interface Scan24hMetrics {
   totalCycles: number;
   totalEvaluated: number;
   totalSurvived: number;
-  avgEvaluatedPerCycle: number;
-  avgSurvivedPerCycle: number;
-  successRate: number;
+  uniqueEvaluated: number;
+  uniqueSurvived: number;
   windowStart: string;
   windowEnd: string;
-  lastUpdated: string;
 }
 
 interface Scan24hResponse {
@@ -145,6 +143,7 @@ export function FilterInsights() {
   const { messages: wsMessages } = useWebSocket();
   const [nextAutoRefresh, setNextAutoRefresh] = useState<number | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
+  const [engineActive, setEngineActive] = useState<boolean>(false);
 
   // Query filter insights
   const { data, isLoading, refetch, isFetching } = useQuery<FilterInsightsData>({
@@ -182,6 +181,20 @@ export function FilterInsights() {
       queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/filtered-pairs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/diagnostics/scan-24h?mode=paper'] });
+    }
+  }, [wsMessages]);
+
+  // Phase 8.8.2-UI-FINAL-RESTORE: Listen for trading_state_changed to track engine state
+  useEffect(() => {
+    const stateChangeEvents = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
+    if (stateChangeEvents.length > 0) {
+      const latestEvent = stateChangeEvents[stateChangeEvents.length - 1];
+      const payload = latestEvent.payload;
+      
+      // Track if paper engine is active
+      if (payload?.mode === 'paper') {
+        setEngineActive(payload.isEngineActive === true || payload.active === true);
+      }
     }
   }, [wsMessages]);
 
@@ -359,6 +372,32 @@ export function FilterInsights() {
               </p>
             </div>
           </div>
+
+          {/* Phase 8.8.2-UI-FINAL-RESTORE: Cycle Info subsection */}
+          <div className="mt-6 pt-4 border-t">
+            <p className="text-xs font-medium text-muted-foreground mb-3">Cycle Info</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Next Scan In</p>
+                <p className="text-xl font-bold" data-testid="text-next-scan-countdown">
+                  {countdownDisplay}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Cycles per Hour</p>
+                <p className="text-xl font-bold" data-testid="text-cycles-per-hour">
+                  120
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Scan Frequency</p>
+                <p className="text-xl font-bold" data-testid="text-scan-frequency">
+                  Every 30s
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
             <Activity className="w-3 h-3" />
             Last scan: {new Date(data.ts).toLocaleString()}
@@ -369,12 +408,30 @@ export function FilterInsights() {
       {/* Section 2: 24h Filter Activity */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">24h Filter Activity</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            24h Filter Activity
+            {!engineActive && (
+              <Badge variant="outline" className="text-xs border-warning text-warning">
+                STOPPED
+              </Badge>
+            )}
+          </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Aggregated filter performance over the last 24 hours
+            Aggregated filter performance over the last 24 hours (only counts ACTIVE trading cycles)
           </p>
         </CardHeader>
         <CardContent>
+          {!engineActive && (
+            <div className="mb-4 p-3 rounded-lg bg-warning/10 border border-warning/20">
+              <p className="text-sm text-warning font-medium flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                Trading Engine STOPPED
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                24h metrics only accumulate when trading engine is ACTIVE. Start the engine to begin tracking.
+              </p>
+            </div>
+          )}
           {isLoading24h ? (
             <div className="text-center py-4">
               <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-muted-foreground" />
@@ -385,36 +442,56 @@ export function FilterInsights() {
               <Activity className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
               <p className="text-sm text-muted-foreground">No 24h data available yet</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Data will appear after first scan cycle
+                Data will appear after engine starts and first scan cycle completes
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Total Cycles (24h)</p>
-                  <p className="text-2xl font-bold">{scan24hData.data.totalCycles}</p>
+                  <p className="text-2xl font-bold" data-testid="text-24h-cycles">
+                    {scan24hData.data.totalCycles}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Total Evaluated (24h)</p>
-                  <p className="text-2xl font-bold">{scan24hData.data.totalEvaluated.toLocaleString()}</p>
+                  <p className="text-2xl font-bold" data-testid="text-24h-evaluated">
+                    {scan24hData.data.totalEvaluated.toLocaleString()}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Total Survived (24h)</p>
-                  <p className="text-2xl font-bold text-success">{scan24hData.data.totalSurvived.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Avg Per Cycle</p>
-                  <p className="text-2xl font-bold">{scan24hData.data.avgEvaluatedPerCycle}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Success Rate (24h)</p>
-                  <p className="text-2xl font-bold">{scan24hData.data.successRate.toFixed(1)}%</p>
+                  <p className="text-2xl font-bold text-success" data-testid="text-24h-survived">
+                    {scan24hData.data.totalSurvived.toLocaleString()}
+                  </p>
                 </div>
               </div>
+
+              {/* Phase 8.8.2-UI-FINAL-RESTORE: Unique symbol counts */}
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Unique Evaluated (24h)</p>
+                  <p className="text-2xl font-bold" data-testid="text-24h-unique-evaluated">
+                    {scan24hData.data.uniqueEvaluated}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Distinct symbols evaluated across all cycles
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Unique Survived (24h)</p>
+                  <p className="text-2xl font-bold text-success" data-testid="text-24h-unique-survived">
+                    {scan24hData.data.uniqueSurvived}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Distinct symbols that passed filters
+                  </p>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
                 <span>Window: {new Date(scan24hData.data.windowStart).toLocaleString()} - {new Date(scan24hData.data.windowEnd).toLocaleString()}</span>
-                <span>Updated: {new Date(scan24hData.data.lastUpdated).toLocaleTimeString()}</span>
               </div>
             </div>
           )}
@@ -424,13 +501,31 @@ export function FilterInsights() {
       {/* Section 3: Active Filtered Pool (Deduped, Non-Expired) */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Active Filtered Pool</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            Active Filtered Pool
+            {!engineActive && (
+              <Badge variant="outline" className="text-xs border-warning text-warning">
+                STOPPED
+              </Badge>
+            )}
+          </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
             Pairs that passed all filters in the current scan cycle and are available for trading
           </p>
         </CardHeader>
         <CardContent>
-          {isLoadingPairs ? (
+          {!engineActive ? (
+            <div className="text-center py-8">
+              <Activity className="w-12 h-12 mx-auto mb-3 text-warning opacity-50" />
+              <h3 className="text-lg font-semibold mb-2 text-warning">Trading Engine STOPPED</h3>
+              <p className="text-muted-foreground">
+                Active pool only populates when trading engine is ACTIVE
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Start the engine to see eligible pairs for trading
+              </p>
+            </div>
+          ) : isLoadingPairs ? (
             <div className="text-center py-8">
               <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-muted-foreground" />
               <p className="text-muted-foreground">Loading filtered pairs...</p>
