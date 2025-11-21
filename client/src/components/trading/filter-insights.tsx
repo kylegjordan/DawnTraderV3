@@ -17,6 +17,9 @@ interface FilterBreakdown {
   failed_min_price: number;
   failed_stablecoin: number;
   failed_quote_currency: number;
+  failed_history: number;
+  failed_market_cap: number;
+  failed_guardrail_risk: number;
   already_active: number;
   passed_all_filters: number;
 }
@@ -97,6 +100,9 @@ const FILTER_DESCRIPTIONS: Record<string, string> = {
   failed_min_price: "Excludes very low-priced pairs that may have penny-stock characteristics",
   failed_stablecoin: "Filters out stablecoins which have minimal price volatility",
   failed_quote_currency: "Ensures only pairs with allowed quote currencies (USD, EUR, etc.) are considered",
+  failed_history: "Filters out pairs with insufficient historical data for backtesting and analysis",
+  failed_market_cap: "Excludes pairs with market cap outside acceptable thresholds",
+  failed_guardrail_risk: "Filters out pairs that exceed risk management guardrails",
   already_active: "Pairs currently in active trades are excluded from new trade consideration",
   passed_all_filters: "Pairs that successfully passed all filtering criteria and are eligible for trading",
 };
@@ -108,6 +114,9 @@ const FILTER_DISPLAY_NAMES: Record<string, string> = {
   failed_min_price: "Min Price",
   failed_stablecoin: "Exclude Stablecoins",
   failed_quote_currency: "Valid Quote Currency",
+  failed_history: "Min Data History",
+  failed_market_cap: "Market Cap Range",
+  failed_guardrail_risk: "Risk Guardrails",
   already_active: "Already Active",
   passed_all_filters: "Passed All Filters",
 };
@@ -118,7 +127,7 @@ const THRESHOLD_CONCEPTUAL: Record<string, string> = {
   passed_all_filters: "No extra rules — count of pairs that passed every filter this scan",
 };
 
-// Phase 8.8.2-MAP-FINAL: Exactly 8 allowed categories
+// Phase 8.8.2-MAP-FINAL: All Stage-3 breakdown categories (11 total)
 const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   'failed_min_volume',
   'failed_spread',
@@ -126,6 +135,9 @@ const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   'failed_min_price',
   'failed_stablecoin',
   'failed_quote_currency',
+  'failed_history',
+  'failed_market_cap',
+  'failed_guardrail_risk',
   'already_active',
   'passed_all_filters',
 ];
