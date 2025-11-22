@@ -1,0 +1,562 @@
+# PH.8.7–11.20–REB 2.0 – Restoration Blueprint  
+Backend & UI Restoration to 11.18–11.20 Truth (No Stage-3 Changes)
+
+## 0. Context & Non-Negotiable Guardrails
+
+This blueprint defines **what to restore and in what order** to get DawnTrader v1 back to the **11.18–11.20 truth state**, using the registered truth files in:
+
+- `/docs/restoration/PH_8.7-11.20-REB_0_MasterBlueprint.md`
+- `/docs/restoration/truth/TRUTH_REGISTRY.md`
+- `/docs/restoration/truth/*.md`
+- `/docs/restoration/truth/filter-insights (11.18.25)_*.tsx`
+
+It is based on:
+
+- REB 1 reports (`00_MASTER_GAP_ANALYSIS.md`, `01`–`08` reports)
+- Phase 8.6–8.7 completion docs
+- 11/6, 11/15, 11/20 chat archives
+- `filter-insights (11.18.25).tsx` as the last good UI snapshot
+
+### 0.1 Hard Guardrails
+
+These apply to **all REB 2.x phases**:
+
+1. **Restoration Target is Fixed**
+
+   - Target behavior/state is: **“how the system behaved on 11.18–11.20 before the GitHub rollback.”**
+   - No “improvements,” no “optimizations,” no “cleanup” beyond what’s required to match that behavior.
+
+2. **Stage-3 Is Documentation-Only**
+
+   - REB 2.x **MUST NOT**:
+     - Change Stage-3 cache logic
+     - Change Stage-3 emitter or WS payloads
+     - Add Stage-3 → FX5 wiring
+     - Make any Stage-3 code deletions or refactors
+   - The only Stage-3 work allowed in REB 2 is **planning documentation** (see REB 2.7).
+
+3. **No New Variables / New Targets**
+
+   - REB 2.x cannot redefine:
+     - FX5 scanning philosophy
+     - Active Filter Pool semantics
+     - Passive learning semantics
+   - Those are taken as truth from Phases 8.6–8.7 docs and the 11.20 archive.
+
+4. **8.8 Work Is Ignored for Now**
+
+   - All 8.8 work (including Stage-3 fixes) is treated as **Tier 3 / optional** and is **not** a source of truth for restoration.
+   - Only **after** restoration is complete will 8.8 work be evaluated for salvage.
+
+5. **Read/Compare First, Then Change**
+
+   - Every change in REB 2.x must be:
+     1. Motivated by a specific truth file line/section
+     2. Documented in a REB 2.x report
+     3. Verified in behavior against that truth
+
+---
+
+## 1. REB 2.x Roadmap Overview
+
+**PH.8.7–11.20–REB 2** is split into seven tightly-scoped sub-phases:
+
+1. **REB 2.1 – FX5 Scanner Restoration**
+2. **REB 2.2 – Active Filter Pool Restoration**
+3. **REB 2.3 – Backend Endpoint Restoration (Filter Insights + FX5 metrics)**
+4. **REB 2.4 – Filter Insights UI Restoration (11.18 → Current)**
+5. **REB 2.5 – Screeners Tab Restoration (Goals Engine)**
+6. **REB 2.6 – Passive Learning & Global Sanity Checks**
+7. **REB 2.7 – Stage-3 Compatibility Planning (Docs Only)**
+
+Execution order is **strict**: 2.1 → 2.2 → 2.3 → 2.4 → 2.5 → 2.6, with 2.7 running in parallel as **documentation only**.
+
+---
+
+## 2. REB 2.1 – FX5 Scanner Restoration
+
+**Goal:**  
+Restore FX5 scanner behavior to the 8.6.7/8.6.10 truth:
+
+- 30-second batch engine
+- Top-N + Tier-B rotated universe
+- Correct evaluated/eligible counts
+- Correct rotation and universe sizing
+- No dependence on Stage-3
+
+### 2.1.1 Truth Inputs
+
+- `phase_8.6.7_validation_*.md` – FX5 architecture + rotation behavior  
+- `phase_8.6.10_mapping_*.md` – metrics mapping for Filter Insights  
+- `DawnTrader_Chat_Archive_11-20-25.md` – FX5 behavior and rotation semantics
+
+### 2.1.2 Scope
+
+**In-scope:**
+
+- `server/services/fx5-scanner.ts`  
+- Any supporting utility functions/data structures used exclusively by FX5
+
+**Out-of-scope:**
+
+- Stage-3 files
+- Signal orchestrator
+- Trading engine
+- Strategy engine
+
+### 2.1.3 Restoration Tasks
+
+1. **Rebuild FX5 Batch Architecture**
+
+   - Restore 30-sec scanning loop as per 8.6.7 validation doc.
+   - Ensure FX5:
+     - Pulls from the correct Kraken universe
+     - Produces a **60-pair mixed Top-N / Tier-B batch** per cycle.
+
+2. **Restore Rotation Logic**
+
+   - Re-implement:
+     - **Top-End rotation** over the top tier universe
+     - **Tier-B rotation** over the larger tail universe
+   - Ensure rotation semantics match what’s described in 8.6.7 + 11.20 archive, not 8.8.
+
+3. **Restore Universe Metrics**
+
+   - `topEndUniverseSize`
+   - `tierBUniverseSize`
+   - `evaluatedCount` for each cycle
+
+4. **Restore Logging for Verification**
+
+   - Re-enable or re-implement the debug logs used in 8.6.7 validation (e.g., batch composition, rotation cursor positions), but:
+     - Keep them behind a debug flag if necessary
+     - Ensure they are only for internal verification (no new features).
+
+### 2.1.4 Deliverables
+
+- `docs/restoration/reb2_reports/REB2.1_FX5_Scanner_Restoration.md`
+- Verified logs showing:
+  - Correct batch sizes (60)
+  - Correct rotation across both tiers
+  - Correct evaluated/eligible counts
+
+---
+
+## 3. REB 2.2 – Active Filter Pool Restoration
+
+**Goal:**  
+Restore the Active Filter Pool to its 11.18–11.20 semantics:
+
+- Maintains a **deduped, non-expired pool** of filtered pairs
+- Only populated when **trading engine is active**, **not** in passive learning
+- Accurately reflects the ready-for-strategy universe
+
+### 3.2.1 Truth Inputs
+
+- `phase_8.6.10_mapping_*.md` – how ActivePool stats fed Filter Insights  
+- `phase_8.6.9_verification_results_*.md` – dedupe/expiry behavior  
+- `DawnTrader_Chat_Archive_11-20-25.md` – semantics of “active filtered pool”
+
+### 3.2.2 Scope
+
+**In-scope:**
+
+- Active Filter Pool storage & maintenance:
+  - Its backing storage (DB / in-memory / hybrid)
+  - Update logic from FX5
+- Any helper methods exposed to:
+  - Filter Insights
+  - Strategy engine
+
+**Out-of-scope:**
+
+- Ready-to-Buy logic
+- Execution engine
+- Stage-3
+
+### 3.2.3 Restoration Tasks
+
+1. **Confirm / Rebuild Active Pool Data Model**
+
+   - Ensure the model supports:
+     - Symbol
+     - First-seen timestamp
+     - Last-seen timestamp or last-updated
+     - Expiry rules
+     - Any tags/flags required by strategies
+
+2. **Re-implement Dedupe Logic**
+
+   - Ensure new entries are only inserted if:
+     - Symbol is **not already in ActivePool**, and
+     - Symbol is **not expired/removed** only due to cooldown semantics.
+
+3. **Re-implement Expiry Logic**
+
+   - Restore the exact expiry behavior from Phase 8.6.X:
+     - A pair ages out of ActivePool after a defined window or policy.
+   - Confirm via logs and/or test harness.
+
+4. **Restore Passive Learning Behavior**
+
+   - When the system is in **passive learning mode** and trading engine is OFF:
+     - Active Filter Pool MUST remain **empty**.
+     - Filter Insights should reflect this (no active pairs).
+
+5. **Cooldown Awareness (Read-Only)**
+
+   - Do **not** change cooldown logic, but:
+     - Confirm how cooldown affects visibility and re-entry into ActivePool.
+     - Document this in REB2.2 report.
+
+### 3.2.4 Deliverables
+
+- `docs/restoration/reb2_reports/REB2.2_Active_Filter_Pool_Restoration.md`
+- Verification evidence:
+  - Logs or test outputs showing:
+    - Dedupe working
+    - Expiry working
+    - Pool empty in passive mode
+
+---
+
+## 4. REB 2.3 – Backend Endpoint Restoration
+
+**Goal:**  
+Recreate the missing / regressed REST endpoints required by Filter Insights & FX5, as defined in Phase 8.6.10 and confirmed in REB 1.1.
+
+### 4.3.1 Truth Inputs
+
+- `phase_8.6.10_mapping_*.md` – endpoints + payload shapes  
+- `07_Backend_Endpoint_Verification.md` – current vs expected endpoint list  
+- `filter-insights (11.18.25).tsx` – frontend expectations
+
+### 4.3.2 Scope
+
+**In-scope:**
+
+- `server/routes.ts`
+- Handler functions for:
+  - Scan summary
+  - 24h activity
+  - Active pool listing
+  - Filter reset
+
+**Out-of-scope:**
+
+- Any Stage-3 routes or WebSocket behavior
+- Adding *new* endpoints beyond those required to match 11.18–11.20
+
+### 4.3.3 Endpoints to Restore
+
+Based on REB 1.1, the following must exist and match truth:
+
+1. **`GET /api/scan-summary`**
+
+   - Returns current/last scan cycle metrics:
+     - evaluatedCount, eligibleCount, ineligibleCount
+     - topNCount, tierBCount
+     - cycle timestamp
+
+2. **`GET /api/scan-history`** (if used in 11.18–11.20 UI)
+
+   - Returns recent scan cycles for charts/time-series.
+
+3. **`GET /api/24h-activity`**
+
+   - Must replace or properly alias `GET /api/paper-sim/diagnostics/scan-24h`
+   - Payload must match what Filter Insights expects:
+     - Total evaluated (24h)
+     - Unique evaluated
+     - Total eligible (24h)
+     - Unique eligible
+     - 24h cycle count
+
+4. **`GET /api/active-pool`**
+
+   - Returns current Active Filter Pool overview:
+     - Count of active pairs
+     - Possibly, subset or aggregate stats depending on 11.18 UI needs.
+
+5. **`POST /api/filters/reset`**
+
+   - Resets filters to **truth default values** as defined by Phase 8.6.X.
+
+### 4.3.4 Deliverables
+
+- `docs/restoration/reb2_reports/REB2.3_Backend_Endpoints_Restoration.md`
+- Route map showing:
+  - Expected vs actual endpoints
+  - Payload samples
+  - Verified behavior from local curl / Postman / test harness
+
+---
+
+## 5. REB 2.4 – Filter Insights UI Restoration
+
+**Goal:**  
+Restore Filter Insights UI to the **11.18 (+ small 11.20 deltas)** visual and behavioral truth, using the 11.18 TSX file and mapping doc as primary references.
+
+### 5.4.1 Truth Inputs
+
+- `filter-insights (11.18.25).tsx` – primary UI truth  
+- `filter-insights-metrics-mapping.md` (if present in truth set)  
+- `phase_8.6.10_mapping_*.md` – exact field → endpoint mapping  
+- `02_Filter_Insights_UI_Truth_Report.md` – what’s wrong now
+
+### 5.4.2 Scope
+
+**In-scope:**
+
+- Filter Insights React component(s)
+- Hooks / data fetching used *by Filter Insights only*
+- UI layout and metric cards as of 11.18 (+ minor 11.20 adjustments like History filter metrics, if they existed)
+
+**Out-of-scope:**
+
+- Any WS-driven architecture
+- New metrics that weren’t present as of 11.18–11.20
+- Stage-3 scan_tick usage (for this restoration)
+
+### 5.4.3 Restoration Tasks
+
+1. **Re-adopt 11.18 Layout**
+
+   - Use `filter-insights (11.18.25).tsx` as the **base**.
+   - Recreate sections:
+     - Kraken universe stats
+     - Last scan metrics
+     - 24-hour aggregates
+     - Active filtered pool overview
+     - Filter breakdown categories (final set of 8–9, not 11 legacy categories)
+
+2. **Rewire Data Sources to REST**
+
+   - Every card / number / chart should:
+     - Call the appropriate **REST endpoint** from REB 2.3.
+     - No direct dependence on WebSocket `scan_tick` payloads.
+   - If WebSockets are used at all, it must be:
+     - Only to trigger **“refresh now”** behavior, NOT to carry metrics.
+
+3. **Restore Final Breakdown Categories**
+
+   - Use 11.20 archive + Phase 8.6/8.7 docs to:
+     - Remove `cooldown`, `guardrails` from UI filter breakdown.
+     - Hide `market cap` (backend may still track it).
+     - Re-introduce `History` as a valid filter category with the correct label.
+
+4. **Descriptions Under Each Breakdown**
+
+   - Use your finalized description list (the ones you pasted) to populate the captions/descriptions under each filter metric.
+
+### 5.4.4 Deliverables
+
+- `docs/restoration/reb2_reports/REB2.4_Filter_Insights_UI_Restoration.md`
+- Screenshots of the restored UI matching the 11.18 screenshots
+- Mapping table: UI element → REST endpoint → backend source
+
+---
+
+## 6. REB 2.5 – Screeners Tab Restoration (Goals Engine)
+
+**Goal:**  
+Restore the Screeners tab (Goals Engine) to the state it was in just before the rollback:
+
+- Correct dropdowns (e.g., History)
+- Correct filter control toggles (Latti vs manual, even if Latti override bug remains)
+- Correct persistence & mapping to backend filter settings
+
+### 6.5.1 Truth Inputs
+
+- `phase_8.7.1_completion_*.md` – finalization of Screeners work  
+- `phase_8.7_completion_*.md` – overall 8.7 state  
+- `DawnTrader_Chat_Archive_11-20-25.md` – details on:
+  - History dropdown
+  - Quote currencies behavior
+  - Guardrails presence/removal
+  - Manual vs Latti behavior
+
+### 6.5.2 Scope
+
+**In-scope:**
+
+- Screeners tab UI components (Goals / Settings)
+- Form controls and validation
+- Wiring to backend settings endpoints
+
+**Out-of-scope:**
+
+- Fixing Latti overriding manual settings (explicitly deferred)
+- Introducing new filters beyond those in Phase 8.7 truth
+
+### 6.5.3 Restoration Tasks
+
+1. **Recreate UI Structure from 8.7**
+
+   - Filters, sections, groupings must match:
+     - Liquidity
+     - Price bounds
+     - Spread
+     - Volatility
+     - Market Cap (present in backend, maybe hidden where specified)
+     - Quote currencies behavior
+     - Data Quality / Minimum History dropdown
+
+2. **Restore History Filter UI**
+
+   - Ensure “Minimum History” is present as a dropdown with options like:
+     - 30 days
+     - 60 days
+     - 90 days
+   - Ensure selection maps to backend correctly.
+
+3. **Restore Toggle Behavior (Latti vs Manual)**
+
+   - Only the **toggling and UI side** is restored (not Latti bug fix).
+   - Confirm:
+     - Each filter can independently switch between:
+       - Latti control
+       - Manual input mode
+
+4. **Backend Mapping Verification**
+
+   - Ensure POST/PUT/GET for screener settings:
+     - Correctly store each filter’s thresholds
+     - Correctly store mode (Latti vs manual)
+   - Confirm through direct endpoint calls and a small test harness or logs.
+
+### 6.5.4 Deliverables
+
+- `docs/restoration/reb2_reports/REB2.5_Screeners_Tab_Restoration.md`
+- Screenshot set comparing:
+  - Current Screeners tab
+  - Expected 11.18–11.20 layout
+- A mapping table: each Screeners control → backend setting field
+
+---
+
+## 7. REB 2.6 – Passive Learning & Global Sanity Checks
+
+**Goal:**  
+Verify that after REB 2.1–2.5:
+
+- Passive learning behaves exactly as it did in 11.18–11.20.
+- Filter Insights + ActivePool + FX5 are internally consistent.
+- No unintended dependencies on Stage-3 or 8.8 artifacts exist.
+
+### 7.6.1 Test Scenarios
+
+1. **Passive Mode, Trading OFF**
+
+   - Start system in passive learning mode with trading engines OFF.
+   - Expected:
+     - Filter Insights:
+       - Next scan countdown ticks every 30s.
+       - Last scan metrics mostly 0, occasionally 1–3, never accumulating.
+       - 24h metrics remain essentially inert / not meaningful (per earlier description).
+     - Active Filter Pool:
+       - **Empty** at all times.
+     - Screeners tab:
+       - Settings visible & changeable.
+       - Changes do not affect any live trading behavior (since trading is off).
+
+2. **Trading ON (Paper Mode)**
+
+   - Start paper trading engine.
+   - Expected:
+     - FX5:
+       - 60-pair batches every 30s.
+     - Active Filter Pool:
+       - Non-empty, deduped, non-expired.
+     - Filter Insights:
+       - Last scan metrics aligned with FX5.
+       - 24h metrics aggregated accordingly.
+     - Screeners:
+       - Changes affect subsequent FX5 scans as per 8.6–8.7 docs.
+
+3. **Engine Toggle**
+
+   - Turn trading ON → OFF → ON and verify:
+     - ActivePool clears when expected.
+     - No lingering entries in passive mode.
+     - No Stage-3 dependency for any of this behavior.
+
+### 7.6.2 Deliverables
+
+- `docs/restoration/reb2_reports/REB2.6_Global_Sanity_and_Passive_Mode_Verification.md`
+- Log excerpts for the scenarios above
+- Final checklist: “All REB 2.x restoration goals met”
+
+---
+
+## 8. REB 2.7 – Stage-3 Compatibility Planning (Docs Only)
+
+**Goal:**  
+Produce a **planning document only** that describes:
+
+- How Stage-3 *will* read from the restored FX5 + ActivePool + metrics.
+- How Filter Insights *could later* use Stage-3 safely — without changing any behavior now.
+
+### 8.7.1 Guardrails (Re-stated)
+
+- **NO code changes.**
+- **NO new endpoints.**
+- **NO changes to existing WS or REST behavior.**
+- This is a **pure design document** for a **future phase** (likely post-REB 3+).
+
+### 8.7.2 Contents of the Planning Doc
+
+- `docs/restoration/REB2.7_Stage3_Compatibility_Plan.md`
+
+Sections:
+
+1. **Overview**
+
+   - What Stage-3 is intended to do in the end-to-end architecture.
+   - How FX5 + ActivePool will act as its inputs.
+
+2. **Read-Only Data Contracts**
+
+   - Enumerate which REST endpoints Stage-3 could safely consume:
+     - Scan summary
+     - 24h activity
+     - ActivePool snapshots
+   - Enumerate any read-only DB or cache views Stage-3 might read in future.
+
+3. **No-Coupling Rules**
+
+   - Rules Stage-3 must follow:
+     - Never mutate FX5 state.
+     - Never mutate ActivePool directly.
+     - Never gate FX5 behaviour.
+     - Never change Filter Insights semantics.
+
+4. **Future Integration Points (Phase 9+ Maybe)**
+
+   - High-level suggestions (not commitments) for:
+     - How Stage-3 events could co-exist with FX5/REST-based metrics.
+     - Where WebSockets might broadcast Stage-3-specific views without overlapping the Filter Insights responsibilities.
+
+### 8.7.3 Deliverables
+
+- `docs/restoration/REB2.7_Stage3_Compatibility_Plan.md`
+- No code changes, no config changes, no runtime changes.
+
+---
+
+## 9. Overall Completion Criteria for REB 2
+
+REB 2 is considered **fully complete** when:
+
+1. FX5 scanner behavior matches 11.18–11.20 truth (REB2.1 report verified).
+2. Active Filter Pool matches its dedupe/expiry/passive semantics (REB2.2).
+3. Required REST endpoints exist and align with truth mapping (REB2.3).
+4. Filter Insights UI looks and behaves like 11.18 (+ small 11.20 deltas) and reads from REST (REB2.4).
+5. Screeners tab matches 8.7 truth, including History dropdown and per-filter Latti/manual toggles (REB2.5).
+6. Passive learning & trading ON/OFF behavior is verified and documented (REB2.6).
+7. Stage-3 compatibility plan exists as a **document only**, with **zero code changes** (REB2.7).
+
+Only after all of the above are satisfied do we move to:
+
+- Evaluating 8.8 work for salvage
+- Deciding how and when to implement any Stage-3 changes.

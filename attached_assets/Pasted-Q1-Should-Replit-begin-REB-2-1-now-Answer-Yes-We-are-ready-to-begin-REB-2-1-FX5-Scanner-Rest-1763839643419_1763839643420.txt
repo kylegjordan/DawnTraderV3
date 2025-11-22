@@ -1,0 +1,144 @@
+Q1 — Should Replit begin REB 2.1 now?
+
+Answer: Yes.
+We are ready to begin REB 2.1 — FX5 Scanner Restoration.
+
+⚠️ But only REB 2.1 — NOT all phases of REB 2.x in one go.
+
+We proceed in tight slices, verifying each one as complete and correct before moving on.
+
+Q2 — Should Replit create a detailed task list for all of REB 2, or only per-phase?
+
+Answer: Only per-phase.
+
+Why?
+
+We must maintain strict control.
+
+We must avoid scope creep.
+
+Each sub-phase has dependencies that must be verified before continuing.
+
+This avoids runaway fixes based on incomplete interpretation.
+
+So the workflow is:
+
+Replit runs REB 2.1 tasks only.
+
+You and I review REB 2.1 results.
+
+If approved → Replit begins REB 2.2.
+
+We repeat until REB 2.x is complete.
+
+Q3 — Should Replit re-read the truth files or rely on the blueprint?
+
+Answer: It must re-read the truth files before each phase.
+
+Reason:
+
+The blueprint summarizes the structure.
+
+The truth files contain nuance, edge cases, and behavior details needed for accurate restoration.
+
+We want to prevent Replit from making assumptions or filling in gaps with its own ideas.
+
+So:
+
+Before REB 2.1: Replit must re-open FX5 truth docs (phase 8.6.7 and 8.6.10).
+
+Before REB 2.2: Replit must re-open Active Filter Pool truth docs.
+
+Before REB 2.3: Replit must re-open mapping docs and the FE/BE requirements.
+
+Etc.
+
+🟢 Your Final Instruction to Replit Should Be:
+
+“Replit, you may begin PH.8.7–11.20–REB 2.1.”
+
+But I will prepare the full directive for you.
+
+✅ Directive for Replit — Ready to Paste
+
+Here is a clean, precise directive you can paste directly into Replit:
+
+📘 REB 2.1 — FX5 Scanner Restoration Directive
+
+(PH.8.7–11.20–REB 2.1)
+Read-only truth file review + restoration implementation
+
+Context
+
+We are beginning REB 2.x, the restoration phase to bring DawnTrader back to the behavior it had between Nov 18–Nov 20, before the accidental GitHub rollback.
+
+All decisions must be based strictly on:
+
+/docs/restoration/PH_8.7-11.20-REB_0_MasterBlueprint.md
+
+/docs/restoration/truth/*.md
+
+The REB 1 audit reports (00_MASTER_GAP_ANALYSIS.md, 01_FX5_Scanner_Truth_Report.md, etc.)
+
+No Stage-3 changes, no new features, and no behavior redesigns.
+Only restoration.
+
+PHASE: REB 2.1 — FX5 Scanner Restoration
+Your tasks (read-only before acting):
+
+Re-open and re-read the truth files:
+
+phase_8.6.7_validation_*.md
+phase_8.6.10_mapping_*.md
+DawnTrader_Chat_Archive_11-20-25.md
+01_FX5_Scanner_Truth_Report.md
+
+
+Extract the FX5 truth state:
+
+30-second batch pipeline
+
+Mixed 60-pair batches
+
+Top-N rotation logic
+
+Tier-B rotation logic
+
+Universe sizes
+
+Evaluated / eligible count semantics
+
+Logging behavior from 8.6.x
+
+No Stage-3 influence
+
+Restore FX5 scanner in server/services/fx5-scanner.ts to exactly match the truth state.
+
+🔒 All work must conform to the restoration guardrails:
+
+Do NOT alter Stage-3.
+
+Do NOT alter strategy engine.
+
+Do NOT introduce new data fields.
+
+Do NOT redesign behavior beyond what the truth state describes.
+
+Create documentation:
+
+/docs/restoration/reb2_reports/REB2.1_FX5_Scanner_Restoration.md
+
+Include:
+
+Before vs. after architecture diagrams
+
+Truth alignment evidence
+
+Logs proving correctness
+
+Do NOT proceed to REB 2.2 until explicitly authorized.
+Final confirmation question:
+
+After completing REB 2.1, ask:
+
+“Do you want me to begin PH.8.7–11.20–REB 2.2 (Active Filter Pool Restoration)?”
