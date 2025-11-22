@@ -1,0 +1,258 @@
+PH.8.7–11.20–REB 1 – Truth State Extraction Directive
+Phase: REB 1.0 — Truth State Extraction
+Restoration Program: PH.8.7–11.20–REB
+📌 Context
+
+This restoration directive is part of the master recovery program defined in:
+
+/docs/restoration/PH_8.7-11.20-REB_0_MasterBlueprint.md
+
+A rollback incident occurred due to a GitHub sync mistake, where Replit pulled older files from GitHub and overwrote several weeks of development work inside the Replit workspace. As a result, major systems including:
+
+FX5 Scanner
+
+Filter Insights
+
+Screeners Tab (Goals Engine → Screeners)
+
+Active Filtered Pool (dedupe + expiry)
+
+UI → Endpoint Mapping
+
+Filter Breakdown categories
+
+Rotation logic
+
+Universe / batching logic
+
+…were unintentionally reverted to older states.
+
+Our goal is to reconstruct the correct 11/18 → 11/20 state of the system using a structured multi-phase rebuild process.
+
+This is NOT a refactor.
+This is forensic extraction of the truth, so we can restore the system to the correct configuration before the rollback occurred.
+
+🎯 Objective of REB 1
+
+REB 1 must produce a complete truth-state report for all systems touched by the rollback.
+NO CODE CHANGES are allowed in REB 1.
+
+You must only audit, extract data, analyze, compare, and produce documents.
+
+This truth-state report will then be reviewed by the Architect.
+If anything is missing, you will be asked to produce additional extractions until the full truth is obtained.
+
+🔍 Scope (Option A – Full Ecosystem Audit)
+
+You must audit EVERYTHING that may have been affected by the rollback:
+
+1. FX5 Scanner
+
+Scan cadence
+
+Universe formation (Top-N + Tier-B mix)
+
+Rotation logic
+
+IndexStart / SliceSize behavior
+
+Input sources (Kraken APIs, caches)
+
+Evaluated / Eligible / Ineligible counts
+
+Correct 60-pair batching
+
+2. Filter Insights (UI + backend)
+
+Audit all 63 UI fields including:
+
+Latest Scan Cycle section
+
+24H Filter Activity section
+
+Active Filter Pool
+
+Filter Breakdown (all categories)
+
+Correct descriptions
+
+Correct threshold wiring
+
+All source mapping (Kraken summaries, batch results, FX5 outputs, etc.)
+
+3. Screeners Tab (Goals Engine)
+
+All filter parameters
+
+Manual ↔ LATTi toggle behavior
+
+Dropdown vs numeric fields
+
+History filter logic
+
+Quote currency logic
+
+Regulated Only / Stablecoins / Volatility / Price Range
+
+Universe Size control
+
+Endpoint mapping
+
+Validation logic
+
+4. Active Filtered Pool
+
+Deduplication logic
+
+Expiry logic
+
+FirstSeen / LastUpdated
+
+Conditions for removal
+
+Correct population during ACTIVE trading
+
+Zero population during PASSIVE learning
+
+5. Filter Breakdown Engine
+
+Correct filter categories
+
+Removal of deprecated categories (Cooldown, Risk Guardrails, etc.)
+
+Conditional inclusion of Market Cap / History
+
+Correct source data for each category
+
+Correct threshold exposure
+
+6. Backend Filter Pipeline (server/services)
+
+Audit all filtering operators including:
+
+minVolume
+
+minLiquidity
+
+minPrice / maxPrice
+
+spread
+
+volatility
+
+marketCap
+
+quote currency
+
+history
+
+stablecoins exclusion
+
+universe tiering
+
+prefilter logic
+
+daily range / min data
+
+7. Mapping Layer
+
+Audit all wiring:
+
+UI → client components
+
+client → API endpoints
+
+API endpoints → backend services
+
+backend services → Kraken data / FX5 outputs
+
+Stage-3 pathways that may have leaked into FX5
+
+Any references to the deprecated 10-minute scanner
+
+Any leftover code from 8.8 that must be removed later
+
+8. 24-Hour Aggregation
+
+Audit the two aggregation systems:
+
+FX5-native 24h stats (the correct one)
+
+The new 8.8 “24h aggregator” (should be deprecated)
+
+📁 Required Output Files
+
+Please produce the following files:
+
+1. /reports/REB_1_FX5_TruthState.md
+
+Everything about FX5 behavior, pipeline, rotation, batching.
+
+2. /reports/REB_1_FilterInsights_TruthState.md
+
+All 63 fields mapped to exact backend sources.
+
+3. /reports/REB_1_Screeners_TruthState.md
+
+Complete breakdown of every filter parameter and endpoint.
+
+4. /reports/REB_1_ActivePool_TruthState.md
+
+Expiry logic, dedupe logic, population rules.
+
+5. /reports/REB_1_PipelineMap.md
+
+Complete wiring of UI → Backend → FX5 → Cache → Insights.
+
+6. /reports/REB_1_LegacyArtifacts.md
+
+List of all obsolete artifacts (10-min scanner, 8.8 aggregators, etc.).
+
+7. /reports/REB_1_GapReport.md
+
+This is critical:
+List all missing or incomplete areas where more information is required from the Architect.
+
+🔐 Test User Credentials (for validation)
+
+These credentials must be used only for verification tasks:
+
+username: testuser123
+password: SecurePass123!
+
+🧭 Execution Rules
+
+Do NOT modify ANY source code
+
+Do NOT attempt to fix anything
+
+Do NOT attempt to merge or update files
+
+Only produce READ-ONLY reports
+
+If something is unclear, explicitly document it in the Gap Report
+
+❓ Final Questions for You (Repl.it)
+
+Before you begin:
+
+Q1
+
+Do you fully understand that REB 1 is ONLY an audit phase and must not modify any code?
+
+Q2
+
+Do you know where to place the output reports, and do you confirm they will be stored under /reports/ exactly as listed?
+
+Q3
+
+Do you need any additional context or clarification before beginning REB 1?
+
+Please respond with:
+
+“Ready to begin REB 1”
+or
+
+Your clarifying questions
+
+END OF DIRECTIVE

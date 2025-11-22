@@ -1,0 +1,263 @@
+PH.8.7–11.20–REB 0A — Truth File Registration & Pre-Audit Clarification
+🧭 Context (Critical — must read before executing anything)
+
+Two days ago, a GitHub sync error caused Replit to pull older code from GitHub into the workspace, which:
+
+Overwrote weeks of frontend & backend work
+
+Rolled Filter Insights back to a very old version
+
+Rolled Screeners tab back to an old version
+
+Rolled FX5 filtering, batch rotation, and other behaviors back
+
+Restored legacy code that had already been removed
+
+Broke the pipeline feeding the UI
+
+This rollback was discovered after significant progress had been made in Phase 8.8, and therefore most work done during 8.8 was built on top of a compromised codebase.
+
+To restore the system properly, we must rebuild from the true, correct state that existed between Nov 18–20 (immediately before the rollback occurred).
+
+To do this, Replit needs access to the truth files stored outside of Replit because the rollback removed the correct versions.
+
+📌 Your Questions — Answers (Please Read Carefully)
+Q1: Why does Replit need the “truth files” if they are earlier than current code?
+
+Because the GitHub rollback overwrote the correct versions of:
+
+Filter Insights UI (latest correct version was Nov 18)
+
+Screeners tab configuration
+
+FX5 expected behavior
+
+Active Filter Pool behavior
+
+The cleanup from phases 8.6 and 8.7
+
+The current files in Replit are not the correct lineage.
+Therefore, Replit cannot audit the system without the truth documents.
+
+Q2: Where are the Nov 18–20 truth sources?
+
+The truth sources are:
+
+Core 4 (must be uploaded by user)
+
+These are the authoritative truth sources that describe the system as it actually worked on Nov 18–20.
+
+DawnTrader_Chat_Archive_11-20-25.md
+
+DawnTrader_Chat_Archive_11-15-25.md
+
+DawnTrader_Chat_Archive_11-6-25-2.md
+
+filter-insights (11.18.25).tsx (final good version of the UI before rollback)
+
+Phase 8.6–8.7 Truth Files (must also be uploaded)
+
+These documents contain the correct backend, FX5 behavior, filtering logic, and UI mapping prior to rollback.
+
+All of the following (user will upload):
+
+PHASE_8.6_COMPLETE_SUMMARY.md
+
+phase_8.6.11_completion.md
+
+phase_8.6.10_verification.md
+
+phase_8.6.10_repair_summary.md
+
+phase_8.6.10_mapping.md
+
+PHASE_8.6.10_COMPLETE.md
+
+phase_8.6.9_verification_results.md
+
+phase_8.6.9_audit_logging.md
+
+phase_8.6.7_validation.md
+
+phase_8.7.1_completion.md
+
+phase_8.7_completion.md
+
+These files must be uploaded so Replit has access to the stable, pre-rollback reference material.
+
+Q3: Why only documents and not TypeScript files?
+
+Because TypeScript backend files on the user’s machine may not correspond to Replit’s versions after rollback, and uploading them would create version conflicts.
+
+We want Replit to compare:
+
+TRUTH DOCUMENTATION ➜ CURRENT CODE,
+not
+OLD TS FILES ➜ CURRENT TS FILES
+
+Q4: Should Replit begin REB 1 immediately after upload?
+
+No.
+
+Replit must:
+
+Wait for user uploads
+
+Register them
+
+Confirm all files are indexed
+
+Ask follow-up clarification questions
+
+Only then begin REB 1
+
+🚀 DIRECTIVE TO REPLIT (Copy/Paste Below)
+📄 PH.8.7–11.20–REB 0A — Truth File Registration & Pre-Audit Clarification
+
+Replit, this directive prepares you for REB 1 and gives you the truth reference materials required to correctly audit the system following the GitHub rollback event.
+
+You must not make any code changes in this directive.
+
+This directive is setup only.
+
+1. Create Truth Directory
+
+Create:
+
+/docs/restoration/truth/
+
+
+Ensure it is readable but not write-locked yet.
+
+2. Wait for User Uploads (Critical)
+
+The user will upload the following truth files:
+
+Core 4 (authoritative truth sources)
+
+DawnTrader_Chat_Archive_11-20-25.md
+
+DawnTrader_Chat_Archive_11-15-25.md
+
+DawnTrader_Chat_Archive_11-6-25-2.md
+
+filter-insights (11.18.25).tsx
+
+Phase 8.6–8.7 Completion Truth Files
+
+PHASE_8.6_COMPLETE_SUMMARY.md
+
+phase_8.6.11_completion.md
+
+phase_8.6.10_verification.md
+
+phase_8.6.10_repair_summary.md
+
+phase_8.6.10_mapping.md
+
+PHASE_8.6.10_COMPLETE.md
+
+phase_8.6.9_verification_results.md
+
+phase_8.6.9_audit_logging.md
+
+phase_8.6.7_validation.md
+
+phase_8.7.1_completion.md
+
+phase_8.7_completion.md
+
+You must wait until all files are uploaded before proceeding.
+
+3. After Uploads: Register The Truth Files
+
+Move all uploaded files into:
+
+/docs/restoration/truth/
+
+
+Then generate:
+
+/docs/restoration/truth/TRUTH_REGISTRY.md
+
+
+This file must list:
+
+filename
+
+SHA-256 checksum
+
+date received
+
+category (Core4 or Phase8.6–8.7)
+
+short description of purpose
+
+4. Confirm No Conflicts
+
+Check for:
+
+filename collisions
+
+path collisions
+
+encoding problems
+
+unreadable files
+
+truncated files
+
+duplicate content across uploads
+
+If found, ask for instructions before continuing.
+
+5. Ask Clarifying Questions Before REB 1
+
+Do not begin REB 1 yet.
+
+After indexing the truth files:
+
+Ask the following:
+
+Do all expected truth files appear correct?
+
+Does the registry match the uploads?
+
+Is any truth file missing?
+
+Should any truth file be prioritized during REB 1?
+
+Are there newer versions of any truth file that the user wants uploaded?
+
+Does the user want a timestamp-ordered reading sequence for REB 1?
+
+Wait for user responses.
+
+6. Stop Here Until the User Confirms
+
+Under no circumstances begin REB 1 until the user explicitly says:
+
+“Replit, you may begin PH.8.7–11.20–REB 1.”
+
+7. Test User Credentials
+
+Keep these ready for when REB 1 begins:
+
+username: testuser123
+password: SecurePass123!
+
+Replit — Do you understand this directive?
+
+Before taking action, confirm:
+
+You understand the rollback context
+
+You understand why truth files must be uploaded
+
+You understand the directory structure
+
+You understand that no code changes are permitted
+
+You will wait for uploads before running tasks
+
+You will ask follow-up questions before beginning REB 1

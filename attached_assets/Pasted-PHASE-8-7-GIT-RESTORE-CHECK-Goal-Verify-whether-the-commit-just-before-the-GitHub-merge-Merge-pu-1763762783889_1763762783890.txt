@@ -1,0 +1,260 @@
+PHASE 8.7-GIT-RESTORE-CHECK
+
+Goal:
+Verify whether the commit just before the GitHub merge
+
+“Merge pull request #1 from kylegjordan/dt-v1-revival-bootstrap”
+contains the full, correct Phase 8.7 UI/behavior (Filter Insights + GOES Filters), so we can safely use it as a restore point for the entire app.
+
+Critical safety rule:
+This phase is read-only / exploratory.
+❌ Do NOT reset main or force-push.
+✅ Work only in temporary / new branches and produce a clear report.
+
+1. Identify the rollback merge and its parent
+
+From the Replit workspace, show the recent commit graph:
+
+cd /home/runner/workspace
+git fetch origin
+git log --oneline --decorate --graph -n 15
+
+
+Locate the merge commit that matches what’s visible in GitHub:
+
+Message: Merge pull request #1 from kylegjordan/dt-v1-revival-bootstrap
+
+Branch: main
+
+In the log output, capture:
+
+Merge commit hash (call it MERGE_HASH)
+
+First parent hash (the commit on main immediately before this merge; call it PRE_MERGE_MAIN)
+
+Note in the report exactly which hashes you found, e.g.
+MERGE_HASH = 5d8ff26
+PRE_MERGE_MAIN = 745c458 (example – use the real ones from log).
+
+Confirm that PRE_MERGE_MAIN is the commit that was at the tip of main before PR #1 was merged.
+
+2. Create safe branches (no changes to main yet)
+
+To avoid losing anything:
+
+Create a backup branch of the current main (the “broken” state with the regressions):
+
+git checkout main
+git branch backup-8-8-current-main
+
+
+Create a temporary restore-check branch at the pre-merge commit:
+
+git checkout -b phase-8-7-restore-check PRE_MERGE_MAIN
+
+
+Replace PRE_MERGE_MAIN with the actual hash from step 1.
+
+This branch is ONLY for testing whether that commit really matches the end-of-8.7 state. Do not modify code yet.
+
+3. Run the app on the restore-check branch
+
+In the restore-check branch:
+
+git status
+# should show: On branch phase-8-7-restore-check, nothing to commit
+
+
+Start the app as usual (whatever Replit command you normally use – keep it the same as for 8.8):
+
+Start server
+
+Start client (Preview)
+
+Log in with the normal test user you’ve been using for validation (e.g. testuser123 / SecurePass123! or your regular trading account – use whichever we’ve used for Phase 8.7/8.8 checks).
+
+4. UI Verification – Filter Insights (should match Phase 8.7 screenshots)
+
+Navigate to:
+
+Trading → PAPER → Filter Insights
+
+On this branch, you must verify whether ALL of the following match the known-good Phase 8.7 behavior:
+
+4.1 Scan & Filter Overview
+
+Layout:
+
+Header text: “Scan & Filter Overview”
+
+Top line: Kraken Universe with a single number (total Kraken trading pairs).
+
+Under Cycle Info:
+
+Last Scan Cycle ID is shown and looks like cycle_paper_xxxxxxx
+
+Next Scan In: countdown in seconds
+
+Cycles per Hour: numeric (e.g. 0.3, 0.4, etc.)
+
+Last Scan Time: timestamp of last 30-second scan
+
+Scan Frequency: every 30 seconds
+
+Under Last Scan Result:
+
+Evaluated This Scan (≈ 60)
+
+Eligible This Scan
+
+Ineligible This Scan
+
+Numbers look sane for a 30-second scan – not huge 24h totals.
+
+4.2 24h Filter Activity
+
+Header: “24h Filter Activity”
+
+Fields:
+
+Total Evaluated (24h)
+
+Total Survived Filters (24h)
+
+Unique Evaluated (24h)
+
+Unique Survived Filters (24h)
+
+Cycles (24h)
+
+Values are in the same scale as your older 8.7 screenshot (e.g. low hundreds / few dozens when the engine hasn’t run long), not crazy numbers like 128,712 unless you’ve truly run for many hours.
+
+When paper engine is STOPPED / passive learning only:
+
+These numbers should be low and match how 8.7 behaved before.
+
+No “24h aggregator” behavior beyond what 8.7 originally had.
+
+4.3 Active Filtered Pool
+
+Header: “Active Filtered Pool (Deduped, Non-Expired)”
+
+Behavior:
+
+When engine is STOPPED / passive learning:
+
+No active filtered pairs table filled in – you should see the “No active filtered pairs at this time” message (like in your old screenshot).
+
+When engine is ACTIVE:
+
+Table of pairs:
+
+Symbol
+
+Status (badge: “Passed all filters”)
+
+First Seen (this window)
+
+Last Updated (this cycle)
+
+Values and columns should match the 8.7 screenshots you provided.
+
+4.4 Filter Breakdown (Last 24 Hours)
+
+Header: “Filter Breakdown (Last 24 Hours)”
+
+Shows only the filter categories we had agreed for Phase 8.7 (before thresholds/descriptions were added in 8.8):
+
+Min Volume
+
+Spread
+
+Daily Range
+
+Min Price
+
+Stablecoin
+
+Quote Currency
+
+Blacklist
+
+Whitelist
+
+History
+
+Guardrail Risk
+
+No Strategy Triggered
+
+Passed All Filters
+
+The counts here should align with the 24h state – this is the older 8.7 version, not the new 8.8 Stage-3 schema. For the restore-check, we’re only verifying that the UI and wiring match what we had at the end of 8.7.
+
+5. GOES Engine → Filters Tab Validation
+
+Navigate to:
+
+Goals Engine → Filters (the tab you noticed has regressed)
+
+On the restore-check branch, verify:
+
+This tab reflects the post-8.6 / 8.7 fixes, not the old rolled-back version:
+
+Correct filter names
+
+Correct default values
+
+Any 8.6.x guardrail / filter fixes are present (as per previous documentation)
+
+Nothing looks like the older V1/V2-era config
+
+If you have any 8.6/8.7 screenshots for the Filters tab, compare them here and note any mismatches.
+
+6. Deliverables – “Phase 8.7 Restore-Check Report”
+
+Produce a short report file:
+
+reports/phase-8.7/8.7-restore-check-report.md
+
+Include:
+
+Commit hashes:
+
+MERGE_HASH = ...
+
+PRE_MERGE_MAIN = ...
+
+Branch used for test: phase-8-7-restore-check
+
+Filter Insights status:
+
+Bullet list for each of the four sections, indicating:
+
+✔ Matches Phase 8.7 behavior
+
+or ✖ Deviations found (describe exactly)
+
+GOES Engine → Filters tab:
+
+✔ / ✖ and description of any differences from our known 8.6/8.7 fixes.
+
+Conclusion:
+
+Either:
+
+✅ “PRE_MERGE_MAIN is a valid Phase 8.7 restore point. It matches the last-good Filter Insights + GOES Filters state.”
+
+or
+
+⚠️ “PRE_MERGE_MAIN still shows regressions. We need to search further back in history or rely on Replit internal backups.”
+
+7. Absolutely do not do this yet
+
+❌ Do not git reset --hard main.
+
+❌ Do not force-push (git push -f) anything.
+
+❌ Do not delete branches.
+
+This phase is only to find and verify a safe 8.7 restore commit.

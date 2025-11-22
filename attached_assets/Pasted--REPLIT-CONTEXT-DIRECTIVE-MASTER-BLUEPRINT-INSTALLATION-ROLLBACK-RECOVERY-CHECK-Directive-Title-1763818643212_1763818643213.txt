@@ -1,0 +1,154 @@
+✅ REPLIT CONTEXT DIRECTIVE — MASTER BLUEPRINT INSTALLATION + ROLLBACK RECOVERY CHECK
+Directive Title:
+
+PH.8.7–11.20–REB 0 — Master Restoration Audit Blueprint Installation & Rollback Recovery Inquiry
+
+🧭 Critical Context (Must Read)
+
+We experienced a major, unintentional system rollback caused by a GitHub synchronization mistake:
+
+Replit attempted to push local changes to GitHub
+
+GitHub contained significantly older versions
+
+Replit pulled those older versions into the project
+
+Overwriting weeks of completed upgrades, including:
+
+FX5 scanner refactor
+
+Filter Insights rebuild (final 11/18–11/20 state)
+
+Screeners tab improvements
+
+Frontend → Backend mapping
+
+Removal of legacy code
+
+Active Filter Pool logic
+
+Rotation logic
+
+Bug fixes across backend + UI
+
+This left the project in a corrupted, mixed-era state that must be restored before continuing Phase 8.8 work.
+
+⚠️ Before ANY Restoration Work Begins — Rollback Recovery Check
+
+Replit has its own Rollbacks / History / Snapshots feature — separate from GitHub.
+
+We need to know whether Replit can restore the entire project to a snapshot from:
+
+🗓️ November 20, 2025 — JUST BEFORE the GitHub sync began
+
+Please search your rollback/history system and confirm:
+
+1. Do you have any snapshots or restore-points from November 20th (UTC or local time)?
+2. If multiple exist, list their timestamps.
+3. Can you restore the entire project to any of those points?
+4. Would such a rollback overwrite the current filesystem?
+5. Do you need user approval before performing the rollback?
+
+⚠️ DO NOT PERFORM the rollback yet.
+First, list all available restore points, their timestamps, and ask for confirmation.
+
+If Replit can restore directly to 11/20, that may bring the entire system back to the exact correct state — before we begin the rebuild.
+
+🗂️ Task 1 — Store Master Blueprint in /docs/restoration/
+
+If rollback is NOT available or NOT used, then proceed with installation:
+
+Create directory (if it does not exist):
+
+/docs/restoration/
+
+
+Save the blueprint file:
+
+/docs/restoration/PH_8.7-11.20-REB_0_MasterBlueprint.md
+
+
+Confirm:
+
+path exists
+
+file opens correctly
+
+SHA checksum
+
+it is read-only for future work
+
+📚 Task 2 — Register as Permanent Reference
+
+This blueprint is the single source of truth for the entire restoration program.
+
+All future directives will reference this file:
+
+FX5 truth reconstruction
+
+Filter Insights exact restoration
+
+Screeners tab mapping
+
+Active Filter Pool logic
+
+Rotation & batching
+
+All backend field wiring
+
+Cleanup of rollback damage
+
+Do not modify this blueprint.
+
+🚫 Task 3 — Blueprint Is Read-Only
+
+If updates are ever required, create separate addendum files (don’t overwrite):
+
+PH_8.7-11.20-REB_0A_Addendum.md
+PH_8.7-11.20-REB_0B_Clarifications.md
+
+
+Never alter the base 0 file.
+
+🧪 Task 4 — No Code Changes Yet
+
+This directive is context/setup only.
+
+Do NOT modify:
+
+Backend
+
+Frontend
+
+FX5
+
+Screeners
+
+Stage-3
+
+WebSockets
+
+Active Filter Pool
+
+Scanner scheduling
+
+State machines
+
+Trading logic
+
+Work begins only after rollback options are confirmed and the blueprint is installed.
+
+❓ Final Step — Understanding & Questions
+
+After completing the rollback inquiry and blueprint installation, please answer:
+
+1. Did you find rollback snapshots from November 20th?
+2. If yes, what are their timestamps?
+3. Can the system be restored to that snapshot?
+4. Do you fully understand the rollback incident and why the rebuild program is required?
+5. Do you understand that the Master Blueprint is now the authoritative reference?
+6. Do you have any questions before we begin PH.8.7–11.20–REB 1?
+
+STOP and wait for user response before doing anything else.
+
+✔️ End of Directive

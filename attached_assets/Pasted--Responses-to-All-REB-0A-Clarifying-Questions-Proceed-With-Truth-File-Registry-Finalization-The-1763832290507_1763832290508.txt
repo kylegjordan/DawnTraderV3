@@ -1,0 +1,211 @@
+✅ Responses to All REB 0A Clarifying Questions
+
+(Proceed With Truth File Registry Finalization — Then Await REB 1 Authorization)
+
+Thank you for the detailed questions. Below are the authoritative answers.
+
+Q1 — Truth File Completeness
+
+Yes — all truth files appear correct and intentional.
+You now have every file we expect for the truth-state extraction, and all of them are valid:
+
+The 4 Core Truth Files (3 chat archives + 11.18 Filter Insights TSX)
+
+The 11 Phase 8.6–8.7 backend truth files
+
+No additional files are needed at this time.
+
+The partial-view limitation is fine — nothing in REB 1 requires you to read every line at once. You’ll be searching specific patterns and doing targeted reads.
+
+There is no concern here. You have what you need.
+
+Q2 — Registry Verification
+
+Yes — the TRUTH_REGISTRY.md matches my expectations exactly.
+All files, checksums, metadata, and categories are correct.
+
+No changes needed.
+
+Q3 — Missing Truth Files
+
+No — all expected truth files are now present.
+The final missing file (phase_8.6.7_validation.md) was uploaded and registered successfully.
+
+There are no additional “phase” truth files you need to request from me.
+
+Q4 — File Prioritization for REB 1
+
+Yes — your recommended prioritization is exactly correct:
+
+phase_8.6.7_validation.md — the architectural foundation
+
+filter-insights (11.18.25).tsx — the last good UI snapshot
+
+phase_8.6.10_mapping.md — full field-level mapping truth
+
+11-20 Chat Archive — the canonical specification for the 11.18 → 11.20 truth
+
+Remaining Phase 8.6–8.7 files — implementation detail references
+
+11-15 and 11-6 archives — historical context
+
+Follow that order during REB 1.
+
+Q5 — Newer Versions to Upload?
+
+No.
+There are no newer versions of any truth-file that need to be uploaded.
+
+If such versions existed, I would provide them — but these are the final, last-known-good copies from before the rollback corrupted the workspace.
+
+You have the correct versions.
+
+Q6 — Reading Sequence Preference
+
+Please follow this reading sequence for REB 1:
+
+✓ Architecture-first (BEST CHOICE)
+
+This means:
+
+Phase 8.6 foundational files
+
+Filter Insights UI + mapping
+
+11-20 archive spec
+
+Historical chat archives
+
+This produces the highest accuracy and avoids false assumptions.
+
+Q7 — Critical Areas to Audit First
+
+Prioritize the following in this exact order:
+
+1️⃣ FX5 Scanner Architecture (Highest Priority)
+
+batch formation
+
+rotation
+
+top-N + Tier B mix
+
+universe construction
+
+truth pipeline before Stage 3 existed
+
+FX5 is the “engine” of all downstream behavior.
+If FX5 is rolled back, everything else is downstream-corrupted.
+
+2️⃣ Filter Insights UI Mapping (Second Priority)
+
+The 11.18 truth UI
+
+Correct metrics
+
+Correct sections
+
+Correct breakdown categories
+
+Correct REST data sources
+
+This is the main UI that was visibly rolled back.
+
+3️⃣ Screeners Tab Configuration (Third Priority)
+
+All dropdowns
+
+Lottie/manual toggle behavior
+
+Validation
+
+History filter
+
+Currency logic
+
+Quote currency selector
+
+These were heavily refactored around 11.18–11.20.
+
+4️⃣ Active Filter Pool Logic (Fourth Priority)
+
+dedupe logic
+
+expiry logic
+
+feed from FX5 filters
+
+passive mode behavior
+
+truth of “active” vs “expired”
+
+This pool must work perfectly for strategies and paper execution.
+
+5️⃣ Filter Breakdown Categories (Fifth Priority)
+
+correct count
+
+correct names
+
+correct order
+
+correct data sources
+
+removal of guardrails/cooldown
+
+hidden Market Cap logic
+
+addition of History
+
+6️⃣ Metrics Pipeline (Sixth Priority)
+
+passive learning behavior
+
+REST-only refresh
+
+no accumulation
+
+correct cycle counts
+
+correct mapping to UI
+
+🔥 Additional Clarification For You
+
+You asked earlier whether Replit should be concerned about only seeing “partial reads.”
+Answer:
+
+No — the truth files are meant to be reference documents.
+During REB 1, you will rely on:
+
+pattern searches
+
+structural analysis
+
+content extraction
+
+mapping comparisons
+
+You do not need to read every line of the 60,000-line files.
+You will do targeted scanning only, and that works perfectly.
+
+🚦 Before You Begin REB 1 — Two Final Instructions
+1. YES — You must treat the Phase 8.6–8.7 files as the authoritative backend truth.
+
+These contain the last-clean backend architecture before FX5, Filter Insights UI, and Screeners experienced rollback contamination.
+
+2. After you finish REB 1 and produce the reports:
+
+I will review every report line-by-line.
+If ANYTHING is missing or unclear, I will instruct you to rerun targeted sub-audits until we reach the full truth-state.
+
+You are NOT expected to guess — we will iterate until we have 100% clarity.
+
+🟢 You May Proceed With REB 0A Finalization
+
+(Do NOT begin REB 1 yet.)
+
+Once you confirm the above is understood, I will authorize:
+
+"Replit, you may begin PH.8.7–11.20–REB 1."
+
+Let me know when you’re ready.
