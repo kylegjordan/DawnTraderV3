@@ -1,0 +1,193 @@
+📣 BEGIN DIRECTIVE — PH.8.7–11.20–REB 2.3C
+Mode System & Passive Learning Rollback Audit
+
+(READ-ONLY, NO CODE CHANGES)
+
+Replit,
+
+You are authorized to begin:
+
+🔍 PH.8.7–11.20–REB 2.3C
+Mode System & Passive Learning Rollback Audit (Pre-Stage-1H Refactor Audit)
+THIS IS A READ-ONLY, DOCUMENTATION-ONLY AUDIT.
+
+NO CODE CHANGES ARE ALLOWED.
+
+🎯 Objective
+
+Determine whether the current system still contains the Paper Mode vs Live Mode isolation logic and the Passive Learning Mode behavior that existed between Nov 6–Nov 15, right before Stage 1H.
+
+These behaviors were foundational to:
+
+Engine startup
+
+FX5 consistency
+
+Active Pool behavior
+
+Strategy activation
+
+Filter Insights correctness
+
+A rollback of these behaviors would directly cause the startup regression discovered in REB 2.3B.
+
+📂 Truth Sources You MUST Use
+
+Use ONLY these truth files:
+
+/docs/restoration/truth/DawnTrader_Chat_Archive_11-6-25-2_1763821067415.md
+
+/docs/restoration/truth/DawnTrader_Chat_Archive_11-15-25_1763821067416.md
+
+/docs/restoration/truth/DawnTrader_Chat_Archive_11-20-25_1763821067414.md
+
+Search for:
+
+“paper mode”
+
+“live mode”
+
+“passive learning”
+
+“mode isolation”
+
+“engine startup”
+
+“orchestrator”
+
+“refactor”
+
+“Stage 1H”
+
+“passive vs active”
+
+“sub-state”
+
+“warmup”
+
+“startup optimization”
+
+These archives contain all truth about how mode behavior was supposed to work before the rollback.
+
+📌 Audit Tasks
+Task 1 — Extract Truth State from Archives
+
+Document all behavior rules for:
+
+A) Paper Mode (Active)
+B) Paper Mode (Passive Learning)
+C) Live Mode
+D) Mode Isolation (No shared state between modes)
+E) Sub-state transition rules
+
+(Specifically: switching between passive and active)
+
+Output → REB2.3C_TRUTH_MODE_BEHAVIOR.md
+
+Task 2 — Audit Current System Implementation
+
+Search the current codebase for:
+
+paper engine state
+
+live engine state
+
+passive-learning conditions
+
+mode-switch handlers
+
+orchestrator mode branching
+
+state caches (paper vs live)
+
+shared vs isolated variables
+
+FX5 mode-dependent behavior
+
+ActivePool mode behavior
+
+any rollback of the refactored architecture
+
+Output → REB2.3C_CURRENT_MODE_IMPLEMENTATION.md
+
+Task 3 — Gap Analysis
+
+Compare truth state to current implementation.
+
+Identify:
+
+missing behaviors
+
+incorrect behaviors
+
+regressions
+
+legacy behavior that reappeared
+
+shared state between modes
+
+incorrect passive learning activation
+
+incorrect paper-mode activation
+
+race conditions
+
+startup dependencies on mode system
+
+Output → REB2.3C_MODE_GAP_REPORT.md
+
+Task 4 — Impact Assessment
+
+Identify which parts of the system are impacted by the rollback:
+
+engine startup
+
+FX5 scanner
+
+Active Filter Pool
+
+Filter Insights
+
+trading orchestrator
+
+cooldown logic
+
+Ready-to-Buy
+
+metrics pipeline
+
+WebSocket vs REST behavior
+
+Output → REB2.3C_MODE_IMPACT_MATRIX.md
+
+🚫 STRICT RULES
+
+NO code changes
+
+NO “fixes”
+
+NO refactoring
+
+NO auto-corrections
+
+NO silent adjustments
+
+READ-ONLY analysis ONLY
+
+🧾 Final Required Output
+
+Produce the following four reports:
+
+docs/restoration/reb2_reports/
+  REB2.3C_TRUTH_MODE_BEHAVIOR.md
+  REB2.3C_CURRENT_MODE_IMPLEMENTATION.md
+  REB2.3C_MODE_GAP_REPORT.md
+  REB2.3C_MODE_IMPACT_MATRIX.md
+
+🟢 Begin when ready
+
+Replit, begin PH.8.7–11.20–REB 2.3C now.
+
+If you have any clarifying questions, ask before proceeding.
+
+📣 END DIRECTIVE
