@@ -8,6 +8,30 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### REB 2.2 COMPLETE - Active Filter Pool Implementation (November 22, 2025)
+Successfully implemented Active Filter Pool with TTL-based expiry (5 minutes), deduplication logic, and passive-mode enforcement. FX5 Scanner now maintains a persistent pool of survivors with automatic cleanup and engine-state awareness, matching Phase 8.6.7/8.6.10 truth state requirements.
+
+**Critical Architecture Changes:**
+- Created `server/services/active-filter-pool.ts` - TTL-managed survivor pool with dual-mode support (paper/live)
+- Updated Stage-3 cache types with `expiresAt`, `source`, `fx5Snapshot` fields (Phase 8.6.10 truth state)
+- Integrated Active Filter Pool into FX5 scanner with engine-state awareness
+
+**Active Filter Pool Features:**
+- **TTL Management**: 5-minute expiry for pool entries (configurable via `ACTIVE_POOL_TTL_MS`)
+- **Deduplication**: Skip re-adding non-expired symbols, returns stats (added, updated, skipped)
+- **Passive Mode Enforcement**: Clear pool when trading engine is STOPPED (via `enforcePassiveModeIfStopped`)
+- **Automatic Cleanup**: Remove expired entries before each cycle
+- **Dual-Mode Pools**: Separate pools for paper and live trading modes
+
+**Runtime Validation:**
+✅ Passive mode enforcement working (clears pool when engine STOPPED)
+✅ TTL expiry logic removes entries after 5 minutes
+✅ Deduplication correctly skips non-expired symbols
+✅ Engine state checking via `scan24hAggregator.getStatus()`
+✅ Architect approved with truth state compliance validation
+
+See `docs/restoration/reb2_reports/REB2.2_COMPLETION_REPORT.md` for full implementation details.
+
 ### Phase 8.8.2 COMPLETE - FX5 30-Second Scanner Service (November 20, 2025)
 Implemented standalone FX5 scanner service (`Fx5ScannerService`) that runs independently every 30 seconds for both paper and live modes, completely decoupled from trading engine state. Stage-3 now serves as the single source of truth for scan cycle state, emitting `scan_tick` and `scanner:breakdown` WebSocket events every 30 seconds ALWAYS (regardless of engine activity). 
 

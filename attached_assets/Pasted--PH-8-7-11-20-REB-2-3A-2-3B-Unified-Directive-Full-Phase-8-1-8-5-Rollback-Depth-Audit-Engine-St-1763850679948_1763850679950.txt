@@ -1,0 +1,294 @@
+✅ PH.8.7–11.20–REB 2.3A + 2.3B Unified Directive
+Full Phase 8.1–8.5 Rollback Depth Audit + Engine Startup Regression Audit
+
+(READ-ONLY • NO FIXES • NO PATCHES • NO CHANGES • AUDIT ONLY)
+
+Replit — this directive begins PH.8.7–11.20–REB 2.3, consisting of two mandatory sub-audits performed together:
+
+📌 REB 2.3A — Phase 8.1–8.5 Rollback Depth Audit (Backend Systems)
+Purpose
+
+We need to determine how far the rollback went beyond the 8.6–8.7 regressions already discovered.
+
+We must confirm whether the following backend logic from Phase 8.1 through Phase 8.5 still exists in the current system, or if it was silently wiped out during the rollback:
+
+Components to Audit:
+A. Engine Warmup & Startup Logic
+
+early-phase engine bootstrap logic
+
+orchestrator initialization order
+
+event sequencing
+
+pre-warm throttling
+
+engine state-machine transitions
+
+B. Strategy Engine Integration Backbone
+
+Ready-to-Buy execution chain
+
+orchestrator signals
+
+strategy invocation timing
+
+cooldown prevention
+
+trade-queue handling
+
+C. FX5 Scanner Pre-6.x Behavior
+
+early FX5 behaviors before batch-first
+
+rotation methods
+
+rank preparation
+
+universe slicing logic
+
+filter pre-checks
+
+D. Filter Loading & Threshold Initialization
+
+backend initialization of thresholds
+
+persistent storage pre-load
+
+screeners → backend mapping logic
+
+E. Caching & Shared-State Foundations
+
+in-memory caches (pre-stage 3)
+
+safety guards
+
+stale-prevention logic
+
+dedupe behavior
+
+F. REST API Foundation
+
+endpoints introduced in 8.0–8.5
+
+payload shapes
+
+signature correctness
+
+middleware loading
+
+G. Any Fixes in Phase 8 Prior to 8.6
+
+especially silent backend improvements
+
+known regressions with no UI visibility
+
+startup safety enhancements
+
+📌 REB 2.3B — Engine Startup Regression Audit
+
+The trading engine currently takes ~60 seconds to activate, which indicates a rollback to pre-fix behavior.
+
+This audit must:
+
+Identify the truth-state implementation (from Nov 6 to Nov 20 archives):
+
+source of optimized startup
+
+file(s) modified
+
+expected startup duration
+
+expected engine activation sequence
+
+warmup timing constraints
+
+orchestrator readiness rules
+
+state transitions (INIT → WARM → ACTIVE)
+
+explicit or implicit dependencies
+
+Inspect current behavior:
+
+what code now executes on startup
+
+whether warmup logic is missing
+
+whether initialization is blocked, waiting, or looping
+
+whether legacy logic has replaced optimized logic
+
+whether throttling or long-polling returned
+
+whether startup is now sequential instead of parallel
+
+Determine rollback depth:
+
+was only the orchestration layer reverted?
+
+was the entire engine-switch subsystem reverted?
+
+was warmup logic removed or overwritten?
+
+were startup optimizations undone by GitHub sync?
+
+📂 Sources of Truth
+
+Use ONLY these documents for truth-state comparison:
+
+Core Truth Files (already in /docs/restoration/truth):
+
+DawnTrader_Chat_Archive_11-6-25-2
+
+DawnTrader_Chat_Archive_11-15-25
+
+DawnTrader_Chat_Archive_11-20-25
+
+filter-insights (11.18.25).tsx
+
+Phase 8.6–8.7 Documentation:
+
+Used for context only — DO NOT assume Phase 8.1–8.5 logic is similar.
+
+Uploaded Stage Files (for historical reference only):
+
+Do NOT use these as truth unless cross-verified with the chat archives.
+
+🧱 Guardrails (MANDATORY)
+☑️ READ-ONLY MODE
+
+You may not modify any code, including:
+
+no fixes
+
+no patches
+
+no refactors
+
+no reorganizing
+
+no dependency changes
+
+no deletions
+
+no optimizations
+
+This is audit only.
+
+☑️ No Assumptions
+
+If truth is not found in the archives, you must ask for clarification.
+
+☑️ No Stage 3 Modifications
+
+Stage 3 compatibility is documentation-only later in REB 2.7.
+Do not modify Stage 3 in this audit.
+
+☑️ No UI Assumptions
+
+UI restoration is deferred to REB 2.4 and REB 2.5.
+
+☑️ Ask Questions BEFORE proceeding if anything is unclear.
+📑 Required Output (Mandatory Report Set)
+
+All reports must be written to:
+
+/docs/restoration/reb2_reports/
+
+
+Replit must produce:
+
+1. REB2.3A_PHASE_8.1-8.5_ROLLBACK_MAP.md
+
+Contains:
+
+list of all fixes originally introduced in 8.1–8.5
+
+which fixes still exist in current system
+
+which fixes are partially missing
+
+which fixes are totally missing
+
+“Rollback Depth Score” (0%–100%)
+
+file-by-file comparison summary
+
+2. REB2.3A_COMPONENT_IMPACT_MATRIX.md
+
+Shows for each impacted subsystem:
+
+FX5
+
+Strategy Engine
+
+ActivePool
+
+Engine Orchestrator
+
+State Machine
+
+REST API
+
+Telemetry
+
+Cooldown logic
+
+Scheduler
+
+whether Phase 8 logic survived.
+
+3. REB2.3B_ENGINE_STARTUP_REGRESSION_REPORT.md
+
+Contains:
+
+expected startup sequence from truth
+
+current startup sequence
+
+exact delta list
+
+root cause hypotheses
+
+affected files
+
+affected services
+
+rollback depth classification
+
+required restoration scope
+
+4. REB2.3A_BROKEN_FEATURE_INDEX.md
+
+A list of all backend behaviors missing that truth-state guaranteed.
+
+5. Questions for Clarification (if needed)
+🔐 Test User Credentials
+
+Use these ONLY if required for testing:
+
+email: phasetester@dawntrader.ai
+password: PhaseTester!234
+
+❗ Before starting, Replit must confirm ALL of the following:
+
+It understands the scope of REB 2.3A and REB 2.3B
+
+It understands this is READ-ONLY
+
+It understands truth comes from the Nov 6–20 chat archives
+
+It understands no code changes may be made
+
+It has no remaining questions before proceeding
+
+🚀 Final Command
+
+Replit — if you understand this directive fully,
+have no unanswered questions,
+and are ready to begin the audits:
+
+Acknowledge readiness and ask any final clarifying questions before starting REB 2.3.
+
+Do NOT begin until you have confirmed.
