@@ -1,0 +1,234 @@
+✅ PH.8.7–11.20–REB 1.1 + REB 1.2 — Combined Directive
+Backend Endpoint Verification + FX5 → ActivePool → Strategy Wiring Verification
+
+(Read-Only Audit — NO Code Changes)
+
+🧭 Context (Must Read)
+
+This directive is part of the Emergency REB Program restoring the DawnTrader V1 system to its correct state between Nov 18–20 before the GitHub rollback incident overwrote key components.
+
+REB 1.0 (Truth State Extraction) is complete and produced 7 audit reports confirming major architectural regressions affecting:
+
+FX5 Scanner
+
+Filter Insights
+
+Screeners
+
+Metrics pipeline
+
+Filter breakdowns
+
+Active Filter Pool
+
+Now we must complete the final two mini-audits needed before beginning REB-2:
+
+REB 1.1 — Backend Endpoint Verification
+
+Verify the truth and completeness of backend REST endpoints required by Filter Insights and FX5.
+
+REB 1.2 — FX5 → ActivePool → Strategy Wiring Verification
+
+Validate the backend wiring that feeds:
+
+FX5 Scanner → Active Filter Pool → Strategy Engine → Ready-To-Buy
+
+These are the two most critical backend pathways that must be validated before designing the restoration plan.
+
+ABSOLUTE RULE:
+🟥 NO CODE CHANGES. READ-ONLY AUDIT ONLY.
+🟥 NO FIXES, NO PATCHES, NO REFACTORING IN THIS PHASE.
+🟥 Only documentation and truth extraction.
+
+🧪 Test User Credentials
+
+Use for any API calls during backend verification:
+
+username: testuser123
+password: SecurePass123!
+
+
+Auth token retrieval:
+
+curl -s -X POST http://localhost:5000/api/auth/login \
+-H 'Content-Type: application/json' \
+-d '{"username":"testuser123","password":"SecurePass123!"}' \
+| jq -r '.accessToken'
+
+🔶 PH.8.7–11.20–REB 1.1 — Backend Endpoint Verification
+🎯 Purpose
+
+Confirm which backend REST endpoints currently exist, whether they match the truth files (Phase 8.6–8.7), and whether they provide the correct data shape for Filter Insights and FX5.
+
+📝 Tasks (Read-Only)
+
+Search backend (server/) for the following endpoints:
+
+I. FX5-Required Endpoints
+/api/scan-summary
+/api/scan-history
+/api/24h-activity
+/api/active-pool
+/api/filters-v2
+/api/screeners
+/api/screeners/update
+/api/filters/reset
+
+II. Filter Insights-Required Endpoints
+
+Confirm whether each exists, and document:
+
+File location
+
+Route method (GET/POST/PUT)
+
+Output payload shape
+
+Whether it matches the data model in Phase 8.6.10 mapping
+
+III. Output Requirements
+
+Create the following report:
+
+/docs/restoration/reb1_reports/07_Backend_Endpoint_Verification.md
+
+
+Report MUST contain:
+
+List of all endpoints found
+
+Missing endpoints
+
+Correct vs incorrect payload shapes
+
+Any schema mismatches
+
+Whether passive learning mode is handled correctly
+
+REST vs WebSocket usage notes
+
+A table mapping truth → current state
+
+🔶 PH.8.7–11.20–REB 1.2 — FX5 → ActivePool → Strategy Wiring Verification
+🎯 Purpose
+
+Verify that backend logic matches the expected truth pipeline from Nov 18–20:
+
+FX5 Scanner  
+   ↓  
+Eligible Pairs  
+   ↓  
+Active Filter Pool (dedupe + expiry)  
+   ↓  
+Strategy Engine evaluation  
+   ↓  
+Ready-To-Buy generation  
+
+📝 Tasks (Read-Only)
+
+Search backend for:
+
+I. FX5 Output Path
+
+Where FX5 scanner outputs:
+
+eligible symbols
+
+breakdown
+
+evaluated count
+
+deduplication state
+
+universe rotation values
+
+Search for:
+
+getEligiblePairsWithBreakdown
+activeFilteredPool
+addToActivePool
+pruneExpiredEntries
+
+II. Active Filter Pool Logic
+
+Confirm:
+
+how entries are added
+
+how expiry is determined
+
+how dedupe occurs
+
+how passive mode handles the pool (should remain EMPTY)
+
+III. Strategy Engine Path
+
+Verify:
+
+which functions receive active pool entries
+
+whether Strategy Engine is triggered correctly
+
+whether 8.7.x repairs (confidence thresholds, minHistoryDays, etc.) persist
+
+whether any Stage-3 code has contaminated the FX5 → strategy path (should NOT be present at this phase of restoration)
+
+IV. Output Requirements
+
+Create:
+
+/docs/restoration/reb1_reports/08_FX5_ActivePool_Strategy_Wiring_Verification.md
+
+
+This report MUST include:
+
+Actual wiring graph (current implementation)
+
+Expected truth wiring graph (from truth files)
+
+Exact discrepancies
+
+Missing logic
+
+Extra/legacy logic
+
+Any Stage 3 or WS contamination
+
+Whether ActivePool is correctly EMPTY in passive learning
+
+Whether cooldown logic is present or missing
+
+🔍 ABSOLUTE REQUIREMENTS
+
+❌ Do NOT modify ANY code
+
+❌ Do NOT “fix” anything
+
+❌ Do NOT delete or refactor anything
+
+❌ Do NOT add missing endpoints
+
+This is pure audit, building the knowledge base for the REB-2 restoration plan.
+
+📁 Deliverables
+
+Place all reports into:
+
+/docs/restoration/reb1_reports/
+
+
+Required files:
+
+07_Backend_Endpoint_Verification.md
+
+08_FX5_ActivePool_Strategy_Wiring_Verification.md
+
+❓ Final Confirmation
+
+Replit, before starting:
+
+Do you fully understand this is a read-only audit with no code modifications?
+
+Do you understand how these two reports fit into the larger REB program?
+
+Do you have any questions before beginning PH.8.7–11.20–REB 1.1 + 1.2?
