@@ -1,0 +1,445 @@
+PH.8.7–11.20–REB 2.3D — Refactor & Stage 1H Rollback Depth Audit (READ-ONLY)
+
+You are now executing PH.8.7–11.20–REB 2.3D in the Emergency Restoration & Bootstrap (REB) program.
+
+This phase is READ-ONLY.
+You must NOT modify any code, configs, schemas, tests, or runtime behavior.
+
+The goals of this audit:
+
+Determine exactly how far the rollback reached into the refactor work (Phases 1–7) and Stage 1H.
+
+Identify which refactor/Stage systems survived intact, which are partially present, and which are completely gone.
+
+Identify any “legacy garbage” that the refactor removed but the rollback silently reintroduced.
+
+Isolate all refactor + Stage 1H pieces that are required for:
+
+Proper engine startup & warm-up
+
+Correct mode isolation (Paper vs Live)
+
+Correct passive learning behavior
+
+Clean data pipelines into later Phase 8 work (FX5, Active Pool, Filter Insights, Screeners, etc.)
+
+We are not restoring anything here. We are only mapping reality vs truth so later REB phases can restore safely.
+
+0. Guardrails (Non-Negotiable)
+
+READ-ONLY:
+
+❌ No code edits
+
+❌ No config changes
+
+❌ No DB schema changes
+
+❌ No migrations
+
+❌ No “quick fixes” or “hot patches”
+
+Stage-3:
+
+You may analyze Stage-3 code and docs, but MUST NOT modify it in this phase.
+
+Engine behavior:
+
+Observe current behavior via logs / API only. Do not “fix” anything.
+
+Mode system:
+
+Observe Paper / Live / passiveLearning behavior. Do not change logic.
+
+If you are unsure, you MUST ask questions rather than assume.
+
+1. Truth Sources for REB 2.3D
+
+Use these as authoritative references for how the system was meant to behave after the refactor:
+
+1.1. Chat Archives (already in truth registry)
+
+These are under docs/restoration/truth/:
+
+DawnTrader_Chat_Archive_11-6-25_*.md
+
+DawnTrader_Chat_Archive_11-15-25_*.md
+
+DawnTrader_Chat_Archive_11-20-25_*.md
+
+Usage:
+
+Nov 6 archive: refactor context (Phases 1–7 beginnings, legacy removal, bootstrap goals).
+
+Nov 15 archive: Stage 1H details, unified scanner, mode system design, orchestrator sequencing.
+
+Nov 20 archive: How Phases 1–7 + Stage 1H were meant to support Phase 8.
+
+1.2. Stage / Refactor Truth Docs (I will ensure these are available)
+
+Assume these (or equivalent) are/will be placed in docs/restoration/truth/ as part of the truth set:
+
+stage-c-lite-validation-report.md
+
+Any other Stage-related .md docs that describe:
+
+Stage 1H
+
+Stage 2 / Stage 2b scan flow
+
+Stage 3 state cache / db integration
+
+Sync/analysis docs (e.g., “sync-analysis-docs”, “stage-3-audit-sources”, etc.)
+
+If you find them under attached_assets/, you may copy them into docs/restoration/truth/ (like REB 0A did) and register them in the truth registry.
+
+1.3. Phase 8.6–8.7 Truth Docs
+
+These are secondary here, but still useful to anchor our understanding of how refactor work supported Phase 8:
+
+phase_8.6.7_validation*.md
+
+phase_8.6.9_*.md
+
+phase_8.6.10_*.md
+
+phase_8.6.11_completion*.md
+
+phase_8.7.1_completion*.md
+
+phase_8.7_completion*.md
+
+Do not treat these as “refactor truth,” but as downstream consumers of refactor/Stage work.
+
+2. Scope of REB 2.3D
+
+You are auditing three intertwined layers:
+
+Refactor Phases 1–7
+
+Removal of legacy back-end objects and flows
+
+Introduction of new unified pipelines & abstractions
+
+Reorganization of engine, orchestrator, storage, and scanner structure
+
+Anything tagged as “Refactor Phase 1–7”, “bootstrap”, “revival”, etc.
+
+Stage 1H (and related Stage 1 work)
+
+Unified scanner architecture
+
+Broadcasting optimizations
+
+Initial mode isolation design
+
+Engine startup / warm-up pattern (INIT → WARM → ACTIVE)
+
+Any Stage 1H debug logging patterns
+
+Stage 2 / Stage 3 & Sync Layers (for rollback depth mapping, not restoration)
+
+Stage-2 scan flow
+
+Stage-3 state cache and shared storage
+
+Sync analysis docs (what was cleaned up, what was removed)
+
+Your job is to answer:
+
+Which pieces of these layers still exist in the current codebase, and which were erased by rollback?
+Which legacy structures that refactor removed are now back?
+
+3. Concrete Questions You Must Answer
+
+Your reports should answer, at minimum, the following:
+
+3.1. Refactor Survival
+
+For each major refactor objective (Phases 1–7):
+
+Was this objective fully, partially, or not at all present in the current code?
+
+Which files / modules currently reflect refactor work vs older, pre-refactor structures?
+
+Which legacy modules / patterns that should have been removed are present again?
+
+Areas to evaluate:
+
+Engine structure:
+
+Is there a clean separation between:
+
+Trading engine
+
+Execution engines (paper, live)
+
+Orchestrator / signal system
+
+Scanners / pipelines
+
+Or do we see older, tangled “everything in one” patterns still present?
+
+Mode system (Paper vs Live vs Passive Learning):
+
+Compare truth behavior vs current behavior at refactor time:
+
+Paper vs live isolation
+
+Passive learning as an attribute of paper
+
+Where mode is enforced (scanner, metrics, pool, strategies, etc.)
+
+Legacy garbage removal:
+
+Did refactor remove specific legacy routes, services, or DB artifacts?
+
+Are any of those now present again?
+
+Document concrete examples (file path, symbol names, how we know they’re legacy).
+
+3.2. Stage 1H Truth vs Current
+
+From Stage 1H truth docs + Nov 15 archive:
+
+What was Stage 1H supposed to do?
+
+Unified scanner
+
+Reduced broadcast noise
+
+Proper engine warm-up
+
+Mode-aware scanning behavior
+
+Improved startup timing
+
+Specific debug logging patterns
+
+In the current code:
+
+Do we see a unified scanner or multiple old scanner variants?
+
+Do we see any signs of the Stage 1H logging structures?
+
+Are broadcast throttling / consolidation behaviors present or missing?
+
+Is there any explicit warm-up stage for engine startup?
+
+3.3. Stage 2/3 & Sync Layers
+
+You must not restore Stage 3 here, but you must answer:
+
+Which Stage-2 and Stage-3 components are:
+
+Fully alive
+
+Partially alive
+
+Dead / missing
+
+What did the refactor & stages intend to do with:
+
+Stage-3 cache
+
+Shared DB + in-memory state
+
+Sync logic between FX5 / filters / strategies / UI
+
+Which of those results are now at risk because part of refactor was undone?
+
+3.4. Engine Startup / Warm-Up Dependencies
+
+Tie this audit back to the already known engine startup regression:
+
+What refactor–/Stage-level building blocks did engine startup depend on?
+
+Warm-up logic
+
+State machine transitions (INIT → WARM → ACTIVE)
+
+Orchestrator boot ordering
+
+Pre-warm data fetching
+
+Mode-aware startup
+
+Which of those pieces are missing or clearly rolled back?
+
+4. Implementation Instructions (How to Work)
+
+You must:
+
+Use grep, rg, and targeted file reads, not full sequential reads of huge archives.
+
+Always tie a finding to a specific truth source, e.g.:
+
+“Per Stage-1H section in Nov 15 archive lines XXXX–YYYY…”
+
+“Per stage-c-lite-validation-report.md, section Z…”
+
+Work systematically:
+
+First pass: build a timeline and intent (from truth docs)
+
+Second pass: map current codebase onto that intent
+
+Third pass: highlight mismatches and legacy re-introductions
+
+You may reuse your REB 1 and REB 2.3A–C knowledge, but do not treat previous inferences as truth if they weren’t anchored in these Stage / refactor docs.
+
+5. Required Output Reports
+
+Place all reports here:
+
+docs/restoration/reb2_reports/
+
+Create at least the following files:
+
+REB2.3D_REFACTOR_TIMELINE_MAP.md
+
+Timeline of:
+
+Refactor Phases 1–7
+
+Stage 1H
+
+Stage 2/3 changes
+
+For each entry:
+
+Date / archive reference
+
+Summary of what changed (intent)
+
+Which subsystems were touched
+
+Which later Phase 8 work depended on it (if known)
+
+REB2.3D_STAGE_1H_TRUTH_REPORT.md
+
+Extract Stage 1H behavior from truth:
+
+Scanner structure
+
+Broadcast rules
+
+Mode behavior
+
+Warm-up & startup
+
+Logging conventions
+
+Then map what exists now:
+
+Same structures present?
+
+Partially present?
+
+Completely missing?
+
+REB2.3D_REFACTOR_SURVIVAL_MATRIX.md
+
+A table listing key refactor objectives/components (rows) vs status (columns):
+
+Component name
+
+Original purpose (from truth docs)
+
+Current status: SURVIVED, PARTIAL, ROLLED_BACK
+
+Notes: which files show survival vs rollback
+
+Legacy artifacts reintroduced? (Y/N, with example)
+
+REB2.3D_LEGACY_GARBAGE_REINTRODUCED.md
+
+A list of specific legacy patterns and files that:
+
+Were removed during refactor,
+
+But are now present again.
+
+Include:
+
+File path
+
+Symbol(s) or pattern(s)
+
+Evidence from truth docs they were meant to be removed
+
+Potential risk if left in place
+
+REB2.3D_ENGINE_STARTUP_DEPENDENCIES.md
+
+Detail which refactor/Stage features engine startup relied on:
+
+Mode system
+
+Warm-up / pre-warm actions
+
+Orchestrator ordering
+
+State machine
+
+Clearly mark which are currently:
+
+Missing
+
+Broken
+
+Partially present
+
+REB2.3D_RESTORATION_RECOMMENDATIONS.md
+
+This is not a code plan, but a map of what REB 2.4+ will need to restore, grouped by priority:
+
+P0: Must be restored before any safe trading
+
+P1: Important but can follow
+
+P2: Nice-to-have / optimization
+
+Only list things that are clearly supported by truth docs.
+
+6. Questions You MUST Answer (Before Marking REB 2.3D Complete)
+
+In your reports, you must explicitly answer:
+
+Did the rollback definitely reach into the refactor (Phases 1–7)?
+
+If yes, how deep and which components?
+
+Which refactor objectives are clearly gone and must be restored later?
+
+Which Stage 1H behaviors are fully or partially missing?
+
+Which legacy structures that were supposed to be removed are back?
+
+What minimal subset of refactor/Stage work is absolutely required to:
+
+Fix engine startup
+
+Enforce passive learning
+
+Keep modes properly isolated
+
+Avoid data corruption (Active Pool, metrics, strategies)
+
+7. Final Confirmation
+
+When you are done, respond with:
+
+A brief bullet summary of:
+
+The most critical rollback findings
+
+Any “surprise” survivals (things that did not roll back)
+
+The P0 restoration items you believe REB 2.4 should target first
+
+Confirmation that:
+
+All required REB 2.3D reports have been created
+
+No code or config changes were made

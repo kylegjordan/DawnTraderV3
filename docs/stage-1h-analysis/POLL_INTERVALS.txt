@@ -1,0 +1,62 @@
+# Poll, Refresh, and Debounce Intervals Found in Codebase
+
+## Critical Frontend Intervals
+
+1. Trading Status Query (use-trading.tsx:24)
+   - refetchInterval: false (WebSocket-only)
+   - staleTime: Infinity
+
+2. System Config Poll (top-bar.tsx:104)
+   - refetchInterval: 10000ms (10 seconds)
+   - Used for passiveLearning flag
+
+3. Paper Sim Status (use-trading.tsx:189)
+   - refetchInterval: 5000ms (5 seconds)
+
+4. Portfolio Queries (dashboard.tsx:47, 56)
+   - refetchInterval: 15000ms (15 seconds)
+   - staleTime: 15000ms
+
+5. Debounced Invalidation (use-trading.tsx:77)
+   - Debounce window: 500ms
+   - Accumulates query keys during window
+
+## Critical Backend Intervals
+
+1. Broadcast Debounce (trading-state-sync.ts:31)
+   - BROADCAST_DEBOUNCE_MS: 250ms
+   - Prevents duplicate broadcasts
+
+2. Passive Learning Debounce (trading-state-sync.ts:485-492)
+   - Reset window: 2000ms (2 seconds)
+   - Prevents duplicate passiveLearning broadcasts
+
+3. Reconciliation Delay (trading-state-sync.ts:40-41)
+   - Initial delay: 3000ms (3 seconds after startup)
+
+## WebSocket Intervals
+
+1. Heartbeat (use-websocket.tsx:115)
+   - Ping interval: 25000ms (25 seconds)
+   - Max missed pongs: 3
+
+2. Reconnect Backoff (use-websocket.tsx:86-92)
+   - Initial delay: 1000ms
+   - Max delay: 30000ms (30 seconds)
+   - Pattern: Exponential (1s → 2s → 4s → 8s → ... → 30s)
+
+## Other Service Intervals
+
+- Market Scanner: 30000ms (30 seconds)
+- Watchlist Refresh: 30000ms (30 seconds)
+- Paper Execution Monitor: 10000ms (10 seconds)
+- Walter Health Monitor: 30000ms (30 seconds)
+- Health Report Scheduler: 3600000ms (1 hour)
+- Learning Cycle: 86400000ms (24 hours, configurable)
+
+## Default Query Client Settings (queryClient.ts:136-137)
+
+- staleTime: 15000ms (15 seconds)
+- refetchInterval: false
+- refetchOnWindowFocus: false
+- retry: 1
