@@ -639,3 +639,285 @@ export class MarketScanner {
   }
 
 }
+
+/**
+ * REB 2.1 — FX5 Scanner Restoration (Phase 8.6.7 Truth State)
+ * 
+ * Batch-First → FX5 Filter Architecture
+ * Restored from: docs/restoration/truth/phase_8.6.7_validation_1763829797709.md
+ */
+
+// Rotation state storage (in-memory, persisted across scan cycles)
+const rotationState = {
+  topNIndex: 0,
+  tierBIndex: 0,
+};
+
+export interface BatchResult {
+  survivors: Array<{
+    symbol: string;
+    currentPrice: number;
+    volume24h: number;
+    dailyRange: number;
+    fromTopN: boolean;
+  }>;
+  breakdown: {
+    failed_min_volume: number;
+    failed_spread: number;
+    failed_daily_range: number;
+    failed_min_price: number;
+    failed_stablecoin: number;
+    failed_quote_currency: number;
+    failed_history: number;
+    failed_market_cap: number;
+    failed_guardrail_risk: number;
+    already_active: number;
+    passed_all_filters: number;
+  };
+  metrics: {
+    evaluatedCount: number;
+    eligibleCount: number;
+    ineligibleCount: number;
+    topNCount: number;
+    tierBCount: number;
+    krakenUniverseSize: number;
+    topEndUniverseSize: number;
+    tierBUniverseSize: number;
+  };
+}
+
+/**
+ * Batch-First Scanner (Phase 8.6.7 Architecture)
+ * 
+ * 5-Step Pipeline:
+ * 1. Fetch ALL 1,370 Kraken tickers (NO filtering)
+ * 2. Sort by volume, identify Top-N (100) and Tier-B (1,270) universes
+ * 3. Build 60-pair batch with rotation (36 Top-N + 24 Tier-B)
+ * 4. Apply FX5 filters to ONLY those 60 symbols
+ * 5. Return survivors with breakdown
+ */
+export async function collectMixedBatch(
+  krakenService: KrakenService,
+  filters: any,
+  mode: 'paper' | 'live'
+): Promise<BatchResult> {
+  const startTime = Date.now();
+  
+  // STEP 1: Fetch ALL Kraken tickers for volume ranking
+  console.log('[8.6.7][DEBUG] STEP 1: Fetching ALL Kraken tickers for volume ranking...');
+  const [tickers, pairsObj] = await Promise.all([
+    krakenService.getTicker(),
+    krakenService.getTradablePairs()
+  ]);
+  
+  const allPairs = Object.entries(tickers).map(([pairName, ticker]) => ({
+    pairName,
+    symbol: pairsObj[pairName]?.wsname || pairName,
+    volume24h: parseFloat(ticker.v[1]),
+    ticker,
+    pairInfo: pairsObj[pairName],
+  })).filter(p => p.pairInfo); // Only keep pairs with metadata
+  
+  const krakenUniverseSize = allPairs.length;
+  console.log(`[8.6.7][DEBUG] Total Kraken symbols available: ${krakenUniverseSize}`);
+  
+  // STEP 2: Sort by volume, identify Top-N and Tier-B universes
+  allPairs.sort((a, b) => b.volume24h - a.volume24h); // Descending volume
+  
+  const TOP_N_SIZE = 100;
+  const topNUniverse = allPairs.slice(0, TOP_N_SIZE);
+  const tierBUniverse = allPairs.slice(TOP_N_SIZE);
+  
+  console.log(`[8.6.7][DEBUG] STEP 2: Top-N universe: ${topNUniverse.length}, Tier-B universe: ${tierBUniverse.length}`);
+  
+  // STEP 3: Build 60-pair batch with rotation
+  const TOP_N_BATCH_SIZE = 36;
+  const TIER_B_BATCH_SIZE = 24;
+  
+  // Select 36 pairs from Top-N using rotation
+  const topNBatch: typeof allPairs = [];
+  for (let i = 0; i < TOP_N_BATCH_SIZE; i++) {
+    const index = (rotationState.topNIndex + i) % topNUniverse.length;
+    topNBatch.push(topNUniverse[index]);
+  }
+  
+  // Select 24 pairs from Tier-B using rotation
+  const tierBBatch: typeof allPairs = [];
+  for (let i = 0; i < TIER_B_BATCH_SIZE; i++) {
+    const index = (rotationState.tierBIndex + i) % tierBUniverse.length;
+    tierBBatch.push(tierBUniverse[index]);
+  }
+  
+  // Combine batches
+  const batch = [...topNBatch, ...tierBBatch];
+  
+  console.log(`[8.6.7][DEBUG] STEP 3: Built batch - ${topNBatch.length} Top-N + ${tierBBatch.length} Tier-B = ${batch.length} total`);
+  console.log(`[8.6.7][DEBUG] Batch size BEFORE filtering: ${batch.length}`);
+  
+  // Increment rotation indices for next cycle
+  rotationState.topNIndex = (rotationState.topNIndex + TOP_N_BATCH_SIZE) % topNUniverse.length;
+  rotationState.tierBIndex = (rotationState.tierBIndex + TIER_B_BATCH_SIZE) % tierBUniverse.length;
+  
+  // STEP 4: Apply FX5 filters to ONLY those 60 symbols
+  console.log(`[8.6.7][DEBUG] STEP 4: Applying FX5 filters to ${batch.length} batch symbols...`);
+  
+  // Get active trades to exclude
+  const activeTrades = await storage.getActiveTrades(mode);
+  const activeSymbols = new Set(activeTrades.map(t => t.symbol));
+  
+  // Initialize breakdown counters
+  const breakdown = {
+    failed_min_volume: 0,
+    failed_spread: 0,
+    failed_daily_range: 0,
+    failed_min_price: 0,
+    failed_stablecoin: 0,
+    failed_quote_currency: 0,
+    failed_history: 0,
+    failed_market_cap: 0,
+    failed_guardrail_risk: 0,
+    already_active: 0,
+    passed_all_filters: 0,
+  };
+  
+  // Extract filter criteria
+  const minVolume = parseFloat(filters.minVolume ?? '1000000.00');
+  const minDailyRange = parseFloat(filters.volatilityMin ?? '0.50');
+  const minPrice = parseFloat(filters.minPrice ?? '0.01');
+  const maxBidAskSpread = parseFloat(filters.maxBidAskSpread ?? '1.00');
+  const excludeStablecoins = filters.excludeStablecoins ?? true;
+  const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'UST'];
+  
+  // Parse allowed quote currencies
+  let allowedQuotes: string[] = [];
+  try {
+    allowedQuotes = typeof filters.quoteCurrencies === 'string'
+      ? JSON.parse(filters.quoteCurrencies)
+      : (filters.quoteCurrencies ?? []);
+  } catch {
+    allowedQuotes = [];
+  }
+  
+  const survivors: BatchResult['survivors'] = [];
+  let topNSurvivors = 0;
+  let tierBSurvivors = 0;
+  
+  // Evaluate each pair in the batch
+  for (let i = 0; i < batch.length; i++) {
+    const pair = batch[i];
+    const fromTopN = i < TOP_N_BATCH_SIZE;
+    const ticker = pair.ticker;
+    const pairInfo = pair.pairInfo;
+    
+    const baseCurrency = pairInfo.base;
+    const quoteCurrency = pairInfo.quote;
+    const normalizedQuote = quoteCurrency?.startsWith('Z') ? quoteCurrency.slice(1) : quoteCurrency;
+    const currentPrice = parseFloat(ticker.c[0]);
+    const volume24h = parseFloat(ticker.v[1]);
+    const high24h = parseFloat(ticker.h[1]);
+    const low24h = parseFloat(ticker.l[1]);
+    const dailyRange = ((high24h - low24h) / low24h) * 100;
+    const askPrice = parseFloat(ticker.a[0]);
+    const bidPrice = parseFloat(ticker.b[0]);
+    const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 100;
+    
+    let rejected = false;
+    
+    // Filter 1: Quote currency
+    if (!rejected && allowedQuotes.length > 0 && !allowedQuotes.includes(normalizedQuote || '')) {
+      breakdown.failed_quote_currency++;
+      rejected = true;
+    }
+    
+    // Filter 2: Stablecoins
+    if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
+      breakdown.failed_stablecoin++;
+      rejected = true;
+    }
+    
+    // Filter 3: Min volume
+    if (!rejected && volume24h < minVolume) {
+      breakdown.failed_min_volume++;
+      rejected = true;
+    }
+    
+    // Filter 4: Daily range (volatility)
+    if (!rejected && dailyRange < minDailyRange) {
+      breakdown.failed_daily_range++;
+      rejected = true;
+    }
+    
+    // Filter 5: Min price
+    if (!rejected && currentPrice < minPrice) {
+      breakdown.failed_min_price++;
+      rejected = true;
+    }
+    
+    // Filter 6: Bid-ask spread
+    if (!rejected && bidAskSpread > maxBidAskSpread) {
+      breakdown.failed_spread++;
+      rejected = true;
+    }
+    
+    // Pair passed all filters
+    if (!rejected) {
+      // Check if already active
+      if (activeSymbols.has(pair.symbol)) {
+        breakdown.already_active++;
+      } else {
+        breakdown.passed_all_filters++;
+        
+        // Add to survivors
+        survivors.push({
+          symbol: pair.symbol,
+          currentPrice,
+          volume24h,
+          dailyRange,
+          fromTopN,
+        });
+        
+        // Track Top-N vs Tier-B survivor counts
+        if (fromTopN) {
+          topNSurvivors++;
+        } else {
+          tierBSurvivors++;
+        }
+      }
+    }
+  }
+  
+  const survivorCount = survivors.length;
+  console.log(`[8.6.7][DEBUG] Survivors AFTER FX5 filters: ${survivorCount}/${batch.length}`);
+  
+  const duration = Date.now() - startTime;
+  console.log(`[Scan:${mode}] Mixed batch collected: ${survivorCount} eligible (${topNBatch.length} Top-N + ${tierBBatch.length} Tier-B) — ${duration}ms`);
+  
+  // Calculate metrics
+  const evaluatedCount = batch.length; // 60 (batch size)
+  const eligibleCount = breakdown.passed_all_filters + breakdown.already_active;
+  const ineligibleCount = 
+    breakdown.failed_min_volume +
+    breakdown.failed_spread +
+    breakdown.failed_daily_range +
+    breakdown.failed_min_price +
+    breakdown.failed_stablecoin +
+    breakdown.failed_quote_currency +
+    breakdown.failed_history +
+    breakdown.failed_market_cap +
+    breakdown.failed_guardrail_risk;
+  
+  return {
+    survivors,
+    breakdown,
+    metrics: {
+      evaluatedCount,
+      eligibleCount,
+      ineligibleCount,
+      topNCount: topNSurvivors,
+      tierBCount: tierBSurvivors,
+      krakenUniverseSize,
+      topEndUniverseSize: topNUniverse.length,
+      tierBUniverseSize: tierBUniverse.length,
+    },
+  };
+}

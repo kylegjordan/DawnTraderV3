@@ -1,0 +1,274 @@
+📘 PH.8.7–11.20–REB 2.2 Directive
+Active Filter Pool Restoration (Deduplication, Expiry, Passive Mode Behavior)
+
+STRICT RESTORATION — NOV 18–20 TRUTH ONLY
+NO NEW FEATURES — NO SCOPE CREEP — NO CHANGES TO STRATEGIES OR GUARDRAILS
+
+🔧 CONTEXT FOR REPLIT (REQUIRED)
+
+This directive is part of the Emergency Restoration & Bootstrap Program (REB Program), following the GitHub sync incident that overwrote large sections of the system with older code.
+Replit must continue to reference:
+
+/docs/restoration/PH_8.7-11.20-REB_0_MasterBlueprint.md
+
+All 15 files in /docs/restoration/truth/
+
+All REB 1 reports in /docs/restoration/reb1_reports/
+
+This directive restores the Active Filter Pool to its exact behavior between Nov 18–20, just before the rollback.
+
+Do NOT:
+
+Do not modify strategies, guardrails, trading engine, cooldown-after-trade, or Stage-3.
+
+Do not introduce new behavior or new logic.
+
+Do not modernize anything.
+
+Do not optimize.
+
+Do not add features.
+
+Do ONLY:
+
+Restore the scanner-side Active Filter Pool to the truth state
+from the following files:
+
+phase_8.6.7_validation.md
+
+phase_8.6.10_mapping.md
+
+phase_8.7.1_completion.md
+
+DawnTrader_Chat_Archive_11-20-25.md (Filter Insights + Active Pool behavior)
+
+DawnTrader_Chat_Archive_11-15-25.md (Passive mode + dedupe rules)
+
+🎯 PH.8.7–11.20–REB 2.2 Goals
+
+Restore ALL original Active Filter Pool semantics:
+
+1. Deduplication (Scanner-Side “alreadyActive”)
+
+Restore the exact pre-rollback rule:
+
+If a symbol is already in the Active Filter Pool and not expired,
+FX5 must NOT re-add it during new cycles.
+
+
+Truth definition:
+
+“Active pool is a non-expired deduped list of pairs that passed FX5.”
+
+FX5 must check:
+
+Is the pair in the pool?
+
+Has it expired?
+
+If not expired → skip
+
+If expired → remove old entry, then add new one.
+
+2. Expiry Logic (TTL)
+
+Restore the original TTL behavior documented in the archives.
+
+Truth state:
+
+Each entry stores:
+
+firstSeen timestamp
+
+lastSeen or lastActive timestamp
+
+TTL countdown used to determine expiry (value in the truth files)
+
+If expired → remove from Active Filter Pool automatically
+
+Restore without modification, exactly as described in truth files.
+
+3. Passive Learning Mode Requirements
+
+Restore the correct passive learning behavior:
+
+When Trading Engine = STOPPED:
+
+Active Filter Pool must remain EMPTY
+
+No symbol may be added to the pool
+
+No dedupe or TTL behavior should run
+
+Only “Next Scan Countdown” should be active
+
+lastScanEvaluated may show 0–3 random values
+
+eligible usually 0
+
+These do NOT accumulate
+
+This behavior is confirmed across:
+
+11–20 Chat Archive
+
+Filter Insights truth
+
+Phase 8.6.7 + 8.6.10 audits
+
+Restore EXACTLY this behavior.
+
+4. Integration Boundaries (CRITICAL)
+FX5 → Active Filter Pool
+
+YES restore this.
+
+Active Filter Pool → Strategy Engine
+
+NO — DO NOT wire or modify this.
+This belongs to REB 4.x.
+
+Guardrails / Cooldown after trades
+
+NO CHANGES — do not modify this logic.
+Guardrails cooldown is NOT part of FX5 or Active Filter Pool.
+
+🛠️ IMPLEMENTATION TASKS
+
+Replit must perform the following exact tasks:
+
+Task 1 — Fully restore ActivePool data model
+
+Restore fields from truth:
+
+symbol
+
+firstSeen
+
+lastSeen
+
+ttlExpiresAt
+
+source (paper/live)
+
+fx5Snapshot (if present in truth)
+
+Any additional fields found in Phase 8.6–8.7 truth files
+
+Do NOT add anything new.
+
+Task 2 — Reinstate expiration logic
+
+Implement exactly the TTL described in the truth files.
+
+Remove expired entries before each FX5 cycle
+
+Log debug statements (if present in truth)
+
+Match truth file behavior exactly
+
+Task 3 — Restore dedupe logic
+
+Implement the pipeline:
+
+if symbol in activePool:
+    if not expired:
+        skip
+    else:
+        remove old entry and add new entry
+else:
+    add new entry
+
+
+Do not modify behavior beyond this.
+
+Task 4 — Restore passive-mode behavior
+
+Strict rules:
+
+If Trading Engine = OFF:
+
+activeFilteredPool = []
+
+Do NOT add any symbols
+
+Do NOT update TTL
+
+Do NOT perform dedupe logic
+
+The pool remains empty until engine is re-enabled
+
+This must be restored exactly.
+
+Task 5 — Add required debug logs (from truth)
+
+Look for all logs prefixed:
+
+[8.6.7][DEBUG]
+[8.6.10][DEBUG]
+
+
+Restore the ones related to Active Filter Pool management.
+
+Do NOT add new log formats.
+
+Task 6 — No UI changes in this phase
+
+Filter Insights and Screeners UI will be restored in:
+
+REB 2.4
+
+REB 2.5
+
+Do NOT modify UI now.
+
+Task 7 — No Stage-3 changes
+
+Stage-3 will be analyzed but not altered in:
+
+REB 2.7 (compatibility planning only)
+
+📄 Output Requirements
+
+Replit must produce:
+
+1. REB2.2_COMPLETION_REPORT.md
+
+Located at:
+
+/docs/restoration/reb2_reports/REB2.2_COMPLETION_REPORT.md
+
+
+Must include:
+
+Restored files list
+
+Before vs after diffs
+
+Dedupe behavior verification
+
+TTL expiry verification
+
+Passive-mode behavior verification
+
+Debug log verification
+
+Confirmed alignment with truth files
+
+2. REB2.2_DELTA_ANALYSIS.md
+
+Document:
+
+All differences between current code and truth state
+
+All restored sections
+
+Verification that no non-truth behavior was added
+
+❓ Final Confirmation Prompt
+
+Before implementing, Replit must respond:
+
+“I confirm I understand PH.8.7–11.20–REB 2.2 exactly and will perform a pure truth-state restoration with no new behavior. Do you authorize implementation now?”
+
+Do not perform work until confirmation.

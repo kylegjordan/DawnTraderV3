@@ -1,11 +1,19 @@
-// Phase 8.8.2-MAP-FINAL: ActiveFilteredPair for detailed pool tracking
+// Phase 8.8.2-MAP-FINAL + REB 2.2: ActiveFilteredPair for detailed pool tracking
+// REB 2.2: Added expiresAt, source, and fx5Snapshot for TTL and deduplication
 export type ActiveFilteredPair = {
   symbol: string;
   price: number;
   volume24h: number;
   dailyRange: number;
-  firstSeen: string;
-  lastUpdated: string;
+  firstSeen: string;          // ISO timestamp when first added
+  lastUpdated: string;        // ISO timestamp when last seen passing filters
+  expiresAt?: number;         // REB 2.2: Unix timestamp when entry expires (TTL = 5 min)
+  source?: 'paper' | 'live';  // REB 2.2: Trading mode
+  fx5Snapshot?: {             // REB 2.2: Optional snapshot of FX5 metrics
+    volume24h: number;
+    dailyRange: number;
+    price: number;
+  };
 };
 
 export type Stage3State = {

@@ -1,16 +1,15 @@
 /**
  * FX5 Scanner Service - Always-On 30-Second Market Scanner
- * Phase 8.8.2 FINAL CORRECTION
+ * REB 2.1 RESTORATION (Phase 8.6.7 Architecture)
  * 
- * This service drives Stage-3 state updates independently of trading engine status.
- * Runs every 30 seconds for both paper and live modes, providing real-time
- * market data via WebSocket events.
+ * Restored to batch-first → FX5 filter architecture per Phase 8.6.7 truth state.
+ * Uses collectMixedBatch() for 60-pair Top-N/Tier-B rotation instead of universe-scale filtering.
  * 
  * Architecture:
  * - Initializes at server startup
  * - Runs 30-second intervals for each mode
- * - Loads screener filters and executes FX5 filtering
- * - Computes breakdown from filter results (NOT diagnostics)
+ * - Loads screener filters and executes batch-first FX5 filtering
+ * - Uses collectMixedBatch() from market-scanner.ts (Phase 8.6.7)
  * - Updates Stage-3 cache and emits WebSocket events
  * - Operates independently of trading engine state
  */
@@ -18,8 +17,11 @@
 import { storage } from '../storage.js';
 import { FilteredPairsService } from './filtered-pairs-service.js';
 import { KrakenService } from './kraken.js';
-import { updateStage3Cache, ActiveFilteredPair } from './stage3-state-cache.js';
+import { updateStage3Cache } from './stage3-state-cache.js';
 import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
+import { collectMixedBatch, BatchResult } from './market-scanner.js';
+import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.js';
+import { scan24hAggregator } from './scan-24h-aggregator.js';
 import type { ScreenerFilters } from '@shared/schema';
 
 const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
@@ -109,6 +111,7 @@ export class Fx5ScannerService {
 
   /**
    * Execute FX5 scan for a specific mode
+   * REB 2.1: Uses batch-first architecture from Phase 8.6.7
    */
   private async scanMode(mode: 'paper' | 'live'): Promise<ScanResult | null> {
     try {
@@ -119,39 +122,29 @@ export class Fx5ScannerService {
         return null;
       }
 
-      // Execute FX5 filtering via FilteredPairsService
-      const result = await this.filteredPairsService.getValidPairs(mode, filters, true);
+      // REB 2.1: Execute batch-first FX5 scanning (Phase 8.6.7 truth state)
+      const batchResult: BatchResult = await collectMixedBatch(
+        this.krakenService,
+        filters,
+        mode
+      );
       
-      // Compute breakdown from filter results (includes evaluated count)
-      // Phase 8.8.2-UI-FINAL-RESTORE: Now includes symbol arrays for unique tracking
-      const diagnosticData = await this.computeBreakdown(mode, filters);
-      const breakdown = diagnosticData.breakdown;
-      const { evaluatedSymbols, survivedSymbols } = diagnosticData;
-      
-      // Calculate counts from breakdown to satisfy truth constraint
-      // eligibleCount = pairs that passed ALL filters (includes active trades)
-      // ineligibleCount = pairs that failed ANY filter
-      const evaluatedCount = diagnosticData.evaluated;
-      const eligibleCount = breakdown.passed_all_filters + breakdown.already_active;
-      const ineligibleCount = 
-        breakdown.failed_min_volume +
-        breakdown.failed_spread +
-        breakdown.failed_daily_range +
-        breakdown.failed_min_price +
-        breakdown.failed_stablecoin +
-        breakdown.failed_quote_currency +
-        breakdown.failed_history +
-        breakdown.failed_market_cap +
-        breakdown.failed_guardrail_risk;
+      // Extract results from batch pipeline
+      const { survivors, breakdown, metrics } = batchResult;
+      const {
+        evaluatedCount,
+        eligibleCount,
+        ineligibleCount,
+        topNCount,
+        tierBCount,
+        krakenUniverseSize,
+        topEndUniverseSize,
+        tierBUniverseSize,
+      } = metrics;
 
       // Get active trades count
       const activeTrades = await storage.getActiveTrades(mode);
       const activePoolCount = activeTrades.length;
-
-      // Calculate rotation stats
-      const universeSize = filters.universeSize || 100;
-      const topNCount = eligibleCount;
-      const tierBCount = 0; // Future enhancement (Phase 8.9)
 
       const scanResult: ScanResult = {
         mode,
@@ -164,44 +157,56 @@ export class Fx5ScannerService {
         activePoolCount,
       };
 
-      // Phase 8.8.2-MAP-FINAL: Build activeFilteredPool with full pair details
-      const activeFilteredPool: ActiveFilteredPair[] = result.filteredPairs.slice(0, 60).map(pair => ({
-        symbol: pair.symbol,
-        price: pair.currentPrice,
-        volume24h: pair.volume24h,
-        dailyRange: pair.dailyRange || 0,
-        firstSeen: pair.lastUpdate.toISOString(),
-        lastUpdated: pair.lastUpdate.toISOString(),
-      }));
+      // REB 2.2: Add survivors to Active Filter Pool (deduped, TTL-managed)
+      // REB 2.2: Passive mode enforcement - clear pool when engine stopped
+      console.log(`[8.6.7][DEBUG] FX5 scan complete - survivors.length=${survivors.length}, eligibleCount=${eligibleCount}`);
+      
+      // Check if trading engine is active for this mode
+      const aggregatorStatus = scan24hAggregator.getStatus();
+      const isEngineActive = mode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
 
+      // REB 2.2: Enforce passive mode - clear pool if engine stopped
+      activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
+
+      if (isEngineActive) {
+        // Engine ACTIVE: Add survivors to Active Filter Pool
+        const poolStats = activeFilterPool.addSurvivors(mode, survivors);
+        console.log(`[8.6.7][DEBUG] Active Pool stats: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}`);
+      }
+
+      // Get the current active pool (deduped, non-expired)
+      const activeFilteredPoolEntries = activeFilterPool.getActivePool(mode);
+      
       const cycleStartTimestamp = new Date().toISOString();
       const cycleEndTimestamp = new Date().toISOString();
-      const krakenUniverseSize = evaluatedCount; // Total pairs evaluated from Kraken
 
-      // Update Stage-3 cache FIRST with all Phase 8.8.2-MAP-FINAL fields
+      // Update Stage-3 cache FIRST with Phase 8.6.7 metrics
+      // REB 2.2: Use persistent Active Filter Pool instead of fresh pool
       await updateStage3Cache(mode, {
         cycleStartTimestamp,
         cycleEndTimestamp,
         krakenUniverseSize,
-        evaluatedCount,
+        evaluatedCount, // Now 60 (batch size) instead of 1,370
         eligibleCount,
         ineligibleCount,
-        topNCount,
-        tierBCount,
+        topNCount,  // Actual Top-N survivors (not stub value)
+        tierBCount, // Actual Tier-B survivors (not 0)
         rotation: {
-          topEndUniverseSize: universeSize,
-          tierBUniverseSize: 0,
+          topEndUniverseSize,  // 100 (Top-N universe size)
+          tierBUniverseSize,   // 1,270 (Tier-B universe size)
         },
         cyclesPerHour: CYCLES_PER_HOUR,
         cycleFrequencyMs: SCAN_INTERVAL_MS,
         nextScanInMs: SCAN_INTERVAL_MS,
-        activePoolCount,
-        activeFilteredPool,
-        latestEligibleSymbols: result.filteredPairs.slice(0, 10).map(p => p.symbol),
+        activePoolCount: activeFilteredPoolEntries.length, // REB 2.2: Use actual pool size
+        activeFilteredPool: activeFilteredPoolEntries, // REB 2.2: Use persistent pool
+        latestEligibleSymbols: survivors.slice(0, 10).map(s => s.symbol),
       });
 
       // Emit Stage-3 WebSocket events SECOND
-      // Phase 8.8.2-UI-FINAL-RESTORE: Pass symbol arrays for unique 24h tracking
+      // Extract symbol arrays for unique 24h tracking
+      const evaluatedSymbols = survivors.map(s => s.symbol); // All evaluated symbols from batch
+      const survivedSymbols = survivors.map(s => s.symbol);   // All survivors
       await emitStage3Events(mode, breakdown, { evaluatedSymbols, survivedSymbols });
 
       console.log(`[FX5Scanner][${mode}] ✅ Scan complete (evaluated=${evaluatedCount}, eligible=${eligibleCount})`);
@@ -214,153 +219,11 @@ export class Fx5ScannerService {
   }
 
   /**
-   * Compute filter breakdown from FX5 results
-   * Engine-agnostic: Uses KrakenService directly without user context
+   * REB 2.1: Old computeBreakdown() method removed
    * 
-   * Phase 8.8.2-UI-FINAL-RESTORE: Now returns symbol arrays for unique tracking in 24h aggregator
+   * Replaced with batch-first collectMixedBatch() from market-scanner.ts
+   * See Phase 8.6.7 truth state for architecture details
    */
-  private async computeBreakdown(
-    mode: 'paper' | 'live',
-    filters: ScreenerFilters
-  ): Promise<{ 
-    breakdown: FilterBreakdown; 
-    evaluated: number;
-    evaluatedSymbols: string[];
-    survivedSymbols: string[];
-  }> {
-    // Get all tradable pairs and tickers from Kraken
-    const [tickers, pairsObj] = await Promise.all([
-      this.krakenService.getTicker(),
-      this.krakenService.getTradablePairs()
-    ]);
-    
-    // Get active trades to exclude from eligible pool
-    const activeTrades = await storage.getActiveTrades(mode);
-    const activeSymbols = new Set(activeTrades.map(t => t.symbol));
-
-    // Initialize breakdown counters
-    const breakdown: FilterBreakdown = {
-      failed_min_volume: 0,
-      failed_spread: 0,
-      failed_daily_range: 0,
-      failed_min_price: 0,
-      failed_stablecoin: 0,
-      failed_quote_currency: 0,
-      failed_history: 0,
-      failed_market_cap: 0,
-      failed_guardrail_risk: 0,
-      already_active: 0,
-      passed_all_filters: 0,
-    };
-
-    // Phase 8.8.2-UI-FINAL-RESTORE: Track symbols for unique 24h metrics
-    const evaluatedSymbols: string[] = [];
-    const survivedSymbols: string[] = [];
-
-    // Extract filter criteria
-    const minVolume = parseFloat(filters.minVolume ?? '1000000.00');
-    const minDailyRange = parseFloat(filters.volatilityMin ?? '0.50');
-    const minPrice = parseFloat(filters.minPrice ?? '0.01');
-    const maxBidAskSpread = parseFloat(filters.maxBidAskSpread ?? '1.00');
-    const excludeStablecoins = filters.excludeStablecoins ?? true;
-    const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'UST'];
-    
-    // Parse allowed quote currencies
-    let allowedQuotes: string[] = [];
-    try {
-      allowedQuotes = typeof filters.quoteCurrencies === 'string'
-        ? JSON.parse(filters.quoteCurrencies)
-        : (filters.quoteCurrencies ?? []);
-    } catch {
-      allowedQuotes = [];
-    }
-
-    // Evaluate each pair against filters (using ticker data + pair info)
-    let evaluated = 0;
-    Object.entries(tickers).forEach(([pairName, ticker]) => {
-      const pairInfo = pairsObj[pairName];
-      if (!pairInfo) return;
-
-      evaluated++;
-      
-      // Extract pair data
-      const baseCurrency = pairInfo.base;
-      const quoteCurrency = pairInfo.quote;
-      const normalizedQuote = quoteCurrency?.startsWith('Z') ? quoteCurrency.slice(1) : quoteCurrency;
-      const currentPrice = parseFloat(ticker.c[0]);
-      const volume24h = parseFloat(ticker.v[1]);
-      const high24h = parseFloat(ticker.h[1]);
-      const low24h = parseFloat(ticker.l[1]);
-      const dailyRange = ((high24h - low24h) / low24h) * 100;
-      const askPrice = parseFloat(ticker.a[0]);
-      const bidPrice = parseFloat(ticker.b[0]);
-      const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 100;
-      
-      // Get canonical symbol (e.g., BTCUSD instead of XXBTZUSD)
-      const symbol = pairInfo.wsname || pairName;
-      
-      // Phase 8.8.2-UI-FINAL-RESTORE: Track evaluated symbol
-      evaluatedSymbols.push(symbol);
-      
-      let rejected = false;
-
-      // Filter 1: Quote currency
-      if (!rejected && allowedQuotes.length > 0 && !allowedQuotes.includes(normalizedQuote || '')) {
-        breakdown.failed_quote_currency++;
-        rejected = true;
-      }
-
-      // Filter 2: Stablecoins
-      if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
-        breakdown.failed_stablecoin++;
-        rejected = true;
-      }
-
-      // Filter 3: Min volume
-      if (!rejected && volume24h < minVolume) {
-        breakdown.failed_min_volume++;
-        rejected = true;
-      }
-
-      // Filter 4: Daily range (volatility)
-      if (!rejected && dailyRange < minDailyRange) {
-        breakdown.failed_daily_range++;
-        rejected = true;
-      }
-
-      // Filter 5: Min price
-      if (!rejected && currentPrice < minPrice) {
-        breakdown.failed_min_price++;
-        rejected = true;
-      }
-
-      // Filter 6: Bid-ask spread
-      if (!rejected && bidAskSpread > maxBidAskSpread) {
-        breakdown.failed_spread++;
-        rejected = true;
-      }
-
-      // Pair passed all filters
-      if (!rejected) {
-        // Check if already active
-        if (activeSymbols.has(symbol)) {
-          breakdown.already_active++;
-        } else {
-          breakdown.passed_all_filters++;
-        }
-        
-        // Phase 8.8.2-UI-FINAL-RESTORE: Track survived symbol (passed all filters)
-        survivedSymbols.push(symbol);
-      }
-    });
-
-    return {
-      breakdown,
-      evaluated,
-      evaluatedSymbols,
-      survivedSymbols,
-    };
-  }
 }
 
 // Singleton instance
