@@ -1,6 +1,7 @@
 /**
  * FX5 Scanner Service - Always-On 30-Second Market Scanner
  * REB 2.1 RESTORATION (Phase 8.6.7 Architecture)
+ * REB 2.6: Passive learning mode enforcement for Active Pool
  * 
  * Restored to batch-first → FX5 filter architecture per Phase 8.6.7 truth state.
  * Uses collectMixedBatch() for 60-pair Top-N/Tier-B rotation instead of universe-scale filtering.
@@ -12,6 +13,7 @@
  * - Uses collectMixedBatch() from market-scanner.ts (Phase 8.6.7)
  * - Updates Stage-3 cache and emits WebSocket events
  * - Operates independently of trading engine state
+ * - REB 2.6: Respects passive learning flag - pool stays empty when passiveLearning=true
  */
 
 import { storage } from '../storage.js';
@@ -22,6 +24,7 @@ import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
 import { collectMixedBatch, BatchResult } from './market-scanner.js';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.js';
 import { scan24hAggregator } from './scan-24h-aggregator.js';
+import { systemConfigService } from './system-config.js';
 import type { ScreenerFilters } from '@shared/schema';
 
 const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
@@ -158,20 +161,27 @@ export class Fx5ScannerService {
       };
 
       // REB 2.2: Add survivors to Active Filter Pool (deduped, TTL-managed)
-      // REB 2.2: Passive mode enforcement - clear pool when engine stopped
+      // REB 2.2/2.6: Passive mode enforcement - clear pool when engine stopped OR passiveLearning enabled
       console.log(`[8.6.7][DEBUG] FX5 scan complete - survivors.length=${survivors.length}, eligibleCount=${eligibleCount}`);
       
       // Check if trading engine is active for this mode
       const aggregatorStatus = scan24hAggregator.getStatus();
       const isEngineActive = mode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
 
+      // REB 2.6: Check passive learning flag (behavioral control)
+      const isPassiveLearning = systemConfigService.isPassiveLearningEnabled();
+
       // REB 2.2: Enforce passive mode - clear pool if engine stopped
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
 
-      if (isEngineActive) {
-        // Engine ACTIVE: Add survivors to Active Filter Pool
+      // REB 2.6: Only populate pool if engine ACTIVE AND NOT passive learning
+      if (isEngineActive && !isPassiveLearning) {
+        // Engine ACTIVE + Passive Learning DISABLED: Add survivors to Active Filter Pool
         const poolStats = activeFilterPool.addSurvivors(mode, survivors);
         console.log(`[8.6.7][DEBUG] Active Pool stats: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}`);
+      } else if (isPassiveLearning) {
+        // REB 2.6: Passive learning mode - pool stays empty
+        console.log(`[8.6.9][PassivePool] Passive learning enabled - Active Pool not populated (correct behavior)`);
       }
 
       // Get the current active pool (deduped, non-expired)

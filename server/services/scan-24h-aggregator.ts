@@ -1,5 +1,6 @@
 /**
  * Phase 8.8.2-UI-FINAL-RESTORE: 24-hour scan activity aggregator
+ * REB 2.6: Passive learning mode enforcement restored
  * 
  * Explicitly called by Stage-3 emitter (no monkey-patching) to maintain rolling 24h metrics
  * for Filter Insights UI Section 2 (24h Filter Activity) and Section 4 (Filter Breakdown)
@@ -10,10 +11,12 @@
  * - Provides aggregated metrics: total cycles, unique pairs evaluated/survived, breakdown
  * - Auto-cleanup of expired entries
  * - Engine-state gated: resets on ACTIVE→STOPPED transition
+ * - Passive learning gated: skips recording when SystemConfig.passiveLearning = true
  */
 
 import { contextBridge } from './context-bridge.js';
 import { storage } from '../storage.js';
+import { systemConfigService } from './system-config.js';
 
 interface ScanCycleRecord {
   timestamp: Date;
@@ -168,11 +171,18 @@ class Scan24hAggregator {
       survivedSymbolsSample: data.survivedSymbols?.slice(0, 3),
     });
 
-    // Gate: only record if engine is ACTIVE for this mode
+    // REB 2.6 GATE 1: Check SystemConfig.passiveLearning flag (behavioral control)
+    // Truth state requirement: Check passive learning BEFORE engine state
+    if (systemConfigService.isPassiveLearningEnabled()) {
+      console.log('[8.6.9][MetricsAudit] PASSIVE LEARNING - NO METRICS UPDATED (correct behavior)');
+      return; // SKIP all metrics recording
+    }
+
+    // REB 2.6 GATE 2: Check engine state (existing logic)
     const isActive = mode === 'paper' ? this.paperEngineActive : this.liveEngineActive;
     
     if (!isActive) {
-      // Silent skip - we don't record passive learning scans
+      // Silent skip - we don't record when engine stopped
       console.log(`[Scan24hAggregator][recordCycle] Skipped - ${mode} engine is STOPPED`);
       return;
     }
