@@ -222,7 +222,9 @@ export class TradingStateSync {
     }
     
     // Phase 33.C: Fire instant broadcast with full portfolioOverview object
+    // REB 2.4 Stage-1g: Add ACK markers for engine_start broadcasts
     const { contextBridge } = await import('./context-bridge.js');
+    const stateVersion = Date.now(); // REB 2.4 Stage-1f: Generate stateVersion for engine_start
     await contextBridge.broadcast({
       type: 'trading_state_changed',
       payload: {
@@ -234,10 +236,12 @@ export class TradingStateSync {
         passiveLearning: !isActive,
         portfolioValue: portfolioOverview.totalValue, // Backward compatibility
         portfolioOverview, // Phase 33.C: Full portfolio overview
+        stateVersion, // REB 2.4 Stage-1f: Add stateVersion to engine state broadcasts
         timestamp,
       },
       mode
     });
+    console.log(`[STAGE1G][ACK] engine_start broadcasted v=${stateVersion} for ${mode}`);
     console.log(`[Phase-33.C] ⚡ Instant broadcast sent: mode=${mode}, active=${isActive}, portfolio=$${portfolioOverview.totalValue}, latency=<50ms`);
     
     // Then update database and do heavy operations asynchronously

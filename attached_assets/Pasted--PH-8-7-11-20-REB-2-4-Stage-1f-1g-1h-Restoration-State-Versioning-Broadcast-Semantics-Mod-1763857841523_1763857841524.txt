@@ -1,0 +1,348 @@
+🧾 PH.8.7–11.20–REB 2.4
+Stage-1f / 1g / 1h Restoration (State Versioning & Broadcast Semantics)
+
+Mode: IMPLEMENTATION (code changes allowed, tightly scoped)
+Goal: Restore Stage-1f, 1g, 1h behavior exactly as it existed in the 11.18–11.20 truth state, without introducing any new behavior or touching future Stage-2 / Stage-3 enhancements.
+
+1. Context & High-Level Intent
+
+This directive is a follow-up to:
+
+REB 2.1 – FX5 batch-first scanner restored (60-pair Top-N + Tier-B rotation).
+
+REB 2.2 – Active Filter Pool restored (TTL, dedupe, passive mode behavior).
+
+REB 2.3A–D – Deep rollback audits:
+
+8.1–8.5 rollback mapping
+
+Engine startup regression
+
+Mode system & passive learning gaps
+
+Refactor & Stage-1H rollback depth
+
+From those audits, we now have a clear, reconciled picture:
+
+Phases 0–7 of the refactor survived (≈90%+ of the work is still present).
+
+Unified scanner, FX5, schema, and most refactor cleanup survived.
+
+The major regressions are concentrated in Stage-1f / 1g / 1h and warm-up/state machine.
+
+This phase, REB 2.4, is about restoring:
+
+Stage-1f – state versioning
+
+Stage-1g – ACK / delivery semantics
+
+Stage-1h – blocking broadcast / atomic UI snapshots
+
+🚫 Explicitly out of scope for REB 2.4:
+
+Engine warm-up / INIT→WARM→ACTIVE state machine (that will be REB 2.5).
+
+Any Stage-2 / Stage-3 future enhancements.
+
+Any 8.8+ Stage-3 v2 or “24h aggregator v2” experiments.
+
+Any new metrics, new endpoints, or UI redesign.
+
+This is a surgical restoration of the broadcast semantics that existed at 11.18–11.20.
+
+2. Truth Sources You MUST Use
+
+Before coding, re-read these:
+
+/docs/restoration/truth/DawnTrader_Chat_Archive_11-15-25_*.md
+
+/docs/restoration/truth/DawnTrader_Chat_Archive_11-20-25_*.md
+
+/docs/stage-1h-analysis/ANALYSIS_SUMMARY.md
+
+/docs/stage-1h-analysis/POLL_INTERVALS.txt
+
+REB 2.3D reports:
+
+REB2.3D_STAGE_1H_TRUTH_REPORT.md
+
+REB2.3D_ENGINE_STARTUP_DEPENDENCIES.md
+
+REB2.3D_REFACTOR_SURVIVAL_MATRIX.md
+
+You should only implement behavior that you can directly justify from these truth sources.
+If something is unclear, document the ambiguity and ask instead of guessing.
+
+3. Scope & Non-Goals
+3.1 In Scope (YOU MAY CHANGE)
+
+Scanner/broadcast path only where Stage-1f/g/h lived:
+
+The component that assembles the full scan snapshot for a cycle.
+
+The component that emits the WebSocket payload to the UI.
+
+Any stateVersion / scanCycleId fields that anchor atomicity.
+
+Minimal wiring around:
+
+FX5 Scanner → Stage-3 cache → broadcast hub.
+
+Any “scanner state” object responsible for Version/ACK.
+
+3.2 Explicitly Out of Scope (DO NOT TOUCH)
+
+/api/trading/start timeout duration or semantics.
+
+TradingEngine warm-up or state transitions (INIT/WARM/ACTIVE).
+
+Strategy Engine, SignalOrchestrator, Ready-To-Buy.
+
+Stage-3 v2 or any new caches from Phase 8.8.x.
+
+New endpoints, new metrics, or UI redesign.
+
+Any change to the semantics of:
+
+FX5 batch building (already restored)
+
+Active Filter Pool TTL/dedupe/passive behavior (already restored)
+
+If in doubt, err on the side of NOT changing and ask for clarification.
+
+4. Behavioral Truth You’re Restoring
+
+Summarizing Stage-1f / 1g / 1h from the truth docs:
+
+4.1 Stage-1f – State Versioning
+
+Each scan cycle produced a monotonic stateVersion (or equivalent scanCycleId).
+
+This version:
+
+Was attached to the entire scan snapshot, not individual fragments.
+
+Allowed consumers (UI) to know: “these metrics, breakdowns, pool stats all belong to the same cycle.”
+
+Was the basis for ensuring no mixed-cycle payloads.
+
+Key properties:
+
+Version increments once per completed scan (per mode).
+
+No version bump until the whole scan is ready.
+
+Version is per mode (paper vs live), not global.
+
+4.2 Stage-1g – Acknowledged Delivery / De-mixed Payloads
+
+Broadcast logic never emitted partial, mixed, or stale states.
+
+The system:
+
+Waited until all required components for that cycle were available (FX5 metrics, breakdown, Active Pool summary, etc.).
+
+Emitted a single, unified payload per cycle with a consistent version.
+
+Ensured the UI never saw “half updated” or “previous metrics + new breakdown.”
+
+The UI implicitly “acknowledged” this by always using the latest version from the WebSocket payload.
+
+No complex NACK protocol is needed here; the key is atomic broadcast with a single version.
+
+4.3 Stage-1h – Blocking Broadcast / Atomic Snapshot
+
+Emission was blocking / atomic per cycle:
+
+For a given mode (paper/live), the system did not emit the next cycle’s payload until the current cycle’s snapshot was complete.
+
+This ensured:
+
+No overlapping or interleaved payloads.
+
+No “UI thrash” where multiple overlapping updates raced in.
+
+Clean, predictable UI state.
+
+Logging included markers like:
+
+[STAGE1][DEBUG] Emitting unified scan snapshot (paper, version=123)
+
+[STAGE1][DEBUG] Skipping emit - snapshot incomplete
+
+You are restoring this model, NOT inventing a new one.
+
+5. Implementation Plan
+STEP 1 – Identify/Refactor the “Snapshot Builder”
+
+Locate the module/function that currently:
+
+Collects FX5 scan results.
+
+Reads 24h metrics / scan counts.
+
+Reads Active Pool stats.
+
+Assembles the payload used for filter insights / WebSocket.
+
+If this logic is scattered:
+
+Introduce a single, small “snapshot builder” function (e.g. buildScanSnapshot(mode)), but keep it in an existing, appropriate file (no new top-level service).
+
+This function should:
+
+Take mode (paper/live).
+
+Gather all required pieces from existing services.
+
+Return a single typed object (e.g. ScanSnapshot) that includes stateVersion.
+
+Do NOT add new business logic beyond:
+
+Version handling.
+
+Atomic assembly.
+
+STEP 2 – Restore State Versioning (Stage-1f)
+
+Implement a per-mode version tracker:
+
+For example: in a scanner/broadcast context module:
+
+type Mode = 'paper' | 'live';
+
+const scanStateVersion: Record<Mode, number> = {
+  paper: 0,
+  live: 0,
+};
+
+
+Or reuse an existing structure if the truth docs show a specific pattern.
+
+Rules:
+
+Increment version only when:
+
+A full snapshot has been successfully built for that mode.
+
+Attach the version to the snapshot:
+
+interface ScanSnapshot {
+  mode: Mode;
+  stateVersion: number;
+  // existing fields: metrics, breakdown, pool stats, etc.
+}
+
+
+Do not persist this version in the DB unless the truth docs explicitly show that.
+If unclear, keep it in-memory only, scoped to the process.
+
+STEP 3 – Restore Atomic Broadcast (Stage-1g/1h)
+
+Identify the code that emits WebSocket updates for the scan:
+
+Likely something like broadcastScanUpdate(...), wsHub.emit('scan_tick', ...), etc.
+
+Change that emitter so it only ever emits full ScanSnapshot objects with a version:
+
+No more incremental or partial payloads for that channel.
+
+If you currently send smaller fragments, keep that code unchanged for other channels.
+For the main scan insights channel, you must send the unified snapshot.
+
+Implement minimal gating logic:
+
+If any required component for a snapshot is missing or errors:
+
+Do not emit.
+
+Log a debug line like:
+
+[STAGE1H][DEBUG] Skipping emit for paper - snapshot incomplete (missing breakdown)
+
+
+On success:
+
+[STAGE1H][DEBUG] Emitting unified scan snapshot (mode=paper, stateVersion=NNN)
+
+
+Ensure that, for a single mode, only one snapshot per 30s cycle is emitted (unless an explicit retrigger is part of the truth docs).
+
+STEP 4 – Integration with FX5 and Active Pool (No Behavior Changes)
+
+FX5 behavior is already restored – do NOT alter its filtering logic or batch logic.
+
+Active Pool behavior is already restored – do NOT alter TTL, dedupe, or passive enforcement.
+
+Your snapshot builder should consume the results of FX5 and Active Pool as they are now exposed; it should not change their behavior.
+
+6. Logging & Verification
+
+Add narrow, easily grep-able debug logs:
+
+When snapshot building starts and finishes.
+
+When version increments.
+
+When a snapshot is skipped due to missing components.
+
+When a snapshot is emitted.
+
+Examples:
+
+[STAGE1F][DEBUG] Next stateVersion for paper: 124
+[STAGE1H][DEBUG] Snapshot complete (paper, version=124) - emitting
+[STAGE1H][DEBUG] Skipping emit (live) - missing ActivePool summary
+
+
+✅ After implementation, please:
+
+Run the app with paper engine running.
+
+Capture one full scan cycle in logs.
+
+Confirm:
+
+1 snapshot emitted per 30s per mode.
+
+stateVersion monotonically increasing per mode.
+
+No mixed/partial payloads logged.
+
+Summarize this in a short REB2.4 completion report, e.g.:
+
+docs/restoration/reb2_reports/REB2.4_STAGE1F_1G_1H_COMPLETION_REPORT.md
+
+7. Guardrails & Questions
+
+You must NOT:
+
+Change engine warm-up / /api/trading/start behavior.
+
+Introduce new Stage-2/3 concepts.
+
+Add new DB tables or migrations.
+
+Change existing REST endpoint contracts.
+
+Change filter behavior, FX5 thresholds, or Active Pool semantics.
+
+If you encounter ambiguity such as:
+
+Unclear which components must be in a snapshot.
+
+Conflicting descriptions across truth docs.
+
+Concerns about double-emitting or racing behavior.
+
+👉 Stop, document the ambiguity in the REB2.4 report, and surface explicit questions instead of guessing.
+
+8. Confirmation Request
+
+Before coding, please:
+
+Acknowledge this directive.
+
+List the files you expect to touch (e.g. server/services/...) based on your reading of the truth docs.
+
+Confirm that you understand this is Stage-1f/1g/1h restoration only, with warm-up/state machine deferred to REB 2.5.

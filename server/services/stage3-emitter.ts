@@ -20,9 +20,11 @@ export type FilterBreakdown = {
 };
 
 // Phase 8.8.2-MAP-FINAL: Complete ScanTickPayload per directive
+// REB 2.4 Stage-1f: Added stateVersion for atomic snapshot tracking
 export type ScanTickPayload = {
   mode: 'paper' | 'live';
   cycleId: number;
+  stateVersion: number; // REB 2.4 Stage-1f: Timestamp-based version for atomic snapshots
   krakenUniverseSize: number;
   evaluatedCount: number;
   eligibleCount: number;
@@ -45,6 +47,7 @@ export type ScanTickPayload = {
 export type ScannerBreakdownPayload = {
   mode: 'paper' | 'live';
   cycleId: number;
+  stateVersion: number; // REB 2.4 Stage-1f: Match scan_tick version for consistency
   window: 'last_cycle' | '24h';
   evaluatedCount: number;
   eligibleCount: number;
@@ -54,23 +57,56 @@ export type ScannerBreakdownPayload = {
 };
 
 class Stage3Emitter {
+  // REB 2.4 Stage-1f: Per-mode state version tracking (timestamp-based)
+  private paperStateVersion: number = 0;
+  private liveStateVersion: number = 0;
+
+  /**
+   * REB 2.4 Stage-1f: Generate next state version for atomic snapshot tracking
+   * Uses timestamp to ensure monotonic, globally unique versions
+   */
+  private nextStateVersion(mode: 'paper' | 'live'): number {
+    const version = Date.now();
+    if (mode === 'paper') {
+      this.paperStateVersion = version;
+    } else {
+      this.liveStateVersion = version;
+    }
+    console.log(`[STAGE1F][DEBUG] Next stateVersion for ${mode}: ${version}`);
+    return version;
+  }
+
+  /**
+   * REB 2.4 Stage-1f: Get current state version for a mode
+   */
+  private getStateVersion(mode: 'paper' | 'live'): number {
+    return mode === 'paper' ? this.paperStateVersion : this.liveStateVersion;
+  }
+
   /**
    * Emit lightweight scan_tick event for real-time UI updates
    */
   /**
    * Phase 8.8.2-MAP-FINAL: Emit scan_tick with all required fields for Filter Insights
+   * REB 2.4 Stage-1f/1g/1h: Added atomic snapshot with stateVersion and ACK markers
    */
   emitScanTick(mode: 'paper' | 'live'): void {
     const state = stage3Cache.getState(mode);
     
+    // REB 2.4 Stage-1h: Snapshot completeness check (atomic emission)
     if (!state) {
-      console.warn(`[Stage3Emitter] Cannot emit scan_tick: no state for ${mode}`);
+      console.log(`[STAGE1H][DEBUG] Skipping emit for ${mode} - snapshot incomplete (missing state)`);
       return;
     }
+
+    // REB 2.4 Stage-1f: Generate new stateVersion for this snapshot AND persist to cache
+    const stateVersion = this.nextStateVersion(mode);
+    stage3Cache.updateState(mode, { stateVersion });
 
     const payload: ScanTickPayload = {
       mode,
       cycleId: state.cycleId,
+      stateVersion, // REB 2.4 Stage-1f: Attach version to snapshot
       krakenUniverseSize: state.krakenUniverseSize,
       evaluatedCount: state.evaluatedCount,
       eligibleCount: state.eligibleCount,
@@ -90,14 +126,19 @@ class Stage3Emitter {
       activeFilteredPool: state.activeFilteredPool,
     };
 
+    // REB 2.4 Stage-1g: ACK broadcast with version tracking
     contextBridge.broadcast({
       type: 'scan_tick',
       payload,
       mode,
     });
 
+    // REB 2.4 Stage-1h: Atomic snapshot emission confirmed
+    console.log(`[STAGE1H][DEBUG] Emitting unified scan snapshot (mode=${mode}, stateVersion=${stateVersion})`);
+    console.log(`[STAGE1G][ACK] scan_tick broadcasted v=${stateVersion} for ${mode}`);
     console.log(`[Stage3Emitter] Emitted scan_tick for ${mode}:`, {
       cycleId: payload.cycleId,
+      stateVersion: payload.stateVersion,
       evaluated: payload.evaluatedCount,
       eligible: payload.eligibleCount,
       krakenUniverse: payload.krakenUniverseSize,
@@ -109,6 +150,7 @@ class Stage3Emitter {
    * Emit heavy scanner:breakdown:<mode> event for diagnostics and Filter Insights UI
    * 
    * Phase 8.8.2-UI-FINAL-RESTORE: Also records cycle in 24h aggregator (explicit call, no monkey-patching)
+   * REB 2.4 Stage-1f/1g/1h: Added stateVersion for atomic snapshot consistency
    */
   emitScannerBreakdown(
     mode: 'paper' | 'live',
@@ -121,9 +163,19 @@ class Stage3Emitter {
   ): void {
     const state = stage3Cache.getState(mode);
     
+    // REB 2.4 Stage-1h: Snapshot completeness check
     if (!state) {
-      console.warn(`[Stage3Emitter] Cannot emit scanner:breakdown: no state for ${mode}`);
+      console.log(`[STAGE1H][DEBUG] Skipping emit for ${mode} - snapshot incomplete (missing state)`);
       return;
+    }
+
+    // REB 2.4 Stage-1f: Use stateVersion from cache (persisted by emitScanTick or previous call)
+    // If no version in cache, generate one and persist it
+    let stateVersion = state.stateVersion;
+    if (!stateVersion) {
+      console.warn(`[STAGE1F][WARN] No stateVersion in cache for ${mode} - generating new version (may indicate out-of-order broadcast)`);
+      stateVersion = this.nextStateVersion(mode);
+      stage3Cache.updateState(mode, { stateVersion });
     }
 
     // Validate truth constraint
@@ -154,6 +206,7 @@ class Stage3Emitter {
     const payload: ScannerBreakdownPayload = {
       mode,
       cycleId: state.cycleId,
+      stateVersion, // REB 2.4 Stage-1f: Match scan_tick version for atomic consistency
       window,
       evaluatedCount: state.evaluatedCount,
       eligibleCount: state.eligibleCount,
@@ -162,11 +215,14 @@ class Stage3Emitter {
       truthConstraintOk,
     };
 
+    // REB 2.4 Stage-1g: ACK broadcast with version tracking
     contextBridge.broadcast({
       type: `scanner:breakdown:${mode}`,
       payload,
       mode,
     });
+
+    console.log(`[STAGE1G][ACK] scanner:breakdown:${mode} broadcasted v=${stateVersion}`);
 
     // Phase 8.8.2-UI-FINAL-RESTORE: Explicitly record cycle in 24h aggregator
     // (replaces monkey-patching approach with clean explicit call)
@@ -180,6 +236,7 @@ class Stage3Emitter {
 
     console.log(`[Stage3Emitter] Emitted scanner:breakdown:${mode}:`, {
       cycleId: payload.cycleId,
+      stateVersion: payload.stateVersion,
       truthConstraintOk,
       evaluated: payload.evaluatedCount,
       breakdownSum: expectedTotal,
