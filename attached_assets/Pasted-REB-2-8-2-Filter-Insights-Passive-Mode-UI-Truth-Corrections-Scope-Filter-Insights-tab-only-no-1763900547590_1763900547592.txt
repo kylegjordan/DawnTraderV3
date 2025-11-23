@@ -1,0 +1,464 @@
+REB 2.8.2 — Filter Insights Passive-Mode & UI Truth Corrections
+
+Scope: Filter Insights tab only (no Screeners work in this phase)
+Environment: Paper Trading mode, using existing FX5 REST endpoints. No Stage-3 dependencies.
+
+0. Context & References
+
+This phase follows:
+
+REB2.8_CURRENT_STATE_MAPPING.md (mapping-only doc, Phase 1)
+
+REB2.8.1_FILTER_INSIGHTS_TRUTH_RESTORATION_COMPLETION.md (UI restructuring + 9-category breakdown, Phase 2)
+
+Phase 2 got us close to the November 18, 2025 truth Filter Insights tab, but there are still:
+
+Visual/layout mismatches
+
+Passive-mode behavior problems
+
+Some fields showing values when the trading engine is STOPPED that should not
+
+The canonical visual reference remains the 11/18/2025 screenshots of the Filter Insights tab (“truth screenshots”).
+The user will attach these 4 images directly in the Replit chat message containing this directive:
+
+Truth – Filter Insights Top Section 1 – 11.18.25
+
+Truth – Filter Insights Top Section 2 – 11.18.25
+
+Truth – Filter Insights Active Filtered Pool – 11.18.25
+
+Truth – Filter Insights Filter Breakdown (No Descriptions) – 11.18.25
+
+The user will also attach current-state screenshots (11/23/2025) for comparison so you can visually diff current vs truth.
+
+Goal of REB 2.8.2
+
+Make the Filter Insights tab visually match the 11/18 truth screenshots (with a few explicitly-called-out improvements).
+
+Make the tab behave correctly in Passive Learning mode when the trading engine is STOPPED:
+
+Only the fields that should tick in passive mode do so.
+
+24-hour metrics and filter breakdown do not freeze stale values or use hardcoded/snapshot data.
+
+Confirm all metrics are still sourced from the correct FX5 REST endpoints, consistent with the authoritative mapping from the 11/20 directive / mapping table.
+
+1. Passive Learning Mode & Data Behavior (Engine STOPPED)
+1.1. Target Behavior (Engine STOPPED, Passive Learning ON)
+
+When Trading Engine = STOPPED (Paper mode) and the app is in Passive Learning:
+
+Allowed to tick:
+
+Next Scan In: live 30s countdown continues as normal.
+
+Last Scan Result: may occasionally show small “mini-ticks” (e.g., 1–2 evaluated / eligible) reflecting background FX5 scans in passive learning mode. This is acceptable.
+
+Should not carry stale data:
+
+24h Filter Activity (all 5 metrics) must not show old values from the last ACTIVE session if we’ve turned trading off.
+
+Filter Breakdown (Last 24h) counts must not show old values; if nothing has been trading in the last 24h, these must be zero (or treated as “no data yet”).
+
+Kraken Universe:
+
+May continue to show the current universe size (e.g., 1,386 pairs); this value updates infrequently and is fine to keep non-zero while stopped.
+
+1.2. Required Checks & Fixes
+
+Trace data sources for these fields in client/src/components/trading/filter-insights.tsx:
+
+Last Scan Result (Evaluated / Eligible / Ineligible / Eligible %)
+
+24h Filter Activity metrics
+
+Filter Breakdown counts
+
+Verify that all of them are populated from the FX5 REST endpoints specified in the authoritative mapping (11/20 directive), not from:
+
+WebSocket-only payload state
+
+Hardcoded / mock values
+
+Static snapshots from a previous ACTIVE session
+
+Verify passive-mode correctness:
+
+With engine STOPPED for a fresh 24h period (i.e., after a clean stop & some time elapsed), the following should be true:
+
+24h Total Pairs Evaluated = 0
+
+24h Total Pairs Survived = 0
+
+24h Unique Pairs Evaluated = 0
+
+24h Unique Pairs Survived = 0
+
+Total FX5 Cycles (24h) = 0 (or “No 24h data yet” state)
+
+All Filter Breakdown categories show 0 (or “No 24h data yet” at top) — no stale counts.
+
+The only exceptions are:
+
+Kraken Universe (non-zero, as above)
+
+Occasional small Last Scan Result values from FX5 passive scans
+
+“Next Scan In” countdown
+
+No frozen session snapshots:
+
+Ensure that when we transition ACTIVE → STOPPED, the UI does not simply continue showing the last ACTIVE 24h metrics and breakdown counts indefinitely.
+
+If the REST endpoints currently return “last 24h including past ACTIVE cycles,” you must either:
+
+Use mode / active-flag aware REST fields that only aggregate ACTIVE cycles, or
+
+Apply a client-side guard such that, once the engine is STOPPED and there are no new active cycles, the UI shows zeros / “No 24h data yet” rather than stale non-zero values.
+
+Mini-ticks explicitly allowed:
+
+Do not suppress the small evaluated/eligible counts in Last Scan Result that occasionally appear in passive learning.
+
+The user expects these “mini-ticks” as a sign that the scanner is still alive; they just don’t want stale 24h or breakdown metrics.
+
+2. Top Section — Layout & Styling Corrections
+
+Use the 11/18 truth top-section screenshots as your visual source of truth, plus the adjustments below.
+
+2.1. Card / Border Structure
+
+Current 2.8.1 implementation uses separate cards/boxes for each of the four sections.
+
+Change this to:
+
+One single parent card enclosing all four sections:
+
+Kraken Universe
+
+Cycle Info
+
+Last Scan Result
+
+24h Filter Activity
+
+Remove the individual border boxes around each section.
+
+Instead, use horizontal divider lines between the sections, matching the 11/18 screenshots:
+
+Divider below Kraken Universe section
+
+Divider below Cycle Info section
+
+Divider below Last Scan Result section
+
+No divider below 24h Filter Activity (it’s the last section in the card).
+
+2.2. Section Headers & Font Sizes
+
+Across all four sections:
+
+Section titles (e.g., “Kraken Universe”, “Cycle Info”) should:
+
+Match the font size and weight in the 11/18 truth screenshots.
+
+Numeric values:
+
+Slightly larger and bolder than their label text.
+
+Do not use the oversized font currently applied to the Kraken Universe count.
+
+Concretely:
+
+Kraken Universe (1,386) should be the same number font size/style as the other metrics, not dramatically larger.
+
+2.3. Kraken Universe Section (Section 1)
+
+Shows only:
+
+Label: “Total tradable pairs in Kraken universe”
+
+Value: <N> pairs (e.g., 1,386 pairs)
+
+No Evaluated / Eligible / Ineligible metrics in this section (those belong in Last Scan Result).
+
+2.4. Cycle Info Section (Section 2)
+
+Restore all fields that were present in the 11/18 truth state and lay them out in three rows, as in the screenshot.
+
+Fields required:
+
+Row 1:
+
+Last Scan Time: includes date + time, e.g.
+11/18/2025, 12:40:13 AM
+
+Next Scan In: live countdown (e.g., 27s)
+
+Row 2:
+
+Cycle ID: shows the current FX5 cycle ID (e.g., cycle_paper_u2Ywh0By3)
+
+Scan Frequency: “Every 30 seconds” (static label text)
+
+Row 3:
+
+Cycles per Hour: numeric value (e.g., 0.4)
+
+Also:
+
+Use the same fonts, spacing, and colors as in the 11/18 screenshot.
+
+Keep the Cycle Info header exactly as in truth; no extra description is necessary.
+
+2.5. Last Scan Result Section (Section 3)
+
+Remove the small sub-header text “Most recent FX5 scan cycle statistics” (not present in truth).
+
+Ensure it shows exactly these four metrics:
+
+Evaluated (This Scan)
+
+Eligible (This Scan)
+
+Ineligible (This Scan)
+
+Eligible %
+
+Layout: match the 11/18 screenshot’s grid (two rows or one row of four, whichever the truth shows — use the truth screenshots you’ll be given).
+
+Eligible % should be calculated exactly as in 2.8.1 (eligible / evaluated × 100), but must always be consistent with the other three metrics.
+
+2.6. 24h Filter Activity Section (Section 4)
+
+Match the truth layout: three stacked rows:
+
+Row 1:
+
+Total Evaluated (24h)
+
+Unique Evaluated (24h)
+
+Row 2:
+
+Total Survived Filters (24h)
+
+Unique Survived Filters (24h)
+
+Row 3:
+
+Total FX5 Cycles (Last 24h) — this always appears last
+
+Important behaviors:
+
+When no valid 24h data exists (e.g., engine STOPPED and no active cycles in last 24h):
+
+Either show all zeros or a clear “No 24h data available yet” message instead of misleading non-zero values.
+
+Use the same typography for labels and numbers as in the truth top-section screenshots.
+
+3. Active Filtered Pool – Header & Layout Corrections
+
+Use the truth “Active Filtered Pool” screenshot as your base.
+
+3.1. Columns & Data
+
+Columns remain as established in 2.8.1:
+
+Symbol
+
+Status
+
+First Seen (this window)
+
+Last Updated (this cycle)
+
+Timestamps:
+
+Keep the UTC + relative time dual-line format from 2.8.1 — that’s acceptable.
+
+3.2. Header & Sub-header Text
+
+Change the header area under “Active Filtered Pool (Deduped, Non-Expired)” to match truth:
+
+Under the header, instead of the current explanatory text, show:
+
+Total Active Filtered Pairs: <N>
+
+Use the same font sizes and weights as other total/stat displays in the app.
+
+Empty state:
+
+When there are zero active filtered pairs:
+
+Show the existing “No Eligible Pairs / No symbols currently pass all screening filters” empty-state UI as in truth.
+
+Ensure the Total Active Filtered Pairs count shows 0.
+
+4. Filter Breakdown (Last 24h) – Behavior & Styling Fixes
+
+Use the truth Filter Breakdown screenshot and the Phase 8.7 filter table below.
+
+4.1. Categories (Final List)
+
+Exactly these 9 visible categories, in a sensible order (truth order is preferred):
+
+Passed All Filters
+
+Min Price
+
+Min Volume
+
+Max Spread
+
+Min Daily Range
+
+Exclude Stablecoins
+
+Valid Quote Currency
+
+Already Active
+
+History
+
+Descriptions should match the Phase 8.7 truth descriptions (which you already wired in during 2.8.1).
+
+4.2. Counts, Not Pass/Fail Pills
+
+Current behavior shows “Pass/Fail” pills on each row. This is incorrect.
+
+Required behavior:
+
+Each category shows:
+
+Label (e.g., “Min Volume”)
+
+Short description (already implemented)
+
+Threshold (already implemented)
+
+Numeric count for the last 24h window (e.g., 180)
+
+Remove any Pass/Fail badge for these categories. The only “summary” concept is the count of pairs that failed that filter in the last 24 hours.
+
+“Passed All Filters”:
+
+Also shows a numeric count — the number of pairs that passed every filter in that last scan cycle / 24h window.
+
+The sum of:
+
+“Passed All Filters” count
+
+All individual failure category counts
+≈ Total Evaluated (24h), subject to the same semantics as truth.
+
+4.3. No Greyed-Out Categories
+
+Do not render any of the 9 categories as “greyed out” or visually disabled.
+
+All 9 should appear active and readable, even when their count is 0.
+
+4.4. Passive-Mode Zeroing
+
+When the engine has been STOPPED and there are no qualifying active cycles in the last 24h:
+
+All category counts must be 0, and/or a clear header message (e.g., “No 24h data available yet”) should be shown.
+
+Do not show residual counts from old sessions while engine is stopped.
+
+5. Passive-Mode Visual State (Sanity Checklist)
+
+After implementing the above:
+
+With Trading = STOPPED, Passive Learning = ON:
+
+Kraken Universe:
+
+Shows current universe size (e.g., 1,386 pairs).
+
+Cycle Info:
+
+Shows Last Scan Time, Next Scan In, Cycle ID, Scan Frequency, Cycles per Hour — all formatted as in truth.
+
+Last Scan Result:
+
+May show occasional low counts (mini-ticks) from FX5 scans — this is allowed.
+
+24h Filter Activity:
+
+Shows zeros or “No 24h data available yet” if no valid data.
+
+Does not show stale values from last active trading session.
+
+Active Filtered Pool:
+
+Table empty, Total Active Filtered Pairs = 0, “No Eligible Pairs” empty-state displayed.
+
+Filter Breakdown:
+
+All 9 categories visible, no pass/fail pills, all counts = 0 (or overall “No 24h data yet”).
+
+6. Implementation Notes
+
+Code location:
+
+client/src/components/trading/filter-insights.tsx
+
+Architecture assumptions:
+
+Continue using REST endpoints as source of truth for Filter Insights data (scan summary, 24h metrics, active pool, breakdown), as specified in the 11/20 mapping directive and REB1–02 / 06 reports.
+
+WebSockets should only be used for triggers / invalidation, not as an alternate source of metrics.
+
+No backend schema changes are requested in this directive; however:
+
+If you discover that REST endpoints themselves are returning stale or session-snapshot values for 24h metrics or breakdown, document this clearly in your completion report so it can be addressed in a later REB backend phase.
+
+7. Deliverables
+
+Please provide:
+
+Updated Filter Insights implementation matching:
+
+The 11/18 truth screenshots (plus specific tweaks in this directive).
+
+The passive-mode behavior described in Section 1 & 5.
+
+Short completion report (similar to REB2.8.1 report), summarizing:
+
+UI changes made (top card, cycle info, 24h layout, filter breakdown counts, etc.).
+
+Data source verification results for Last Scan, 24h metrics, and breakdown.
+
+Passive-mode behavior validation (including screenshots with Trading STOPPED).
+
+Screenshots:
+
+Filter Insights tab with Trading STOPPED (Passive Learning), showing:
+
+Full top card
+
+Empty Active Filtered Pool
+
+Filter Breakdown with counts = 0
+
+Optional: Filter Insights tab with Trading ACTIVE to confirm 24h metrics and breakdown tick as expected.
+
+Confirmation that:
+
+No hardcoded/sample numbers remain in Filter Insights.
+
+All 9 filter categories are present, none greyed out, all using numeric counts only.
+
+Kraken Universe, Cycle Info, Last Scan Result, 24h metrics, Active Filtered Pool, and Filter Breakdown all align with the truth layout and semantics.
+
+8. Test User Credentials
+
+Use the following credentials for validation (as before):
+
+Username: testuser123
+
+Password: SecurePass123!
+
+Please use Paper mode when validating Filter Insights.

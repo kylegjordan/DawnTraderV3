@@ -143,6 +143,55 @@ const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   'failed_history',
 ];
 
+// REB 2.8.1: UTC timestamp formatter with fallback guards (no Stage-3 dependencies)
+function formatScanTimestamp(value: string | null | undefined): { display: string; relative: string } {
+  // Guard against falsy, empty strings, or string literal 'undefined'
+  if (!value || value === '' || value === 'undefined' || value === 'null') {
+    return { display: '—', relative: '' };
+  }
+  
+  try {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      return { display: '—', relative: '' };
+    }
+    
+    // Format in UTC with explicit zone label
+    const utcString = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short'
+    }).format(date);
+    
+    // Calculate relative time
+    const now = Date.now();
+    const diffMs = now - date.getTime();
+    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    let relative = '';
+    if (diffMinutes < 1) {
+      relative = 'just now';
+    } else if (diffMinutes < 60) {
+      relative = `${diffMinutes}m ago`;
+    } else if (diffHours < 24) {
+      relative = `${diffHours}h ago`;
+    } else {
+      relative = `${diffDays}d ago`;
+    }
+    
+    return { display: utcString, relative };
+  } catch (error) {
+    return { display: '—', relative: '' };
+  }
+}
+
 export function FilterInsights() {
   const { messages: wsMessages } = useWebSocket();
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
@@ -266,171 +315,187 @@ export function FilterInsights() {
 
   return (
     <div className="space-y-4" data-testid="filter-insights">
-      {/* REB 2.8.1: Section 1 - Kraken Universe (single metric) */}
+      {/* REB 2.8.2: Single unified card with 4 sections separated by dividers */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Kraken Universe</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Total tradable pairs in Kraken universe
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2">
-            <p className="text-4xl font-bold" data-testid="text-universe-count">
-              {scanTick.krakenUniverseSize.toLocaleString()}
-            </p>
-            <span className="text-sm text-muted-foreground">pairs</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* REB 2.8.1: Section 2 - Cycle Info (timing) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Cycle Info</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            FX5 scanner timing and schedule
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Last Scan Time</p>
-              <p className="text-lg font-medium" data-testid="text-last-scan">
-                {new Date(scanTick.cycleEndTimestamp).toLocaleTimeString()}
-              </p>
+        <CardContent className="p-6">
+          {/* Section 1: Kraken Universe */}
+          <div className="mb-6">
+            <h3 className="text-base font-semibold mb-3">Kraken Universe</h3>
+            <div className="flex items-baseline gap-2">
+              <p className="text-xs text-muted-foreground">Total tradable pairs in Kraken universe</p>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Next Scan In</p>
-              <p className="text-lg font-bold" data-testid="text-next-scan-countdown">
-                {countdownDisplay}
+            <div className="flex items-baseline gap-2 mt-1">
+              <p className="text-2xl font-bold" data-testid="text-universe-count">
+                {scanTick.krakenUniverseSize.toLocaleString()}
               </p>
+              <span className="text-sm text-muted-foreground">pairs</span>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* REB 2.8.1: Section 3 - Last Scan Result */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Last Scan Result</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Most recent FX5 scan cycle statistics
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Evaluated</p>
-              <p className="text-2xl font-bold" data-testid="text-evaluated-count">
-                {scanTick.evaluatedCount.toLocaleString()}
-              </p>
+          <div className="border-t mb-6"></div>
+
+          {/* Section 2: Cycle Info - REB 2.8.2: Restored to 3-row layout with all fields */}
+          <div className="mb-6">
+            <h3 className="text-base font-semibold mb-3">Cycle Info</h3>
+            {/* Row 1: Last Scan Time + Next Scan In */}
+            <div className="grid grid-cols-2 gap-4 mb-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Last Scan Time</p>
+                <p className="text-sm font-medium" data-testid="text-last-scan">
+                  {new Date(scanTick.cycleEndTimestamp).toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Next Scan In</p>
+                <p className="text-sm font-bold" data-testid="text-next-scan-countdown">
+                  {countdownDisplay}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Eligible</p>
-              <p className="text-2xl font-bold text-success" data-testid="text-eligible-count">
-                {scanTick.eligibleCount}
-              </p>
+            {/* Row 2: Cycle ID + Scan Frequency */}
+            <div className="grid grid-cols-2 gap-4 mb-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Cycle ID</p>
+                <p className="text-sm font-medium font-mono" data-testid="text-cycle-id">
+                  {scanTick.cycleId || 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Scan Frequency</p>
+                <p className="text-sm font-medium">
+                  {scanFrequency}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Ineligible</p>
-              <p className="text-2xl font-bold text-muted-foreground" data-testid="text-ineligible-count">
-                {scanTick.ineligibleCount}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Eligible %</p>
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-bold text-success" data-testid="text-eligible-percent">
-                  {eligiblePercent}%
+            {/* Row 3: Cycles per Hour */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Cycles per Hour</p>
+                <p className="text-sm font-medium" data-testid="text-cycles-per-hour">
+                  {scanTick.cyclesPerHour !== undefined ? scanTick.cyclesPerHour.toFixed(1) : 'N/A'}
                 </p>
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* REB 2.8.1: Section 4 - 24h Metrics (5 metrics, Total Cycles last) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            24h Filter Activity
-            {!engineActive && (
-              <Badge variant="outline" className="text-xs border-warning text-warning">
-                STOPPED
-              </Badge>
+          <div className="border-t mb-6"></div>
+
+          {/* Section 3: Last Scan Result - REB 2.8.2: Removed sub-header */}
+          <div className="mb-6">
+            <h3 className="text-base font-semibold mb-3">Last Scan Result</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Evaluated (This Scan)</p>
+                <p className="text-2xl font-bold" data-testid="text-evaluated-count">
+                  {scanTick.evaluatedCount.toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Eligible (This Scan)</p>
+                <p className="text-2xl font-bold text-success" data-testid="text-eligible-count">
+                  {scanTick.eligibleCount}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Ineligible (This Scan)</p>
+                <p className="text-2xl font-bold text-muted-foreground" data-testid="text-ineligible-count">
+                  {scanTick.ineligibleCount}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Eligible %</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl font-bold text-success" data-testid="text-eligible-percent">
+                    {eligiblePercent}%
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t mb-6"></div>
+
+          {/* Section 4: 24h Filter Activity - REB 2.8.2: Restructured into 3-row layout */}
+          <div>
+            <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
+              24h Filter Activity
+              {!engineActive && (
+                <Badge variant="outline" className="text-xs border-warning text-warning">
+                  STOPPED
+                </Badge>
+              )}
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Aggregated filter performance over the last 24 hours
+            </p>
+            {isLoading24h ? (
+              <div className="text-center py-4">
+                <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">Loading 24h metrics...</p>
+              </div>
+            ) : !scan24hData?.ok || !scan24hData?.data ? (
+              <div className="text-center py-4">
+                <Activity className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                <p className="text-sm text-muted-foreground">No 24h data available yet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Data will appear after engine starts and first scan cycle completes
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Row 1: Total Evaluated + Unique Evaluated */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Total Evaluated (24h)</p>
+                    <p className="text-2xl font-bold" data-testid="text-24h-evaluated">
+                      {scan24hData.data.totalEvaluated.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Unique Evaluated (24h)</p>
+                    <p className="text-2xl font-bold" data-testid="text-24h-unique-evaluated">
+                      {scan24hData.data.uniqueEvaluated.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                {/* Row 2: Total Survived + Unique Survived */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Total Survived Filters (24h)</p>
+                    <p className="text-2xl font-bold text-success" data-testid="text-24h-survived">
+                      {scan24hData.data.totalSurvived.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Unique Survived Filters (24h)</p>
+                    <p className="text-2xl font-bold text-success" data-testid="text-24h-unique-survived">
+                      {scan24hData.data.uniqueSurvived.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                {/* Row 3: Total FX5 Cycles (always last) */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Total FX5 Cycles (Last 24h)</p>
+                    <p className="text-2xl font-bold" data-testid="text-24h-cycles">
+                      {scan24hData.data.totalCycles.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
-          </CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">
-            Aggregated filter performance over the last 24 hours
-          </p>
-        </CardHeader>
-        <CardContent>
-          {isLoading24h ? (
-            <div className="text-center py-4">
-              <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">Loading 24h metrics...</p>
-            </div>
-          ) : !scan24hData?.ok || !scan24hData?.data ? (
-            <div className="text-center py-4">
-              <Activity className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-              <p className="text-sm text-muted-foreground">No 24h data available yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Data will appear after engine starts and first scan cycle completes
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* REB 2.8.1: First 4 metrics */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">24h Total Pairs Evaluated</p>
-                  <p className="text-2xl font-bold" data-testid="text-24h-evaluated">
-                    {scan24hData.data.totalEvaluated.toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">24h Total Pairs Survived</p>
-                  <p className="text-2xl font-bold text-success" data-testid="text-24h-survived">
-                    {scan24hData.data.totalSurvived.toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">24h Unique Pairs Evaluated</p>
-                  <p className="text-2xl font-bold" data-testid="text-24h-unique-evaluated">
-                    {scan24hData.data.uniqueEvaluated.toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">24h Unique Pairs Survived</p>
-                  <p className="text-2xl font-bold text-success" data-testid="text-24h-unique-survived">
-                    {scan24hData.data.uniqueSurvived.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-
-              {/* REB 2.8.1: Total Cycles - visually last metric */}
-              <div className="pt-4 border-t">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Total FX5 Cycles (Last 24h)</p>
-                  <p className="text-2xl font-bold" data-testid="text-24h-cycles">
-                    {scan24hData.data.totalCycles.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* REB 2.8.1: Active Filtered Pool - truth columns: Symbol, Status, First Seen, Last Updated */}
+      {/* REB 2.8.2: Active Filtered Pool - Updated header per truth */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            Active Filtered Pool
+            Active Filtered Pool (Deduped, Non-Expired)
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Pairs that passed all filters in the current scan cycle
+            Total Active Filtered Pairs: <span className="font-semibold">{scanTick.activePoolCount || 0}</span>
           </p>
         </CardHeader>
         <CardContent>
@@ -470,22 +535,33 @@ export function FilterInsights() {
                   </tr>
                 </thead>
                 <tbody>
-                  {scanTick.activeFilteredPool.slice(0, 20).map((pair, index) => (
-                    <tr key={`${pair.symbol}-${index}`} className="border-b hover:bg-muted/50">
-                      <td className="py-2 px-3 font-medium">{pair.symbol}</td>
-                      <td className="py-2 px-3">
-                        <Badge variant="outline" className="text-xs text-success border-success/20 bg-success/10">
-                          All Filters Passed
-                        </Badge>
-                      </td>
-                      <td className="py-2 px-3 text-sm">
-                        {pair.firstSeen ? new Date(pair.firstSeen).toLocaleString() : '—'}
-                      </td>
-                      <td className="py-2 px-3 text-sm">
-                        {pair.lastUpdated ? new Date(pair.lastUpdated).toLocaleString() : '—'}
-                      </td>
-                    </tr>
-                  ))}
+                  {scanTick.activeFilteredPool.slice(0, 20).map((pair, index) => {
+                    const firstSeenFormatted = formatScanTimestamp(pair.firstSeen);
+                    const lastUpdatedFormatted = formatScanTimestamp(pair.lastUpdated);
+                    
+                    return (
+                      <tr key={`${pair.symbol}-${index}`} className="border-b hover:bg-muted/50">
+                        <td className="py-2 px-3 font-medium">{pair.symbol}</td>
+                        <td className="py-2 px-3">
+                          <Badge variant="outline" className="text-xs text-success border-success/20 bg-success/10">
+                            All Filters Passed
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="text-sm">{firstSeenFormatted.display}</div>
+                          {firstSeenFormatted.relative && (
+                            <div className="text-xs text-muted-foreground">{firstSeenFormatted.relative}</div>
+                          )}
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="text-sm">{lastUpdatedFormatted.display}</div>
+                          {lastUpdatedFormatted.relative && (
+                            <div className="text-xs text-muted-foreground">{lastUpdatedFormatted.relative}</div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {scanTick.activeFilteredPool.length > 20 && (
@@ -498,7 +574,7 @@ export function FilterInsights() {
         </CardContent>
       </Card>
 
-      {/* REB 2.8.1: Filter Breakdown (Last 24h) - 9 truth categories */}
+      {/* REB 2.8.2: Filter Breakdown (Last 24h) - Counts only, no Pass/Fail pills */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Filter Breakdown (Last 24h)</CardTitle>
@@ -520,10 +596,9 @@ export function FilterInsights() {
                 </div>
               </div>
               
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {ALLOWED_FILTER_CATEGORIES.map((key) => {
                   const count = breakdown.breakdown[key];
-                  const isTopFailure = count > 0 && count > 100;
                   const threshold = getThreshold(key);
                   const displayName = FILTER_DISPLAY_NAMES[key] || key;
                   const description = FILTER_DESCRIPTIONS[key];
@@ -531,53 +606,35 @@ export function FilterInsights() {
                   return (
                     <div 
                       key={key} 
-                      className={cn(
-                        "flex flex-col p-3 rounded border",
-                        isTopFailure ? "border-destructive/20 bg-destructive/5" : "border-border",
-                        count === 0 && "opacity-60"
-                      )}
+                      className="flex items-start justify-between p-3 rounded border border-border hover:bg-muted/30"
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {count > 0 ? (
-                            <XCircle className={cn(
-                              "w-4 h-4 shrink-0",
-                              isTopFailure ? "text-destructive" : "text-warning"
-                            )} />
-                          ) : (
-                            <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium">{displayName}</span>
+                          {count === 0 && count !== undefined && (
+                            <span className="text-xs text-success">✓ Pass</span>
                           )}
-                          <span className={cn(
-                            "text-sm font-medium",
-                            count === 0 && "text-muted-foreground"
-                          )}>
-                            {displayName}
-                          </span>
                         </div>
-                        <Badge 
-                          variant={count > 0 ? (isTopFailure ? "destructive" : "secondary") : "outline"}
-                          data-testid={`badge-filter-${key}`}
-                          data-count={count}
-                          className={cn(
-                            "shrink-0",
-                            count === 0 && "text-success border-success/20"
-                          )}
-                        >
-                          {count > 0 ? count.toLocaleString() : "✓ Pass"}
-                        </Badge>
+                        {description && (
+                          <p className="text-xs text-muted-foreground mb-1">
+                            {description}
+                          </p>
+                        )}
+                        {threshold && (
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Threshold: {threshold}
+                          </p>
+                        )}
                       </div>
-                      
-                      {description && (
-                        <p className="text-xs text-muted-foreground mb-1 ml-6">
-                          {description}
+                      <div className="ml-4 shrink-0">
+                        <p 
+                          className="text-lg font-bold"
+                          data-testid={`count-filter-${key}`}
+                          data-count={count}
+                        >
+                          {count !== undefined ? count.toLocaleString() : '—'}
                         </p>
-                      )}
-                      
-                      {threshold && (
-                        <p className="text-xs font-medium text-muted-foreground ml-6">
-                          Threshold: {threshold}
-                        </p>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
