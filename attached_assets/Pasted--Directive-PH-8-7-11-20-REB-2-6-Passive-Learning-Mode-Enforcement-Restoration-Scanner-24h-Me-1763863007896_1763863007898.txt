@@ -1,0 +1,406 @@
+🧭 Directive: PH.8.7–11.20–REB 2.6
+Passive Learning & Mode Enforcement Restoration (Scanner + 24h Metrics)
+
+You are now entering PH.8.7–11.20–REB 2.6 of the REB program.
+
+The goal of this phase is not to invent anything new.
+Your job is to restore the pre-rollback (Nov 6–20) behavior for:
+
+Passive Learning Mode behavior, and
+
+Paper vs Live mode enforcement
+
+…specifically in the scanner + 24h metrics pipeline, on top of the work already completed in:
+
+REB 2.1 – FX5 batch-first scanner restoration
+
+REB 2.2 – Active Filter Pool TTL + dedupe + passive enforcement (scanner-side)
+
+REB 2.3A/B/C/D – Rollback + mode audits and refactor mapping
+
+REB 2.4 – Stage-1f/1g/1h stateVersion + atomic broadcast
+
+REB 2.5 – Engine warm-up / startup fixes (INIT/WARM/ACTIVE behavior + 143s regression fix)
+
+This phase is logic-level only (backend), and must be driven by truth from the archives — no “nice to have” improvements, no creative redesigns.
+
+1️⃣ High-Level Objective
+
+Restore the mode system and passive learning behavior so that it matches the truth state from Nov 6–20:
+
+Truth (what must be restored)
+
+From the REB 2.3C truth reports and Nov 6/15/20 archives:
+
+Three conceptual modes
+
+Passive Learning Mode (default)
+
+Paper Active Mode
+
+Live Active Mode
+
+Passive Learning semantics (pre-rollback truth):
+
+Scans still run (so we can see pairs + breakdowns),
+
+But trading metrics and “active pool” behavior are paused from the perspective of learning / performance metrics:
+
+No new trades are executed.
+
+No strategy performance metrics are updated.
+
+UI shows something equivalent to “Passive Learning – Trading Metrics Paused”, and the backend must actually respect that.
+
+Mode isolation:
+
+Paper and Live must be isolated in terms of:
+
+Active pool contents,
+
+Metrics,
+
+Engine state,
+
+Scan broadcasts.
+
+Passive learning is a behavior flag that modifies paper mode behavior, not a separate 4th mode.
+
+Scanner + 24h metrics integration:
+
+FX5 batch and breakdowns still run for both modes.
+
+24h metrics / learning / aggregation are controlled by:
+
+engine state (paper/live ACTIVE vs STOPPED), and
+
+passiveLearning flag (for paper mode).
+
+The current state from REB 2.3C:
+
+mode-registry.ts, system-config.ts still exist and define things like passiveLearning, paper/live modes. ✅
+
+The scanner + metrics pipeline ignores passiveLearning completely. ❌
+
+UI can claim “Passive Learning active / metrics paused”, but backend still updates metrics / pool as if fully active. ❌
+
+REB 2.6 must fix that mismatch.
+
+2️⃣ Scope – IN vs OUT
+✅ IN SCOPE (REB 2.6)
+
+You are allowed to modify backend only, and only in these areas, to restore truth behavior:
+
+Scanner + metrics pipeline, mode enforcement & passive learning:
+
+server/services/scan-24h-aggregator.ts
+
+server/services/fx5-scanner.ts (only mode/passive logic, not filters themselves)
+
+server/services/active-filter-pool.ts (only if small adjustments needed to obey passive semantics)
+
+Any mode/engine status helpers required to read flags or state (e.g. from:
+
+server/services/mode-registry.ts
+
+server/services/system-config.ts
+
+server/services/trading-state-sync.ts
+
+server/services/trading-engine.ts
+…but only to consume their values, not redesign them.
+
+Behavior we want restored (high level):
+
+When paper engine is ACTIVE and passiveLearning = FALSE
+→ Scanner + 24h metrics behave normally (full learning, metrics, pool behavior).
+
+When paper engine is ACTIVE and passiveLearning = TRUE (Passive Learning Mode)
+→ Scans still run and appear in UI, but:
+
+Trading metrics / “learning” updates are paused exactly as in truth.
+
+Any writes to “learning” metrics / performance stats are gated.
+
+When paper engine is STOPPED
+→ Scanner + metrics behave per current truth (you’ve already restored: no new entries into active pool in STOPPED state, pool cleared as appropriate).
+
+When live engine is ACTIVE
+→ Behavior remains truth-correct; passiveLearning is primarily a paper mode behavior flag.
+
+❌ OUT OF SCOPE (REB 2.6)
+
+You must not:
+
+Change trading engine startup behavior (REB 2.5 already did that).
+
+Change Stage-1f/1g/1h stateVersion or broadcast semantics (REB 2.4).
+
+Change FX5 filter logic, batch sizes, or filtering thresholds (REB 2.1).
+
+Change Active Filter Pool TTL, dedupe, cooldown semantics (REB 2.2).
+
+Change strategy engine, trade execution logic, or SignalOrchestrator beyond what is required to respect passive mode for metrics/learning.
+
+Modify frontend code (React/TSX).
+
+Introduce any new feature or “future improvement.”
+Only restore behavior we can point to in the truth docs.
+
+If you feel forced to touch anything outside the scope above, stop and ask for confirmation.
+
+3️⃣ Truth Sources You MUST Use
+
+You must base your restoration only on these truth sources (read-only):
+
+Mode & passive learning truth (REB 2.3C):
+
+docs/restoration/reb2_reports/REB2.3C_TRUTH_MODE_BEHAVIOR.md
+
+docs/restoration/reb2_reports/REB2.3C_CURRENT_MODE_IMPLEMENTATION.md
+
+docs/restoration/reb2_reports/REB2.3C_MODE_GAP_REPORT.md
+
+docs/restoration/reb2_reports/REB2.3C_MODE_IMPACT_MATRIX.md
+
+Archives (for Nov 6–20 behavior):
+
+docs/restoration/truth/DawnTrader_Chat_Archive_11-6-25-2_*.md
+
+docs/restoration/truth/DawnTrader_Chat_Archive_11-15-25_*.md
+
+docs/restoration/truth/DawnTrader_Chat_Archive_11-20-25_*.md
+
+Phase 8.6–8.7 backend truth (context for scanner + metrics):
+
+docs/restoration/truth/phase_8.6.7_validation_*.md
+
+docs/restoration/truth/phase_8.6.10_mapping_*.md
+
+docs/restoration/truth/phase_8.7_completion_*.md
+
+docs/restoration/truth/phase_8.7.1_completion_*.md
+
+Existing REB 2 reports (for consistency):
+
+Active Pool: REB2.2_COMPLETION_REPORT.md
+
+FX5: REB2.1_COMPLETION_REPORT.md
+
+Engine warm-up: REB2.5_ENGINE_WARMUP_STATE_MACHINE_SPEC.md
+
+Stage-1 broadcast: REB2.4_STAGE1F_1G_1H_COMPLETION_REPORT.md
+
+Do not guess. If truth is ambiguous, treat it as ambiguous and document options.
+
+4️⃣ Concrete Tasks (Execution Plan)
+
+You must perform these steps in order:
+
+Task 1 – Re-read Mode Truth & Current Implementation
+
+Re-read:
+
+REB2.3C_TRUTH_MODE_BEHAVIOR.md
+
+REB2.3C_CURRENT_MODE_IMPLEMENTATION.md
+
+Extract and summarize for yourself:
+
+The exact behaviors described for:
+
+Passive Learning mode,
+
+Paper active,
+
+Live active.
+
+Where, in truth, updates were supposed to be skipped during passive learning (e.g., metrics, learning, pool writes).
+
+Deliverable (internal to you): a short internal checklist of “things that MUST be skipped during passive mode”.
+
+Task 2 – Locate All Mode & Passive Checks in Current Code
+
+In read-only mode:
+
+Search across server/ for:
+
+passiveLearning
+
+passive
+
+mode-registry
+
+system-config
+
+Search for code that:
+
+Writes metrics / 24h stats / learning data (e.g., in scan-24h-aggregator.ts).
+
+Writes or mutates the active pool from the scanner side (you already know some of this from REB 2.2).
+
+You are confirming: where should passive learning apply gates, but currently doesn’t.
+
+Task 3 – Design Minimal Passive Learning Gates
+
+Still in analysis mode:
+
+Based on truth + current code, design a minimal set of boolean gates such as (names illustrative):
+
+const isPaperActive = ...;        // paper engine ACTIVE
+const isPaperPassive = ...;       // passiveLearning === true
+const shouldUpdateLearning = isPaperActive && !isPaperPassive;
+
+
+Decide exactly where those gates should be applied:
+
+In scan-24h-aggregator.ts:
+
+Before any writes to metrics / learning records.
+
+In fx5-scanner.ts + active-filter-pool.ts:
+
+Confirm that existing REB 2.2 passive enforcement is still correct.
+
+Only add/adjust logic if truth docs explicitly require additional behavior.
+
+Do not implement yet; ensure the design matches the truth behavior you see in REB 2.3C.
+
+If you find conflicts or ambiguity in truth, stop and document them.
+
+Task 4 – Implement Passive Learning Enforcement (Scanner + 24h Aggregator)
+
+Now implement only the gates described in Task 3:
+
+In scan-24h-aggregator.ts:
+
+Add helper(s) to read:
+
+paper/live engine status,
+
+passiveLearning flag.
+
+Implement logic so that:
+
+When paper is ACTIVE and passiveLearning = TRUE:
+
+All writes to learning / performance metrics are skipped, but
+
+Scan snapshots and breakdowns still flow (for UI visibility).
+
+Preserve Stage-1f/1g/1h behavior and stateVersion semantics.
+
+In fx5-scanner.ts / active-filter-pool.ts:
+
+Verify REB 2.2 passive enforcement (no new pool writes when engine STOPPED) remains correct.
+
+Only adjust if truth docs explicitly state different behavior for passiveLearning vs STOPPED.
+
+Add clear logs (DEBUG-level, not noisy) using a consistent prefix, for example:
+
+[MODE][DEBUG] paper=ACTIVE passiveLearning=TRUE → skipping learning updates
+
+[MODE][DEBUG] paper=ACTIVE passiveLearning=FALSE → learning updates enabled
+
+Do not change existing log formats from earlier REB phases unless needed for correctness.
+
+Task 5 – Sanity Checks & Non-Regression
+
+After implementation:
+
+Run the system in paper mode with:
+
+passiveLearning = true
+
+passiveLearning = false
+
+Confirm via logs:
+
+In passiveLearning = true, you see:
+
+Scans + breakdowns + stateVersion continue,
+
+But your new guard logs show skips for learning metrics.
+
+In passiveLearning = false, you see:
+
+Learning updates proceed as expected.
+
+Confirm that:
+
+FX5 scan cycle + Active Pool behavior from REB 2.1 / 2.2 remain intact.
+
+Stage-1f/1g/1h atomic broadcast behavior from REB 2.4 still passes truth constraints.
+
+Engine warm-up behavior from REB 2.5 is unchanged.
+
+If any previously restored behavior regresses, stop, roll back the specific change, and document the conflict.
+
+5️⃣ Required Deliverables
+
+When REB 2.6 is complete, you must create these documentation files:
+
+docs/restoration/reb2_reports/REB2.6_PASSIVE_MODE_TRUTH_VS_CURRENT.md
+
+Summarize:
+
+Truth behavior (from archives + REB 2.3C),
+
+Pre-REB 2.6 current behavior,
+
+Post-REB 2.6 restored behavior.
+
+docs/restoration/reb2_reports/REB2.6_MODE_ENFORCEMENT_COMPLETION_REPORT.md
+
+Detail:
+
+Files modified (exact list),
+
+Logic changes made and how they align with truth,
+
+Log examples showing passiveLearning=TRUE vs FALSE,
+
+Verification steps taken,
+
+Any open questions or ambiguities left intentionally unresolved.
+
+Optional but preferred:
+docs/restoration/reb2_reports/REB2.6_METRICS_IMPACT_CHECKLIST.md
+
+Short checklist of where metrics can be affected by passiveLearning, and how each is now guarded.
+
+6️⃣ Guardrails & Escalation
+
+Do not introduce any new behaviors beyond those supported by truth docs.
+
+Do not touch Stage-2 or Stage-3 enhancements.
+
+Do not alter engine startup behavior, FX5 filter logic, or Active Pool TTL/cooldown semantics.
+
+If you find that restoring passive learning requires touching out-of-scope systems, you must:
+
+Stop implementation at that boundary.
+
+Document the exact dependency and file/line.
+
+Ask for explicit confirmation before proceeding.
+
+7️⃣ Final Confirmation
+
+Before you begin, please respond with:
+
+Confirmation that you understand:
+
+The goal of REB 2.6,
+
+The truth sources you must rely on,
+
+The in-scope vs out-of-scope boundaries.
+
+Any blocking questions you have before implementing.
+
+Once confirmed, you may proceed with PH.8.7–11.20–REB 2.6.
+
+If you’d like, once Replit finishes this phase and posts its notes + reports, I can review them and then we’ll plan the UI-facing cleanup (Filter Insights + Dashboard + Goals/Guidelines widget + portfolio balance timing) as the next set of phases.
+
+🕓 Nov 23 2025 – 5:53 AM (GST)
