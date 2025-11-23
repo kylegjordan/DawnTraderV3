@@ -1,0 +1,293 @@
+🔧 PH.8.7–11.20–REB 2.5 – Engine Warm-Up & Startup State Machine Restoration
+
+Title (for Replit): PH.8.7–11.20–REB 2.5 – Engine Warm-Up & Startup State Machine Restoration (Stage-1 Warm-Up, INIT→WARM→ACTIVE)
+
+🎯 High-Level Goal
+
+Restore the engine warm-up and startup state machine to the 11.18–11.20 truth state, so that:
+
+Engine startup is fast (<10 seconds target)
+
+Engine transitions cleanly: INIT → WARM → ACTIVE
+
+API no longer times out while the engine silently continues in the background
+
+Engine status reflects reality (no more “RUNNING but never ACTIVE”)
+
+Behavior matches the truth described in the Nov 6 / Nov 15 / Nov 20 archives, not the current regressed implementation
+
+This is a backend-only restoration, tightly scoped to warm-up and engine startup behavior. It builds on:
+
+✅ REB 2.1 – FX5 batch-first scanner restored
+
+✅ REB 2.2 – Active Filter Pool TTL/dedupe/passive enforcement restored
+
+✅ REB 2.4 – Stage-1f/1g/1h broadcast semantics restored (stateVersion + atomic snapshots)
+
+You are not allowed to redefine our end-state. You must restore the pre-rollback truth, not invent a new warm-up design.
+
+🧱 Scope – What IS and IS NOT allowed
+✅ IN SCOPE
+
+You may modify the backend only, and only as required to restore warm-up & startup:
+
+Primary suspects (expected files):
+
+server/services/trading-engine.ts
+
+server/services/paper-execution-engine.ts
+
+server/services/paper-sim-service.ts
+
+server/services/trading-state-sync.ts
+
+server/services/scan-24h-aggregator.ts (if needed for warm-up metrics)
+
+server/services/mode-registry.ts / server/services/system-config.ts (if needed to read mode state, NOT to change mode semantics)
+
+You may:
+
+Re-implement the INIT→WARM→ACTIVE state machine
+
+Recreate state transitions as defined in the Nov archives (Stage-1 truth).
+
+Ensure engine goes from “stopped” → “starting/warming” → “ACTIVE / ready to trade” in under ~10 seconds under normal conditions.
+
+Ensure this works for paper mode at minimum; live mode should follow the same pattern if truth explicitly states that.
+
+Restore warm-up behavior
+
+Preload any required data (e.g., market tickers, configs) needed before engine becomes ACTIVE.
+
+Ensure warm-up is done in a non-blocking way that aligns with truth (parallel init if that’s how it was originally designed).
+
+Make sure that once warm-up is complete, engine becomes ACTIVE promptly and reliably.
+
+Fix /api/trading/start behavior to match truth
+
+Today: endpoint hard-times out at 10s while engine continues for ~143s and never reaches ACTIVE.
+
+Truth: endpoint behavior, timeout, and status semantics must match what we had between 11.18–11.20.
+
+If truth indicates:
+
+The endpoint returns quickly and the UI polls for readiness → restore that behavior.
+
+OR the endpoint waits for READY but warm-up was <10s → restore that contract and reduce warm-up time accordingly.
+
+You may adjust timeout only as needed to match the truth contracts from the archives. Do NOT “just increase it” to mask slow behavior.
+
+Align backend status with real engine state
+
+Make sure GET /api/trading/status and any internal status fields accurately reflect the state machine: INIT, WARM, ACTIVE, STOPPED, etc.
+
+Fix the situation where status stays “RUNNING” and never reaches “ACTIVE”.
+
+Integrate with Stage-1f/1g/1h where required
+
+Use the now-restored stateVersion and atomic broadcast semantics when transitioning between INIT/WARM/ACTIVE.
+
+If any warm-up telemetry or state transitions are broadcast via WebSocket, ensure they carry coherent stateVersion and are atomic.
+
+Add warm-up specific logging markers
+
+Add clear, grep-friendly log tags like:
+
+[WARMUP][DEBUG]
+
+[ENGINE_INIT][DEBUG]
+
+[ENGINE_ACTIVE][DEBUG]
+
+[ENGINE_STATE][DEBUG]
+
+These should be enough to trace:
+
+When a start request is received
+
+When warm-up begins
+
+What steps warm-up includes
+
+When the engine becomes ACTIVE
+
+If any failure occurs, where and why
+
+🚫 OUT OF SCOPE – DO NOT TOUCH
+
+You MUST NOT change any of the following behaviors in REB 2.5:
+
+❌ Mode semantics (Passive vs Paper vs Live)
+
+Do NOT change the meaning of modes.
+
+Do NOT wire passive learning logic here – that is REB 2.6.
+
+You may read mode or config state as needed, but do not redefine how modes work.
+
+❌ FX5 Scanner logic
+
+Batch-first 60-pair architecture (36 Top-N / 24 Tier-B) is already restored and correct.
+
+Do not alter FX5 filtering logic or thresholds.
+
+You may only interact with FX5 for warm-up if truth explicitly says so (e.g., pre-warm a first scan or certain caches).
+
+❌ Active Filter Pool semantics
+
+TTL/dedupe/passive clearing behavior are already restored (REB 2.2).
+
+Do not change pool semantics; you may only ensure warm-up does not break them.
+
+❌ Stage-2 or Stage-3 enhancements
+
+Do NOT attempt to “fix” Stage 2 or Stage 3 in this phase.
+
+REB 2.5 is strictly Stage-1 warm-up / engine startup; Stage-2/3 reconsideration comes later.
+
+❌ UI / Frontend
+
+Do NOT change Filter Insights, Screeners, or any React code in this phase.
+
+The UI may still temporarily show stale behavior until backend is fully restored in REB 2.6+; that’s acceptable for now.
+
+❌ Business logic of strategies
+
+No changes to strategies, signal orchestrator, or trade execution algorithms.
+
+Only engine startup & readiness concerns are allowed.
+
+If you feel you must touch anything in the OUT OF SCOPE list to complete the warm-up restoration, you must:
+
+Document the need and rationale in the completion report, and
+
+STOP and wait for a new directive.
+
+📚 Truth Sources You MUST Use
+
+You must derive behavior from our existing truth documents:
+
+docs/restoration/truth/DawnTrader_Chat_Archive_11-6-25-2_*.md
+
+docs/restoration/truth/DawnTrader_Chat_Archive_11-15-25_*.md
+
+docs/restoration/truth/DawnTrader_Chat_Archive_11-20-25_*.md
+
+docs/stage-1h-analysis/ANALYSIS_SUMMARY.md
+
+docs/stage-1h-analysis/POLL_INTERVALS.txt
+
+Any REB 2.3B / 2.3C / 2.3D reports that describe warm-up, startup, or engine state dependencies.
+
+Do NOT “re-invent” warm-up behavior.
+If something is ambiguous in the archives, choose the least invasive implementation that:
+
+Fixes the 143s startup delay
+
+Avoids timeouts / mismatched states
+
+Preserves all previously restored behavior
+
+✅ Success Criteria
+
+You must consider REB 2.5 complete ONLY if all of these are true:
+
+Engine Startup Time
+
+For paper mode:
+
+Time from /api/trading/start POST to engine becoming ACTIVE is under ~10 seconds, unless truth explicitly states a different target.
+
+No more 143+ second cold start.
+
+State Machine Behavior
+
+State transitions visible in logs:
+
+[ENGINE_STATE][DEBUG] mode=paper from=INIT to=WARM
+
+[ENGINE_STATE][DEBUG] mode=paper from=WARM to=ACTIVE
+
+/api/trading/status reflects this correctly.
+
+Endpoint Behavior
+
+/api/trading/start no longer returns a timeout error while engine continues in background.
+
+Its behavior (blocking vs async, status codes) matches 11.18–11.20 truth.
+
+If you adjust timeout, log it as [REB2.5][TIMEOUT_ADJUST] with old and new values.
+
+No Regression of 2.1 / 2.2 / 2.4
+
+FX5 batch-scan remains correct.
+
+Active Pool behavior (TTL/dedupe/passive) remains correct.
+
+Stage-1f/1g/1h semantics keep working:
+
+One stateVersion per mode per cycle
+
+Atomic scan_tick + breakdown
+
+No new truth violations or race warnings
+
+Logs Prove It
+
+A clean warm-up sequence is visible in the logs for at least one paper engine start.
+
+No error stack traces during normal startup.
+
+No “Engine start timeout” errors while the state transitions successfully to ACTIVE.
+
+📄 Required Deliverables
+
+Please create these documentation files:
+
+docs/restoration/reb2_reports/REB2.5_ENGINE_WARMUP_COMPLETION_REPORT.md
+Must include:
+
+Summary of changes (per file, with line-level descriptions)
+
+Description of restored INIT→WARM→ACTIVE behavior
+
+Before vs After startup timing comparison
+
+Log excerpts showing a full successful startup (paper mode)
+
+Explanation of endpoint behavior and timeouts
+
+Explicit statement that 2.1/2.2/2.4 behavior remains intact
+
+docs/restoration/reb2_reports/REB2.5_ENGINE_WARMUP_STATE_MACHINE_SPEC.md
+A concise spec of the final truth state, including:
+
+States and transitions
+
+Triggers and conditions for each transition
+
+How warm-up interacts with FX5, Active Pool, and Stage-3 broadcast
+
+Any known edge cases (e.g., engine already running, double start calls, etc.)
+
+Optional (but strongly encouraged):
+
+A short section in the completion report called KNOWN LIMITATIONS & DEFERRALS listing anything left for REB 2.6 (mode semantics & passive learning) or later phases.
+
+🚦 Execution Mode
+
+This is NOT a read-only audit. You are authorized to modify backend code within the scope above.
+
+You must first confirm in your own words that you understand the scope and constraints.
+
+Then implement, restart, and validate using logs and test calls.
+
+If you encounter ambiguity in truth, choose the least invasive fix and explicitly document the assumption in the completion report.
+
+✅ Final Instruction
+
+You are now authorized to begin:
+
+“PH.8.7–11.20–REB 2.5 – Engine Warm-Up & Startup State Machine Restoration (Stage-1 Warm-Up, INIT→WARM→ACTIVE)”
+
+Do not expand the scope beyond what is described above. If you believe something out of scope must be changed to complete this work, stop and report it instead of proceeding silently.

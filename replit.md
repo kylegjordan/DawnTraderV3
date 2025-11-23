@@ -6,58 +6,6 @@ This project is a long-only, spot-trading cryptocurrency day trading web applica
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-## Recent Changes
-
-### REB 2.2 COMPLETE - Active Filter Pool Implementation (November 22, 2025)
-Successfully implemented Active Filter Pool with TTL-based expiry (5 minutes), deduplication logic, and passive-mode enforcement. FX5 Scanner now maintains a persistent pool of survivors with automatic cleanup and engine-state awareness, matching Phase 8.6.7/8.6.10 truth state requirements.
-
-**Critical Architecture Changes:**
-- Created `server/services/active-filter-pool.ts` - TTL-managed survivor pool with dual-mode support (paper/live)
-- Updated Stage-3 cache types with `expiresAt`, `source`, `fx5Snapshot` fields (Phase 8.6.10 truth state)
-- Integrated Active Filter Pool into FX5 scanner with engine-state awareness
-
-**Active Filter Pool Features:**
-- **TTL Management**: 5-minute expiry for pool entries (configurable via `ACTIVE_POOL_TTL_MS`)
-- **Deduplication**: Skip re-adding non-expired symbols, returns stats (added, updated, skipped)
-- **Passive Mode Enforcement**: Clear pool when trading engine is STOPPED (via `enforcePassiveModeIfStopped`)
-- **Automatic Cleanup**: Remove expired entries before each cycle
-- **Dual-Mode Pools**: Separate pools for paper and live trading modes
-
-**Runtime Validation:**
-✅ Passive mode enforcement working (clears pool when engine STOPPED)
-✅ TTL expiry logic removes entries after 5 minutes
-✅ Deduplication correctly skips non-expired symbols
-✅ Engine state checking via `scan24hAggregator.getStatus()`
-✅ Architect approved with truth state compliance validation
-
-See `docs/restoration/reb2_reports/REB2.2_COMPLETION_REPORT.md` for full implementation details.
-
-### Phase 8.8.2 COMPLETE - FX5 30-Second Scanner Service (November 20, 2025)
-Implemented standalone FX5 scanner service (`Fx5ScannerService`) that runs independently every 30 seconds for both paper and live modes, completely decoupled from trading engine state. Stage-3 now serves as the single source of truth for scan cycle state, emitting `scan_tick` and `scanner:breakdown` WebSocket events every 30 seconds ALWAYS (regardless of engine activity). 
-
-**Critical Architecture Changes:**
-- Created `server/services/fx5-scanner.ts` - autonomous 30-second scanner service
-- Removed Stage-3 dependencies from `signal-orchestrator.ts` (no longer tied to 10-minute scanner)
-- Fixed truth constraint violation by deriving eligible/ineligible counts from breakdown categories
-- Truth constraint equation: `evaluatedCount = (passed_all_filters + already_active) + (sum of all failed_*)`
-
-**Breakdown Counting Contract:**
-Every evaluated pair must increment exactly ONE breakdown category to maintain truth constraint. The `computeBreakdown()` function ensures:
-- `eligibleCount = breakdown.passed_all_filters + breakdown.already_active`
-- `ineligibleCount = sum of all breakdown.failed_* categories`
-- `evaluatedCount = eligibleCount + ineligibleCount` (always true)
-
-**Implementation Pattern:**
-Use `Object.entries(tickers)` when iterating Kraken API responses (object indexed by pair name, not array).
-
-**Runtime Validation:**
-✅ Truth constraint satisfied: evaluated=1382, breakdownSum=1382, truthConstraintOk=true
-✅ Both paper and live modes scanning independently every 30 seconds
-✅ Events fire regardless of trading engine state
-✅ Architect approved with runtime evidence validation
-
-See `reports/phase-8.8/8.8.2-FINAL-CORRECTION-DIRECTIVE.txt` for full implementation details.
-
 ## System Architecture
 The application features a React, TypeScript, Vite frontend with a mobile-first, responsive design, and a Node.js/Express backend providing a RESTful API and WebSocket support. PostgreSQL, utilizing Neon serverless driver and Drizzle ORM, handles data persistence. Authentication is managed via username/password, bcrypt, JWT, and WebAuthn.
 
@@ -69,7 +17,7 @@ The Goals Engine UI offers advanced universe and signal controls, execution rhyt
 
 The system incorporates a modern `guardrails_v2` schema with four core guardrail parameters: Portfolio Risk per Trade %, Symbol Cooldown (minutes), Max Open Positions, and Daily Loss Kill Switch %. It features dual-mode operation with independent guardrail sets, coherency validation, backend API endpoints for GET/PUT guardrails, and real-time WebSocket broadcasts for configuration changes. The **GuardrailPolicy Service** (`server/services/guardrail-policy.ts`) serves as the single backend source of truth for guardrail values, enforcing runtime coherency. The Goals Engine features an adaptive learning system that automatically optimizes preset boundaries based on 30-day performance metrics.
 
-The Screeners tab now exclusively uses the unified v2 filter configuration. A comprehensive audit system ensures that only current, visible fields influence the trade engine through runtime validation and database views. An automated anomaly detection system for override configuration changes, `AuditAnomalyDetectionService`, analyzes audit logs for unusual patterns.
+The Screeners tab exclusively uses the unified v2 filter configuration. A comprehensive audit system ensures that only current, visible fields influence the trade engine through runtime validation and database views. An automated anomaly detection system for override configuration changes, `AuditAnomalyDetectionService`, analyzes audit logs for unusual patterns.
 
 **Adaptive Guardrails** introduces a local-only learning system (`AdaptiveGuardrails` service) that allows LATTI to adaptively tune parameters based on trading outcomes using variance-based statistical analysis of 30-day performance metrics. A strict throttle mechanism limits changes to 3 per 24 hours. Override influence weighting adjusts AI aggressiveness based on user manual overrides.
 
@@ -108,6 +56,8 @@ Startup & Telemetry Remediation + Modularization Kickoff remediates performance 
 Lottie Connectivity & Impact Audit mapped all LATTI/Lottie system connections across 4 core services, 13 API endpoints, 5 database tables, 6 UI components, and 5 scheduled jobs, confirming clean separation of concerns and zero external AI dependencies for LATTI's statistical analysis.
 
 Orchestrator Connectivity & Impact Audit mapped all Orchestrator system connections (SignalOrchestrator, ReasoningOrchestrator, CLEOrchestrator, EthicsConsensusOrchestrator), confirming clean separation of concerns and independence from LATTI/Lottie. Bob agents are active and registered with ReasoningOrchestrator for DevOps, FullStack, UX, and Trading domains.
+
+An Active Filter Pool with TTL-based expiry (5 minutes), deduplication logic, and passive-mode enforcement has been implemented. The FX5 Scanner now maintains a persistent pool of survivors with automatic cleanup and engine-state awareness. A standalone FX5 scanner service runs independently every 30 seconds for both paper and live modes, completely decoupled from trading engine state. Stage-3 now serves as the single source of truth for scan cycle state, emitting `scan_tick` and `scanner:breakdown` WebSocket events every 30 seconds.
 
 The overall system architecture is considered foundational and sound, with a clear path for improvements in security and performance.
 

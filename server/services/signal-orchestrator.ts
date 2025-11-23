@@ -87,7 +87,8 @@ export class SignalOrchestrator {
 
   /**
    * Start the signal orchestrator
-   * Performs immediate evaluation and sets up periodic evaluation timer
+   * REB 2.5: Removed blocking evaluateMarket() to eliminate 143s startup delay
+   * Sets up periodic evaluation timer immediately without waiting for first evaluation
    */
   async start(onSignal: (signal: StrategySignal) => Promise<void>): Promise<void> {
     if (this.isRunning) {
@@ -100,21 +101,26 @@ export class SignalOrchestrator {
     this.onSignalCallback = onSignal;
     
     console.log(`[37.A][SignalOrchestrator][${this.mode}] Starting with ${this.enabledStrategies.size} strategies, interval ${this.evaluationIntervalMs}ms`);
+    console.log(`[WARMUP][DEBUG] SignalOrchestrator starting (non-blocking)`);
     telemetryTrace.trace('SignalOrchestrator', 'START', 'INFO', { 
       mode: this.mode, 
       strategies: this.enabledStrategies.size, 
       interval: this.evaluationIntervalMs 
     });
 
-    // Immediate evaluation pass
-    await this.evaluateMarket();
+    // REB 2.5: Run first evaluation asynchronously (non-blocking) to prevent startup delay
+    // This allows engine to become ACTIVE immediately while first evaluation runs in background
+    this.evaluateMarket().catch(err => {
+      console.error(`[SignalOrchestrator][${this.mode}] First evaluation failed:`, err);
+    });
 
     // Set up periodic evaluation timer
     this.evaluationTimer = setInterval(async () => {
       await this.evaluateMarket();
     }, this.evaluationIntervalMs);
 
-    console.log(`[37.A][SignalOrchestrator][${this.mode}] Started successfully`);
+    console.log(`[37.A][SignalOrchestrator][${this.mode}] Started successfully (first evaluation running async)`);
+    console.log(`[WARMUP][DEBUG] SignalOrchestrator started successfully`);
     telemetryTrace.trace('SignalOrchestrator', 'START_SUCCESS', 'INFO', { mode: this.mode });
   }
 

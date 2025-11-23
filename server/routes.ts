@@ -2483,12 +2483,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 41D: Balance confirmation system removed - accept startingBalance directly
       console.log('[41D] Starting engine without balance confirmation gate');
       
-      // Phase 27.F.13.I: Wrap engine start in 10-second timeout
-      const ENGINE_START_TIMEOUT = 10000; // 10 seconds
+      // REB 2.5: Increased timeout from 10s to 30s (SignalOrchestrator now non-blocking)
+      // With async orchestrator startup, engine should start in <10s
+      const ENGINE_START_TIMEOUT = 30000; // 30 seconds
+      console.log('[REB2.5][TIMEOUT_ADJUST] Engine start timeout: 10s → 30s (post-warmup optimization)');
       
       const startEnginePromise = (async () => {
         // Phase 27.F.13.B: Start the correct engine based on mode
         if (mode === 'paper') {
+          console.log('[ENGINE_INIT][DEBUG] Entering INIT state (importing paper-sim-service)');
           console.log('[ENGINE_STARTING_PAPER] Importing paper-sim-service...');
           // Start paper trading simulation
           const { startPaperSimulation } = await import('./services/paper-sim-service.js');
@@ -2496,22 +2499,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           const result = await startPaperSimulation(userId, { skipAutoWatchlist: true });
           console.log(`[TradingStart] Paper simulation started for user ${userId}`);
           console.log('[ENGINE_START_COMPLETED]', { mode: 'paper', sessionId: result.data?.sessionId });
+          console.log('[ENGINE_ACTIVE][DEBUG] Engine reached ACTIVE state');
           return result;
         } else {
+          console.log('[ENGINE_INIT][DEBUG] Entering INIT state (global live engine)');
           console.log('[ENGINE_STARTING_LIVE][Phase-27.F.15.B.3] Using global live engine...');
           // Phase 27.F.15.B.3: Use global live engine (shared by all users)
           await globalLiveEngine.start();
           console.log(`[TradingStart] Global live trading engine started by user ${userId}`);
           console.log('[ENGINE_START_COMPLETED]', { mode: 'live', engine: 'global' });
+          console.log('[ENGINE_ACTIVE][DEBUG] Engine reached ACTIVE state');
           return { success: true };
         }
       })();
       
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Engine start timeout after 10 seconds')), ENGINE_START_TIMEOUT);
+        setTimeout(() => reject(new Error('Engine start timeout after 30 seconds')), ENGINE_START_TIMEOUT);
       });
       
-      console.log('[ENGINE_WAITING_START] Waiting for engine start with 10s timeout...');
+      console.log('[ENGINE_WAITING_START] Waiting for engine start with 30s timeout...');
       const result = await Promise.race([startEnginePromise, timeoutPromise]) as any;
       
       const elapsed = Date.now() - startTime;
