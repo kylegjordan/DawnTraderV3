@@ -362,27 +362,27 @@ export function FilterInsights() {
           {/* Section 2: Cycle Info - REB 2.8.3: All fields from REST data */}
           <div className="mb-6">
             <h3 className="text-base font-semibold mb-3">Cycle Info</h3>
-            {/* Row 1: Last Scan Time + Next Scan In */}
+            {/* Row 1: Cycle ID + Last Scan Time */}
             <div className="grid grid-cols-2 gap-4 mb-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Cycle ID</p>
+                <p className="text-sm font-medium font-mono" data-testid="text-cycle-id">
+                  {scanData.cycleId || 'N/A'}
+                </p>
+              </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Last Scan Time</p>
                 <p className="text-sm font-medium" data-testid="text-last-scan">
                   {new Date(scanData.cycleEndTimestamp).toLocaleString()}
                 </p>
               </div>
+            </div>
+            {/* Row 2: Next Scan In + Scan Frequency */}
+            <div className="grid grid-cols-2 gap-4 mb-3">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Next Scan In</p>
                 <p className="text-sm font-bold" data-testid="text-next-scan-countdown">
                   {countdownDisplay}
-                </p>
-              </div>
-            </div>
-            {/* Row 2: Cycle ID + Scan Frequency */}
-            <div className="grid grid-cols-2 gap-4 mb-3">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Cycle ID</p>
-                <p className="text-sm font-medium font-mono" data-testid="text-cycle-id">
-                  {scanData.cycleId || 'N/A'}
                 </p>
               </div>
               <div>
