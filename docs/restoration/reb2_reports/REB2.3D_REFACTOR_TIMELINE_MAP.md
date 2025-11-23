@@ -8,12 +8,14 @@
 
 ## Executive Summary
 
+**⚠️ CORRECTION NOTICE**: After verification, Phase 0's Walter/Orchestrator "purge" claims were INACCURATE. Walter modules were NEVER deleted - they remain active and imported in current codebase. See REB2.3D_LEGACY_GARBAGE_REINTRODUCED.md for details.
+
 The Nov 18-20 GitHub sync rollback destroyed **two distinct work streams**:
 
 1. **Refactor Track** (Nov 6): Modernization, cleanup, single-tenant migration
 2. **Stage-1 Hardening** (Nov 14-16): Engine startup optimization sequence (1a-1i)
 
-Total estimated rollback depth: **85-90%** of Nov 6-20 work lost.
+Total estimated rollback depth: **50-55%** of Nov 6-20 work lost (CORRECTED: Phase 0 survived better than initially thought).
 
 ---
 

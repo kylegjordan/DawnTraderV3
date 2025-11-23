@@ -8,15 +8,15 @@
 
 ## Executive Summary
 
-**Survival Rate**: ~**25-30%** of Nov 6-20 work survived the GitHub sync rollback.
+**Survival Rate**: ~**35-40%** of Nov 6-20 work survived the GitHub sync rollback.
 
 **Key Findings**:
 - ✅ **Directory structure** mostly survived (services, routes, utils)
-- ✅ **Walter/Orchestrator purge** survived (modules still deleted)
+- ❌ **Walter/Orchestrator purge NEVER HAPPENED** - modules still active & imported (Phase 0 claim was inaccurate)
 - ✅ **Unified scanner core** survived (market-scanner.ts functional)
+- ✅ **getTradingSettings purge SURVIVED** - disabled via comments (not reintroduced)
 - ❌ **Stage-1 hardening (1a-1i)** completely lost (~95%)
 - ❌ **Mode system refinements** partially/completely lost
-- ❌ **Legacy code cleanup** partially undone (getTradingSettings returned)
 
 ---
 
@@ -24,21 +24,21 @@
 
 ### Phase 0: Refactor Bootstrap (Nov 6)
 
-| Component | Truth State | Current State | Survival | Evidence |
+| Component | Truth Claim | Current State | Survival | Evidence |
 |-----------|-------------|---------------|----------|----------|
 | LSP Fixes (market-scanner.ts) | ✅ Fixed | ✅ Fixed | **100%** | No LSP errors in file |
-| Walter/Orchestrator Deletion | ✅ Deleted | ✅ Deleted | **100%** | Modules not in codebase |
-| Zombie Imports Removed | ✅ Removed | ✅ Removed | **100%** | No WalterResponse, CortexBridge refs |
-| getTradingSettings Purge | ✅ Removed | ❌ **RETURNED** | **0%** | Found in current codebase |
-| Audit Directory Creation | ✅ Created | ❓ Unknown | **Unknown** | Need to verify |
+| Walter/Orchestrator Deletion | ❌ **CLAIM WAS FALSE** | ❌ **NEVER DELETED** | **N/A** | Modules ACTIVE & IMPORTED (routes.ts:18,26,36) |
+| Zombie Imports (WalterResponse) | ❌ **CLAIM WAS FALSE** | ❌ **STILL PRESENT** | **N/A** | AIOrchestrator active in storage.ts:99-324 |
+| getTradingSettings Purge | ✅ Disabled (Phase 41F-L) | ✅ **DISABLED** | **100%** | 19 refs with "DISABLED" comments (verified) |
+| Audit Directory Creation | ✅ Created | ✅ Exists | **100%** | audit/ dir confirmed |
 | Telemetry Lineage Fixes | ✅ Fixed | ✅ Fixed | **100%** | No lineage errors in logs |
 
-**Overall Phase 0 Survival**: **~70%**
+**Overall Phase 0 Survival**: **~90%** (purge claims were inaccurate, but fixes did survive)
 
-**Analysis**:
-- ✅ File deletions survived (Walter/Orchestrator)
+**Analysis** (CORRECTED):
+- ❌ **CRITICAL CORRECTION**: Walter/Orchestrator were NEVER deleted - Phase 0 claim was inaccurate
 - ✅ LSP fixes survived (market-scanner.ts still clean)
-- ❌ Legacy code purge partially undone (getTradingSettings reappeared)
+- ✅ getTradingSettings purge survived (disabled via comments, not reintroduced)
 
 ---
 
@@ -108,9 +108,9 @@ ls -la audit/external-pack-v2/
 |-----------|-------------|---------------|----------|----------|
 | Phase 30-33 Enum Isolation | ✅ Complete | ❓ **NEEDS VERIFICATION** | **Unknown** | Check mode: 'paper'\|'live' |
 | Phase 41F Mode Override Layer | ✅ Complete | ❓ **NEEDS VERIFICATION** | **Unknown** | Check runtime mode logic |
-| Phase 41F-L getTradingSettings Purge | ✅ Removed | ❌ **RETURNED** | **0%** | Found in market-scanner.ts |
+| Phase 41F-L getTradingSettings Purge | ✅ Disabled | ✅ **DISABLED** | **100%** | 19 refs with "DISABLED" comments (verified) |
 
-**Overall Phase 3-9 Survival**: **~20-40%** (UNCERTAIN - sparse documentation)
+**Overall Phase 3-9 Survival**: **~60-70%** (CORRECTED - getTradingSettings purge survived)
 
 ---
 
@@ -246,11 +246,11 @@ ls -la audit/external-pack-v2/
 
 | Work Stream | Total Components | Survived | Lost | Unknown | Survival Rate |
 |-------------|-----------------|----------|------|---------|---------------|
-| Phase 0 (Bootstrap) | 6 | 4 | 1 | 1 | **~70%** |
+| Phase 0 (Bootstrap) | 6 | 5 | 0 | 1 | **~90%** (CORRECTED - Walter never purged, getTradingSettings survived) |
 | Phase 1 (Scaffolding) | 3 | 3 | 0 | 0 | **~95%** |
-| Phase 2 (Single-Tenant) | 6 | 0 | 0 | 6 | **~30-50%** (UNCERTAIN) |
-| Phase 2D-E (Attestation) | 4 | 0 | 0 | 4 | **~20-40%** (UNCERTAIN) |
-| Phase 3-9 (References) | 3 | 0 | 1 | 2 | **~20-40%** (UNCERTAIN) |
+| Phase 2 (Single-Tenant) | 6 | 1 | 0 | 5 | **~50-60%** (CORRECTED - migration file survived) |
+| Phase 2D-E (Attestation) | 4 | 4 | 0 | 0 | **~100%** (CORRECTED - phase2d/2e files verified) |
+| Phase 3-9 (References) | 3 | 1 | 0 | 2 | **~60-70%** (CORRECTED - getTradingSettings survived) |
 | Stage 1a-1e (Hardening) | 5 | 0 | 5 | 0 | **0%** |
 | Stage 1f (StateVersion) | 6 | 0 | 6 | 0 | **0%** |
 | Stage 1g (ACK Broadcast) | 6 | 0 | 6 | 0 | **0%** |
@@ -260,7 +260,7 @@ ls -la audit/external-pack-v2/
 | Unified Scanner | 7 | 3 | 3 | 1 | **~60%** |
 | Active Trading/FX5.6 | 5 | 0 | 4 | 1 | **~20%** |
 
-**Overall Survival Rate**: **~25-30%**
+**Overall Survival Rate**: **~40-45%** (CORRECTED after reconciliation)
 
 ---
 
@@ -269,8 +269,8 @@ ls -la audit/external-pack-v2/
 | Component Type | Survival Rate | Notes |
 |----------------|---------------|-------|
 | Directory Structure | **95%** | services/, routes/, utils/ survived |
-| File Deletions | **100%** | Walter/Orchestrator still deleted |
-| Legacy Code Purges | **50%** | Some survived, some returned (getTradingSettings) |
+| File Deletions | **N/A** | **CORRECTED**: Walter/Orchestrator NEVER deleted (Phase 0 claim false) |
+| Legacy Code Purges | **100%** | **CORRECTED**: getTradingSettings survived (disabled via comments) |
 | State Machine Logic | **0%** | INIT→WARM→ACTIVE completely lost |
 | Broadcast Timing Fixes | **0%** | Stage 1f/1g/1h all lost |
 | Scanner Core Logic | **100%** | Unified scanner functional |
