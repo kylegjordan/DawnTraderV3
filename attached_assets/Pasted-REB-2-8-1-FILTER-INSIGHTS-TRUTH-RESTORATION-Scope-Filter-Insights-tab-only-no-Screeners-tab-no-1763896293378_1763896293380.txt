@@ -1,0 +1,686 @@
+REB 2.8.1 – FILTER INSIGHTS TRUTH RESTORATION
+
+Scope: Filter Insights tab only (no Screeners tab, no Stage-3, no kill switch, no strategy wiring)
+
+0. Context / Truth Sources / Guardrails
+
+Truth sources you MUST treat as canonical for this task:
+
+Visual truth (11/18 state, ~90–95% final):
+
+docs/truth/filter-insights/FI_truth_top_section_1.png
+
+docs/truth/filter-insights/FI_truth_top_section_2.png
+
+docs/truth/filter-insights/FI_truth_active_pool.png
+
+docs/truth/filter-insights/FI_truth_breakdown.png
+
+Filter Breakdown categories + descriptions (Phase 8.7 final):
+
+Filter Category	Description
+Passed All Filters	Pairs that successfully passed all filtering criteria and are eligible for trading.
+Min Price	Excludes very low-priced pairs that may have penny-stock characteristics.
+Min Volume	Excludes pairs with very low daily volume that may create liquidity issues or high slippage risk.
+Max Spread	Excludes pairs with wide bid-ask spreads that increase trading costs.
+Min Daily Range	Removes pairs with insufficient daily price movement for day-trading strategies.
+Exclude Stablecoins	Filters out stablecoins, which have minimal price volatility.
+Valid Quote Currency	Filters out pairs that do not use an approved quote currency (e.g., USD, EUR).
+Already Active	Filters out pairs that already have an active position to avoid duplicate exposure.
+History	Filters out pairs lacking the required minimum number of historical trading days.
+
+Current-state mapping (you already created):
+docs/restoration/reb2_reports/REB2.8_CURRENT_STATE_MAPPING.md
+→ This documents how the current UI is wired today. Use it as the “current wiring” reference, not as truth.
+
+Guardrails / DO NOT:
+
+❌ Do not introduce Stage-3 dependencies into Filter Insights.
+
+❌ Do not add new WebSocket feed usage for Filter Insights. Use the existing data flows already wired in the current implementation; this directive is about what is shown and how, not about adding new transport.
+
+❌ Do not change backend APIs or add new endpoints.
+
+❌ Do not change engine startup, mode system, or kill switch in this phase.
+
+❌ Do not change Screeners tab behavior in this directive (that’s later REB 2.9).
+
+In scope:
+
+✅ Filter Insights tab layout & grouping (sections).
+
+✅ Field-to-data mapping for all visible stats in Filter Insights.
+
+✅ Which fields exist in each section, their labels, and their data sources (using existing responses).
+
+✅ Hiding/removing fields that should no longer be exposed.
+
+✅ Adding missing fields that are already available from FX5 / existing backend data.
+
+Test user for verification:
+
+Username: testuser123
+
+Password: SecurePass123!
+
+Log in with that account and use the Trading → Filter Insights tab to verify your changes.
+
+1. Mapping Section – From Current → Truth (Field by Field)
+
+Use your existing doc REB2.8_CURRENT_STATE_MAPPING.md as the “current state” reference. This section tells you, per section, what to keep, what to move, what to add, and what to remove.
+
+Where I say “current mapping row X”, I’m referring to the relevant row in that mapping doc.
+
+1.1 Top Area – “Kraken Universe” + Scan & Filter Overview
+
+This top area visually corresponds to the top of FI_truth_top_section_1.png and FI_truth_top_section_2.png.
+
+We’ll treat this as three sections, not “rows”:
+
+Kraken Universe section (small block at the top)
+
+Cycle Info section (scan timing + next scan)
+
+Last Scan Result section (evaluated / eligible / ineligible + % eligible)
+
+24h Metrics section (24-hour rotation stats; sometimes visually grouped close to the above)
+
+1.1.1 Kraken Universe Section
+
+Truth:
+This small block shows only the Kraken Universe size (the number of tradable Kraken pairs in the universe). It should not show evaluated/eligible/ineligible counts — those belong to Last Scan Result, not here.
+
+Current (from your Table 1):
+
+You indicated that the “Kraken Universe” block currently includes additional scan stats (evaluated / eligible / ineligible).
+
+Directive:
+
+Keep:
+
+Label: “Kraken Universe” (or equivalent).
+
+Value: Use the same backend property you currently use for “Kraken Universe” in Table 1.
+
+Remove from this section:
+
+Any counts such as “Pairs Evaluated”, “Pairs Eligible”, “Pairs Ineligible”.
+
+Those counts must be moved into the Last Scan Result section (see below).
+
+Visually, the Kraken Universe section should be a single metric block: label + number.
+
+1.1.2 Cycle Info Section (Timing)
+
+This is the section that shows when FX5 last ran and when the next run will occur.
+
+Target fields (Cycle Info section):
+
+Last Scan Time
+
+Label should clearly indicate time, e.g. “Last Scan Time”.
+
+Value: timestamp of the most recent FX5 scan (same value you currently bind to “Last scan”).
+
+Next Scan Countdown
+
+New explicit field if not already present / visible.
+
+Label: “Next Scan In” or “Next Scan Countdown”.
+
+Value: countdown timer until the next scheduled FX5 scan (based on the 30s scan interval).
+
+If nothing is running yet, show something like “—” or “Waiting for first scan”.
+
+Directive:
+
+Ensure there is a Cycle Info section (not just a single row) with at least these two fields.
+
+If any status label currently reads “Last scan” but is reused elsewhere, ensure the label in this section is unambiguous: “Last Scan Time”.
+
+Do not show evaluated/eligible/ineligible here; those belong to Last Scan Result.
+
+1.1.3 Last Scan Result Section
+
+This section shows what happened in the most recent FX5 scan cycle.
+
+Truth target fields (Last Scan Result):
+
+Pairs Evaluated (Last Scan)
+
+Pairs Eligible (Last Scan)
+
+Pairs Ineligible (Last Scan)
+
+Eligible % (Last Scan)
+
+Percent = eligible / evaluated (rounded appropriately).
+
+These values should come from the latest scan snapshot (the same data that currently feeds your “last scan” stats, but visually isolated in its own section).
+
+Directive:
+
+Move into this section (from whatever place they currently show in the top area):
+
+Evaluated, Eligible, Ineligible counts and Eligible %.
+
+Ensure labels clearly indicate these are last scan counts.
+
+Make sure the sum of Eligible + Ineligible = Evaluated (under normal circumstances), i.e. they’re consistent with the FX5 snapshot.
+
+1.1.4 24-Hour Metrics Section (“24h Filter Activity” / Rotation Stats)
+
+This section represents the last 24 hours of filter activity and “rotation” through pairs. It’s distinct from Last Scan.
+
+From your description:
+
+It's a total of five:
+
+total evaluated
+
+total survived filters
+
+unique pairs
+
+unique evaluated
+
+unique survived
+and “Total cycles 24 hours” should be at the bottom.
+
+Truth target fields (24-hour metrics section):
+
+24h Total Pairs Evaluated
+
+24h Total Pairs Survived All Filters
+
+24h Unique Pairs Evaluated
+
+24h Unique Pairs Survived All Filters
+
+Total FX5 Cycles (Last 24h)
+
+This is the “Total cycles 24 hours” stat; it should be visually the last item in this section.
+
+Directive:
+
+In the current 24h section, include exactly these five metrics.
+
+Make sure “Total FX5 Cycles (Last 24h)” is visually the last field in that section.
+
+Remove or rename any confusing labels so it’s obvious:
+
+Top-level label for this section should read something like:
+“24h Filter Activity” or “24h Rotation Stats” (either is fine, but don’t create a second “rotation stats” section).
+
+Engine STOPPED behavior:
+
+Do not show fake zero values. If no 24h data is available yet, show a neutral state such as “No 24h data yet” or “Waiting for data”, and leave the stats blank or “—”.
+
+1.2 Active Filter Pool Table
+
+This corresponds to FI_truth_active_pool.png.
+
+Truth layout:
+
+Columns:
+
+Symbol
+
+Status
+
+First Seen (this window)
+
+Last Updated (this cycle)
+
+The Status field for “passed all filters” was shown with a green pill / badge and text like “All Filters Passed” (same styling as the truth screenshot).
+
+Current mapping (Table 3 in your doc):
+
+Current columns:
+
+Symbol (good)
+
+Status (exists but currently static / non-meaningful)
+
+Price
+
+24h Volume
+
+Daily Range
+
+Plus overall row limit, empty state, etc.
+
+Directive – Column mapping changes:
+
+Keep:
+
+Column 1: Symbol
+
+Keep current binding: activeFilteredPool[].symbol (or equivalent).
+
+Change Column 2: Status
+
+Status should reflect something like:
+
+“All Filters Passed” for pairs that passed all filters.
+
+Potentially other statuses if defined in backend, but truth primarily showed “All Filters Passed”.
+
+Use existing backend properties (e.g., a boolean “passedAllFilters” or equivalent) to drive the label.
+
+Apply light green background / badge styling for the “All Filters Passed” status, matching the truth screenshot’s tone as closely as possible.
+
+Remove in UI (acknowledged explicitly):
+
+Column 3 – Price
+
+Column 4 – 24h Volume
+
+Column 5 – Daily Range
+
+These columns are fine in the backend, but the Filter Insights Active Filter Pool UI should no longer display them. You can note in comments that they are intentionally not shown.
+
+Add new columns (using existing data):
+
+Column 3 – First Seen (this window)
+
+Bind to the timestamp when the pair first entered the Active Filter Pool within the current 24-hour window.
+
+There is backend support for this timing (per previous phases); wire to that field or compute based on existing timestamps.
+
+Column 4 – Last Updated (this cycle)
+
+Bind to the timestamp of the most recent FX5 scan in which this pair was present in the active pool.
+
+Row limit:
+
+Keep the “Show first 20 rows” behavior as-is (it’s fine for now).
+
+Keep “Showing 20 of X” summary if present.
+
+Empty / Passive behavior:
+
+When Passive Learning = TRUE (paper) → Active Filter Pool must be empty (no rows) even if scans are running.
+
+REB 2.6 already ensures this at the backend; UI should just render the empty state correctly.
+
+When engine is STOPPED:
+
+Show the table headers and an empty body (or a simple empty state message), but do not hide the entire section.
+
+If you currently show a “STOPPED” warning banner, you may keep it, but the pool section should remain visible with 0 rows.
+
+1.3 Filter Breakdown Table (Last 24h)
+
+This corresponds to FI_truth_breakdown.png, plus the history & threshold enhancements that were intended but not visible in that exact snapshot.
+
+1.3.1 Categories to Show (Final Truth)
+
+Replace the current 11-row breakdown with exactly these 9 categories, in this order:
+
+Passed All Filters
+
+Min Price
+
+Min Volume
+
+Max Spread
+
+Min Daily Range
+
+Exclude Stablecoins
+
+Valid Quote Currency
+
+Already Active
+
+History
+
+Each category row must show:
+
+Category label (as above).
+
+Description (text per the table near the top of this message).
+
+Count (Last 24h) – the number of pairs filtered out by that category over the last 24 hours.
+
+For Passed All Filters, the count is the number of pairs that survived all filters (i.e., survivors).
+
+Threshold(s) – from filter settings, where applicable. Examples:
+
+Min Price: >= $X
+
+Min Volume: >= Y (units or USD)
+
+Max Spread: <= Z%
+
+Min Daily Range: >= W%
+
+Exclude Stablecoins: ON/OFF
+
+Valid Quote Currency: list of allowed quote currencies
+
+Already Active: ON/OFF
+
+History: >= N days required
+
+Important:
+
+The sum of all “failed” counts (Min Price, Min Volume, Max Spread, Min Daily Range, Exclude Stablecoins, Valid Quote Currency, Already Active, History) plus the “Passed All Filters” count should equal the 24h total evaluated (for the filter pipeline, adjusted for any multi-filter membership if the backend designed it that way in truth). At minimum, the data displayed must be consistent with your 24h stats in the top section.
+
+1.3.2 Current Categories to Remove or Rename
+
+From REB2.8_CURRENT_STATE_MAPPING.md Table 4:
+
+Min Price – keep, but align label & description with truth table above.
+
+Min Volume – keep.
+
+Max Spread – keep.
+
+Min Daily Range – keep.
+
+Exclude Stablecoins – keep.
+
+Valid Quote Currency – keep.
+
+Min Data History – rename this row to “History” and use the History description and thresholds above.
+
+You do not add a second “History” row; this rename is the history row.
+
+Market Cap Range – remove from the visible table.
+
+Acknowledge explicitly in code/doc comments: the backend may still compute Market Cap Range, but it is intentionally hidden from Filter Insights because we do not have reliable market cap from Kraken.
+
+Risk Guardrails – remove from the visible table.
+
+This filter category was removed from the truth state. Keep any backend remnants isolated; do not show it in Filter Insights.
+
+Passed All Filters – keep, with the “passed all filters” description and semantics above.
+
+1.3.3 Descriptions
+
+You must display a short description for each category, using the text (or very close paraphrase) from the truth table at the top. These can be hard-coded constants in the frontend.
+
+2. UI Specification – Layout & Visual Requirements
+
+Use the 11/18 screenshots as the visual truth, plus the adjustments described here. Do not treat any 11/22 screenshots as truth; those were failed attempts.
+
+2.1 Section Structure on Filter Insights Tab
+
+Top-to-bottom order:
+
+Top Scan & Filter Overview Area
+
+Kraken Universe section (single metric)
+
+Cycle Info section (Last Scan Time, Next Scan Countdown)
+
+Last Scan Result section (evaluated / eligible / ineligible / eligible %)
+
+24-Hour Metrics section (5 metrics, last one = total cycles 24h)
+
+Active Filtered Pool section
+
+Filter Breakdown (Last 24h) section
+
+Do not add any extra unnamed “Rotation Stats” section – rotation-style metrics are part of the 24-Hour Metrics section.
+
+2.2 Visual Nuances That Must Match
+
+Kraken Universe:
+
+Should visually match its 11/18 card: header + bold numeric value.
+
+No extra stats mixed into that same small block.
+
+Cycle Info:
+
+Group Last Scan Time and Next Scan Countdown together visually.
+
+These appear near the top, just below the universe or aligned next to it.
+
+Last Scan Result:
+
+Group the 4 last-scan metrics in a clearly delineated section:
+
+Evaluated
+
+Eligible
+
+Ineligible
+
+Eligible %
+
+Layout should visually match the 11/18 screenshot as closely as possible.
+
+24-Hour Metrics:
+
+Show 5 metrics for the last 24 hours as described.
+
+Ensure Total cycles (Last 24h) appears visually as the last metric in this section.
+
+Active Filtered Pool:
+
+Table columns:
+
+Symbol
+
+Status
+
+First Seen (this window)
+
+Last Updated (this cycle)
+
+Status “All Filters Passed” should use a light green pill / badge (matching the 11/18 screenshot styling).
+
+Leave row limit and pagination as is (show first 20 rows).
+
+Filter Breakdown:
+
+Section header: “Filter Breakdown (Last 24h)” or similar, as in truth screenshot.
+
+Each row: Category label + description + 24h count + thresholds or config.
+
+Remove the “Min Data History” label and use “History” instead.
+
+Stopped / Passive states:
+
+Engine STOPPED:
+
+Don’t fake zeros in the 24h stats; show appropriate “no data” states if necessary.
+
+Keep Active Filter Pool and Filter Breakdown visible – they just show 0 or “—”.
+
+Passive Learning = TRUE (paper):
+
+Active Filter Pool must remain empty (no rows).
+
+Filter Breakdown and 24h metrics still reflect scan activity, but trading metrics / learning are not updated (already enforced backend-side by REB 2.6).
+
+3. Implementation & Acceptance Criteria
+3.1 Implementation Tasks
+
+Top Area Refactor
+
+Refactor the Filter Insights top-area component to:
+
+Extract a Kraken Universe section that shows only universe size.
+
+Create a Cycle Info section with:
+
+Last Scan Time
+
+Next Scan Countdown
+
+Create a Last Scan Result section with:
+
+Evaluated, Eligible, Ineligible, Eligible %
+
+Implement the 24-Hour Metrics section with exactly the 5 metrics specified and ordered so that Total FX5 Cycles (Last 24h) is last.
+
+Use existing data bindings (from your mapping doc) and rearrange them into the correct sections; do not introduce new transport layers.
+
+Active Filter Pool Table Changes
+
+Update the columns as specified:
+
+Keep Symbol.
+
+Use Status to display meaningful “All Filters Passed” etc. with green pill.
+
+Remove Price, 24h Volume, and Daily Range from the UI (acknowledged as intentionally hidden).
+
+Add First Seen (this window) and Last Updated (this cycle) columns, wired to existing timestamps from the backend (or whichever fields represent those values today).
+
+Ensure that:
+
+In Passive Learning, table has 0 rows.
+
+In STOPPED state, table remains visible but empty / neutral.
+
+Filter Breakdown Table Changes
+
+Replace the current 11-row table with the 9-row truth table:
+
+Passed All Filters
+
+Min Price
+
+Min Volume
+
+Max Spread
+
+Min Daily Range
+
+Exclude Stablecoins
+
+Valid Quote Currency
+
+Already Active
+
+History
+
+For each row:
+
+Show label, description, 24h count, and thresholds/config (where applicable).
+
+Explicitly:
+
+Rename current “Min Data History” row → History.
+
+Remove Market Cap Range from visible UI (backend may still compute).
+
+Remove Risk Guardrails from visible UI.
+
+Descriptions & Threshold Display
+
+Implement descriptions as a simple const map from internal key → description text (from the table above).
+
+Threshold values should be pulled from existing filter settings endpoints (e.g., /api/settings/filters) and displayed next to each category in a simple, legible format.
+
+No Backend / Transport Changes
+
+Do not change which endpoints or transports are used.
+
+Use the existing data flows already wired in the current implementation (your mapping doc already tells you what those are).
+
+3.2 Acceptance Criteria
+
+To consider REB 2.8.1 complete, the following must hold when testing as testuser123 / SecurePass123!:
+
+Kraken Universe Section
+
+Shows exactly one metric: Kraken Universe size.
+
+Does not show any evaluated/eligible/ineligible metrics.
+
+Cycle Info Section
+
+Shows a clearly labeled Last Scan Time.
+
+Shows a Next Scan Countdown field that updates toward the next 30s scan.
+
+Last Scan Result Section
+
+Shows 4 metrics: Evaluated, Eligible, Ineligible, Eligible %.
+
+The numbers match what FX5 shows for the latest scan snapshot.
+
+Evaluated ≈ Eligible + Ineligible (within expected semantics).
+
+24-Hour Metrics Section
+
+Shows exactly 5 metrics:
+
+24h Total Evaluated
+
+24h Total Survived All Filters
+
+24h Unique Pairs Evaluated
+
+24h Unique Pairs Survived
+
+Total FX5 Cycles (Last 24h)
+
+Total FX5 Cycles appears visually last in this section.
+
+When engine STOPPED and no data exists yet, uses a neutral “no data” state, not fake zeros.
+
+Active Filter Pool
+
+Table columns are: Symbol, Status, First Seen (this window), Last Updated (this cycle).
+
+Status “All Filters Passed” shows with a light green pill/badge.
+
+No columns for Price, 24h Volume, or Daily Range are visible.
+
+In Passive Learning mode:
+
+Table appears but has 0 rows.
+
+In STOPPED state:
+
+Table appears (headers visible), 0 rows or a clean empty state; no hiding the entire section.
+
+Filter Breakdown
+
+Exactly 9 categories in this order:
+
+Passed All Filters
+
+Min Price
+
+Min Volume
+
+Max Spread
+
+Min Daily Range
+
+Exclude Stablecoins
+
+Valid Quote Currency
+
+Already Active
+
+History
+
+Each row shows:
+
+Label
+
+Description matching the truth text
+
+Last-24h count (integer)
+
+Threshold(s) where meaningful
+
+There is no visible Market Cap Range row and no Risk Guardrails row.
+
+There is only one History row (the renamed Min Data History row).
+
+Visual Match to 11/18 Truth
+
+Layout, grouping, and styling of sections closely matches the 11/18 truth screenshots (FI_truth_*.png), with the additions called out above (Next Scan Countdown, history row, thresholds, descriptions).
+
+Any remaining visual differences should be minor and clearly in the spirit of the original design.

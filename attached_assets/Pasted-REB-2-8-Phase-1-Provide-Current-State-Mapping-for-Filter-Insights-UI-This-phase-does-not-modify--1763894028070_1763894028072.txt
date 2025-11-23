@@ -1,0 +1,128 @@
+REB 2.8 – Phase 1: Provide Current-State Mapping for Filter Insights UI
+
+This phase does not modify anything.
+It only produces a mapping table of the current code as it exists today.
+
+1. Task: Create a Complete Mapping Table of the Current Filter Insights UI
+
+Produce a mapping table showing every UI field currently displayed in:
+
+Trading → Filter Insights → Scan & Filter Overview (entire top card)
+
+Trading → Filter Insights → Active Filtered Pool
+
+Trading → Filter Insights → Filter Breakdown
+
+For each field, provide the following columns:
+Section	UI Label	Current UI Component Path	Current Backend Source (endpoint)	Current Response Property	Transform Logic (if any)	Notes
+
+Section
+e.g., "Kraken Universe", "Cycle Info section", "Last Scan Result section", “24h Filter Activity section”, “Active Filtered Pool”, “Filter Breakdown”
+
+UI Label
+Exact text shown in the UI (e.g., “Total Kraken Trading Pairs”, “Evaluated This Scan”).
+
+Current UI Component Path
+File + component name in the project (e.g., src/components/FilterInsights/ScanOverview.tsx).
+
+Current Backend Source (endpoint)
+e.g., /api/market-scanner/scan-summary.
+
+Current Response Property
+e.g., lastScan.evaluatedCount, krakenUniverseSize, breakdown.minVolume, etc.
+
+Transform Logic (if any)
+Such as: rounding, percent calculation, using derived values, hiding values under engine-stopped conditions, etc.
+
+Notes
+Indicate:
+
+If the field is currently wrong
+
+If the field appears to be unused
+
+If placeholder or null behavior is present
+
+2. Active Filtered Pool – Separate Table
+
+Produce a second table specifically for the Active Filtered Pool table, since its columns differ:
+
+UI Column	UI Label	UI Component Path	Backend Source	Response Property	Transform Logic	Notes
+
+Columns to map:
+
+Symbol
+
+Status
+
+First Seen (this window)
+
+Last Updated (this cycle)
+
+Also include:
+
+Total Active Filtered Pairs (summary field)
+
+3. Filter Breakdown – Category Rows Table
+
+Produce a third table for the filter categories as currently shown in the UI:
+
+Display Order	Category Label	Component Path	Backend Source	Response Property	Count Logic	Notes
+
+List every row currently displayed exactly as coded (even if incorrect).
+
+4. Upload the Four Truth Screenshots Into the Repo
+
+Please copy the following images into:
+
+/docs/truth/filter-insights/
+
+Use these filenames:
+
+FI_truth_top_section_1.png
+
+FI_truth_top_section_2.png
+
+FI_truth_active_pool.png
+
+FI_truth_breakdown.png
+
+The files are available here in the workspace:
+
+/mnt/data/Truth Filter Insights Top Section 1 - 11.18.25.png
+
+/mnt/data/Truth Filter Insights Top Section 2 - 11.18.25.png
+
+/mnt/data/Truth Filter Insights Active Filtered Pool - 11.18.25.png
+
+/mnt/data/Truth Filter Insights Filter Breakdown No Descriptions - 11.18.25.png
+
+Use the filenames provided above when copying them into the repo.
+
+5. Include Test User Credentials (as a comment)
+
+At the bottom of your report, include the test user credentials:
+
+Trader Test User:
+username: testuser123
+password: SecurePass123!
+
+6. Output
+
+Please produce:
+
+docs/restoration/reb2_reports/REB2.8_CURRENT_STATE_MAPPING.md
+
+containing the three mapping tables described above
+
+plus test credentials at bottom
+
+Upload the four truth screenshots to the folder:
+docs/truth/filter-insights/
+
+7. Do NOT begin fixing anything yet.
+
+This phase is mapping only, no UI changes, no backend changes.
+We will provide the corrected mapping + full truth UI spec in Phase 2 once this mapping is complete.
+
+✔️ End of REB 2.8 – Phase 1 Directive

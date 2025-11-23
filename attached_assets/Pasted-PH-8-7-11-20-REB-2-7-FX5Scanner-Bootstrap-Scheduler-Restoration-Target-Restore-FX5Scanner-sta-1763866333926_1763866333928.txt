@@ -1,0 +1,437 @@
+PH.8.7–11.20 — REB 2.7 — FX5Scanner Bootstrap & Scheduler Restoration
+Target: Restore FX5Scanner startup behavior to the state it was in after REB 2.4 / REB 2.5 and before REB 2.6, while preserving all prior restoration work.
+
+0. Mode & Guardrails
+
+MODE: RESTORATION + MINIMAL SURGERY
+You are restoring correct, previously-working behavior, not inventing new designs.
+
+You MUST:
+
+✅ Preserve all of the following as restored so far:
+
+REB 2.1 — FX5 batch-first scanner (Top-N/Tier-B, 60-pair batches)
+
+REB 2.2 — Active Filter Pool (TTL, dedupe, passive-mode clearing)
+
+REB 2.3 — Audit findings (rollback depth, engine startup regression)
+
+REB 2.4 — Stage-1f/1g/1h broadcast semantics (stateVersion, atomic snapshots)
+
+REB 2.5 — Engine warm-up & startup timeout fixes
+
+REB 2.6 — Passive Learning enforcement semantics (behavioral truth)
+
+✅ Treat “FX5Scanner was running after REB 2.4 / 2.5” as truth. The current state (“scanner not running”) is a regression.
+
+You MUST NOT:
+
+❌ Modify Stage-1f/1g/1h logic (stateVersion + atomic emission)
+
+❌ Modify REB 2.5 engine warm-up logic or timeouts
+
+❌ Change FX5 filter logic, batch sizes, or thresholds
+
+❌ Change Active Filter Pool TTL / dedupe / cooldown semantics
+
+❌ Change any frontend code
+
+❌ Add new “features” or new modes – this is restoration only
+
+If at any point a required change seems to conflict with prior REB work, stop and document the conflict in the REB 2.7 completion report instead of guessing.
+
+1. Truth Sources & Reference Files
+1.1 Truth You Must Rely On
+
+Use these as authoritative context:
+
+FX5 & scanner truth:
+
+/docs/restoration/truth/phase_8.6.7_validation_*.md
+
+/docs/restoration/reb2_reports/REB2.1_COMPLETION_REPORT.md
+
+Broadcast & Stage-1 semantics:
+
+/docs/restoration/reb2_reports/REB2.4_STAGE1F_1G_1H_COMPLETION_REPORT.md
+
+Warm-up & startup:
+
+/docs/restoration/reb2_reports/REB2.5_ENGINE_WARMUP_COMPLETION_REPORT.md
+
+/docs/restoration/reb2_reports/REB2.5_ENGINE_WARMUP_STATE_MACHINE_SPEC.md
+
+Mode & passive learning truth:
+
+/docs/restoration/reb2_reports/REB2.3C_TRUTH_MODE_BEHAVIOR.md
+
+/docs/restoration/reb2_reports/REB2.3C_CURRENT_MODE_IMPLEMENTATION.md
+
+/docs/restoration/reb2_reports/REB2.3C_MODE_GAP_REPORT.md
+
+/docs/restoration/reb2_reports/REB2.6_PASSIVE_MODE_TRUTH_VS_CURRENT.md
+
+/docs/restoration/reb2_reports/REB2.6_MODE_ENFORCEMENT_COMPLETION_REPORT.md
+
+1.2 Current Implementation Files to Inspect
+
+You will definitely need to read these:
+
+server/services/fx5-scanner.ts
+
+server/services/scan-24h-aggregator.ts
+
+server/services/active-filter-pool.ts
+
+server/services/stage3-emitter.ts
+
+server/services/stage3-state-cache.ts
+
+server/services/paper-portfolio-manager.ts
+
+server/services/paper-sim-service.ts
+
+server/index.ts or server/server.ts (where services are wired)
+
+server/routes.ts (for any scanner- or engine-related triggers)
+
+2. Problem Statement (Treat as Facts)
+
+After REB 2.4 & REB 2.5, the user verified:
+
+Engine startup was < 10s
+
+FX5Scanner was running and producing:
+
+60 evaluated pairs per cycle
+
+Top-N/Tier-B split (36 + 24)
+
+Survivors in paper mode
+
+Filter Insights was seeing scan updates (even if UI wasn’t fully correct)
+
+After REB 2.6:
+
+Engine still starts quickly (thanks to REB 2.5)
+
+But logs show no FX5 scanner cycles
+
+ReB 2.6 concluded “FX5 scanner not initialized” — this directly contradicts the previously-working behavior
+
+Conclusion:
+REB 2.6’s passive learning enforcement changes accidentally disrupted scanner bootstrap / scheduling / mode gating. REB 2.7’s job is to restore scanner bootstrap so we get:
+
+FX5Scanner running again (every 30s)
+
+While still correctly enforcing passive learning semantics from REB 2.6.
+
+3. REB 2.7 Objectives
+
+You must achieve ALL of the following:
+
+Restore FX5Scanner bootstrap & scheduler so that:
+
+FX5Scanner starts automatically when paper or live engine is ACTIVE (per truth behavior)
+
+Scan cycles run every 30s (per Phase 8.6.x truth)
+
+Logs clearly show scan cycles for both paper and live modes
+
+Preserve Passive Learning semantics:
+
+When passiveLearning = TRUE:
+
+Scans still run
+
+Metrics + Active Pool writes are gated/blocked (as implemented in REB 2.6)
+
+When passiveLearning = FALSE:
+
+Full behavior: scans + metrics + Active Pool
+
+Do NOT break:
+
+State versioning (Stage-1f/1g/1h)
+
+Engine warm-up / fast startup
+
+FX5 batch-first logic
+
+Active Filter Pool semantics
+
+Produce a clear, verifiable completion report describing:
+
+The root cause of the scanner not running after REB 2.6
+
+What, exactly, you changed
+
+Before/after behavior with log excerpts
+
+4. Tasks (Step-by-Step)
+Task 0 — Re-read the Relevant Truth & Completion Reports
+
+Skim (don’t fully re-read line-by-line) the following to refresh context:
+
+REB2.1_COMPLETION_REPORT.md
+
+REB2.2_COMPLETION_REPORT.md
+
+REB2.3C_TRUTH_MODE_BEHAVIOR.md
+
+REB2.6_PASSIVE_MODE_TRUTH_VS_CURRENT.md
+
+REB2.4_STAGE1F_1G_1H_COMPLETION_REPORT.md
+
+REB2.5_ENGINE_WARMUP_COMPLETION_REPORT.md
+
+Your goal is to anchor:
+
+What “correct” FX5Scanner behavior looked like
+
+What passive learning is supposed to affect (metrics + pool, NOT the existence of scans)
+
+That scanner was previously running correctly after 2.4 / 2.5
+
+Task 1 — Confirm Current Regression (Runtime + Code)
+
+Start the paper engine from the UI (or via API, if needed).
+
+Wait at least 90 seconds to allow at least 3 scan cycles.
+
+Check logs for FX5 scanner activity:
+
+Look for:
+
+[FX5Scanner]
+
+[8.6.7][DEBUG] STEP 1/2/3/4
+
+evaluated=60, survivors=…
+
+If you see zero such logs across the entire latest log file, this confirms the regression.
+
+Verify whether any of the following are being called at runtime:
+
+FX5Scanner constructor
+
+fx5Scanner.start() (or equivalent)
+
+Any scheduler/timer that should execute FX5 scans
+
+Document these findings in the REB 2.7 report.
+
+Task 2 — Trace Scanner Bootstrap Path
+
+Using the current codebase:
+
+Locate where FX5Scanner is instantiated:
+
+Search for new FX5Scanner( or similar.
+
+Determine:
+
+Which module owns it (e.g. server/index.ts, some “bootstrap” file, or a service registry)
+
+Locate where FX5Scanner is started:
+
+Search for .start() calls on the FX5Scanner instance.
+
+Determine:
+
+Whether it starts at server startup
+
+Or only when the engine enters ACTIVE
+
+Or is never started (current bug)
+
+Compare this to the behavior implied by:
+
+REB2.1_COMPLETION_REPORT.md (this described working behavior)
+
+Any mentions of “30-second scanner” or “FX5 scanner scheduler” in the truth docs
+
+Identify the weakest link:
+
+Is the scanner never instantiated?
+
+Instantiated but never started?
+
+Started but immediately gated by passive mode or engine state?
+
+Scheduled with the wrong timer or hidden behind incorrect conditions?
+
+Document this as “Bootstrap Root Cause” in the report.
+
+Task 3 — Audit REB 2.6 Impact on Scanner & Metrics
+
+You must now target the REB 2.6 changes:
+
+In scan-24h-aggregator.ts:
+
+Find the new dual-gate logic (SystemConfig.passiveLearning + engineActive).
+
+Confirm:
+
+It only gates metrics & learning writes (e.g. recordCycle).
+
+It does NOT prevent calling the scanner.
+
+In fx5-scanner.ts:
+
+Find any REB 2.6 changes around:
+
+Passive learning enforcement
+
+Active pool updates
+
+Any early return statements related to mode or passive flags
+
+Confirm that:
+
+Passive enforcement is applied only when deciding whether to update Active Pool or metrics.
+
+It does NOT short-circuit the scanner’s entire scan cycle or scheduler.
+
+If you find code that stops the scanner entirely under passive conditions, or prevents start-up:
+
+Treat this as the REB 2.6 regression.
+
+You MUST fix it so that scanner always runs when the engine is ACTIVE (paper or live), regardless of passive mode—while still respecting truth about metrics/pool gating.
+
+Task 4 — Restore Correct Bootstrap & Scheduler Behavior (Minimal Changes)
+
+Only after Tasks 1–3 are completed and documented, you may modify code.
+
+Your modifications must satisfy:
+
+FX5Scanner MUST:
+
+Be instantiated once per process (not per request).
+
+Be started reliably in all the modes it previously ran in (at least paper; live as per truth docs).
+
+Execute its internal 30-second scheduler, producing scan cycles.
+
+Scanner MUST NOT:
+
+Be fully disabled just because passiveLearning = TRUE.
+
+Passive mode should gate writes, not scans.
+
+Depend on UI or WebSocket state to start.
+
+Permitted modifications:
+
+You may:
+
+Fix or add:
+
+The call that starts the scanner (e.g. from engine ACTIVE transition)
+
+A small piece of bootstrap code that ensures scheduler is hooked up
+
+Adjust REB 2.6 gating if:
+
+It incorrectly prevents scans from running at all
+
+But you MUST keep:
+
+Metrics + Active Pool gating under passive mode
+
+Logs and semantics consistent with REB 2.6 truth
+
+You may NOT:
+
+Introduce new config flags
+
+Introduce a new “mode” or “sub-mode”
+
+Replace the scanner with a different architecture
+
+Keep changes as small and local as possible. If you can fix the problem by adjusting a single if condition or moving a .start() call, prefer that over wider refactors.
+
+Task 5 — Runtime Verification (Paper + Live)
+
+Once changes are made:
+
+Restart the backend.
+
+Start paper engine via UI.
+
+Observe for at least 90 seconds:
+
+Confirm in logs:
+
+[FX5Scanner][paper] Scan complete (evaluated=60, eligible=XX) repeating every ~30s
+
+Phase 8.6.7 debug logs (STEP 1–4) appear each cycle
+
+Confirm that:
+
+When passiveLearning = TRUE:
+
+Metrics & Active Pool updates show gated behavior consistent with REB 2.6
+
+When passiveLearning = FALSE:
+
+Metrics & Active Pool update normally
+
+If possible (and safe), test live engine similarly, or at minimum ensure logic is symmetric for live mode in the code.
+
+Do NOT attempt to fix any UI issues (e.g. LATTi widget or portfolio delays) in this phase. Only observe behavior if it helps confirm scanner cycles exist.
+
+5. Deliverables
+
+You must create the following files:
+
+docs/restoration/reb2_reports/REB2.7_FX5_SCANNER_BOOTSTRAP_COMPLETION_REPORT.md
+
+This report must include:
+
+Summary:
+
+What was broken (FX5Scanner not running after REB 2.6)
+
+What was restored
+
+Bootstrap Root Cause:
+
+Where the startup sequence broke
+
+How REB 2.6 impacted it
+
+Code Changes:
+
+Files edited
+
+Brief description of each change
+
+Why each change is safe and necessary
+
+Runtime Evidence:
+
+Log snippets showing:
+
+FX5Scanner cycles in paper mode
+
+Passive = TRUE behavior (metrics/pool gated)
+
+Passive = FALSE behavior (full updates)
+
+Guardrail Confirmation:
+
+Explicit statement that Stage-1f/1g/1h, REB 2.5 warmup, REB 2.1/2.2 semantics are intact.
+
+(Optional but recommended)
+docs/restoration/reb2_reports/REB2.7_FX5_SCANNER_RUNTIME_CHECKLIST.md
+
+A short checklist for the user to validate scanner behavior via UI + logs.
+
+6. Final Confirmation Before Exiting REB 2.7
+
+Before considering REB 2.7 “done”, you must be able to honestly assert in the completion report:
+
+“FX5Scanner now starts reliably with the trading engine, runs 30-second scan cycles in paper mode (and live, per truth), and honors passive learning semantics by gating metrics & pool writes, not scans themselves. This matches the behavior the user observed after REB 2.4 / 2.5 and restores the pre-rollback truth state.”
+
+Only once that is true and documented is REB 2.7 complete.

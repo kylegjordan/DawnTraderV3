@@ -356,19 +356,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     console.error('[MarketScanner] Failed to start:', error);
   });
 
-  // Phase 8.8.2-UI-FINAL-RESTORE: Initialize 24h scan aggregator BEFORE FX5Scanner starts
-  // This ensures aggregator is ready to receive Stage-3 emissions immediately
-  const { scan24hAggregator } = await import('./services/scan-24h-aggregator');
-  await scan24hAggregator.initialize();
-  console.log('[Scan24hAggregator] Initialized - monitoring engine states and ready for explicit scan records');
-
-  // Phase 8.8.2: Start FX5 Scanner (always-on 30-second scanner for Stage-3)
-  // Runs independently of trading engine state
-  // MUST start AFTER scan24hAggregator.initialize() to avoid race condition
-  const { fx5Scanner } = await import('./services/fx5-scanner');
-  fx5Scanner.start().catch((error) => {
-    console.error('[FX5Scanner] Failed to start:', error);
-  });
+  // REB 2.7: FX5Scanner now starts from server/startup/fx5-scanner-bootstrap.ts
+  // Called early from server/index.ts BEFORE registerRoutes to ensure unconditional startup
+  // Scan24hAggregator initialization removed from here - scanner is independent
 
   // Phase 27.DX: Add diagnostic trace middleware for goals and trading endpoints
   apiRouter.use(diagnosticTraceMiddleware);

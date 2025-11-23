@@ -109,6 +109,18 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // REB 2.7: Bootstrap FX5 Scanner FIRST (fire-and-forget, independent of engine state)
+  // Non-blocking to avoid waiting for slow registerRoutes completion
+  console.log('[REB2.7] Starting FX5 scanner bootstrap import...');
+  import('./startup/fx5-scanner-bootstrap.js')
+    .then(({ bootstrapFX5Scanner }) => {
+      console.log('[REB2.7] Bootstrap module loaded, calling function...');
+      return bootstrapFX5Scanner();
+    })
+    .catch((error) => {
+      console.error('[REB2.7] ❌ Scanner bootstrap failed:', error);
+    });
+
   // Register routes and get the API router + HTTP server
   const { httpServer: server, apiRouter } = await registerRoutes(app);
 

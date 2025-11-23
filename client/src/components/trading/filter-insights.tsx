@@ -92,33 +92,35 @@ interface FiltersSettings {
   };
 }
 
-// Phase 8.7 filter descriptions (exact text from Phase 8.7)
+// REB 2.8.1: Filter descriptions (Phase 8.7 truth table, 9 categories)
 const FILTER_DESCRIPTIONS: Record<string, string> = {
-  failed_min_volume: "Excludes pairs with very low daily volume that may have liquidity issues or high slippage risk",
-  failed_spread: "Filters out pairs with wide bid-ask spreads that increase trading costs",
-  failed_daily_range: "Removes pairs with insufficient daily price movement for day trading strategies",
+  passed_all_filters: "Pairs that successfully passed all filtering criteria and are eligible for trading",
   failed_min_price: "Excludes very low-priced pairs that may have penny-stock characteristics",
-  failed_stablecoin: "Filters out stablecoins which have minimal price volatility",
-  failed_quote_currency: "Ensures only pairs with allowed quote currencies (USD, EUR, etc.) are considered",
-  failed_history: "Filters out pairs with insufficient historical data for backtesting and analysis",
+  failed_min_volume: "Excludes pairs with very low daily volume that may create liquidity issues or high slippage risk",
+  failed_spread: "Filters out pairs with wide bid-ask spreads that increase trading costs",
+  failed_daily_range: "Removes pairs with insufficient daily price movement for day-trading strategies",
+  failed_stablecoin: "Filters out stablecoins, which have minimal price volatility",
+  failed_quote_currency: "Filters out pairs that do not use an approved quote currency (e.g., USD, EUR)",
+  already_active: "Filters out pairs that already have an active position to avoid duplicate exposure",
+  failed_history: "Filters out pairs lacking the required minimum number of historical trading days",
+  // REB 2.8.1: Intentionally hidden - backend may still compute, but not shown in UI
   failed_market_cap: "Excludes pairs with market cap outside acceptable thresholds",
   failed_guardrail_risk: "Filters out pairs that exceed risk management guardrails",
-  already_active: "Pairs currently in active trades are excluded from new trade consideration",
-  passed_all_filters: "Pairs that successfully passed all filtering criteria and are eligible for trading",
 };
 
 const FILTER_DISPLAY_NAMES: Record<string, string> = {
+  passed_all_filters: "Passed All Filters",
+  failed_min_price: "Min Price",
   failed_min_volume: "Min Volume",
   failed_spread: "Max Spread",
   failed_daily_range: "Min Daily Range",
-  failed_min_price: "Min Price",
   failed_stablecoin: "Exclude Stablecoins",
   failed_quote_currency: "Valid Quote Currency",
-  failed_history: "Min Data History",
+  already_active: "Already Active",
+  failed_history: "History", // REB 2.8.1: Renamed from "Min Data History"
+  // REB 2.8.1: Intentionally hidden - not shown in Filter Insights UI
   failed_market_cap: "Market Cap Range",
   failed_guardrail_risk: "Risk Guardrails",
-  already_active: "Already Active",
-  passed_all_filters: "Passed All Filters",
 };
 
 // Threshold conceptual text for non-numeric filters
@@ -127,19 +129,18 @@ const THRESHOLD_CONCEPTUAL: Record<string, string> = {
   passed_all_filters: "No extra rules — count of pairs that passed every filter this scan",
 };
 
-// Phase 8.8.2-MAP-FINAL: All Stage-3 breakdown categories (11 total)
+// REB 2.8.1: Truth filter categories (9 total, ordered per truth screenshots)
+// Removed: failed_market_cap, failed_guardrail_risk (backend may still compute, intentionally hidden from UI)
 const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
+  'passed_all_filters',
+  'failed_min_price',
   'failed_min_volume',
   'failed_spread',
   'failed_daily_range',
-  'failed_min_price',
   'failed_stablecoin',
   'failed_quote_currency',
-  'failed_history',
-  'failed_market_cap',
-  'failed_guardrail_risk',
   'already_active',
-  'passed_all_filters',
+  'failed_history',
 ];
 
 export function FilterInsights() {
@@ -265,41 +266,60 @@ export function FilterInsights() {
 
   return (
     <div className="space-y-4" data-testid="filter-insights">
-      {/* Header Card with Refresh */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            <CardTitle>Filter Insights</CardTitle>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              Next scan in {countdownDisplay}
-            </span>
-          </div>
-        </CardHeader>
-      </Card>
-
-      {/* Section 1: Scan & Filter Overview */}
+      {/* REB 2.8.1: Section 1 - Kraken Universe (single metric) */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            Scan & Filter Overview
-          </CardTitle>
+          <CardTitle className="text-lg">Kraken Universe</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Current scan cycle statistics from Kraken universe
+            Total tradable pairs in Kraken universe
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2">
+            <p className="text-4xl font-bold" data-testid="text-universe-count">
+              {scanTick.krakenUniverseSize.toLocaleString()}
+            </p>
+            <span className="text-sm text-muted-foreground">pairs</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* REB 2.8.1: Section 2 - Cycle Info (timing) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Cycle Info</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            FX5 scanner timing and schedule
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Last Scan Time</p>
+              <p className="text-lg font-medium" data-testid="text-last-scan">
+                {new Date(scanTick.cycleEndTimestamp).toLocaleTimeString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Next Scan In</p>
+              <p className="text-lg font-bold" data-testid="text-next-scan-countdown">
+                {countdownDisplay}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* REB 2.8.1: Section 3 - Last Scan Result */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Last Scan Result</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Most recent FX5 scan cycle statistics
           </p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Kraken Universe</p>
-              <p className="text-2xl font-bold" data-testid="text-universe-count">
-                {scanTick.krakenUniverseSize.toLocaleString()}
-              </p>
-            </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Evaluated</p>
               <p className="text-2xl font-bold" data-testid="text-evaluated-count">
@@ -308,14 +328,9 @@ export function FilterInsights() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Eligible</p>
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-bold text-success" data-testid="text-eligible-count">
-                  {scanTick.eligibleCount}
-                </p>
-                <Badge variant="default" className="bg-success/10 text-success">
-                  {eligiblePercent}%
-                </Badge>
-              </div>
+              <p className="text-2xl font-bold text-success" data-testid="text-eligible-count">
+                {scanTick.eligibleCount}
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Ineligible</p>
@@ -323,40 +338,11 @@ export function FilterInsights() {
                 {scanTick.ineligibleCount}
               </p>
             </div>
-          </div>
-
-          {/* Cycle Info subsection */}
-          <div className="mt-6 pt-4 border-t">
-            <p className="text-xs font-medium text-muted-foreground mb-3">Cycle Info</p>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Last scan</p>
-                <p className="text-sm font-medium" data-testid="text-last-scan">
-                  {new Date(scanTick.cycleEndTimestamp).toLocaleTimeString()}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Cycle ID</p>
-                <p className="text-sm font-medium" data-testid="text-cycle-id">
-                  #{scanTick.cycleId}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Cycles per Hour</p>
-                <p className="text-sm font-bold" data-testid="text-cycles-per-hour">
-                  {scanTick.cyclesPerHour}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Scan Frequency</p>
-                <p className="text-sm font-bold" data-testid="text-scan-frequency">
-                  {scanFrequency}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Next Scan In</p>
-                <p className="text-sm font-bold" data-testid="text-next-scan-countdown">
-                  {countdownDisplay}
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Eligible %</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold text-success" data-testid="text-eligible-percent">
+                  {eligiblePercent}%
                 </p>
               </div>
             </div>
@@ -364,7 +350,7 @@ export function FilterInsights() {
         </CardContent>
       </Card>
 
-      {/* Section 2: 24h Filter Activity */}
+      {/* REB 2.8.1: Section 4 - 24h Metrics (5 metrics, Total Cycles last) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -376,53 +362,14 @@ export function FilterInsights() {
             )}
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Aggregated filter performance over the last 24 hours (only counts ACTIVE trading cycles)
+            Aggregated filter performance over the last 24 hours
           </p>
         </CardHeader>
         <CardContent>
-          {!engineActive && (
-            <div className="mb-4 p-3 rounded-lg bg-warning/10 border border-warning/20">
-              <p className="text-sm text-warning font-medium flex items-center gap-2">
-                <Activity className="w-4 h-4" />
-                Trading Engine STOPPED
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                24h metrics only accumulate when trading engine is ACTIVE. Start the engine to begin tracking.
-              </p>
-            </div>
-          )}
           {isLoading24h ? (
             <div className="text-center py-4">
               <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-muted-foreground" />
               <p className="text-xs text-muted-foreground">Loading 24h metrics...</p>
-            </div>
-          ) : !engineActive ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Total Cycles (24h)</p>
-                  <p className="text-2xl font-bold" data-testid="text-24h-cycles">0</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Total Evaluated (24h)</p>
-                  <p className="text-2xl font-bold" data-testid="text-24h-evaluated">0</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Total Survived (24h)</p>
-                  <p className="text-2xl font-bold text-success" data-testid="text-24h-survived">0</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Unique Evaluated (24h)</p>
-                  <p className="text-2xl font-bold" data-testid="text-24h-unique-evaluated">0</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Unique Survived (24h)</p>
-                  <p className="text-2xl font-bold text-success" data-testid="text-24h-unique-survived">0</p>
-                </div>
-              </div>
             </div>
           ) : !scan24hData?.ok || !scan24hData?.data ? (
             <div className="text-center py-4">
@@ -434,90 +381,82 @@ export function FilterInsights() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {/* REB 2.8.1: First 4 metrics */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Total Cycles (24h)</p>
-                  <p className="text-2xl font-bold" data-testid="text-24h-cycles">
-                    {scan24hData.data.totalCycles.toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Total Evaluated (24h)</p>
+                  <p className="text-xs text-muted-foreground mb-1">24h Total Pairs Evaluated</p>
                   <p className="text-2xl font-bold" data-testid="text-24h-evaluated">
                     {scan24hData.data.totalEvaluated.toLocaleString()}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Total Survived (24h)</p>
+                  <p className="text-xs text-muted-foreground mb-1">24h Total Pairs Survived</p>
                   <p className="text-2xl font-bold text-success" data-testid="text-24h-survived">
                     {scan24hData.data.totalSurvived.toLocaleString()}
                   </p>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Unique Evaluated (24h)</p>
+                  <p className="text-xs text-muted-foreground mb-1">24h Unique Pairs Evaluated</p>
                   <p className="text-2xl font-bold" data-testid="text-24h-unique-evaluated">
                     {scan24hData.data.uniqueEvaluated.toLocaleString()}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Distinct symbols evaluated across all cycles
-                  </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Unique Survived (24h)</p>
+                  <p className="text-xs text-muted-foreground mb-1">24h Unique Pairs Survived</p>
                   <p className="text-2xl font-bold text-success" data-testid="text-24h-unique-survived">
                     {scan24hData.data.uniqueSurvived.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Distinct symbols that passed filters
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                <span>Window: {new Date(scan24hData.data.windowStart).toLocaleString()} - {new Date(scan24hData.data.windowEnd).toLocaleString()}</span>
+              {/* REB 2.8.1: Total Cycles - visually last metric */}
+              <div className="pt-4 border-t">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Total FX5 Cycles (Last 24h)</p>
+                  <p className="text-2xl font-bold" data-testid="text-24h-cycles">
+                    {scan24hData.data.totalCycles.toLocaleString()}
+                  </p>
+                </div>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Section 3: Active Filtered Pool */}
+      {/* REB 2.8.1: Active Filtered Pool - truth columns: Symbol, Status, First Seen, Last Updated */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             Active Filtered Pool
-            {!engineActive && (
-              <Badge variant="outline" className="text-xs border-warning text-warning">
-                STOPPED
-              </Badge>
-            )}
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Pairs that passed all filters in the current scan cycle and are available for trading
+            Pairs that passed all filters in the current scan cycle
           </p>
         </CardHeader>
         <CardContent>
-          {!engineActive ? (
-            <div className="text-center py-8">
-              <Activity className="w-12 h-12 mx-auto mb-3 text-warning opacity-50" />
-              <h3 className="text-lg font-semibold mb-2 text-warning">Trading Engine STOPPED</h3>
-              <p className="text-muted-foreground">
-                Active pool only populates when trading engine is ACTIVE
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Start the engine to see eligible pairs for trading
-              </p>
-            </div>
-          ) : !scanTick.activeFilteredPool || scanTick.activeFilteredPool.length === 0 ? (
-            <div className="text-center py-8">
-              <Filter className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">No Eligible Pairs</h3>
-              <p className="text-muted-foreground">
-                No symbols currently pass all screening filters
-              </p>
+          {!scanTick.activeFilteredPool || scanTick.activeFilteredPool.length === 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full" data-testid="table-active-pool">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-3 font-medium">Symbol</th>
+                    <th className="text-left py-2 px-3 font-medium">Status</th>
+                    <th className="text-left py-2 px-3 font-medium">First Seen (this window)</th>
+                    <th className="text-left py-2 px-3 font-medium">Last Updated (this cycle)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center">
+                      <Filter className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                      <h3 className="text-lg font-semibold mb-2">No Eligible Pairs</h3>
+                      <p className="text-muted-foreground">
+                        No symbols currently pass all screening filters
+                      </p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -526,9 +465,8 @@ export function FilterInsights() {
                   <tr className="border-b">
                     <th className="text-left py-2 px-3 font-medium">Symbol</th>
                     <th className="text-left py-2 px-3 font-medium">Status</th>
-                    <th className="text-right py-2 px-3 font-medium">Price</th>
-                    <th className="text-right py-2 px-3 font-medium">24h Volume</th>
-                    <th className="text-right py-2 px-3 font-medium">Daily Range</th>
+                    <th className="text-left py-2 px-3 font-medium">First Seen (this window)</th>
+                    <th className="text-left py-2 px-3 font-medium">Last Updated (this cycle)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -536,18 +474,15 @@ export function FilterInsights() {
                     <tr key={`${pair.symbol}-${index}`} className="border-b hover:bg-muted/50">
                       <td className="py-2 px-3 font-medium">{pair.symbol}</td>
                       <td className="py-2 px-3">
-                        <Badge variant="outline" className="text-xs text-success border-success/20">
-                          Passed all filters
+                        <Badge variant="outline" className="text-xs text-success border-success/20 bg-success/10">
+                          All Filters Passed
                         </Badge>
                       </td>
-                      <td className="text-right py-2 px-3">
-                        ${pair.price >= 1 ? pair.price.toFixed(2) : pair.price.toFixed(4)}
+                      <td className="py-2 px-3 text-sm">
+                        {pair.firstSeen ? new Date(pair.firstSeen).toLocaleString() : '—'}
                       </td>
-                      <td className="text-right py-2 px-3">
-                        ${(pair.volume24h / 1000000).toFixed(2)}M
-                      </td>
-                      <td className="text-right py-2 px-3">
-                        {(pair.dailyRange * 100).toFixed(2)}%
+                      <td className="py-2 px-3 text-sm">
+                        {pair.lastUpdated ? new Date(pair.lastUpdated).toLocaleString() : '—'}
                       </td>
                     </tr>
                   ))}
@@ -563,12 +498,12 @@ export function FilterInsights() {
         </CardContent>
       </Card>
 
-      {/* Section 4: Filter Breakdown */}
+      {/* REB 2.8.1: Filter Breakdown (Last 24h) - 9 truth categories */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Filter Breakdown</CardTitle>
+          <CardTitle className="text-lg">Filter Breakdown (Last 24h)</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Why pairs were filtered out in the last scan cycle
+            Why pairs were filtered out over the last 24 hours
           </p>
         </CardHeader>
         <CardContent>
