@@ -1,0 +1,291 @@
+REB 2.8.3 – Filter Insights Field-Mapping & Passive-Mode Corrections
+
+Scope: Filter Insights tab only (no Screeners tab)
+Mode under test: Paper, Passive Learning ON, Trading engine STOPPED
+Test user: testuser123 / SecurePass123!
+
+Use the November 18, 2025 truth screenshots attached in this thread as the visual reference:
+
+“Truth Filter Insights Top Section 1 – 11.18.25”
+
+“Truth Filter Insights Top Section 2 – 11.18.25”
+
+“Truth Filter Insights Active Filtered Pool – 11.18.25”
+
+“Truth Filter Insights Filter Breakdown – 11.18.25”
+
+The current UI is very close; this directive is about (1) wiring all fields to the correct FX5 REST sources, (2) fixing the remaining passive-mode behaviour, and (3) tightening the layout.
+
+2.1 Master Field-Mapping Table (Truth vs Current)
+
+Use the current mapping you produced in REB2.8_CURRENT_STATE_MAPPING_UPDATED.md as the baseline for the “Current Backend Source” column. For each row below:
+
+Fill in the Current Backend Source from your mapping (REST vs WebSocket, endpoint object name, etc.).
+
+Implement the Correct Backend Source and behaviour exactly as specified.
+
+When I say “REST”, I mean an HTTP call or cached result from the FX5 / diagnostics layer – no WebSocket.
+
+2.1.1 Scan & Filter Overview – Top Card
+Section	UI Label / Field	Current Backend Source (from your map)	Correct Backend Source / Behaviour	Notes
+Kraken Universe	Total Kraken Trading Pairs	(REST summary; krakenUniverseSize)	✅ Keep as-is: FX5 REST summary for Kraken tradable universe. Shown even in passive mode.	Font size fix below.
+Cycle Info	Last Scan Time	(currently from scanTick / WebSocket)	REST: latest FX5 scan record for the current mode (paper). Use the same record that drives Last Scan Result. Include date+time.	No WebSocket here.
+Cycle Info	Last Scan Cycle ID	(currently shows “1”)	REST: the unique cycle ID of that same latest FX5 scan record. Should look like the prior cycle_paper_xxx IDs, not a literal “1”.	Must match the record used for Last Scan Time.
+Cycle Info	Next Scan In	(local countdown derived from scanTick)	REST-backed timing from FX5 scanner: count down to the next actual FX5 30s scan. When scanner is running, this should count down 30 → 0; when we’re stopped but passive learning is enabled, Option A is allowed: a small “heartbeat” countdown driven by the scanner, but it must be consistent with the real 30-second interval.	No arbitrary reset 30→26→30. Tie it to the real scan cadence.
+Cycle Info	Scan Frequency	(dynamic from scanTick or config)	Static textual value: "Every 30s". You may derive it from the same config that drives the FX5 scanner, but it doesn’t need to be dynamic.	Text only.
+Cycle Info	Cycles per Hour	(currently hard-coded 120.0)	Derived on the backend from actual scan history (recommended) or from scanner config if history not yet available. In any case, do not hard-code. The value should change if the scan frequency ever changes.	Truth had non-integer values (e.g. 0.4) when system had just started.
+Last Scan Result	Evaluated (This Scan)	(currently from WebSocket scan_tick)	REST: the evaluatedCount from the latest FX5 scan record for the current mode.	Same record as Last Scan Time / Cycle ID.
+Last Scan Result	Eligible (This Scan)	(currently from WebSocket scan_tick)	REST: the eligibleCount from that same latest scan record.	–
+Last Scan Result	Ineligible (This Scan)	(currently from WebSocket scan_tick)	REST: computed as evaluatedCount - eligibleCount, or use explicit ineligible field from the REST scan record if you have one.	–
+Last Scan Result	Eligible % (This Scan)	(currently from WebSocket scan_tick)	UI-level calculation: eligibleCount / evaluatedCount * 100, formatted as a percentage with 1 decimal place.	No WebSocket; drive from REST values.
+24h Filter Activity	Total Evaluated (24h)	(currently from 24h diagnostics object)	✅ Keep sourcing from the FX5 24h REST diagnostics object for the current mode. Must be 0 in passive mode when no ACTIVE cycles have run in last 24h.	See passive rules below.
+24h Filter Activity	Unique Evaluated (24h)	(same 24h object)	Same as above. 0 in passive mode with no active history.	–
+24h Filter Activity	Total Survived Filters (24h)	(same 24h object)	Same as above. 0 in passive mode with no active history.	–
+24h Filter Activity	Unique Survived Filters (24h)	(same 24h object)	Same as above. 0 in passive mode with no active history.	–
+24h Filter Activity	Total FX5 Cycles (Last 24h)	(same 24h object)	Same as above. 0 in passive mode with no active history.	–
+2.1.2 Active Filtered Pool – Table
+Section	UI Label / Column	Current Backend Source (from your map)	Correct Backend Source / Behaviour	Notes
+Active Filtered Pool	Symbol	FX5 active pool REST endpoint	✅ Keep as-is: FX5 REST active filtered pool (deduped, non-expired) for current mode.	–
+Active Filtered Pool	Status	Same active pool endpoint	✅ Keep as-is: textual status (“Passed all filters”), with green pill styling as in 11/18 truth screenshot.	Do not show spinner when pool is empty.
+Active Filtered Pool	First Seen (this window)	Same active pool endpoint (firstSeen timestamp)	✅ Keep as-is: convert timestamp via existing UTC formatter / dual-line display. Show “—” when no data.	–
+Active Filtered Pool	Last Updated (this cycle)	Same active pool endpoint (lastUpdated timestamp)	✅ Keep as-is: convert timestamp via existing UTC formatter / dual-line display. Show “—” when no data.	–
+Active Filtered Pool	Table empty state	UI logic	When trading engine is STOPPED (passive learning ON), the table should not show a loading spinner. Instead, always show the “No Eligible Pairs – No symbols currently pass all screening filters” empty state.	Spinner only allowed while a REAL data fetch is in progress.
+2.1.3 Filter Breakdown – Header & Categories
+
+Use exactly these 9 categories and descriptions (Phase 8.7 final truth, which you already have implemented):
+
+Passed All Filters
+
+Min Price
+
+Min Volume
+
+Max Spread
+
+Min Daily Range
+
+Exclude Stablecoins
+
+Valid Quote Currency
+
+Already Active
+
+History
+
+Mapping table:
+
+Section	UI Label / Field	Current Backend Source (from your map)	Correct Backend Source / Behaviour	Notes
+Filter Breakdown	Total Evaluated (24h)	24h diagnostics / breakdown object	Keep sourcing from FX5 24h REST diagnostics for the current mode. 0 in passive mode with no active history.	–
+Filter Breakdown	Survived Filters (24h)	Same	Same as above.	–
+Filter Breakdown	Passed All Filters (count)	Breakdown object (may be via scan_tick currently)	REST: count of pairs that passed every filter in the most recent scan cycle that contributes to the 24h breakdown. No WebSocket.	This is the survivor bucket.
+Filter Breakdown	Min Price (count)	Breakdown object / WebSocket	REST: count of pairs excluded by Min Price in the last contributing scan cycle (and rolled into the 24h aggregation).	Numeric count only.
+Filter Breakdown	Min Volume (count)	Breakdown object / WebSocket	REST: count of pairs excluded by Min Volume. Numeric count only.	No “✓ Pass”.
+Filter Breakdown	Max Spread (count)	Breakdown object / WebSocket	REST: count of pairs excluded by Max Spread. Numeric count only.	–
+Filter Breakdown	Min Daily Range (count)	Breakdown object / WebSocket	REST: count of pairs excluded by Min Daily Range. Numeric count only.	–
+Filter Breakdown	Exclude Stablecoins (count)	Breakdown object / WebSocket	REST: count of pairs excluded by Exclude Stablecoins. Numeric count only.	–
+Filter Breakdown	Valid Quote Currency	Breakdown object / WebSocket	REST: count of pairs excluded by Valid Quote Currency. Numeric count only.	Remove ✓ Pass label.
+Filter Breakdown	Already Active	Breakdown object / WebSocket	REST: count of pairs excluded by Already Active. Numeric count only.	Remove ✓ Pass label.
+Filter Breakdown	History	Breakdown object / WebSocket	REST: count of pairs excluded by History (minimum trading-days requirement). Numeric count only.	Remove ✓ Pass label.
+Filter Breakdown	Threshold line per category	UI text / config	Keep thresholds as you have them today except for “Passed All Filters” – this category should not show a “Threshold:” line at all.	For “Passed All Filters”, remove the threshold row.
+
+After you populate the “Current Backend Source” column from your mapping, this table becomes the master truth map for REB 2.8.3.
+
+2.2 Sub-table: Fields with Incorrect or Ambiguous Mapping
+
+From the table above, compile a short sub-table listing only the fields that need mapping corrections (source change, removal of WebSocket, or behaviour change). At minimum this must include:
+
+Cycle Info:
+
+Last Scan Time
+
+Last Scan Cycle ID
+
+Next Scan In
+
+Cycles per Hour
+
+Last Scan Result:
+
+Evaluated (This Scan)
+
+Eligible (This Scan)
+
+Ineligible (This Scan)
+
+Eligible % (This Scan)
+
+Filter Breakdown:
+
+All 9 category counts wherever they reference WebSockets today
+
+The category headers where “✓ Pass” appears in the label
+
+Any other field in your current mapping that still shows scan_tick / WebSocket as its data source.
+
+For each of those rows, clearly state:
+
+Current Source: what you have now (WebSocket event name, object, property)
+
+Required Source: corresponding FX5 REST endpoint / property (or calculated value)
+
+This sub-table is what we’ll use to double-check your corrections.
+
+2.3 UI & Layout Corrections (Non-functional but important)
+
+Apply these purely visual/layout changes to match the 11/18 truth screenshots:
+
+Number font sizes (all sections)
+
+Reduce the font size of all numeric values in:
+
+Kraken Universe total pairs
+
+Last Scan Result numbers
+
+24h Filter Activity numbers
+
+Filter Breakdown “Total Evaluated / Survived Filters” header numbers
+
+Filter Breakdown per-category counts
+
+They should be:
+
+Larger than the field labels,
+
+But not as large as the current Kraken Universe number.
+
+Use the same scale you see in the 11/18 screenshots where the numbers are prominent but not dominant.
+
+Label–value alignment
+
+Throughout the top card and Filter Breakdown header:
+
+Place numeric values to the right of the label, on the same row, not below the label.
+
+Example: Total Evaluated (24h): 1,446 rather than label on one line and the number below it.
+
+Apply this to:
+
+All Cycle Info fields
+
+All Last Scan Result stats
+
+All 24h Filter Activity stats
+
+Filter Breakdown “Total Evaluated / Survived Filters” header.
+
+Cycle Info row ordering
+
+Arrange Cycle Info exactly as:
+
+Row 1: Last Scan Cycle ID on the left, Last Scan Time on the right.
+
+Row 2: Next Scan In on the left, Scan Frequency on the right.
+
+Row 3: Cycles per Hour centered alone.
+
+Kraken Universe number
+
+Reduce the font size of the 1,386 (or current number) so it matches the style used for other prominent numbers (Last Scan Result, etc.) in the truth screenshots, not the very large variant it currently uses.
+
+Active Filtered Pool spinner
+
+When engine is STOPPED (passive learning ON):
+
+Do not show a loading spinner for the Active Filtered Pool table.
+
+Show the empty state immediately: “No Eligible Pairs – No symbols currently pass all screening filters.”
+
+The spinner should only ever appear while an actual network request is in flight.
+
+Filter Breakdown labels
+
+For the categories Min Volume, Valid Quote Currency, Already Active, History (and any others):
+
+Remove the little ✓ badge and the word “Pass” that appears in the header/label line. The category headers should be just the category name, description, and threshold line.
+
+For Passed All Filters:
+
+Remove the “Threshold: …” line entirely. This category does not represent a filter with a threshold; it’s the survivor bucket.
+
+2.4 Passive-Mode Behaviour Rules (Engine STOPPED)
+
+When the paper trading engine is STOPPED and passive learning is ON, behaviour should be:
+
+Kraken Universe
+
+Shows the current universe size from REST. OK to keep real value here.
+
+Cycle Info
+
+Next Scan In may continue to tick as a heartbeat based on the real FX5 scanner interval (Option A, mini-ticks allowed).
+
+Last Scan Time / Cycle ID should reflect the latest actual FX5 scan (if any); if the scanner is not running at all, show an appropriate “—” or “No scan yet” state.
+
+Cycles per Hour should reflect reality (if only a few scans in the last hour, show a small value; if none, show 0 or “0.0”).
+
+Last Scan Result (This Scan)
+
+Values should follow whatever the latest real FX5 scan produced.
+
+When the scanner is effectively idle, these may be zeros most of the time; occasional mini-ticks are acceptable as long as they are genuine.
+
+24h Filter Activity & Filter Breakdown
+
+When there have been no ACTIVE trading cycles in the last 24 hours:
+
+All 24h metrics must be 0.
+
+All Filter Breakdown per-category counts must be 0.
+
+There must be no stale values carried over from the last ACTIVE session.
+
+If you prefer, you may show an explicit “No 24h data available yet” message when totals are zero and there is genuinely no active history.
+
+Active Filtered Pool
+
+Total active filtered pairs should be 0.
+
+Table shows “No Eligible Pairs” empty state, no spinner.
+
+2.5 Testing Instructions
+
+Use testuser123 / SecurePass123!.
+
+Passive Mode Test (engine STOPPED)
+
+Paper mode, passive learning ON, engine STOPPED.
+
+Navigate to Trading → Filter Insights.
+
+Verify:
+
+Top card matches the 11/18 screenshots for layout, font, and row ordering.
+
+Kraken Universe shows a realistic value; Cycle Info rows match the specified order and update sensibly.
+
+Last Scan Result numbers are realistic and derived from REST (no obvious hard-code).
+
+24h Filter Activity and Filter Breakdown counts are all zero if there has been no ACTIVE session in the last 24h.
+
+Active Filtered Pool shows the empty state, no spinner.
+
+Smoke test with a short ACTIVE session (optional)
+
+Briefly start paper ACTIVE trading, allow a few cycles to run, then stop.
+
+Confirm:
+
+24h Filter Activity and Filter Breakdown counts reflect the new ACTIVE cycles.
+
+After stopping again, switching back to passive view shows those counts, but they will roll off naturally after 24h – no hard resets.
+
+Mapping verification
+
+Ensure your updated mapping document:
+
+Contains the full master table (all fields) with Current vs Correct source columns.
+
+Contains the sub-table listing only fields whose source changed.
+
+When you mark REB 2.8.3 complete, include that updated mapping file path in your report.

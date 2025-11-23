@@ -59,6 +59,8 @@ Orchestrator Connectivity & Impact Audit mapped all Orchestrator system connecti
 
 An Active Filter Pool with TTL-based expiry (5 minutes), deduplication logic, and passive-mode enforcement has been implemented. The FX5 Scanner now maintains a persistent pool of survivors with automatic cleanup and engine-state awareness. A standalone FX5 scanner service runs independently every 30 seconds for both paper and live modes, completely decoupled from trading engine state. Stage-3 now serves as the single source of truth for scan cycle state, emitting `scan_tick` and `scanner:breakdown` WebSocket events every 30 seconds.
 
+**REB 2.8.3 Filter Insights REST Migration** completed the transition from WebSocket to REST data for all Cycle Info and Last Scan Result fields in the Filter Insights UI. The backend endpoint `/api/paper-sim/diagnostics/scan-latest` now calculates `nextScanInMs` server-side using the formula `(cycleEndTimestamp + 30000ms) - Date.now()` and returns zeroed payloads when the engine is STOPPED (Passive Learning mode). The frontend implements live countdown by tracking REST fetch time and decrementing the server-provided value based on elapsed time, eliminating the previous WebSocket `scan_tick` listener that was causing countdown glitches. This ensures the countdown displays smoothly (30→29→28...→0) without resetting, and the UI properly shows STOPPED state with zero metrics instead of loading skeletons when the engine is inactive.
+
 The overall system architecture is considered foundational and sound, with a clear path for improvements in security and performance.
 
 ## External Dependencies

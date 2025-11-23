@@ -1,0 +1,88 @@
+The countdown behavior is still incorrect in the UI, so the backend fix you tested is NOT reflected in the running system.
+
+Please verify the following immediately:
+
+1. The REST endpoint actually returns the dynamic countdown values in the LIVE running server
+
+Please paste the actual payload that the UI receives by hitting the endpoint in the running app:
+
+/api/paper-sim/diagnostics/scan-latest?mode=paper
+
+
+You can test this by opening the browser devtools Console and running:
+
+fetch('/api/paper-sim/diagnostics/scan-latest?mode=paper')
+  .then(r => r.json())
+  .then(console.log)
+
+
+I need to see the exact JSON that the front-end receives in the LIVE environment.
+
+If the values still show:
+
+nextScanInMs: 30000
+cycleEndTimestamp: <does not change>
+
+
+— then your backend fix is not active in the production runtime.
+
+2. Confirm the file you edited is the one actually used by the running server
+
+You added the new logic to compute:
+
+actualNextScanInMs = (cycleEndTimestamp + scanFrequencyMs) - Date.now()
+
+
+But the UI is still receiving the old fields.
+
+Please confirm:
+
+which file you edited
+
+which route
+
+and verify with grep that the running server is actually using your updated code.
+
+Run:
+
+grep -R "actualNextScanInMs" -n server
+grep -R "cycleEndTimestamp" -n server
+grep -R "nextScanInMs" -n server
+
+
+This should confirm whether the fix is in the live code path.
+
+3. Confirm that the frontend is NOT using a WebSocket fallback
+
+If the UI still has this listener active:
+
+socket.on("scanTick", ...)
+
+
+Then it will override your REST values.
+
+Please search:
+
+grep -R "scanTick" -n client/src
+
+
+If found, that must be disabled.
+
+4. Confirm that the UI is not recomputing the countdown locally
+
+The UI should NOT compute the countdown like:
+
+nextScanInMs - (Date.now() - lastUpdate)
+
+
+Instead, it should:
+
+show the backend number directly
+
+subtract ONLY within the 1-second timer
+
+This ensures no jitter.
+
+5. Verify server clock timezone / UTC mismatch
+
+If server uses UTC and frontend uses local GMT+?, the countdown resets incorrectly.

@@ -80,6 +80,29 @@ interface Scan24hResponse {
   data: Scan24hMetrics;
 }
 
+// REB 2.8.3: Latest scan data from REST endpoint (replaces WebSocket for Cycle Info + Last Scan Result)
+interface ScanLatestData {
+  cycleId: number;
+  cycleStartTimestamp: string;
+  cycleEndTimestamp: string;
+  krakenUniverseSize: number;
+  evaluatedCount: number;
+  eligibleCount: number;
+  ineligibleCount: number;
+  cyclesPerHour: number;
+  cycleFrequencyMs: number;
+  nextScanInMs: number;
+  activePoolCount: number;
+  activeFilteredPool: ActiveFilteredPair[];
+  isEngineActive: boolean;
+}
+
+interface ScanLatestResponse {
+  ok: boolean;
+  data: ScanLatestData | null;
+  error?: string;
+}
+
 interface FiltersSettings {
   mode: 'paper' | 'live';
   filters: {
@@ -195,12 +218,26 @@ function formatScanTimestamp(value: string | null | undefined): { display: strin
 export function FilterInsights() {
   const { messages: wsMessages } = useWebSocket();
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
-  const [engineActive, setEngineActive] = useState<boolean>(false);
   
-  // Phase 8.8.2-MAP-FINAL: State from WebSocket events
-  const [scanTick, setScanTick] = useState<ScanTickPayload | null>(null);
+  // REB 2.8.3: WebSocket state - ONLY for Filter Breakdown (scanner:breakdown:paper)
   const [breakdown, setBreakdown] = useState<ScannerBreakdownPayload | null>(null);
-  const [nextScanBaseTime, setNextScanBaseTime] = useState<number>(Date.now());
+  
+  // REB 2.8.3: Track when REST data was fetched to calculate elapsed time
+  const [restFetchTime, setRestFetchTime] = useState<number>(Date.now());
+
+  // REB 2.8.3: Query latest scan data from REST (replaces WebSocket for Cycle Info + Last Scan Result)
+  const { data: scanLatestData, isLoading: isLoadingScan } = useQuery<ScanLatestResponse>({
+    queryKey: ['/api/paper-sim/diagnostics/scan-latest?mode=paper'],
+    refetchInterval: 5000, // Refresh every 5 seconds for near-real-time updates
+    refetchOnWindowFocus: true,
+  });
+
+  // REB 2.8.3: Update fetch timestamp whenever REST data changes
+  useEffect(() => {
+    if (scanLatestData?.data) {
+      setRestFetchTime(Date.now());
+    }
+  }, [scanLatestData]);
 
   // Query for 24h scan activity metrics
   const { data: scan24hData, isLoading: isLoading24h } = useQuery<Scan24hResponse>({
@@ -215,17 +252,9 @@ export function FilterInsights() {
     staleTime: 10 * 60 * 1000,
   });
 
-  // Listen for scan_tick WebSocket events
-  useEffect(() => {
-    const scanTickEvents = wsMessages.filter((msg: any) => msg.type === 'scan_tick' && msg.payload?.mode === 'paper');
-    if (scanTickEvents.length > 0) {
-      const latestTick = scanTickEvents[scanTickEvents.length - 1].payload as ScanTickPayload;
-      setScanTick(latestTick);
-      setNextScanBaseTime(Date.now());
-    }
-  }, [wsMessages]);
+  // REB 2.8.3: REMOVED scan_tick WebSocket listener - now using REST only
 
-  // Listen for scanner:breakdown WebSocket events
+  // Listen for scanner:breakdown WebSocket events (still needed for Filter Breakdown)
   useEffect(() => {
     const breakdownEvents = wsMessages.filter((msg: any) => 
       (msg.type === 'scanner:breakdown:paper' || msg.type === 'scanner:breakdown') && msg.payload?.mode === 'paper'
@@ -233,19 +262,6 @@ export function FilterInsights() {
     if (breakdownEvents.length > 0) {
       const latestBreakdown = breakdownEvents[breakdownEvents.length - 1].payload as ScannerBreakdownPayload;
       setBreakdown(latestBreakdown);
-    }
-  }, [wsMessages]);
-
-  // Listen for trading_state_changed to track engine state
-  useEffect(() => {
-    const stateChangeEvents = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
-    if (stateChangeEvents.length > 0) {
-      const latestEvent = stateChangeEvents[stateChangeEvents.length - 1];
-      const payload = latestEvent.payload;
-      
-      if (payload?.mode === 'paper') {
-        setEngineActive(payload.isEngineActive === true || payload.active === true);
-      }
     }
   }, [wsMessages]);
 
@@ -258,8 +274,12 @@ export function FilterInsights() {
     return () => clearInterval(interval);
   }, []);
 
-  // Calculate time until next refresh
-  const timeUntilRefresh = scanTick ? Math.max(0, scanTick.nextScanInMs - (currentTime - nextScanBaseTime)) : 0;
+  // REB 2.8.3: Calculate live countdown by decrementing server value based on elapsed time
+  // Server provides nextScanInMs at time of fetch, we subtract elapsed time for live countdown
+  const serverNextScanMs = scanLatestData?.data?.nextScanInMs ?? 0;
+  const elapsedSinceFetch = currentTime - restFetchTime;
+  const timeUntilRefresh = Math.max(0, serverNextScanMs - elapsedSinceFetch);
+  
   const minutesUntilRefresh = Math.floor(timeUntilRefresh / (60 * 1000));
   const secondsRemainder = Math.floor((timeUntilRefresh % (60 * 1000)) / 1000);
   const countdownDisplay = minutesUntilRefresh > 0 
@@ -288,17 +308,22 @@ export function FilterInsights() {
     return map[filterKey] || null;
   };
 
-  // Calculate eligible percentage
-  const eligiblePercent = scanTick && scanTick.evaluatedCount > 0
-    ? ((scanTick.eligibleCount / scanTick.evaluatedCount) * 100).toFixed(1)
+  // REB 2.8.3: Calculate eligible percentage from REST data
+  const scanData = scanLatestData?.data;
+  const eligiblePercent = scanData && scanData.evaluatedCount > 0
+    ? ((scanData.eligibleCount / scanData.evaluatedCount) * 100).toFixed(1)
     : '0.0';
 
-  // Format scan frequency
-  const scanFrequency = scanTick 
-    ? `Every ${(scanTick.cycleFrequencyMs / 1000).toFixed(0)}s`
+  // REB 2.8.3: Format scan frequency from REST data (or static fallback)
+  const scanFrequency = scanData 
+    ? `Every ${(scanData.cycleFrequencyMs / 1000).toFixed(0)}s`
     : 'Every 30s';
 
-  if (!scanTick) {
+  // REB 2.8.3: Engine active status from REST data
+  const engineActive = scanData?.isEngineActive ?? false;
+
+  // REB 2.8.3: Loading state - check REST data instead of WebSocket
+  if (isLoadingScan || !scanData) {
     return (
       <div className="space-y-4">
         <Card data-testid="filter-insights-loading">
@@ -325,8 +350,8 @@ export function FilterInsights() {
               <p className="text-xs text-muted-foreground">Total tradable pairs in Kraken universe</p>
             </div>
             <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-2xl font-bold" data-testid="text-universe-count">
-                {scanTick.krakenUniverseSize.toLocaleString()}
+              <p className="text-lg font-bold" data-testid="text-universe-count">
+                {scanData.krakenUniverseSize.toLocaleString()}
               </p>
               <span className="text-sm text-muted-foreground">pairs</span>
             </div>
@@ -334,7 +359,7 @@ export function FilterInsights() {
 
           <div className="border-t mb-6"></div>
 
-          {/* Section 2: Cycle Info - REB 2.8.2: Restored to 3-row layout with all fields */}
+          {/* Section 2: Cycle Info - REB 2.8.3: All fields from REST data */}
           <div className="mb-6">
             <h3 className="text-base font-semibold mb-3">Cycle Info</h3>
             {/* Row 1: Last Scan Time + Next Scan In */}
@@ -342,7 +367,7 @@ export function FilterInsights() {
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Last Scan Time</p>
                 <p className="text-sm font-medium" data-testid="text-last-scan">
-                  {new Date(scanTick.cycleEndTimestamp).toLocaleString()}
+                  {new Date(scanData.cycleEndTimestamp).toLocaleString()}
                 </p>
               </div>
               <div>
@@ -357,7 +382,7 @@ export function FilterInsights() {
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Cycle ID</p>
                 <p className="text-sm font-medium font-mono" data-testid="text-cycle-id">
-                  {scanTick.cycleId || 'N/A'}
+                  {scanData.cycleId || 'N/A'}
                 </p>
               </div>
               <div>
@@ -372,7 +397,7 @@ export function FilterInsights() {
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Cycles per Hour</p>
                 <p className="text-sm font-medium" data-testid="text-cycles-per-hour">
-                  {scanTick.cyclesPerHour !== undefined ? scanTick.cyclesPerHour.toFixed(1) : 'N/A'}
+                  {scanData.cyclesPerHour !== undefined ? scanData.cyclesPerHour.toFixed(1) : 'N/A'}
                 </p>
               </div>
             </div>
@@ -380,32 +405,32 @@ export function FilterInsights() {
 
           <div className="border-t mb-6"></div>
 
-          {/* Section 3: Last Scan Result - REB 2.8.2: Removed sub-header */}
+          {/* Section 3: Last Scan Result - REB 2.8.3: All fields from REST data */}
           <div className="mb-6">
             <h3 className="text-base font-semibold mb-3">Last Scan Result</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Evaluated (This Scan)</p>
-                <p className="text-2xl font-bold" data-testid="text-evaluated-count">
-                  {scanTick.evaluatedCount.toLocaleString()}
+                <p className="text-lg font-bold" data-testid="text-evaluated-count">
+                  {scanData.evaluatedCount.toLocaleString()}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Eligible (This Scan)</p>
-                <p className="text-2xl font-bold text-success" data-testid="text-eligible-count">
-                  {scanTick.eligibleCount}
+                <p className="text-lg font-bold text-success" data-testid="text-eligible-count">
+                  {scanData.eligibleCount}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Ineligible (This Scan)</p>
-                <p className="text-2xl font-bold text-muted-foreground" data-testid="text-ineligible-count">
-                  {scanTick.ineligibleCount}
+                <p className="text-lg font-bold text-muted-foreground" data-testid="text-ineligible-count">
+                  {scanData.ineligibleCount}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Eligible %</p>
                 <div className="flex items-baseline gap-2">
-                  <p className="text-2xl font-bold text-success" data-testid="text-eligible-percent">
+                  <p className="text-lg font-bold text-success" data-testid="text-eligible-percent">
                     {eligiblePercent}%
                   </p>
                 </div>
@@ -447,13 +472,13 @@ export function FilterInsights() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Total Evaluated (24h)</p>
-                    <p className="text-2xl font-bold" data-testid="text-24h-evaluated">
+                    <p className="text-lg font-bold" data-testid="text-24h-evaluated">
                       {scan24hData.data.totalEvaluated.toLocaleString()}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Unique Evaluated (24h)</p>
-                    <p className="text-2xl font-bold" data-testid="text-24h-unique-evaluated">
+                    <p className="text-lg font-bold" data-testid="text-24h-unique-evaluated">
                       {scan24hData.data.uniqueEvaluated.toLocaleString()}
                     </p>
                   </div>
@@ -462,13 +487,13 @@ export function FilterInsights() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Total Survived Filters (24h)</p>
-                    <p className="text-2xl font-bold text-success" data-testid="text-24h-survived">
+                    <p className="text-lg font-bold text-success" data-testid="text-24h-survived">
                       {scan24hData.data.totalSurvived.toLocaleString()}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Unique Survived Filters (24h)</p>
-                    <p className="text-2xl font-bold text-success" data-testid="text-24h-unique-survived">
+                    <p className="text-lg font-bold text-success" data-testid="text-24h-unique-survived">
                       {scan24hData.data.uniqueSurvived.toLocaleString()}
                     </p>
                   </div>
@@ -477,7 +502,7 @@ export function FilterInsights() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Total FX5 Cycles (Last 24h)</p>
-                    <p className="text-2xl font-bold" data-testid="text-24h-cycles">
+                    <p className="text-lg font-bold" data-testid="text-24h-cycles">
                       {scan24hData.data.totalCycles.toLocaleString()}
                     </p>
                   </div>
@@ -495,11 +520,11 @@ export function FilterInsights() {
             Active Filtered Pool (Deduped, Non-Expired)
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Total Active Filtered Pairs: <span className="font-semibold">{scanTick.activePoolCount || 0}</span>
+            Total Active Filtered Pairs: <span className="font-semibold">{scanData.activePoolCount || 0}</span>
           </p>
         </CardHeader>
         <CardContent>
-          {!scanTick.activeFilteredPool || scanTick.activeFilteredPool.length === 0 ? (
+          {!scanData.activeFilteredPool || scanData.activeFilteredPool.length === 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full" data-testid="table-active-pool">
                 <thead>
@@ -535,7 +560,7 @@ export function FilterInsights() {
                   </tr>
                 </thead>
                 <tbody>
-                  {scanTick.activeFilteredPool.slice(0, 20).map((pair, index) => {
+                  {scanData.activeFilteredPool.slice(0, 20).map((pair, index) => {
                     const firstSeenFormatted = formatScanTimestamp(pair.firstSeen);
                     const lastUpdatedFormatted = formatScanTimestamp(pair.lastUpdated);
                     
@@ -564,9 +589,9 @@ export function FilterInsights() {
                   })}
                 </tbody>
               </table>
-              {scanTick.activeFilteredPool.length > 20 && (
+              {scanData.activeFilteredPool.length > 20 && (
                 <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Showing 20 of {scanTick.activePoolCount} eligible pairs
+                  Showing 20 of {scanData.activePoolCount} eligible pairs
                 </p>
               )}
             </div>
@@ -588,11 +613,11 @@ export function FilterInsights() {
               <div className="mb-4 grid grid-cols-2 gap-4">
                 <div className="p-3 rounded-lg bg-muted/50">
                   <p className="text-xs text-muted-foreground mb-1">Total Evaluated</p>
-                  <p className="text-xl font-bold">{breakdown.evaluatedCount.toLocaleString()}</p>
+                  <p className="text-lg font-bold">{breakdown.evaluatedCount.toLocaleString()}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-success/10">
                   <p className="text-xs text-muted-foreground mb-1">Survived Filters</p>
-                  <p className="text-xl font-bold text-success">{breakdown.eligibleCount.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-success">{breakdown.eligibleCount.toLocaleString()}</p>
                 </div>
               </div>
               
@@ -611,16 +636,13 @@ export function FilterInsights() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-sm font-medium">{displayName}</span>
-                          {count === 0 && count !== undefined && (
-                            <span className="text-xs text-success">✓ Pass</span>
-                          )}
                         </div>
                         {description && (
                           <p className="text-xs text-muted-foreground mb-1">
                             {description}
                           </p>
                         )}
-                        {threshold && (
+                        {threshold && key !== 'passed_all_filters' && (
                           <p className="text-xs font-medium text-muted-foreground">
                             Threshold: {threshold}
                           </p>

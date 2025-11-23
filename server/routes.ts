@@ -6074,6 +6074,75 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // REB 2.8.3: Latest FX5 scan data from Stage-3 cache (REST endpoint for Filter Insights)
+  apiRouter.get('/paper-sim/diagnostics/scan-latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { stage3Cache } = await import('./services/stage3-state-cache.js');
+      const { scan24hAggregator } = await import('./services/scan-24h-aggregator.js');
+      const { mode } = req.query;
+      const scanMode = (mode as 'paper' | 'live') || 'paper';
+      
+      const scanState = stage3Cache.getState(scanMode);
+      const aggregatorStatus = scan24hAggregator.getStatus();
+      const isEngineActive = scanMode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
+      
+      // REB 2.8.3: If no scan state (engine STOPPED), return zeroed payload for Passive mode display
+      if (!scanState) {
+        return res.json({
+          ok: true,
+          data: {
+            cycleId: null,
+            cycleStartTimestamp: null,
+            cycleEndTimestamp: null,
+            krakenUniverseSize: 0,
+            evaluatedCount: 0,
+            eligibleCount: 0,
+            ineligibleCount: 0,
+            cyclesPerHour: 0,
+            cycleFrequencyMs: 30000, // Static default
+            nextScanInMs: 0,
+            activePoolCount: 0,
+            activeFilteredPool: [],
+            isEngineActive: false,
+          },
+        });
+      }
+      
+      // REB 2.8.3: Calculate ACTUAL time until next scan (server-side calculation)
+      const lastScanTime = new Date(scanState.cycleEndTimestamp).getTime();
+      const scanInterval = scanState.cycleFrequencyMs; // 30000ms
+      const nextScanTime = lastScanTime + scanInterval;
+      const currentServerTime = Date.now();
+      const actualNextScanInMs = Math.max(0, nextScanTime - currentServerTime);
+      
+      // Return latest scan record with all fields needed for Cycle Info and Last Scan Result
+      res.json({
+        ok: true,
+        data: {
+          cycleId: scanState.cycleId,
+          cycleStartTimestamp: scanState.cycleStartTimestamp,
+          cycleEndTimestamp: scanState.cycleEndTimestamp,
+          krakenUniverseSize: scanState.krakenUniverseSize,
+          evaluatedCount: scanState.evaluatedCount,
+          eligibleCount: scanState.eligibleCount,
+          ineligibleCount: scanState.ineligibleCount,
+          cyclesPerHour: scanState.cyclesPerHour,
+          cycleFrequencyMs: scanState.cycleFrequencyMs,
+          nextScanInMs: actualNextScanInMs, // REB 2.8.3: ACTUAL countdown value (server-calculated)
+          activePoolCount: scanState.activePoolCount,
+          activeFilteredPool: scanState.activeFilteredPool,
+          isEngineActive,
+        },
+      });
+    } catch (error) {
+      console.error('[ScanLatest] Error:', error);
+      res.status(500).json({ 
+        ok: false, 
+        error: error instanceof Error ? error.message : 'Failed to fetch latest scan data' 
+      });
+    }
+  });
+
   // Phase 27.F.14.DIAG: Last Cycle Telemetry (diagnostic endpoint)
   apiRouter.get('/paper-sim/last-cycle', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
