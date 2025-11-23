@@ -392,14 +392,12 @@ export function FilterInsights() {
                 </p>
               </div>
             </div>
-            {/* Row 3: Cycles per Hour */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Cycles per Hour</p>
-                <p className="text-sm font-medium" data-testid="text-cycles-per-hour">
-                  {scanData.cyclesPerHour !== undefined ? scanData.cyclesPerHour.toFixed(1) : 'N/A'}
-                </p>
-              </div>
+            {/* Row 3: Cycles per Hour (centered) */}
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-1">Cycles per Hour</p>
+              <p className="text-sm font-medium" data-testid="text-cycles-per-hour">
+                {scanData.cyclesPerHour !== undefined ? scanData.cyclesPerHour.toFixed(1) : 'N/A'}
+              </p>
             </div>
           </div>
 
