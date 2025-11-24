@@ -25,6 +25,7 @@ import { collectMixedBatch, BatchResult } from './market-scanner.js';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.js';
 import { scan24hAggregator } from './scan-24h-aggregator.js';
 import { systemConfigService } from './system-config.js';
+import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
 
 const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
@@ -189,10 +190,14 @@ export class Fx5ScannerService {
       
       const cycleStartTimestamp = new Date().toISOString();
       const cycleEndTimestamp = new Date().toISOString();
+      
+      // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
+      const scanCycleId = `cycle_${mode}_${nanoid(12)}`;
 
       // Update Stage-3 cache FIRST with Phase 8.6.7 metrics
       // REB 2.2: Use persistent Active Filter Pool instead of fresh pool
       await updateStage3Cache(mode, {
+        scanCycleId, // REB 2.8.4: Unique string ID for this scan
         cycleStartTimestamp,
         cycleEndTimestamp,
         krakenUniverseSize,

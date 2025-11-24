@@ -7,8 +7,9 @@ import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import ModeBanner from "@/components/mode-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Lightbulb, AlertTriangle } from "lucide-react";
+import { BarChart3, TrendingUp, Lightbulb, AlertTriangle, History } from "lucide-react";
 import { FilterInsights } from "@/components/trading/filter-insights";
+import { TradeHistoryTab } from "@/components/trading/trade-history-tab";
 import { Button } from "@/components/ui/button";
 
 interface ErrorBoundaryProps {
@@ -84,7 +85,7 @@ function TradingPageContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3" data-testid="trading-tabs">
+        <TabsList className="grid w-full grid-cols-4" data-testid="trading-tabs">
           <TabsTrigger value="open" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-open-trades">
             <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden xs:inline">Open Trades</span>
@@ -100,6 +101,11 @@ function TradingPageContent() {
             <span className="hidden xs:inline">Filter Insights</span>
             <span className="xs:hidden">Insights</span>
           </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-trade-history">
+            <History className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Trade History</span>
+            <span className="xs:hidden">History</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="open" className="mt-6">
@@ -112,6 +118,10 @@ function TradingPageContent() {
 
         <TabsContent value="insights" className="mt-6">
           <FilterInsights />
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-6">
+          <TradeHistoryTab />
         </TabsContent>
       </Tabs>
     </div>

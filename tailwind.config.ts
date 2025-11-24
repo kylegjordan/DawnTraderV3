@@ -44,6 +44,7 @@ export default {
           DEFAULT: "var(--destructive)",
           foreground: "var(--destructive-foreground)",
         },
+        success: "hsl(var(--success) / <alpha-value>)",
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",

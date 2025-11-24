@@ -40,7 +40,7 @@
   --chart-4: hsl(0, 84%, 60%);
   --chart-5: hsl(271, 76%, 53%);
   
-  --success: hsl(142, 76%, 36%);
+  --success: 142 76% 36%;
   --warning: hsl(38, 92%, 50%);
   
   --sidebar: hsl(0, 0%, 100%);
@@ -75,6 +75,10 @@
 }
 
 @layer utilities {
+  .text-success {
+    color: hsl(var(--success));
+  }
+  
   .glow {
     box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
   }
@@ -101,7 +105,7 @@
   }
   
   .status-dot.active {
-    background-color: var(--success);
+    background-color: hsl(var(--success));
     animation: pulse 2s infinite;
   }
   

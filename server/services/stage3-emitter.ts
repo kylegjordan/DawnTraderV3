@@ -151,6 +151,7 @@ class Stage3Emitter {
    * 
    * Phase 8.8.2-UI-FINAL-RESTORE: Also records cycle in 24h aggregator (explicit call, no monkey-patching)
    * REB 2.4 Stage-1f/1g/1h: Added stateVersion for atomic snapshot consistency
+   * REB 2.8.4: Zero out breakdown when engine STOPPED (passive learning mode)
    */
   emitScannerBreakdown(
     mode: 'paper' | 'live',
@@ -178,28 +179,48 @@ class Stage3Emitter {
       stage3Cache.updateState(mode, { stateVersion });
     }
 
-    // Validate truth constraint
-    const failureSum = 
-      breakdown.failed_min_volume +
-      breakdown.failed_spread +
-      breakdown.failed_daily_range +
-      breakdown.failed_min_price +
-      breakdown.failed_stablecoin +
-      breakdown.failed_quote_currency +
-      breakdown.failed_history +
-      breakdown.failed_market_cap +
-      breakdown.failed_guardrail_risk +
-      breakdown.already_active;
+    // REB 2.8.4: Check if engine is active - zero out breakdown if STOPPED
+    const aggregatorStatus = scan24hAggregator.getStatus();
+    const isEngineActive = mode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
+    
+    // REB 2.8.4: Use actual breakdown if engine ACTIVE, otherwise zero it out
+    const actualBreakdown = isEngineActive ? breakdown : {
+      failed_min_volume: 0,
+      failed_spread: 0,
+      failed_daily_range: 0,
+      failed_min_price: 0,
+      failed_stablecoin: 0,
+      failed_quote_currency: 0,
+      failed_history: 0,
+      failed_market_cap: 0,
+      failed_guardrail_risk: 0,
+      already_active: 0,
+      passed_all_filters: 0,
+    };
 
-    const expectedTotal = failureSum + breakdown.passed_all_filters;
-    const truthConstraintOk = expectedTotal === state.evaluatedCount;
+    // Validate truth constraint (use actual or zeroed evaluatedCount based on engine state)
+    const actualEvaluatedCount = isEngineActive ? state.evaluatedCount : 0;
+    const failureSum = 
+      actualBreakdown.failed_min_volume +
+      actualBreakdown.failed_spread +
+      actualBreakdown.failed_daily_range +
+      actualBreakdown.failed_min_price +
+      actualBreakdown.failed_stablecoin +
+      actualBreakdown.failed_quote_currency +
+      actualBreakdown.failed_history +
+      actualBreakdown.failed_market_cap +
+      actualBreakdown.failed_guardrail_risk +
+      actualBreakdown.already_active;
+
+    const expectedTotal = failureSum + actualBreakdown.passed_all_filters;
+    const truthConstraintOk = expectedTotal === actualEvaluatedCount;
 
     if (!truthConstraintOk) {
       console.error(`[Stage3Emitter] Truth constraint VIOLATED for ${mode}:`, {
-        evaluatedCount: state.evaluatedCount,
+        evaluatedCount: actualEvaluatedCount,
         breakdownSum: expectedTotal,
-        gap: state.evaluatedCount - expectedTotal,
-        breakdown,
+        gap: actualEvaluatedCount - expectedTotal,
+        breakdown: actualBreakdown,
       });
     }
 
@@ -208,10 +229,10 @@ class Stage3Emitter {
       cycleId: state.cycleId,
       stateVersion, // REB 2.4 Stage-1f: Match scan_tick version for atomic consistency
       window,
-      evaluatedCount: state.evaluatedCount,
-      eligibleCount: state.eligibleCount,
-      ineligibleCount: state.ineligibleCount,
-      breakdown,
+      evaluatedCount: actualEvaluatedCount, // REB 2.8.4: Trading metric - zero when STOPPED
+      eligibleCount: isEngineActive ? state.eligibleCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
+      ineligibleCount: isEngineActive ? state.ineligibleCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
+      breakdown: actualBreakdown, // REB 2.8.4: Use zeroed breakdown if engine STOPPED
       truthConstraintOk,
     };
 

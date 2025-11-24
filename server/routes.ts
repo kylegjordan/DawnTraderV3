@@ -6060,10 +6060,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const scanMode = (mode as 'paper' | 'live') || 'paper';
       
       const metrics = scan24hAggregator.getMetrics(scanMode);
+      const aggregatorStatus = scan24hAggregator.getStatus();
+      const isEngineActive = scanMode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
       
+      // REB 2.8.4: Zero out 24h trading metrics when engine STOPPED
+      // FX5 still runs for passive learning, but 24h metrics should be 0 when not actively trading
       res.json({
         ok: true,
-        data: metrics,
+        data: isEngineActive ? metrics : {
+          mode: scanMode,
+          totalCycles: 0,
+          totalEvaluated: 0,
+          totalSurvived: 0,
+          uniqueEvaluated: 0,
+          uniqueSurvived: 0,
+          windowStart: metrics.windowStart,
+          windowEnd: metrics.windowEnd,
+        },
       });
     } catch (error) {
       console.error('[Scan24h] Error:', error);
@@ -6092,6 +6105,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           ok: true,
           data: {
             cycleId: null,
+            scanCycleId: null, // REB 2.8.4: No unique scan ID when engine stopped
             cycleStartTimestamp: null,
             cycleEndTimestamp: null,
             krakenUniverseSize: 0,
@@ -6115,22 +6129,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const currentServerTime = Date.now();
       const actualNextScanInMs = Math.max(0, nextScanTime - currentServerTime);
       
-      // Return latest scan record with all fields needed for Cycle Info and Last Scan Result
+      // REB 2.8.4: Zero out trading metrics when engine STOPPED (passive learning only)
+      // FX5 still runs for passive learning, but trading metrics should be 0 when not actively trading
       res.json({
         ok: true,
         data: {
           cycleId: scanState.cycleId,
+          scanCycleId: scanState.scanCycleId, // REB 2.8.4: Unique string ID for this scan
           cycleStartTimestamp: scanState.cycleStartTimestamp,
           cycleEndTimestamp: scanState.cycleEndTimestamp,
           krakenUniverseSize: scanState.krakenUniverseSize,
-          evaluatedCount: scanState.evaluatedCount,
-          eligibleCount: scanState.eligibleCount,
-          ineligibleCount: scanState.ineligibleCount,
-          cyclesPerHour: scanState.cyclesPerHour,
+          evaluatedCount: isEngineActive ? scanState.evaluatedCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
+          eligibleCount: isEngineActive ? scanState.eligibleCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
+          ineligibleCount: isEngineActive ? scanState.ineligibleCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
+          cyclesPerHour: isEngineActive ? scanState.cyclesPerHour : 0, // REB 2.8.4: Trading metric - zero when STOPPED
           cycleFrequencyMs: scanState.cycleFrequencyMs,
           nextScanInMs: actualNextScanInMs, // REB 2.8.3: ACTUAL countdown value (server-calculated)
-          activePoolCount: scanState.activePoolCount,
-          activeFilteredPool: scanState.activeFilteredPool,
+          activePoolCount: isEngineActive ? scanState.activePoolCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
+          activeFilteredPool: isEngineActive ? scanState.activeFilteredPool : [], // REB 2.8.4: Trading metric - empty when STOPPED
           isEngineActive,
         },
       });

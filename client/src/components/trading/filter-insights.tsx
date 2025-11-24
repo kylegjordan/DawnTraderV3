@@ -83,6 +83,7 @@ interface Scan24hResponse {
 // REB 2.8.3: Latest scan data from REST endpoint (replaces WebSocket for Cycle Info + Last Scan Result)
 interface ScanLatestData {
   cycleId: number;
+  scanCycleId: string; // REB 2.8.4: Unique string ID for each scan cycle
   cycleStartTimestamp: string;
   cycleEndTimestamp: string;
   krakenUniverseSize: number;
@@ -346,14 +347,11 @@ export function FilterInsights() {
           {/* Section 1: Kraken Universe */}
           <div className="mb-6">
             <h3 className="text-base font-semibold mb-3">Kraken Universe</h3>
-            <div className="flex items-baseline gap-2">
-              <p className="text-xs text-muted-foreground">Total tradable pairs in Kraken universe</p>
-            </div>
-            <div className="flex items-baseline gap-2 mt-1">
-              <p className="text-lg font-bold" data-testid="text-universe-count">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="text-xs text-muted-foreground">Total Kraken Trading Pairs:</span>
+              <span className="text-sm font-semibold" data-testid="text-universe-count">
                 {scanData.krakenUniverseSize.toLocaleString()}
-              </p>
-              <span className="text-sm text-muted-foreground">pairs</span>
+              </span>
             </div>
           </div>
 
@@ -362,42 +360,44 @@ export function FilterInsights() {
           {/* Section 2: Cycle Info - REB 2.8.3: All fields from REST data */}
           <div className="mb-6">
             <h3 className="text-base font-semibold mb-3">Cycle Info</h3>
-            {/* Row 1: Cycle ID + Last Scan Time */}
-            <div className="grid grid-cols-2 gap-4 mb-3">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Cycle ID</p>
-                <p className="text-sm font-medium font-mono" data-testid="text-cycle-id">
-                  {scanData.cycleId || 'N/A'}
-                </p>
+            <div className="space-y-2">
+              {/* Row 1: Cycle ID (left) + Last Scan Time (right) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground">Last Scan Cycle ID:</span>
+                  <span className="text-sm font-semibold font-mono" data-testid="text-cycle-id">
+                    {scanData.scanCycleId || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground">Last Scan Time:</span>
+                  <span className="text-sm font-semibold" data-testid="text-last-scan">
+                    {new Date(scanData.cycleEndTimestamp).toLocaleString()}
+                  </span>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Last Scan Time</p>
-                <p className="text-sm font-medium" data-testid="text-last-scan">
-                  {new Date(scanData.cycleEndTimestamp).toLocaleString()}
-                </p>
+              {/* Row 2: Next Scan In (left) + Scan Frequency (right) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground">Next Scan In:</span>
+                  <span className="text-sm font-semibold" data-testid="text-next-scan-countdown">
+                    {countdownDisplay}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground">Scan Frequency:</span>
+                  <span className="text-sm font-semibold">
+                    {scanFrequency}
+                  </span>
+                </div>
               </div>
-            </div>
-            {/* Row 2: Next Scan In + Scan Frequency */}
-            <div className="grid grid-cols-2 gap-4 mb-3">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Next Scan In</p>
-                <p className="text-sm font-bold" data-testid="text-next-scan-countdown">
-                  {countdownDisplay}
-                </p>
+              {/* Row 3: Cycles per Hour (alone) */}
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-xs text-muted-foreground">Cycles per Hour:</span>
+                <span className="text-sm font-semibold text-blue-700" data-testid="text-cycles-per-hour">
+                  {scanData.cyclesPerHour !== undefined ? scanData.cyclesPerHour.toFixed(1) : 'N/A'}
+                </span>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Scan Frequency</p>
-                <p className="text-sm font-medium">
-                  {scanFrequency}
-                </p>
-              </div>
-            </div>
-            {/* Row 3: Cycles per Hour (centered) */}
-            <div className="text-center">
-              <p className="text-xs text-muted-foreground mb-1">Cycles per Hour</p>
-              <p className="text-sm font-medium" data-testid="text-cycles-per-hour">
-                {scanData.cyclesPerHour !== undefined ? scanData.cyclesPerHour.toFixed(1) : 'N/A'}
-              </p>
             </div>
           </div>
 
@@ -406,32 +406,28 @@ export function FilterInsights() {
           {/* Section 3: Last Scan Result - REB 2.8.3: All fields from REST data */}
           <div className="mb-6">
             <h3 className="text-base font-semibold mb-3">Last Scan Result</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Evaluated (This Scan)</p>
-                <p className="text-lg font-bold" data-testid="text-evaluated-count">
+            {/* Single row with evenly justified fields */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground">Evaluated This Scan:</span>
+                <span className="text-sm font-semibold" data-testid="text-evaluated-count">
                   {scanData.evaluatedCount.toLocaleString()}
-                </p>
+                </span>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Eligible (This Scan)</p>
-                <p className="text-lg font-bold text-success" data-testid="text-eligible-count">
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground">Eligible This Scan:</span>
+                <span className="text-sm font-semibold text-success" data-testid="text-eligible-count">
                   {scanData.eligibleCount}
-                </p>
+                </span>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Ineligible (This Scan)</p>
-                <p className="text-lg font-bold text-muted-foreground" data-testid="text-ineligible-count">
+              <div className="flex items-baseline gap-1">
+                <span className="text-xs text-muted-foreground">Ineligible This Scan:</span>
+                <span className="text-sm font-semibold text-muted-foreground" data-testid="text-ineligible-count">
                   {scanData.ineligibleCount}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Eligible %</p>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-lg font-bold text-success" data-testid="text-eligible-percent">
-                    {eligiblePercent}%
-                  </p>
-                </div>
+                </span>
+                <span className="text-xs text-muted-foreground font-medium" data-testid="text-eligible-percent">
+                  ({eligiblePercent}%)
+                </span>
               </div>
             </div>
           </div>
@@ -440,13 +436,8 @@ export function FilterInsights() {
 
           {/* Section 4: 24h Filter Activity - REB 2.8.2: Restructured into 3-row layout */}
           <div>
-            <h3 className="text-base font-semibold mb-1 flex items-center gap-2">
+            <h3 className="text-base font-semibold mb-1">
               24h Filter Activity
-              {!engineActive && (
-                <Badge variant="outline" className="text-xs border-warning text-warning">
-                  STOPPED
-                </Badge>
-              )}
             </h3>
             <p className="text-xs text-muted-foreground mb-3">
               Aggregated filter performance over the last 24 hours
@@ -465,45 +456,43 @@ export function FilterInsights() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {/* Row 1: Total Evaluated + Unique Evaluated */}
+              <div className="space-y-2">
+                {/* Row 1: Total Evaluated (left) + Unique Evaluated (right) */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Total Evaluated (24h)</p>
-                    <p className="text-lg font-bold" data-testid="text-24h-evaluated">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-xs text-muted-foreground">Total Evaluated (24h):</span>
+                    <span className="text-sm font-semibold" data-testid="text-24h-evaluated">
                       {scan24hData.data.totalEvaluated.toLocaleString()}
-                    </p>
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Unique Evaluated (24h)</p>
-                    <p className="text-lg font-bold" data-testid="text-24h-unique-evaluated">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-xs text-muted-foreground">Unique Evaluated (24h):</span>
+                    <span className="text-sm font-semibold" data-testid="text-24h-unique-evaluated">
                       {scan24hData.data.uniqueEvaluated.toLocaleString()}
-                    </p>
+                    </span>
                   </div>
                 </div>
-                {/* Row 2: Total Survived + Unique Survived */}
+                {/* Row 2: Total Survived (left) + Unique Survived (right) */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Total Survived Filters (24h)</p>
-                    <p className="text-lg font-bold text-success" data-testid="text-24h-survived">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-xs text-muted-foreground">Total Survived Filters (24h):</span>
+                    <span className="text-sm font-semibold text-success" data-testid="text-24h-survived">
                       {scan24hData.data.totalSurvived.toLocaleString()}
-                    </p>
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Unique Survived Filters (24h)</p>
-                    <p className="text-lg font-bold text-success" data-testid="text-24h-unique-survived">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-xs text-muted-foreground">Unique Survived Filters (24h):</span>
+                    <span className="text-sm font-semibold text-success" data-testid="text-24h-unique-survived">
                       {scan24hData.data.uniqueSurvived.toLocaleString()}
-                    </p>
+                    </span>
                   </div>
                 </div>
-                {/* Row 3: Total FX5 Cycles (always last) */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Total FX5 Cycles (Last 24h)</p>
-                    <p className="text-lg font-bold" data-testid="text-24h-cycles">
-                      {scan24hData.data.totalCycles.toLocaleString()}
-                    </p>
-                  </div>
+                {/* Row 3: Cycles (alone) */}
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground">Cycles (24h):</span>
+                  <span className="text-sm font-semibold text-blue-700" data-testid="text-24h-cycles">
+                    {scan24hData.data.totalCycles.toLocaleString()}
+                  </span>
                 </div>
               </div>
             )}
@@ -527,10 +516,10 @@ export function FilterInsights() {
               <table className="w-full" data-testid="table-active-pool">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                    <th className="text-left py-2 px-3 font-medium">Status</th>
-                    <th className="text-left py-2 px-3 font-medium">First Seen (this window)</th>
-                    <th className="text-left py-2 px-3 font-medium">Last Updated (this cycle)</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium">Symbol</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium">Status</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium">First Seen (this window)</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium">Last Updated (this cycle)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -551,10 +540,10 @@ export function FilterInsights() {
               <table className="w-full" data-testid="table-active-pool">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                    <th className="text-left py-2 px-3 font-medium">Status</th>
-                    <th className="text-left py-2 px-3 font-medium">First Seen (this window)</th>
-                    <th className="text-left py-2 px-3 font-medium">Last Updated (this cycle)</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium">Symbol</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium">Status</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium">First Seen (this window)</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium">Last Updated (this cycle)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -609,13 +598,13 @@ export function FilterInsights() {
           {breakdown ? (
             <>
               <div className="mb-4 grid grid-cols-2 gap-4">
-                <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-xs text-muted-foreground mb-1">Total Evaluated</p>
-                  <p className="text-lg font-bold">{breakdown.evaluatedCount.toLocaleString()}</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground">Total Evaluated:</span>
+                  <span className="text-sm font-semibold">{breakdown.evaluatedCount.toLocaleString()}</span>
                 </div>
-                <div className="p-3 rounded-lg bg-success/10">
-                  <p className="text-xs text-muted-foreground mb-1">Survived Filters</p>
-                  <p className="text-lg font-bold text-success">{breakdown.eligibleCount.toLocaleString()}</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground">Survived Filters:</span>
+                  <span className="text-sm font-semibold text-success">{breakdown.eligibleCount.toLocaleString()}</span>
                 </div>
               </div>
               
@@ -625,15 +614,22 @@ export function FilterInsights() {
                   const threshold = getThreshold(key);
                   const displayName = FILTER_DISPLAY_NAMES[key] || key;
                   const description = FILTER_DESCRIPTIONS[key];
+                  const isPassedAllFilters = key === 'passed_all_filters';
                   
                   return (
                     <div 
                       key={key} 
-                      className="flex items-start justify-between p-3 rounded border border-border hover:bg-muted/30"
+                      className={`flex items-start justify-between p-3 rounded border ${
+                        isPassedAllFilters 
+                          ? 'border-success bg-success/10' 
+                          : 'border-border hover:bg-muted/30'
+                      }`}
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium">{displayName}</span>
+                          <span className={`text-sm font-medium ${isPassedAllFilters ? 'text-success' : ''}`}>
+                            {displayName}
+                          </span>
                         </div>
                         {description && (
                           <p className="text-xs text-muted-foreground mb-1">
@@ -648,7 +644,7 @@ export function FilterInsights() {
                       </div>
                       <div className="ml-4 shrink-0">
                         <p 
-                          className="text-lg font-bold"
+                          className={`text-lg font-bold ${isPassedAllFilters ? 'text-success' : ''}`}
                           data-testid={`count-filter-${key}`}
                           data-count={count}
                         >
