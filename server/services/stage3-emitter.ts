@@ -179,27 +179,16 @@ class Stage3Emitter {
       stage3Cache.updateState(mode, { stateVersion });
     }
 
-    // REB 2.8.4: Check if engine is active - zero out breakdown if STOPPED
-    const aggregatorStatus = scan24hAggregator.getStatus();
-    const isEngineActive = mode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
+    // REB 2.8.4 DISABLED: Aggregator removal - no longer zero out based on stale aggregator state
+    // TODO: Engine state checking will be handled by frontend based on REST endpoint data
+    // const aggregatorStatus = scan24hAggregator.getStatus();
+    // const isEngineActive = mode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
     
-    // REB 2.8.4: Use actual breakdown if engine ACTIVE, otherwise zero it out
-    const actualBreakdown = isEngineActive ? breakdown : {
-      failed_min_volume: 0,
-      failed_spread: 0,
-      failed_daily_range: 0,
-      failed_min_price: 0,
-      failed_stablecoin: 0,
-      failed_quote_currency: 0,
-      failed_history: 0,
-      failed_market_cap: 0,
-      failed_guardrail_risk: 0,
-      already_active: 0,
-      passed_all_filters: 0,
-    };
+    // REB 2.8.4 DISABLED: Always use actual breakdown (no zeroing)
+    const actualBreakdown = breakdown;
 
-    // Validate truth constraint (use actual or zeroed evaluatedCount based on engine state)
-    const actualEvaluatedCount = isEngineActive ? state.evaluatedCount : 0;
+    // Validate truth constraint (use actual evaluatedCount)
+    const actualEvaluatedCount = state.evaluatedCount;
     const failureSum = 
       actualBreakdown.failed_min_volume +
       actualBreakdown.failed_spread +
@@ -229,10 +218,10 @@ class Stage3Emitter {
       cycleId: state.cycleId,
       stateVersion, // REB 2.4 Stage-1f: Match scan_tick version for atomic consistency
       window,
-      evaluatedCount: actualEvaluatedCount, // REB 2.8.4: Trading metric - zero when STOPPED
-      eligibleCount: isEngineActive ? state.eligibleCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
-      ineligibleCount: isEngineActive ? state.ineligibleCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
-      breakdown: actualBreakdown, // REB 2.8.4: Use zeroed breakdown if engine STOPPED
+      evaluatedCount: actualEvaluatedCount, // Always use actual count (no zeroing)
+      eligibleCount: state.eligibleCount, // Always use actual count (no zeroing)
+      ineligibleCount: state.ineligibleCount, // Always use actual count (no zeroing)
+      breakdown: actualBreakdown, // Always use actual breakdown (no zeroing)
       truthConstraintOk,
     };
 
@@ -245,8 +234,8 @@ class Stage3Emitter {
 
     console.log(`[STAGE1G][ACK] scanner:breakdown:${mode} broadcasted v=${stateVersion}`);
 
-    // Phase 8.8.2-UI-FINAL-RESTORE: Explicitly record cycle in 24h aggregator
-    // (replaces monkey-patching approach with clean explicit call)
+    // Phase 8.8.2-UI-FINAL-RESTORE: Temporarily keep aggregator recording for 24h metrics
+    // TODO: Remove this once FX5Scanner has native 24h accumulation
     scan24hAggregator.recordCycle(mode, {
       cycleId: state.cycleId,
       evaluatedCount: state.evaluatedCount,

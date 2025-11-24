@@ -159,6 +159,12 @@ class Scan24hAggregator {
       survivedSymbols?: string[];
     }
   ): void {
+    // Lazy initialization: auto-initialize on first use
+    if (!this.initialized) {
+      console.log('[Scan24hAggregator] Lazy initialization triggered by recordCycle');
+      this.initialize().catch(err => console.error('[Scan24hAggregator] Initialization failed:', err));
+    }
+    
     // Phase 8.8.2-DIAGNOSTIC: Log what we receive
     console.log('[Scan24hAggregator][recordCycle] Received:', {
       mode,

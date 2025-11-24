@@ -165,9 +165,9 @@ export class Fx5ScannerService {
       // REB 2.2/2.6: Passive mode enforcement - clear pool when engine stopped OR passiveLearning enabled
       console.log(`[8.6.7][DEBUG] FX5 scan complete - survivors.length=${survivors.length}, eligibleCount=${eligibleCount}`);
       
-      // Check if trading engine is active for this mode
-      const aggregatorStatus = scan24hAggregator.getStatus();
-      const isEngineActive = mode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
+      // Check if trading engine is active for this mode (from database, not aggregator)
+      const context = await storage.getSystemContext(mode);
+      const isEngineActive = context?.isEngineActive || false;
 
       // REB 2.6: Check passive learning flag (behavioral control)
       const isPassiveLearning = systemConfigService.isPassiveLearningEnabled();

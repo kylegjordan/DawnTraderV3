@@ -6052,19 +6052,22 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 8.8.2-UI-ROLLBACK: 24-hour scan activity metrics for Filter Insights Section 2
+  // Phase 8.8.2-UI-ROLLBACK: 24h metrics temporarily use aggregator (pending FX5-native implementation)
+  // TODO: Implement native 24h accumulation in FX5Scanner to replace aggregator
   apiRouter.get('/paper-sim/diagnostics/scan-24h', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { scan24hAggregator } = await import('./services/scan-24h-aggregator.js');
       const { mode } = req.query;
       const scanMode = (mode as 'paper' | 'live') || 'paper';
       
-      const metrics = scan24hAggregator.getMetrics(scanMode);
-      const aggregatorStatus = scan24hAggregator.getStatus();
-      const isEngineActive = scanMode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
+      // Check engine state from database (not aggregator status)
+      const context = await storage.getSystemContext(scanMode);
+      const isEngineActive = context?.isEngineActive || false;
       
-      // REB 2.8.4: Zero out 24h trading metrics when engine STOPPED
-      // FX5 still runs for passive learning, but 24h metrics should be 0 when not actively trading
+      // Use aggregator metrics (still functional for 24h tracking)
+      const metrics = scan24hAggregator.getMetrics(scanMode);
+      
+      // Return actual metrics if engine active, zeros if passive
       res.json({
         ok: true,
         data: isEngineActive ? metrics : {
@@ -6091,13 +6094,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/paper-sim/diagnostics/scan-latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { stage3Cache } = await import('./services/stage3-state-cache.js');
-      const { scan24hAggregator } = await import('./services/scan-24h-aggregator.js');
       const { mode } = req.query;
       const scanMode = (mode as 'paper' | 'live') || 'paper';
       
       const scanState = stage3Cache.getState(scanMode);
-      const aggregatorStatus = scan24hAggregator.getStatus();
-      const isEngineActive = scanMode === 'paper' ? aggregatorStatus.paperActive : aggregatorStatus.liveActive;
+      
+      // Check engine state from database (not aggregator)
+      const context = await storage.getSystemContext(scanMode);
+      const isEngineActive = context?.isEngineActive || false;
       
       // REB 2.8.3: If no scan state (engine STOPPED), return zeroed payload for Passive mode display
       if (!scanState) {
