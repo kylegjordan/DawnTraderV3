@@ -1,0 +1,210 @@
+✅ REB 2.8.10 — Portfolio Value Global Refresh Fix (Dashboard + Goals Engine)
+Directive for Replit
+
+Implement REB 2.8.10 to ensure that all modules using the portfolio value update instantly, including:
+
+Dashboard → Portfolio Value
+
+Dashboard → LATTi Goals & Guardrails
+
+Goals Engine → Projected Portfolio Growth
+
+Goals Engine → Active Preset
+
+Any component using portfolio values derived from /portfolio/* endpoints
+
+This is a global sync fix for all portfolio-dependent UI.
+
+🎯 SECTION A — Identify Every React Query That Loads Portfolio Data
+
+Search for every file that references any of these endpoints:
+
+Paper Mode
+
+/api/paper/portfolio/state
+
+/api/paper-sim/status
+
+Live Mode
+
+/api/portfolio/overview
+
+/api/portfolio/overview?mode=live
+
+/api/portfolio/metrics
+
+/api/portfolio/balance
+
+/api/trading/status
+
+Search terms:
+
+portfolio
+state
+overview
+projected
+goals
+growth
+latti
+allocation
+portfolioValue
+
+
+Produce a mapping file:
+
+📄 docs/restoration/reb2_reports/REB_2.8.10_PORTFOLIO_GLOBAL_QUERY_MAP.md
+
+This table should list:
+
+File	Component	Query Key	Endpoint	Refresh Triggered?	Needs Invalidation?
+🎯 SECTION B — Standardize All Portfolio Queries
+
+For every identified useQuery call that fetches portfolio data:
+
+Replace query settings with:
+refetchInterval: 5000,
+staleTime: 0,
+refetchOnWindowFocus: true,
+refetchOnReconnect: true,
+
+
+These must be applied to:
+
+Dashboard
+
+GoalsEngine index page
+
+GoalsEngine → ProjectedPortfolioGrowth
+
+GoalsEngine → LATTi Presets & Guardrails sections
+
+Any portfolio selectors used by Goal calculations
+
+🎯 SECTION C — Add Missing Query Invalidations
+STEP 1 — Update TopBar Invalidations
+
+TopBar already invalidates:
+
+✔ /api/paper/portfolio/state
+✔ /api/portfolio/overview?mode=live
+
+Add the remaining keys discovered in the mapping file:
+
+Must Add:
+await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/metrics'] });
+await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/balance'] });
+await queryClient.invalidateQueries({ queryKey: ['/api/goals-engine/state'] });
+await queryClient.invalidateQueries({ queryKey: ['portfolioValue'] });
+
+STEP 2 — Ensure Goals Engine queries refresh instantly
+
+Modify Goals Engine components:
+
+client/src/pages/goals-engine/index.tsx
+
+client/src/components/goals/projected-portfolio-growth.tsx
+
+client/src/components/goals/latti-presets.tsx
+
+client/src/components/goals/latti-guardrails.tsx
+
+Add after trading start/stop:
+
+queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+queryClient.invalidateQueries({ queryKey: ['/api/portfolio/metrics'] });
+queryClient.invalidateQueries({ queryKey: ['/api/goals-engine/state'] });
+
+🎯 SECTION D — Add Backend Event (Minimal)
+
+This is optional, but will give instant UI refresh even without polling.
+
+Add in:
+
+Paper Mode
+
+server/services/paper-sim-service.ts
+Inside startPaperSimulation() and stopPaperSimulation():
+
+tradingStateSync.broadcast('portfolio_balance_updated', {
+    mode: 'paper',
+    timestamp: Date.now()
+});
+
+Live Mode
+
+server/services/live-trading-service.ts
+
+tradingStateSync.broadcast('portfolio_balance_updated', {
+    mode: 'live',
+    timestamp: Date.now()
+});
+
+
+Do NOT send the actual balance — only send a signal to tell clients to refetch.
+
+🎯 SECTION E — Frontend Listener for Global Refresh
+
+In:
+client/src/hooks/useTradingWebSocket.ts (or equivalent)
+
+Add handler:
+
+if (event.type === 'portfolio_balance_updated') {
+    queryClient.invalidateQueries(); // global refresh
+}
+
+🎯 SECTION F — Verification Steps
+
+Replit must provide:
+
+📄 REB_2.8.10_PORTFOLIO_REFRESH_COMPLETION.md containing:
+
+File-by-file diff summary
+
+Mapping table of all portfolio queries
+
+Test log showing:
+
+Start paper trading → portfolio updates instantly in all modules
+
+Stop trading → portfolio updates instantly
+
+Update portfolio amount → all modules update instantly
+
+Screenshot of Dashboard
+
+Screenshot of Goals Engine → Projected Portfolio Growth
+
+Screenshot of LATTi Goals
+
+🧪 Expected Behavior After Fix
+✔ Dashboard Portfolio Value
+
+Refreshes instantly (<500 ms)
+
+✔ LATTi Goals & Guardrails
+
+Portfolio risk %, projected growth, guardrails all update instantly
+
+✔ Goals Engine → Projected Portfolio Growth
+
+Updates instantly on:
+
+changing portfolio value
+
+starting/stopping trading
+
+switching modes
+
+applying presets
+
+✔ No 1–5 minute delays
+
+All staleTimes are eliminated.
+
+✔ No more “navigate away then return”
+
+Updates happen in real-time.
