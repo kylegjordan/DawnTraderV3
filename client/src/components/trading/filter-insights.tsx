@@ -223,28 +223,25 @@ export function FilterInsights() {
   // REB 2.8.3: WebSocket state - ONLY for Filter Breakdown (scanner:breakdown:paper)
   const [breakdown, setBreakdown] = useState<ScannerBreakdownPayload | null>(null);
   
-  // REB 2.8.3: Track when REST data was fetched to calculate elapsed time
+  // REB 2.8.5A: Track when REST data was fetched for countdown calculation
   const [restFetchTime, setRestFetchTime] = useState<number>(Date.now());
 
-  // REB 2.8.3: Query latest scan data from REST (replaces WebSocket for Cycle Info + Last Scan Result)
+  // REB 2.8.5A: Query latest scan data from REST (replaces WebSocket for Cycle Info + Last Scan Result)
   const { data: scanLatestData, isLoading: isLoadingScan } = useQuery<ScanLatestResponse>({
     queryKey: ['/api/paper-sim/diagnostics/scan-latest?mode=paper'],
     refetchInterval: 5000, // Refresh every 5 seconds for near-real-time updates
     refetchOnWindowFocus: true,
+    onSuccess: () => {
+      // REB 2.8.5A: Update fetch time only on successful fetch (not when nextScanInMs is already 0)
+      setRestFetchTime(Date.now());
+    },
   });
 
-  // REB 2.8.3: Update fetch timestamp whenever REST data changes
-  useEffect(() => {
-    if (scanLatestData?.data) {
-      setRestFetchTime(Date.now());
-    }
-  }, [scanLatestData]);
-
-  // Query for 24h scan activity metrics
+  // REB 2.8.5A: Query for 24h scan activity metrics (now using FX5-native window)
   const { data: scan24hData, isLoading: isLoading24h } = useQuery<Scan24hResponse>({
     queryKey: ['/api/paper-sim/diagnostics/scan-24h?mode=paper'],
-    refetchInterval: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    refetchInterval: 30 * 1000, // Refresh every 30s for more responsive updates
+    refetchOnWindowFocus: true,
   });
 
   // Query for filter settings (thresholds)
@@ -275,17 +272,14 @@ export function FilterInsights() {
     return () => clearInterval(interval);
   }, []);
 
-  // REB 2.8.3: Calculate live countdown by decrementing server value based on elapsed time
-  // Server provides nextScanInMs at time of fetch, we subtract elapsed time for live countdown
+  // REB 2.8.5A: Calculate live countdown by decrementing server value based on elapsed time
+  // Server calculates nextScanInMs at response time, we subtract elapsed time for live countdown
   const serverNextScanMs = scanLatestData?.data?.nextScanInMs ?? 0;
   const elapsedSinceFetch = currentTime - restFetchTime;
-  const timeUntilRefresh = Math.max(0, serverNextScanMs - elapsedSinceFetch);
+  const remainingMs = Math.max(0, serverNextScanMs - elapsedSinceFetch);
   
-  const minutesUntilRefresh = Math.floor(timeUntilRefresh / (60 * 1000));
-  const secondsRemainder = Math.floor((timeUntilRefresh % (60 * 1000)) / 1000);
-  const countdownDisplay = minutesUntilRefresh > 0 
-    ? `${minutesUntilRefresh}m ${secondsRemainder}s` 
-    : `${secondsRemainder}s`;
+  const nextScanSeconds = Math.floor(remainingMs / 1000);
+  const countdownDisplay = nextScanSeconds > 0 ? `${nextScanSeconds}s` : '0s';
 
   // Helper to get threshold text for a filter
   const getThreshold = (filterKey: string): string | null => {
