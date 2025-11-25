@@ -237,6 +237,19 @@ This is a high-risk operation and requires your explicit consent.`;
         }).catch((err: Error) => {
           console.error('[41F-B][BROADCAST] Error broadcasting live mode activation:', err);
         });
+        
+        // REB 2.8.10: Emit portfolio_balance_updated event to trigger frontend refresh
+        contextBridge.broadcast({
+          type: 'portfolio_balance_updated',
+          payload: {
+            mode: 'live',
+            timestamp: Date.now(),
+          },
+          userId,
+        }).catch((err: Error) => {
+          console.error('[REB 2.8.10] Error broadcasting portfolio_balance_updated:', err);
+        });
+        console.log('[REB 2.8.10] portfolio_balance_updated event emitted for live trading start');
       }
       
       return queueResult;
@@ -360,6 +373,19 @@ This is a high-risk operation and requires your explicit consent.`;
         }).catch((err: Error) => {
           console.error('[41F-B][BROADCAST] Error broadcasting live mode stop:', err);
         });
+        
+        // REB 2.8.10: Emit portfolio_balance_updated event to trigger frontend refresh
+        contextBridge.broadcast({
+          type: 'portfolio_balance_updated',
+          payload: {
+            mode: 'live',
+            timestamp: Date.now(),
+          },
+          userId,
+        }).catch((err: Error) => {
+          console.error('[REB 2.8.10] Error broadcasting portfolio_balance_updated:', err);
+        });
+        console.log('[REB 2.8.10] portfolio_balance_updated event emitted for live trading stop');
       }
       
       return queueResult;
