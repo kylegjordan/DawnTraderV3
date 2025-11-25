@@ -305,8 +305,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       }
       
       // REB 2.8.9: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.9] Invalidating portfolio queries after trading start');
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      console.log('[REB 2.8.9] Invalidating portfolio queries after paper trading start');
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       
@@ -342,7 +341,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       
       // REB 2.8.9: Invalidate portfolio queries for immediate balance update
       console.log('[REB 2.8.9] Invalidating portfolio queries after new simulation start');
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       
@@ -368,8 +366,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       
       // REB 2.8.9: Invalidate portfolio queries for immediate balance update
       console.log('[REB 2.8.9] Invalidating portfolio queries after live trading start');
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
       
       // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
@@ -412,8 +409,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       
       // REB 2.8.9: Invalidate portfolio queries for immediate balance update
       console.log('[REB 2.8.9] Invalidating portfolio queries after live trading stop');
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
       
       // Phase 33.A: Toast removed - WebSocket will trigger UI feedback

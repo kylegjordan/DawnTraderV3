@@ -62,8 +62,7 @@ const { data: portfolioState } = useQuery({
 **After**:
 ```typescript
 // REB 2.8.9: Invalidate portfolio queries for immediate balance update
-console.log('[REB 2.8.9] Invalidating portfolio queries after trading start');
-await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+console.log('[REB 2.8.9] Invalidating portfolio queries after paper trading start');
 await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
 await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
 ```
@@ -75,7 +74,6 @@ await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
 ```typescript
 // REB 2.8.9: Invalidate portfolio queries for immediate balance update
 console.log('[REB 2.8.9] Invalidating portfolio queries after new simulation start');
-await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
 await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
 await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
 ```
@@ -87,8 +85,7 @@ await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
 ```typescript
 // REB 2.8.9: Invalidate portfolio queries for immediate balance update
 console.log('[REB 2.8.9] Invalidating portfolio queries after live trading start');
-await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
-await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
 await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
 ```
 
@@ -99,8 +96,7 @@ await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
 ```typescript
 // REB 2.8.9: Invalidate portfolio queries for immediate balance update
 console.log('[REB 2.8.9] Invalidating portfolio queries after live trading stop');
-await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
-await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
 await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
 ```
 
@@ -144,10 +140,17 @@ await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
 ## Query Invalidation Pattern
 
 ### Standard Pattern Used
+
+**Paper Trading**:
 ```typescript
-await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
 await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
-await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });  // or /api/trading/status
+await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+```
+
+**Live Trading**:
+```typescript
+await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
+await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
 ```
 
 ### How It Works
@@ -159,9 +162,14 @@ await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });  /
 6. Background polling continues at 5-second intervals
 
 ### Queries Invalidated
-- **`/api/portfolio/overview`**: Total balance, P&L, asset allocation
-- **`/api/paper/portfolio/state`**: Detailed portfolio state for current mode
-- **`/api/paper-sim/status`** or **`/api/trading/status`**: Trading engine status
+
+**Paper Mode**:
+- **`/api/paper/portfolio/state`**: Paper trading portfolio state
+- **`/api/paper-sim/status`**: Paper simulation engine status
+
+**Live Mode**:
+- **`/api/portfolio/overview?mode=live`**: Live portfolio overview with mode parameter
+- **`/api/trading/status`**: Live trading engine status
 
 ## Testing & Validation
 
@@ -189,7 +197,7 @@ await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });  /
 ## Console Logging
 All invalidation operations include debug logging:
 ```
-[REB 2.8.9] Invalidating portfolio queries after trading start
+[REB 2.8.9] Invalidating portfolio queries after paper trading start
 [REB 2.8.9] Invalidating portfolio queries after new simulation start
 [REB 2.8.9] Invalidating portfolio queries after live trading start
 [REB 2.8.9] Invalidating portfolio queries after live trading stop
