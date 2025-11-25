@@ -1,0 +1,105 @@
+LEASE FILL IN THE TABLES EXACTLY AS PROVIDED
+
+Below are the tables and questions that must be filled out exactly as structured.
+Do not skip columns.
+Do not skip rows.
+Do not change wording.
+Do not infer “expected” values.
+Just fill in what the current code is using today.
+
+When a field is not wired to any data source, write:
+(no source)
+When a value is hard-coded, write:
+(hard-coded)
+All backend sources must be REST or FX5 internal state only.
+No WebSocket events should appear in any answer.
+
+🟦 TABLE 1 — TOP SECTION FIELD MAPPING (FILL THIS OUT COMPLETELY)
+
+Columns Repl.it must fill in:
+
+UI Field Name	Current Backend Source (REST Endpoint or FX5 internal state)	Current Field Name Used in Code	Actual Values Observed in UI	Expected Correct Source (based on truth)	Notes on Discrepancy
+Rows to fill in (one per line exactly):
+Kraken Universe Section
+
+Kraken Universe — Total Pairs
+
+Cycle Info Section
+
+Last Scan Cycle ID
+
+Last Scan Time
+
+Next Scan In
+
+Scan Frequency
+
+Cycles per Hour
+
+Last Scan Result Section
+
+Evaluated (This Scan)
+
+Eligible (This Scan)
+
+Ineligible (This Scan)
+
+Eligible % (calculated client-side)
+
+24h Filter Activity Section
+
+Total Evaluated (24h)
+
+Unique Evaluated (24h)
+
+Total Survived Filters (24h)
+
+Unique Survived Filters (24h)
+
+Cycles (24h)
+
+🟦 TABLE 2 — ACTIVE FILTERED POOL (TRIGGER & DATA SOURCES)
+
+Fill in the table below to identify what currently triggers the Active Filtered Pool table and what data source it actually uses.
+
+Question	Your Answer
+What backend source currently determines whether the Active Filtered Pool table becomes visible or stays empty?	
+What field or endpoint currently provides the Active Filtered Pool list?	
+What exact value is the frontend reading to display “Total Active Filtered Pairs”?	
+Why does the table never populate even when Eligible > 0?	
+What prevents the Active Filtered Pool rows from ever rendering?	
+🟦 TABLE 3 — FILTER BREAKDOWN (24H AGGREGATION LOGIC)
+
+Please answer the following questions so we can understand why the Filter Breakdown is only showing the latest scan instead of 24-hour aggregation.
+
+Question	Your Answer
+What data source is currently populating the Filter Breakdown category counts?	
+Is the Filter Breakdown using only the latest scan results?	
+What backend logic (if any) currently performs 24h accumulation for breakdown counts?	
+Since the legacy 24h aggregator is removed, what code now tracks 24h accumulation?	
+If no 24h logic exists, confirm that the Filter Breakdown is currently non-aggregated.	
+What backend endpoint or state would be required to produce correct 24h aggregation?	
+🟦 REQUIREMENTS FOR COMPLETION
+
+Do not redesign anything.
+
+Do not implement fixes yet.
+
+Simply fill the tables with current-state mapping, as-is.
+
+All backend source fields must reference:
+
+/api/paper-sim/diagnostics/scan-latest
+
+/api/paper-sim/diagnostics/scan-24h
+
+or internal FX5 scanner state
+
+No WebSockets should appear anywhere in the mapping.
+
+If a field is using a placeholder or hard-coded default, label it clearly.
+
+If a field has no source, write (no source).
+
+Once you return the filled tables,
+I will provide the corrected mapping table and next steps for implementation.
