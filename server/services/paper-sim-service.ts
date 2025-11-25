@@ -11,6 +11,7 @@ import type { InsertPaperSimSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from './kraken.js';
 import { paperOperationQueue } from '../utils/operation-queue.js';
+import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 
 console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
 console.log('[41F][QUEUE] Paper operation queue integrated');
@@ -577,6 +578,11 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
           runForMs: runDuration,
         });
         console.log(`[41E-S][TIMING] DB session update completed in ${Date.now() - t1}ms`);
+
+        // REB 2.8.5C: Reset 24h window and hourly scan history on ACTIVE → STOPPED
+        console.log('[REB 2.8.5C] Resetting FX5 24h window and hourly scan history for paper mode');
+        reset24hWindow('paper');
+        resetHourlyScanHistory('paper');
 
         console.log(`[PaperSimService] Stopped session: ${existingSession.sessionId}, duration: ${runDuration}ms`);
         console.log('[PaperSimService] Manager cleared (service + global), DB session ended');

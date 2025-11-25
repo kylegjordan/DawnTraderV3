@@ -1,0 +1,621 @@
+REB 2.8.5C – Filter Insights Top Metrics Truth Fix (Countdown, Cycles/Hour, 24h Reset)
+Scope
+This micro-phase is only about the top metrics block on Trading → Filter Insights:
+
+
+Kraken Universe
+
+
+Cycle Info
+
+
+Last Scan Result
+
+
+24h Filter Activity
+
+
+Do not change:
+
+
+Active Filtered Pool
+
+
+Filter Breakdown (Last 24h)
+
+
+Any legacy scan24hAggregator code (must remain unused / not re-introduced)
+
+
+Use only the new FX5 24h window module and existing REST endpoints
+/api/paper-sim/diagnostics/scan-latest and /api/paper-sim/diagnostics/scan-24h.
+At the end, please create a new report:
+docs/restoration/reb2_reports/REB_2.8.5C_PRIMARY_METRICS_TRUTH_FIX_COMPLETION.md
+(see “Reporting” section).
+
+1. Truth Behavior – STOPPED vs ACTIVE
+Assume Trading toggle in the header is the engine state:
+
+
+STOPPED → trading engine OFF (passive learning only)
+
+
+ACTIVE → trading engine ON (paper trading)
+
+
+1.1 While STOPPED (Passive Learning)
+Top section should behave as follows even if FX5 is still scanning in the background:
+
+
+Kraken Universe
+
+
+Shows the correct Kraken tradable pair count (non-zero).
+
+
+OK as currently implemented.
+
+
+
+
+Cycle Info
+
+
+Last Scan Cycle ID: updates each FX5 scan (as it does now).
+
+
+Last Scan Time: updates each FX5 scan (same as now).
+
+
+Next Scan In: shows a smooth 30-second countdown that never gets stuck at 0s. It should continuously cycle 30 → … → 0 → 30 → … even when STOPPED.
+
+
+Cycles per Hour: must show 0.0 when STOPPED (see section 3).
+
+
+
+
+Last Scan Result
+
+
+Evaluated / Eligible / Ineligible counts must all be 0.
+
+
+Eligible % should be 0.0% or equivalent.
+
+
+This is currently correct; don’t change the source.
+
+
+
+
+24h Filter Activity
+
+
+All five metrics must be 0 while STOPPED:
+
+
+Total Evaluated (24h)
+
+
+Unique Evaluated (24h)
+
+
+Total Survived Filters (24h)
+
+
+Unique Survived Filters (24h)
+
+
+Cycles (24h)
+
+
+
+
+When trading is stopped, the UI must not show non-zero residual 24h values from the previous run.
+
+
+
+
+1.2 While ACTIVE (Trading ON)
+
+
+Cycle Info
+
+
+All four fields must update in real time:
+
+
+Cycle ID, Last Scan Time, Next Scan In, Cycles per Hour.
+
+
+
+
+
+
+Last Scan Result
+
+
+Already correct: Evaluated always 60, Eligible/Ineligible vary per scan, Eligible % derived in UI.
+
+
+
+
+24h Filter Activity
+
+
+Already aggregates correctly while trading is ACTIVE:
+
+
+All counts and Cycles (24h) accumulate across scans.
+
+
+
+
+The only required change is reset behavior when trading stops (section 4).
+
+
+
+
+
+2. Fix “Next Scan In” Countdown (scan-latest)
+Symptoms now:
+
+
+In both STOPPED and ACTIVE states, Next Scan In shows 0s and does not count down.
+
+
+Required behavior:
+
+
+Countdown must work in both STOPPED and ACTIVE states.
+
+
+It must reflect the real FX5 scan cadence (every 30s), not a hardcoded or zero value.
+
+
+2.1 Backend – /scan-latest nextScanInMs
+In server/routes.ts (the scan-latest handler), please ensure:
+
+
+When a scanState exists (FX5 has completed ≥ 1 scan):
+const lastScanTime = new Date(scanState.cycleEndTimestamp).getTime();
+const scanIntervalMs = scanState.cycleFrequencyMs ?? 30000; // 30s default
+const nextScanTime = lastScanTime + scanIntervalMs;
+const now = Date.now();
+
+const nextScanInMs = Math.max(0, nextScanTime - now);
+
+
+
+Do NOT override nextScanInMs to 0 based on engine state.
+
+
+nextScanInMs must always be the real time until the next FX5 scan, regardless of ACTIVE/STOPPED.
+
+
+
+
+When the scanner has just started and there is no scanState yet:
+Use the fx5Scanner.getStartTime(mode) you added in REB 2.8.5B:
+const startTime = fx5Scanner.getStartTime(mode);
+const scanIntervalMs = 30000; // 30s
+const nextScanTime = startTime + scanIntervalMs;
+const now = Date.now();
+
+const nextScanInMs = Math.max(0, nextScanTime - now);
+
+
+
+The JSON response must always include:
+{
+  "ok": true,
+  "data": {
+    ...
+    "nextScanInMs": <non-negative integer>,
+    ...
+  }
+}
+
+and must never be hard-coded to 0 except in the millisecond or two right before the next scan.
+
+
+2.2 Frontend – Filter Insights countdown
+In client/src/components/trading/filter-insights.tsx:
+
+
+Keep using the existing REST-based countdown logic (which was already correct):
+const serverNextScanMs = scanLatestData?.data?.nextScanInMs ?? 0;
+const elapsedSinceFetch = currentTime - restFetchTime;
+const timeUntilRefresh = Math.max(0, serverNextScanMs - elapsedSinceFetch);
+
+
+
+Confirm that:
+
+
+restFetchTime is set in the onSuccess callback of the scan-latest query.
+
+
+currentTime is updated with a setInterval every 1s.
+
+
+There is no extra logic that forces timeUntilRefresh to 0 based on engine state.
+
+
+
+
+Result: Next Scan In shows a smooth 30-second countdown in both STOPPED and ACTIVE.
+
+3. Fix Cycles per Hour Semantics
+Symptoms now:
+
+
+cyclesPerHour increments on every scan, even in STOPPED (passive) mode.
+
+
+After stopping trading, cyclesPerHour continues to count up instead of returning to 0.
+
+
+Required truth:
+
+
+cyclesPerHour in the top Cycle Info block must represent trading activity only:
+
+
+While STOPPED → cyclesPerHour = 0.0
+
+
+While ACTIVE → count of trading scan cycles in the last hour.
+
+
+
+
+We are not trying to show “FX5 health” here; it should reflect trading.
+3.1 Backend – FX5 24h window module
+Using the new fx5-24h-window.ts module:
+
+
+Add a function to clear the hourly scan history for a given mode:
+export function resetHourlyScanHistory(mode: Fx5Mode) {
+  hourlyScanTimestamps[mode] = [];
+}
+
+(Use whatever internal structure you already use for getCyclesPerHour.)
+
+
+Update recordScanCompletion(mode) so it only records when trading is ACTIVE:
+
+
+Get engine state via your existing storage or context:
+const context = await storage.getSystemContext(mode);
+const isActive = context?.engineState === 'ACTIVE'; // or equivalent
+
+
+
+Only append timestamps for cycles-per-hour when isActive is true.
+
+
+When isActive is false, do not record the scan in the hourly list.
+
+
+
+
+On engine state change from ACTIVE → STOPPED:
+
+
+Wherever you handle engine state transitions (e.g. in your sim service / engine controller), when you detect:
+previousState === 'ACTIVE' && newState === 'STOPPED'
+
+call:
+resetHourlyScanHistory('paper'); // and 'live' if needed
+
+
+
+This ensures getCyclesPerHour(mode) returns 0 immediately after stopping trading.
+
+
+
+
+/scan-latest must use this trading-only getCyclesPerHour(mode) when populating data.cyclesPerHour.
+
+
+Result:
+
+
+STOPPED → cyclesPerHour immediately 0.0
+
+
+ACTIVE → shows count of trading scans in the last 60 minutes
+
+
+Restarting trading starts from 0 again, not from a previous session’s value.
+
+
+
+4. Fix 24h Filter Activity Reset on Stop
+Current behavior:
+
+
+While ACTIVE, the 24h block now aggregates correctly. ✅
+
+
+When you toggle trading to STOPPED, the 24h counts stay at their last values.
+
+
+When you start trading again, the new counts continue from the old values instead of starting from 0.
+
+
+Required truth:
+
+
+24h Filter Activity is meant to show trading-session activity, not historical FX5 scans across sessions.
+
+
+When trading is STOPPED:
+
+
+All 24h metrics in the UI must be 0.
+
+
+
+
+When trading is started again:
+
+
+Counts must begin from 0, not from old values.
+
+
+
+
+4.1 Backend – FX5 24h window
+Using fx5-24h-window.ts:
+
+
+Add a function to fully reset the 24h window for a given mode:
+export function reset24hWindow(mode: Fx5Mode) {
+  totals[mode] = {
+    totalEvaluated: 0,
+    totalSurvived: 0,
+    uniqueEvaluated: new Set(),
+    uniqueSurvivors: new Set(),
+    cycles: 0,
+  };
+  // Also clear any per-scan timestamp arrays you use for pruning:
+  scanTimestamps[mode] = [];
+}
+
+
+
+On engine state change ACTIVE → STOPPED:
+
+
+In the same place where you reset hourly history (section 3.1), also call:
+reset24hWindow('paper'); // and 'live' as appropriate
+
+
+
+
+
+/scan-24h endpoint:
+
+
+Continue to use the 24h window module, but after the above resets, its output for a STOPPED engine will already be zeroed.
+
+
+Optionally (extra safety) you can also gate the response:
+const isActive = context?.engineState === 'ACTIVE';
+if (!isActive) {
+  return res.json({
+    ok: true,
+    data: {
+      totalEvaluated: 0,
+      uniqueEvaluated: 0,
+      totalSurvived: 0,
+      uniqueSurvived: 0,
+      cycles24h: 0,
+    },
+  });
+}
+
+
+
+Important: Do not re-introduce or call the legacy scan24hAggregator here.
+
+
+
+
+Result:
+
+
+When trading is STOPPED, 24h block shows all zeros.
+
+
+When trading is started again, counts begin from 0 and aggregate correctly during that session.
+
+
+
+5. What NOT to Change in This Micro-Phase
+
+
+Do not change:
+
+
+Active Filtered Pool behavior.
+
+
+Filter Breakdown (Last 24h) numbers or WebSocket wiring.
+
+
+
+
+Do not re-import or use the legacy scan24hAggregator anywhere.
+
+
+Do not change any UI layout, fonts, or colors – we’re only fixing data behavior.
+
+
+Those will be covered in later micro-phases.
+
+6. Testing Matrix
+Please validate and include results in the completion report.
+
+
+STOPPED → Passive learning after fresh server restart
+
+
+Trading toggle = STOPPED, Paper mode.
+
+
+Observe for at least 3–4 FX5 cycles:
+
+
+Cycle ID & Last Scan Time update every ~30s.
+
+
+Next Scan In counts 30 → … → 0 → 30… continuously.
+
+
+Cycles per Hour = 0.0.
+
+
+Last Scan Result: 0 | 0 | 0.
+
+
+24h Filter Activity: all zeros.
+
+
+
+
+
+
+ACTIVE trading session
+
+
+Start a new paper simulation.
+
+
+After several minutes:
+
+
+Next Scan In counts down correctly between scans.
+
+
+Cycles per Hour shows a positive value, increasing as expected.
+
+
+Last Scan Result matches per-scan values.
+
+
+24h Filter Activity shows non-zero totals and Cycles(24h) increments.
+
+
+
+
+
+
+ACTIVE → STOPPED transition
+
+
+While metrics are non-zero, toggle Trading to STOPPED.
+
+
+Confirm in the next REST responses:
+
+
+cyclesPerHour returns 0.0.
+
+
+All 24h metrics return 0.
+
+
+Next Scan In countdown continues (because FX5 still scans).
+
+
+
+
+
+
+STOPPED → ACTIVE restart
+
+
+Start paper trading again.
+
+
+Confirm:
+
+
+24h metrics start from 0 and aggregate from the new session only.
+
+
+Cycles per Hour starts from 0 and builds up again.
+
+
+
+
+
+
+
+7. Reporting
+When finished, please create:
+docs/restoration/reb2_reports/REB_2.8.5C_PRIMARY_METRICS_TRUTH_FIX_COMPLETION.md
+Include:
+
+
+Summary of fixes (per section 2–4 above).
+
+
+Field mapping table for the top section only, with:
+
+
+UI Label
+
+
+Endpoint
+
+
+JSON path
+
+
+Engine state (STOPPED / ACTIVE)
+
+
+Expected example values
+
+
+
+
+Before/after behavior notes for:
+
+
+Next Scan In
+
+
+Cycles per Hour
+
+
+24h Filter Activity reset on STOP
+
+
+
+
+Testing logs:
+
+
+At least one sampled JSON payload from /scan-latest and /scan-24h
+
+
+While STOPPED, after several scans
+
+
+While ACTIVE, mid-session
+
+
+Immediately after ACTIVE → STOPPED
+
+
+
+
+
+
+This will let me download and verify everything that was changed.

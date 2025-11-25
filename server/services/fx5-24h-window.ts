@@ -83,14 +83,21 @@ export function recordScanFor24h(
 
 /**
  * Record scan completion timestamp for cyclesPerHour tracking
- * REB 2.8.5B: Updated to use current timestamp
+ * REB 2.8.5C: Changed semantics to TRADING-ONLY (not FX5 health)
  * 
  * @param mode - paper or live
+ * @param isEngineActive - whether trading engine is ACTIVE for this mode
  * 
- * Note: This tracks ALL scans (ACTIVE and passive) to give accurate
- * cyclesPerHour metric reflecting actual FX5 performance
+ * Note: This now tracks ONLY ACTIVE trading scans (changed from 2.8.5B)
+ * to reflect trading activity, not FX5 scanner health
  */
-export function recordScanCompletion(mode: Mode): void {
+export function recordScanCompletion(mode: Mode, isEngineActive: boolean): void {
+  if (!isEngineActive) {
+    // REB 2.8.5C: cyclesPerHour must represent trading activity only
+    // Do not record STOPPED (passive learning) scans
+    return;
+  }
+
   const now = Date.now();
   const history = scanHistoryByMode.get(mode) ?? { timestamps: [] };
   history.timestamps.push(now);
@@ -198,6 +205,23 @@ export function clear24hWindow(mode: Mode): void {
 export function clearCyclesHistory(mode: Mode): void {
   scanHistoryByMode.delete(mode);
   console.log(`[FX5-24h] Cleared ${mode} cycles history`);
+}
+
+// REB 2.8.5C: Directive-specified function names for reset operations
+/**
+ * Reset 24h window for a mode (REB 2.8.5C directive name)
+ * Alias for clear24hWindow()
+ */
+export function reset24hWindow(mode: Mode): void {
+  clear24hWindow(mode);
+}
+
+/**
+ * Reset hourly scan history for a mode (REB 2.8.5C directive name)
+ * Alias for clearCyclesHistory()
+ */
+export function resetHourlyScanHistory(mode: Mode): void {
+  clearCyclesHistory(mode);
 }
 
 /**

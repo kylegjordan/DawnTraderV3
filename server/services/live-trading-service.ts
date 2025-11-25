@@ -15,6 +15,7 @@ import type { ActionResult } from './nlai-action-registry';
 import { permissionCache } from './permission-cache.js';
 import type { UserRole } from '../config/permissions.js';
 import { liveOperationQueue } from '../utils/operation-queue';
+import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 
 // Initialize ExecutionPolicyController instance
 const executionPolicyController = new ExecutionPolicyController(storage as any);
@@ -292,6 +293,11 @@ This is a high-risk operation and requires your explicit consent.`;
 
       // 3. Remove session
       this.sessions.delete(userId);
+
+      // REB 2.8.5C: Reset 24h window and hourly scan history on ACTIVE → STOPPED
+      console.log('[REB 2.8.5C] Resetting FX5 24h window and hourly scan history for live mode');
+      reset24hWindow('live');
+      resetHourlyScanHistory('live');
 
       // 4. Emit cluster bus event
       try {

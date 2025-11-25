@@ -237,9 +237,9 @@ export class Fx5ScannerService {
       // REB 2.8.5A: Record scan completion for FX5-native 24h window & cycles per hour tracking
       const completedAt = Date.now();
       
-      // Track cycles per hour (all scans, ACTIVE or passive)
-      // REB 2.8.5B: No timestamp parameter needed (uses current time internally)
-      recordScanCompletion(mode);
+      // Track cycles per hour (ONLY when engine is ACTIVE)
+      // REB 2.8.5C: Changed semantics from "FX5 health" to "trading activity only"
+      recordScanCompletion(mode, isEngineActive);
       
       // Track 24h metrics (ONLY when engine is ACTIVE)
       recordScanFor24h(
