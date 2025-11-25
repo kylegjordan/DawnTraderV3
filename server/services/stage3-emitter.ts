@@ -1,6 +1,5 @@
 import { contextBridge } from './context-bridge.js';
 import { stage3Cache, Stage3State, ActiveFilteredPair } from './stage3-state-cache.js';
-import { scan24hAggregator } from './scan-24h-aggregator.js';
 
 // Phase 8.8.2B: Corrected FilterBreakdown schema (per future-state blueprint)
 // Removed: failed_blacklist, failed_whitelist, strategy_none_triggered
@@ -234,15 +233,8 @@ class Stage3Emitter {
 
     console.log(`[STAGE1G][ACK] scanner:breakdown:${mode} broadcasted v=${stateVersion}`);
 
-    // Phase 8.8.2-UI-FINAL-RESTORE: Temporarily keep aggregator recording for 24h metrics
-    // TODO: Remove this once FX5Scanner has native 24h accumulation
-    scan24hAggregator.recordCycle(mode, {
-      cycleId: state.cycleId,
-      evaluatedCount: state.evaluatedCount,
-      eligibleCount: state.eligibleCount,
-      evaluatedSymbols: scanData?.evaluatedSymbols,
-      survivedSymbols: scanData?.survivedSymbols,
-    });
+    // REB 2.8.5A: Legacy aggregator removed - 24h tracking now handled by fx5-24h-window.ts
+    // Recording happens in fx5-scanner.ts via recordScanFor24h() after scan completes
 
     console.log(`[Stage3Emitter] Emitted scanner:breakdown:${mode}:`, {
       cycleId: payload.cycleId,

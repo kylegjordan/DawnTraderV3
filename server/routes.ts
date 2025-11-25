@@ -6052,34 +6052,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 8.8.2-UI-ROLLBACK: 24h metrics temporarily use aggregator (pending FX5-native implementation)
-  // TODO: Implement native 24h accumulation in FX5Scanner to replace aggregator
+  // REB 2.8.5A: 24h metrics now use FX5-native window (legacy aggregator removed)
   apiRouter.get('/paper-sim/diagnostics/scan-24h', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { scan24hAggregator } = await import('./services/scan-24h-aggregator.js');
+      const { get24hSummary } = await import('./services/fx5-24h-window.js');
       const { mode } = req.query;
       const scanMode = (mode as 'paper' | 'live') || 'paper';
       
-      // Check engine state from database (not aggregator status)
-      const context = await storage.getSystemContext(scanMode);
-      const isEngineActive = context?.isEngineActive || false;
+      // Get 24h summary from FX5-native window
+      // This automatically returns zeros when no ACTIVE cycles in window
+      const summary = get24hSummary(scanMode);
       
-      // Use aggregator metrics (still functional for 24h tracking)
-      const metrics = scan24hAggregator.getMetrics(scanMode);
-      
-      // Return actual metrics if engine active, zeros if passive
       res.json({
         ok: true,
-        data: isEngineActive ? metrics : {
-          mode: scanMode,
-          totalCycles: 0,
-          totalEvaluated: 0,
-          totalSurvived: 0,
-          uniqueEvaluated: 0,
-          uniqueSurvived: 0,
-          windowStart: metrics.windowStart,
-          windowEnd: metrics.windowEnd,
-        },
+        data: summary,
       });
     } catch (error) {
       console.error('[Scan24h] Error:', error);
@@ -6134,7 +6120,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const actualNextScanInMs = Math.max(0, nextScanTime - currentServerTime);
       
       // REB 2.8.4: Zero out trading metrics when engine STOPPED (passive learning only)
-      // FX5 still runs for passive learning, but trading metrics should be 0 when not actively trading
+      // REB 2.8.5A: cyclesPerHour reflects FX5 scan health, NOT zeroed when STOPPED
       res.json({
         ok: true,
         data: {
@@ -6146,7 +6132,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           evaluatedCount: isEngineActive ? scanState.evaluatedCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
           eligibleCount: isEngineActive ? scanState.eligibleCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
           ineligibleCount: isEngineActive ? scanState.ineligibleCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED
-          cyclesPerHour: isEngineActive ? scanState.cyclesPerHour : 0, // REB 2.8.4: Trading metric - zero when STOPPED
+          cyclesPerHour: scanState.cyclesPerHour, // REB 2.8.5A: Real FX5 scan health (NOT zeroed when STOPPED)
           cycleFrequencyMs: scanState.cycleFrequencyMs,
           nextScanInMs: actualNextScanInMs, // REB 2.8.3: ACTUAL countdown value (server-calculated)
           activePoolCount: isEngineActive ? scanState.activePoolCount : 0, // REB 2.8.4: Trading metric - zero when STOPPED

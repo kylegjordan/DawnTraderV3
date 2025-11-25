@@ -23,10 +23,10 @@ import { updateStage3Cache } from './stage3-state-cache.js';
 import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
 import { collectMixedBatch, BatchResult } from './market-scanner.js';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.js';
-import { scan24hAggregator } from './scan-24h-aggregator.js';
 import { systemConfigService } from './system-config.js';
 import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
+import { recordScanFor24h, recordScanCompletion, getCyclesPerHour } from './fx5-24h-window.js';
 
 const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
 const CYCLES_PER_HOUR = Math.round(3600000 / SCAN_INTERVAL_MS); // 120 for 30s intervals
@@ -194,6 +194,9 @@ export class Fx5ScannerService {
       // REB 2.8.4: Generate unique scan cycle ID (survives server restarts)
       const scanCycleId = `cycle_${mode}_${nanoid(12)}`;
 
+      // REB 2.8.5A: Get real cycles per hour from tracking (not hard-coded)
+      const cyclesPerHour = getCyclesPerHour(mode);
+
       // Update Stage-3 cache FIRST with Phase 8.6.7 metrics
       // REB 2.2: Use persistent Active Filter Pool instead of fresh pool
       await updateStage3Cache(mode, {
@@ -210,7 +213,7 @@ export class Fx5ScannerService {
           topEndUniverseSize,  // 100 (Top-N universe size)
           tierBUniverseSize,   // 1,270 (Tier-B universe size)
         },
-        cyclesPerHour: CYCLES_PER_HOUR,
+        cyclesPerHour, // REB 2.8.5A: Real cycles per hour from tracking
         cycleFrequencyMs: SCAN_INTERVAL_MS,
         nextScanInMs: SCAN_INTERVAL_MS,
         activePoolCount: activeFilteredPoolEntries.length, // REB 2.2: Use actual pool size
@@ -223,6 +226,26 @@ export class Fx5ScannerService {
       const evaluatedSymbols = survivors.map(s => s.symbol); // All evaluated symbols from batch
       const survivedSymbols = survivors.map(s => s.symbol);   // All survivors
       await emitStage3Events(mode, breakdown, { evaluatedSymbols, survivedSymbols });
+
+      // REB 2.8.5A: Record scan completion for FX5-native 24h window & cycles per hour tracking
+      const completedAt = Date.now();
+      
+      // Track cycles per hour (all scans, ACTIVE or passive)
+      recordScanCompletion(mode, completedAt);
+      
+      // Track 24h metrics (ONLY when engine is ACTIVE)
+      recordScanFor24h(
+        mode,
+        {
+          cycleId: scanCycleId,
+          completedAt,
+          evaluatedCount,
+          eligibleCount,
+          evaluatedSymbols,
+          survivedSymbols,
+        },
+        isEngineActive
+      );
 
       console.log(`[FX5Scanner][${mode}] ✅ Scan complete (evaluated=${evaluatedCount}, eligible=${eligibleCount})`);
 

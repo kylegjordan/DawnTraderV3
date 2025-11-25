@@ -1,0 +1,401 @@
+REB 2.8.5A – Filter Insights Top Metrics (REST + 24h Aggregation)
+Scope
+This micro-phase focuses on the top Filter Insights card only (see attached truth screenshots from Nov 18, 2025):
+
+
+Kraken Universe
+
+
+Cycle Info (Last Scan Cycle ID, Last Scan Time, Next Scan In, Scan Frequency, Cycles per Hour)
+
+
+Last Scan Result (Evaluated / Eligible / Ineligible This Scan + Eligible %)
+
+
+24h Filter Activity (Total / Unique Evaluated & Survived, Cycles 24h)
+
+
+Goals:
+
+
+Ensure all fields are driven purely by REST, with no WebSocket fallbacks.
+
+
+Implement a clean 24h aggregation path for the 24h metrics that does not rely on the legacy scan24hAggregator module.
+
+
+Fix the countdown and cycles per hour semantics so they reflect real FX5 behaviour.
+
+
+Preserve the passive-mode behaviour we already validated (zeros when engine STOPPED, no stale trading numbers).
+
+
+Use testuser123 in paper mode for your testing unless otherwise specified.
+
+1. Top-Card Source-of-Truth Mapping (Must End Here)
+1.1 REST Endpoints
+For this micro-phase, the only allowed backend sources for the top card are:
+
+
+/api/paper-sim/diagnostics/scan-latest?mode=paper
+
+
+/api/paper-sim/diagnostics/scan-24h?mode=paper
+
+
+There must be no WebSocket usage and no other endpoints for these four sections.
+1.2 Field Mapping Table – REQUIRED FINAL STATE
+Please make sure each row below matches the implementation exactly.
+(If your file/line numbers differ, just adjust, but the sources and logic must match.)
+Table A – Kraken Universe & Cycle Info
+SectionUI LabelUI Field / Variable (TSX)Required Backend SourceBackend Field PathTransform / LogicBehaviour ACTIVE vs STOPPEDKraken UniverseTotal tradable pairs in Kraken universescanData?.krakenUniverseSize (from scanLatestData)GET /api/paper-sim/diagnostics/scan-latest?mode=paperdata.krakenUniverseSizeDisplay with toLocaleString() and “pairs” labelSame value in ACTIVE & STOPPED (universe is static)Cycle InfoLast Scan Cycle IDscanData?.cycleId/api/paper-sim/diagnostics/scan-latestdata.cycleIdRender full cycle ID string (e.g. cycle_paper_3-kJhD6HsP1S0), no hard-coded fallbackUpdates every 30s in both modes (shows most recent FX5 cycle)Cycle InfoLast Scan TimescanData?.cycleEndTimestamp/api/paper-sim/diagnostics/scan-latestdata.cycleEndTimestampnew Date(cycleEndTimestamp).toLocaleString() in the user’s local timezone, including secondsUpdates every 30s; may show last passive scan when STOPPED (OK)Cycle InfoNext Scan InnextScanSeconds/api/paper-sim/diagnostics/scan-latestdata.nextScanInMsBackend returns actual ms until next scan at fetch time. Front-end decrements locally (see Section 2).In ACTIVE: live countdown 30→0 each cycle; In STOPPED: always 0Cycle InfoScan Frequencystatic textnone (static)n/aAlways display Every 30s (or Every 30 seconds), not computedSame label in both modesCycle InfoCycles per HourscanData?.cyclesPerHour/api/paper-sim/diagnostics/scan-latestdata.cyclesPerHourServer-calculated (see Section 3) – not hard-coded. Display with toFixed(1) or similar & blue number stylingIn ACTIVE: reflects real rate; In STOPPED: 0.0
+Table B – Last Scan Result
+SectionUI LabelUI Field / VariableRequired Backend SourceBackend Field PathLogic / NotesLast Scan ResultEvaluated (This Scan)scanData?.evaluatedCount/api/paper-sim/diagnostics/scan-latestdata.evaluatedCountBatch size per FX5 scan (typically 60).Last Scan ResultEligible (This Scan)scanData?.eligibleCount/api/paper-sim/diagnostics/scan-latestdata.eligibleCountSurvivors that passed all FX5 filters.Last Scan ResultIneligible (This Scan)scanData?.ineligibleCount/api/paper-sim/diagnostics/scan-latestdata.ineligibleCountMust satisfy ineligibleCount = evaluatedCount - eligibleCount (or receive directly if backend provides it).Last Scan ResultEligible %calculated in UIderives from evaluatedCount & eligibleCountn/aeligiblePct = evaluatedCount ? (eligibleCount / evaluatedCount) * 100 : 0; toFixed(1) plus %. Ineligible % inferred as 100 – eligiblePct.
+Rule:
+These fields must not use any WebSocket payload or any hard-coded values.
+Table C – 24h Filter Activity
+SectionUI LabelUI Field / VariableRequired Backend SourceBackend Field PathLogic / Notes (must match)24h Filter ActivityTotal Evaluated (24h)activity24h?.totalEvaluatedGET /api/paper-sim/diagnostics/scan-24h?mode=paperdata.totalEvaluatedSum of evaluatedCount over all ACTIVE cycles in last 24h (see Section 4).24h Filter ActivityTotal Survived Filters (24h)activity24h?.totalSurvivedsamedata.totalSurvivedSum of eligibleCount over all ACTIVE cycles in last 24h.24h Filter ActivityUnique Evaluated (24h)activity24h?.uniqueEvaluatedsamedata.uniqueEvaluatedCount of distinct symbols ever evaluated in any ACTIVE cycle in last 24h.24h Filter ActivityUnique Survived (24h)activity24h?.uniqueSurvivedsamedata.uniqueSurvivedDistinct symbols that passed all filters at least once in last 24h (ACTIVE cycles only).24h Filter ActivityCycles (24h)activity24h?.totalCycles (or cyclesLast24h, choose one name and use consistently)samedata.totalCyclesNumber of FX5 scan cycles considered in the 24h window (ACTIVE only).
+Behaviour requirement for 24h section:
+
+
+ACTIVE: show real 24h numbers according to the aggregation logic below.
+
+
+STOPPED (Passive Learning): show 0 for all 24h metrics (no passive accumulation), but do not hide the fields. A small “24h metrics only accumulate when engine is ACTIVE” note is OK.
+
+
+
+2. Next Scan Countdown – Correct Behaviour
+2.1 Backend: true “time until next scan”
+/api/paper-sim/diagnostics/scan-latest must continue to compute nextScanInMs on the server like this (or equivalent):
+const lastScanTime = new Date(scanState.cycleEndTimestamp).getTime();   // ms
+const scanInterval = scanState.cycleFrequencyMs; // normally 30000
+const nextScanTime = lastScanTime + scanInterval;
+const now = Date.now();
+const nextScanInMs = Math.max(0, nextScanTime - now);
+
+
+
+When the engine is ACTIVE, this should return something between 0 and scanInterval.
+
+
+When the engine is STOPPED, return 0 for nextScanInMs.
+
+
+2.2 Front-end: live countdown using REST only
+In filter-insights.tsx:
+
+
+Keep a currentTime state updated via setInterval every 1s.
+
+
+Track the time of the last successful REST fetch for scan-latest:
+const [restFetchTime, setRestFetchTime] = useState<number>(Date.now());
+
+const { data: scanLatestData } = useQuery(/* ... */, {
+  // existing options
+  onSuccess: () => setRestFetchTime(Date.now()),
+});
+
+
+
+Compute the countdown purely from REST:
+const serverNextScanMs = scanLatestData?.data?.nextScanInMs ?? 0;
+const elapsedSinceFetch = currentTime - restFetchTime;
+const remainingMs = Math.max(0, serverNextScanMs - elapsedSinceFetch);
+const nextScanSeconds = Math.floor(remainingMs / 1000);
+
+
+
+Display nextScanSeconds as the “Next Scan In” value.
+
+
+Important implementation notes:
+
+
+Do not involve any WebSocket payload here.
+
+
+Do not reset restFetchTime when nextScanInMs is already 0; otherwise the timer can “stick” at 0. Only update restFetchTime in the onSuccess handler of the query.
+
+
+The behaviour we want (and that Kyle is already seeing partially) is:
+
+
+Count down 30→0.
+
+
+When a new scan completes, REST returns a fresh nextScanInMs from ~30000, and the next countdown begins.
+
+
+If REST polling frequency is 5s, the countdown will “jump” in 5s chunks but should never oscillate or stick at >0.
+
+
+
+
+
+3. Cycles per Hour – Real Calculation, No Hard-Coding
+Right now, cyclesPerHour is effectively a hard-coded 120.0. That’s not acceptable – it should reflect actual FX5 performance.
+3.1 Backend calculation (recommended)
+Implement cyclesPerHour on the server side (in the service that feeds scan-latest) roughly as:
+// Per mode, keep a rolling array of recent cycle completion timestamps (in ms)
+interface ScanHistory {
+  timestamps: number[];
+}
+
+const scanHistoryByMode = new Map<string, ScanHistory>();
+
+export function recordScanCompletion(mode: 'paper' | 'live', completedAt: number) {
+  const history = scanHistoryByMode.get(mode) ?? { timestamps: [] };
+  history.timestamps.push(completedAt);
+
+  // Keep only the last 60 minutes
+  const oneHourAgo = completedAt - 60 * 60 * 1000;
+  history.timestamps = history.timestamps.filter(ts => ts >= oneHourAgo);
+
+  scanHistoryByMode.set(mode, history);
+}
+
+export function getCyclesPerHour(mode: 'paper' | 'live'): number {
+  const history = scanHistoryByMode.get(mode);
+  if (!history || history.timestamps.length === 0) return 0;
+  return history.timestamps.length; // “cycles in last hour” ≈ “cycles per hour”
+}
+
+
+
+Call recordScanCompletion(mode, Date.now()) once per FX5 scan when it finishes.
+
+
+In your scan-latest handler, set:
+const cyclesPerHour = getCyclesPerHour(mode);
+
+
+
+Return this in the scan-latest payload as data.cyclesPerHour.
+
+
+3.2 Front-end display
+
+
+Use only the cyclesPerHour value from the scan-latest response.
+
+
+No WebSocket, no client-side math.
+
+
+Format e.g. cyclesPerHour.toFixed(1) and style in blue as you’re already doing.
+
+
+When the engine is STOPPED, recordScanCompletion should still be called if FX5 keeps scanning in passive mode – but the 24h aggregation will later be gated to ACTIVE. For the top card specifically, it’s acceptable for cyclesPerHour to gradually drop or reflect the current scan health.
+
+4. 24h Filter Activity – REST-Only Aggregation (No Legacy Aggregator)
+4.1 Remove usage of the legacy scan24hAggregator
+For this micro-phase:
+
+
+Do not use server/services/scan-24h-aggregator.ts or any scan24hAggregator.* calls for the 24h metrics.
+
+
+If the file still exists, it must not be imported or referenced by the code paths serving /api/paper-sim/diagnostics/scan-24h.
+
+
+All 24h metrics should instead be computed by a lightweight FX5-specific 24h window implemented alongside the FX5 scanner / diagnostics.
+4.2 Implement a simple FX5 24h window
+Create a small module (conceptually similar to the previous market-scanner 24h window) that:
+interface Scan24hEntry {
+  cycleId: string;
+  completedAt: number;       // ms timestamp
+  evaluatedCount: number;
+  eligibleCount: number;
+  evaluatedSymbols: string[]; // or Set<string> if you prefer
+  survivedSymbols: string[];
+}
+
+type Mode = 'paper' | 'live';
+
+const windowByMode = new Map<Mode, Scan24hEntry[]>();
+
+Recording logic:
+
+
+Add a function like:
+function recordScanFor24h(mode: Mode, entry: Scan24hEntry, isEngineActive: boolean) {
+  if (!isEngineActive) {
+    // 24h metrics must only track ACTIVE trading cycles
+    return;
+  }
+
+  const now = entry.completedAt;
+  const window = windowByMode.get(mode) ?? [];
+  window.push(entry);
+
+  const cutoff = now - 24 * 60 * 60 * 1000;
+  const trimmed = window.filter(e => e.completedAt >= cutoff);
+
+  windowByMode.set(mode, trimmed);
+}
+
+
+
+Call this from wherever you already know all of these values – e.g. the same place that updates Stage-3 state and emits the scan-latest data:
+recordScanFor24h(mode, {
+  cycleId,
+  completedAt: Date.now(),
+  evaluatedCount,
+  eligibleCount,
+  evaluatedSymbols, // deduped list of symbols touched in this cycle
+  survivedSymbols,  // deduped survivors
+}, isEngineActive /* from engine state for this mode */);
+
+
+
+Only record when the trading engine is ACTIVE for that mode (paper in your test).
+
+
+In passive learning / STOPPED state, FX5 may still scan, but do not track those scans in this 24h window.
+
+
+
+
+Aggregation logic for /scan-24h:
+In the handler for GET /api/paper-sim/diagnostics/scan-24h?mode=paper, compute:
+function get24hSummary(mode: Mode): Scan24hResponse {
+  const window = windowByMode.get(mode) ?? [];
+  if (window.length === 0) {
+    return {
+      mode,
+      totalCycles: 0,
+      totalEvaluated: 0,
+      totalSurvived: 0,
+      uniqueEvaluated: 0,
+      uniqueSurvived: 0,
+      windowStart: null, // or ISO of now-24h; UI doesn’t rely heavily on this
+      windowEnd: new Date().toISOString(),
+    };
+  }
+
+  const totalCycles = window.length;
+  const totalEvaluated = window.reduce((sum, e) => sum + e.evaluatedCount, 0);
+  const totalSurvived = window.reduce((sum, e) => sum + e.eligibleCount, 0);
+
+  const evaluatedSet = new Set<string>();
+  const survivedSet = new Set<string>();
+  for (const e of window) {
+    e.evaluatedSymbols.forEach(s => evaluatedSet.add(s));
+    e.survivedSymbols.forEach(s => survivedSet.add(s));
+  }
+
+  const uniqueEvaluated = evaluatedSet.size;
+  const uniqueSurvived = survivedSet.size;
+
+  const windowStart = new Date(window[0].completedAt).toISOString();
+  const windowEnd = new Date(window[window.length - 1].completedAt).toISOString();
+
+  return {
+    mode,
+    totalCycles,
+    totalEvaluated,
+    totalSurvived,
+    uniqueEvaluated,
+    uniqueSurvived,
+    windowStart,
+    windowEnd,
+  };
+}
+
+The route should simply:
+apiRouter.get('/paper-sim/diagnostics/scan-24h', (req, res) => {
+  const mode = (req.query.mode as Mode) ?? 'paper';
+  const summary = get24hSummary(mode);
+  res.json({ ok: true, data: summary });
+});
+
+Key constraints:
+
+
+This window is fed directly by FX5 and gated by engine ACTIVE state.
+
+
+It does not depend on any legacy aggregator module.
+
+
+It ignores passive learning scans, which matches the truth screenshots and your expectations.
+
+
+4.3 Front-end behaviour for 24h section
+
+
+Use a useQuery hook to fetch /api/paper-sim/diagnostics/scan-24h?mode=paper every ~30–60s.
+
+
+Bind the UI fields exactly to activity24h as described in Table C.
+
+
+When the engine is STOPPED for that mode, the 24h window will be empty → everything renders as 0.
+
+
+It’s OK to keep a small text note like “24h metrics only accumulate when trading engine is ACTIVE,” but do not hide the numbers.
+
+
+
+
+
+5. Acceptance Criteria for Micro-Phase 1 (Top Card Only)
+Using testuser123 in paper mode:
+
+
+Passive mode (Trading toggle OFF, passive learning ON)
+
+
+Kraken universe shows 1,386 pairs (or whatever real value) and matches your truth screenshot.
+
+
+Countdown runs; cycle ID and last scan time update every 30 seconds.
+
+
+Last Scan Result shows small per-scan numbers but does not accumulate 24h metrics.
+
+
+All 24h Filter Activity values are 0.
+
+
+
+
+Active trading session (Trading toggle ON, new simulation started)
+
+
+Countdown runs 30→0.
+
+
+Cycle ID changes each scan; last scan time updates correctly.
+
+
+Last Scan Result fields update every cycle: evaluated (60), eligible/ineligible counts and % all make sense.
+
+
+After several minutes of ACTIVE trading:
+
+
+24h Total Evaluated / Survived / Unique Evaluated / Unique Survived / Cycles all become non-zero and grow as more cycles complete.
+
+
+Turning trading OFF stops further growth in those 24h values.
+
+
+
+
+
+
+No WebSocket or legacy aggregator dependencies
+
+
+There are no references to scan_tick or scanner:breakdown in the code paths that feed the top card.
+
+
+There are no imports or calls to scan24hAggregator in the top-card pipeline or /scan-24h endpoint.
+
+
+
+
+Once this micro-phase is complete and stable, we’ll proceed with Micro-Phase 2 (Passive learning & Active Filtered Pool) and then Micro-Phase 3 (Filter Breakdown 24h aggregation).
