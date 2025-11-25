@@ -64,6 +64,16 @@ interface ScannerBreakdownPayload {
   truthConstraintOk: boolean;
 }
 
+interface Breakdown24h {
+  survived: number;
+  ineligible: number;
+  byFilter: Record<string, {
+    name: string;
+    failedCount: number;
+    survivedCount: number;
+  }>;
+}
+
 interface Scan24hMetrics {
   mode: 'paper' | 'live';
   totalCycles: number;
@@ -73,6 +83,7 @@ interface Scan24hMetrics {
   uniqueSurvived: number;
   windowStart: string;
   windowEnd: string;
+  breakdown24h: Breakdown24h; // REB 2.8.8: Filter-level breakdown over 24h
 }
 
 interface Scan24hResponse {
@@ -220,8 +231,7 @@ export function FilterInsights() {
   const { messages: wsMessages } = useWebSocket();
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
   
-  // REB 2.8.3: WebSocket state - ONLY for Filter Breakdown (scanner:breakdown:paper)
-  const [breakdown, setBreakdown] = useState<ScannerBreakdownPayload | null>(null);
+  // REB 2.8.8: breakdown state REMOVED - now using REST-only (scan24hData.breakdown24h)
   
   // REB 2.8.5A: Track when REST data was fetched for countdown calculation
   const [restFetchTime, setRestFetchTime] = useState<number>(Date.now());
@@ -255,16 +265,7 @@ export function FilterInsights() {
     }
   }, [scanLatestData]);
 
-  // Listen for scanner:breakdown WebSocket events (still needed for Filter Breakdown)
-  useEffect(() => {
-    const breakdownEvents = wsMessages.filter((msg: any) => 
-      (msg.type === 'scanner:breakdown:paper' || msg.type === 'scanner:breakdown') && msg.payload?.mode === 'paper'
-    );
-    if (breakdownEvents.length > 0) {
-      const latestBreakdown = breakdownEvents[breakdownEvents.length - 1].payload as ScannerBreakdownPayload;
-      setBreakdown(latestBreakdown);
-    }
-  }, [wsMessages]);
+  // REB 2.8.8: WebSocket breakdown listener REMOVED - now using REST-only for Filter Breakdown
 
   // Tick currentTime every second for live countdown
   useEffect(() => {
@@ -572,7 +573,7 @@ export function FilterInsights() {
         </CardContent>
       </Card>
 
-      {/* REB 2.8.2: Filter Breakdown (Last 24h) - Counts only, no Pass/Fail pills */}
+      {/* REB 2.8.8: Filter Breakdown (Last 24h) - REST-based aggregation with passive-mode guard */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Filter Breakdown (Last 24h)</CardTitle>
@@ -581,22 +582,27 @@ export function FilterInsights() {
           </p>
         </CardHeader>
         <CardContent>
-          {breakdown ? (
+          {scan24hData?.data ? (
             <>
-              <div className="mb-4 grid grid-cols-2 gap-4">
+              <div className="mb-4 grid grid-cols-3 gap-4">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xs text-muted-foreground">Total Evaluated:</span>
-                  <span className="text-sm font-semibold">{breakdown.evaluatedCount.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">Total Evaluated (24h):</span>
+                  <span className="text-sm font-semibold">{scan24hData.data.totalEvaluated.toLocaleString()}</span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xs text-muted-foreground">Survived Filters:</span>
-                  <span className="text-sm font-semibold text-success">{breakdown.eligibleCount.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">Survived Filters (24h):</span>
+                  <span className="text-sm font-semibold text-success">{scan24hData.data.breakdown24h.survived.toLocaleString()}</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-muted-foreground">Ineligible (24h):</span>
+                  <span className="text-sm font-semibold text-destructive">{scan24hData.data.breakdown24h.ineligible.toLocaleString()}</span>
                 </div>
               </div>
               
               <div className="space-y-2">
                 {ALLOWED_FILTER_CATEGORIES.map((key) => {
-                  const count = breakdown.breakdown[key];
+                  const filterData = scan24hData.data.breakdown24h.byFilter[key];
+                  const count = filterData?.failedCount ?? 0;
                   const threshold = getThreshold(key);
                   const displayName = FILTER_DISPLAY_NAMES[key] || key;
                   const description = FILTER_DESCRIPTIONS[key];
@@ -634,7 +640,10 @@ export function FilterInsights() {
                           data-testid={`count-filter-${key}`}
                           data-count={count}
                         >
-                          {count !== undefined ? count.toLocaleString() : '—'}
+                          {isPassedAllFilters 
+                            ? (filterData?.survivedCount?.toLocaleString() ?? '0')
+                            : count.toLocaleString()
+                          }
                         </p>
                       </div>
                     </div>
@@ -645,7 +654,7 @@ export function FilterInsights() {
           ) : (
             <div className="text-center py-4">
               <RefreshCw className="w-6 h-6 mx-auto mb-2 animate-spin text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">Waiting for breakdown data...</p>
+              <p className="text-xs text-muted-foreground">Loading 24h breakdown data...</p>
             </div>
           )}
         </CardContent>

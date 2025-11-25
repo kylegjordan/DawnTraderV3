@@ -1,0 +1,228 @@
+Filter Breakdown (Last 24h) — REST Aggregation, 24h Accumulation, New “Ineligible Total” Metric, and Passive-Mode Guard**
+
+🎯 Goals
+
+Fix all remaining issues in the Filter Breakdown section:
+
+Problems to Fix
+
+Breakdown uses WebSocket scanner:breakdown events → wrong source
+Must switch fully to REST endpoints.
+
+Breakdown only shows latest scan → NOT aggregated over 24 hours.
+
+Breakdown updates even in passive mode → INVALID.
+Must stop updating when isEngineActive = false.
+
+Missing “Ineligible Total (24h)” metric.
+
+Survived count appears to update in passive mode → wrong source.
+
+Breakdown subsection rows must reflect 24-hour totals and percentages.
+
+🔧 A. REQUIRED BACKEND FIXES — Replace WebSocket Feed With REST 24h Aggregation
+A.1 Remove WebSocket dependency
+
+Find any WebSocket listeners sending:
+
+scanner:breakdown
+scan_tick.breakdown
+WS breakdown payload
+
+
+Remove or disable them entirely.
+
+Breakdown must NOT come from WebSockets.
+
+A.2 Add REST endpoint for 24h breakdown
+Modify the existing endpoint:
+
+GET /api/:mode/diagnostics/scan-24h
+
+Extend the response structure to include:
+
+{
+  totalEvaluated: number,
+  totalSurvived: number,
+  uniqueEvaluated: number,
+  uniqueSurvived: number,
+  totalCycles: number,
+
+  // NEW:
+  breakdown24h: {
+    survived: number,         // total passed filters
+    ineligible: number,       // total failed at least one filter (NEW)
+    byFilter: {
+      [filterId: string]: {
+        name: string,
+        failedCount: number,
+        survivedCount: number
+      }
+    }
+  }
+}
+
+Source of truth for all counts:
+
+fx5-24h-window.ts must track the following per cycle:
+
+evaluatedSymbols
+
+survivedSymbols
+
+ineligibleSymbols (NEW)
+
+failures per filter
+
+Aggregation rule
+
+24h window = rolling window based ONLY on cycles that occurred while isEngineActive = true.
+
+🔧 B. REQUIRED BACKEND FIXES — Capture Ineligible Symbols
+
+In fx5-scanner.ts, inside the scanning pipeline:
+
+Add a new field returned from BatchResult:
+
+ineligibleSymbols: string[]
+
+
+And return it from collectMixedBatch().
+
+Then record it in the 24h window:
+
+recordBreakdown24h({
+  evaluatedSymbols,
+  survivedSymbols,
+  ineligibleSymbols,
+  filterFailures
+}, mode);
+
+🔧 C. REQUIRED REST 24h WINDOW UPDATES (fx5-24h-window.ts)
+
+Add internal structures:
+
+totalIneligible: number;
+breakdownByFilter: Map<filterId, { failedCount, survivedCount }>;
+
+
+Rules:
+
+C.1 Only record when trading is ACTIVE
+if (!isEngineActive) return;
+
+C.2 Add logic
+totalIneligible += ineligibleSymbols.length;
+totalSurvived += survivedSymbols.length;
+
+// Per-filter failures
+for (const [filterId, failedCount] of Object.entries(filterFailures)) {
+   breakdownByFilter[filterId].failedCount += failedCount;
+}
+
+
+These accumulate over the 24h window.
+
+C.3 On cycle expiration (older than 24h), subtract counts accordingly
+
+Maintain full, correct rolling window.
+
+🔧 D. FRONTEND FIXES — Filter Breakdown UI
+D.1 Remove WebSocket breakdown consumption
+
+Search for code like:
+
+wsMessages.filter(msg.type === 'scanner:breakdown')
+
+
+Delete it.
+
+D.2 Replace with REST
+
+In filter-insights.tsx:
+
+Add React Query call:
+
+const { data: breakdown24h } = useQuery(
+  ['scan-24h', mode],
+  () => fetch(`/api/${mode}/diagnostics/scan-24h`).then(r => r.json()),
+  { refetchInterval: 30000 }
+);
+
+D.3 Render using the REST values:
+
+Top line should show:
+
+Total Evaluated (24h): breakdown24h.totalEvaluated
+Survived Filters (24h): breakdown24h.totalSurvived
+Ineligible (24h): breakdown24h.breakdown24h.ineligible  <-- NEW
+
+D.4 For the filter breakdown rows:
+
+Each row:
+
+Filter Name
+Failed (24h): breakdown24h.breakdown24h.byFilter[filterId].failedCount
+Survived (24h): breakdown24h.breakdown24h.byFilter[filterId].survivedCount
+Percentage: failedCount / totalEvaluated * 100
+
+🔧 E. BEHAVIORAL REQUIREMENTS
+E.1 When Active Trading → Breakdown begins accumulating immediately
+
+Each cycle updates totals.
+
+E.2 When Trading Stops → Breakdown must freeze and remain at last values
+
+No new data added.
+
+E.3 When Server Restarts → 24h window restores from rolling memory
+
+NO zeroing unless all data >24h old.
+
+E.4 No WebSocket events affect Breakdown
+
+REST-only.
+
+🧪 TESTING REQUIREMENTS
+
+Replit must verify:
+
+✔ Breakdown does NOT update in passive mode
+
+(isEngineActive=false)
+
+✔ Breakdown aggregates correctly over multiple cycles (≥ 3)
+✔ Ineligible (24h) appears on UI and increments correctly
+✔ Breakdown rows show correct filter-level failure counts
+✔ WebSocket removal confirmed by log search:
+
+Message:
+NO scanner:breakdown references must appear in browser console or Node logs.
+
+📄 DOCUMENTATION REQUIREMENTS
+
+Replit must produce two files:
+
+1. REB_2.8.8_FILTER_BREAKDOWN_MAPPING.md
+
+Contains:
+
+UI → REST → backend → data-source mapping
+
+before/after examples
+
+sample JSON responses
+
+2. REB_2.8.8_FILTER_BREAKDOWN_COMPLETION.md
+
+Contains:
+
+screenshots of breakdown before/after
+
+REST debug outputs
+
+logs showing breakdown only updates while active
+
+removed WebSocket listener proof
+
+rolling 24h aggregation demonstration

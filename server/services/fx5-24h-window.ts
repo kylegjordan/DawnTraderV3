@@ -24,6 +24,18 @@ interface Scan24hEntry {
   eligibleCount: number;
   evaluatedSymbols: string[]; // symbols touched in this cycle
   survivedSymbols: string[];  // symbols that passed filters
+  ineligibleSymbols: string[]; // REB 2.8.8: symbols that failed at least one filter
+  filterFailures: Record<string, number>; // REB 2.8.8: count of failures per filter ID
+}
+
+interface Breakdown24h {
+  survived: number;           // total passed all filters across 24h
+  ineligible: number;         // total failed at least one filter across 24h
+  byFilter: Record<string, {
+    name: string;
+    failedCount: number;
+    survivedCount: number;
+  }>;
 }
 
 interface Scan24hResponse {
@@ -35,6 +47,7 @@ interface Scan24hResponse {
   uniqueSurvived: number;
   windowStart: string;
   windowEnd: string;
+  breakdown24h: Breakdown24h; // REB 2.8.8: Filter-level breakdown over 24h
 }
 
 // Separate windows for 24h metrics (ACTIVE cycles only)
@@ -155,6 +168,11 @@ export function get24hSummary(mode: Mode): Scan24hResponse {
       uniqueSurvived: 0,
       windowStart: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
       windowEnd: new Date().toISOString(),
+      breakdown24h: {
+        survived: 0,
+        ineligible: 0,
+        byFilter: {},
+      },
     };
   }
 
@@ -165,9 +183,11 @@ export function get24hSummary(mode: Mode): Scan24hResponse {
   // Deduplicate symbols across all cycles
   const evaluatedSet = new Set<string>();
   const survivedSet = new Set<string>();
+  const ineligibleSet = new Set<string>(); // REB 2.8.8: Track ineligible symbols
   for (const e of window) {
     e.evaluatedSymbols.forEach(s => evaluatedSet.add(s));
     e.survivedSymbols.forEach(s => survivedSet.add(s));
+    e.ineligibleSymbols?.forEach(s => ineligibleSet.add(s)); // REB 2.8.8: Aggregate ineligible
   }
 
   const uniqueEvaluated = evaluatedSet.size;
@@ -175,6 +195,73 @@ export function get24hSummary(mode: Mode): Scan24hResponse {
 
   const windowStart = new Date(window[0].completedAt).toISOString();
   const windowEnd = new Date(window[window.length - 1].completedAt).toISOString();
+
+  // REB 2.8.8: Compute filter-level breakdown over 24h window
+  const filterNameMap: Record<string, string> = {
+    failed_min_volume: 'Minimum Volume',
+    failed_spread: 'Bid-Ask Spread',
+    failed_daily_range: 'Daily Range',
+    failed_min_price: 'Minimum Price',
+    failed_stablecoin: 'Stablecoin Filter',
+    failed_quote_currency: 'Quote Currency',
+    failed_history: 'Insufficient History',
+    failed_market_cap: 'Market Cap',
+    failed_guardrail_risk: 'Guardrail Risk',
+    already_active: 'Already Active',
+    passed_all_filters: 'Passed All Filters',
+  };
+
+  // Aggregate all filter IDs that appear in any cycle
+  const allFilterIds = new Set<string>();
+  for (const entry of window) {
+    const failures = entry.filterFailures ?? {};
+    for (const filterId of Object.keys(failures)) {
+      allFilterIds.add(filterId);
+    }
+  }
+
+  // Compute totals per filter across all cycles
+  const byFilter: Record<string, { name: string; failedCount: number; survivedCount: number }> = {};
+  let totalIneligible = 0;
+
+  for (const filterId of allFilterIds) {
+    // Skip passed_all_filters - it's handled separately below
+    if (filterId === 'passed_all_filters') {
+      continue;
+    }
+
+    let failedCount = 0;
+    
+    for (const entry of window) {
+      const failures = entry.filterFailures ?? {};
+      failedCount += failures[filterId] ?? 0;
+    }
+
+    // survivedCount = symbols that PASSED this filter in each cycle
+    // For a given filter, survivedCount = totalEvaluated - failedCount
+    // This is correct because each symbol either passes or fails each filter
+    const survivedCount = totalEvaluated - failedCount;
+
+    byFilter[filterId] = {
+      name: filterNameMap[filterId] || filterId,
+      failedCount,
+      survivedCount,
+    };
+  }
+
+  // Compute total ineligible symbols (failed at least one filter)
+  for (const entry of window) {
+    totalIneligible += entry.ineligibleSymbols?.length ?? 0;
+  }
+
+  // Always set passed_all_filters explicitly (special case with inverted semantics)
+  // For this filter, "survivedCount" = totalSurvived (symbols that passed ALL filters)
+  // and "failedCount" = totalEvaluated - totalSurvived (symbols that failed at least one)
+  byFilter.passed_all_filters = {
+    name: 'Passed All Filters',
+    failedCount: totalEvaluated - totalSurvived,
+    survivedCount: totalSurvived,
+  };
 
   return {
     mode,
@@ -185,6 +272,11 @@ export function get24hSummary(mode: Mode): Scan24hResponse {
     uniqueSurvived,
     windowStart,
     windowEnd,
+    breakdown24h: {
+      survived: totalSurvived,
+      ineligible: totalIneligible,
+      byFilter,
+    },
   };
 }
 

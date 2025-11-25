@@ -237,6 +237,25 @@ export class Fx5ScannerService {
       // REB 2.8.5C: Changed semantics from "FX5 health" to "trading activity only"
       recordScanCompletion(mode, isEngineActive);
       
+      // REB 2.8.8: Compute ineligible symbols (failed at least one filter)
+      const survivedSet = new Set(survivedSymbols);
+      const ineligibleSymbols = evaluatedSymbols.filter(s => !survivedSet.has(s));
+      
+      // REB 2.8.8: Convert breakdown to filter failures format (for 24h aggregation)
+      const filterFailures: Record<string, number> = {
+        failed_min_volume: breakdown.failed_min_volume,
+        failed_spread: breakdown.failed_spread,
+        failed_daily_range: breakdown.failed_daily_range,
+        failed_min_price: breakdown.failed_min_price,
+        failed_stablecoin: breakdown.failed_stablecoin,
+        failed_quote_currency: breakdown.failed_quote_currency,
+        failed_history: breakdown.failed_history,
+        failed_market_cap: breakdown.failed_market_cap,
+        failed_guardrail_risk: breakdown.failed_guardrail_risk,
+        already_active: breakdown.already_active,
+        passed_all_filters: breakdown.passed_all_filters,
+      };
+      
       // Track 24h metrics (ONLY when engine is ACTIVE)
       recordScanFor24h(
         mode,
@@ -247,6 +266,8 @@ export class Fx5ScannerService {
           eligibleCount,
           evaluatedSymbols,
           survivedSymbols,
+          ineligibleSymbols, // REB 2.8.8: Add ineligible symbols
+          filterFailures,    // REB 2.8.8: Add filter-level failures
         },
         isEngineActive
       );
