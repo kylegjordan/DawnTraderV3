@@ -47,32 +47,52 @@ If WebSocket events fail, the 5-second polling ensures data freshness within acc
 
 ### Section A: Frontend WebSocket Listener ✅
 
-**File:** `client/src/pages/dashboard.tsx`
+**Files:** 
+- `client/src/pages/dashboard.tsx` (WebSocket listener)
+- `client/src/constants/query-keys.ts` (NEW - Centralized constants)
 
 **Changes:**
+- Created centralized `PORTFOLIO_QUERY_KEYS` constant to prevent code/doc drift
 - Expanded existing WebSocket listener to invalidate ALL portfolio-related queries
-- Added invalidation for 11 query keys covering all modules
+- Added invalidation for **15 query keys** covering all modules (Dashboard, Goals Engine, LATTi)
+- Refactored to use constants loop instead of hardcoded keys
 - Maintained batched updates using `unstable_batchedUpdates` for performance
 
-**Invalidated Query Keys:**
+**Invalidated Query Keys (from constants):**
 ```typescript
-// Portfolio queries
+// Portfolio queries (mode-specific and mode-agnostic)
 '/api/paper/portfolio/state'
 '/api/portfolio/overview?mode=live'
 '/api/portfolio/overview'
 '/api/portfolio/metrics'
 
-// Metrics queries
+// Portfolio metrics queries
 '/api/paper/metrics/portfolio'
 '/api/paper/metrics/earnings'
 '/api/portfolio/earnings'
 
-// Goals Engine
+// Goals Engine queries (mode-specific and mode-agnostic)
 '/api/goals/summary'
+'/api/goals/summary?mode=paper'  // ← Added for Goals Engine
+'/api/goals/summary?mode=live'   // ← Added for Goals Engine
 
-// LATTI
+// Trading status queries
+'/api/paper-sim/status'          // ← Added for telemetry
+'/api/trading/status'            // ← Added for telemetry
+
+// LATTI queries
 '/api/latti/targets'
 '/api/system/trading-pace'
+```
+
+**Implementation:**
+```typescript
+// Using centralized constants to prevent drift
+unstable_batchedUpdates(() => {
+  PORTFOLIO_QUERY_KEYS.forEach(queryKey => {
+    queryClient.invalidateQueries({ queryKey: [queryKey] });
+  });
+});
 ```
 
 **Log Output:**
@@ -408,11 +428,12 @@ Expected logs after trading operation:
 
 ## Files Modified
 
-### Frontend (4 files)
+### Frontend (5 files)
 1. `client/src/pages/dashboard.tsx` - Expanded WebSocket listener
-2. `client/src/hooks/use-portfolio-balance.tsx` - Standardized queries (REB 2.8.10)
-3. `client/src/hooks/use-trading.tsx` - Standardized queries (REB 2.8.10)
-4. `client/src/components/layout/top-bar.tsx` - Added invalidations (REB 2.8.10)
+2. `client/src/constants/query-keys.ts` - NEW: Centralized query key constants
+3. `client/src/hooks/use-portfolio-balance.tsx` - Standardized queries (REB 2.8.10)
+4. `client/src/hooks/use-trading.tsx` - Standardized queries (REB 2.8.10)
+5. `client/src/components/layout/top-bar.tsx` - Added invalidations (REB 2.8.10)
 
 ### Backend (2 files)
 5. `server/services/paper-sim-service.ts` - Added WS events + fixed LSP error
