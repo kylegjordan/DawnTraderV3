@@ -23,7 +23,6 @@ import { updateStage3Cache } from './stage3-state-cache.js';
 import { emitStage3Events, FilterBreakdown } from './stage3-emitter.js';
 import { collectMixedBatch, BatchResult } from './market-scanner.js';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.js';
-import { systemConfigService } from './system-config.js';
 import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
 import { recordScanFor24h, recordScanCompletion, getCyclesPerHour } from './fx5-24h-window.js';
@@ -168,28 +167,25 @@ export class Fx5ScannerService {
         activePoolCount,
       };
 
-      // REB 2.2: Add survivors to Active Filter Pool (deduped, TTL-managed)
-      // REB 2.2/2.6: Passive mode enforcement - clear pool when engine stopped OR passiveLearning enabled
+      // REB 2.8.7: Add survivors to Active Filter Pool (deduped, TTL-managed)
+      // Single-gate pattern: Check ONLY isEngineActive (passive learning = !isEngineActive)
       console.log(`[8.6.7][DEBUG] FX5 scan complete - survivors.length=${survivors.length}, eligibleCount=${eligibleCount}`);
       
       // Check if trading engine is active for this mode (from database, not aggregator)
       const context = await storage.getSystemContext(mode);
       const isEngineActive = context?.isEngineActive || false;
 
-      // REB 2.6: Check passive learning flag (behavioral control)
-      const isPassiveLearning = systemConfigService.isPassiveLearningEnabled();
-
-      // REB 2.2: Enforce passive mode - clear pool if engine stopped
+      // REB 2.8.7: Enforce passive mode - clear pool if engine stopped
       activeFilterPool.enforcePassiveModeIfStopped(mode, isEngineActive);
 
-      // REB 2.6: Only populate pool if engine ACTIVE AND NOT passive learning
-      if (isEngineActive && !isPassiveLearning) {
-        // Engine ACTIVE + Passive Learning DISABLED: Add survivors to Active Filter Pool
+      // REB 2.8.7: Single-gate pattern - populate pool ONLY when engine ACTIVE
+      if (isEngineActive) {
+        // Engine ACTIVE: Add survivors to Active Filter Pool
         const poolStats = activeFilterPool.addSurvivors(mode, survivors);
-        console.log(`[8.6.7][DEBUG] Active Pool stats: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}`);
-      } else if (isPassiveLearning) {
-        // REB 2.6: Passive learning mode - pool stays empty
-        console.log(`[8.6.9][PassivePool] Passive learning enabled - Active Pool not populated (correct behavior)`);
+        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${survivors.length}`);
+      } else {
+        // Engine STOPPED: Pool cleared by enforcePassiveModeIfStopped (passive learning)
+        console.log(`[REB 2.8.7][ActivePool] Engine stopped - pool cleared (passive learning mode)`);
       }
 
       // Get the current active pool (deduped, non-expired)

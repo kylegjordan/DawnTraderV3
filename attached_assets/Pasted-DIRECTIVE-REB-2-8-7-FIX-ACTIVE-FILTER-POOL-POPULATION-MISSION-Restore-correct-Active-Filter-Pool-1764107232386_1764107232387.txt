@@ -1,0 +1,146 @@
+DIRECTIVE: REB 2.8.7 – FIX ACTIVE FILTER POOL POPULATION
+MISSION
+
+Restore correct Active Filter Pool population.
+FX5 survivors must populate the pool when trading is ACTIVE,
+and the pool must remain empty when trading is STOPPED (passive learning).
+
+A. REQUIRED BEHAVIOR (GROUND TRUTH)
+1. When trading is ACTIVE (paper or live):
+
+passiveLearning = false
+
+Active Filter Pool must populate with:
+
+symbol
+
+status
+
+firstSeen
+
+lastUpdated
+
+24h metrics accumulate
+
+Pool persists and updates every scan
+
+Pool survives page reloads
+
+2. When trading stops:
+
+Active Filter Pool must be cleared immediately
+
+24h metrics reset
+
+passiveLearning becomes true
+
+B. FIX #1 — Correct the Active Pool Ingestion Gate
+
+File: server/services/active-filter-pool.ts
+
+Replace this (current faulty logic):
+if (!isEngineActive) {
+   clearPool();
+   return;
+}
+
+With this (correct truth):
+// Only clear when entering passive learning mode
+if (!isEngineActive) {
+    await clearPool();
+    return;  // but only skip population when STOPPED
+}
+
+// ACTIVE MODE → populate the pool
+await upsertPoolEntries(survivors);
+
+C. FIX #2 — Restore FX5 → ActivePool Data Flow
+
+REPLIT removed or broke the function that feeds survivors to the Active Pool.
+
+File: server/services/fx5-scanner.ts
+Search for:
+
+updateActiveFilteredPool
+pushToActivePool
+populateActiveFilteredPool
+
+Restore this call inside each scan result:
+if (isEngineActive) {
+    await activeFilterPool.updateFromScanResult({
+        survivors: batchData.survivors,
+        cycleId,
+        timestamp: Date.now()
+    });
+}
+
+D. FIX #3 — Ensure passiveLearning is NOT used anywhere in ActivePool logic
+
+ActivePool must depend ONLY on:
+
+isEngineActive == true
+
+
+Search entire repo:
+
+passiveLearning
+SystemConfig.passiveLearning
+systemFlags.passiveLearning
+
+
+❌ Remove all references within active-filter-pool.ts
+❌ Remove any conditional logic based on passiveLearning
+✔ Keep single-gate: isEngineActive only
+
+E. FIX #4 — UI Only Needs Data Rendering, NO LOGIC
+
+File: client/src/components/trading/active-filtered-pool.tsx
+
+Ensure:
+
+It requests data from /api/.../active-filtered-pool
+
+No gating logic is done on the front-end
+
+It merely renders the array returned
+
+F. REQUIRED OUTPUT FROM REPLIT
+
+After implementation, REPLIT must produce:
+
+1. A before/after mapping table
+
+Listing:
+
+FX5 survivors
+
+ActivePool ingestion
+
+ActivePool clear logic
+
+Derivation of isEngineActive
+
+No use of SystemConfig.passiveLearning
+
+2. A full execution log sample
+
+Engine STOPPED → Pool clears
+
+Engine ACTIVE → Pool populates
+
+Survivors logged in DB
+
+Pool returns non-empty rows via REST
+
+3. A new document
+
+REB_2.8.7_ACTIVE_POOL_FIX_COMPLETION.md
+including:
+
+code diffs
+
+architectural verification
+
+logs from 3 consecutive cycles
+
+UI verification screenshot
