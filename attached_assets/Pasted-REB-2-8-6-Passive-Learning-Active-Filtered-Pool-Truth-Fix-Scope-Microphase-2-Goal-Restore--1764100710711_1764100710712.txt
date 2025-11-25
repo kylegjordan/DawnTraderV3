@@ -1,0 +1,362 @@
+REB 2.8.6 – Passive Learning & Active Filtered Pool Truth Fix
+
+Scope – Microphase 2
+
+Goal:
+
+Restore automatic passive-learning behavior so it always reflects trading activity.
+
+Wire that behavior into the Active Filtered Pool so the pool works exactly as before the GitHub regression.
+
+Deliver a small audit/report so we can see exactly what’s wired where.
+
+Do not change anything in the Primary Metrics section you just fixed in REB 2.8.5 (Kraken Universe, Cycle Info, Last Scan Result, 24h Filter Activity). Those are “truth” now. This phase is only about:
+
+Passive learning state (backend + broadcasts + UI indicator)
+
+Active Filtered Pool (deduped, non-expired table on Filter Insights)
+
+0. Truth References (please re-read first)
+
+Use these as the source of truth for this phase:
+
+Passive Learning Truth Behavior – docs/restoration/reb2_reports/REB2.3C_TRUTH_MODE_BEHAVIOR.md
+
+Derived Passive Learning Logic – chat archive 11-15 (TradingStateSync)
+
+Passive Learning Verification & scan_tick payload – chat archive 11-20 (FX5.3 verification)
+
+Passive Mode Dual-Gate Pattern & Active Pool enforcement – docs/restoration/reb2_reports/REB2.6_PASSIVE_MODE_TRUTH_VS_CURRENT.md
+
+You don’t need to re-audit those documents – just use them as the “truth spec” you are restoring.
+
+1. Desired Behavior – Passive Learning (Truth Spec)
+
+This is what must be true again, end-to-end:
+
+No manual toggle.
+Passive learning is derived, not a third mode and not manually set anywhere.
+
+Derivation rule (per TradingStateSync truth):
+
+const tradingActive = paperTradingActive || liveTradingActive;
+const isPassiveLearning = !tradingActive;
+
+
+When either paper or live trading is running → tradingActive = true → isPassiveLearning = false.
+
+When neither is running → tradingActive = false → isPassiveLearning = true.
+
+Backend truth & persistence:
+
+This derived isPassiveLearning must be:
+
+Stored in the system state (e.g. TradingStateSync / state cache).
+
+Exposed via the status API (e.g. /api/system/state or equivalent).
+
+Persisted in SystemConfig.passiveLearning (see REB 2.6 dual-gate spec) so services that gate behavior can read a single authoritative flag.
+
+Broadcast & UI behavior (truth that used to work):
+
+All trading_state_changed / trading_state_ack broadcasts include passiveLearning and it matches the derived flag above.
+
+In the client (TradingModeContext + Trading top bar + Filter Insights banner), systemFlags.passiveLearning (or equivalent) updates correctly:
+
+Engine OFF / not trading → Banner/indicator shows “Passive Learning active”.
+
+Engine ON (paper or live) → Banner/indicator is hidden.
+
+Side-effects of passive learning (from REB 2.6 checklist):
+
+When SystemConfig.passiveLearning = true:
+
+Metrics & pools are gated (no 24h metrics writes, no activeFilteredPool writes).
+
+When SystemConfig.passiveLearning = false and engine is ACTIVE:
+
+Normal metrics recording and pool population resume.
+
+2. Task A – Passive Learning State Audit & Fix
+A.1. Current-state mapping (documentation only, no changes yet)
+
+Create a new doc:
+
+docs/restoration/reb2_reports/REB_2.8.6_PASSIVE_LEARNING_AND_POOL_MAPPING.md
+
+In that file, document current behavior (BEFORE any code changes this phase):
+
+Backend flags & storage
+
+Where passiveLearning (or any variant) is stored:
+
+system_config.passiveLearning
+
+Any in-memory trading state (TradingStateSync, state cache, etc.)
+
+Where engine active flags live:
+
+isEngineActive per mode (paper/live) in system state.
+
+How the passive flag is currently set and flipped
+
+Which functions set or mutate SystemConfig.passiveLearning.
+
+Whether it is automatically derived or manually toggled.
+
+Call sites for any setPassiveLearning, updateSystemConfig({ passiveLearning }), etc.
+
+Broadcast & UI
+
+Which events include passiveLearning in their payload.
+
+Where the frontend reads it (TradingModeContext, TopBar, Filter Insights passive banner).
+
+Gating
+
+Any current checks like:
+
+if (config.passiveLearning) { ... }
+
+if (passiveLearningOnly) { ... }
+
+Which components use those checks:
+
+FX5 scanner / active pool
+
+24h window / metrics
+
+Anything else
+
+Keep this section purely descriptive – no edits yet. It’s just a snapshot of the current wiring.
+
+A.2. Restore correct derivation & persistence
+
+After the mapping doc is written, align the implementation with the truth spec:
+
+Single derivation site
+
+Ensure there is one place (e.g. TradingStateSync, or equivalent trading state service) that computes:
+
+const tradingActive = paperTradingActive || liveTradingActive;
+const isPassiveLearning = !tradingActive;
+
+
+This must be recomputed whenever:
+
+Paper trading starts or stops.
+
+Live trading starts or stops.
+
+Persist to system config
+
+On each recalculation, update SystemConfig.passiveLearning (or equivalent DB/config object) so that services like FX5 can read the same truth flag used in REB 2.6.
+
+There should be no manual UI or API that directly flips passiveLearning; it is fully derived from trading active flags.
+
+Broadcast & API
+
+Ensure all trading state broadcasts (trading_state_changed, trading_state_ack, etc.) include passiveLearning that matches the derived value (not some separate flag).
+
+Ensure /api/system/state (or whatever is used by the client to hydrate trading state) includes both:
+
+{
+  "paperTradingActive": ...,
+  "liveTradingActive": ...,
+  "passiveLearning": true|false
+}
+
+
+Frontend
+
+Confirm the existing passive learning indicator/banner is driven entirely by the passiveLearning field from the mode context (no local heuristics).
+
+Expected behavior:
+
+When you click Start Trading (paper OR live):
+
+Next state: passiveLearning=false
+
+Banner/indicator disappears across relevant screens.
+
+When you click Stop Trading (all engines stopped):
+
+Next state: passiveLearning=true
+
+Banner/indicator appears again.
+
+Regression guard
+
+Add a small logging line at the derivation site:
+
+console.log(
+  '[PassiveLearning][StateSync]',
+  'tradingActive=', tradingActive,
+  'passiveLearning=', isPassiveLearning,
+  'paperActive=', paperTradingActive,
+  'liveActive=', liveTradingActive,
+);
+
+
+We’ll use this later to confirm correct transitions.
+
+3. Task B – Active Filtered Pool Behavior
+
+Once passive learning truth is restored, wire the Active Filtered Pool to it correctly.
+
+B.1. Expected behavior (truth spec)
+
+Passive learning (no trading):
+
+isEngineActive=false for the relevant mode.
+
+passiveLearning=true.
+
+Behavior:
+
+FX5 scanner may still evaluate for observation, but:
+
+No writes to activeFilteredPool.
+
+Pool is cleared when engine stops.
+
+Filter Insights “Active Filtered Pool” table should be empty.
+
+Active trading (paper or live):
+
+isEngineActive=true for that mode.
+
+passiveLearning=false.
+
+Behavior:
+
+Each FX5 scan can add candidates (survivors) into the mode-specific active pool.
+
+Pool obeys TTL (5-minute expiry) and deduplication.
+
+The Active Filtered Pool (Deduped, Non-Expired) table on Filter Insights should show symbols when there are eligible pairs.
+
+Transitions:
+
+When trading transitions ACTIVE → STOPPED:
+
+enforcePassiveModeIfStopped(mode, isEngineRunning) (existing method) must be called so the pool is cleared and the UI table falls back to “No Eligible Pairs”.
+
+When trading transitions STOPPED → ACTIVE:
+
+Pool starts empty; new scans repopulate it normally.
+
+B.2. Wiring the gates (backend)
+
+Use the dual-gate pattern already defined in REB 2.6 – but apply it to the current FX5 / active pool path, not the removed legacy aggregator:
+
+In the FX5 scanner / pool update path (wherever survivors are written into activeFilteredPool):
+
+Ensure you have access to both:
+
+const config = SystemConfigService.getConfig();
+
+const isEngineActive = /* per-mode engine state */;
+
+Apply the dual gate from REB 2.6:
+
+// Guard 1: persistent passive learning flag
+if (config.passiveLearning) {
+  console.log('[8.6.9][PassivePool] Passive learning enabled - Active Pool not populated');
+  return []; // or skip pool update
+}
+
+// Guard 2: engine state
+if (!isEngineActive) {
+  // Engine not running → no pool updates
+  return [];
+}
+
+// Only here do we update activeFilteredPool
+activeFilterPool.addCandidates(mode, survivors);
+
+
+Don’t re-introduce the legacy scan-24h-aggregator. This logic belongs in the FX5 scanner + activeFilteredPool services only.
+
+Hook up enforcePassiveModeIfStopped
+
+In the place where engine state transitions are handled (e.g. when stopPaperSimulation / stopLiveTrading succeed and the engine is now STOPPED):
+
+Call:
+
+activeFilterPool.enforcePassiveModeIfStopped('paper' | 'live', isEngineRunning);
+
+
+as per REB2.3C current implementation audit.
+
+Also ensure this is run at startup for safety if engine comes up as STOPPED.
+
+4. Task C – Minimal Passive Learning Audit
+
+Add a short audit section into the new mapping doc (REB_2.8.6_PASSIVE_LEARNING_AND_POOL_MAPPING.md), after implementation:
+
+State transition log sample
+
+Copy/paste one short log sequence showing:
+
+Engine OFF → passiveLearning=true
+
+Start paper (or live) trading → passiveLearning=false
+
+Stop trading → passiveLearning=true again.
+
+Active Filtered Pool behavior
+
+Screenshots or log snippets showing:
+
+Pool populating when trading is ACTIVE and passiveLearning=false.
+
+Pool cleared when trading is STOPPED (and table returning to “No Eligible Pairs”).
+
+Confirmation bullets
+
+Explicitly confirm in the doc:
+
+passiveLearning is never manually toggled.
+
+SystemConfig.passiveLearning is updated only from the derived logic.
+
+Active Filtered Pool is gated by both passiveLearning and isEngineActive.
+
+No legacy scan-24h-aggregator or similar is involved in pool updates.
+
+5. Deliverables for REB 2.8.6
+
+Please provide:
+
+Mapping / audit doc
+docs/restoration/reb2_reports/REB_2.8.6_PASSIVE_LEARNING_AND_POOL_MAPPING.md
+
+Current-state mapping (before edits).
+
+Final behavior summary (after edits).
+
+Log snippets/screenshots as described in Task C.
+
+Completion report
+docs/restoration/reb2_reports/REB_2.8.6_PASSIVE_LEARNING_AND_ACTIVE_POOL_COMPLETION.md
+
+Files touched.
+
+Before/after behavior table (Passive vs Active trading, for paper and live).
+
+Any edge cases you had to adjust.
+
+No changes to:
+
+The already-stable Primary Metrics: top section of Filter Insights (Kraken Universe, Cycle Info, Last Scan Result, 24h Filter Activity).
+
+The FX5 24h window module, beyond any passiveLearning gating you need for the pool (24h metrics themselves are currently behaving correctly and should remain so).
+
+If you follow this spec, we should end up with:
+
+Passive learning automatically turning OFF whenever paper or live trading is ON, and ON whenever all trading is stopped.
+
+The passive learning indicator in the UI matching that behavior.
+
+The Active Filtered Pool correctly populating only during active trading and clearing whenever the system returns to passive learning.
