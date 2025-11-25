@@ -544,7 +544,7 @@ export function FilterInsights() {
                   </tr>
                 </thead>
                 <tbody>
-                  {scanData.activeFilteredPool.slice(0, 20).map((pair, index) => {
+                  {scanData.activeFilteredPool.map((pair, index) => {
                     const firstSeenFormatted = formatScanTimestamp(pair.firstSeen);
                     const lastUpdatedFormatted = formatScanTimestamp(pair.lastUpdated);
                     
@@ -558,26 +558,15 @@ export function FilterInsights() {
                         </td>
                         <td className="py-2 px-3">
                           <div className="text-sm">{firstSeenFormatted.display}</div>
-                          {firstSeenFormatted.relative && (
-                            <div className="text-xs text-muted-foreground">{firstSeenFormatted.relative}</div>
-                          )}
                         </td>
                         <td className="py-2 px-3">
                           <div className="text-sm">{lastUpdatedFormatted.display}</div>
-                          {lastUpdatedFormatted.relative && (
-                            <div className="text-xs text-muted-foreground">{lastUpdatedFormatted.relative}</div>
-                          )}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              {scanData.activeFilteredPool.length > 20 && (
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Showing 20 of {scanData.activePoolCount} eligible pairs
-                </p>
-              )}
             </div>
           )}
         </CardContent>

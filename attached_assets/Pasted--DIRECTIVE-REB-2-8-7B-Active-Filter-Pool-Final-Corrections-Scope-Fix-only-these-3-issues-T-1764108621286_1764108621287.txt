@@ -1,0 +1,174 @@
+✅ DIRECTIVE: REB 2.8.7B — Active Filter Pool Final Corrections
+🎯 Scope
+
+Fix only these 3 issues:
+
+Total Active Filtered Pairs count is wrong – it displays uniqueSurvived instead of totalSurvived.
+
+UI list only shows ~20 pairs – remove any limits/pagination and show the full active pool.
+
+Remove “x minutes ago” relative timestamps underneath First Seen / Last Updated.
+
+No other modifications.
+
+🔧 A. FIX #1 — Correct “Total Active Filtered Pairs” Count
+Problem
+
+UI is mistakenly using:
+
+uniqueSurvived (24h)
+
+
+instead of:
+
+activeFilteredPool.size
+
+
+or the backend’s:
+
+poolStats.total
+
+
+(depending on endpoint).
+
+Required Fix
+1. Backend: expose accurate pool count
+
+In server/services/active-filter-pool.ts, ensure the REST response for the Active Pool includes:
+
+{
+  totalActiveFilteredPairs: this.pool[mode].size,
+  pairs: [...this.pool[mode].values()],
+}
+
+2. Frontend: use this value
+
+In client/src/components/trading/filter-insights.tsx:
+
+- const totalActivePairs = activePoolData?.uniqueSurvived24h;
++ const totalActivePairs = activePoolData?.totalActiveFilteredPairs;
+
+
+Make sure the UI label “Total Active Filtered Pairs” uses this corrected field.
+
+🔧 B. FIX #2 — Remove Pool List Size Limit; Show All Pairs
+Problem
+
+The UI shows only ~20 pairs.
+This means either the backend or frontend is enforcing a limit:
+
+A .slice(0,20)
+
+A page size on the query
+
+Or the endpoint returns only partial data.
+
+Required Fix
+1. Backend: return all pairs
+
+Inspect server/routes.ts endpoint /active-filtered-pool, remove any slicing:
+
+- const pairs = pool.slice(0, 20);
++ const pairs = pool;  // return everything
+
+
+or:
+
+- .limit(20)
++ // no limit
+
+2. Frontend: remove defensive slicing
+
+Search in filter-insights.tsx for:
+
+.slice(
+
+.filter((_, i) => i <
+
+any limits in a table component
+
+Replace:
+
+- const displayed = activePairs.slice(0, 20);
++ const displayed = activePairs;
+
+🔧 C. FIX #3 — Remove “x minutes ago” Relative Timestamps
+Problem
+
+Under every pair row:
+
+1m ago
+2m ago
+3m ago
+
+
+These are unnecessary and clutter UI.
+
+Required Fix
+
+In the Active Filter Pool table code (filter-insights.tsx most likely):
+
+Search for:
+
+timeAgo
+
+timeSince
+
+formatDistanceToNow
+
+<small>
+
+relative timestamp helpers
+
+Remove the relative timestamp component entirely:
+
+- <div className="text-xs text-muted">{formatDistanceToNow(new Date(pair.lastUpdated))} ago</div>
++ {/* removed relative timestamp */}
+
+
+Leave only:
+
+{formatUTC(pair.firstSeen)}
+{formatUTC(pair.lastUpdated)}
+
+🧪 Testing Checklist
+
+After implementing the above:
+
+With Trading ACTIVE
+
+Active Pool appears with correct total count
+
+Full list (could be 60, 80, 100 pairs — no limit)
+
+First Seen + Last Updated timestamps display UTC only (NO relative timestamp)
+
+With Trading STOPPED
+
+Active Pool clears immediately
+
+Pool count = 0
+
+UI disappears / shows “No Eligible Pairs”
+
+📄 Deliverables Required From Replit
+1. Completion Report
+
+Stored in:
+
+docs/restoration/reb2_reports/REB_2.8.7B_ACTIVE_POOL_FINAL_FIX_COMPLETION.md
+
+The report must include:
+
+Before/after screenshots of the Active Filter Pool
+
+Backend response JSON before/after for /active-filtered-pool
+
+Code diffs (fx5-scanner, active-filter-pool, filter-insights)
+
+Proof that all pairs are returned (log count)
+
+Proof that relative timestamps are removed
+
+2. Updated mapping file:
+docs/restoration/reb2_reports/REB_2.8.7B_ACTIVE_POOL_FINAL_MAPPING.md
