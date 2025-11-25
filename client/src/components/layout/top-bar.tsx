@@ -304,10 +304,14 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         return;
       }
       
-      // REB 2.8.9: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.9] Invalidating portfolio queries after paper trading start');
+      // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
+      console.log('[REB 2.8.10] Invalidating portfolio and goals queries after paper trading start');
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      // REB 2.8.10: Add goals and LATTI invalidations
+      await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       
       toast({
         title: "Simulation Continued",
@@ -339,10 +343,14 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         initialBalance: balance 
       });
       
-      // REB 2.8.9: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.9] Invalidating portfolio queries after new simulation start');
+      // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
+      console.log('[REB 2.8.10] Invalidating portfolio and goals queries after new simulation start');
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      // REB 2.8.10: Add goals and LATTI invalidations
+      await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       
       toast({
         title: "New Simulation Started",
@@ -364,10 +372,15 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     try {
       await startTrading('live');
       
-      // REB 2.8.9: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.9] Invalidating portfolio queries after live trading start');
+      // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
+      console.log('[REB 2.8.10] Invalidating portfolio and goals queries after live trading start');
       await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      // REB 2.8.10: Add goals, LATTI, and metrics invalidations
+      await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=live`] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/metrics'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       
       // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
@@ -407,10 +420,15 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     try {
       await stopTrading('live');
       
-      // REB 2.8.9: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.9] Invalidating portfolio queries after live trading stop');
+      // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
+      console.log('[REB 2.8.10] Invalidating portfolio and goals queries after live trading stop');
       await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      // REB 2.8.10: Add goals, LATTI, and metrics invalidations
+      await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=live`] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/metrics'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       
       // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
