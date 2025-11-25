@@ -67,17 +67,32 @@ export default function Dashboard() {
     [isPaper, paperPortfolioData, livePortfolioData]
   );
   
-  // Phase 35.2A: Batch WebSocket updates to prevent render cascades
+  // Phase 35.2A + REB 2.8.10B: Batch WebSocket updates to prevent render cascades
   useEffect(() => {
     const balanceUpdates = wsMessages.filter((msg: any) => msg.type === 'portfolio_balance_updated');
     if (balanceUpdates.length > 0) {
       const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
-      console.log('[35.2A][Dashboard] batched render triggered - portfolio balance update', latestUpdate.payload);
+      console.log('[REB 2.8.10B][WS] portfolio_balance_updated → refreshing portfolio-related queries', latestUpdate.payload);
       
-      // Batch all query invalidations together to prevent multiple renders
+      // REB 2.8.10B: Invalidate ALL portfolio-related queries for global refresh
       unstable_batchedUpdates(() => {
-        queryClient.invalidateQueries({ queryKey: [`/api/portfolio/overview?mode=${mode}`] });
+        // Portfolio queries (mode-specific and mode-agnostic)
         queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/metrics'] });
+        
+        // Portfolio metrics queries
+        queryClient.invalidateQueries({ queryKey: ['/api/paper/metrics/portfolio'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/paper/metrics/earnings'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/earnings'] });
+        
+        // Goals Engine queries
+        queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] });
+        
+        // LATTI queries
+        queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       });
     }
   }, [wsMessages, queryClient, mode]);

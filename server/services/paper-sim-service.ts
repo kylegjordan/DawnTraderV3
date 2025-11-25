@@ -349,9 +349,9 @@ export async function startPaperSimulation(
           : null;
 
         // Phase 27.F.9: Create session in database FIRST (source of truth)
+        // Note: Single-tenant system - userId not stored in paperSimSessions table
         const sessionData: InsertPaperSimSession = {
           sessionId,
-          userId,
           mode: 'paper',
           status: 'running',
           startingBalance: options?.startingBalance?.toString() || '10000',

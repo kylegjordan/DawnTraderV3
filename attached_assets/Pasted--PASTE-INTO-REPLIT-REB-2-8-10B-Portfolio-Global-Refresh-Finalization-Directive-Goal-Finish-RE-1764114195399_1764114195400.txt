@@ -1,0 +1,198 @@
+✅ PASTE INTO REPLIT — REB 2.8.10B Portfolio Global Refresh (Finalization Directive)
+
+Goal:
+Finish REB 2.8.10 by enabling instant portfolio refresh globally (Dashboard, Goals Engine, LATTi, Portfolio Overview).
+This requires completing tasks 5–9 that are still pending.
+
+🟦 REB 2.8.10B — Finalize Global Portfolio Refresh System
+A. Complete Section E — Add Frontend WebSocket Listener
+
+Add a global WebSocket listener for portfolio_balance_updated inside:
+
+client/src/hooks/use-websocket.ts
+
+
+(or whichever file handles WebSocket multiplexing)
+
+Required behavior:
+
+When message type is:
+
+portfolio_balance_updated
+
+
+Trigger React Query invalidation for ALL relevant keys:
+
+queryClient.invalidateQueries(['/api/paper/portfolio/state']);
+queryClient.invalidateQueries(['/api/portfolio/overview?mode=live']);
+queryClient.invalidateQueries(['/api/portfolio/overview']);
+queryClient.invalidateQueries(['/api/portfolio/metrics']);
+queryClient.invalidateQueries(['/api/paper/metrics/portfolio']);
+queryClient.invalidateQueries(['/api/paper/metrics/earnings']);
+queryClient.invalidateQueries(['/api/portfolio/earnings']);
+queryClient.invalidateQueries(['/api/goals/summary']);
+queryClient.invalidateQueries(['/api/latti/targets']);
+queryClient.invalidateQueries(['/api/system/trading-pace']);
+
+
+Important:
+Invalidate both mode-specific and mode-agnostic keys, because older components use each inconsistently.
+
+Add log:
+
+[REB 2.8.10B][WS] portfolio_balance_updated → refreshing portfolio-related queries
+
+B. Complete Section F — Standardize Missing Query Configs
+
+Update the following components to use:
+
+refetchInterval: 5000,
+staleTime: 0,
+refetchOnWindowFocus: true,
+refetchOnReconnect: true,
+
+Apply to all remaining files listed in the mapping:
+1. Portfolio Overview
+
+client/src/components/trading/portfolio-overview.tsx
+(portfolio metrics & earnings)
+
+2. Goals Engine
+
+goals-summary-widget.tsx
+
+goals-table.tsx
+
+goals-engine-tab.tsx
+
+target-daily-goals.tsx
+
+3. LATTI Components
+
+latti-goals-mirror.tsx
+
+4. Portfolio tabs in Goals engine
+
+portfolio-tab.tsx
+
+5. Trading
+
+useTradingStatus in use-trading.tsx
+(currently staleTime: Infinity — must be replaced)
+
+Mark each updated file with:
+
+// REB 2.8.10B - standardized portfolio refresh config
+
+C. Complete Section G — Add Backend Event Emissions for Portfolio Updates During Trading
+
+Ensure the following backend methods emit:
+
+Paper Trading
+
+File: server/services/paper-sim-service.ts
+
+Emit after successful completion, NOT before:
+
+tradingStateSync.broadcast('portfolio_balance_updated', { mode: 'paper' });
+
+Live Trading
+
+File: server/services/live-trading-service.ts
+
+Add identical emission after:
+
+activateLiveTrading()
+
+stopLiveTrading()
+
+This ensures UI updates immediately when balances change.
+
+D. Fix Missing Query Invalidations in Goals Engine
+
+The Goals Engine components use portfolio values indirectly, but were never invalidated.
+
+Add invalidations in every place where preset is applied or goals are recalculated.
+
+Update:
+
+goals-engine-tab.tsx
+
+target-daily-goals.tsx
+
+goals-summary-widget.tsx
+
+Add:
+
+queryClient.invalidateQueries(['/api/goals/summary']);
+queryClient.invalidateQueries(['/api/latti/targets']);
+queryClient.invalidateQueries(['/api/portfolio/overview']);
+
+
+Label these:
+
+// REB 2.8.10B - Goals Engine portfolio invalidation
+
+E. Confirm TopBar Invalidations
+
+Ensure TopBar trading operations invalidate the following missing keys:
+
+queryClient.invalidateQueries(['/api/portfolio/overview']);
+queryClient.invalidateQueries(['/api/portfolio/metrics']);
+queryClient.invalidateQueries(['/api/paper/metrics/portfolio']);
+queryClient.invalidateQueries(['/api/goals/summary']);
+queryClient.invalidateQueries(['/api/latti/targets']);
+queryClient.invalidateQueries(['/api/system/trading-pace']);
+
+
+Mark block:
+
+// REB 2.8.10B - expanded portfolio invalidation keys
+
+F. Documentation Requirements
+
+Create:
+
+1. docs/restoration/reb2_reports/REB_2.8.10B_PORTFOLIO_REFRESH_COMPLETION.md
+
+Include:
+
+Summary of changes
+
+Updated file list
+
+Verification steps
+
+Architect review section
+
+Screenshots/logs confirming:
+
+WS listener firing
+
+Queries invalidating
+
+Dashboard reflecting instantly
+
+Goals reflecting instantly
+
+LATTI updating instantly
+
+2. Update mapping file:
+REB_2.8.10_PORTFOLIO_GLOBAL_QUERY_MAP.md
+
+G. Verification Checklist
+Must pass:
+
+Dashboard portfolio value updates within <1 second
+
+Goals Engine projected growth updates instantly
+
+LATTI widgets update instantly
+
+Portfolio Overview reflects new balance instantly
+
+No stale values after starting/stopping trading
+
+All components use standardized query config
+
+END OF DIRECTIVE
