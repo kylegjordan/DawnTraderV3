@@ -1,0 +1,89 @@
+📘 REB 2.8.5B — Directive for Top Section Corrections (ONLY)
+Objective
+
+Fix the Primary Metrics section of Filter Insights:
+
+Kraken Universe
+
+Cycle Info
+
+Last Scan Result
+
+24h Filter Activity
+
+All logic must be REST-only and use the mapping table provided.
+
+A. FIX 1 — Countdown Freezing at 0s
+Backend: /scan-latest must always send a fresh nextScanInMs
+
+Replace your current calculation with:
+
+const lastScan = new Date(scanState.cycleEndTimestamp).getTime();
+const interval = scanState.cycleFrequencyMs; // usually 30s
+const now = Date.now();
+
+const nextScanTimestamp = lastScan + interval;
+const actualNextScanInMs = Math.max(0, nextScanTimestamp - now);
+
+
+💡 And DO NOT zero this value when STOPPED.
+
+B. FIX 2 — Frontend Countdown Logic Must Use the Above
+
+You MUST update the Timer baseline only inside the onSuccess callback:
+
+onSuccess: () => {
+    setRestFetchTime(Date.now());
+}
+
+
+NOT inside useEffect() watching the query.
+
+C. FIX 3 — Cycles Per Hour (backend) must reflect real FX5 health
+
+Replace your current implementation with:
+
+recordScanCompletion(mode: Mode) {
+    const now = Date.now();
+    this.data[mode].scanCompletions1h.push(now);
+
+    // Remove anything older than 3600 seconds
+    this.data[mode].scanCompletions1h =
+        this.data[mode].scanCompletions1h.filter(t => now - t <= 3600000);
+}
+
+getCyclesPerHour(mode: Mode) {
+    const count = this.data[mode].scanCompletions1h.length;
+    return (count * 3600000) / this.cycleFrequencyMs; // usually 30s
+}
+
+D. FIX 4 — 24h Activity aggregation must follow FX5-native 24h window logic
+
+Do NOT use or reference the legacy aggregator.
+Use only:
+
+recordScanFor24h() → when engine active
+
+get24hSummary() → for /scan-24h endpoint
+
+E. FIX 5 — Implement the mapping table exactly
+
+Copy the mapping table exactly as-is.
+Do not add extra columns.
+Do not add WebSocket sources.
+
+F. Provide a new “mapping table AFTER implementation”
+
+After completing the changes above, output:
+
+The new mapping table (actual implementation)
+
+The backend logs showing:
+
+scans executing
+
+actualNextScanInMs changing
+
+cyclesPerHour updating
+
+This is required to validate correctness.

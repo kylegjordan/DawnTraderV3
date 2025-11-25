@@ -6089,8 +6089,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const context = await storage.getSystemContext(scanMode);
       const isEngineActive = context?.isEngineActive || false;
       
-      // REB 2.8.3: If no scan state (engine STOPPED), return zeroed payload for Passive mode display
+      // REB 2.8.5B: If no scan state yet, still calculate countdown from scanner startup
       if (!scanState) {
+        // FX5 scanner runs every 30s - estimate next scan even without state
+        const { fx5Scanner } = await import('./services/fx5-scanner.js');
+        const scannerStartTime = fx5Scanner.getStartTime();
+        const cycleFrequencyMs = 30000;
+        
+        // Calculate next scan based on scanner start + interval
+        const now = Date.now();
+        const elapsed = now - scannerStartTime;
+        const cyclesSinceStart = Math.floor(elapsed / cycleFrequencyMs);
+        const nextScanTimestamp = scannerStartTime + ((cyclesSinceStart + 1) * cycleFrequencyMs);
+        const nextScanInMs = Math.max(0, nextScanTimestamp - now);
+        
         return res.json({
           ok: true,
           data: {
@@ -6103,8 +6115,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             eligibleCount: 0,
             ineligibleCount: 0,
             cyclesPerHour: 0,
-            cycleFrequencyMs: 30000, // Static default
-            nextScanInMs: 0,
+            cycleFrequencyMs,
+            nextScanInMs, // REB 2.8.5B: Always calculate, never zero
             activePoolCount: 0,
             activeFilteredPool: [],
             isEngineActive: false,

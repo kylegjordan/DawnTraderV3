@@ -83,26 +83,27 @@ export function recordScanFor24h(
 
 /**
  * Record scan completion timestamp for cyclesPerHour tracking
+ * REB 2.8.5B: Updated to use current timestamp
  * 
  * @param mode - paper or live
- * @param completedAt - timestamp in ms
  * 
  * Note: This tracks ALL scans (ACTIVE and passive) to give accurate
  * cyclesPerHour metric reflecting actual FX5 performance
  */
-export function recordScanCompletion(mode: Mode, completedAt: number): void {
+export function recordScanCompletion(mode: Mode): void {
+  const now = Date.now();
   const history = scanHistoryByMode.get(mode) ?? { timestamps: [] };
-  history.timestamps.push(completedAt);
+  history.timestamps.push(now);
 
-  // Keep only the last 60 minutes
-  const oneHourAgo = completedAt - 60 * 60 * 1000;
-  history.timestamps = history.timestamps.filter(ts => ts >= oneHourAgo);
+  // Remove anything older than 3600 seconds (1 hour)
+  history.timestamps = history.timestamps.filter(t => now - t <= 3600000);
 
   scanHistoryByMode.set(mode, history);
 }
 
 /**
  * Get cycles per hour for a mode
+ * REB 2.8.5B: Returns count of scans in last hour
  * 
  * @param mode - paper or live
  * @returns Number of scan cycles completed in the last hour
@@ -114,6 +115,7 @@ export function getCyclesPerHour(mode: Mode): number {
   if (!history || history.timestamps.length === 0) {
     return 0;
   }
+  // REB 2.8.5B: Simple count of scans in last hour
   return history.timestamps.length;
 }
 

@@ -48,10 +48,16 @@ export class Fx5ScannerService {
   private paperTimer: NodeJS.Timeout | null = null;
   private liveTimer: NodeJS.Timeout | null = null;
   private isRunning = false;
+  private startTime: number = 0; // REB 2.8.5B: Track actual scanner start time
 
   constructor() {
     this.filteredPairsService = new FilteredPairsService();
     this.krakenService = new KrakenService();
+  }
+
+  // REB 2.8.5B: Get scanner start time for countdown calculation
+  getStartTime(): number {
+    return this.startTime;
   }
 
   /**
@@ -65,6 +71,7 @@ export class Fx5ScannerService {
     }
 
     this.isRunning = true;
+    this.startTime = Date.now(); // REB 2.8.5B: Set actual start time when scanner starts
     console.log('[FX5Scanner] Starting 30-second scanner for paper and live modes');
 
     // Run initial scan for both modes
@@ -231,7 +238,8 @@ export class Fx5ScannerService {
       const completedAt = Date.now();
       
       // Track cycles per hour (all scans, ACTIVE or passive)
-      recordScanCompletion(mode, completedAt);
+      // REB 2.8.5B: No timestamp parameter needed (uses current time internally)
+      recordScanCompletion(mode);
       
       // Track 24h metrics (ONLY when engine is ACTIVE)
       recordScanFor24h(
