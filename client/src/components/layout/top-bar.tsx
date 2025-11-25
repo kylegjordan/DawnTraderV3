@@ -719,8 +719,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
               </Button>
             </div>
 
-            {/* Phase 31.H/32.D-Fix.Final: Passive Learning Indicator (FYI only; does not gate Active/Stopped) */}
-            {systemConfigData?.systemFlags?.passiveLearning && (
+            {/* REB 2.8.6B: Passive Learning Indicator (derived from !isEngineActive) */}
+            {tradingStatus?.passiveLearning && (
               <div className="flex items-center gap-0.5 px-0.5 py-0 bg-blue-500/10 border border-blue-500/30 rounded mr-2">
                 <div className="flex items-center gap-0.5">
                   <div className="w-0.5 h-0.5 bg-blue-500 rounded-full animate-pulse" />

@@ -1,0 +1,332 @@
+REB 2.8.6B – Passive Learning & Active Filter Pool Truth Restore
+
+Scope:
+
+Fix passive learning behavior and indicator
+
+Fix Active Filtered Pool behavior
+
+Restore correct 24h Filter Activity metrics behavior that we had after REB 2.8.5D
+
+Do not regress the already-working parts of the Primary Metrics section (Top block on Filter Insights)
+
+0. Truth Recap – Required Behavior
+
+Engine states and modes
+
+For each mode (paper, live) there is an engine state flag we already use:
+
+isEngineActive (true = trading, false = stopped)
+
+Passive learning is not a separate “third mode”. It’s just:
+
+passiveLearning = !isEngineActive (per mode)
+
+Passive Learning behavior (per mode)
+
+When trading is OFF (isEngineActive === false):
+
+System is in Passive Learning.
+
+FX5 can still scan internally, but:
+
+Last Scan Result shows zeros.
+
+24h Filter Activity shows zeros for all fields.
+
+Cycles per Hour shows 0.0.
+
+Active Filtered Pool stays empty.
+
+When trading is ON (isEngineActive === true):
+
+System is in Active Trading (no passive learning).
+
+Passive Learning indicator must disappear.
+
+24h Filter Activity begins aggregating:
+
+Totals, uniques, cycles 24h all increment correctly.
+
+Cycles per Hour increments with scans (≤ 1 scan delay is acceptable).
+
+Active Filtered Pool populates with current survivors.
+
+When trading stops again (per mode)
+
+As soon as the engine stops for that mode:
+
+isEngineActive becomes false.
+
+System goes back to Passive Learning.
+
+24h Filter Activity resets all fields to zero for that mode.
+
+Cycles per Hour returns to 0.0 within at most 1 scan cycle.
+
+Active Filtered Pool is cleared and remains empty until the engine is started again.
+
+Already-working behaviors that MUST NOT regress
+
+From REB 2.8.5D we were satisfied with:
+
+Next Scan In countdown (including the small “pause at 0” edge case).
+
+Last Scan Cycle ID updates each scan.
+
+Last Scan Result values and percentages.
+
+24h Filter Activity:
+
+Totals & uniques increment correctly during trading.
+
+Unique Evaluated ≠ Unique Survived (they now calculate correctly).
+
+Metrics reset to 0 when trading stops.
+
+Treat REB_2.8.5D_PRIMARY_METRICS_FIX_COMPLETION.md as the truth reference for the top-section metrics behavior.
+
+1. Roll Back / Simplify Passive Learning Semantics
+
+Goal: Passive learning is derived from !isEngineActive only, not persisted or gated via SystemConfig.passiveLearning.
+
+1.1 Remove / neutralize SystemConfig.passiveLearning
+
+In any files where you added or use SystemConfig.passiveLearning in REB 2.8.6 (e.g. trading-state-sync.ts, storage.ts, etc.):
+
+Stop persisting a passiveLearning field to SystemConfig.
+
+If you already added such a field, leave the DB schema as-is but stop reading or writing it; treat it as dead / ignored.
+
+In trading-state-sync.ts (or whichever service currently computes passive learning):
+
+Derive passive learning in memory only, per mode:
+
+const passiveLearning = !context.isEngineActive;
+
+
+Use this derived value for:
+
+Logs,
+
+WebSocket payloads,
+
+Any in-memory decisions.
+
+Do not persist passiveLearning to SystemConfig.
+
+Ensure that the mode context object / broadcast payload includes:
+
+isEngineActive (existing)
+
+Optional derived passiveLearning field set to !isEngineActive (for convenience), but again not persisted.
+
+2. Fix Passive Learning Indicator (UI)
+
+Goal: The “PASSIVE LEARNING” pill should reflect the truth: visible only when isEngineActive === false for the current mode.
+
+Find the component(s) that render the Passive Learning pill (e.g. mode banner, trading header).
+
+Replace any use of a persisted passiveLearning flag with:
+
+const passiveLearning = !engineActive; // where engineActive comes from the current mode context
+
+
+Rendering rule:
+
+If engineActive === false → show “PASSIVE LEARNING” pill.
+
+If engineActive === true → hide “PASSIVE LEARNING” pill.
+
+Verify for both modes (Paper and Live):
+
+Toggle trading ON → pill disappears immediately (at worst within 1 scan).
+
+Toggle trading OFF → pill reappears.
+
+3. Restore Correct 24h Filter Activity Behavior
+
+Goal: Get back to the behavior we had after REB 2.8.5D and remove any passiveLearning gate that broke it.
+
+The correct behavior:
+
+When engine is STOPPED:
+
+24h fields all zero (per mode).
+
+When engine is ACTIVE:
+
+24h fields accumulate over time.
+
+When engine goes back to STOPPED:
+
+24h fields reset to zero for that mode.
+
+3.1 Gating logic – use isEngineActive only
+
+In server/services/fx5-24h-window.ts (or equivalent):
+
+For functions like recordScanFor24h(...) and recordScanCompletion(...):
+
+Ensure the only gate for recording 24h metrics is the engine state:
+
+export function recordScanFor24h(params: { mode: Mode; isEngineActive: boolean; ... }) {
+  if (!params.isEngineActive) {
+    // do not record 24h trading metrics in passive learning
+    return;
+  }
+  // existing accumulation logic from REB 2.8.5D
+}
+
+
+Remove any checks against SystemConfig.passiveLearning or similar:
+
+No if (systemConfig.passiveLearning) return; etc.
+
+Make sure you still call the 24h reset logic when trading stops (per mode), as implemented in 2.8.5C/5D:
+
+Example pattern (pseudocode):
+
+// on stop for paper mode
+fx5Window.reset24hWindow("paper");
+fx5Window.resetHourlyScanHistory("paper");
+
+
+This should be invoked from the trading stop flows (paper + live), not from passiveLearning flags.
+
+Re-run the simple behavior test (per mode):
+
+Start app (engine stopped):
+
+24h totals, uniques, cycles = 0.
+
+Start trading:
+
+After the first scan, 24h totals and cycles > 0.
+
+Stop trading:
+
+After stop, 24h totals and cycles reset back to 0 and stay at 0.
+
+4. Fix Active Filtered Pool Behavior
+
+Goal: Pool is only populated while trading is active; it clears and stays empty when trading stops.
+
+4.1 Population rule
+
+In server/services/active-filter-pool.ts (or equivalent):
+
+Find the handler that adds survivors into the active pool (e.g. wired to scanner:breakdown or FX5 stage-3 events).
+
+Make sure it only runs when engine is active for that mode:
+
+if (!isEngineActive) {
+  // passive learning → do not populate Active Pool
+  return;
+}
+// existing survivor-add logic
+
+
+Remove any dependency on SystemConfig.passiveLearning for pool population.
+
+The gating condition should be only isEngineActive === true.
+
+4.2 Clearing rule on stop
+
+Ensure that when trading is stopped for a mode (paper or live), the pool is immediately cleared for that mode.
+
+In server/routes.ts (or wherever /trading/stop is handled for paper & live):
+
+// After successful engine stop for mode
+activeFilterPool.clear(mode); // or enforcePassiveModeIfStopped(mode) if that function calls clear()
+
+
+Verify behavior:
+
+Before starting trading:
+
+“Total Active Filtered Pairs: 0”
+
+Table shows “No Eligible Pairs”.
+
+While trading is active and survivors exist:
+
+“Total Active Filtered Pairs” > 0
+
+Table filled with symbols/status/etc.
+
+Immediately after stop trading:
+
+“Total Active Filtered Pairs: 0”
+
+Table returns to “No Eligible Pairs” and stays that way, even if FX5 continues internal scans.
+
+5. Preserve Cycles-Per-Hour & Countdown Behavior
+
+These were already acceptable after REB 2.8.5D; just make sure REB 2.8.6B does not regress them.
+
+Cycles per Hour
+
+Must:
+
+Be 0.0 while engine is stopped.
+
+Begin incrementing only when engine becomes active (≤ 1 scan delay acceptable).
+
+Reset to 0.0 after engine stops again.
+
+Next Scan In countdown
+
+Must continue using the REST-based countdown implemented in REB 2.8.5D.
+
+The minor “0s pause for a few seconds, then restart at 25–27s” behavior is acceptable; do not re-introduce WebSocket dependence.
+
+6. Documentation & Reports
+
+Please:
+
+Update the mapping doc for this micro-phase:
+
+Create docs/restoration/reb2_reports/REB_2.8.6B_PASSIVE_LEARNING_AND_ACTIVE_POOL_MAPPING.md
+
+Include:
+
+Where isEngineActive comes from.
+
+How passiveLearning is derived (not persisted).
+
+How 24h metrics gating works now (functions and conditions).
+
+How Active Filter Pool population and clearing are gated.
+
+Create a completion report:
+
+docs/restoration/reb2_reports/REB_2.8.6B_PASSIVE_LEARNING_AND_ACTIVE_POOL_COMPLETION.md
+
+Include:
+
+List of files changed.
+
+Before/after behavior table for:
+
+Passive Learning pill
+
+24h Filter Activity metrics
+
+Cycles per Hour
+
+Active Filtered Pool
+
+Short log excerpts showing:
+
+Engine stopped → no 24h accumulation and no pool population.
+
+Engine active → 24h accumulation and pool entries.
+
+Engine stop → 24h reset and pool clear.
+
+Confirm in the completion report that:
+
+The Primary Metrics behavior from REB_2.8.5D is preserved (no regression).
+
+All passive learning and active pool truths listed in section 0 now hold in both Paper and Live modes.

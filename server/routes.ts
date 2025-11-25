@@ -2627,9 +2627,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[TradingStop] Global live trading engine stopped by user ${userId}`);
       }
       
-      // REB 2.8.6: Enforce passive mode - clear Active Filter Pool immediately
+      // REB 2.8.6B: Enforce passive mode - clear Active Filter Pool immediately
+      // Passive learning is derived (!isEngineActive), not a separate flag
       activeFilterPool.enforcePassiveModeIfStopped(mode as 'paper' | 'live', false);
-      console.log(`[REB 2.8.6][PassivePool] Cleared Active Pool for ${mode} mode (engine stopped)`);
+      console.log(`[REB 2.8.6B][PassivePool] Cleared Active Pool for ${mode} mode (engine stopped)`);
       
       // REB 2.8.5D: Update system context AFTER successful engine stop (atomic truth)
       // This ensures isEngineActive only flips false when engine is actually stopped
