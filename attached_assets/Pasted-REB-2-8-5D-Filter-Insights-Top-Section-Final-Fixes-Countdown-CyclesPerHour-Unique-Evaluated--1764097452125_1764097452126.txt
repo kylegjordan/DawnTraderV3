@@ -1,0 +1,161 @@
+REB 2.8.5D — Filter Insights: Top Section Final Fixes (Countdown, CyclesPerHour, Unique Evaluated)
+
+(Ready to send directly to Replit)
+
+🚀 REB 2.8.5D — FINAL FIXES FOR FILTER INSIGHTS: TOP METRICS SECTION
+
+This directive fixes the final three defects in the Primary Metrics / Top Section of the Filter Insights page.
+
+📌 Scope of Work — Microphase 1 Only
+
+Fix these 3 issues:
+
+1. Next Scan Countdown (UI) — Always Stuck at 0s
+Problem
+
+The countdown UI no longer decrements.
+
+It always shows 0s because the previous elapsed-time logic was removed.
+
+Backend values are correct, but the UI is not processing them.
+
+Required Fix
+
+Restore proper countdown behavior:
+
+Frontend Logic Specification
+
+On each successful REST fetch of /scan-latest:
+
+Store:
+
+setRestFetchTime(Date.now());
+setServerNextScanMs(data.nextScanInMs);
+
+
+Every render tick:
+
+const elapsed = Date.now() - restFetchTime;
+const remaining = Math.max(0, serverNextScanMs - elapsed);
+
+
+Display:
+
+Math.floor(remaining / 1000) + "s"
+
+Important Rules
+
+Do NOT use WebSockets.
+
+Do NOT rely on server-side countdown alone.
+
+Countdown must decrement locally between REST polls.
+
+Reset countdown every time REST updates.
+
+2. cyclesPerHour — Delayed Start & Delayed Reset
+Problem
+
+cyclesPerHour = 0 for 2–3 scans after turning trading ON.
+
+cyclesPerHour continues incrementing for 2–3 scans after turning trading OFF.
+
+FX5 scanner is reading stale isEngineActive value due to delayed system-context updates.
+
+Required Fix
+Backend Specification
+
+When the user toggles trading:
+
+Update system context immediately before the next scan.
+
+Ensure FX5Scanner sees the correct isEngineActive value at the very next cycle.
+
+Required Changes
+
+Immediately write mode state into system context when trading is toggled:
+
+await storage.upsertSystemContext(mode, { isEngineActive: true/false });
+
+
+Ensure that fx5-scanner.ts reads the updated context before the next scan:
+
+const context = await storage.getSystemContext(mode);
+const isEngineActive = context?.isEngineActive === true;
+
+
+cyclesPerHour must update on the first scan after toggle, not after 2–3 scans.
+
+3. 24h Activity → uniqueEvaluated — Incorrect Calculation
+Problem
+
+uniqueEvaluated currently equals uniqueSurvived.
+
+Correct Behavior
+
+uniqueEvaluated (24h) must represent:
+
+The number of unique trading pairs that were evaluated at least once in all scan cycles within the last 24 hours.
+
+Backend Implementation Specification
+
+Modify the FX5 24h Window module:
+
+In recordScanFor24h():
+
+For each evaluated symbol in the scan:
+
+window.uniqueEvaluatedSet.add(symbol);
+
+
+In /api/.../scan-24h:
+
+uniqueEvaluated: window.uniqueEvaluatedSet.size
+
+
+Ensure uniqueSurvived and uniqueEvaluated are computed independently.
+
+Expected Output after Fix
+
+uniqueEvaluated >= uniqueSurvived
+
+uniqueEvaluated will be close to totalEvaluated early in a session
+
+Diverges properly over time
+
+📘 Deliverables
+
+Replit must provide:
+
+1. Full implementation report
+
+Saved under:
+
+docs/restoration/reb2_reports/REB_2.8.5D_PRIMARY_METRICS_FIX_COMPLETION.md
+
+
+Including:
+
+The exact code changes made
+
+Before/after behavior logs
+
+Tests performed
+
+Final mapping table updates
+
+2. Updated mapping table
+
+Updated version of:
+
+REB_2.8.5B_PRIMARY_METRICS_MAPPING_TABLE.md
+
+3. Confirmation screenshots
+
+Showing:
+
+Properly decrementing countdown
+
+cyclesPerHour updating instantly on mode toggle
+
+uniqueEvaluated calculated correctly

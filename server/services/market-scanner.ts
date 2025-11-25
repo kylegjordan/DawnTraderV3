@@ -661,6 +661,7 @@ export interface BatchResult {
     dailyRange: number;
     fromTopN: boolean;
   }>;
+  evaluatedSymbols: string[]; // REB 2.8.5D: All 60 symbols evaluated in this batch (before filtering)
   breakdown: {
     failed_min_volume: number;
     failed_spread: number;
@@ -750,6 +751,9 @@ export async function collectMixedBatch(
   
   // Combine batches
   const batch = [...topNBatch, ...tierBBatch];
+  
+  // REB 2.8.5D: Capture all evaluated symbols BEFORE filtering for 24h uniqueEvaluated tracking
+  const evaluatedSymbols = batch.map(p => p.symbol);
   
   console.log(`[8.6.7][DEBUG] STEP 3: Built batch - ${topNBatch.length} Top-N + ${tierBBatch.length} Tier-B = ${batch.length} total`);
   console.log(`[8.6.7][DEBUG] Batch size BEFORE filtering: ${batch.length}`);
@@ -908,6 +912,7 @@ export async function collectMixedBatch(
   
   return {
     survivors,
+    evaluatedSymbols, // REB 2.8.5D: All 60 symbols evaluated (before filtering)
     breakdown,
     metrics: {
       evaluatedCount,

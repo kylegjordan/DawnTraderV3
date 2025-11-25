@@ -2510,14 +2510,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log('[ENGINE_WAITING_START] Waiting for engine start with 30s timeout...');
       const result = await Promise.race([startEnginePromise, timeoutPromise]) as any;
       
-      const elapsed = Date.now() - startTime;
-      console.log(`[ENGINE_TIMING] Engine started in ${elapsed}ms`);
-      
-      console.log('[ENGINE_DATABASE_UPDATE] Updating user status...');
-      await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
-      
-      // Phase 27.F.13.O: Update global system_context with audit trail
-      console.log('[ENGINE_DATABASE_UPDATE] Updating global system context...');
+      // REB 2.8.5D: Update system context AFTER successful engine start (atomic truth)
+      // This ensures isEngineActive only flips true when engine is actually running
+      // Trade-off: 1-scan delay vs guaranteed truth consistency
+      console.log('[REB 2.8.5D][ENGINE_DATABASE_UPDATE] Updating system context AFTER successful engine start...');
       await storage.updateSystemContext(mode, {
         isEngineActive: true,
         lastStartedBy: userId,
@@ -2525,6 +2521,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         changedBy: req.user!.username || 'unknown',
         changeReason: 'User-initiated start'
       });
+      
+      const elapsed = Date.now() - startTime;
+      console.log(`[ENGINE_TIMING] Engine started in ${elapsed}ms`);
+      
+      console.log('[ENGINE_DATABASE_UPDATE] Updating user status...');
+      await storage.updateUser(userId, { tradingStatus: 'active', tradingMode: mode });
       
       console.log('[41D-FIX] Engine start completed, preparing HTTP response...');
       
@@ -2574,6 +2576,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         timeout: elapsed >= 9900 // True if timeout occurred
       });
       
+      // REB 2.8.5D: No rollback needed - context update happens AFTER successful start
+      // If we reach this catch block, context was never flipped to true
+      
       if (error.message?.includes('timeout')) {
         return res.status(504).json({ 
           error: 'Engine start timeout', 
@@ -2621,15 +2626,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[TradingStop] Global live trading engine stopped by user ${userId}`);
       }
       
-      await storage.updateUser(userId, { tradingStatus: 'stopped' });
-      
-      // Phase 27.F.13.O: Update global system_context with audit trail
+      // REB 2.8.5D: Update system context AFTER successful engine stop (atomic truth)
+      // This ensures isEngineActive only flips false when engine is actually stopped
+      // Trade-off: 1-scan delay vs guaranteed truth consistency
+      console.log('[REB 2.8.5D][ENGINE_DATABASE_UPDATE] Updating system context AFTER successful engine stop...');
       await storage.updateSystemContext(mode, {
         isEngineActive: false,
         lastStoppedBy: userId,
         changedBy: req.user!.username || 'unknown',
         changeReason: 'User-initiated stop'
       });
+      
+      await storage.updateUser(userId, { tradingStatus: 'stopped' });
       
       console.log('[41D-FIX] Engine stop completed, preparing HTTP response...');
       
@@ -2667,6 +2675,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       });
     } catch (error) {
       console.error('[TradingStop] Error stopping trading:', error);
+      
+      // REB 2.8.5D: No rollback needed - context update happens AFTER successful stop
+      // If we reach this catch block, context was never flipped to false
+      
       res.status(500).json({ error: 'Failed to stop trading' });
     }
   });

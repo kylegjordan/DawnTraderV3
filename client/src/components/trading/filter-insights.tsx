@@ -231,10 +231,6 @@ export function FilterInsights() {
     queryKey: ['/api/paper-sim/diagnostics/scan-latest?mode=paper'],
     refetchInterval: 5000, // Refresh every 5 seconds for near-real-time updates
     refetchOnWindowFocus: true,
-    onSuccess: () => {
-      // REB 2.8.5A: Update fetch time only on successful fetch (not when nextScanInMs is already 0)
-      setRestFetchTime(Date.now());
-    },
   });
 
   // REB 2.8.5A: Query for 24h scan activity metrics (now using FX5-native window)
@@ -251,6 +247,13 @@ export function FilterInsights() {
   });
 
   // REB 2.8.3: REMOVED scan_tick WebSocket listener - now using REST only
+
+  // REB 2.8.5D: Update restFetchTime whenever scanLatestData changes (replaces deprecated onSuccess)
+  useEffect(() => {
+    if (scanLatestData) {
+      setRestFetchTime(Date.now());
+    }
+  }, [scanLatestData]);
 
   // Listen for scanner:breakdown WebSocket events (still needed for Filter Breakdown)
   useEffect(() => {

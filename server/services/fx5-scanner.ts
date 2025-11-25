@@ -141,7 +141,7 @@ export class Fx5ScannerService {
       );
       
       // Extract results from batch pipeline
-      const { survivors, breakdown, metrics } = batchResult;
+      const { survivors, evaluatedSymbols, breakdown, metrics } = batchResult;
       const {
         evaluatedCount,
         eligibleCount,
@@ -229,9 +229,9 @@ export class Fx5ScannerService {
       });
 
       // Emit Stage-3 WebSocket events SECOND
-      // Extract symbol arrays for unique 24h tracking
-      const evaluatedSymbols = survivors.map(s => s.symbol); // All evaluated symbols from batch
-      const survivedSymbols = survivors.map(s => s.symbol);   // All survivors
+      // REB 2.8.5D: evaluatedSymbols now comes from batchResult (all 60 batch symbols before filtering)
+      // survivedSymbols remains the same (only survivors that passed filters)
+      const survivedSymbols = survivors.map(s => s.symbol);
       await emitStage3Events(mode, breakdown, { evaluatedSymbols, survivedSymbols });
 
       // REB 2.8.5A: Record scan completion for FX5-native 24h window & cycles per hour tracking
