@@ -75,12 +75,11 @@ function TargetDailyGoals() {
   // Phase 27.F.23: Fetch current trading pace (disable all background refetches)
   const { data: currentPaceData } = useQuery<{ tradingPace: string }>({
     queryKey: ['/api/system/trading-pace'],
-    refetchInterval: false,
-    refetchIntervalInBackground: false,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    staleTime: Infinity,
+    // REB 2.8.10: Standardized portfolio refresh
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
   
   // Phase 27.F.21: Compute current pace early (needed for LATTI query key)
@@ -93,12 +92,11 @@ function TargetDailyGoals() {
       console.log(`[TargetDailyGoals] Phase 27.F.23: LATTI fetched for ${currentPace} preset at ${new Date().toLocaleTimeString()}`);
       return apiRequest('GET', `/api/latti/targets?mode=${mode}`);
     },
-    refetchInterval: false,
-    refetchIntervalInBackground: false,
-    refetchOnMount: true, // Phase 27.F.23: Allow mount refetch for preset changes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    staleTime: Infinity,
+    // REB 2.8.10: Standardized portfolio refresh
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
   
   // Phase 27.F.21: Diagnostic console.table for LATTI values on frontend

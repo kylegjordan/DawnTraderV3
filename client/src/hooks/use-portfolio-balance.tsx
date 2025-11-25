@@ -26,11 +26,12 @@ export function usePortfolioBalance() {
     queryKey: [`/api/portfolio/overview?mode=${mode}`],
     // Wait for mode to be available before executing query
     enabled: !!mode,
-    // Phase 27.F.24: Reduce refetch frequency for Goals Engine (doesn't need real-time updates)
-    staleTime: 30000, // 30 seconds
-    refetchInterval: false, // No polling - rely on WebSocket invalidations only
-    refetchOnWindowFocus: false, // Don't refetch on window focus
-    refetchOnMount: true, // Always refetch when component mounts
+    // REB 2.8.10: Standardized portfolio refresh for instant updates
+    refetchInterval: 5000,         // 5-second polling for real-time balance
+    staleTime: 0,                  // Always consider stale to force refetch
+    refetchOnWindowFocus: true,    // Refetch on tab focus
+    refetchOnReconnect: true,      // Refetch after network reconnect
+    refetchOnMount: true,          // Always refetch when component mounts
     // Don't throw errors - just use fallback
     throwOnError: false,
     retry: 1, // Retry once before using fallback

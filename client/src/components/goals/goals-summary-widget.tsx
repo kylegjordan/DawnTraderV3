@@ -28,6 +28,11 @@ export default function GoalsSummaryWidget() {
   
   const { data, isLoading, refetch } = useQuery<GoalsSummaryData>({
     queryKey: [`/api/goals/summary?mode=${mode}`],
+    // REB 2.8.10: Standardized portfolio refresh
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   // Refetch when mode changes

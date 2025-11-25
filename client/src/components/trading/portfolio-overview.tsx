@@ -48,10 +48,20 @@ export default function PortfolioOverview() {
   const { data: paperPortfolioMetrics, isLoading: paperPortfolioLoading } = useQuery<PortfolioMetrics>({
     queryKey: ['/api/paper/metrics/portfolio'],
     enabled: isPaper,
+    // REB 2.8.10: Standardized portfolio refresh
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
   
   const { data: earningsData, isLoading: earningsLoading } = useQuery<EarningsData>({
     queryKey: isPaper ? ['/api/paper/metrics/earnings'] : ['/api/portfolio/earnings'],
+    // REB 2.8.10: Standardized portfolio refresh
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const { data: dailyBriefs = [], isLoading: briefsLoading } = useQuery<DailyBrief[]>({

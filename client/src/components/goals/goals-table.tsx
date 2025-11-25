@@ -54,6 +54,11 @@ export default function GoalsTable() {
 
   const { data: goalsData, isLoading } = useQuery<{ goals: UserGoal[]; hasGoals: boolean }>({
     queryKey: [`/api/goals/summary?mode=${mode}`],
+    // REB 2.8.10: Standardized portfolio refresh
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   useEffect(() => {

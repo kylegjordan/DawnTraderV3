@@ -45,12 +45,11 @@ const LATTIGoalsMirrorComponent = () => {
   // Phase 27.F.30: Fetch current trading pace (allow mount refetch for initial load)
   const { data: currentPaceData, isLoading: paceLoading } = useQuery<{ tradingPace: string }>({
     queryKey: ['/api/system/trading-pace'],
-    refetchInterval: false,
-    refetchIntervalInBackground: false,
-    refetchOnMount: true, // Phase 27.F.30: Allow mount refetch to get current pace
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    staleTime: Infinity,
+    // REB 2.8.10: Standardized portfolio refresh
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
   
   const currentPace = currentPaceData?.tradingPace || 'baseline';
@@ -63,12 +62,11 @@ const LATTIGoalsMirrorComponent = () => {
       return apiRequest('GET', `/api/latti/targets?mode=${mode}&preset=${currentPace}`);
     },
     enabled: !paceLoading && !!currentPaceData, // Phase 27.F.30: Wait for pace data before fetching
-    refetchInterval: false,
-    refetchIntervalInBackground: false,
-    refetchOnMount: true, // Allow mount refetch for preset changes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    staleTime: Infinity,
+    // REB 2.8.10: Standardized portfolio refresh
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   // Phase 27.F.30: Memoize projection calculations

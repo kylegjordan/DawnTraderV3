@@ -17,13 +17,14 @@ import {
 
 // Phase 40.3: WebSocket-only trading status - no polling
 // Status updates delivered via 'trading_state_changed' WebSocket events
+// REB 2.8.10: Updated to use 5s polling + WebSocket for instant status updates
 export function useTradingStatus() {
   return useQuery<TradingStatus>({
     queryKey: ['/api/trading/status'],
-    staleTime: Infinity, // Data stays fresh until invalidated
-    refetchInterval: false, // ✅ Disabled - use WebSocket events instead
-    refetchOnWindowFocus: true, // Refetch on tab focus as fallback
-    refetchOnReconnect: true // Refetch on network reconnect as fallback
+    refetchInterval: 5000,         // REB 2.8.10: 5-second polling
+    staleTime: 0,                  // REB 2.8.10: Always consider stale
+    refetchOnWindowFocus: true,    // Refetch on tab focus as fallback
+    refetchOnReconnect: true       // Refetch on network reconnect as fallback
   });
 }
 
