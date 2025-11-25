@@ -1,0 +1,151 @@
+🎯 3. Directive: REB 2.8.9 — Fix Portfolio Balance Refresh Latency
+TITLE
+
+REB 2.8.9 — Portfolio Balance Refresh Fix (Dashboard + Trading Start)
+
+GOAL
+
+Ensure the Dashboard portfolio value updates immediately when:
+
+Paper trading is activated
+
+A new portfolio value is set
+
+The user changes between Paper / Live
+
+A new balance is emitted from backend
+
+A REST call updates the stored portfolio value
+
+BACKGROUND
+
+Current behavior shows stale balance caused by:
+
+React Query cache not being invalidated
+
+No refetch on trading start
+
+Missing event → Dashboard not refreshing
+
+Possibly incorrect data source (SystemConfig vs Session State)
+
+This must be restored to the original behavior (automatic, immediate update).
+
+🛠️ DIRECTIVE FOR REPLIT
+
+Paste the following into Replit:
+
+🚀 REB 2.8.9 — Portfolio Balance Refresh Fix (Dashboard + Trading Start)
+A. Fix React Query Caching on Dashboard
+
+1. Locate Dashboard data query
+
+File:
+client/src/components/dashboard/dashboard.tsx
+(or equivalent Dashboard component)
+
+Find the query fetching portfolio/balance, e.g.:
+
+const { data: portfolioData } = useQuery(['/portfolio/balance'], fetchBalance, {
+  staleTime: 60_000,
+  cacheTime: 120_000,
+});
+
+
+2. Change caching settings to force near-real-time updates
+
+Replace:
+
+staleTime: 60000
+
+
+with:
+
+staleTime: 0,
+refetchInterval: 5000,        // Every 5 seconds
+refetchOnWindowFocus: true,
+refetchOnReconnect: true,
+refetchOnMount: true,
+
+
+This ensures Dashboard always updates quickly.
+
+B. Invalidate Queries When Trading Starts
+
+File:
+client/src/components/trading/top-bar.tsx
+(or wherever the Trading START/STOP buttons live)
+
+After the API call that activates trading, add:
+
+queryClient.invalidateQueries(['/portfolio/balance']);
+queryClient.invalidateQueries(['/api/paper-sim/portfolio']);
+queryClient.invalidateQueries(['/api/live/portfolio']);
+
+
+Example:
+
+await startPaperTrading();
+queryClient.invalidateQueries({ queryKey: ['/portfolio/balance'] });
+
+
+This forces immediate refresh.
+
+C. Add Backend Event Emission (Optional but Preferred)
+
+In:
+
+server/services/paper-sim-service.ts
+inside the trading-start method:
+
+Add:
+
+broadcast('portfolio:update', {
+  mode: 'paper',
+  balance: updatedBalance
+});
+
+
+Then in Dashboard WebSocket handler:
+
+if (msg.type === 'portfolio:update') {
+  queryClient.invalidateQueries(['/portfolio/balance']);
+}
+
+
+This allows instant UI updates (no polling).
+
+D. Verify Data Source
+
+Ensure the Dashboard reads balance from the active trading session state, NOT from SystemConfig.
+
+REST source should be:
+
+GET /api/paper-sim/portfolio/balance
+
+
+NOT:
+
+systemConfig.walletBalance
+
+
+If Dashboard is reading systemConfig, replace it with the proper REST call.
+
+E. REQUIRED DELIVERABLE
+
+Please provide:
+
+❑ A code-level diff of all file modifications
+❑ A summary describing:
+
+what was changed
+
+why
+
+verification logs
+❑ Add documentation file to:
+
+docs/restoration/reb2_reports/REB_2.8.9_PORTFOLIO_REFRESH_COMPLETION.md
+
+
+This completes the directive.

@@ -304,6 +304,12 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         return;
       }
       
+      // REB 2.8.9: Invalidate portfolio queries for immediate balance update
+      console.log('[REB 2.8.9] Invalidating portfolio queries after trading start');
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      
       toast({
         title: "Simulation Continued",
         description: "Resumed previous simulation with existing baseline",
@@ -334,6 +340,12 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         initialBalance: balance 
       });
       
+      // REB 2.8.9: Invalidate portfolio queries for immediate balance update
+      console.log('[REB 2.8.9] Invalidating portfolio queries after new simulation start');
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      
       toast({
         title: "New Simulation Started",
         description: `Started fresh simulation with $${balance.toFixed(2)} balance`,
@@ -353,6 +365,13 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     
     try {
       await startTrading('live');
+      
+      // REB 2.8.9: Invalidate portfolio queries for immediate balance update
+      console.log('[REB 2.8.9] Invalidating portfolio queries after live trading start');
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      
       // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
       let errorMessage = "Failed to start Live Trading";
@@ -390,6 +409,13 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     
     try {
       await stopTrading('live');
+      
+      // REB 2.8.9: Invalidate portfolio queries for immediate balance update
+      console.log('[REB 2.8.9] Invalidating portfolio queries after live trading stop');
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
+      
       // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
       let errorMessage = "Failed to stop Live Trading";

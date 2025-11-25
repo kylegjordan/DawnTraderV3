@@ -40,21 +40,25 @@ export default function Dashboard() {
   const { messages: wsMessages } = useWebSocket();
   
   // Phase 35.2A: Fetch portfolio data at Dashboard level for context isolation
-  // Phase 40.2: Aligned to 15s to match MarketEvaluationService cache TTL
+  // REB 2.8.9: Updated to 5s refresh for near-real-time balance updates
   const { data: livePortfolioData } = useQuery<PortfolioOverview>({
     queryKey: [`/api/portfolio/overview?mode=live`],
     enabled: !isPaper,
-    refetchInterval: 15000,
-    staleTime: 15000,
-    refetchOnWindowFocus: false
+    refetchInterval: 5000,        // Faster refresh for immediate updates
+    staleTime: 0,                 // Always consider stale to force refetch
+    refetchOnWindowFocus: true,   // Refetch when user returns to tab
+    refetchOnReconnect: true,     // Refetch after connection issues
+    refetchOnMount: true          // Refetch on component mount
   });
   
   const { data: paperPortfolioData } = useQuery<PortfolioOverview>({
     queryKey: ['/api/paper/portfolio/state'],
     enabled: isPaper,
-    refetchInterval: 15000,
-    staleTime: 15000,
-    refetchOnWindowFocus: false
+    refetchInterval: 5000,        // Faster refresh for immediate updates
+    staleTime: 0,                 // Always consider stale to force refetch
+    refetchOnWindowFocus: true,   // Refetch when user returns to tab
+    refetchOnReconnect: true,     // Refetch after connection issues
+    refetchOnMount: true          // Refetch on component mount
   });
   
   // Phase 35.2A: Memoize portfolio data to prevent unnecessary context updates
