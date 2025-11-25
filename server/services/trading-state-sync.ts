@@ -8,6 +8,7 @@
 import { storage } from '../storage.js';
 import { clusterBus } from './cluster-bus.js';
 import { contextBridge } from './context-bridge.js';
+import { systemConfigService } from './system-config.js';
 import type { SystemContext } from '@shared/schema';
 
 export type TradingMode = 'live' | 'paper';
@@ -455,6 +456,28 @@ export class TradingStateSync {
         this.lastPassiveState = null;
         console.log('[Phase-33.B] Passive state debounce reset (2s window expired)');
       }, 2000);
+      
+      // REB 2.8.6: Persist derived passiveLearning to SystemConfig (single source of truth)
+      // This ensures behavioral gates (FX5 scanner, 24h metrics) read correct value
+      try {
+        const tradingActive = isEngineActivePaper || isEngineActiveLive;
+        console.log(
+          '[PassiveLearning][StateSync]',
+          'tradingActive=', tradingActive,
+          'passiveLearning=', passiveLearning,
+          'paperActive=', isEngineActivePaper,
+          'liveActive=', isEngineActiveLive,
+        );
+        
+        await systemConfigService.getInstance().updateConfig(
+          { passiveLearning },
+          'system-auto' // Auto-derived, not manual
+        );
+        console.log(`[REB 2.8.6][PassiveLearning] SystemConfig updated: passiveLearning=${passiveLearning}`);
+      } catch (error) {
+        console.error('[REB 2.8.6][PassiveLearning] Failed to update SystemConfig:', error);
+        // Continue with broadcast even if config update fails
+      }
       
       // Phase 34.B: Fetch portfolioOverview for reconciliation broadcasts
       let portfolioOverview = { totalValue: 0, cash: 0, crypto: 0 };

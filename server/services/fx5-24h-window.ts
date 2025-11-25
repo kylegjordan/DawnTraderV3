@@ -1,5 +1,6 @@
 /**
  * REB 2.8.5A: FX5-Native 24h Window & Cycles Per Hour Tracking
+ * REB 2.8.6: Added dual-gate pattern (SystemConfig.passiveLearning + isEngineActive)
  * 
  * This module replaces the legacy scan24hAggregator with a lightweight,
  * FX5-specific implementation that:
@@ -10,9 +11,11 @@
  * Key differences from legacy aggregator:
  * - No engine state polling (relies on explicit isEngineActive parameter)
  * - No WebSocket emissions
- * - No systemConfigService dependencies
+ * - REB 2.8.6: Added SystemConfig.passiveLearning checks for dual-gate enforcement
  * - Pure data aggregation for REST endpoints
  */
+
+import { systemConfigService } from './system-config.js';
 
 type Mode = 'paper' | 'live';
 
@@ -62,6 +65,15 @@ export function recordScanFor24h(
   entry: Scan24hEntry,
   isEngineActive: boolean
 ): void {
+  // REB 2.8.6: Dual-gate pattern - check BOTH passiveLearning AND engine state
+  // Guard 1: Check persistent passive learning flag FIRST
+  const isPassiveLearning = systemConfigService.isPassiveLearningEnabled();
+  if (isPassiveLearning) {
+    console.log(`[FX5-24h][REB 2.8.6] Skipped recording ${mode} cycle ${entry.cycleId} - passive learning enabled`);
+    return;
+  }
+  
+  // Guard 2: Check engine state
   if (!isEngineActive) {
     // REB 2.8.5A: 24h metrics must only track ACTIVE trading cycles
     console.log(`[FX5-24h] Skipped recording ${mode} cycle ${entry.cycleId} - engine STOPPED`);
@@ -92,6 +104,15 @@ export function recordScanFor24h(
  * to reflect trading activity, not FX5 scanner health
  */
 export function recordScanCompletion(mode: Mode, isEngineActive: boolean): void {
+  // REB 2.8.6: Dual-gate pattern - check BOTH passiveLearning AND engine state
+  // Guard 1: Check persistent passive learning flag FIRST
+  const isPassiveLearning = systemConfigService.isPassiveLearningEnabled();
+  if (isPassiveLearning) {
+    console.log(`[FX5-24h][REB 2.8.6] Skipped recording scan completion for ${mode} - passive learning enabled`);
+    return;
+  }
+  
+  // Guard 2: Check engine state
   if (!isEngineActive) {
     // REB 2.8.5C: cyclesPerHour must represent trading activity only
     // Do not record STOPPED (passive learning) scans

@@ -61,6 +61,7 @@ import { numericNormalizationMiddleware } from './utils/numeric-normalizer.js';
 import { contextBridge } from './services/context-bridge.js';
 import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
+import { activeFilterPool } from './services/active-filter-pool.js';
 import os from 'os';
 
 // Rate Limiting for Authentication Endpoints - prevent brute force attacks
@@ -2625,6 +2626,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         await globalLiveEngine.stop();
         console.log(`[TradingStop] Global live trading engine stopped by user ${userId}`);
       }
+      
+      // REB 2.8.6: Enforce passive mode - clear Active Filter Pool immediately
+      activeFilterPool.enforcePassiveModeIfStopped(mode as 'paper' | 'live', false);
+      console.log(`[REB 2.8.6][PassivePool] Cleared Active Pool for ${mode} mode (engine stopped)`);
       
       // REB 2.8.5D: Update system context AFTER successful engine stop (atomic truth)
       // This ensures isEngineActive only flips false when engine is actually stopped
