@@ -33,6 +33,8 @@ const DEFAULTS = {
   universeSize: 100,
   activeTimeframes: ['5m', '15m', '1h'],
   confidenceThreshold: 60,
+  // REB 2.9: Data Quality - Phase 8.7.1 truth restoration
+  minHistoryDays: 30,
 };
 
 interface ScreenerFilters {
@@ -52,6 +54,8 @@ interface ScreenerFilters {
   universeSize?: number;
   activeTimeframes?: string[];
   confidenceThreshold?: number;
+  // REB 2.9: Data Quality - Phase 8.7.1 truth restoration
+  minHistoryDays?: number;
 }
 
 interface CalibrationData {
@@ -136,6 +140,8 @@ export default function ScreenerFiltersTab() {
         universeSize: currentFilters.universeSize ?? DEFAULTS.universeSize,
         activeTimeframes: currentFilters.activeTimeframes ?? DEFAULTS.activeTimeframes,
         confidenceThreshold: currentFilters.confidenceThreshold ?? DEFAULTS.confidenceThreshold,
+        // REB 2.9: Data Quality - Phase 8.7.1 truth restoration
+        minHistoryDays: currentFilters.minHistoryDays ?? DEFAULTS.minHistoryDays,
       });
       setHasChanges(false);
     }
@@ -473,6 +479,43 @@ export default function ScreenerFiltersTab() {
                 </Label>
               </div>
             </div>
+          </div>
+
+          {/* REB 2.9: Data Quality Section - Phase 8.7.1 truth restoration */}
+          <div className="mt-8">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-teal-500" />
+                  <CardTitle>Data Quality</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="minHistoryDays">Minimum History (Days)</Label>
+                  <Select
+                    value={filters.minHistoryDays?.toString() || "30"}
+                    onValueChange={(value) => {
+                      setFilters(prev => ({ ...prev, minHistoryDays: parseInt(value, 10) }));
+                      setHasChanges(true);
+                    }}
+                  >
+                    <SelectTrigger id="minHistoryDays" data-testid="select-min-history-days">
+                      <SelectValue placeholder="Select days" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="30">30 days</SelectItem>
+                      <SelectItem value="60">60 days</SelectItem>
+                      <SelectItem value="90">90 days</SelectItem>
+                      <SelectItem value="180">180 days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground">
+                    Excludes pairs without sufficient price history for backtesting and analysis.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Phase 27.F.14.UI-SYNC.2: Advanced Universe & Signal Controls */}
