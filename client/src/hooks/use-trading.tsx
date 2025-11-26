@@ -94,22 +94,8 @@ export function useTrading() {
     }
   }, [wsMessages, queryClient, debouncedInvalidate]);
 
-  // Phase 32.D-Fix.6 Fix #1: Listen for portfolio_balance_updated events
-  useEffect(() => {
-    const balanceUpdates = wsMessages.filter((msg: any) => msg.type === 'portfolio_balance_updated');
-    if (balanceUpdates.length > 0) {
-      const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
-      console.log('[32.D-Fix.6] Portfolio balance updated → debounced invalidation', latestUpdate.payload);
-      
-      // Phase 35.3.A: Use debounced invalidation for portfolio updates
-      debouncedInvalidate([
-        ['/api/dashboard/overview'],
-        ['/api/goals/summary'],
-        ['/api/paper-sim/status'],
-        ['/api/portfolio/overview']
-      ]);
-    }
-  }, [wsMessages, queryClient, debouncedInvalidate]);
+  // REB 2.8.12: portfolio_balance_updated listener removed (restored Nov 6-15 truth)
+  // Dashboard local WS listener handles instant portfolio updates via trading_state_changed
 
   // Phase 33.B: Listen for background_jobs_complete events
   useEffect(() => {
@@ -185,16 +171,21 @@ export function useTrading() {
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
       // Invalidate portfolio overview for both modes
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=paper'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'paper'] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'live'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trades/active'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
     }
   });
 
-  // Portfolio data - use mode-aware query key
+  // Portfolio data - use canonical tuple key format
   const { data: portfolioMetrics, isLoading: portfolioLoading } = useQuery<PortfolioMetrics>({
-    queryKey: [`/api/portfolio/overview?mode=${mode}`],
+    queryKey: ['portfolio-overview', mode],
+    queryFn: async () => {
+      const res = await fetch(`/api/portfolio/overview?mode=${mode}`);
+      if (!res.ok) throw new Error('Failed to fetch portfolio overview');
+      return res.json();
+    },
     enabled: !!mode,
     refetchInterval: 60000,
     staleTime: 60000,
@@ -225,8 +216,8 @@ export function useTrading() {
       queryClient.invalidateQueries({ queryKey: ['/api/trades/active'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trades'] });
       // Invalidate portfolio overview for both modes
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=paper'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'paper'] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'live'] });
     }
   });
 

@@ -23,12 +23,17 @@ export function usePortfolioBalance() {
   const { mode } = useTradingMode();
   
   const { data, isLoading, error, isFetching } = useQuery<PortfolioOverview>({
-    queryKey: [`/api/portfolio/overview?mode=${mode}`],
+    queryKey: ['portfolio-overview', mode],
+    queryFn: async () => {
+      const res = await fetch(`/api/portfolio/overview?mode=${mode}`);
+      if (!res.ok) throw new Error('Failed to fetch portfolio overview');
+      return res.json();
+    },
     // Wait for mode to be available before executing query
     enabled: !!mode,
-    // REB 2.8.10: Standardized portfolio refresh for instant updates
-    refetchInterval: 5000,         // 5-second polling for real-time balance
-    staleTime: 0,                  // Always consider stale to force refetch
+    // Nov 6-15 truth: Normal polling + WebSocket for instant updates
+    refetchInterval: 15000,        // 15-second polling (Dashboard WS provides instant updates)
+    staleTime: 15000,              // Cache for 15s
     refetchOnWindowFocus: true,    // Refetch on tab focus
     refetchOnReconnect: true,      // Refetch after network reconnect
     refetchOnMount: true,          // Always refetch when component mounts

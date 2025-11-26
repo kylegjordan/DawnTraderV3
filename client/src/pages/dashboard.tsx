@@ -41,14 +41,24 @@ export default function Dashboard() {
   // Fetch portfolio data at Dashboard level for context isolation
   // Nov 6-15 truth: Normal polling (15s) + WebSocket for instant updates
   const { data: livePortfolioData } = useQuery<PortfolioOverview>({
-    queryKey: [`/api/portfolio/overview?mode=live`],
+    queryKey: ['portfolio-overview', 'live'],
+    queryFn: async () => {
+      const res = await fetch('/api/portfolio/overview?mode=live');
+      if (!res.ok) throw new Error('Failed to fetch live portfolio');
+      return res.json();
+    },
     enabled: !isPaper,
     refetchInterval: 15000,
     staleTime: 15000
   });
   
   const { data: paperPortfolioData } = useQuery<PortfolioOverview>({
-    queryKey: ['/api/portfolio/overview?mode=paper'],
+    queryKey: ['portfolio-overview', 'paper'],
+    queryFn: async () => {
+      const res = await fetch('/api/portfolio/overview?mode=paper');
+      if (!res.ok) throw new Error('Failed to fetch paper portfolio');
+      return res.json();
+    },
     enabled: isPaper,
     refetchInterval: 15000,
     staleTime: 15000
@@ -66,8 +76,9 @@ export default function Dashboard() {
         console.log('[Dashboard][WS] trading_state_changed → updating portfolio cache', payload);
         
         // Directly update query cache for instant UI updates (no polling delay)
+        // Use canonical tuple key format: ['portfolio-overview', mode]
         queryClient.setQueryData(
-          [`/api/portfolio/overview?mode=${payload.mode}`],
+          ['portfolio-overview', payload.mode],
           payload.portfolioOverview
         );
       }

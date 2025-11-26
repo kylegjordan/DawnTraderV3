@@ -355,7 +355,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       
       // Minimal invalidations - WebSocket will handle most updates
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
+      await queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'live'] });
       
     } catch (error: any) {
       let errorMessage = "Failed to start Live Trading";
@@ -396,7 +396,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       
       // Minimal invalidations - WebSocket will handle most updates
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
+      await queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'live'] });
       
     } catch (error: any) {
       let errorMessage = "Failed to stop Live Trading";
@@ -441,7 +441,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       });
       
       // Refresh portfolio after balance confirmation
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=paper'] });
+      await queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'paper'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       
       // Close the modal

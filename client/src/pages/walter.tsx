@@ -111,7 +111,8 @@ export default function WalterPage() {
       case 'state_update':
         // Invalidate relevant queries to refresh UI
         queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'paper'] });
+        queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'live'] });
         break;
         
       case 'config_update':
