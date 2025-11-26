@@ -18,7 +18,6 @@ import { RequestTraceProvider } from "@/hooks/use-request-trace";
 import { ensureValidToken } from "@/lib/auth";
 import WalterFloatingAssistant from "@/components/walter-floating-assistant";
 import { LATTIToastListener } from "@/components/latti-toast-listener";
-import { PortfolioRefreshListener } from "@/components/portfolio-refresh-listener";
 import { ProfiledRoute } from "@/components/profiled-route";
 
 const Settings = lazy(() => import("@/pages/settings"));
@@ -213,7 +212,6 @@ function App() {
             <div className="min-h-screen bg-background text-foreground">
               <Toaster />
               <LATTIToastListener />
-              <PortfolioRefreshListener />
               <Router />
             </div>
           </TooltipProvider>
