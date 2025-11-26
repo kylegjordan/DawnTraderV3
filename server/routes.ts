@@ -5587,7 +5587,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         
         // Start the simulation
         const { startPaperSimulation } = await import('./services/paper-sim-service.js');
-        const result = await startPaperSimulation(userId);
+        // REB 2.8.13: Pass startingBalance to startPaperSimulation (required after REB 2.8.12)
+        const result = await startPaperSimulation(userId, { startingBalance: balance });
         
         // Invalidate Bob Core cache
         bobCore.invalidate('metrics:paperSimStatus');
@@ -5636,9 +5637,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 41D: Balance confirmation removed - continue directly
       console.log('[41D] Continuing simulation without balance confirmation gate');
       
+      // REB 2.8.13: Fetch existing portfolio balance for continue mode
+      const portfolioState = await storage.getPortfolioState('paper');
+      const existingBalance = portfolioState?.balance ? parseFloat(portfolioState.balance) : 800;
+      console.log(`[REB 2.8.13] Continue simulation with existing balance: $${existingBalance}`);
+      
       // Continue with existing baseline
       const { startPaperSimulation } = await import('./services/paper-sim-service.js');
-      const result = await startPaperSimulation(userId);
+      // REB 2.8.13: Pass startingBalance to startPaperSimulation (required after REB 2.8.12)
+      const result = await startPaperSimulation(userId, { startingBalance: existingBalance });
       
       // Invalidate Bob Core cache for paper-sim status
       bobCore.invalidate('metrics:paperSimStatus');
