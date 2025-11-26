@@ -1,8 +1,9 @@
 # REB 2.8.13 - Critical Fix: startingBalance Missing, Simulation Start Rejected
 
 **Date**: November 26, 2025  
-**Status**: ✅ COMPLETED  
-**Severity**: CRITICAL - Simulation start completely broken
+**Status**: ✅ COMPLETED (Pending Manual E2E Testing)  
+**Severity**: CRITICAL - Simulation start completely broken (FIXED)  
+**Architect Review**: ✅ APPROVED
 
 ## Problem Statement
 
@@ -83,6 +84,8 @@ console.log('[REB 2.8.13] Purged portfolio cache before new simulation');
 
 ## Testing Checklist
 
+**Manual Testing Required** (E2E test blocked by auth credentials):
+- [ ] Login to application with test credentials
 - [ ] Start new simulation with balance 808
 - [ ] Verify backend accepts the request (no 400 error)
 - [ ] Verify engine actually starts
@@ -91,9 +94,14 @@ console.log('[REB 2.8.13] Purged portfolio cache before new simulation');
 - [ ] Verify Goals Engine sees 808 on next REST poll
 - [ ] Verify LATTI sees 808 on next REST poll
 - [ ] Verify no $10,000 zombie values appear
-- [ ] Continue existing simulation
-- [ ] Verify it uses existing portfolio balance
+- [ ] Stop simulation, then continue existing simulation
+- [ ] Verify it uses existing portfolio balance (~808)
 - [ ] Switch modes and verify portfolio stays synced
+
+**Code Review Status**: ✅ APPROVED by Architect
+- Frontend cache purging: ✅ Verified
+- Backend routes passing startingBalance: ✅ Verified
+- Integration with REB 2.8.11/2.8.12: ✅ Verified
 
 ## Contract Verification
 
