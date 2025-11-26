@@ -1,0 +1,197 @@
+Directive: Fix LATTi Goals & Guardrails mirror card on Dashboard to match Goals Engine behavior
+
+You’ve already fixed the portfolio truth path with REB 2.8.11–2.8.13 and rolled back the global WebSocket experiment in REB 2.8.12. Portfolio value now behaves correctly on the Dashboard and in the Goals Engine.
+
+The remaining regression is only the Dashboard “LATTi Goals & Guardrails” mirror widget, which currently shows:
+
+“Failed to load guardrails data. Failed to fetch / Failed to fetch”
+
+The Goals Engine “Projected Portfolio Growth” section is working correctly, so the backend endpoints are healthy. The issue is localized to the Dashboard mirror component.
+
+Please make the Dashboard LATTi mirror identical in data flow to the Goals Engine implementation and remove any subtle differences that crept in during REB 2.8.9–2.8.13.
+
+1. Treat Goals Engine as the truth source
+
+Locate the component used on the Goals Engine page that renders the Projected Portfolio Growth card (e.g. something like:
+
+client/src/components/goals/projected-portfolio-growth.tsx, or
+
+whatever component is responsible for showing the “Current Portfolio Value + timeframes” card on the Goals tab).
+
+Confirm which queries it uses:
+
+Goals summary endpoint (/api/goals/summary?mode=paper|live)
+
+Trading pace endpoint (/api/system/trading-pace?mode=...)
+
+LATTi targets endpoint (/api/latti/targets?mode=...&pace=...&preset=...)
+
+Confirm the exact query keys and options it uses with React Query:
+
+queryKey shapes
+
+enabled, staleTime, refetchInterval
+
+any error handling or retry flags
+
+That Goals Engine implementation is the “truth” pattern for how LATTi data should be fetched.
+
+2. Bring latti-goals-mirror.tsx back in line with that truth
+
+Using the code currently in client/src/components/dashboard/latti-goals-mirror.tsx (which Kyle already provided), please:
+
+Unify the data hooks
+
+Create a shared hook (or reuse an existing one if it already exists) that encapsulates the LATTi data flow, for example:
+
+// client/src/hooks/use-latti-targets.ts
+export function useLattiTargets(mode: TradingMode, baselinePreset: string) {
+  const { data: paceData, ... } = useQuery( ... /api/system/trading-pace ... );
+  const { data: lattiTargets, ... } = useQuery( ... /api/latti/targets ... );
+  return { paceData, lattiTargets, ... };
+}
+
+
+Then:
+
+Use this same hook in:
+
+the Goals Engine “Projected Portfolio Growth” card, and
+
+the Dashboard LattiGoalsMirror component.
+
+This guarantees both surfaces are always calling the same endpoints with the same parameters and query options.
+
+Align query keys and parameters
+
+In latti-goals-mirror.tsx, ensure the React Query keys and parameters are exactly the same as the Goals Engine component:
+
+For trading pace:
+
+queryKey: ['/api/system/trading-pace', mode]
+queryFn:  () => apiRequest('/api/system/trading-pace', { search: { mode } })
+
+
+For LATTi targets:
+
+queryKey: ['/api/latti/targets', mode, paceData?.pace, baselinePreset]
+queryFn:  () => apiRequest('/api/latti/targets', {
+  search: {
+    mode,
+    pace: paceData?.pace,
+    preset: baselinePreset,
+  }
+})
+
+
+enabled flags should match the Goals Engine component. If the Goals Engine doesn’t require currentPaceData?.mode in the key or uses a slightly different key shape, use that exact shape here as well.
+
+Remove any leftover REB 2.8.10-era differences
+
+Make sure this file is not using any deprecated patterns from the WebSocket/global-invalidation experiment (e.g., no reference to removed query-keys.ts, no custom key lists).
+
+Keep it purely REST + React Query, consistent with the Nov 6–15 architecture you restored in REB 2.8.12.
+
+3. Debug the “Failed to fetch” error explicitly
+
+To be safe and to avoid guessing, please:
+
+Add temporary logging around the endpoints
+
+In server/routes.ts, around the handlers for:
+
+/api/system/trading-pace
+
+/api/latti/targets
+
+Log each request including:
+
+user id
+
+mode
+
+pace
+
+preset
+
+This will confirm that the Dashboard widget is actually hitting the endpoints with the expected parameters and whether any 4xx/5xx errors occur.
+
+Use the browser Network tab
+
+Load the Dashboard with Trading ON in paper mode.
+
+Watch the Network tab for:
+
+GET /api/system/trading-pace?mode=paper
+
+GET /api/latti/targets?...
+
+Note the HTTP status codes and any error response bodies.
+
+If you see 200s on the Goals Engine page but 4xx/5xx on the Dashboard for the same endpoints, copy those differences into REB_2.8.13 notes and align them.
+
+Fix error propagation
+
+If apiRequest is throwing a generic 'Failed to fetch' even when the server returns a JSON error with more detail, update the LATTi mirror to show a cleaner message (or at least log the underlying error.response to the console while we’re debugging).
+
+The Dashboard card should only show the red error state when at least one of the queries is actually in an error state (isError === true), not just when data is temporarily undefined.
+
+4. Keep the portfolio integration exactly as-is
+
+Please do not change the now-working portfolio truth flow:
+
+Continue using usePortfolioBalance({ mode }) in latti-goals-mirror.tsx.
+
+Continue using the canonical React Query keys for portfolio overview:
+
+['portfolio-overview', 'paper']
+
+['portfolio-overview', 'live']
+
+Continue relying on the Dashboard’s trading_state_changed WebSocket listener to call setQueryData(['portfolio-overview', mode], data) for instant portfolio updates.
+
+Do not reintroduce portfolio_balance_updated events or the removed portfolio-refresh-listener.tsx / query-keys.ts machinery.
+
+Manual test plan (for Replit)
+
+Once you’ve aligned the LATTi mirror to the Goals Engine implementation:
+
+Start paper trading with a custom balance
+
+From Dashboard, start paper mode with starting balance 888.
+
+Expected:
+
+Portfolio Value widget: $888.00 immediately.
+
+LATTi Goals & Guardrails card on Dashboard: shows guardrails + growth projections based on $888.00, no error banner.
+
+Open Goals Engine → Goals tab
+
+Expected:
+
+“Current Portfolio Value” in Projected Portfolio Growth: $888.00.
+
+All guardrails and projections match the Dashboard LATTi mirror.
+
+Change starting balance again (e.g., 825)
+
+Expected:
+
+All three surfaces (Portfolio widget, Dashboard LATTi mirror, Goals Engine) flip to $825.00 within the same second.
+
+No “Failed to fetch” errors anywhere.
+
+If any of those expectations fail, please capture:
+
+The Network tab entries for /api/system/trading-pace and /api/latti/targets.
+
+Relevant server logs for those requests.
+
+The current version of:
+
+client/src/components/dashboard/latti-goals-mirror.tsx
+
+The Goals Engine projected-growth component
+
+The hooks file(s) used for LATTi queries, if you factor them out.
