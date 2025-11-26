@@ -1,0 +1,123 @@
+Please start a focused FX5 / Filter Insights truth audit as a continuation of REB 2.8. Treat this as **REB 2.8.15 – FX5 Filter Insights Truth Audit** and create a new report file:
+
+- docs/restoration/reb2_reports/REB_2.8.15_FILTER_INSIGHTS_TRUTH_AUDIT.md
+
+The goal is to STOP patching and instead PROVE that all Filter Insights numbers are mathematically correct and consistent with the FX5 scanner’s behavior, especially in the first 10–20 cycles.
+
+Please follow this structure:
+
+A. Map the current data flow (FX5 → 24h metrics → Active Pool → UI)
+-----------------------------------------------------------------
+
+1. In the report, document **exactly** how these values are currently computed in code (file + function):
+   - Total Evaluated (24h)
+   - Unique Evaluated (24h)
+   - Total Survived Filters (24h)
+   - Unique Survived Filters (24h)
+   - Total Active Filtered Pairs (header on Active Pool card)
+
+2. For each, specify:
+   - The underlying data source (which tables/collections/rows).
+   - The exact aggregation logic (e.g., by scan id, by symbol, by (symbol, scanCycle) pair, etc.).
+   - Any filters applied (mode, time range, isEngineActive, passive/active gating).
+
+3. Confirm that **all 24h metrics now come from the REST-based 24h aggregation** you introduced in REB 2.8.8 and NOT from WebSocket deltas or ad-hoc listeners.
+
+B. Define and enforce the accounting TRUTH for FX5
+--------------------------------------------------
+
+Assume this truth unless the historical REB docs explicitly say otherwise (if they do, please quote them):
+
+1. For a given 24h window:
+   - “Total Evaluated (24h)” = count of (symbol, scanCycle) pairs that were run through FX5.
+   - “Unique Evaluated (24h)” = count of distinct symbols that were evaluated at least once.
+   - “Total Survived Filters (24h)” = count of (symbol, scanCycle) pairs that passed all filters.
+   - “Unique Survived Filters (24h)” = count of distinct symbols that passed all filters at least once.
+
+2. For the **Active Filtered Pool**:
+   - Total Active Filtered Pairs (header) = number of distinct symbols currently in the pool (deduped, non-expired).
+   - It must ALWAYS be:
+     - ≤ Unique Survived Filters (24h)
+     - Equal to the number of rows in the Active Pool table being rendered.
+
+3. In the report, explicitly state whether the current implementation matches these truths. If not, list each discrepancy and the exact line(s) of code responsible.
+
+C. Early-cycle behavior: focused test for first 10–20 scans
+-----------------------------------------------------------
+
+For this part, please implement **temporary diagnostic logging** (or a small test harness) and capture results in the REB 2.8.15 report.
+
+1. With paper trading ACTIVE and passive learning disabled:
+   - Start with a fresh 24h window (clear relevant 24h tables or simulate a fresh environment).
+   - Run the engine for at least 10–20 FX5 scan cycles.
+
+2. For each cycle, log:
+   - cycleId
+   - mode (paper)
+   - batch type (Top-N vs Tier-B or however it’s labeled)
+   - evaluatedCount for that cycle
+   - survivorsCount for that cycle
+   - cumulative Total Evaluated (24h)
+   - cumulative Unique Evaluated (24h)
+   - cumulative Total Survived Filters (24h)
+   - cumulative Unique Survived Filters (24h)
+   - Active Pool size after the cycle.
+
+3. In the report, include a **small table** (or summary) showing how these numbers evolve over the first ~10 cycles and explain:
+
+   - Are “Total Evaluated” and “Unique Evaluated” close in the first few scans (as we’d expect with mostly new pairs)?
+   - If they diverge quickly, is it due to intentional behavior (e.g., Top-N re-checking the same pairs), or a counting bug?
+   - Does Active Pool size behave as expected relative to survivors?
+
+D. Verify Top-N + Tier-B rotation semantics
+-------------------------------------------
+
+We previously established that FX5 uses a batch-first design with Top-N pairs and Tier-B rotation. Please:
+
+1. Explicitly document in REB 2.8.15:
+   - How Top-N pairs are selected per cycle.
+   - How Tier-B pairs are rotated.
+   - How many pairs of each type are expected per cycle (batch size and composition).
+
+2. Explain how this rotation logic interacts with the 24h metrics:
+   - Why, in the first ~5–10 cycles, we should or should NOT expect “Total Evaluated” and “Unique Evaluated” to be close.
+   - If the current behavior differs from the original Nov 6–15 truth, highlight what changed.
+
+3. Do NOT change the rotation logic unless you find clear evidence that it diverged from the pre-GitHub truth. This task is about **measurement and verification first**, not redesign.
+
+E. Reconcile UI state with backend truth
+----------------------------------------
+
+Once the backend math is proven:
+
+1. Verify that the Filter Insights page:
+   - Uses the correct REST endpoints for:
+     - 24h Filter Activity
+     - Filter Breakdown (Last 24h)
+     - Active Filter Pool.
+   - Displays the exact values returned by those endpoints without additional client-side “massaging”.
+
+2. Confirm in code that:
+   - There are no leftover WebSocket-based listeners manipulating these metrics.
+   - There are no hidden defaults or magic numbers (like 10,000) in the Filter Insights pipeline.
+
+3. If any client-side adjustments exist (e.g., derived percentages), document them in the report and ensure they are mathematically consistent with the backend truth.
+
+F. Deliverables
+---------------
+
+Please produce:
+
+1. docs/restoration/reb2_reports/REB_2.8.15_FILTER_INSIGHTS_TRUTH_AUDIT.md with:
+   - Data flow mapping.
+   - Accounting truth definitions.
+   - Early-cycle diagnostic table and analysis.
+   - Rotation semantics summary.
+   - A clear list of any bugs found plus proposed fixes.
+
+2. If code changes are needed to align implementation with the defined truth, please:
+   - Keep changes minimal and surgical (no new architectures).
+   - Reference REB 2.1–2.8 docs where relevant.
+   - Update the report with a BEFORE vs AFTER explanation.
+
+The priority here is **truth and correctness**, not new features. I want to understand EXACTLY how Filter Insights is counting and aggregating data, then make it match the pre-GitHub truth.

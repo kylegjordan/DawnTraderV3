@@ -25,7 +25,7 @@ import { collectMixedBatch, BatchResult } from './market-scanner.js';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.js';
 import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
-import { recordScanFor24h, recordScanCompletion, getCyclesPerHour } from './fx5-24h-window.js';
+import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary } from './fx5-24h-window.js';
 
 const SCAN_INTERVAL_MS = 30 * 1000; // 30 seconds
 const CYCLES_PER_HOUR = Math.round(3600000 / SCAN_INTERVAL_MS); // 120 for 30s intervals
@@ -48,6 +48,8 @@ export class Fx5ScannerService {
   private liveTimer: NodeJS.Timeout | null = null;
   private isRunning = false;
   private startTime: number = 0; // REB 2.8.5B: Track actual scanner start time
+  private paperCycleCount: number = 0; // REB 2.8.15: Track cycle number for diagnostics
+  private liveCycleCount: number = 0;  // REB 2.8.15: Track cycle number for diagnostics
 
   constructor() {
     this.filteredPairsService = new FilteredPairsService();
@@ -271,6 +273,31 @@ export class Fx5ScannerService {
         },
         isEngineActive
       );
+
+      // REB 2.8.15: Early-cycle diagnostic logging (first 20 cycles only)
+      const cycleNumber = mode === 'paper' ? ++this.paperCycleCount : ++this.liveCycleCount;
+      if (cycleNumber <= 20) {
+        const summary24h = get24hSummary(mode);
+        console.log(`\n╔═══ [REB 2.8.15] Early-Cycle Diagnostic (Cycle ${cycleNumber}) ═══`);
+        console.log(`║ Mode: ${mode.toUpperCase()}`);
+        console.log(`║ Cycle ID: ${scanCycleId}`);
+        console.log(`║ Engine Active: ${isEngineActive}`);
+        console.log(`╠═══ THIS CYCLE ═══`);
+        console.log(`║ Batch Composition: Top-N=${topNCount}, Tier-B=${tierBCount}`);
+        console.log(`║ Evaluated: ${evaluatedCount}`);
+        console.log(`║ Survivors (Eligible): ${eligibleCount}`);
+        console.log(`╠═══ 24H CUMULATIVE ═══`);
+        console.log(`║ Total Cycles: ${summary24h.totalCycles}`);
+        console.log(`║ Total Evaluated (24h): ${summary24h.totalEvaluated}`);
+        console.log(`║ Unique Evaluated (24h): ${summary24h.uniqueEvaluated}`);
+        console.log(`║ Total Survived (24h): ${summary24h.totalSurvived}`);
+        console.log(`║ Unique Survived (24h): ${summary24h.uniqueSurvived}`);
+        console.log(`║ Ratio (Unique/Total Eval): ${summary24h.totalEvaluated > 0 ? ((summary24h.uniqueEvaluated / summary24h.totalEvaluated) * 100).toFixed(1) : 'N/A'}%`);
+        console.log(`╠═══ ACTIVE POOL ═══`);
+        console.log(`║ Pool Size (deduped, non-expired): ${activeFilteredPoolEntries.length}`);
+        console.log(`║ Pool ≤ Unique Survived: ${activeFilteredPoolEntries.length <= summary24h.uniqueSurvived ? '✅ PASS' : '❌ FAIL'}`);
+        console.log(`╚═══════════════════════════════════════════════\n`);
+      }
 
       console.log(`[FX5Scanner][${mode}] ✅ Scan complete (evaluated=${evaluatedCount}, eligible=${eligibleCount})`);
 
