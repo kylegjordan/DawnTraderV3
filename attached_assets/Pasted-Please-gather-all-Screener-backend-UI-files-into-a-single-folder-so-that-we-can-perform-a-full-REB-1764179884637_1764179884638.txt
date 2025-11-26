@@ -1,0 +1,74 @@
+Please gather all Screener backend + UI files into a single folder so that we can perform a full REB 2.9 audit.
+
+Create a new folder:
+
+docs/current_state/screeners_export/
+
+Inside it, include copies of ALL of the following:
+
+===========================================================
+A) BACKEND FILES (ALL filter-related logic)
+===========================================================
+
+Include any file under server/services/** whose purpose is filter evaluation, including:
+
+- fx5-scanner.ts
+- market-scanner.ts
+- apply-filters.ts
+- run-filter.ts
+- filter-mapper.ts
+- filter-config.ts
+
+And include *all* filter implementation files:
+
+server/services/**/rsi*.ts
+server/services/**/macd*.ts
+server/services/**/ema*.ts
+server/services/**/volatility*.ts
+server/services/**/atr*.ts
+server/services/**/trend*.ts
+server/services/**/momentum*.ts
+server/services/**/candle*.ts
+server/services/**/mistrend*.ts
+
+Also include these folders if they exist:
+
+strategy-filters/**
+filter-rules/**
+filters_v2/**
+active-filters/**
+fx-filters/**
+
+Additionally include:
+
+- server/routes.ts (full file)
+- stage3-state-cache.ts (full file)
+
+===========================================================
+B) FRONTEND FILES (ALL Screeners UI components)
+===========================================================
+
+Include everything involved in displaying Screener or filter data:
+
+client/src/pages/screeners*.tsx
+client/src/components/screeners/**
+client/src/components/filter-item*.tsx
+client/src/components/filter-table*.tsx
+client/src/components/screener-table*.tsx
+client/src/components/screener-row*.tsx
+client/src/hooks/use-screeners*.ts
+client/src/hooks/use-filter*.ts
+
+ALSO include shared UI resources used by the Screeners tab:
+
+client/src/ui/**
+client/src/constants/**/*.ts  (filter names, definitions, thresholds, groupings)
+
+===========================================================
+Placement
+===========================================================
+
+Place ALL collected files inside:
+docs/current_state/screeners_export/
+
+When complete, notify us and we will begin the REB 2.9 truth comparison and restoration.
