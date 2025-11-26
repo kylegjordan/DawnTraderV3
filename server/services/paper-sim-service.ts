@@ -365,6 +365,11 @@ export async function startPaperSimulation(
         const dbSession = await storage.createPaperSimSession(sessionData);
         console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
 
+        // REB 2.8.11: Cache previous portfolio balance for rollback on failure
+        const previousPortfolioState = await storage.getPortfolioState({ mode: 'paper' });
+        const previousBalance = previousPortfolioState ? parseFloat(previousPortfolioState.balance) : null;
+        console.log(`[REB 2.8.11] Cached previous portfolio balance: $${previousBalance} (for rollback if needed)`);
+
         // Phase 41F-B: Move broadcast-triggering calls OUTSIDE queue job
         // State updates will be done, but broadcasts happen after queue completes (mode already declared above)
         console.log('[ENGINE_CHECKPOINT_4] Queued job - skipping broadcasts (will fire after queue completion)');
@@ -395,6 +400,55 @@ export async function startPaperSimulation(
         try {
           await manager.start();
           console.log('[ENGINE_CHECKPOINT_12] Manager started successfully');
+          
+          // REB 2.8.11: Sync portfolioState.balance with new startingBalance AFTER manager starts
+          // This ensures the session is fully live before touching canonical portfolio state
+          // Moved here from before manager.start() to prevent partial initialization on failure
+          const startBalance = parseFloat(sessionData.startingBalance);
+          console.log(`[REB 2.8.11] Syncing portfolioState.balance = $${startBalance} for paper mode`);
+          
+          try {
+            await storage.updatePortfolioBalance({ 
+              mode: 'paper', 
+              balance: startBalance 
+            });
+            console.log('[REB 2.8.11] Portfolio balance synchronized successfully');
+          } catch (balanceUpdateError: any) {
+            console.error('[REB 2.8.11] Failed to sync portfolio balance:', balanceUpdateError);
+            
+            // REB 2.8.11: CRITICAL - Stop manager before rollback to prevent divergent state
+            // The manager is already running; we must stop it atomically before clearing reference
+            console.log('[REB 2.8.11] Stopping manager to prevent divergent state...');
+            try {
+              await manager.stop();
+              console.log('[REB 2.8.11] Manager stopped successfully');
+            } catch (stopError: any) {
+              console.error('[REB 2.8.11] CRITICAL: Failed to stop manager during rollback:', stopError);
+              // Continue with rollback even if stop fails
+            }
+            
+            // Rollback: Restore previous balance to maintain consistency
+            if (previousBalance !== null) {
+              try {
+                await storage.updatePortfolioBalance({ 
+                  mode: 'paper', 
+                  balance: previousBalance 
+                });
+                console.log(`[REB 2.8.11] Rolled back to previous balance: $${previousBalance}`);
+              } catch (rollbackError: any) {
+                console.error('[REB 2.8.11] CRITICAL: Failed to rollback balance:', rollbackError);
+              }
+            }
+            
+            // Clean up manager reference and mark session as failed
+            clearGlobalPaperSimManager();
+            const failedSession = await storage.getPaperSimSessionBySessionId(sessionId);
+            if (failedSession) {
+              await storage.updatePaperSimSession(failedSession.id, { status: 'failed' });
+            }
+            
+            throw new Error(`Failed to sync portfolio balance: ${balanceUpdateError.message}`);
+          }
         } catch (managerError: any) {
           console.error('[ENGINE_ERROR] Manager start failed:', managerError);
           // Rollback on manager start failure
