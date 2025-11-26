@@ -1,0 +1,254 @@
+🧩 REB 2.8.10C — Portfolio Value Truth Restoration Directive (Technical Version for Replit)
+
+Objective:
+Restore correct, instant-refresh, REST-only portfolio value behavior across the Dashboard, LATTi Goals & Guardrails, and Goals Engine for both paper and live mode, ensuring correct mode isolation, correct P&L integration, and removal of all WebSocket dependency from the UI.
+
+✅ SECTION A — BACKEND: SINGLE SOURCE OF TRUTH PER MODE
+A.1 — PAPER MODE PORTFOLIO (SSOT)
+
+Canonical REST endpoint (must be the only data source for UI):
+
+GET /api/paper/portfolio/state
+
+Requirements
+
+This endpoint must return the live in-memory simulation state, including:
+
+{
+  totalValue: number,            // startingPortfolio + realizedPnL + unrealizedPnL – fees
+  startingPortfolio: number,
+  realizedPnL: number,
+  unrealizedPnL: number,
+  lastUpdated: number
+}
+
+
+All modules that affect simulated P&L must write to the same source:
+
+Paths to modify/confirm:
+
+server/services/paper-sim-trade-execution.ts
+server/services/paper-sim-engine.ts
+server/services/paper-sim-service.ts
+server/storage/paper-sim-state.ts
+
+
+Update logic must be synchronous and must always update the in-memory paper simulation state used by /api/paper/portfolio/state.
+
+When a simulated trade executes:
+
+Update realizedPnL or unrealizedPnL immediately.
+
+Recompute totalValue.
+
+Persist to the same state object that /api/paper/portfolio/state reads from.
+
+A.2 — LIVE MODE PORTFOLIO (SSOT)
+
+Canonical REST endpoint:
+
+GET /api/portfolio/overview?mode=live
+
+Requirements
+
+Value must come exclusively from Kraken/live account logic.
+
+Must never use the paper simulation state.
+
+No UI component may override or modify live mode values.
+
+If additional live endpoints exist (e.g. /api/portfolio/state), they must internally delegate to the canonical endpoint or be deprecated.
+
+Paths to audit:
+
+server/services/live-trading-service.ts
+server/services/kraken-portfolio-service.ts
+server/routes.ts
+
+✅ SECTION B — FRONTEND: UNIFIED PORTFOLIO HOOK
+
+Create/update:
+
+client/src/hooks/use-portfolio-balance.ts
+
+Required API:
+export function usePortfolioBalance(mode: 'paper' | 'live')
+
+Internals:
+queryKey: ['portfolioBalance', mode]
+
+queryFn:
+  if (mode==='paper')  GET /api/paper/portfolio/state
+  if (mode==='live')   GET /api/portfolio/overview?mode=live
+
+React Query Config:
+{
+  refetchInterval: 5000,     // Hard requirement
+  staleTime: 0,
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true,
+  retry: false
+}
+
+
+This must be the only portfolio-fetching hook used across the app.
+
+✅ SECTION C — FRONTEND: REPLACE ALL PORTFOLIO QUERIES WITH THE UNIFIED HOOK
+
+Every component that displays a portfolio value must be refactored to use usePortfolioBalance(mode).
+
+Components to update:
+client/src/pages/dashboard.tsx
+client/src/components/layout/top-bar.tsx
+client/src/components/dashboard/portfolio-value-widget.tsx
+client/src/components/dashboard/latti-goals-mirror.tsx
+client/src/components/goals/goals-summary-widget.tsx
+client/src/components/goals/goals-table.tsx
+client/src/components/goals/target-daily-goals.tsx
+client/src/components/trading/portfolio-overview.tsx
+client/src/components/goals/projected-growth.tsx
+
+
+MANDATORY:
+Remove any direct use of:
+
+/api/paper/portfolio/state (except through the hook)
+
+/api/portfolio/overview
+
+/api/goals/summary for portfolio values
+
+/api/latti/targets for portfolio values
+
+inconsistent queryKey variations
+
+All of these must call:
+
+const { data: portfolio } = usePortfolioBalance(currentMode)
+
+✅ SECTION D — REMOVE WEBSOCKET DEPENDENCY FROM ALL PORTFOLIO UI
+Remove all listeners referencing:
+portfolio_balance_updated
+portfolio:update
+paperPortfolioUpdate
+
+Files to edit:
+client/src/components/portfolio-refresh-listener.tsx   (remove or disable)
+client/src/pages/dashboard.tsx                        (remove listener)
+client/src/App.tsx                                    (remove listener)
+client/src/hooks/use-websocket.tsx                    (clean unused cases)
+
+UI must refresh strictly through:
+
+React Query invalidation when trading mode changes
+
+React Query polling
+
+usePortfolioBalance
+
+No UI should rely on WebSocket messages to trigger portfolio updates.
+
+(Backend events can remain for logs, but UI must not depend on them.)
+
+✅ SECTION E — INVALIDATE PORTFOLIO QUERIES AFTER MODE CHANGES
+
+In:
+
+client/src/components/layout/top-bar.tsx
+
+
+After these operations:
+
+handleStartNewSimulation
+
+handleContinueSimulation
+
+handleStopPaperSimulation
+
+handleConfirmLiveTrading
+
+handleConfirmStopLiveTrading
+
+Add:
+
+queryClient.invalidateQueries(['portfolioBalance', 'paper']);
+queryClient.invalidateQueries(['portfolioBalance', 'live']);
+queryClient.invalidateQueries({ queryKey: ['goalsSummary', mode] });
+queryClient.invalidateQueries({ queryKey: ['lattiTargets', mode] });
+
+
+This ensures:
+
+Paper → Live switches refresh instantly
+
+Live → Paper switches refresh instantly
+
+Goals engine recomputes based on new balance
+
+LATTi recomputes based on new balance
+
+✅ SECTION F — REQUIRED TESTS (MUST BE INCLUDED IN REB REPORT)
+
+Replit must produce:
+
+docs/restoration/reb2_reports/REB_2.8.10C_PORTFOLIO_REST_TRUTH_COMPLETION.md
+
+
+With logs + screenshots for the following 6 tests:
+
+Test 1 — Paper Starting Value + Instant UI Sync
+
+Stop paper trading.
+
+Start a new simulation with $8,888.
+
+Verify (within 1–2 seconds, no refresh):
+
+Dashboard → Portfolio Value = 8888
+
+Dashboard → LATTi → Current Portfolio Value = 8888
+
+Goals Engine → Goals tab → Current Portfolio Value = 8888
+
+Verify REST:
+GET /api/paper/portfolio/state → totalValue = 8888
+
+Test 2 — Paper Mode Simulated Trades Affect Portfolio
+
+Run simulation until trades occur.
+
+Confirm P&L updates the same three places within 1–2 seconds.
+
+REST response must match UI exactly.
+
+Test 3 — Live Mode Shows Real Kraken Portfolio
+
+Switch to live mode.
+
+Verify all three portfolio locations show the Kraken-derived number.
+
+No manual override possible.
+
+REST /api/portfolio/overview?mode=live matches exactly.
+
+Test 4 — Mode Isolation
+
+Run paper mode with distinctive portfolio (e.g. 8888).
+
+Switch to live — verify live portfolio shows Kraken value.
+
+Switch back to paper — verify value still 8888 (plus P&L updates).
+
+Test 5 — No WebSocket Dependency
+
+Kill WebSocket connection (e.g., simulate offline WS):
+
+Confirm UI still updates every 5 seconds via REST polling.
+
+Confirm TopBar mode switches still trigger immediate invalidations.
+
+Test 6 — Goals Engine & LATTi Consistency
+
+Change paper portfolio value (by simulation).
+
+Verify Goals Engine and LATTi both recompute projections using the updated value.
