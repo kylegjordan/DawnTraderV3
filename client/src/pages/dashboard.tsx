@@ -21,6 +21,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, lazy, Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useWebSocket } from "@/hooks/use-websocket";
 
 // Phase 4C: Lazy load LATTI widget for code splitting and bundle optimization
 const DashboardLATTiWidget = lazy(() => 
@@ -34,6 +35,8 @@ export default function Dashboard() {
   useSystemHealth();
   
   const { mode, isPaper } = useTradingMode();
+  const queryClient = useQueryClient();
+  const { messages: wsMessages } = useWebSocket();
   
   // Fetch portfolio data at Dashboard level for context isolation
   // Nov 6-15 truth: Normal polling (15s) + WebSocket for instant updates
@@ -50,6 +53,26 @@ export default function Dashboard() {
     refetchInterval: 15000,
     staleTime: 15000
   });
+  
+  // Nov 6-15 truth: Local WebSocket listener for instant portfolio updates
+  // Listen to trading_state_changed and patch query cache with portfolioOverview
+  useEffect(() => {
+    const updates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
+    if (updates.length > 0) {
+      const latestUpdate = updates[updates.length - 1];
+      const payload = latestUpdate.payload;
+      
+      if (payload?.portfolioOverview && payload?.mode) {
+        console.log('[Dashboard][WS] trading_state_changed → updating portfolio cache', payload);
+        
+        // Directly update query cache for instant UI updates (no polling delay)
+        queryClient.setQueryData(
+          [`/api/portfolio/overview?mode=${payload.mode}`],
+          payload.portfolioOverview
+        );
+      }
+    }
+  }, [wsMessages, queryClient]);
   
   // Memoize portfolio data to prevent unnecessary context updates
   const portfolioData = useMemo(() => 

@@ -350,11 +350,16 @@ export async function startPaperSimulation(
 
         // Phase 27.F.9: Create session in database FIRST (source of truth)
         // Note: Single-tenant system - userId not stored in paperSimSessions table
+        // Require startingBalance to be provided (no fallback defaults)
+        if (!options?.startingBalance) {
+          throw new Error('startingBalance is required to start paper trading');
+        }
+        
         const sessionData: InsertPaperSimSession = {
           sessionId,
           mode: 'paper',
           status: 'running',
-          startingBalance: options?.startingBalance?.toString() || '10000',
+          startingBalance: options.startingBalance.toString(),
           runForMs: options?.runForMs || null,
           endsAt: endsAt || null,
           startedBy: options?.startedBy || 'manual',
@@ -538,20 +543,8 @@ export async function startPaperSimulation(
       // Update trading state (triggers internal broadcasts) - don't block HTTP response
       tradingStateSync.setEngineActive(userId, true, mode)
         .then(() => tradingStateSync.setTradingMode(userId, 'paper', userId, 'Paper simulation started'))
-        .then(async () => {
+        .then(() => {
           console.log('[41F-B][BROADCAST] Engine state sync completed successfully');
-          
-          // REB 2.8.10: Emit portfolio_balance_updated event to trigger frontend refresh
-          const { contextBridge } = await import('./context-bridge.js');
-          await contextBridge.broadcast({
-            type: 'portfolio_balance_updated',
-            payload: {
-              mode: 'paper',
-              timestamp: Date.now(),
-            },
-            mode: 'paper',
-          });
-          console.log('[REB 2.8.10] portfolio_balance_updated event emitted for paper trading start');
         })
         .catch(err => {
           console.error('[41F-B][BROADCAST] Error in state sync/broadcast:', err);
@@ -715,18 +708,6 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
           } else {
             console.warn('[41F-B][BROADCAST] ⚠️ Failed to verify engine inactive state');
           }
-          
-          // REB 2.8.10: Emit portfolio_balance_updated event to trigger frontend refresh
-          const { contextBridge } = await import('./context-bridge.js');
-          await contextBridge.broadcast({
-            type: 'portfolio_balance_updated',
-            payload: {
-              mode: 'paper',
-              timestamp: Date.now(),
-            },
-            mode: 'paper',
-          });
-          console.log('[REB 2.8.10] portfolio_balance_updated event emitted for paper trading stop');
         })
         .catch(err => {
           console.error('[41F-B][BROADCAST] Error in state sync/broadcast:', err);
