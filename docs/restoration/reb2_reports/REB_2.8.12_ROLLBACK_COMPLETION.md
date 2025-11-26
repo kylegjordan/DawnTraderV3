@@ -197,28 +197,48 @@ useEffect(() => {
 ### Backend
 1. `server/services/paper-sim-service.ts`
    - Removed portfolio_balance_updated broadcasts
-   - Added startingBalance validation
+   - Added startingBalance validation (throws error if not provided)
    - Removed 10000 fallback
 
 2. `server/services/live-trading-service.ts`
-   - Removed portfolio_balance_updated broadcasts (2 locations)
+   - Removed portfolio_balance_updated broadcasts (2 locations: start and stop)
 
-### Frontend
+### Frontend - Core Changes
 3. `client/src/pages/dashboard.tsx`
+   - Changed queryKey format: `['portfolio-overview', 'live']` and `['portfolio-overview', 'paper']`
+   - Added explicit queryFn to both useQuery calls
    - Added local WS listener for trading_state_changed
+   - Listener calls `queryClient.setQueryData(['portfolio-overview', mode], data)` for instant updates
    - Restored normal polling (15s)
-   - Added queryClient.setQueryData for instant updates
 
 4. `client/src/components/layout/top-bar.tsx`
-   - Removed portfolio_balance_updated listener
-   - Removed REB 2.8.10B invalidation calls
+   - Updated all invalidateQueries to use tuple format: `['portfolio-overview', 'live']` and `['portfolio-overview', 'paper']`
+   - Removed REB 2.8.10B excess invalidation calls
 
 5. `client/src/components/app.tsx`
    - Removed PortfolioRefreshListener import and usage
 
+### Frontend - Cache Coherency Fixes
+6. `client/src/hooks/use-trading.tsx`
+   - Changed portfolio useQuery to canonical tuple format with explicit queryFn
+   - Updated all invalidateQueries to use tuple format
+   - Removed portfolio_balance_updated listener entirely
+   - Added comment explaining React Query global cache behavior
+
+7. `client/src/hooks/use-portfolio-balance.tsx`
+   - Changed queryKey to canonical tuple format with explicit queryFn
+   - Restored normal polling (15s, removed REB 2.8.10 5s aggressive polling)
+   - Restored normal staleTime (15s, removed REB 2.8.10 0ms staleTime)
+
+8. `client/src/pages/walter.tsx`
+   - Updated state_update handler invalidations to use tuple format
+
+9. `client/src/components/ai/chat-panel.tsx`
+   - Updated state_update handler invalidations to use tuple format
+
 ### Deleted Files
-6. `client/src/components/portfolio/portfolio-refresh-listener.tsx` (DELETED)
-7. `client/src/lib/query-keys.ts` (DELETED)
+10. `client/src/components/portfolio/portfolio-refresh-listener.tsx` (DELETED)
+11. `client/src/lib/query-keys.ts` (DELETED)
 
 ---
 

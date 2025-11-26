@@ -94,8 +94,10 @@ export function useTrading() {
     }
   }, [wsMessages, queryClient, debouncedInvalidate]);
 
-  // REB 2.8.12: portfolio_balance_updated listener removed (restored Nov 6-15 truth)
-  // Dashboard local WS listener handles instant portfolio updates via trading_state_changed
+  // REB 2.8.12: portfolio_balance_updated listener removed (Nov 6-15 truth restored)
+  // Dashboard local WS listener calls setQueryData(['portfolio-overview', mode], data)
+  // React Query cache is GLOBAL - all components with same key automatically see updates
+  // No invalidations needed - setQueryData directly updates the shared cache
 
   // Phase 33.B: Listen for background_jobs_complete events
   useEffect(() => {
