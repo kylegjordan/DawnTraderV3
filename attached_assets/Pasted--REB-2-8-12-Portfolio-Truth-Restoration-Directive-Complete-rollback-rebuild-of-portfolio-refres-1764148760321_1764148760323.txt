@@ -1,0 +1,373 @@
+✅ REB 2.8.12 — Portfolio Truth Restoration Directive
+Complete rollback + rebuild of portfolio refresh architecture using Nov. 6–15 truth as reference
+⚠️ SUMMARY OF WHAT MUST BE DONE
+
+Replit must:
+
+Remove ALL global portfolio-refresh infrastructure it created during REB 2.8.10B:
+
+PortfolioRefreshListener component
+
+Global WebSocket listeners in App.tsx
+
+Massive 24-query invalidation network
+
+All predicate-based invalidation logic
+
+All new query-keys infrastructure related to this global listener
+
+Any code auto-writing or injecting “portfolio updates” that did NOT exist in November truth.
+
+Remove ALL fallback defaults for paper start balance, especially:
+
+Any || 10000
+
+Any || '10000'
+
+Any hard-coded value appearing in:
+
+paper-sim-service.ts
+
+UI modal defaults beyond the visible default (800)
+
+getPortfolioState()
+
+portfolio/overview endpoint
+
+Any fallback inside any React component
+
+Restore the Nov. 6–15 TRUTH architecture, which was:
+
+portfolioState.balance = single source of truth
+
+A small, local WebSocket listener inside Dashboard only, receiving:
+
+trading_state_changed
+
+
+payload that includes the fresh portfolio overview
+
+Dashboard calls:
+
+queryClient.setQueryData(['portfolio-overview', mode], payload.overview)
+
+
+Goals + LATTi do not use WebSocket events
+
+Goals + LATTi simply hit their REST endpoints and refetch when:
+
+trading starts
+
+trading stops
+
+you change active preset
+
+the system detects a portfolio change
+
+Guarantee that paper trading start does:
+
+Create paperSimSession
+
+Start manager
+
+Update portfolioState.balance = startingBalance
+
+Emit trading_state_changed WebSocket event containing:
+
+{
+  type: 'trading_state_changed',
+  payload: {
+    mode: 'paper',
+    isEngineActive: true,
+    portfolioOverview: <complete REST version>,
+    timestamp: Date.now()
+  }
+}
+
+
+No additional events created by newer REB systems
+
+Guarantee that paper trading stop:
+
+Stops manager
+
+Leaves portfolioState.balance untouched
+
+Emits another trading_state_changed event with updated overview
+
+No default resets
+
+No fallback balance injection
+
+No legacy REB 2.8.10B behavior
+
+Confirm all surfaces use REST, except Dashboard's local WS patch:
+
+Dashboard Portfolio Value → WebSocket OR REST (both valid)
+
+Goals Engine → REST only, no WebSocket listeners
+
+LATTi Goals & Guardrails → REST only, no WS listeners
+
+Growth Projections → REST only, no WS listeners
+
+Remove every remaining artifact from REB 2.8.10B so it cannot interfere, including:
+
+client/src/components/portfolio-refresh-listener.tsx
+
+Any exports or imports referencing that file
+
+client/src/constants/query-keys.ts entries created exclusively for REB 2.8.10B
+
+Any invalidation logic in:
+
+top-bar.tsx
+
+dashboard.tsx (except the local WS listener)
+
+goals-summary-widget.tsx
+
+goals-table.tsx
+
+settings or latti components
+
+Any predicate-style invalidations based on startsWith('/api/portfolio') or dynamic objects
+
+All 5-second polling override settings
+
+All refetch-on-window-focus overrides
+
+All “global listener plumbing” or “global refresh orchestration”
+
+🔧 THE FIX — STEP BY STEP
+STEP 1 — REMOVE GLOBAL LISTENER AND REFRESH INFRASTRUCTURE
+
+Delete entirely:
+
+1A. File
+client/src/components/portfolio-refresh-listener.tsx
+
+1B. App Shell Wiring
+
+In client/src/App.tsx:
+
+Remove imports of the listener
+
+Remove <PortfolioRefreshListener />
+
+Remove any global WebSocket subscriptions added by REB 2.8.10B
+
+Restore App.tsx to pre-REB structure.
+
+1C. Remove query-keys bloat
+
+In:
+
+client/src/constants/query-keys.ts
+
+
+Remove ALL entries that were introduced in 2.8.10B that were NOT present before Nov 6–15.
+
+Only leave the baseline query keys that existed in the original truth.
+
+STEP 2 — REMOVE/REVERT BROKEN INVALIDATION LOGIC
+2A. Dashboard
+
+Keep only:
+
+Local WebSocket listener for trading_state_changed
+
+Direct call to setQueryData for:
+
+['portfolio-overview', mode]
+
+
+Remove:
+
+Predicate invalidations
+
+Mass invalidation sets
+
+24-key invalidation arrays
+
+Any logic based on dynamic matching
+
+2B. TopBar
+
+Remove all invalidations except:
+
+invalidateQueries(['/api/trading/status'])
+invalidateQueries(['/api/paper-sim/status'])
+invalidateQueries(['/api/portfolio/overview?mode=paper'])
+invalidateQueries(['/api/portfolio/overview?mode=live'])
+
+2C. Goals Engine + LATTi
+
+Remove any listeners or invalidation systems not present before Nov 6.
+
+STEP 3 — RESTORE THE ORIGINAL WEBSOCKET EVENT DESIGN
+
+Use ONLY:
+
+trading_state_changed
+
+
+Payload must include:
+
+{
+  type: 'trading_state_changed',
+  payload: {
+    mode: 'paper' | 'live',
+    isEngineActive: boolean,
+    portfolioOverview: <exact REST API payload of /api/portfolio/overview>,
+    timestamp: number
+  }
+}
+
+
+Remove portfolio_balance_updated.
+
+Remove all other REB-added event types.
+
+STEP 4 — FIX PAPER SIM START LOGIC
+MUST implement exactly this:
+
+After engine successful start:
+
+await updatePortfolioBalance(userId, startingBalance);
+
+
+Then emit:
+
+tradingStateSync.broadcast({
+  type: 'trading_state_changed',
+  payload: {
+    mode: 'paper',
+    isEngineActive: true,
+    portfolioOverview: await storage.getPortfolioOverview(userId, 'paper'),
+    timestamp: Date.now()
+  }
+});
+
+
+Remove:
+
+Any backup fallback to 10000
+
+Any pre-manager-start injection
+
+Any double emission
+
+Any REB 2.8.10B “portfolio_balance_updated” emissions
+
+STEP 5 — ENSURE UI CONSUMES SAME ENDPOINT
+
+ALL widgets must source their data from this endpoint:
+
+REST truth:
+
+GET /api/portfolio/overview?mode=<paper|live>
+
+
+This must populate:
+
+Dashboard Portfolio Value
+
+Goals Engine → Projected Portfolio Growth
+
+LATTi Goals & Guardrails
+
+No other endpoints should influence portfolio balance on the UI.
+
+STEP 6 — REMOVE OBSOLETE 5s POLLING + STALE SETTINGS
+
+Revert:
+
+refetchInterval: 5000
+
+staleTime: 0
+
+refetchOnWindowFocus: true
+
+Restore the original values from early November (usually 15–20s refresh OR relying on WS push for Dashboard only).
+
+🧹 STEP 7 — REMOVE ANY NEW CODE RELATED TO REB 2.8.10B
+
+Search and remove ANYTHING referencing:
+
+REB 2.8.10B
+
+PortfolioRefreshListener
+
+portfolio_balance_updated
+
+“global refresh”
+
+“predicate invalidation”
+
+“24 query keys”
+
+“centralized refresh”
+
+“query-keys.ts (extended)”
+
+This ensures you eliminate “legacy junk” permanently.
+
+🔥 STEP 8 — VERIFY TRUTH AGAINST THE WORKING NOV 6–15 STATE
+
+Once the rollback + restoration is complete, validate these:
+
+✔ Dashboard updates INSTANTLY on paper start
+
+Because:
+
+Backend updates portfolioState.balance
+
+Backend sends trading_state_changed
+
+Dashboard patches query cache immediately
+
+No polling delay
+
+✔ LATTi + Goals update within normal REST refresh window
+
+They never used WebSockets originally
+They should rely on:
+
+A tiny set of invalidations when trading starts/stops
+
+Normal polling afterwards
+
+✔ No sudden overrides to 10,000 or 800
+
+The only source of truth is:
+
+portfolioState.balance
+
+✔ No race conditions, no contradictory events
+
+Because all global invalidation nets were dismantled.
+
+🧨 FINAL DELIVERABLE REQUIREMENT
+
+Replit must produce:
+
+Git diff showing removal of global listener & invalidations
+
+Git diff showing restored Dashboard listener only
+
+Git diff showing removal of any default 10000
+
+Git diff showing cleaned-up paper-sim-service.ts
+
+Architecture note confirming alignment with Nov 6–15 truth
+
+Final test logs for:
+
+Start paper sim w/ custom balance
+
+Stop + restart
+
+Navigate across Dashboard → Goals → LATTi
+
+Validate consistency and no delays
