@@ -1,0 +1,312 @@
+⚙️ REB 2.8.11 – Portfolio Truth Audit & Sync Fix (Paper + Live)
+
+Goal (plain English)
+Stop guessing. Map exactly how portfolio value flows for both paper and live modes, from backend to every UI widget, then fix the places where:
+
+Paper starting balance + simulated P&L are not propagating to all portfolio surfaces, and
+
+LATTi Goals & Guardrails / Goals Engine either lag, desync, or error out after balance changes.
+
+We must preserve the REB 2.8.10B architecture (global portfolio_balance_updated WebSocket + REST) and only fix broken pieces, not redesign the system.
+
+A. Guardrails & Truth Constraints
+
+Truth = Pre-corruption behavior
+
+Paper mode:
+
+User inputs a paper starting portfolio value when a new simulation starts.
+
+That value + simulated P&L must drive all portfolio surfaces (Dashboard, LATTi, Goals Engine) for paper mode.
+
+Live mode:
+
+Portfolio value is taken from Kraken balances.
+
+No manual override; all UI surfaces show the Kraken-derived value.
+
+Architectural constraints
+
+Keep REB 2.8.10B global refresh architecture (WebSocket + REST polling).
+
+Do not remove PortfolioRefreshListener, query-keys.ts, or the portfolio_balance_updated mechanism.
+
+Do not change trading engine metrics (scans, filters, FX5) – they remain REST-only. The portfolio is an exception allowed to use WebSocket for sub-second updates.
+
+Scope of this REB
+
+✅ Paper portfolio value truth (startBalance + simulated P&L).
+
+✅ Live portfolio value truth (Kraken).
+
+✅ Sync across:
+
+Dashboard “Portfolio Value” widget
+
+Dashboard “LATTI Goals & Guardrails” widget
+
+Goals Engine → Goals tab → “Current Portfolio Value / Projected Portfolio Growth”
+
+❌ Do not adjust anything in Filter Insights / trading metrics.
+
+B. Phase 1 – End-to-End Portfolio Truth Audit (No Fixes Yet)
+
+Create one new doc:
+
+docs/restoration/reb2_reports/REB_2.8.11_PORTFOLIO_TRUTH_AUDIT.md
+
+Structure it into sections as below.
+
+B.1 Backend Sources – Paper vs Live
+
+Create Table 1 – Backend Portfolio Data Sources
+
+Columns (per row):
+
+Mode (paper / live)
+
+Concept (startBalance, currentBalance, realizedPnL, unrealizedPnL, totalPortfolioValue, etc.)
+
+Exact source:
+
+DB table + column (if any)
+
+Or in-memory structure + owning service
+
+How it’s computed (formula or description)
+
+Owning service (file + function)
+
+Used by endpoints (list all endpoints that depend on this value)
+
+Rows: one row per distinct concept per mode.
+
+Specifically include:
+
+startPaperSimulation / stopPaperSimulation plumbing in paper-sim-service.ts.
+
+Live portfolio sourcing from Kraken (whatever service bridges Kraken → portfolio overview).
+
+B.2 REST Endpoints – What They Return
+
+Create Table 2 – Portfolio REST Endpoints
+
+Columns:
+
+Endpoint (full path incl. query parameters)
+
+Mode(s) it supports (paper, live)
+
+JSON path to portfolio value used in UI
+(e.g. data.portfolio.totalValue, data.currentPortfolioValue, etc.)
+
+Which surfaces use it (Dashboard widget / LATTi widget / Goals Engine etc.)
+
+Whether the endpoint is already in the 26 query keys list from REB 2.8.10B, or not.
+
+Required endpoints to include (plus any others you discover):
+
+/api/paper/portfolio/state
+
+/api/portfolio/overview?mode=paper
+
+/api/portfolio/overview?mode=live
+
+/api/portfolio/metrics
+
+/api/goals/summary?mode=paper
+
+/api/goals/summary?mode=live
+
+/api/latti/targets
+
+/api/system/trading-pace
+
+Any endpoint used by the Goals Engine Projected Portfolio Growth card.
+
+For each endpoint: show a real example response from the current system for paper and for live (redact anything sensitive), especially the fields that hold the portfolio value.
+
+B.3 Frontend Surfaces – Components & Hooks
+
+Create Table 3 – Frontend Portfolio Surfaces
+
+For each of these surfaces:
+
+Dashboard → Portfolio Value widget
+
+Dashboard → LATTI Goals & Guardrails widget
+
+Goals Engine → Goals tab → Projected Portfolio Growth / Current Portfolio Value
+
+Any other visible portfolio value you find.
+
+Columns:
+
+Surface (e.g., “Dashboard – Portfolio Value widget”)
+
+Component file path (e.g., client/src/pages/dashboard.tsx, client/src/components/dashboard/latti-goals-mirror.tsx)
+
+Hook used (usePortfolioBalance, useQuery, etc.)
+
+queryKey (full value, including parameters)
+
+REST endpoint called (must map to Table 2)
+
+Fields used from the response
+
+Does the component also listen for WebSocket events directly (yes/no; if yes, where)?
+
+Make sure all of these query keys are either in, or explicitly not in, the PORTFOLIO_QUERY_KEYS constant used by PortfolioRefreshListener.
+
+B.4 WebSocket Events – What’s Actually Emitted
+
+Create Table 4 – portfolio_balance_updated Emission Points
+
+Columns:
+
+Mode (paper / live)
+
+Service + function (e.g., paper-sim-service.startPaperSimulation)
+
+When it fires (before/after DB update, before/after REST state is consistent)
+
+Event payload (actual structure, including mode, timestamp, any other fields)
+
+Log sample (one line from server logs showing the event or related log)
+
+Confirm that you have entries for:
+
+Paper:
+
+startPaperSimulation
+
+stopPaperSimulation
+
+Live:
+
+activateLiveTrading
+
+stopLiveTrading / deactivateLiveTrading
+
+B.5 Global Listener – What It Invalidates
+
+Summarize, in prose + a small table:
+
+Where PortfolioRefreshListener is mounted (App.tsx)
+
+The full list of 26 query keys it invalidates (you can reuse from 2.8.10B doc)
+
+For each surface in Table 3, indicate which invalidated key(s) it relies on.
+
+If any surface uses a query key that is not in PORTFOLIO_QUERY_KEYS, flag it explicitly.
+
+B.6 Reproduce Kyle’s Scenario with Evidence
+
+Run exactly this scenario in paper mode and put evidence (logs + responses) into the audit file:
+
+Start state:
+
+Portfolio shows $810 everywhere.
+
+Take a screenshot or log REST responses from all endpoints listed in Table 2.
+
+Start paper trading:
+
+Start a new paper simulation with startBalance = $845.
+
+Capture:
+
+REST responses from key endpoints after a few seconds.
+
+At minimum: /api/paper/portfolio/state, /api/portfolio/overview?mode=paper, /api/goals/summary?mode=paper, /api/latti/targets.
+
+Any portfolio_balance_updated events in the logs.
+
+Frontend errors/warnings related to LATTi or Goals (for example, the “Failed to load guardrails” error).
+
+Stop trading, then start again with startBalance = $871.
+
+Repeat the same captures.
+
+In the audit doc, explicitly answer:
+
+After the $845 start:
+
+Which endpoints reflect $845, and which still show $810?
+
+Do we see a portfolio_balance_updated event with mode: 'paper'?
+
+After the $871 start:
+
+Which endpoints show $871, which show $845, which show $810?
+
+What error causes the LATTi widget to fail to load (stack trace / HTTP error)?
+
+Only after this audit is complete and the mismatch is clearly documented do we proceed to fixes.
+
+C. Phase 2 – Targeted Fixes (After Audit Only)
+
+Once REB_2.8.11_PORTFOLIO_TRUTH_AUDIT.md is complete, implement minimal, evidence-based fixes:
+
+C.1 Single Canonical Paper Portfolio Source
+
+Choose one canonical backend source for the paper portfolio value (likely the same one used by /api/paper/portfolio/state).
+
+Ensure all endpoints in Table 2 that represent “current portfolio value” for paper mode derive from this same source (or from a clearly documented formula on top of it).
+
+No more “$810 here, $845 there” – they must all agree.
+
+C.2 Ensure LATTi & Goals Use Same Canonical Value
+
+Confirm that:
+
+LATTi Goals & Guardrails widget, and
+
+Goals Engine → Goals tab / Projected Portfolio Growth
+both read from endpoints wired to that canonical paper portfolio value.
+
+Fix any code that:
+
+Reads a stale copy (e.g., from settings or an old session table), or
+
+Swallows errors and produces the “Failed to fetch guardrails” behavior when portfolio changes.
+
+Document in the completion report:
+
+Which endpoint each of those widgets uses after the fix.
+
+Before/after example responses showing correct updated values.
+
+C.3 WebSocket + Query Invalidation Consistency Check
+
+For each surface in Table 3, verify that its query key is present in PORTFOLIO_QUERY_KEYS and gets invalidated when portfolio_balance_updated fires.
+
+If any key is missing, add it to the constant and ensure the predicate invalidation still works with parameters.
+
+No changes to how the WebSocket event is structured – just make sure all portfolio surfaces are actually listening via React Query invalidation.
+
+D. Deliverables
+
+docs/restoration/reb2_reports/REB_2.8.11_PORTFOLIO_TRUTH_AUDIT.md
+
+Tables 1–4 + scenario evidence + analysis.
+
+docs/restoration/reb2_reports/REB_2.8.11_PORTFOLIO_TRUTH_FIX_COMPLETION.md
+
+Summary of fixes:
+
+Root cause(s) for stale/incorrect portfolio values
+
+Exact code changes (file paths + brief explanation)
+
+Before/after REST responses and screenshots
+
+Confirmation that paper vs live mode behavior matches pre-corruption truth.
+
+A short note in replit.md summarizing:
+
+“Portfolio truth architecture” (paper vs live)
+
+The canonical paper portfolio source
+
+Which endpoints/screens depend on it.
