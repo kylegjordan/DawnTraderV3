@@ -1,0 +1,152 @@
+📌 DIRECTIVE TO REPLIT — Fix startingBalance + restore correct portfolio refresh behavior
+
+REB 2.8.13 – Critical Fix: startingBalance missing, simulation start rejected
+
+Replit, the rollback introduced a major regression:
+
+❗Backend now requires startingBalance
+
+But the frontend no longer passes it in the startPaperTrading request.
+
+❗As a result:
+
+backend rejects the request with 400
+
+engine never actually starts
+
+no trading_state_changed WS event
+
+Dashboard keeps stale values
+
+Goals Engine sees stale values
+
+LATTI sees stale values
+
+random cache artifacts (like $10,000) show up from older cache entries
+
+🚨 FIX THIS FIRST: Ensure frontend always sends startingBalance
+1. Inspect and repair the Paper Trading Start modal
+
+Look at:
+
+client/src/components/trading/start-paper-simulation-modal.tsx
+client/src/hooks/use-trading.tsx (handleContinueSimulation / handleStartSimulation)
+client/src/pages/dashboard.tsx (new Start Simulation modal wiring)
+
+
+Ensure the request:
+
+POST /api/paper/portfolio/start
+
+
+includes:
+
+{
+  "startingBalance": <number>
+}
+
+
+with NO chance for undefined, null, NaN, or empty string.
+
+The input must ALWAYS send a value.
+
+🚨 FIX THIS SECOND: Prevent fallback cached values from leaking
+
+Because $10,000 is appearing after rollback, add:
+
+2. Purge cached portfolioOverview on simulation start request
+
+Before firing the POST request, do:
+
+queryClient.removeQueries(['portfolio-overview', 'paper']);
+
+
+Same for live:
+
+queryClient.removeQueries(['portfolio-overview', 'live']);
+
+
+This ensures stale cached data (like $10k) cannot resurrect.
+
+🚨 FIX THIS THIRD: Verify backend start calls update portfolioState
+
+In:
+
+server/services/paper-sim-service.ts
+
+Replit must ensure:
+
+manager.start() succeeds
+
+then update portfolioState.balance
+
+then emit trading_state_changed
+
+This was added in REB 2.8.11; confirm it still exists exactly as written.
+
+🚨 FIX THIS FOURTH: Validate the Dashboard WS listener
+
+Ensure the listener:
+
+receives trading_state_changed
+
+extracts payload.portfolioOverview
+
+updates cache:
+
+setQueryData(['portfolio-overview', mode], data)
+
+
+Do NOT police other consumers; only Dashboard handles WS → cache update.
+
+🚨 FIX THIS FIFTH: Verify startingBalance param path all the way down
+
+Trace:
+
+Frontend Modal → handleStartPaperTrading → startPaperSimulation → routes.ts → paper-sim-service.ts → createPaperSimSession
+
+
+Ensure:
+
+no undefined options
+
+no missing startingBalance
+
+no stale code referring to body.startBalance or old param names
+
+🧹 Cleanup: Remove any leftover 10,000 fallback defaults
+
+Search:
+
+'|| 10000'
+'== 10000'
+'default starting balance'
+
+
+Ensure NO hidden fallback reappears.
+
+🧩 Final Expected Behavior
+
+After fix:
+
+Entering 808 should immediately start simulation
+
+trading_state_changed should broadcast portfolioOverview {totalValue: 808}
+
+Dashboard Portfolio Value updates INSTANTLY
+
+Goals Engine updates on next REST poll
+
+LATTI updates on next REST poll
+
+No more $10,000 zombie default
+
+🧪 I will validate functionality after your patch.
+
+Please implement REB 2.8.13 exactly as described and provide:
+
+changes summary
+
+git diff excerpts
+
+architect review logs
