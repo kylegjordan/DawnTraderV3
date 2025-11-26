@@ -268,6 +268,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const handleContinueSimulation = async () => {
     console.log('[Phase-27.F.14.I] Continue previous simulation');
     
+    // REB 2.8.13: Purge cached portfolio data to prevent stale $10k values
+    queryClient.removeQueries({ queryKey: ['portfolio-overview', 'paper'] });
+    console.log('[REB 2.8.13] Purged portfolio cache before continue simulation');
+    
     // Phase 32.D-Fix.6 Fix #4: Immediate toast feedback for instant user response
     toast({
       title: "Starting Paper Trading...",
@@ -311,6 +315,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   // Phase 27.F.14.I: Handle Start New Simulation
   const handleStartNewSimulation = async (balance: number) => {
     console.log('[Phase-27.F.14.I] Start new simulation with balance:', balance);
+    
+    // REB 2.8.13: Purge cached portfolio data to prevent stale $10k values
+    queryClient.removeQueries({ queryKey: ['portfolio-overview', 'paper'] });
+    console.log('[REB 2.8.13] Purged portfolio cache before new simulation');
     
     // Phase 32.D-Fix.6 Fix #4: Immediate toast feedback for instant user response
     toast({
