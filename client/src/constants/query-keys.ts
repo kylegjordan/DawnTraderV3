@@ -2,9 +2,9 @@
 // Centralized query key definitions to prevent drift between implementation and documentation
 
 /**
- * REB 2.8.10B: Complete Portfolio Query Keys (24 total)
+ * REB 2.8.10B: Definitive Portfolio Query Keys (26 total)
  * 
- * Portfolio-related query keys that should be invalidated
+ * Portfolio-related query keys that MUST be invalidated
  * when portfolio_balance_updated WebSocket events are received.
  * 
  * This ensures sub-second updates across:
@@ -12,61 +12,59 @@
  * - Goals Engine (Goals Table, Target Daily Goals, Projected Growth)
  * - LATTI (Dashboard widget, standalone page)
  * - Reports (Trading Activity, Earnings Charts)
- * - TopBar (Portfolio display)
+ * - TopBar (Portfolio display, Trading Pace)
  * 
- * Coverage breakdown:
- * - Portfolio queries (8): Base endpoints + history/charts
- * - Paper metrics (4): Paper trading simulation data
- * - Earnings summaries (2): Mode-specific earnings
- * - Daily briefs (2): Mode-specific briefs
- * - Goals Engine (4): Goals summaries (mode-specific + agnostic)
- * - Trading status (2): Engine status and metrics
- * - LATTI (1): Daily targets
+ * Architect-verified coverage breakdown:
+ * - Portfolio core (3): Paper state + mode-specific overviews
+ * - Portfolio metrics (8): Earnings, history, charts (both modes)
+ * - Earnings summaries (2): Mode-specific earnings data
+ * - Briefing feeds (4): Both daily brief variants (with/without /today)
+ * - Goals/LATTI (5): Goals summaries, LATTI targets, trading pace
+ * - Trading state (3): Paper sim status/metrics + unified status
  * - Settings (1): System settings with portfolio values
  * 
- * IMPORTANT: This list was compiled by auditing ALL React Query consumers
- * in the codebase using grep searches. Do not remove entries without verifying
- * they're unused across Dashboard, Goals Engine, LATTI, Reports, and TopBar.
+ * CRITICAL: This list was exhaustively audited via architect analysis of ALL
+ * React Query consumers. Do not remove entries without architect review.
  */
 export const PORTFOLIO_QUERY_KEYS = [
-  // Portfolio queries (8) - mode-specific and mode-agnostic
+  // Portfolio core (3) - mode-specific state
   '/api/paper/portfolio/state',
-  '/api/portfolio/overview?mode=live',
   '/api/portfolio/overview?mode=paper',
-  '/api/portfolio/overview',
+  '/api/portfolio/overview?mode=live',
+  
+  // Portfolio metrics (8) - earnings, history, charts (both modes)
   '/api/portfolio/metrics',
   '/api/portfolio/earnings',
-  '/api/portfolio/earnings-chart',
   '/api/portfolio/history',
-  
-  // Paper portfolio metrics queries (4)
+  '/api/portfolio/earnings-chart',
   '/api/paper/metrics/portfolio',
   '/api/paper/metrics/earnings',
-  '/api/paper/metrics/earnings-chart',
   '/api/paper/metrics/history',
+  '/api/paper/metrics/earnings-chart',
   
   // Earnings summaries (2) - mode-specific
   '/api/earnings/summary?mode=paper',
   '/api/earnings/summary?mode=live',
   
-  // Daily briefs (2) - EXACT endpoints from workflow logs
+  // Briefing feeds (4) - both daily brief variants
+  '/api/paper/briefs',
   '/api/paper/briefs/today',
+  '/api/daily-briefs',
   '/api/daily-briefs/today',
   
-  // Goals Engine queries (4) - mode-specific and mode-agnostic
+  // Goals/LATTI (5) - mode-specific + trading pace
   '/api/goals',
-  '/api/goals/summary',
   '/api/goals/summary?mode=paper',
   '/api/goals/summary?mode=live',
+  '/api/latti/targets',
+  '/api/system/trading-pace',
   
-  // Trading status queries (2)
+  // Trading state (3) - paper sim + unified status
   '/api/paper-sim/status',
   '/api/paper-sim/metrics',
+  '/api/trading/status',
   
-  // LATTI queries (1)
-  '/api/latti/targets',
-  
-  // Settings and configuration (1) - contains portfolioValue field
+  // Settings (1) - contains portfolioValue field
   '/api/settings',
 ] as const;
 
