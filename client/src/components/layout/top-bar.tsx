@@ -140,43 +140,24 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   }, [wsMessages, queryClient]);
 
-  // Phase 27.F.1: Listen for trading_state_changed WebSocket events to sync UI
+  // Listen for trading_state_changed WebSocket events to sync UI
   useEffect(() => {
     const tradingStateUpdates = wsMessages.filter((msg: any) => msg.type === 'trading_state_changed');
     if (tradingStateUpdates.length > 0) {
       const latestUpdate = tradingStateUpdates[tradingStateUpdates.length - 1];
       console.log('[TopBar] Received trading_state_changed event:', latestUpdate);
       
-      // Invalidate trading status queries to immediately reflect changes
+      // Minimal invalidations - only trading status queries
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       
-      // Phase 27.F.1: Invalidate goals queries for both modes to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: ['/api/goals', 'live'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/goals', 'paper'] });
-      
-      // Phase 32.D-Fix.8: Update local mode if changed (use payload, fallback to data for legacy)
+      // Update local mode if changed
       const mode = latestUpdate.payload?.mode || latestUpdate.data?.mode;
       if (mode) {
         setMode(mode);
       }
     }
   }, [wsMessages, queryClient, setMode]);
-
-  // Phase 27.F.14.E + 27.F.14.M: Listen for portfolio_balance_updated events to refresh dashboard
-  useEffect(() => {
-    const balanceUpdates = wsMessages.filter((msg: any) => msg.type === 'portfolio_balance_updated');
-    if (balanceUpdates.length > 0) {
-      const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
-      console.log('[Phase-27.F.14.E] Received portfolio_balance_updated event:', latestUpdate);
-      
-      // Phase 27.F.14.M: Invalidate all portfolio-related queries to immediately refresh balance
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
-    }
-  }, [wsMessages, queryClient]);
 
   // Phase 27.F.14.N: Listen for trading_data_updated events to refresh trading tabs
   useEffect(() => {
@@ -372,17 +353,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     try {
       await startTrading('live');
       
-      // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.10] Invalidating portfolio and goals queries after live trading start');
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
+      // Minimal invalidations - WebSocket will handle most updates
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      // REB 2.8.10: Add goals, LATTI, and metrics invalidations
-      await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=live`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/metrics'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
       
-      // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
       let errorMessage = "Failed to start Live Trading";
       
@@ -420,17 +394,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     try {
       await stopTrading('live');
       
-      // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.10] Invalidating portfolio and goals queries after live trading stop');
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
+      // Minimal invalidations - WebSocket will handle most updates
       await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      // REB 2.8.10: Add goals, LATTI, and metrics invalidations
-      await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=live`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/metrics'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/latti/targets'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=live'] });
       
-      // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
     } catch (error: any) {
       let errorMessage = "Failed to stop Live Trading";
       
@@ -473,9 +440,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         mode: currentMode 
       });
       
-      // Phase 27.F.14.E: Immediately refresh portfolio value across all sessions
-      console.log('[Phase-27.F.14.E] Invalidating portfolio queries after balance confirmation');
-      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview'] });
+      // Refresh portfolio after balance confirmation
+      await queryClient.invalidateQueries({ queryKey: ['/api/portfolio/overview?mode=paper'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
       
       // Close the modal

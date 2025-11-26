@@ -35,30 +35,23 @@ export default function Dashboard() {
   
   const { mode, isPaper } = useTradingMode();
   
-  // Phase 35.2A: Fetch portfolio data at Dashboard level for context isolation
-  // REB 2.8.9: Updated to 5s refresh for near-real-time balance updates
+  // Fetch portfolio data at Dashboard level for context isolation
+  // Nov 6-15 truth: Normal polling (15s) + WebSocket for instant updates
   const { data: livePortfolioData } = useQuery<PortfolioOverview>({
     queryKey: [`/api/portfolio/overview?mode=live`],
     enabled: !isPaper,
-    refetchInterval: 5000,        // Faster refresh for immediate updates
-    staleTime: 0,                 // Always consider stale to force refetch
-    refetchOnWindowFocus: true,   // Refetch when user returns to tab
-    refetchOnReconnect: true,     // Refetch after connection issues
-    refetchOnMount: true          // Refetch on component mount
+    refetchInterval: 15000,
+    staleTime: 15000
   });
   
   const { data: paperPortfolioData } = useQuery<PortfolioOverview>({
-    queryKey: ['/api/paper/portfolio/state'],
+    queryKey: ['/api/portfolio/overview?mode=paper'],
     enabled: isPaper,
-    refetchInterval: 5000,        // Faster refresh for immediate updates
-    staleTime: 0,                 // Always consider stale to force refetch
-    refetchOnWindowFocus: true,   // Refetch when user returns to tab
-    refetchOnReconnect: true,     // Refetch after connection issues
-    refetchOnMount: true          // Refetch on component mount
+    refetchInterval: 15000,
+    staleTime: 15000
   });
   
-  // Phase 35.2A: Memoize portfolio data to prevent unnecessary context updates
-  // REB 2.8.10B: WebSocket listener moved to app shell (PortfolioRefreshListener)
+  // Memoize portfolio data to prevent unnecessary context updates
   const portfolioData = useMemo(() => 
     isPaper ? paperPortfolioData : livePortfolioData,
     [isPaper, paperPortfolioData, livePortfolioData]
