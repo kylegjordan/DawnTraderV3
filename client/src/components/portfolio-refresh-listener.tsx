@@ -24,13 +24,19 @@ export function PortfolioRefreshListener() {
     
     if (balanceUpdates.length > 0) {
       const latestUpdate = balanceUpdates[balanceUpdates.length - 1];
-      console.log('[REB 2.8.10B][WS] portfolio_balance_updated → refreshing portfolio-related queries', latestUpdate.payload);
+      console.log('[REB 2.8.10B][WS] portfolio_balance_updated → invalidating ALL portfolio queries (26 keys)', latestUpdate.payload);
       
-      // REB 2.8.10B: Invalidate ALL portfolio-related queries for global refresh
-      // Using centralized constants to prevent drift between implementation and documentation
+      // REB 2.8.10B: Invalidate ALL 26 portfolio-related queries for global refresh
+      // Using predicate-based matching to catch parameterized queries (e.g., {days: 7}, {limit: 30})
       unstable_batchedUpdates(() => {
         PORTFOLIO_QUERY_KEYS.forEach(queryKey => {
-          queryClient.invalidateQueries({ queryKey: [queryKey] });
+          queryClient.invalidateQueries({
+            predicate: (query) => {
+              // Match exact key or prefix (handles parameterized variants like [{endpoint}, {options}])
+              const firstKey = Array.isArray(query.queryKey) ? query.queryKey[0] : query.queryKey;
+              return firstKey === queryKey || String(firstKey).startsWith(queryKey);
+            }
+          });
         });
       });
     }
