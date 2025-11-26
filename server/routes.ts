@@ -2026,6 +2026,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             manualOverrideEnabled,
             displayName: "Confidence Threshold (%)",
             category: "Universe & Signal Controls"
+          },
+          {
+            name: "minHistoryDays",
+            value: screenerData.minHistoryDays ?? 30,
+            managedByLottie,
+            manualOverrideEnabled,
+            displayName: "Minimum History (Days)",
+            category: "Data Quality"
           }
         ],
         lastUpdated: screenerData.updatedAt
@@ -2342,6 +2350,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           excludeStablecoins: true,
           minLiquidity: '250000.00',
           allowRegulatedOnly: false,
+          minHistoryDays: 30, // REB 2.9: Data Quality - Phase 8.7.1 truth restoration
           createdAt: new Date(),
           updatedAt: new Date()
         };
