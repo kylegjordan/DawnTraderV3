@@ -56,23 +56,40 @@ function DashboardLATTiWidgetComponent() {
   const [, setLocation] = useLocation();
   const { balance: portfolioBalance, isLoading: portfolioLoading } = usePortfolioBalance();
 
+  // REB 2.8.14: Align with Goals Engine pattern - add retry and proper error handling
   // Fetch guardrails
   const { data: guardrailsData, isLoading: guardrailsLoading, error: guardrailsError } = useQuery<{ ok: boolean; data: GuardrailsV2 }>({
     queryKey: [`/api/guardrails-v2?mode=${mode}`],
     enabled: !!mode,
+    retry: 2,
   });
 
-  // Fetch active preset
+  // Fetch active preset - match Goals Engine pattern exactly
   const { data: presetData, isLoading: presetLoading, error: presetError } = useQuery<{ ok: boolean; data: GoalsPreset }>({
     queryKey: [`/api/goals-presets/active?mode=${mode}`],
     enabled: !!mode,
+    retry: 2,
   });
 
   // Fetch coherency compliance
   const { data: complianceData, isLoading: complianceLoading, error: complianceError } = useQuery<{ ok: boolean; data: GuardrailsCompliance }>({
     queryKey: [`/api/analytics/guardrails-compliance?mode=${mode}`],
     enabled: !!mode,
+    retry: 2,
   });
+
+  // REB 2.8.14: Log errors for debugging
+  useEffect(() => {
+    if (guardrailsError) {
+      console.error('[DashboardLATTiWidget] Guardrails query error:', guardrailsError);
+    }
+    if (presetError) {
+      console.error('[DashboardLATTiWidget] Preset query error:', presetError);
+    }
+    if (complianceError) {
+      console.error('[DashboardLATTiWidget] Compliance query error:', complianceError);
+    }
+  }, [guardrailsError, presetError, complianceError]);
 
   const guardrails = guardrailsData?.data;
   const preset = presetData?.data;

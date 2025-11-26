@@ -1317,9 +1317,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/guardrails-v2?mode=paper|live
   apiRouter.get('/guardrails-v2', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
+      console.log(`[REB 2.8.14][/api/guardrails-v2] GET request - userId: ${userId}, mode: ${mode}`);
 
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        console.error(`[REB 2.8.14][/api/guardrails-v2] Invalid mode parameter: ${mode}`);
         return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
@@ -1688,9 +1691,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/goals-presets/active?mode=paper|live - Fetch the active preset
   apiRouter.get('/goals-presets/active', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
+      console.log(`[REB 2.8.14][/api/goals-presets/active] GET request - userId: ${userId}, mode: ${mode}`);
 
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        console.error(`[REB 2.8.14][/api/goals-presets/active] Invalid mode parameter: ${mode}`);
         return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
@@ -1846,9 +1852,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/analytics/guardrails-compliance?mode=paper|live - Get coherency status
   apiRouter.get('/analytics/guardrails-compliance', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      const userId = req.user!.id;
       const mode = req.query.mode as 'live' | 'paper';
+      console.log(`[REB 2.8.14][/api/analytics/guardrails-compliance] GET request - userId: ${userId}, mode: ${mode}`);
 
       if (!mode || (mode !== 'live' && mode !== 'paper')) {
+        console.error(`[REB 2.8.14][/api/analytics/guardrails-compliance] Invalid mode parameter: ${mode}`);
         return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
