@@ -1,0 +1,139 @@
+You’ve found the right issue: there is no min_history_days column in screener_filters, so minHistoryDays can’t persist.
+
+I’m relaxing the “no DB/schema changes” rule for this one very narrow case only:
+
+✅ You ARE allowed to add a single min_history_days column to screener_filters
+❌ You are NOT allowed to change any other tables (especially users)
+❌ Do NOT run npm run db:push or any global schema sync
+❌ Do NOT drop or recreate any tables
+
+Please proceed with the following strict plan:
+
+1) Schema file update (local TypeScript schema)
+
+File: shared/schema.ts
+
+In the screenerFilters table definition, add:
+
+// REB 2.9B: Data Quality – Minimum History (Days)
+minHistoryDays: integer("min_history_days").default(30),
+
+
+Do not change anything else in this file.
+
+2) Database column creation (one safe ALTER)
+
+Run one SQL statement against the DB:
+
+ALTER TABLE screener_filters
+ADD COLUMN IF NOT EXISTS min_history_days INTEGER DEFAULT 30;
+
+
+Then verify:
+
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'screener_filters'
+  AND column_name = 'min_history_days';
+-- Expect exactly 1 row: min_history_days | integer
+
+
+Important safety constraints:
+
+Do not touch the users table or any other tables.
+
+Do not run db:push or db:push --force.
+
+Do not drop any tables.
+
+If you need additional schema changes beyond this one column, STOP and ask first.
+
+3) Wire minHistoryDays persistence correctly
+
+You already started this, but please make sure it’s wired exactly like this:
+
+a) GET /api/filters-v2
+
+When building the filters array for the Data Quality group, ensure minHistoryDays’s value comes from screener_filters.min_history_days for the current user + mode, e.g.:
+
+If there is a row in screener_filters for (userId, mode), read min_history_days.
+
+If no row or value is NULL, default to 30.
+
+b) PUT /api/filters-v2?mode=paper|live
+
+When filterName === "minHistoryDays":
+
+Validate the incoming value: it must be one of [30, 60, 90, 180].
+
+If invalid → return 400 with a clear message.
+
+Upsert into screener_filters for (userId, mode):
+
+min_history_days = <value>
+
+Return the updated filter or the full updated filter set (your existing pattern).
+
+Keep the debug/audit logging you added so we can see updates in logs.
+
+Keep the existing architecture:
+
+Use the same storage.upsertScreenerFilters / storage helper you already use for other screener settings if possible.
+
+Don’t introduce a second table or alternate storage for this one field.
+
+4) Don’t change the scanner semantics
+
+You already confirmed:
+
+minHistoryDays is read in market-scanner.ts / FX5 chain.
+
+Kraken history check logic already exists and uses minHistoryDays.
+
+For REB 2.9B:
+
+Do not add new history logic.
+
+Just ensure that when we change the value via the UI, the scanner sees the new value (because it’s coming from /api/filters-v2 → DB).
+
+5) Verification steps
+
+After implementing:
+
+Login flow test (real login)
+
+Log in as testuser123.
+
+Call GET /api/filters-v2?mode=paper and confirm:
+
+minHistoryDays is present and has some value (default 30).
+
+Update to 60 days
+
+From the Goals Engine → Screeners tab:
+
+Uncheck “Managed by LATTi” for Minimum History (Days).
+
+Select 60 days.
+
+Save.
+
+Verify:
+
+GET /api/filters-v2?mode=paper now returns "minHistoryDays": 60.
+
+SELECT min_history_days FROM screener_filters WHERE mode='paper' AND user_id='<testuser123-id>' → returns 60.
+
+Update again (e.g., 90 days)
+
+Repeat and confirm both API and DB reflect 90.
+
+Scanner confirmation (optional)
+
+Check logs for something like:
+
+[FX5][HistoryCheck] minHistoryDays = 60 (or 90).
+
+If any of these steps require additional DB/schema changes beyond the single min_history_days column, STOP and report back instead of guessing.
+
+That’s the core of it.

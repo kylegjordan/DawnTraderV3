@@ -389,6 +389,9 @@ export const screenerFilters = pgTable("screener_filters", {
   minLiquidity: decimal("min_liquidity", { precision: 15, scale: 2 }).default("500000.00"),
   allowRegulatedOnly: boolean("allow_regulated_only").default(false),
   
+  // REB 2.9B: Data Quality – Minimum History (Days)
+  minHistoryDays: integer("min_history_days").default(30),
+  
   // Phase 27.F.14: Advanced Universe & Signal Controls
   universeSize: integer("universe_size").default(100), // Market universe size (25-150)
   quoteCurrencies: jsonb("quote_currencies").default(sql`'["USD"]'::jsonb`), // Array of quote currencies (e.g., ["USD", "EUR", "USDT"])
