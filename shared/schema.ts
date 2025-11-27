@@ -395,9 +395,6 @@ export const screenerFilters = pgTable("screener_filters", {
   activeTimeframes: jsonb("active_timeframes").default(sql`'["5m", "15m", "1h"]'::jsonb`), // Active timeframes (5m, 15m, 1h, 4h)
   confidenceThreshold: integer("confidence_threshold").default(60), // Minimum confidence % (40-90)
   
-  // REB 2.9: Data Quality - Phase 8.7.1 truth restoration
-  minHistoryDays: integer("min_history_days").default(30), // Minimum OHLC history days required (7/30/60/90/180)
-  
   // Phase 28: Override Persistence
   managedByLottie: boolean("managed_by_lottie").notNull().default(true), // true = LATTI manages filters
   manualOverrideEnabled: boolean("manual_override_enabled").notNull().default(false), // true = user has manual control
