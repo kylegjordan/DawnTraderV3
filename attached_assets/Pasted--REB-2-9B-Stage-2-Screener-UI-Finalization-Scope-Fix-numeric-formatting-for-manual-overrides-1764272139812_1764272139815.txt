@@ -1,0 +1,328 @@
+🧩 REB 2.9B – Stage 2: Screener UI Finalization
+
+Scope:
+
+Fix numeric formatting for manual overrides (commas after save).
+
+Restore dropdowns (Active Timeframes, Market Universe, Quote Currencies) using the 8.6/8.7 truth.
+
+Confirm Quote Currencies is UI-only and ignored by the scanner.
+
+No schema changes. No new DB columns.
+
+1. Ground Truth & Non-Goals
+
+Files in scope (read & modify):
+
+client/src/components/goals/filters-with-override.tsx
+
+client/src/hooks/use-override-state.tsx
+
+server/routes.ts (only for confirming /api/filters-v2 contract; do not change schema)
+
+server/services/market-scanner.ts and/or server/services/fx5-scanner.ts (for quote currency behavior verification only)
+
+Do NOT:
+
+❌ No changes to DB schema or Drizzle schema (shared/schema.ts must not be modified).
+
+❌ No changes to screener_filters table structure.
+
+❌ No re-introduction of ScreenerFiltersTab (keep it commented out).
+
+❌ No second API or duplicate persistence for the same filters.
+
+We are only finishing the existing FiltersWithOverride UI and making sure it persists correctly via /api/filters-v2.
+
+2. Numeric Formatting – Manual Mode (Commas After Save)
+2.1 Current Behavior (What you should observe before changes)
+
+From the current build:
+
+When Managed by LATTi = checked (overrideDisabled):
+
+Inputs are disabled (read-only).
+
+Numbers are shown with comma separators (e.g. 5,000).
+
+When Managed by LATTi = unchecked (manual override ON):
+
+User can type into the input (this is already fixed).
+
+Value is persisted via the PUT /api/filters-v2 call (toast confirms).
+
+But after save/refresh, the manual value still shows without commas (e.g. 5000).
+
+We want the manual override path to display formatted numbers after edit/save, just like the LATTi-managed path, without interfering with typing UX.
+
+2.2 Target Behavior
+
+For numeric filters (Min Volume, Max Liquidity, Min/Max Price, etc.):
+
+While the user is actively typing, they should see a clean, raw numeric text field (no commas while typing).
+
+On blur (and/or after successful mutation), the value should re-render with thousand separators, same as LATTi-managed values.
+
+Internally, the stored value must remain a number everywhere (React state, React Query cache, API payload). Formatting is presentation only.
+
+2.3 Implementation Requirements
+
+In client/src/components/goals/filters-with-override.tsx:
+
+Centralize formatting logic
+
+If a helper already exists from previous work (e.g. formatThousands() or similar), reuse it.
+
+If not, create a helper inside this file or a small local util:
+
+const formatThousands = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) return '';
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
+};
+
+
+Use this for both:
+
+LATTi-managed display
+
+Manual override display (after blur / after load)
+
+Do NOT change the underlying state shape
+
+Continue storing numeric values in state / React Query.
+
+When parsing user input:
+
+Strip commas and spaces, parse to number.
+
+On invalid input, show validation error or revert to previous value (reuse existing logic).
+
+Manual input behavior
+
+When overrideEnabled = true (Managed by LATTi unchecked):
+
+On onChange, treat input as “raw” text:
+
+Strip commas only for parsing, but don’t re-insert commas while typing.
+
+On onBlur:
+
+If the current value is a valid number and mutation succeeded (you already have a mutation + onSuccess handler), render the formatted string using formatThousands(value).
+
+You can implement this either via:
+
+A per-field “isEditing” flag, or
+
+Re-rendering from the numeric value on blur using formatThousands(value).
+
+When overrideEnabled = false (LATTi-managed):
+
+Continue to show disabled input with formatThousands(value) (current behavior).
+
+Minimum History formatting
+
+If minHistoryDays is numeric and already using a Select, it does not need comma formatting.
+
+The formatting change only applies to numeric text inputs that represent amounts (volume, price, market cap, etc.).
+
+Regression checks (local)
+
+Confirm:
+
+Toggle a filter to manual mode.
+
+Type 5000 → blur → field shows 5,000.
+
+Refresh page:
+
+The value is still 5,000.
+
+Backend still receives a bare numeric 5000 in the payload and in /api/filters-v2 response.
+
+3. Dropdown Restoration – Timeframes, Quote Currencies, Market Universe
+
+Now restore the dropdown behavior we had in 8.6/8.7, using fixed option sets.
+
+All of this stays within FiltersWithOverride, using the existing filters-v2 contract. No new DB columns.
+
+3.1 Active Timeframes (multi-select)
+
+Filter name: activeTimeframes (or whatever name /api/filters-v2 exposes – use the existing name from the current filters-v2 payload).
+
+In FiltersWithOverride, when rendering this filter:
+
+Use a multi-select UI (e.g. Shadcn Select + checkboxes, or a reusable multi-select control already used elsewhere).
+
+Populate options (from the 1120 truth):
+
+const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "1h", "4h", "1d"];
+
+
+When LATTi-managed:
+
+Show the current selected timeframes as a comma-separated label (read-only).
+
+When manual override:
+
+Make the multi-select editable.
+
+Persist selections via the same mutation you use for other filters (through /api/filters-v2), using the same value field (likely an array).
+
+Confirm:
+
+Selections persist across page refresh.
+
+The filter’s managedByLottie flag and value are round-tripped correctly via /api/filters-v2.
+
+3.2 Quote Currencies (multi-select, but ignored by backend)
+
+Filter name: quoteCurrencies (or the exact name in /api/filters-v2 response).
+
+UI:
+
+Render as multi-select with the following options (1120 truth):
+
+const QUOTE_CURRENCY_OPTIONS = [
+  "USD", "EUR", "JPY", "GBP",
+  "USDT", "USDC", "BTC", "ETH",
+];
+
+
+LATTi-managed: read-only label.
+
+Manual override: user can select one or more.
+
+Persistence:
+
+Store the selected values via /api/filters-v2 exactly like other array-type filters (no schema changes).
+
+No special rules for filters-with-override beyond using the correct type.
+
+CRITICAL – Backend semantics:
+
+In the FX5 scanner / market-scanner stack, do not use Quote Currencies to filter Kraken pairs.
+
+Verify in server/services/market-scanner.ts and/or fx5-scanner.ts:
+
+If there is any logic currently applying quoteCurrencies to filter pair lists, remove or bypass it.
+
+The 1120 truth: Quote currencies are:
+
+Stored as config.
+
+Surfaced in UI.
+
+Ignored in the actual pair selection, because Kraken’s quirky codes (e.g. ZUSD, XBT) make it too brittle to maintain.
+
+Verification:
+
+Enable a very restrictive quote selection in UI (e.g. only USD).
+
+Check logs / behavior:
+
+FX5 scanner still sees the full quote universe (not just USD).
+
+No crash, no warnings.
+
+/api/filters-v2 returns the quoteCurrencies array correctly, but scanner behavior does not change.
+
+3.3 Market Universe Size (single-select)
+
+Filter name: marketUniverseSize (or current filters-v2 name).
+
+UI:
+
+Render as a single-select dropdown with:
+
+const MARKET_UNIVERSE_OPTIONS = [
+  "Top 25",
+  "Top 50",
+  "Top 100",
+  "Top 250",
+  "Top 500",
+];
+
+
+Map these labels to internal values that match the current contract (e.g. [25, 50, 100, 250, 500]).
+
+When LATTi-managed:
+
+Read-only label.
+
+When manual override:
+
+Editable select, persists via /api/filters-v2.
+
+Backend:
+
+Do not change the underlying semantics of how FX5 uses universe size, beyond reading the numeric value it already uses.
+
+This directive should only adjust the UI and mapping logic in filters-with-override.tsx.
+
+4. Tests & Verification
+
+Please perform explicit verification (and include notes in your report):
+
+4.1 Numeric Formatting
+
+Toggle Min Volume to manual.
+
+Enter 5000 → blur:
+
+UI shows 5,000.
+
+Refresh: still 5,000.
+
+/api/filters-v2 shows 5000 as the numeric value (no commas).
+
+4.2 Active Timeframes
+
+Set activeTimeframes to ["5m", "15m", "1h"].
+
+Confirm:
+
+UI shows these three after refresh.
+
+/api/filters-v2 reflects those values.
+
+4.3 Quote Currencies
+
+Set quoteCurrencies to only ["USD"] via UI.
+
+Confirm:
+
+/api/filters-v2 returns that array.
+
+Scanner logs / behavior show the full quote universe is still used (no restrictive filtering by quote).
+
+No errors thrown in scanner logs.
+
+4.4 Market Universe Size
+
+Set marketUniverseSize to "Top 100" (or equivalent).
+
+Confirm:
+
+Dropdown displays "Top 100" after refresh.
+
+/api/filters-v2 returns the internally expected numeric value (e.g. 100).
+
+5. Deliverables
+
+When done, please provide:
+
+A short summary of code changes (file + key changes).
+
+Confirmation that:
+
+No DB/schema changes were made.
+
+/api/filters-v2 contract is unchanged except for values already supported.
+
+Confirmation that:
+
+Manual numeric values show commas after blur/save.
+
+All three dropdown categories (timeframes, quote currencies, universe size) match the option sets above.
+
+Quote currencies remain UI-only and do not affect FX5 scanner behavior.

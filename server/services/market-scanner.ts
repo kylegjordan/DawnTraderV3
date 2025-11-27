@@ -833,11 +833,13 @@ export async function collectMixedBatch(
     
     let rejected = false;
     
-    // Filter 1: Quote currency
-    if (!rejected && allowedQuotes.length > 0 && !allowedQuotes.includes(normalizedQuote || '')) {
-      breakdown.failed_quote_currency++;
-      rejected = true;
-    }
+    // REB 2.9B Stage 2: Quote currency filter BYPASSED (UI-only per 1120 truth)
+    // Quote currencies are stored in config and surfaced in UI but NOT used for pair filtering
+    // because Kraken's quirky codes (e.g. ZUSD, XBT) make it too brittle to maintain
+    // if (!rejected && allowedQuotes.length > 0 && !allowedQuotes.includes(normalizedQuote || '')) {
+    //   breakdown.failed_quote_currency++;
+    //   rejected = true;
+    // }
     
     // Filter 2: Stablecoins
     if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
