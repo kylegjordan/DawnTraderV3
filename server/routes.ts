@@ -2350,7 +2350,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           excludeStablecoins: true,
           minLiquidity: '250000.00',
           allowRegulatedOnly: false,
-          minHistoryDays: 30, // REB 2.9: Data Quality - Phase 8.7.1 truth restoration
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -7476,7 +7475,6 @@ Provide specific, actionable recommendations.`,
             allowedTradingPairs: [],
             blacklistedSymbols: [],
             whitelistedSymbols: [],
-            minHistoryDays: 30,
             rsiMin: screenerSettings.rsiMin,
             rsiMax: screenerSettings.rsiMax,
             volatilityMin: screenerSettings.volatilityMin,
