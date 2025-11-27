@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Filter, Info, Sparkles, CircleDot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
@@ -83,6 +83,9 @@ export function FiltersWithOverride() {
   // REB 2.9B Section 3: Local string state for number inputs
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
   
+  // REB 2.9B: Track if we've initialized from server data (to avoid re-init on refetch)
+  const initializedRef = useRef(false);
+  
   // Phase 3b: WebSocket integration for real-time sync
   useOverrideState();
 
@@ -103,9 +106,10 @@ export function FiltersWithOverride() {
     },
   });
 
-  // REB 2.9B: Initialize local overrides and values from server data
+  // REB 2.9B: Initialize local overrides and values from server data ONCE
+  // Per 1120 blueprint: Do NOT reinitialize on refetch - local state is source of truth
   useEffect(() => {
-    if (filtersData?.data?.filters) {
+    if (filtersData?.data?.filters && !initializedRef.current) {
       const newOverrides: Record<string, boolean> = {};
       const newLocalValues: Record<string, string> = {};
       
@@ -118,10 +122,17 @@ export function FiltersWithOverride() {
       
       setOverrides(newOverrides);
       setLocalValues(newLocalValues);
+      initializedRef.current = true;
     }
   }, [filtersData]);
+  
+  // Reset initialization flag when mode changes
+  useEffect(() => {
+    initializedRef.current = false;
+  }, [mode]);
 
   // REB 2.9B Section 1: Override mutation - only updates ONE filter
+  // Per 1120 blueprint: NO cache invalidation - local state is source of truth
   const updateOverrideMutation = useMutation({
     mutationFn: async (updates: { filterName: string; manualOverrideEnabled: boolean }) => {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -141,12 +152,7 @@ export function FiltersWithOverride() {
       
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: ['/api/filters-v2', mode],
-        refetchType: 'all'
-      });
-    },
+    // No onSuccess cache invalidation per 1120 blueprint
     onError: (error: any, variables) => {
       toast({
         title: "Error",
@@ -157,6 +163,7 @@ export function FiltersWithOverride() {
   });
 
   // REB 2.9B Section 8: Value mutation - uses /api/filters-v2 only
+  // Per 1120 blueprint: NO cache invalidation - local state is source of truth
   const updateValueMutation = useMutation({
     mutationFn: async (updates: { filterName: string; value: number | string | boolean | string[] }) => {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -176,12 +183,7 @@ export function FiltersWithOverride() {
       
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: ['/api/filters-v2', mode],
-        refetchType: 'all'
-      });
-    },
+    // No onSuccess cache invalidation per 1120 blueprint
     onError: (error: any) => {
       toast({
         title: "Error",
