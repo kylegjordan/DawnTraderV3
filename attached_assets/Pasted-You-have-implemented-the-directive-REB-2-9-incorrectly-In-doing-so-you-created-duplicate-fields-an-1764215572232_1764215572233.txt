@@ -1,0 +1,91 @@
+You have implemented the directive REB 2.9 incorrectly. In doing so, you created duplicate fields and likely introduced multiple potential issues in the backend and in the functions that call these fields.
+
+I need you to roll back all changes related to REB 2.9 and restore the application to the exact behavior it had before REB 2.9 was implemented.
+
+Phase 1 – Plan Only (do not modify any files yet)
+
+Identify the scope of REB 2.9 changes
+
+List every file and location that was modified for REB 2.9.
+
+For each file, briefly describe:
+
+What was added or changed.
+
+Where duplicate fields were introduced (e.g., database schema, models, DTOs, API payloads, validation layers, UI forms, etc.).
+
+If possible, infer or reconstruct the “pre–REB 2.9” behavior/structure from the current code.
+
+Rollback strategy
+
+Propose a step-by-step rollback plan that:
+
+Removes or reverts all duplicate fields.
+
+Restores any schemas/models/interfaces to their previous state.
+
+Restores function signatures and any logic that called the now-duplicated fields.
+
+Covers both backend and any affected frontend/API layers.
+
+Clearly explain how you will avoid introducing new breaking changes during this rollback.
+
+Verification & proof of rollback
+
+Define concrete checks to prove everything has been returned to the pre–REB 2.9 state, including:
+
+Which unit/integration tests should be added or updated.
+
+How to verify database schema or migrations (if any were changed).
+
+How to confirm that no stale/unused duplicate fields remain in:
+
+Models/entities
+
+API contracts
+
+UI components
+
+Validation logic
+
+Any logging or manual test steps to confirm the application behaves exactly as it did before REB 2.9.
+
+Specify what outputs (logs, test results, grep searches, etc.) will demonstrate that:
+
+All REB 2.9 changes have been reverted, and
+
+The rollback does not negatively affect the previously working application.
+
+Output format for this phase
+
+In your first response, provide:
+
+A clearly labeled “Rollback Plan” (numbered steps).
+
+A clearly labeled “Verification Plan” (tests/checks and what success looks like).
+
+Do not make any code edits yet. This first response must be plan and explanation only.
+
+Phase 2 – Implementation (only after I approve the plan)
+
+After I explicitly confirm that the plan is acceptable:
+
+Apply the rollback exactly as described in your approved plan.
+
+Show:
+
+A list of all files changed.
+
+The key diffs or code snippets that demonstrate:
+
+Duplicate fields removed.
+
+Original structures/logic restored.
+
+Run the verification steps you defined and summarize the results.
+
+Important:
+
+Do not proceed to Phase 2 or change any files until I explicitly confirm that your Phase 1 plan is approved.
+
+Your next message should contain Phase 1 only: the rollback plan and the verification plan.
