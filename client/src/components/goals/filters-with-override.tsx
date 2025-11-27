@@ -17,6 +17,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ModeIndicator } from "./mode-indicator";
 
 /**
@@ -28,7 +35,7 @@ import { ModeIndicator } from "./mode-indicator";
 
 interface FilterV2 {
   name: string;
-  value: number;
+  value: number | string;
   managedByLottie: boolean;
   manualOverrideEnabled: boolean;
   displayName: string;
@@ -115,6 +122,44 @@ export function FiltersWithOverride() {
     },
   });
 
+  const updateValueMutation = useMutation({
+    mutationFn: async (updates: { filterName: string; value: number | string }) => {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const response = await fetch(`/api/filters-v2?mode=${mode}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      const data = await response.json();
+      
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.detail || data.error || 'Failed to update filter value');
+      }
+      
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/filters-v2', mode],
+        refetchType: 'all'
+      });
+      toast({
+        title: "Filter value updated",
+        description: "Filter value has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update filter value",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleToggleManual = (filter: FilterV2) => {
     const newManualState = !filter.manualOverrideEnabled;
     
@@ -123,6 +168,20 @@ export function FiltersWithOverride() {
       manualOverrideEnabled: newManualState
     });
   };
+
+  const handleValueChange = (filter: FilterV2, newValue: string) => {
+    updateValueMutation.mutate({
+      filterName: filter.name,
+      value: parseInt(newValue, 10)
+    });
+  };
+
+  const getHistoryDaysOptions = () => [
+    { value: '30', label: '30 days' },
+    { value: '60', label: '60 days' },
+    { value: '90', label: '90 days' },
+    { value: '180', label: '180 days' },
+  ];
 
   if (isLoading) {
     return (
@@ -258,15 +317,34 @@ export function FiltersWithOverride() {
                             )}
                           </div>
                           <div className="flex items-center gap-3">
-                            <Input
-                              type="text"
-                              value={filter.value}
-                              disabled
-                              className="max-w-[150px] bg-muted"
-                              data-testid={`input-${filter.name}`}
-                            />
+                            {filter.name === 'minHistoryDays' ? (
+                              <Select
+                                value={String(filter.value)}
+                                onValueChange={(value) => handleValueChange(filter, value)}
+                                disabled={filter.managedByLottie && !filter.manualOverrideEnabled}
+                              >
+                                <SelectTrigger className="max-w-[150px]" data-testid={`select-${filter.name}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {getHistoryDaysOptions().map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                type="text"
+                                value={filter.value}
+                                disabled
+                                className="max-w-[150px] bg-muted"
+                                data-testid={`input-${filter.name}`}
+                              />
+                            )}
                             <span className="text-xs text-muted-foreground">
-                              Current value
+                              {filter.name === 'minHistoryDays' && filter.manualOverrideEnabled ? 'Manual value' : 'Current value'}
                             </span>
                           </div>
                         </div>

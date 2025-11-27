@@ -170,8 +170,10 @@ async function authenticateToken(req: AuthenticatedRequest, res: Response, next:
     };
     
     // Fetch user from database to get admin status and role (fail closed - no fallback to token)
+    console.log(`[Auth] Attempting to fetch user with ID: ${decoded.id} (username: ${decoded.username})`);
     const user = await storage.getUser(decoded.id);
     if (!user) {
+      console.error(`[Auth] ❌ User not found in database - ID: ${decoded.id}, username: ${decoded.username}`);
       return res.status(401).json({ error: 'User account not found' });
     }
     
@@ -2048,7 +2050,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // PUT /api/filters-v2?mode=paper|live
   // Phase 28: Persist override flag changes to database
-  // Actual filter value updates still use /api/screeners endpoint
+  // REB 2.9B: Also handles filter value updates (minHistoryDays)
   apiRouter.put('/filters-v2', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     const requestId = `fltv2-${Date.now()}`;
     try {
@@ -2059,7 +2061,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
       }
 
-      const { managedByLottie, manualOverrideEnabled } = req.body;
+      const { managedByLottie, manualOverrideEnabled, filterName, value } = req.body;
       
       // Validate override flags
       if (typeof managedByLottie !== 'boolean' && managedByLottie !== undefined) {
@@ -2069,8 +2071,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (typeof manualOverrideEnabled !== 'boolean' && manualOverrideEnabled !== undefined) {
         return res.status(400).json({ ok: false, code: 'INVALID_INPUT', detail: 'manualOverrideEnabled must be a boolean' });
       }
+
+      // REB 2.9B: Validate filter value updates
+      if (filterName !== undefined && value === undefined) {
+        return res.status(400).json({ ok: false, code: 'INVALID_INPUT', detail: 'value is required when filterName is provided' });
+      }
+
+      if (filterName === 'minHistoryDays') {
+        const allowedValues = [30, 60, 90, 180];
+        const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
+        if (!allowedValues.includes(numValue)) {
+          return res.status(400).json({ 
+            ok: false, 
+            code: 'INVALID_INPUT', 
+            detail: `minHistoryDays must be one of: ${allowedValues.join(', ')}` 
+          });
+        }
+      }
       
-      console.log(`[FiltersV2:${requestId}] Updating override flags: managedByLottie=${managedByLottie}, manualOverrideEnabled=${manualOverrideEnabled}`);
+      console.log(`[FiltersV2:${requestId}] Updating - managedByLottie=${managedByLottie}, manualOverrideEnabled=${manualOverrideEnabled}, filterName=${filterName}, value=${value}`);
       
       // Get current filters
       const current = await storage.getScreenerFilters({ mode });
@@ -2088,15 +2107,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         lockedByUser: currentLockedByUser,
         ...filterValues
       } = current;
+
+      // REB 2.9B: Apply filter value updates if provided
+      const updatedFilterValues = { ...filterValues };
+      if (filterName === 'minHistoryDays' && value !== undefined) {
+        updatedFilterValues.minHistoryDays = typeof value === 'string' ? parseInt(value, 10) : value;
+        console.log(`[FiltersV2:${requestId}] REB 2.9B: Updated minHistoryDays from ${current.minHistoryDays} to ${updatedFilterValues.minHistoryDays}`);
+      }
       
-      // Update override flags while preserving all filter values
-      const updated = await storage.upsertScreenerFilters({
+      // Update override flags and/or filter values while preserving all other filter values
+      const updatePayload = {
         mode: current.mode,
-        ...filterValues,
+        ...updatedFilterValues,
         managedByLottie: managedByLottie ?? currentManagedByLottie,
         manualOverrideEnabled: manualOverrideEnabled ?? currentManualOverrideEnabled,
         lastUpdatedBy: userId
-      });
+      };
+      
+      console.log(`[FiltersV2:${requestId}] REB 2.9B: Update payload minHistoryDays = ${updatePayload.minHistoryDays}`);
+      
+      const updated = await storage.upsertScreenerFilters(updatePayload);
       
       // Phase 28.C: Log changes to audit_log
       const auditPromises = [];
@@ -2118,6 +2148,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           field: 'manualOverrideEnabled',
           oldValue: String(currentManualOverrideEnabled),
           newValue: String(manualOverrideEnabled),
+          changedBy: userId,
+          tradingMode: mode
+        }));
+      }
+
+      // REB 2.9B: Log minHistoryDays value changes
+      if (filterName === 'minHistoryDays' && value !== undefined && current.minHistoryDays !== updatedFilterValues.minHistoryDays) {
+        auditPromises.push(storage.addAuditLog({
+          entityType: 'filters',
+          field: 'minHistoryDays',
+          oldValue: String(current.minHistoryDays ?? 30),
+          newValue: String(updatedFilterValues.minHistoryDays),
           changedBy: userId,
           tradingMode: mode
         }));

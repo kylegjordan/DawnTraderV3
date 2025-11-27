@@ -1,0 +1,327 @@
+✅ **DIRECTIVE TO REPL.IT — REB 2.9B
+
+“Screener Tab Truth Restoration — Fix Existing UI, Do NOT Create Duplicates”**
+
+Replit, this is the directive for REB 2.9B, which must correct and complete the Screeners Tab restoration without creating any new UI fields, new components, new tables, or new persistence paths.
+You must only work with the existing, visible fields in the Filter Automation Control card (the FiltersWithOverride UI).
+
+❗CRITICAL CORE REQUIREMENT
+
+All work MUST modify the existing Filter Automation Control + LATTI override system.
+No new UI components.
+No new input fields.
+No duplicated rows.
+No second persistence system.
+No new database columns.
+
+Everything must flow through this system:
+
+FiltersWithOverride.tsx  →  /api/filters-v2  →  LATTi-state  →  FX5 (scanner)
+
+
+This is the ONLY allowed path.
+
+🟥 0. PRE-INSTRUCTIONS (MANDATORY)
+
+Before performing ANY changes:
+
+0.1 — Confirm rollback is clean
+
+Run these checks:
+
+grep -n "ScreenerFiltersTab" client/src/pages/goals-engine.tsx
+
+
+Expected:
+
+Import present
+
+Component commented out with {/* <ScreenerFiltersTab /> */}
+
+grep -n "min_history_days" shared/schema.ts
+
+
+Expected:
+
+No matches
+
+SELECT column_name 
+FROM information_schema.columns 
+WHERE table_name = 'screener_filters';
+
+
+Expected:
+
+There is NO column named min_history_days
+
+0.2 — DO NOT touch client/src/components/goals/screener-filters-tab.tsx
+
+This component is preserved as is.
+It must not be modified, deleted, or referenced.
+It remains dormant until future phases.
+
+🟩 1. Goal of REB 2.9B
+Restore the “Minimum History (Days)” filter into the existing Filter Automation Control system, using:
+
+The same UI structure (overrides, toggles, sections, styling)
+
+The same persistence (/api/filters-v2)
+
+The same data shape (LATTi-managed filter arrays)
+
+The same flow used by all existing screener filters (rsi, volatility, price range, etc.)
+
+And:
+**Use the existing FX5 backend minimum-history filter code.
+
+DO NOT create a new history filter in FX5.
+Expose the existing backend logic as a configuration-driven filter.**
+
+🟦 2. Identify Existing Minimum-History Logic (Backend)
+
+You must locate the existing backend logic for “minimum history days”.
+This logic already exists in FX5 or Market-Scanner — it was originally buried in the backend.
+
+Search:
+
+rg -i -n "history|min history|days|ohlc|lookback|minHistory" server/
+
+
+The logic is expected to appear in one of these:
+
+market-scanner.ts
+
+fx5-scanner.ts
+
+strategy-filters.ts
+
+filtered-pairs-service.ts
+
+scan-24h-aggregator.ts
+
+2.1 Extract exactly where the historical age / lookback check occurs
+
+Example (pseudocode only):
+
+if (symbolTradingAgeDays < MIN_HISTORY_DAYS) {
+    failed_history.push(symbol)
+    continue
+}
+
+2.2 Do NOT duplicate this logic
+
+You must parameterize the existing logic so that it uses a new filter value from /api/filters-v2.
+
+🟧 3. Extend /api/filters-v2 with a single new filter object
+
+The FiltersWithOverride system expects each filter to be expressed as an object with:
+
+{
+  name: string,
+  displayName: string,
+  category: string,
+  value: number | string | boolean,
+  manualOverrideEnabled: boolean,
+  rules: { ... }
+}
+
+Add one filter entry inside /api/filters-v2 response:
+Filter Name: minHistoryDays
+Category: "Data Quality"
+Default value: 30
+Rule type: Single-select (30 / 60 / 90 / 180)
+🟨 4. Modify FiltersWithOverride to include the Minimum History UI row
+
+Inside:
+
+client/src/components/goals/filters-with-override.tsx
+
+Add a third section (if not already present):
+
+Section Title: Data Quality
+UI Row: “Minimum History (Days)”
+
+Use the same structure as every other row.
+
+Checklist:
+
+Checkbox: “Managed by LATTI”
+
+When checked → input is disabled
+
+When unchecked → user can choose value
+
+Use a dropdown (Select) with:
+
+30
+
+60
+
+90
+
+180
+
+All styling, layout, typography must match the existing filter rows.
+
+🟩 5. Update Value Persistence Through /api/filters-v2 ONLY
+
+When the user saves:
+
+If “Managed by LATTI” is checked:
+→ Persist value and manualOverrideEnabled=false to /api/filters-v2
+
+If override is on:
+→ Persist user’s chosen value with manualOverrideEnabled=true
+→ Same endpoint
+
+Absolutely DO NOT write to:
+
+/api/screeners
+
+screener_filters
+
+Any database table tied to ScreenersTab
+
+Any new column
+
+Any new table
+
+🟦 6. Pass the new filter value to FX5
+
+Modify FX5 (scanner) only to reference the value from the LATTi filter system.
+
+Steps:
+
+6.1 Extend FX5 scanner’s filter bundle
+
+Where FX5 uses strategyFilters, add:
+
+minHistoryDays: number
+
+6.2 Inject value from LATTi via /api/filters-v2 → stage3-state-cache → scanner
+
+Where the scanner pulls filters:
+
+const filters = state3.filtersV2
+
+
+Ensure filters.minHistoryDays is included.
+
+6.3 Modify the existing history check (found in step 2)
+
+Replace the hard-coded constant with dynamic:
+
+if (symbolTradingAgeDays < filters.minHistoryDays) {
+    failed_history.push(symbol)
+    continue
+}
+
+❗IMPORTANT
+
+Do not create a new failure category —
+failed_history already exists in Filter Insights.
+Reuse it.
+
+🔵 7. Update Filter Insights to map “history” correctly
+
+In filter-insights.tsx:
+
+Map failed_history → “Minimum History (Days)” row
+
+Use the value passed from FX5 (no client calculation)
+
+Filter Breakdown section should list it as:
+
+Failed: Minimum History (Days)
+value: <filters.minHistoryDays>
+count: <# of pairs failing>
+
+🟣 8. Tests & Verification (Mandatory)
+8.1 UI Verification
+
+Navigate to Goals Engine → Screeners tab
+
+Ensure:
+
+Only Filter Automation Control card visible
+
+Minimum History appears once, in the correct section
+
+Checkbox toggles enable/disable dropdown
+
+Changing values persists via /api/filters-v2
+
+8.2 API Verification
+
+Verify /api/filters-v2 shows:
+
+{
+  "name": "minHistoryDays",
+  "value": 30,
+  "manualOverrideEnabled": false
+}
+
+
+Verify /api/screeners output contains no minHistoryDays.
+
+8.3 Scanner Verification
+
+Turn on paper trading → Scan 10 cycles:
+
+Log:
+
+[FX5][HistoryCheck] minHistoryDays = X
+[FX5][HistoryCheck] fail count = Y
+
+
+Counts must match what Filter Insights shows.
+
+🔴 9. Prohibited Actions (MUST NOT DO)
+
+Replit, you must NOT:
+
+❌ Add new fields to the UI
+
+❌ Duplicate any UI card or row
+
+❌ Activate ScreenerFiltersTab
+
+❌ Create any new DB columns
+
+❌ Add persistence to /api/screeners
+
+❌ Change the architecture of Filter Automation Control
+
+❌ Hardcode any values
+
+❌ Create secondary minimum-history filtering paths
+
+Any deviation requires stopping immediately and requesting clarification.
+
+🟢 10. Deliverables
+
+When complete, return:
+
+A list of all files modified
+
+A summary of backend changes
+
+Before/after screenshot of the Screeners tab
+
+JSON dumps of:
+
+/api/filters-v2
+
+/api/screeners
+
+Diagnostic log excerpt showing history filter working
+
+Confirmation that:
+
+No duplicates exist
+
+No new DB columns exist
+
+ScreenerFiltersTab remains untouched and commented out
+
+✅ END OF DIRECTIVE

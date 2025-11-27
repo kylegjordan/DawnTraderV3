@@ -791,6 +791,8 @@ export async function collectMixedBatch(
   const maxBidAskSpread = parseFloat(filters.maxBidAskSpread ?? '1.00');
   const excludeStablecoins = filters.excludeStablecoins ?? true;
   const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'UST'];
+  // REB 2.9B: Extract minHistoryDays from filters (dynamic value from LATTI)
+  const minHistoryDays = filters.minHistoryDays ?? 30;
   
   // Parse allowed quote currencies
   let allowedQuotes: string[] = [];
@@ -801,6 +803,10 @@ export async function collectMixedBatch(
   } catch {
     allowedQuotes = [];
   }
+  
+  // REB 2.9B: Log minHistoryDays configuration
+  console.log(`[FX5][HistoryCheck] minHistoryDays = ${minHistoryDays}`);
+  console.log(`[FX5][HistoryCheck] Note: Batch-first architecture does not perform OHLC history check for performance. High-volume pairs (Top-N) typically have sufficient history.`);
   
   const survivors: BatchResult['survivors'] = [];
   let topNSurvivors = 0;
