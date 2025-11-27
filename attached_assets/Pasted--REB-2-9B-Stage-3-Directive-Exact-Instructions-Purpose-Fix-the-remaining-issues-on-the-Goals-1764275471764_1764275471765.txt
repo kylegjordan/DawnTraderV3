@@ -1,0 +1,243 @@
+🚨 REB 2.9B – Stage 3 Directive (Exact Instructions)
+Purpose:
+
+Fix the remaining issues on the Goals Engine → Screeners tab UI and backend integrations.
+This directive restores the correct behavior previously implemented in the 11-20 archive (Phases 8.6 & 8.7) and fixes all current regressions.
+
+✅ SECTION 1 — ALWAYS FORMAT NUMERIC FIELDS ON BLUR (Manual + LATTI)
+🎯 Goal:
+
+Whenever a numeric field loses focus (blur), the UI must format the displayed number with commas (e.g. 50000000 → 50,000,000), regardless of whether:
+
+LATTI manages the field
+
+Manual override manages the field
+
+Formatting is visual-only. The backend must continue to store bare numeric values.
+
+🔧 Implementation Steps (filters-with-override.tsx)
+1. Add number formatting helpers
+
+Add these two functions at the top of the file:
+
+const formatNumber = (value: number | string) => {
+  if (value === null || value === undefined || value === "") return "";
+  const num = typeof value === "number" ? value : parseFloat(value.toString().replace(/,/g, ""));
+  if (isNaN(num)) return "";
+  return num.toLocaleString("en-US");
+};
+
+const unformatNumber = (value: string) => {
+  if (!value) return "";
+  return value.replace(/,/g, "");
+};
+
+2. When an input field is focused → remove commas
+
+Inside the numeric input component:
+
+onFocus={(e) => {
+  const raw = unformatNumber(e.target.value);
+  e.target.value = raw;
+}}
+
+3. When input field blurs →
+
+format the number
+
+save the value
+
+show toast
+
+update local UI
+
+onBlur={(e) => {
+  const rawValue = unformatNumber(e.target.value);
+  const numericValue = Number(rawValue);
+
+  if (!isNaN(numericValue)) {
+    updateValueMutation.mutate(
+      { filterName: filter.name, value: numericValue },
+      {
+        onSuccess: () => {
+          toast.success("Value updated successfully");
+          e.target.value = formatNumber(numericValue);
+        }
+      }
+    );
+  }
+}}
+
+❗ REQUIRED
+
+Ensure formatting also applies to values coming from React Query cached data.
+
+✅ SECTION 2 — RESTORE ACTIVE TIMEFRAMES MULTI-SELECT DROPDOWN
+🎯 Goal:
+
+Restore the correct dropdown (identical to 11-20 archive) with checkboxes.
+
+Options (exact):
+
+"1m"
+
+"5m"
+
+"15m"
+
+"1h"
+
+"4h"
+
+"1d"
+
+🔧 Implementation Steps
+
+Inside filters-with-override.tsx, in the rendering switch for array-type filters:
+
+Replace the raw comma-separated input field with:
+
+<Select
+  value={filter.value}
+  onValueChange={(vals) => {
+    updateValueMutation.mutate(
+      { filterName: filter.name, value: vals },
+      { onSuccess: () => toast.success("Timeframes updated") }
+    );
+  }}
+  multiple
+>
+  <SelectTrigger className="w-full">
+    <SelectValue placeholder="Select timeframes" />
+  </SelectTrigger>
+
+  <SelectContent>
+    {["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => (
+      <SelectItem key={t} value={t}>
+        {t}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
+
+This MUST completely replace the text-input version.
+
+✅ SECTION 3 — RESTORE MARKET UNIVERSE SIZE DROPDOWN
+🎯 Goal:
+
+Replace the plain numeric input with a dropdown exactly like Phase 8.7.
+
+Options (exact):
+
+"Top 25"
+
+"Top 50"
+
+"Top 100"
+
+"Top 250"
+
+"Top 500"
+
+🔧 Implementation Steps
+
+In filters-with-override.tsx, detect:
+
+filter.name === "universeSize"
+
+
+Render:
+
+<Select
+  value={String(filter.value)}
+  onValueChange={(val) => {
+    updateValueMutation.mutate(
+      { filterName: "universeSize", value: Number(val) },
+      { onSuccess: () => toast.success("Universe size updated") }
+    );
+  }}
+>
+  <SelectTrigger className="w-full">
+    <SelectValue placeholder="Select size" />
+  </SelectTrigger>
+
+  <SelectContent>
+    <SelectItem value="25">Top 25</SelectItem>
+    <SelectItem value="50">Top 50</SelectItem>
+    <SelectItem value="100">Top 100</SelectItem>
+    <SelectItem value="250">Top 250</SelectItem>
+    <SelectItem value="500">Top 500</SelectItem>
+  </SelectContent>
+</Select>
+
+✅ SECTION 4 — HIDE QUOTE CURRENCIES FROM UI
+🎯 Goal:
+
+The filter must remain in API payloads for backward compatibility
+BUT the UI must hide the field completely.
+
+🔧 Implementation Steps
+
+In filters-with-override.tsx, find the rendering loop:
+
+filters.map((filter) => { … })
+
+
+Add:
+
+if (filter.name === "quoteCurrencies") {
+  return null; // Hide completely
+}
+
+IMPORTANT
+
+Do NOT remove this filter from backend routes.
+Scanner is already bypassing it (market-scanner.ts lines 839–845).
+Just hide it from the UI.
+
+🚀 SECTION 5 — REQUIRED TESTS AFTER IMPLEMENTATION
+
+Replit must verify the following manually inside the UI, not just automated tests:
+
+Numeric Formatting
+
+Enter 50000000 → blur → should show 50,000,000
+
+Toast must appear
+
+Refresh page → commas persist
+
+Active Timeframes
+
+Dropdown appears
+
+Checkboxes appear
+
+Selecting 1m,5m,15m works
+
+No manual typing allowed
+
+Market Universe Size
+
+Dropdown appears
+
+Selecting “Top 100” persists on refresh
+
+Quote Currencies
+
+No longer visible anywhere on the page
+
+🎯 Final Required Output
+
+When completed, Replit must produce:
+
+A list of changed files
+
+A summary of code inserted
+
+Manual UI verification screenshots
+
+Confirmation that ALL checks from Section 5 pass
+
+✔ END OF DIRECTIVE

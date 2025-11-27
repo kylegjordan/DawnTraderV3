@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { Filter, Info, Sparkles, CircleDot, Check } from "lucide-react";
+import { Filter, Info, Sparkles, CircleDot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useTradingMode } from "@/contexts/trading-mode-context";
@@ -34,13 +34,12 @@ import { Button } from "@/components/ui/button";
 import { ModeIndicator } from "./mode-indicator";
 
 /**
- * REB 2.9B Stage 2: Screener UI Finalization (1120 Archive Blueprint)
+ * REB 2.9B Stage 3: Final Screener UI (11-20 Archive Phase 8.6/8.7)
  * 
- * Implements:
- * - Numeric formatting with commas after blur/save
- * - Active Timeframes multi-select
- * - Quote Currencies multi-select (UI-only, scanner ignores)
- * - Market Universe Size dropdown
+ * Section 1: Always format numeric fields on blur (LATTI + Manual)
+ * Section 2: Active Timeframes multi-select dropdown
+ * Section 3: Market Universe Size dropdown
+ * Section 4: Quote Currencies hidden from UI (but kept in API)
  */
 
 interface FilterV2 {
@@ -72,13 +71,10 @@ const FILTER_CATEGORIES: Record<string, { icon: string; color: string }> = {
   'Other': { icon: '⚙️', color: 'bg-gray-100 dark:bg-gray-900/30 border-gray-300 dark:border-gray-700' },
 };
 
-// REB 2.9B Stage 2 Section 3.1: Active Timeframes options (1120 truth)
+// REB 2.9B Stage 3 Section 2: Active Timeframes options
 const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
-// REB 2.9B Stage 2 Section 3.2: Quote Currencies options (1120 truth, UI-only)
-const QUOTE_CURRENCY_OPTIONS = ["USD", "EUR", "JPY", "GBP", "USDT", "USDC", "BTC", "ETH"];
-
-// REB 2.9B Stage 2 Section 3.3: Market Universe Size options
+// REB 2.9B Stage 3 Section 3: Market Universe Size options
 const MARKET_UNIVERSE_OPTIONS = [
   { label: "Top 25", value: 25 },
   { label: "Top 50", value: 50 },
@@ -87,17 +83,20 @@ const MARKET_UNIVERSE_OPTIONS = [
   { label: "Top 500", value: 500 },
 ];
 
-// REB 2.9B Stage 2 Section 2: Enhanced comma formatting helper
-const formatThousands = (value: number | string | boolean | string[] | null | undefined): string => {
-  if (value === null || value === undefined) return "";
-  if (typeof value === 'boolean') return value ? "Yes" : "No";
-  if (Array.isArray(value)) return value.join(", ");
-  const num = Number(value);
-  if (isNaN(num)) return String(value);
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(num);
+// REB 2.9B Stage 3 Section 1: Number formatting helpers (from directive)
+const formatNumber = (value: number | string): string => {
+  if (value === null || value === undefined || value === "") return "";
+  const num = typeof value === "number" ? value : parseFloat(value.toString().replace(/,/g, ""));
+  if (isNaN(num)) return "";
+  return num.toLocaleString("en-US");
 };
 
-// REB 2.9B Stage 2: Determine if a filter is a numeric amount filter (needs comma formatting)
+const unformatNumber = (value: string): string => {
+  if (!value) return "";
+  return value.replace(/,/g, "");
+};
+
+// Determine if a filter is a numeric amount filter (needs comma formatting)
 const isNumericAmountFilter = (filterName: string): boolean => {
   return ['minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'maxBidAskSpread',
           'minMarketCap', 'volatilityMin', 'volatilityMax', 'rsiMin', 'rsiMax',
@@ -108,16 +107,13 @@ export function FiltersWithOverride() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
   
-  // REB 2.9B Section 1: Local override state - each filter independent
+  // Local override state - each filter independent
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   
-  // REB 2.9B Section 3: Local string state for number inputs
+  // Local string state for number inputs (always formatted with commas)
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
   
-  // REB 2.9B Stage 2: Track which fields are being edited (for formatting)
-  const [editingFields, setEditingFields] = useState<Record<string, boolean>>({});
-  
-  // REB 2.9B: Track if we've initialized from server data (to avoid re-init on refetch)
+  // Track if we've initialized from server data (to avoid re-init on refetch)
   const initializedRef = useRef(false);
   
   // Phase 3b: WebSocket integration for real-time sync
@@ -140,7 +136,7 @@ export function FiltersWithOverride() {
     },
   });
 
-  // REB 2.9B: Initialize local overrides and values from server data ONCE
+  // Initialize local overrides and values from server data ONCE
   useEffect(() => {
     if (filtersData?.data?.filters && !initializedRef.current) {
       const newOverrides: Record<string, boolean> = {};
@@ -148,9 +144,9 @@ export function FiltersWithOverride() {
       
       filtersData.data.filters.forEach((f) => {
         newOverrides[f.name] = f.managedByLottie && !f.manualOverrideEnabled;
-        // Stage 2: Initialize with formatted value for numeric amount filters
-        if (isNumericAmountFilter(f.name) && typeof f.value === 'number') {
-          newLocalValues[f.name] = formatThousands(f.value);
+        // Stage 3: ALWAYS initialize with formatted value for numeric amount filters
+        if (isNumericAmountFilter(f.name) && (typeof f.value === 'number' || typeof f.value === 'string')) {
+          newLocalValues[f.name] = formatNumber(f.value);
         } else {
           newLocalValues[f.name] = String(f.value ?? "");
         }
@@ -167,7 +163,7 @@ export function FiltersWithOverride() {
     initializedRef.current = false;
   }, [mode]);
 
-  // REB 2.9B Section 1: Override mutation
+  // Override mutation
   const updateOverrideMutation = useMutation({
     mutationFn: async (updates: { filterName: string; manualOverrideEnabled: boolean }) => {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -196,7 +192,7 @@ export function FiltersWithOverride() {
     },
   });
 
-  // REB 2.9B Stage 2: Value mutation with post-save formatting
+  // Value mutation
   const updateValueMutation = useMutation({
     mutationFn: async (updates: { filterName: string; value: number | string | boolean | string[] }) => {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -216,15 +212,6 @@ export function FiltersWithOverride() {
       
       return { ...data, filterName: updates.filterName, value: updates.value };
     },
-    onSuccess: (data) => {
-      // Stage 2: After successful save, update local value with formatted version
-      if (isNumericAmountFilter(data.filterName) && typeof data.value === 'number') {
-        setLocalValues(prev => ({
-          ...prev,
-          [data.filterName]: formatThousands(data.value),
-        }));
-      }
-    },
     onError: (error: any) => {
       toast({
         title: "Error",
@@ -234,7 +221,7 @@ export function FiltersWithOverride() {
     },
   });
 
-  // REB 2.9B Section 1: Toggle handler
+  // Toggle handler
   const handleToggleOverride = async (filterName: string) => {
     const currentOverride = overrides[filterName];
     const newManualOverrideEnabled = currentOverride;
@@ -257,36 +244,6 @@ export function FiltersWithOverride() {
     } catch (err) {
       // Error handled in mutation onError
     }
-  };
-
-  // REB 2.9B Stage 2: Handle numeric input blur with formatting
-  const handleNumericBlur = (filterName: string, rawValue: string) => {
-    setEditingFields(prev => ({ ...prev, [filterName]: false }));
-    
-    const numericValue = Number(rawValue.replace(/,/g, ""));
-    if (!isNaN(numericValue)) {
-      // Save the numeric value
-      updateValueMutation.mutate({
-        filterName,
-        value: numericValue,
-      });
-      // Immediately show formatted value
-      setLocalValues(prev => ({
-        ...prev,
-        [filterName]: formatThousands(numericValue),
-      }));
-    }
-  };
-
-  // REB 2.9B Stage 2: Handle numeric input focus (switch to raw mode)
-  const handleNumericFocus = (filterName: string, currentValue: string) => {
-    setEditingFields(prev => ({ ...prev, [filterName]: true }));
-    // Strip commas when user starts editing
-    const rawValue = currentValue.replace(/,/g, "");
-    setLocalValues(prev => ({
-      ...prev,
-      [filterName]: rawValue,
-    }));
   };
 
   if (isLoading) {
@@ -346,8 +303,11 @@ export function FiltersWithOverride() {
     );
   }
 
+  // REB 2.9B Stage 3 Section 4: Filter out quoteCurrencies before grouping
+  const visibleFilters = filtersData.data.filters.filter(f => f.name !== 'quoteCurrencies');
+
   // Group filters by category
-  const filtersByCategory = filtersData.data.filters.reduce((acc, filter) => {
+  const filtersByCategory = visibleFilters.reduce((acc, filter) => {
     const category = filter.category || 'Other';
     if (!acc[category]) {
       acc[category] = [];
@@ -356,23 +316,22 @@ export function FiltersWithOverride() {
     return acc;
   }, {} as Record<string, FilterV2[]>);
 
-  // REB 2.9B Stage 2: Render individual filter input
+  // Render individual filter input
   const renderFilterInput = (f: FilterV2) => {
     const isDisabled = overrides[f.name];
     const localValue = localValues[f.name] ?? "";
-    const isEditing = editingFields[f.name] ?? false;
     
-    // REB 2.9B Section 7: Minimum History (Days) dropdown
+    // Minimum History (Days) dropdown
     if (f.name === 'minHistoryDays') {
       return (
         <Select
           value={String(f.value)}
           disabled={isDisabled}
           onValueChange={(val) => {
-            updateValueMutation.mutate({
-              filterName: 'minHistoryDays',
-              value: Number(val),
-            });
+            updateValueMutation.mutate(
+              { filterName: 'minHistoryDays', value: Number(val) },
+              { onSuccess: () => toast({ title: "Value updated successfully" }) }
+            );
           }}
         >
           <SelectTrigger className="w-[180px]" data-testid={`select-${f.name}`}>
@@ -388,7 +347,7 @@ export function FiltersWithOverride() {
       );
     }
     
-    // REB 2.9B Stage 2 Section 3.3: Market Universe Size dropdown
+    // REB 2.9B Stage 3 Section 3: Market Universe Size dropdown
     if (f.name === 'universeSize') {
       const currentValue = typeof f.value === 'number' ? f.value : 100;
       const currentLabel = MARKET_UNIVERSE_OPTIONS.find(opt => opt.value === currentValue)?.label || `Top ${currentValue}`;
@@ -398,10 +357,10 @@ export function FiltersWithOverride() {
           value={String(currentValue)}
           disabled={isDisabled}
           onValueChange={(val) => {
-            updateValueMutation.mutate({
-              filterName: 'universeSize',
-              value: Number(val),
-            });
+            updateValueMutation.mutate(
+              { filterName: 'universeSize', value: Number(val) },
+              { onSuccess: () => toast({ title: "Universe size updated" }) }
+            );
           }}
         >
           <SelectTrigger className="w-[150px]" data-testid={`select-${f.name}`}>
@@ -418,7 +377,7 @@ export function FiltersWithOverride() {
       );
     }
     
-    // REB 2.9B Stage 2 Section 3.1: Active Timeframes multi-select
+    // REB 2.9B Stage 3 Section 2: Active Timeframes multi-select
     if (f.name === 'activeTimeframes') {
       const currentValue = Array.isArray(f.value) ? f.value : [];
       
@@ -440,10 +399,10 @@ export function FiltersWithOverride() {
                   const newValue = checked
                     ? [...currentValue, tf]
                     : currentValue.filter(v => v !== tf);
-                  updateValueMutation.mutate({
-                    filterName: 'activeTimeframes',
-                    value: newValue,
-                  });
+                  updateValueMutation.mutate(
+                    { filterName: 'activeTimeframes', value: newValue },
+                    { onSuccess: () => toast({ title: "Timeframes updated" }) }
+                  );
                 }}
               >
                 {tf}
@@ -454,53 +413,17 @@ export function FiltersWithOverride() {
       );
     }
     
-    // REB 2.9B Stage 2 Section 3.2: Quote Currencies multi-select (UI-only)
-    if (f.name === 'quoteCurrencies') {
-      const currentValue = Array.isArray(f.value) ? f.value : [];
-      
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={isDisabled}>
-            <Button variant="outline" className="w-[200px] justify-between" data-testid={`select-${f.name}`}>
-              <span className="truncate">
-                {currentValue.length > 0 ? currentValue.join(", ") : "Select currencies..."}
-              </span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-[200px]">
-            {QUOTE_CURRENCY_OPTIONS.map(qc => (
-              <DropdownMenuCheckboxItem
-                key={qc}
-                checked={currentValue.includes(qc)}
-                onCheckedChange={(checked) => {
-                  const newValue = checked
-                    ? [...currentValue, qc]
-                    : currentValue.filter(v => v !== qc);
-                  updateValueMutation.mutate({
-                    filterName: 'quoteCurrencies',
-                    value: newValue,
-                  });
-                }}
-              >
-                {qc}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
-    }
-    
-    // REB 2.9B Section 5: Boolean selects (Yes/No)
+    // Boolean selects (Yes/No)
     if (['excludeStablecoins', 'allowRegulatedOnly'].includes(f.name)) {
       return (
         <Select
           value={String(f.value)}
           disabled={isDisabled}
           onValueChange={(val) => {
-            updateValueMutation.mutate({
-              filterName: f.name,
-              value: val === "true",
-            });
+            updateValueMutation.mutate(
+              { filterName: f.name, value: val === "true" },
+              { onSuccess: () => toast({ title: "Value updated successfully" }) }
+            );
           }}
         >
           <SelectTrigger className="w-[120px]" data-testid={`select-${f.name}`}>
@@ -514,11 +437,11 @@ export function FiltersWithOverride() {
       );
     }
     
-    // REB 2.9B Stage 2: Numeric input with comma formatting after blur
+    // REB 2.9B Stage 3 Section 1: Numeric input with ALWAYS comma formatting
     if (isNumericAmountFilter(f.name)) {
       return (
         <Input
-          value={isDisabled ? formatThousands(f.value) : localValue}
+          value={localValue}
           disabled={isDisabled}
           onChange={(e) => {
             setLocalValues(prev => ({
@@ -526,8 +449,37 @@ export function FiltersWithOverride() {
               [f.name]: e.target.value,
             }));
           }}
-          onFocus={() => handleNumericFocus(f.name, localValue)}
-          onBlur={() => handleNumericBlur(f.name, localValue)}
+          onFocus={(e) => {
+            // Remove commas when focused for editing
+            const raw = unformatNumber(e.target.value);
+            e.target.value = raw;
+            setLocalValues(prev => ({
+              ...prev,
+              [f.name]: raw,
+            }));
+          }}
+          onBlur={(e) => {
+            // Format with commas and save
+            const rawValue = unformatNumber(e.target.value);
+            const numericValue = Number(rawValue);
+            
+            if (!isNaN(numericValue)) {
+              updateValueMutation.mutate(
+                { filterName: f.name, value: numericValue },
+                {
+                  onSuccess: () => {
+                    toast({ title: "Value updated successfully" });
+                    const formatted = formatNumber(numericValue);
+                    e.target.value = formatted;
+                    setLocalValues(prev => ({
+                      ...prev,
+                      [f.name]: formatted,
+                    }));
+                  }
+                }
+              );
+            }
+          }}
           className={`max-w-[150px] ${isDisabled ? 'bg-muted' : ''}`}
           data-testid={`input-${f.name}`}
         />
@@ -547,10 +499,10 @@ export function FiltersWithOverride() {
         }}
         onBlur={() => {
           if (localValue !== String(f.value)) {
-            updateValueMutation.mutate({
-              filterName: f.name,
-              value: localValue,
-            });
+            updateValueMutation.mutate(
+              { filterName: f.name, value: localValue },
+              { onSuccess: () => toast({ title: "Value updated successfully" }) }
+            );
           }
         }}
         className={`max-w-[150px] ${isDisabled ? 'bg-muted' : ''}`}
@@ -620,11 +572,6 @@ export function FiltersWithOverride() {
                               <Badge variant="secondary" className="text-xs" data-testid={`badge-manual-${filter.name}`}>
                                 <CircleDot className="w-3 h-3 mr-1" />
                                 Manual
-                              </Badge>
-                            )}
-                            {filter.name === 'quoteCurrencies' && (
-                              <Badge variant="outline" className="text-xs text-amber-600 border-amber-400">
-                                UI Only
                               </Badge>
                             )}
                           </div>
