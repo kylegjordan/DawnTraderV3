@@ -2072,12 +2072,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ ok: false, code: 'INVALID_INPUT', detail: 'manualOverrideEnabled must be a boolean' });
       }
 
-      // REB 2.9B: Validate filter value updates
-      if (filterName !== undefined && value === undefined) {
-        return res.status(400).json({ ok: false, code: 'INVALID_INPUT', detail: 'value is required when filterName is provided' });
-      }
-
-      if (filterName === 'minHistoryDays') {
+      // REB 2.9B Stage 1: Validate filter value updates only when value is provided
+      // Allow toggle-only requests (filterName + manualOverrideEnabled without value)
+      if (filterName === 'minHistoryDays' && value !== undefined) {
         const allowedValues = [30, 60, 90, 180];
         const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
         if (!allowedValues.includes(numValue)) {
@@ -2108,11 +2105,31 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         ...filterValues
       } = current;
 
-      // REB 2.9B: Apply filter value updates if provided
-      const updatedFilterValues = { ...filterValues };
-      if (filterName === 'minHistoryDays' && value !== undefined) {
-        updatedFilterValues.minHistoryDays = typeof value === 'string' ? parseInt(value, 10) : value;
-        console.log(`[FiltersV2:${requestId}] REB 2.9B: Updated minHistoryDays from ${current.minHistoryDays} to ${updatedFilterValues.minHistoryDays}`);
+      // REB 2.9B Stage 1: Apply filter value updates if provided
+      const updatedFilterValues: Record<string, any> = { ...filterValues };
+      
+      if (filterName !== undefined && value !== undefined) {
+        // Numeric filters
+        const numericFilters = ['minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'maxBidAskSpread',
+          'volatilityMin', 'volatilityMax', 'minMarketCap', 'rsiMin', 'rsiMax',
+          'universeSize', 'confidenceThreshold', 'minHistoryDays'];
+        
+        // Boolean filters
+        const booleanFilters = ['excludeStablecoins', 'allowRegulatedOnly'];
+        
+        // Array filters (Stage 2 UX, but backend support now)
+        const arrayFilters = ['quoteCurrencies', 'activeTimeframes'];
+        
+        if (numericFilters.includes(filterName)) {
+          updatedFilterValues[filterName] = typeof value === 'string' ? parseFloat(value) : value;
+          console.log(`[FiltersV2:${requestId}] REB 2.9B Stage 1: Updated ${filterName} from ${(current as any)[filterName]} to ${updatedFilterValues[filterName]}`);
+        } else if (booleanFilters.includes(filterName)) {
+          updatedFilterValues[filterName] = value === true || value === 'true';
+          console.log(`[FiltersV2:${requestId}] REB 2.9B Stage 1: Updated ${filterName} from ${(current as any)[filterName]} to ${updatedFilterValues[filterName]}`);
+        } else if (arrayFilters.includes(filterName)) {
+          updatedFilterValues[filterName] = Array.isArray(value) ? value : [value];
+          console.log(`[FiltersV2:${requestId}] REB 2.9B Stage 1: Updated ${filterName}`);
+        }
       }
       
       // Update override flags and/or filter values while preserving all other filter values
@@ -2153,16 +2170,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }));
       }
 
-      // REB 2.9B: Log minHistoryDays value changes
-      if (filterName === 'minHistoryDays' && value !== undefined && current.minHistoryDays !== updatedFilterValues.minHistoryDays) {
-        auditPromises.push(storage.addAuditLog({
-          entityType: 'filters',
-          field: 'minHistoryDays',
-          oldValue: String(current.minHistoryDays ?? 30),
-          newValue: String(updatedFilterValues.minHistoryDays),
-          changedBy: userId,
-          tradingMode: mode
-        }));
+      // REB 2.9B Stage 1: Log filter value changes
+      if (filterName !== undefined && value !== undefined) {
+        const oldValue = (current as any)[filterName];
+        const newValue = updatedFilterValues[filterName];
+        if (oldValue !== newValue) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'filters',
+            field: filterName,
+            oldValue: String(oldValue ?? ''),
+            newValue: String(newValue),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
       }
       
       await Promise.all(auditPromises);
@@ -2170,9 +2191,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[FiltersV2:${requestId}] Logged ${auditPromises.length} audit entries`);
       }
       
-      // REB 2.9B: Log successful minHistoryDays updates
-      if (filterName === 'minHistoryDays' && value !== undefined && current.minHistoryDays !== updatedFilterValues.minHistoryDays) {
-        console.log(`[REB 2.9B][filters-v2] minHistoryDays updated userId=${userId} mode=${mode} value=${updatedFilterValues.minHistoryDays}`);
+      // REB 2.9B Stage 1: Log successful filter value updates
+      if (filterName !== undefined && value !== undefined) {
+        console.log(`[REB 2.9B Stage 1][filters-v2] ${filterName} updated userId=${userId} mode=${mode} value=${updatedFilterValues[filterName]}`);
       }
       
       console.log(`[FiltersV2:${requestId}] Override flags updated successfully`);

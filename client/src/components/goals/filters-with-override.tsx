@@ -123,7 +123,7 @@ export function FiltersWithOverride() {
   });
 
   const updateValueMutation = useMutation({
-    mutationFn: async (updates: { filterName: string; value: number | string }) => {
+    mutationFn: async (updates: { filterName: string; value: number | string | boolean | string[] }) => {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`/api/filters-v2?mode=${mode}`, {
         method: 'PUT',
@@ -170,9 +170,25 @@ export function FiltersWithOverride() {
   };
 
   const handleValueChange = (filter: FilterV2, newValue: string) => {
+    // Parse value based on filter type
+    let parsedValue: number | boolean | string[] | string = newValue;
+    
+    // Handle numeric filters
+    if (['minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'maxBidAskSpread',
+         'volatilityMin', 'volatilityMax', 'minMarketCap', 'rsiMin', 'rsiMax',
+         'universeSize', 'confidenceThreshold', 'minHistoryDays'].includes(filter.name)) {
+      const numericValue = parseFloat(newValue.replace(/,/g, ''));
+      if (Number.isNaN(numericValue)) return;
+      parsedValue = numericValue;
+    }
+    // Handle boolean filters
+    else if (['excludeStablecoins', 'allowRegulatedOnly'].includes(filter.name)) {
+      parsedValue = newValue === 'true';
+    }
+    
     updateValueMutation.mutate({
       filterName: filter.name,
-      value: parseInt(newValue, 10)
+      value: parsedValue
     });
   };
 
@@ -321,7 +337,7 @@ export function FiltersWithOverride() {
                               <Select
                                 value={String(filter.value)}
                                 onValueChange={(value) => handleValueChange(filter, value)}
-                                disabled={filter.managedByLottie && !filter.manualOverrideEnabled}
+                                disabled={!filter.manualOverrideEnabled}
                               >
                                 <SelectTrigger className="max-w-[150px]" data-testid={`select-${filter.name}`}>
                                   <SelectValue />
@@ -334,12 +350,27 @@ export function FiltersWithOverride() {
                                   ))}
                                 </SelectContent>
                               </Select>
+                            ) : ['excludeStablecoins', 'allowRegulatedOnly'].includes(filter.name) ? (
+                              <Select
+                                value={String(filter.value)}
+                                onValueChange={(value) => handleValueChange(filter, value)}
+                                disabled={!filter.manualOverrideEnabled}
+                              >
+                                <SelectTrigger className="max-w-[150px]" data-testid={`select-${filter.name}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="true">Yes</SelectItem>
+                                  <SelectItem value="false">No</SelectItem>
+                                </SelectContent>
+                              </Select>
                             ) : (
                               <Input
                                 type="text"
                                 value={filter.value}
-                                disabled
-                                className="max-w-[150px] bg-muted"
+                                onChange={(e) => handleValueChange(filter, e.target.value)}
+                                disabled={!filter.manualOverrideEnabled}
+                                className={`max-w-[150px] ${!filter.manualOverrideEnabled ? 'bg-muted' : ''}`}
                                 data-testid={`input-${filter.name}`}
                               />
                             )}

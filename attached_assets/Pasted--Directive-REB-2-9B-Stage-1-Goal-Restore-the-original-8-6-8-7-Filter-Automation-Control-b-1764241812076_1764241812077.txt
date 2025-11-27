@@ -1,0 +1,324 @@
+👉 Directive: REB 2.9B — Stage 1
+
+Goal: Restore the original 8.6 / 8.7 “Filter Automation Control” behavior for Screener filters:
+
+Each filter’s “Managed by LATTI” checkbox works independently.
+
+When a filter is not managed by LATTI, its field(s) are editable.
+
+PUT /api/filters-v2 works without errors when toggling the managed flag, and persists values correctly.
+
+No schema/db changes.
+
+No new UI cards / fields / duplicates.
+
+0. Scope & Constraints
+
+Scope (Stage 1 only)
+
+Fix checkbox → override behavior
+
+Fix field editability when override enabled
+
+Fix errors from PUT /api/filters-v2
+
+Keep Minimum History dropdown as-is for now (just ensure it participates in the same override/persistence behavior).
+
+Out of scope (Stage 2):
+
+Number formatting / commas
+
+Quote Currencies UI (dropdown + options)
+
+Active Timeframes UI (multi-select)
+
+Any changes to quote-currency filter logic in Kraken / scanner
+
+Any Filter Insights changes
+
+Hard constraints:
+
+❌ No database / schema changes. Do not touch shared/schema.ts or run db:push or any ALTER TABLE.
+
+❌ Do not modify ScreenerFiltersTab or uncomment it.
+
+✅ All work must be done in:
+
+client/src/components/goals/filters-with-override.tsx
+
+server/routes.ts (/api/filters-v2 handlers only)
+
+(If truly necessary) small, local helper types in a nearby file – but no schema or migration files.
+
+1. Re-establish the intended API contract for /api/filters-v2
+1.1. Current problem
+
+Right now, clicking a checkbox fires a PUT and returns:
+
+Error: value is required when filterName is provided
+
+That’s wrong for toggle-only actions (when we’re just changing “Managed by LATTI” on/off).
+
+1.2. Required API contract
+
+PUT /api/filters-v2?mode=paper|live must support two kinds of updates:
+
+Toggle-only (no value change):
+
+{
+  "filterName": "minVolumeUsd",
+  "manualOverrideEnabled": false   // or true
+}
+
+
+This must NOT require value.
+
+Backend should only update the override flag for that filter and leave the numeric value unchanged.
+
+Value update (with optional override toggle):
+
+{
+  "filterName": "minVolumeUsd",
+  "value": 7500,
+  "manualOverrideEnabled": true
+}
+
+
+This updates both the stored value and the override flag.
+
+✅ Fix:
+In server/routes.ts, find the PUT /api/filters-v2 handler and:
+
+Remove / relax any validation that throws when filterName is present but value is missing.
+
+Only require value when the request is actually a value update (you can infer from presence of value field).
+
+Allow requests that contain just { filterName, manualOverrideEnabled } and update only the flags.
+
+Important:
+Do not change the overall filters data model, table shape, or add columns. Only update the logic that processes the inbound JSON for this endpoint.
+
+2. Fix checkbox behavior in FiltersWithOverride
+
+File: client/src/components/goals/filters-with-override.tsx
+
+2.1. Each checkbox must toggle only its own filter
+
+Locate where the filters from /api/filters-v2 are mapped to rows/cards (e.g. Volume & Liquidity, Price Range, Market Filters, Technical Indicators, Universe & Signal Controls, Data Quality).
+
+For each filter row, ensure:
+
+It has a unique filterName (e.g. "minVolumeUsd", "maxMarketCapUsd", "minHistoryDays", etc.).
+
+The “Managed by LATTI” checkbox is bound to that filter’s own manualOverrideEnabled or equivalent flag (whatever field you are using to represent “Managed by LATTI” vs Manual).
+
+Implement a dedicated toggle handler:
+
+const toggleManagedByLatti = (filterName: string, isManaged: boolean) => {
+  updateFilterMutation.mutate({
+    filterName,
+    manualOverrideEnabled: !isManaged   // or managedByLatti: isManaged, depending on convention
+  });
+};
+
+
+Wire each checkbox click to this handler with its own filterName, e.g.:
+
+<Checkbox
+  checked={filter.isManagedByLatti}  // or the appropriate field
+  onCheckedChange={(checked) =>
+    toggleManagedByLatti(filter.name, !!checked)
+  }
+/>
+
+
+Key requirement: Toggling one checkbox must never affect another filter’s managed state.
+
+3. Fix field editability when override is off
+
+Still in FiltersWithOverride.tsx:
+
+3.1. Bind disabled correctly
+
+For each input/select field:
+
+Disabled when Managed by LATTI is ON
+
+Enabled when Managed by LATTI is OFF
+
+So, for each field:
+
+const isManaged = filter.isManagedByLatti; // or inverse of manualOverrideEnabled
+
+<Input
+  // ...
+  disabled={isManaged}
+/>
+
+
+Check:
+
+There is no other prop that re-disables the input (e.g. readOnly, pointer-events: none, or wrapper disabling).
+
+CSS classes are not interfering with pointer events (pointer-events-none etc).
+
+3.2. Ensure onChange is wired
+
+For each numeric or textbox style input:
+
+It must have an onChange or onBlur that:
+
+Reads the new value
+
+Normalizes/validates it
+
+Calls the mutation for value update:
+
+const updateFilterValue = (filterName: string, value: number | string) => {
+  updateFilterMutation.mutate({
+    filterName,
+    value,
+    manualOverrideEnabled: true,   // if user is directly typing, we treat as manual
+  });
+};
+
+
+Then:
+
+<Input
+  value={renderedValue}
+  disabled={isManaged}
+  onChange={(e) => {
+    const raw = e.target.value;
+    // Minimal parsing for now; Stage 2 will add nice formatting
+    const numeric = parseFloat(raw.replace(/,/g, ''));
+    if (!Number.isNaN(numeric)) {
+      updateFilterValue(filter.name, numeric);
+    }
+  }}
+/>
+
+
+Goal: Once Managed by LATTI is unchecked, user can place a cursor, type a new number, and see it persisted on reload.
+
+4. Integrate Minimum History into the same override logic
+
+Even though the minimum history dropdown is primarily a Stage 2 concern for UX, it must still respect the same override rules in Stage 1.
+
+In FiltersWithOverride.tsx:
+
+Find the card/section that renders Data Quality / Minimum History (Days).
+
+Ensure it follows exactly the same pattern:
+
+Has its own filterName (e.g. "minHistoryDays").
+
+Checkbox toggles manualOverrideEnabled via the same toggleManagedByLatti.
+
+Dropdown <Select> is disabled when managed, enabled when not managed.
+
+On change, it calls updateFilterValue('minHistoryDays', chosenValue).
+
+This ensures Minimum History behaves consistently with the other filters, even before we polish the UX in Stage 2.
+
+5. Verification checklist (what you must prove)
+
+After changes, please:
+
+5.1. Manual UI test (you can also record an E2E run)
+
+For each of the following filters:
+
+Min Volume ($)
+
+Min Liquidity ($)
+
+Min Price ($), Max Price ($)
+
+Max Bid-Ask Spread (%)
+
+Min/Max Volatility
+
+Min Market Cap
+
+Exclude Stablecoins (we’ll redo UI in Stage 2)
+
+Regulated Only
+
+Min/Max RSI
+
+Market Universe Size
+
+Active Timeframes (current raw UX is fine for Stage 1)
+
+Confidence Threshold (%)
+
+Minimum History (Days)
+
+Verify:
+
+Initial state:
+
+The page loads without error toasts.
+
+Each filter shows “Managed by LATTI” with the correct initial state from /api/filters-v2.
+
+Toggle test (per filter):
+
+Uncheck “Managed by LATTI” for one filter.
+
+Confirm:
+
+That checkbox changes state.
+
+No other filter’s checkbox changes.
+
+No red error toast appears.
+
+Edit test (per filter):
+
+With “Managed by LATTI” unchecked:
+
+Click into the field.
+
+Cursor appears.
+
+Type a new valid value.
+
+Save/persist (if there’s an explicit save; otherwise wait for auto-save).
+
+Refresh the page.
+
+Confirm the new value is still there.
+
+Re-toggle test:
+
+Turn “Managed by LATTI” back on for that filter.
+
+Field must revert to disabled state.
+
+On refresh, both the “Managed by LATTI” state and the underlying filter value must be correct.
+
+API test:
+
+In the network tab, sample a couple of requests:
+
+Checkbox-only toggle → PUT /api/filters-v2 without value, only filterName + override flag.
+
+Value change → PUT /api/filters-v2 with both filterName and value.
+
+Confirm both work without 400 errors and no “value is required when filterName is provided” appears.
+
+6. Non-goals / guardrails (to avoid repeating past issues)
+
+❌ Do not add new Screener tabs, new cards, or reintroduce ScreenerFiltersTab.
+
+❌ Do not add or change database columns.
+
+❌ Do not touch anything in fx5-scanner.ts, market-scanner.ts, or kraken.ts in Stage 1.
+
+✅ Only touch:
+
+client/src/components/goals/filters-with-override.tsx
+
+server/routes.ts (PUT /api/filters-v2 handler)
