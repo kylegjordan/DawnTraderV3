@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Filter, Info, Sparkles, CircleDot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
@@ -27,15 +27,18 @@ import {
 import { ModeIndicator } from "./mode-indicator";
 
 /**
- * Phase 3b: Filters with Override Controls Component
+ * REB 2.9B: Final Restoration of Screener Filters UI (1120 Archive Blueprint)
  * 
- * Displays filter parameters with Lottie/Manual override controls.
- * Integrates with filters_v2 backend and provides real-time WebSocket sync.
+ * Implements exact 8.6/8.7 truth behavior:
+ * - Individual toggles (no global state, no loops)
+ * - Input editability tied to override state
+ * - Number inputs with local string state for full typing
+ * - Comma formatting on blur
  */
 
 interface FilterV2 {
   name: string;
-  value: number | string;
+  value: number | string | boolean | string[];
   managedByLottie: boolean;
   manualOverrideEnabled: boolean;
   displayName: string;
@@ -57,12 +60,28 @@ const FILTER_CATEGORIES: Record<string, { icon: string; color: string }> = {
   'Technical Indicators': { icon: '📊', color: 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700' },
   'Volatility': { icon: '📈', color: 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700' },
   'Asset Type': { icon: '🏷️', color: 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700' },
+  'Data Quality': { icon: '📋', color: 'bg-teal-100 dark:bg-teal-900/30 border-teal-300 dark:border-teal-700' },
   'Other': { icon: '⚙️', color: 'bg-gray-100 dark:bg-gray-900/30 border-gray-300 dark:border-gray-700' },
+};
+
+// REB 2.9B Section 4: Comma formatting helper from 1120 blueprint
+const formatThousands = (val: string | number | boolean | string[] | null | undefined): string => {
+  if (val === null || val === undefined) return "";
+  if (typeof val === 'boolean') return val ? "Yes" : "No";
+  if (Array.isArray(val)) return val.join(", ");
+  const num = Number(val);
+  return isNaN(num) ? String(val) : num.toLocaleString("en-US");
 };
 
 export function FiltersWithOverride() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
+  
+  // REB 2.9B Section 1: Local override state - each filter independent
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  
+  // REB 2.9B Section 3: Local string state for number inputs
+  const [localValues, setLocalValues] = useState<Record<string, string>>({});
   
   // Phase 3b: WebSocket integration for real-time sync
   useOverrideState();
@@ -84,7 +103,26 @@ export function FiltersWithOverride() {
     },
   });
 
-  const updateMutation = useMutation({
+  // REB 2.9B: Initialize local overrides and values from server data
+  useEffect(() => {
+    if (filtersData?.data?.filters) {
+      const newOverrides: Record<string, boolean> = {};
+      const newLocalValues: Record<string, string> = {};
+      
+      filtersData.data.filters.forEach((f) => {
+        // Override = true means "Managed by LATTi" = checked = AUTO mode = input disabled
+        // Override = false means "Manual" = unchecked = input enabled
+        newOverrides[f.name] = f.managedByLottie && !f.manualOverrideEnabled;
+        newLocalValues[f.name] = String(f.value ?? "");
+      });
+      
+      setOverrides(newOverrides);
+      setLocalValues(newLocalValues);
+    }
+  }, [filtersData]);
+
+  // REB 2.9B Section 1: Override mutation - only updates ONE filter
+  const updateOverrideMutation = useMutation({
     mutationFn: async (updates: { filterName: string; manualOverrideEnabled: boolean }) => {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await fetch(`/api/filters-v2?mode=${mode}`, {
@@ -108,20 +146,17 @@ export function FiltersWithOverride() {
         queryKey: ['/api/filters-v2', mode],
         refetchType: 'all'
       });
-      toast({
-        title: "Filter automation updated",
-        description: "Filter control mode has been changed successfully.",
-      });
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to update filter",
+        description: error.message || `Failed to update override for ${variables.filterName}`,
         variant: "destructive",
       });
     },
   });
 
+  // REB 2.9B Section 8: Value mutation - uses /api/filters-v2 only
   const updateValueMutation = useMutation({
     mutationFn: async (updates: { filterName: string; value: number | string | boolean | string[] }) => {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -146,10 +181,6 @@ export function FiltersWithOverride() {
         queryKey: ['/api/filters-v2', mode],
         refetchType: 'all'
       });
-      toast({
-        title: "Filter value updated",
-        description: "Filter value has been updated successfully.",
-      });
     },
     onError: (error: any) => {
       toast({
@@ -160,44 +191,31 @@ export function FiltersWithOverride() {
     },
   });
 
-  const handleToggleManual = (filter: FilterV2) => {
-    const newManualState = !filter.manualOverrideEnabled;
+  // REB 2.9B Section 1: Toggle handler - EXACT 1120 blueprint pattern
+  const handleToggleOverride = async (filterName: string) => {
+    const currentOverride = overrides[filterName];
+    const newManualOverrideEnabled = currentOverride; // If currently managed (override=true), enable manual
     
-    updateMutation.mutate({
-      filterName: filter.name,
-      manualOverrideEnabled: newManualState
-    });
-  };
-
-  const handleValueChange = (filter: FilterV2, newValue: string) => {
-    // Parse value based on filter type
-    let parsedValue: number | boolean | string[] | string = newValue;
-    
-    // Handle numeric filters
-    if (['minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'maxBidAskSpread',
-         'volatilityMin', 'volatilityMax', 'minMarketCap', 'rsiMin', 'rsiMax',
-         'universeSize', 'confidenceThreshold', 'minHistoryDays'].includes(filter.name)) {
-      const numericValue = parseFloat(newValue.replace(/,/g, ''));
-      if (Number.isNaN(numericValue)) return;
-      parsedValue = numericValue;
+    try {
+      await updateOverrideMutation.mutateAsync({
+        filterName,
+        manualOverrideEnabled: newManualOverrideEnabled,
+      });
+      
+      // Update local state after successful mutation
+      setOverrides(prev => ({
+        ...prev,
+        [filterName]: !prev[filterName],
+      }));
+      
+      toast({
+        title: "Filter automation updated",
+        description: `${filterName} is now ${newManualOverrideEnabled ? 'manually controlled' : 'managed by LATTi'}.`,
+      });
+    } catch (err) {
+      // Error already handled in mutation onError
     }
-    // Handle boolean filters
-    else if (['excludeStablecoins', 'allowRegulatedOnly'].includes(filter.name)) {
-      parsedValue = newValue === 'true';
-    }
-    
-    updateValueMutation.mutate({
-      filterName: filter.name,
-      value: parsedValue
-    });
   };
-
-  const getHistoryDaysOptions = () => [
-    { value: '30', label: '30 days' },
-    { value: '60', label: '60 days' },
-    { value: '90', label: '90 days' },
-    { value: '180', label: '180 days' },
-  ];
 
   if (isLoading) {
     return (
@@ -212,7 +230,6 @@ export function FiltersWithOverride() {
     );
   }
 
-  // Handle errors
   if (error) {
     return (
       <Card className="border-2 border-red-200 dark:border-red-900">
@@ -234,7 +251,6 @@ export function FiltersWithOverride() {
     );
   }
 
-  // Handle empty/missing data
   if (!filtersData?.data?.filters || filtersData.data.filters.length === 0) {
     return (
       <Card className="border-2 border-purple-200 dark:border-purple-900">
@@ -267,6 +283,119 @@ export function FiltersWithOverride() {
     acc[category].push(filter);
     return acc;
   }, {} as Record<string, FilterV2[]>);
+
+  // REB 2.9B: Render individual filter row with 1120 blueprint behavior
+  const renderFilterInput = (f: FilterV2) => {
+    const isDisabled = overrides[f.name]; // Disabled when managed by LATTi
+    const localValue = localValues[f.name] ?? String(f.value ?? "");
+    
+    // REB 2.9B Section 7: Minimum History (Days) dropdown
+    if (f.name === 'minHistoryDays') {
+      return (
+        <Select
+          value={String(f.value)}
+          disabled={isDisabled}
+          onValueChange={(val) => {
+            updateValueMutation.mutate({
+              filterName: 'minHistoryDays',
+              value: Number(val),
+            });
+          }}
+        >
+          <SelectTrigger className="w-[180px]" data-testid={`select-${f.name}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="30">30 days</SelectItem>
+            <SelectItem value="60">60 days</SelectItem>
+            <SelectItem value="90">90 days</SelectItem>
+            <SelectItem value="180">180 days</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
+    
+    // REB 2.9B Section 5: Boolean selects (Yes/No)
+    if (['excludeStablecoins', 'allowRegulatedOnly'].includes(f.name)) {
+      return (
+        <Select
+          value={String(f.value)}
+          disabled={isDisabled}
+          onValueChange={(val) => {
+            updateValueMutation.mutate({
+              filterName: f.name,
+              value: val === "true",
+            });
+          }}
+        >
+          <SelectTrigger className="w-[120px]" data-testid={`select-${f.name}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="true">Yes</SelectItem>
+            <SelectItem value="false">No</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
+    
+    // REB 2.9B Section 6: Array selects (timeframes, quoteCurrencies)
+    if (['timeframes', 'quoteCurrencies'].includes(f.name)) {
+      const currentValue = Array.isArray(f.value) ? f.value : [];
+      const options = f.name === 'timeframes' 
+        ? ['1m', '5m', '15m', '1h', '4h', '1d']
+        : ['USD', 'EUR', 'GBP', 'USDT', 'USDC'];
+      
+      return (
+        <Select
+          value={currentValue[0] || ''}
+          disabled={isDisabled}
+          onValueChange={(val) => {
+            updateValueMutation.mutate({
+              filterName: f.name,
+              value: [val],
+            });
+          }}
+        >
+          <SelectTrigger className="w-[150px]" data-testid={`select-${f.name}`}>
+            <SelectValue placeholder="Select..." />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map(opt => (
+              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
+    
+    // REB 2.9B Sections 2, 3, 4: Numeric input with local string state and comma formatting
+    return (
+      <Input
+        value={isDisabled ? formatThousands(f.value) : localValue}
+        disabled={isDisabled}
+        onChange={(e) => {
+          setLocalValues(prev => ({
+            ...prev,
+            [f.name]: e.target.value,
+          }));
+        }}
+        onBlur={() => {
+          if (localValue !== String(f.value)) {
+            const numericValue = Number(localValue.replace(/,/g, ""));
+            if (!isNaN(numericValue)) {
+              updateValueMutation.mutate({
+                filterName: f.name,
+                value: numericValue,
+              });
+            }
+          }
+        }}
+        className={`max-w-[150px] ${isDisabled ? 'bg-muted' : ''}`}
+        data-testid={`input-${f.name}`}
+      />
+    );
+  };
 
   return (
     <Card className="border-2 border-purple-200 dark:border-purple-900">
@@ -320,7 +449,8 @@ export function FiltersWithOverride() {
                             <Label className="text-sm font-medium">
                               {filter.displayName}
                             </Label>
-                            {filter.managedByLottie && !filter.manualOverrideEnabled ? (
+                            {/* REB 2.9B: Badge shows Auto when override=true (managed), Manual when override=false */}
+                            {overrides[filter.name] ? (
                               <Badge variant="default" className="bg-green-600 text-xs" data-testid={`badge-auto-${filter.name}`}>
                                 <Sparkles className="w-3 h-3 mr-1" />
                                 Auto (LATTi)
@@ -333,49 +463,9 @@ export function FiltersWithOverride() {
                             )}
                           </div>
                           <div className="flex items-center gap-3">
-                            {filter.name === 'minHistoryDays' ? (
-                              <Select
-                                value={String(filter.value)}
-                                onValueChange={(value) => handleValueChange(filter, value)}
-                                disabled={!filter.manualOverrideEnabled}
-                              >
-                                <SelectTrigger className="max-w-[150px]" data-testid={`select-${filter.name}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {getHistoryDaysOptions().map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : ['excludeStablecoins', 'allowRegulatedOnly'].includes(filter.name) ? (
-                              <Select
-                                value={String(filter.value)}
-                                onValueChange={(value) => handleValueChange(filter, value)}
-                                disabled={!filter.manualOverrideEnabled}
-                              >
-                                <SelectTrigger className="max-w-[150px]" data-testid={`select-${filter.name}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="true">Yes</SelectItem>
-                                  <SelectItem value="false">No</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <Input
-                                type="text"
-                                value={filter.value}
-                                onChange={(e) => handleValueChange(filter, e.target.value)}
-                                disabled={!filter.manualOverrideEnabled}
-                                className={`max-w-[150px] ${!filter.manualOverrideEnabled ? 'bg-muted' : ''}`}
-                                data-testid={`input-${filter.name}`}
-                              />
-                            )}
+                            {renderFilterInput(filter)}
                             <span className="text-xs text-muted-foreground">
-                              {filter.name === 'minHistoryDays' && filter.manualOverrideEnabled ? 'Manual value' : 'Current value'}
+                              {!overrides[filter.name] ? 'Manual value' : 'Current value'}
                             </span>
                           </div>
                         </div>
@@ -388,17 +478,18 @@ export function FiltersWithOverride() {
                                   <span className="text-xs text-muted-foreground">
                                     Managed by LATTi
                                   </span>
+                                  {/* REB 2.9B Section 1: Checkbox bound to local override state */}
                                   <Checkbox
-                                    checked={filter.managedByLottie && !filter.manualOverrideEnabled}
-                                    onCheckedChange={() => handleToggleManual(filter)}
-                                    disabled={updateMutation.isPending}
+                                    checked={!!overrides[filter.name]}
+                                    onCheckedChange={() => handleToggleOverride(filter.name)}
+                                    disabled={updateOverrideMutation.isPending}
                                     data-testid={`checkbox-managed-${filter.name}`}
                                   />
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p className="max-w-xs">
-                                  {filter.manualOverrideEnabled 
+                                  {!overrides[filter.name]
                                     ? 'Enable LATTi automatic optimization for this filter'
                                     : 'Disable LATTi and switch to manual control for this filter'}
                                 </p>
@@ -422,7 +513,7 @@ export function FiltersWithOverride() {
               <p className="font-semibold mb-1">About Filter Automation</p>
               <p className="text-purple-700 dark:text-purple-200/80">
                 LATTi continuously analyzes market conditions and adjusts filter parameters to maximize opportunity identification. 
-                Uncheck "Managed by LATTi" for any filter you want to control manually. Manual values can be set in the Screener Filters tab.
+                Uncheck "Managed by LATTi" for any filter you want to control manually.
               </p>
             </div>
           </div>

@@ -1,0 +1,270 @@
+✅ DIRECTIVE: REB 2.9B – FINAL RESTORATION OF SCREENER FILTERS UI (1120 ARCHIVE BLUEPRINT)
+Restore the exact 8.6 / 8.7 truth behavior for:
+individual toggles, input editability, value update, and formatting
+⚠️ IMPORTANT RULES
+
+Do not redesign anything.
+
+Do not introduce new logic.
+
+Restore exactly how Phase 8.6 + 8.7 worked.
+
+Only modify the files listed below.
+
+Do not touch database schema.
+
+Do not modify scanner, filters-v2 contract, or screener_filters table.
+
+All fixes must be implemented inside FiltersWithOverride and use-override-state.
+
+🟦 FILES YOU MUST MODIFY
+1. client/src/components/goals/filters-with-override.tsx
+2. client/src/components/goals/use-override-state.tsx
+(do not modify any other files)
+🟪 SECTION 1 — Fix “Managed by LATTI” toggle logic (1120 Blueprint)
+Problem:
+
+When the user clicks ANY checkbox, all checkboxes toggle and Replit fires a toast for every filter.
+
+What Worked in 8.6 + 8.7:
+
+✓ Each filter had its own independent override state
+✓ Toggling one checkbox never affected others
+✓ No global state
+✓ No broadcast invalidation
+✓ No loops
+✓ Update only that one filter’s override flag
+
+Directive — Implement the following fixes:
+1. Remove ANY usage of:
+globalOverride
+globalToggle
+setAllOverrides
+batchInvalidate
+
+2. In FiltersWithOverride, update override toggle to EXACTLY:
+const handleToggleOverride = async (filterName: string) => {
+  try {
+    await updateOverrideMutation.mutateAsync({
+      filterName,
+      manualOverrideEnabled: !overrides[filterName],
+    });
+    setOverrides(prev => ({
+      ...prev,
+      [filterName]: !prev[filterName],
+    }));
+  } catch (err) {
+    toast.error(`Failed to update override for ${filterName}`);
+  }
+};
+
+3. Bind checkbox like this:
+<Checkbox
+  checked={!!overrides[f.name]}
+  onCheckedChange={() => handleToggleOverride(f.name)}
+/>
+
+4. Remove ANY code that:
+
+loops over all filters
+
+touches multiple override flags
+
+fires more than one toast per toggle
+
+debounces override state
+
+sets override from array dependencies
+
+🟪 SECTION 2 — Fix input editability when override is ON
+Problem:
+
+When “Managed by LATTI” is unchecked, inputs turn white but remain non-editable.
+
+1120 Solution:
+
+Disable inputs ONLY when:
+
+overrides[filterName] === true
+
+Directive — Replace ANY current disabled logic with:
+disabled={overrides[f.name]}
+
+Remove ALL occurrences of:
+readOnly
+pointerEvents: "none"
+opacity
+blur overlays
+disabled={!canEditAll}
+disabled={isOverride || isGlobalManaged}
+
+
+Only use:
+
+disabled={overrides[f.name]}
+
+🟪 SECTION 3 — Fix number input typing (1120 Blueprint)
+Problem:
+
+User cannot delete or replace existing digits—can only append digits.
+
+1120 Working Behavior:
+
+Number inputs used string state, allowing full free typing.
+
+Directive — enforce EXACT pattern:
+const [localValue, setLocalValue] = useState(String(f.value ?? ""));
+
+<Input
+  value={localValue}
+  disabled={overrides[f.name]}
+  onChange={e => {
+    setLocalValue(e.target.value);
+  }}
+  onBlur={() => {
+    if (localValue !== String(f.value)) {
+      updateValueMutation.mutate({
+        filterName: f.name,
+        value: Number(localValue.replace(/,/g, "")),
+      });
+    }
+  }}
+/>
+
+This is EXACTLY how we solved the issue in 1120.
+🟪 SECTION 4 — Restore comma formatting (1120 Blueprint)
+Directive — use formatThousands():
+
+Add this helper:
+
+const formatThousands = (val: string | number | null) => {
+  if (val === null || val === undefined) return "";
+  const num = Number(val);
+  return isNaN(num) ? val : num.toLocaleString("en-US");
+};
+
+Then in <Input>:
+value={overrides[f.name] ? formatThousands(f.value) : localValue}
+
+On blur → store numeric value, not formatted:
+Number(localValue.replace(/,/g, ""))
+
+🟪 SECTION 5 — Fix boolean selects ("Yes/No")
+
+Created in 1120.
+
+Directive — use this code:
+<Select
+  value={String(f.value)}
+  disabled={overrides[f.name]}
+  onValueChange={(val) => {
+    updateValueMutation.mutate({
+      filterName: f.name,
+      value: val === "true",
+    });
+  }}
+>
+  <SelectTrigger className="w-[120px]">
+    <SelectValue />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="true">Yes</SelectItem>
+    <SelectItem value="false">No</SelectItem>
+  </SelectContent>
+</Select>
+
+🟪 SECTION 6 — Fix array selects ("Timeframes", "Quote Currencies")
+
+From 1120 we know:
+
+Quote currencies is DEPRECATED but UI must appear
+
+Backend must ignore values (Kraken codes are inconsistent)
+
+User can still choose values in dropdown
+
+Selections must persist locally
+
+No effect on scanner
+
+Directive — enforce EXACT 1120 behavior:
+1. Display dropdown with all final choices from 1120 archive
+
+(Already known from your earlier work.)
+
+2. Use this handler:
+onValueChange={(vals) => {
+  setLocalValue(vals);
+  updateValueMutation.mutate({
+    filterName: f.name,
+    value: vals, // array<string>
+  });
+}}
+
+3. Ensure multiple select UI uses:
+multiple
+
+🟪 SECTION 7 — Minimum History (Days)
+Directive — use EXACT same dropdown pattern as above:
+<Select
+  value={String(f.value)}
+  disabled={overrides[f.name]}
+  onValueChange={(val) => {
+    updateValueMutation.mutate({
+      filterName: "minHistoryDays",
+      value: Number(val),
+    });
+  }}
+>
+  <SelectTrigger className="w-[180px]">
+    <SelectValue />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="30">30 days</SelectItem>
+    <SelectItem value="60">60 days</SelectItem>
+    <SelectItem value="90">90 days</SelectItem>
+    <SelectItem value="180">180 days</SelectItem>
+  </SelectContent>
+</Select>
+
+🟪 SECTION 8 — Fix Value Mutation (1120 Blueprint)
+Directive — updateValueMutation must call:
+await apiFetch(`/api/filters-v2?mode=${mode}`, {
+  method: "PUT",
+  body: JSON.stringify({
+    filterName,
+    value,
+  }),
+});
+
+Remove ANY variants of:
+updateAllFilters
+PATCH /api/screeners
+PUT /api/screeners
+batch update
+
+🟪 SECTION 9 — Required Final Acceptance Tests
+
+Replit must confirm:
+
+1. Each checkbox toggles independently
+
+→ No toast storms
+→ No global state changes
+
+2. When override = false → input disabled
+
+→ When override = true → input editable
+
+3. User can fully erase and retype numbers
+
+→ No append-only behavior
+
+4. Comma formatting applied on blur
+5. Boolean selects use Yes/No
+6. Array selects accept selections
+7. Minimum History dropdown works
+8. No backend errors
+
+→ All updates go through /api/filters-v2
+→ No /api/screeners calls appear
