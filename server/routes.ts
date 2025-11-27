@@ -2170,6 +2170,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[FiltersV2:${requestId}] Logged ${auditPromises.length} audit entries`);
       }
       
+      // REB 2.9B: Log successful minHistoryDays updates
+      if (filterName === 'minHistoryDays' && value !== undefined && current.minHistoryDays !== updatedFilterValues.minHistoryDays) {
+        console.log(`[REB 2.9B][filters-v2] minHistoryDays updated userId=${userId} mode=${mode} value=${updatedFilterValues.minHistoryDays}`);
+      }
+      
       console.log(`[FiltersV2:${requestId}] Override flags updated successfully`);
       
       // Broadcast config update via WebSocket

@@ -1,0 +1,155 @@
+Directive: REB 2.9B – Finish Minimum History filter (NO DB/SCHEMA CHANGES)
+
+You must not perform any further schema or database operations for this task.
+
+❌ Do NOT run db:push (with or without --force)
+
+❌ Do NOT run ALTER TABLE or DROP TABLE on any table
+
+❌ Do NOT attempt to “fix” duplicate columns in users or any other table
+
+The Neon DB is considered the source of truth and must not be altered as part of REB 2.9B.
+
+From this point, REB 2.9B is strictly an application-logic + UI feature:
+
+A. Clarify the current contract
+
+Confirm (by reading code, not changing it) that:
+
+GET /api/filters-v2?mode=paper returns a filter named minHistoryDays in the “Data Quality” section.
+
+That same value is already used by the history check logic in the scanner / Kraken layer:
+
+e.g., kraken.ts / FX5 code where pairs are filtered by trading age / OHLC age.
+
+Confirm that FiltersWithOverride is the only component currently visible on the Screeners tab:
+
+client/src/pages/goals-engine.tsx
+
+TabsContent value="screener" contains <FiltersWithOverride /> only
+
+<ScreenerFiltersTab /> remains commented out and untouched.
+
+You must not change this visibility; leave ScreenerFiltersTab hidden.
+
+B. Finish the UI behavior for Minimum History (Days)
+
+In client/src/components/goals/filters-with-override.tsx:
+
+Rendering behavior
+
+For the filter where filter.name === "minHistoryDays":
+
+When filter.managedByLatti === true:
+
+Show it as disabled / read-only with the current value (e.g., “30 days”).
+
+When filter.managedByLatti === false:
+
+Render a Select dropdown with the options:
+
+30, 60, 90, 180
+
+Display labels as "30 days", "60 days", etc.
+
+This must be done inside the existing FiltersWithOverride layout.
+Do not add any new cards, components, or sections.
+Do not introduce a second Data Quality section.
+
+Mutation behavior
+
+Reuse the existing mutation machinery in FiltersWithOverride:
+
+The payload for updating a filter value should be:
+
+{
+  filterName: "minHistoryDays",
+  value: <number>, // 30, 60, 90, or 180
+  mode: <"paper" | "live"> // whatever is already used in FiltersWithOverride
+}
+
+
+On success:
+
+Update or invalidate the correct React Query cache key for /api/filters-v2 for that mode.
+
+Use exactly the same queryKey wiring that the existing filters in FiltersWithOverride use.
+
+On failure (e.g., 401 or 400):
+
+Show an error toast and do not update local UI state.
+
+Important: Do not introduce any new query keys or new React Query contexts.
+Use the same keys that the component already uses for the other screener filters.
+
+C. Verify behavior using real login (NOT synthetic tokens)
+
+For verification, you must use the real login flow, not a hand-crafted JWT:
+
+Log in via /auth/login as a real user (e.g., testuser123).
+
+In the browser:
+
+Go to /goals-engine.
+
+Click the “Screeners” tab.
+
+Locate the “Minimum History (Days)” field under the existing Data Quality section in Filter Automation Control.
+
+Perform this scenario in the browser (real UI):
+
+Ensure “Managed by LATTi” is checked → field is disabled.
+
+Uncheck “Managed by LATTi” → field becomes editable.
+
+Choose “60 days” from the dropdown.
+
+Save / apply the changes (using whatever existing save semantics FiltersWithOverride uses).
+
+Confirm in the browser devtools Network tab that:
+
+PUT /api/filters-v2?mode=paper returns HTTP 200.
+
+Reload the page (full reload).
+
+Navigate again to Goals Engine → Screeners.
+
+Confirm:
+
+The field still shows “60 days”.
+
+The “Managed by LATTi” toggle remains in the expected state (managed or unmanaged, depending on the design).
+
+Optionally, change it to “90 days” and repeat to confirm persistence works for multiple values.
+
+Do not rely on synthetic E2E tests using manually minted JWTs for this feature’s acceptance.
+The acceptance criteria are based on real user flows in the browser.
+
+D. Logging and proof
+
+Add or keep minimal debug logging around the PUT /api/filters-v2 handler only for minHistoryDays, for example:
+
+On successful update, log:
+
+[REB 2.9B][filters-v2] minHistoryDays updated
+userId=<user-id> mode=<paper|live> value=<value>
+
+
+This log should appear only when the real browser flow succeeds.
+
+Do not add any logging that touches schema tools, db:push, or table definitions.
+
+At the end, please report:
+
+The exact request/response pair for a successful PUT /api/filters-v2 for minHistoryDays.
+
+The exact JSON snippet from GET /api/filters-v2?mode=paper showing the updated minHistoryDays value.
+
+A brief confirmation that:
+
+The value persists after a full page reload.
+
+No duplicate UI appears on the Screeners tab.
+
+That’s the entire scope of REB 2.9B now.
+No DB surgery. No schema tools. Just finishing the behavior of one existing filter inside the existing UI.
