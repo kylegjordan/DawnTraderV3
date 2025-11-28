@@ -1202,9 +1202,13 @@ export async function collectMixedBatch(
   // REB 2.11A: Capture active filter pool state BEFORE any cleanup
   const activeBefore = activeFilterPool.getSymbolsRaw(mode);
   
-  // Get active trades to exclude
+  // Get active trades to exclude (for trade-level exclusion, separate from pool-level)
   const activeTrades = await storage.getActiveTrades(mode);
-  const activeSymbols = new Set(activeTrades.map(t => t.symbol));
+  const activeTradeSymbols = new Set(activeTrades.map(t => t.symbol));
+  
+  // REB 2.11C: Use active filter pool for "already active" detection (THE FIX)
+  // Previously used activeTradeSymbols which was wrong - pairs in pool ARE already active
+  const poolSymbols = new Set(activeBefore);
   
   // REB 2.11A: Track which symbols are actually counted as already_active
   const alreadyActiveReportedList: string[] = [];
@@ -1370,8 +1374,9 @@ export async function collectMixedBatch(
     
     // Pair passed all filters
     if (!rejected) {
-      // Check if already active
-      if (activeSymbols.has(pair.symbol)) {
+      // REB 2.11C: Check if already in active filter pool (THE FIX)
+      // Previously checked activeTradeSymbols (wrong) - now checks poolSymbols (correct)
+      if (poolSymbols.has(pair.symbol)) {
         breakdown.already_active++;
         // REB 2.11A: Track which pairs are counted as already_active
         alreadyActiveReportedList.push(pair.symbol);

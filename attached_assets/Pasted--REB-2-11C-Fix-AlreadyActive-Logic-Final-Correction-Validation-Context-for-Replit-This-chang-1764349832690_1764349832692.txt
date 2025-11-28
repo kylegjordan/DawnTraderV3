@@ -1,0 +1,181 @@
+✅ REB 2.11C – Fix AlreadyActive Logic (Final Correction & Validation)
+Context for Replit
+
+This change fixes a long-standing issue where the “alreadyActive” filter breakdown always shows 0, even when pairs were clearly present in the Active Filter Pool.
+
+REB 2.11A and 2.11B diagnostics definitively proved that:
+
+Survivors are correctly added to the active filter pool
+
+Survivors do appear again in later cycles
+
+Active pool entries and survivor symbols match exactly
+
+But the scanner was checking the active trades table (storage.getActiveTrades)
+
+Instead of the active filter pool (activeFilterPool.getSymbols)
+
+This directive rewires that comparator to the correct source, updates breakdown counters, and ensures all diagnostics reflect the correct behavior.
+
+This is a logic fix only.
+No UI changes.
+No DB changes.
+No schema changes.
+
+🟥 INSTRUCTIONS FOR REPLIT – REB 2.11C
+----------------------------------------------------
+STEP 1 — Modify market-scanner.ts to fix detection
+----------------------------------------------------
+1.1 — Import the active filter pool
+
+At the top of server/services/market-scanner.ts, add:
+
+import { activeFilterPool } from "./active-filter-pool";
+
+
+(If the import already exists, do nothing.)
+
+1.2 — Replace incorrect comparator
+
+❌ REMOVE ALL uses of:
+
+activeTrades.has(...)
+
+
+or
+
+activeTradeSymbols.has(...)
+
+1.3 — Insert the correct comparator using Active Filter Pool
+
+Inside the survivor evaluation loop (the same place REB2.11A captured alreadyActiveReported), add:
+
+// --- REB 2.11C: Correct Already Active Comparator ---
+const poolSymbols = activeFilterPool.getSymbols(); // normalized set
+const normalized = symbol;                         // survivors are already normalized
+
+const isAlreadyActive = poolSymbols.has(normalized);
+
+
+Then update the breakdown counters:
+
+if (isAlreadyActive) {
+    failedAlreadyActive += 1;
+    already_active_reported.push(symbol);
+}
+
+------------------------------------------------------
+STEP 2 — Update REB 2.11A Audit Logic to use new comparator
+------------------------------------------------------
+
+In the REB 2.11A block where we calculate:
+
+alreadyActiveReported
+
+
+Replace the old logic with:
+
+const isReported = already_active_reported.includes(symbol);
+
+const shouldBe = poolSymbols.has(symbol);
+if (shouldBe && !isReported) {
+    mismatches.missedPairs.push(symbol);
+}
+if (!shouldBe && isReported) {
+    mismatches.overcountedPairs.push(symbol);
+}
+
+------------------------------------------------------
+STEP 3 — Update REB 2.11B SymbolTrace to classify correctly
+------------------------------------------------------
+
+Inside the REB 2.11B trace block, update mismatchType logic:
+
+let mismatchType: SymbolMismatchType = "NONE";
+
+if (shouldBe && !wasCountedAlreadyActive) mismatchType = "MISSING";
+if (!shouldBe && wasCountedAlreadyActive) mismatchType = "EXTRA";
+
+
+Remove “FORMAT” as a category.
+(11B proved normalization is not the problem.)
+
+------------------------------------------------------
+STEP 4 — Update CycleSummary breakdown
+------------------------------------------------------
+
+In the section where we generate:
+
+breakdown: {
+  passed,
+  alreadyActive,
+  ...
+}
+
+
+Ensure:
+
+alreadyActive: failedAlreadyActive
+
+
+matches the new detection logic.
+
+------------------------------------------------------------
+STEP 5 — Run REB 2.11A/2.11B Diagnostics for Validation
+------------------------------------------------------------
+
+After restarting:
+
+Run 3–5 cycles and confirm:
+✔️ REB 2.11A
+
+missedPairs should go to 0
+
+overcountedPairs should remain 0
+
+alreadyActiveReported should become > 0 for cycles where pool has entries
+
+✔️ REB 2.11B
+
+Check:
+
+"shouldBeAlreadyActive": true,
+"wasCountedAlreadyActive": true,
+"mismatchType": "NONE"
+
+
+for samples in the traces.
+
+✔️ Filter Breakdown
+
+The UI “Already Active” count should now become non-zero when expected.
+
+------------------------------------------------------------
+STEP 6 — Confirm with 2-minute test run
+------------------------------------------------------------
+
+Run paper-sim for 2–3 minutes.
+
+Confirm:
+
+Active pool grows
+
+Survivors that reappear are correctly flagged
+
+Breakdown “alreadyActive” is accurate
+
+REB 2.11A shows no mismatches
+
+🟢 Expected Outcome After REB 2.11C
+
+“Already Active” finally works correctly for the first time since 8.6/8.7
+
+Active Filter Pool is the authoritative source
+
+All pass/fail breakdowns become accurate
+
+REB 2.11A shows zero mismatches
+
+REB 2.11B mismatchType is “NONE” for matched items
+
+System is ready for REB 2.12 (Detector-Level Validations)
