@@ -1,0 +1,272 @@
+✅ REB 2.11 — Final Backend Wiring & Active Pool Stability Validation (Diagnostics + Stress Testing)
+MASTER DIRECTIVE FOR REPLIT
+🔷 CONTEXT (Replit MUST read this before doing anything)
+
+The FX5 trading engine has now completed:
+
+REB 2.9A–2.9D (Screeners Tab Truth, Filters, History, Wiring)
+
+REB 2.10 (Passive Learning Deep Tests)
+
+REB 2.11 is the final backend wiring + validation phase before we move to REB 2.12 and later phases (including LATTi refactor in Phase 10+).
+
+REB 2.11 ≠ new features.
+REB 2.11 = verifying that all previous features behave correctly over multiple FX5 cycles.
+
+The goal is to:
+
+Ensure the Active Pool is stable
+
+Ensure no drift, oscillation, or incorrect re-entry
+
+Ensure dedupe + TTL expiration works
+
+Ensure all filter outcomes match the passive-learning snapshots
+
+Detect multi-cycle anomalies
+
+Validate cross-mode consistency (paper vs live)
+
+Stress-test the engine with deliberate timing distortions
+
+Ensure FX5 remains stable under load
+
+This is a non-destructive, temporary, diagnostic mode.
+
+🔷 TEST USER CREDENTIALS (USE THESE ONLY)
+username: testuser123
+password: SecurePass123!
+mode: paper OR live when required
+
+🔷 ABSOLUTE SAFETY RULES
+
+You MUST NOT:
+
+✖ modify business logic
+✖ modify filter formulas
+✖ modify UI
+✖ modify LATTi behavior
+✖ modify database schema
+✖ add persistent state
+✖ change TTL values outside the stress test block
+✖ change active pool retention logic permanently
+
+You MAY:
+
+✔ add logging
+✔ add temporary diagnostic wrappers
+✔ add non-persistent in-memory buffers
+✔ add temporary timing offsets (inside stress test block only)
+✔ add consistency assertions
+✔ read/inspect the active pool
+✔ measure drift and instability
+
+All diagnostics MUST self-disable after the test.
+
+🔷 REB 2.11 — IMPLEMENTATION STEPS
+PHASE A — PASSIVE DIAGNOSTICS (NO ENGINE MANIPULATION)
+
+Replit must implement the following inside market-scanner.ts and fx5-scanner.ts:
+
+A1 — Add Passive Drift Buffer (20-cycle rolling window)
+
+A new in-memory only, non-persistent, circular buffer:
+
+interface DriftSnapshot {
+  cycle: number;
+  mode: "paper" | "live";
+  timestamp: number;
+  activePoolSize: number;
+  survivors: string[];
+  failures: {
+    price: number;
+    volume: number;
+    spread: number;
+    range: number;
+    stablecoin: number;
+    history: number;
+  };
+}
+
+
+Size: 20 most recent cycles only.
+
+Purpose: detect drift trends, oscillation, stable state, and cross-filter consistency.
+
+A2 — Add “Pool Integrity Snapshot” after every cycle
+
+At the end of every FX5 cycle:
+
+Log:
+
+[REB2.11][Integrity] {
+  cycle,
+  mode,
+  activePoolSize,
+  uniquePairs: true|false,
+  expiredRemoved: true|false,
+  anomalies: []
+}
+
+
+Checks to add:
+
+Active pool contains unique pairs only
+
+Active pool contains no expired entries
+
+Active pool contains only pairs that passed all filters
+
+No survivors fail passive-learning filter criteria
+
+No pair skipped history filter
+
+No stale state
+
+If ANY check fails:
+
+Add to anomalies[] but DO NOT crash.
+
+A3 — Capture filter pipeline timing
+
+Log:
+
+[REB2.11][Timing] {
+  cycle,
+  mode,
+  t_fetch,
+  t_syncFilters,
+  t_historyFilter,
+  t_universeLimit,
+  t_total
+}
+
+
+For future LATTi optimization.
+
+A4 — Add passive-learning cross-validation
+
+Compare:
+
+survivors vs passive-learning PairSnapshots
+
+If mismatch:
+
+[REB2.11][Mismatch] { pair, reason }
+
+PHASE B — ACTIVE STRESS TEST MODE FOR 5 CYCLES
+
+After passive diagnostics are implemented, add a temporary, explicit block:
+
+if (process.env.REB_2_11_STRESS === "1") { ... }
+
+
+Inside this block, implement:
+
+B1 — Randomized artificial latency
+
+Inside the filter loop:
+
+await delay(10–40 ms random)
+
+
+NOT more than 40ms per pair.
+
+Purpose: detect race conditions, incomplete filter application, unstable ordering.
+
+B2 — Temporary TTL compression
+
+Inside stress block only:
+
+ACTIVE_POOL_TTL = 1 minute
+
+
+This forces expiration to be exercised.
+
+B3 — Force universeSize oscillation
+
+For only 5 cycles, do:
+
+Cycle 1: universeSize = 20
+Cycle 2: universeSize = 60
+Cycle 3: universeSize = 40
+Cycle 4: universeSize = 100
+Cycle 5: universeSize = restored user value
+
+This tests:
+
+oscillation resistance
+
+duplicate removal
+
+stable survivors
+
+universe limit enforcement
+
+B4 — Enable duplicate-injection test (logic only, no DB writes)
+
+Before filtering begins:
+
+if (REB_2_11_STRESS) manually push one duplicate pair to activePool
+
+
+Expected: dedupe removal.
+
+B5 — Capture a Stress Snapshot
+
+Log:
+
+[REB2.11][StressSnapshot] {
+  cycle,
+  injectedDuplicates,
+  ttlCompressionActive,
+  latencyInjected,
+  universeShift,
+  activePoolBefore,
+  activePoolAfter
+}
+
+PHASE C — RESULT AGGREGATION ENDPOINT
+
+Add the following new endpoint:
+
+GET /api/diagnostics/reb-2-11
+
+Returns:
+
+{
+  passiveDriftWindow: [...20 snapshots],
+  integrityEvents: [...],
+  timing: [...],
+  mismatches: [...],
+  stressSnapshots: [...]
+}
+
+
+This endpoint must not require admin — standard user testuser123 can access it.
+
+TESTING INSTRUCTIONS FOR REPLIT
+Use this login flow:
+POST /api/auth/login
+{
+  "username":"testuser123",
+  "password":"SecurePass123!"
+}
+
+Then:
+
+Run paper engine for 2–3 minutes (passive phase).
+
+Run stress block for 5 cycles by setting:
+
+process.env.REB_2_11_STRESS = "1"
+
+
+Call:
+
+GET /api/diagnostics/reb-2-11?includeRaw=1
+
+
+Include full JSON output in your report.
+
+📌 END OF DIRECTIVE

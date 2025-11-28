@@ -9,7 +9,7 @@ import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
-import { MarketScanner, getPassiveLearningBuffer } from "./services/market-scanner";
+import { MarketScanner, getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer } from "./services/market-scanner";
 import { RiskManager, buildSettingsFromModeLevel } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
@@ -5421,6 +5421,89 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.status(500).json({ 
         ok: false,
         error: 'Failed to fetch passive-learning debug data', 
+        message: error.message 
+      });
+    }
+  });
+
+  // ==================== REB 2.11: Active Pool Stability Validation Endpoint ====================
+  
+  // GET /api/diagnostics/reb-2-11 - Get REB 2.11 diagnostic buffers
+  apiRouter.get('/diagnostics/reb-2-11', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const includeRaw = req.query.includeRaw === '1';
+      
+      // Get all REB 2.11 buffers
+      const driftBuffer = getREB211DriftBuffer();
+      const integrityBuffer = getREB211IntegrityBuffer();
+      const timingBuffer = getREB211TimingBuffer();
+      const mismatchBuffer = getREB211MismatchBuffer();
+      const stressBuffer = getREB211StressBuffer();
+      
+      // Calculate summary statistics
+      const latestDrift = driftBuffer.length > 0 ? driftBuffer[driftBuffer.length - 1] : null;
+      const anomalyCount = integrityBuffer.filter(i => i.anomalies.length > 0).length;
+      const avgTiming = timingBuffer.length > 0 
+        ? Math.round(timingBuffer.reduce((sum, t) => sum + t.t_total, 0) / timingBuffer.length) 
+        : 0;
+      
+      // Pool stability analysis
+      let isStable = true;
+      let driftDetected = false;
+      if (driftBuffer.length >= 3) {
+        const recentSizes = driftBuffer.slice(-5).map(d => d.activePoolSize);
+        const variance = Math.max(...recentSizes) - Math.min(...recentSizes);
+        if (variance > 10) {
+          driftDetected = true;
+          isStable = false;
+        }
+      }
+      
+      const response: any = {
+        ok: true,
+        meta: {
+          timestamp: new Date().toISOString(),
+          bufferSizes: {
+            drift: driftBuffer.length,
+            integrity: integrityBuffer.length,
+            timing: timingBuffer.length,
+            mismatches: mismatchBuffer.length,
+            stress: stressBuffer.length,
+          },
+          maxBufferSize: 20,
+          stressTestEnabled: process.env.REB_2_11_STRESS === '1',
+        },
+        summary: {
+          latestCycle: latestDrift?.cycle ?? null,
+          latestPoolSize: latestDrift?.activePoolSize ?? 0,
+          anomalyCount,
+          mismatchCount: mismatchBuffer.length,
+          avgCycleDurationMs: avgTiming,
+          poolStability: {
+            isStable,
+            driftDetected,
+          },
+        },
+        passiveDriftWindow: driftBuffer,
+        integrityEvents: integrityBuffer.filter(i => i.anomalies.length > 0),
+        timing: timingBuffer,
+        mismatches: mismatchBuffer,
+        stressSnapshots: stressBuffer,
+      };
+      
+      // Include raw data if requested
+      if (includeRaw) {
+        response.raw = {
+          allIntegritySnapshots: integrityBuffer,
+        };
+      }
+      
+      res.json(response);
+    } catch (error: any) {
+      console.error('[REB2.11] Error fetching diagnostic buffers:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to fetch REB 2.11 diagnostic data', 
         message: error.message 
       });
     }
