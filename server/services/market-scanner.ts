@@ -5,8 +5,58 @@ import { WatchlistPair } from '@shared/schema';
 import { strategyAlerts } from './strategy-alerts';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 
-// REB 2.9C Section 4: Global cycle counter for diagnostic logging (auto-disables after 20)
-if (!(globalThis as any).__reb29c_cycle) (globalThis as any).__reb29c_cycle = 0;
+// REB 2.9D Section 4: Global cycle counter for diagnostic logging (auto-disables after 20)
+if (!(globalThis as any).__reb29d_cycle) (globalThis as any).__reb29d_cycle = 0;
+
+// REB 2.9D: History check counter for rate-limited logging
+let reb29dHistoryCheckCount = 0;
+const REB_2_9D_HISTORY_LOG_LIMIT = 50;
+
+// REB 2.9D: History filter context type
+type HistoryFilterContext = {
+  minHistoryDays?: number | null;
+  mode: 'paper' | 'live' | 'backtest';
+  krakenService: KrakenService;
+};
+
+/**
+ * REB 2.9D: Check if a pair passes the minimum history filter
+ * Uses Kraken daily OHLC candles to determine trading age
+ */
+async function passesHistoryFilter(
+  pair: string,
+  ctx: HistoryFilterContext
+): Promise<{ passed: boolean; reason?: 'failedHistory'; days?: number | null }> {
+  const { minHistoryDays, mode, krakenService } = ctx;
+
+  if (!minHistoryDays || minHistoryDays <= 0) {
+    // No minimum configured → pass
+    return { passed: true, days: null };
+  }
+
+  const days = await krakenService.getPairHistoryDays(pair, mode);
+
+  // If we cannot determine history, be conservative & fail (matches original safety behavior)
+  const passed = typeof days === 'number' && days >= minHistoryDays;
+
+  // REB 2.9D diagnostics (limited for performance)
+  if (reb29dHistoryCheckCount < REB_2_9D_HISTORY_LOG_LIMIT) {
+    reb29dHistoryCheckCount++;
+    console.log('[REB2.9D][HistoryCheck]', {
+      pair,
+      mode,
+      days,
+      threshold: minHistoryDays,
+      result: passed ? 'PASS' : 'FAIL',
+    });
+  }
+
+  if (!passed) {
+    return { passed: false, reason: 'failedHistory', days };
+  }
+
+  return { passed: true, days };
+}
 
 // LEGACY — Do NOT wire to Stage-3.
 // TODO: Remove in Phase 8.12 (auth+role+stability cleanup)
@@ -707,8 +757,29 @@ export async function collectMixedBatch(
 ): Promise<BatchResult> {
   const startTime = Date.now();
   
-  // REB 2.9C Section 4: Increment global cycle counter
-  (globalThis as any).__reb29c_cycle++;
+  // REB 2.9D Section 4: Increment global cycle counter
+  (globalThis as any).__reb29d_cycle++;
+  const cycleNum = (globalThis as any).__reb29d_cycle;
+  
+  // REB 2.9D CycleStart: Log filter configuration at cycle start (first 20 cycles only)
+  if (cycleNum <= 20) {
+    console.log(`[REB2.9D][FX5][CycleStart] Cycle ${cycleNum}/${mode}:`, {
+      minVolume: filters.minVolume ?? '1000000.00',
+      minLiquidity: filters.minLiquidity ?? '500000.00',
+      minPrice: filters.minPrice ?? '0.01000000',
+      maxPrice: filters.maxPrice ?? '100000.00',
+      rsiMin: filters.rsiMin ?? 30,
+      rsiMax: filters.rsiMax ?? 70,
+      volatilityMin: filters.volatilityMin ?? '0.50',
+      volatilityMax: filters.volatilityMax ?? '5.00',
+      maxBidAskSpread: filters.maxBidAskSpread ?? '1.00',
+      universeSize: filters.universeSize ?? 100,
+      activeTimeframes: filters.activeTimeframes ?? ['5m', '15m', '1h'],
+      minHistoryDays: filters.minHistoryDays ?? 30,
+      excludeStablecoins: filters.excludeStablecoins ?? true,
+      allowRegulatedOnly: filters.allowRegulatedOnly ?? false,
+    });
+  }
   
   // STEP 1: Fetch ALL Kraken tickers for volume ranking
   console.log('[8.6.7][DEBUG] STEP 1: Fetching ALL Kraken tickers for volume ranking...');
@@ -810,9 +881,12 @@ export async function collectMixedBatch(
     allowedQuotes = [];
   }
   
-  // REB 2.9B: Log minHistoryDays configuration
-  console.log(`[FX5][HistoryCheck] minHistoryDays = ${minHistoryDays}`);
-  console.log(`[FX5][HistoryCheck] Note: Batch-first architecture does not perform OHLC history check for performance. High-volume pairs (Top-N) typically have sufficient history.`);
+  // REB 2.9D: History filter context for passesHistoryFilter helper
+  const historyFilterCtx: HistoryFilterContext = {
+    minHistoryDays: minHistoryDays,
+    mode,
+    krakenService,
+  };
   
   const survivors: BatchResult['survivors'] = [];
   let topNSurvivors = 0;
@@ -847,47 +921,61 @@ export async function collectMixedBatch(
     //   rejected = true;
     // }
     
-    // REB 2.9C Section 4: Log filter checks (first 20 cycles only, sample 5 pairs per cycle)
-    const reb29c_shouldLog = (globalThis as any).__reb29c_cycle <= 20 && i < 5;
+    // REB 2.9D Section 4: Log filter checks (first 20 cycles only, sample 5 pairs per cycle)
+    const reb29d_shouldLog = cycleNum <= 20 && i < 5;
     
     // Filter 2: Stablecoins
     if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
-      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=stablecoin pair=${pair.symbol} value=${baseCurrency} result=FAIL`);
+      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=stablecoin pair=${pair.symbol} value=${baseCurrency} result=FAIL`);
       breakdown.failed_stablecoin++;
       rejected = true;
     }
     
     // Filter 3: Min volume
     if (!rejected && volume24h < minVolume) {
-      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=minVolume pair=${pair.symbol} value=${volume24h.toFixed(0)} threshold=${minVolume} result=FAIL`);
+      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=minVolume pair=${pair.symbol} value=${volume24h.toFixed(0)} threshold=${minVolume} result=FAIL`);
       breakdown.failed_min_volume++;
       rejected = true;
     }
     
     // Filter 4: Daily range (volatility)
     if (!rejected && dailyRange < minDailyRange) {
-      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=dailyRange pair=${pair.symbol} value=${dailyRange.toFixed(2)}% threshold=${minDailyRange}% result=FAIL`);
+      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=dailyRange pair=${pair.symbol} value=${dailyRange.toFixed(2)}% threshold=${minDailyRange}% result=FAIL`);
       breakdown.failed_daily_range++;
       rejected = true;
     }
     
     // Filter 5: Min price
     if (!rejected && currentPrice < minPrice) {
-      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=minPrice pair=${pair.symbol} value=$${currentPrice.toFixed(4)} threshold=$${minPrice} result=FAIL`);
+      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=minPrice pair=${pair.symbol} value=$${currentPrice.toFixed(4)} threshold=$${minPrice} result=FAIL`);
       breakdown.failed_min_price++;
       rejected = true;
     }
     
     // Filter 6: Bid-ask spread
     if (!rejected && bidAskSpread > maxBidAskSpread) {
-      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=bidAskSpread pair=${pair.symbol} value=${bidAskSpread.toFixed(2)}% threshold=${maxBidAskSpread}% result=FAIL`);
+      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=bidAskSpread pair=${pair.symbol} value=${bidAskSpread.toFixed(2)}% threshold=${maxBidAskSpread}% result=FAIL`);
       breakdown.failed_spread++;
       rejected = true;
     }
     
-    // REB 2.9C: Log pairs that passed all filters
-    if (!rejected && reb29c_shouldLog) {
-      console.log(`[REB2.9C][MarketScanner][Check] pair=${pair.symbol} result=PASSED_ALL_FILTERS`);
+    // REB 2.9D: Log pairs that passed all synchronous filters
+    if (!rejected && reb29d_shouldLog) {
+      console.log(`[REB2.9D][MarketScanner][Check] pair=${pair.symbol} result=PASSED_SYNC_FILTERS`);
+    }
+    
+    // REB 2.9D Filter 7: Minimum History (async) - Only check if other filters passed
+    if (!rejected && minHistoryDays > 0) {
+      const historyResult = await passesHistoryFilter(pair.symbol, historyFilterCtx);
+      if (!historyResult.passed) {
+        breakdown.failed_history++;
+        rejected = true;
+      }
+    }
+    
+    // REB 2.9D: Log pairs that passed ALL filters including history
+    if (!rejected && reb29d_shouldLog) {
+      console.log(`[REB2.9D][MarketScanner][Check] pair=${pair.symbol} result=PASSED_ALL_FILTERS`);
     }
     
     // Pair passed all filters
@@ -920,9 +1008,9 @@ export async function collectMixedBatch(
   const survivorCount = survivors.length;
   console.log(`[8.6.7][DEBUG] Survivors AFTER FX5 filters: ${survivorCount}/${batch.length}`);
   
-  // REB 2.9C Section 6: End-of-cycle summary (first 20 cycles only)
-  if ((globalThis as any).__reb29c_cycle <= 20) {
-    console.log(`[REB2.9C][FX5][CycleSummary] Cycle ${(globalThis as any).__reb29c_cycle}/${mode}:`, {
+  // REB 2.9D Section 6: End-of-cycle summary (first 20 cycles only)
+  if (cycleNum <= 20) {
+    console.log(`[REB2.9D][FX5][CycleSummary] Cycle ${cycleNum}/${mode}:`, {
       totalEvaluated: batch.length,
       totalSurvived: survivorCount,
       activePoolSize: survivors.length,
@@ -933,7 +1021,8 @@ export async function collectMixedBatch(
         failedSpread: breakdown.failed_spread,
         failedRange: breakdown.failed_daily_range,
         failedPrice: breakdown.failed_min_price,
-        failedStablecoin: breakdown.failed_stablecoin
+        failedStablecoin: breakdown.failed_stablecoin,
+        failedHistory: breakdown.failed_history
       }
     });
   }
