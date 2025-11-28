@@ -290,6 +290,34 @@ function addToActiveAuditBuffer(entry: ActiveAuditEntry): void {
   }
 }
 
+// ============================================================================
+// REB 2.11B: Symbol Mapping Trace Diagnostic
+// ============================================================================
+
+export interface SymbolTraceEntry {
+  cycle: number;
+  mode: 'paper' | 'live';
+
+  pair: string;                      // Raw survivor pair string (e.g., "FWOG/USD")
+  normalizedPair: string;            // String after scanner normalization
+  activePoolEntry: string | null;    // Exact string stored in active-filter-pool, if any
+  krakenSymbol: string | null;       // Kraken API pair key (e.g., "XBTUSD") if available
+
+  inActiveBefore: boolean;           // True if raw or normalized pair exists in activeBeforeCleanup
+  inActiveAfter: boolean;            // True if raw or normalized pair exists in activeAfterCleanup
+  wasCountedAlreadyActive: boolean;  // What scanner *reported*
+  shouldBeAlreadyActive: boolean;    // What REB audit says SHOULD be active
+
+  mismatchType: 'NONE' | 'FORMAT' | 'NOT_FOUND' | 'ORDER' | 'LIMIT';
+}
+
+// REB 2.11B: Symbol trace buffer (400 entries ~= 20 cycles x survivors)
+const reb211bSymbolTraceBuffer: SymbolTraceEntry[] = [];
+
+export function getReb211bSymbolTraces(limit = 20): SymbolTraceEntry[] {
+  return reb211bSymbolTraceBuffer.slice(-limit);
+}
+
 // REB 2.11: Stress test configuration
 interface StressTestConfig {
   enabled: boolean;
