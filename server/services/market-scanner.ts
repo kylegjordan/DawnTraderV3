@@ -1500,6 +1500,83 @@ export async function collectMixedBatch(
   }
   
   // ============================================================================
+  // REB 2.11B: Symbol Mapping Trace Diagnostic
+  // ============================================================================
+  
+  // Build ticker map for Kraken symbol lookup (from batch pairs)
+  const tickerMap: Record<string, { krakenSymbol: string }> = {};
+  for (const p of batch) {
+    tickerMap[p.symbol] = { krakenSymbol: p.krakenPair || p.symbol };
+  }
+  
+  // Create symbol trace entries for each survivor
+  for (const survivor of survivors) {
+    const pair = survivor.symbol;
+    const normalizedPair = pair.trim().toUpperCase();
+    
+    // Find matching entry in active pool (exact or normalized)
+    let activePoolEntry: string | null = null;
+    if (activeBeforeSet.has(pair)) {
+      activePoolEntry = pair;
+    } else if (activeBeforeSet.has(normalizedPair)) {
+      activePoolEntry = normalizedPair;
+    } else {
+      // Check all entries for case-insensitive match
+      for (const poolEntry of activeBefore) {
+        if (poolEntry.toUpperCase() === normalizedPair) {
+          activePoolEntry = poolEntry;
+          break;
+        }
+      }
+    }
+    
+    const trace: SymbolTraceEntry = {
+      cycle: cycleNum,
+      mode,
+      
+      pair,                              // raw survivor string
+      normalizedPair,                    // scanner canonical string
+      activePoolEntry,                   // exact string in pool, or null
+      krakenSymbol: tickerMap[pair]?.krakenSymbol || null,
+      
+      inActiveBefore: activeBeforeSet.has(pair) || activeBeforeSet.has(normalizedPair),
+      inActiveAfter: new Set(activeAfter).has(pair) || new Set(activeAfter).has(normalizedPair),
+      
+      wasCountedAlreadyActive: alreadyActiveReportedSet.has(pair),
+      shouldBeAlreadyActive: activeBeforeSet.has(pair) || activeBeforeSet.has(normalizedPair),
+      
+      mismatchType: 'NONE',
+    };
+    
+    // Classify mismatch type
+    if (trace.shouldBeAlreadyActive && !trace.wasCountedAlreadyActive) {
+      trace.mismatchType = activePoolEntry === null ? 'NOT_FOUND' : 'FORMAT';
+    }
+    
+    // Push trace into buffer with FIFO limit
+    reb211bSymbolTraceBuffer.push(trace);
+    if (reb211bSymbolTraceBuffer.length > 400) {
+      reb211bSymbolTraceBuffer.shift();
+    }
+  }
+  
+  // Log summary of symbol traces for this cycle
+  const traceCount = survivors.length;
+  const mismatchCount = survivors.filter(s => {
+    const trace = reb211bSymbolTraceBuffer.find(t => t.cycle === cycleNum && t.pair === s.symbol);
+    return trace && trace.mismatchType !== 'NONE';
+  }).length;
+  
+  if (mismatchCount > 0) {
+    console.log('[REB2.11B][TRACE]', JSON.stringify({
+      cycle: cycleNum,
+      mode,
+      traces: traceCount,
+      mismatches: mismatchCount,
+    }));
+  }
+  
+  // ============================================================================
   // REB 2.11: Active Pool Stability Validation Diagnostics
   // ============================================================================
   
