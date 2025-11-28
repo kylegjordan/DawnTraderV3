@@ -3,7 +3,7 @@ import { canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-cano
 
 // REB 2.9D: History days cache for minimum history filter
 const historyDaysCache = new Map<string, { days: number | null; fetchedAt: number }>();
-const HISTORY_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const HISTORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours per REB 2.9D spec
 
 function makeHistoryKey(pair: string, mode: 'paper' | 'live' | 'backtest' | undefined): string {
   return `${mode || 'unknown'}::${pair}`;
@@ -608,7 +608,7 @@ export class KrakenService {
   /**
    * REB 2.9D: Get the number of days of trading history for a pair
    * Uses daily (1440m) OHLC candles to determine trading age
-   * Results are cached for 30 minutes to avoid hitting Kraken repeatedly
+   * Results are cached for 24 hours to avoid hitting Kraken repeatedly
    */
   async getPairHistoryDays(
     pair: string,
