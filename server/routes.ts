@@ -2356,6 +2356,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Keep default if parsing fails
       }
 
+      // REB 2.12A: Include minHistoryDays for History threshold display
       const response = {
         mode,
         filters: {
@@ -2365,6 +2366,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           minPrice: parseNumber(screenerFilters.minPrice),
           excludeStablecoins: screenerFilters.excludeStablecoins ?? true,
           allowedQuoteCurrencies,
+          minHistoryDays: screenerFilters.minHistoryDays ?? 30,
         },
       };
 

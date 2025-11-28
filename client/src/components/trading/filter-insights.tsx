@@ -124,6 +124,7 @@ interface FiltersSettings {
     minPrice: number;
     excludeStablecoins: boolean;
     allowedQuoteCurrencies: string[];
+    minHistoryDays: number; // REB 2.12A: Added for History threshold display
   };
 }
 
@@ -296,13 +297,18 @@ export function FilterInsights() {
     
     const filters = filtersSettings.filters;
     
+    // REB 2.12A: Threshold display fixes
+    // - maxBidAskSpread is stored as percentage (e.g., 2.00 = 2%) - no multiplication needed
+    // - minDailyRange (from volatilityMin) is stored as percentage (e.g., 0.50 = 0.5%) - no multiplication needed
+    // - minHistoryDays displayed as "X days" format
     const map: Record<string, string> = {
       'failed_min_volume': filters.minVolume ? `≥ $${filters.minVolume.toLocaleString()}` : '',
       'failed_min_price': filters.minPrice ? `≥ $${filters.minPrice.toFixed(2)}` : '',
-      'failed_spread': filters.maxBidAskSpread ? `≤ ${(filters.maxBidAskSpread * 100).toFixed(1)}%` : '',
-      'failed_daily_range': filters.minDailyRange ? `≥ ${(filters.minDailyRange * 100).toFixed(1)}%` : '',
+      'failed_spread': filters.maxBidAskSpread ? `≤ ${filters.maxBidAskSpread.toFixed(1)}%` : '',
+      'failed_daily_range': filters.minDailyRange ? `≥ ${filters.minDailyRange.toFixed(1)}%` : '',
       'failed_stablecoin': filters.excludeStablecoins ? 'Excluded' : 'Allowed',
       'failed_quote_currency': filters.allowedQuoteCurrencies ? filters.allowedQuoteCurrencies.join(', ') : '',
+      'failed_history': filters.minHistoryDays ? `${filters.minHistoryDays} days` : '',
     };
     
     return map[filterKey] || null;
