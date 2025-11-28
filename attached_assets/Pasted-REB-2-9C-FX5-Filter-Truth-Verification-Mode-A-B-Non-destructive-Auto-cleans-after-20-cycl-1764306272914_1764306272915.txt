@@ -1,0 +1,190 @@
+REB 2.9C — FX5 Filter Truth Verification Mode (A + B)
+
+✔ Non-destructive
+✔ Auto-cleans after 20 cycles
+✔ Covers every filter
+✔ Verifies both manual + LATTI values
+✔ Verifies pipeline UI → API → Scanner → Kraken → Engine
+
+🚀 DIRECTIVE — Paste Into Replit
+I am enabling REB 2.9C — FX5 Filter Truth Verification Mode.  
+This is a SAFE, NON-DESTRUCTIVE diagnostic mode that must ONLY add temporary logging.  
+Do NOT change any functional code, logic, or behavior.
+
+---------------------------------------
+🟣 SECTION 1 — GLOBAL REQUIREMENTS
+---------------------------------------
+
+1. DO NOT modify any functionality.
+2. DO NOT modify filter logic.
+3. DO NOT modify storage or schema.
+4. Only add logs.
+5. All logs MUST self-disable after 20 FX5 cycles.
+6. No performance impact: logs must be inside a "if (cycle <= 20)" block.
+7. After implementing, restart the workflow and confirm logs appear.
+
+---------------------------------------
+🟣 SECTION 2 — ADD LOGGING AT EACH PIPELINE STAGE
+---------------------------------------
+
+Add logs at these EXACT locations:
+
+A) server/routes.ts  
+Inside GET /api/filters-v2 (after the filters array is assembled):  
+Log:
+
+[REB2.9C][API->UI] Filters delivered to UI:
+{JSON.stringify(filters)}
+
+B) server/routes.ts  
+Inside PUT /api/filters-v2 (after update succeeds):  
+Log:
+
+[REB2.9C][UI->API] Filter updated:
+{name, value, manualOverrideEnabled}
+
+---------------------------------------
+🟣 SECTION 3 — ADD LOGGING IN FX5 SCANNER
+---------------------------------------
+
+File: server/services/fx5-scanner.ts
+
+At the beginning of each cycle:
+
+if (cycleCount <= 20) {
+  console.log("[REB2.9C][FX5][CycleStart]", {
+    cycle: cycleCount,
+    filters: {
+      minVolume: filters.minVolume,
+      minLiquidity: filters.minLiquidity,
+      minPrice: filters.minPrice,
+      maxPrice: filters.maxPrice,
+      minRSI: filters.minRSI,
+      maxRSI: filters.maxRSI,
+      minVolatility: filters.minVolatility,
+      maxVolatility: filters.maxVolatility,
+      maxSpread: filters.maxSpread,
+      universeSize: filters.universeSize,
+      activeTimeframes: filters.activeTimeframes,
+      minHistoryDays: filters.minHistoryDays,
+      excludeStablecoins: filters.excludeStablecoins,
+      regulatedOnly: filters.regulatedOnly
+    }
+  });
+}
+
+---------------------------------------
+🟣 SECTION 4 — ADD LOGGING INSIDE MARKET-SCANNER FILTER FUNCTIONS
+---------------------------------------
+
+In server/services/market-scanner.ts:
+
+For each filter function (min/max price, RSI, volatility, liquidity, spread, history, etc.)  
+ADD THIS JUST BEFORE returning the boolean:
+
+if (globalThis.__reb29c_cycle <= 20) {
+  console.log("[REB2.9C][MarketScanner][Check]", {
+    filter: "<FILTER NAME>",
+    value: <value>,
+    pair: symbol,
+    result: <true_or_false>
+  });
+}
+
+Examples (to apply to EVERY filter):
+
+• checkMinVolume  
+• checkMinLiquidity  
+• checkMinPrice  
+• checkMaxPrice  
+• checkRSI  
+• checkVolatility  
+• checkBidAskSpread  
+• checkMinHistoryDays  
+• checkUniverseSize  
+• checkStablecoinExclusion  
+• checkRegulatedOnly
+
+ALSO add at top of file:
+
+if (!globalThis.__reb29c_cycle) globalThis.__reb29c_cycle = 0;
+
+At the start of collectMixedBatch, increment:
+
+globalThis.__reb29c_cycle++;
+
+---------------------------------------
+🟣 SECTION 5 — LOGGING INSIDE KRAKEN ELIGIBLE PAIRS
+---------------------------------------
+
+File: server/services/kraken.ts
+
+Inside getEligiblePairs, at the moment filters are applied:
+
+if (globalThis.__reb29c_cycle <= 20) {
+  console.log("[REB2.9C][Kraken][EligiblePairCheck]", {
+    symbol,
+    historyDays,
+    minHistoryDays: filters.minHistoryDays,
+    passed: historyDays >= filters.minHistoryDays
+  });
+}
+
+---------------------------------------
+🟣 SECTION 6 — END-OF-CYCLE SUMMARY
+---------------------------------------
+
+At the end of each cycle in fx5-scanner.ts, add:
+
+if (cycleCount <= 20) {
+  console.log("[REB2.9C][FX5][CycleSummary]", {
+    cycle: cycleCount,
+    totalEvaluated,
+    totalSurvived,
+    activePoolSize
+  });
+}
+
+---------------------------------------
+🟣 SECTION 7 — AUTO-DISABLE LOGGING AFTER 20 CYCLES
+---------------------------------------
+
+After cycle > 20:
+Automatically stop all REB2.9C logs.
+
+Do NOT remove code — simply silence logs when cycle > 20.
+
+---------------------------------------
+🟣 SECTION 8 — NO OTHER CHANGES
+---------------------------------------
+
+Do NOT:
+- modify any filter logic
+- modify scanner behavior
+- modify API data shapes
+- modify schema
+- modify persistence
+- modify UI
+- create any rollback
+
+ONLY add logs.
+
+---------------------------------------
+🟣 SECTION 9 — CONFIRMATION
+---------------------------------------
+
+After implementing REB 2.9C:
+1. Restart workflow  
+2. Allow FX5 to run 3–5 minutes  
+3. Collect logs  
+4. Confirm logs show UI → API → Scanner → Kraken → Engine values  
+5. Confirm logs auto-disable after 20 cycles
+
+🟢 NEXT STEPS FOR YOU
+
+As soon as Replit completes this diagnostic mode:
+
+✔ I will read the logs
+✔ We will confirm 100% filter truth
+✔ We will certify that FX5 is using the correct values
+✔ And then we can move confidently into REB 2.10

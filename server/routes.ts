@@ -2041,6 +2041,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         lastUpdated: screenerData.updatedAt
       };
 
+      // REB 2.9C Section 2A: Log filters delivered to UI (first 20 cycles only)
+      if (!globalThis.__reb29c_api_calls) globalThis.__reb29c_api_calls = 0;
+      globalThis.__reb29c_api_calls++;
+      if (globalThis.__reb29c_api_calls <= 20) {
+        console.log(`[REB2.9C][API->UI] Filters delivered to UI (call ${globalThis.__reb29c_api_calls}/20):`, JSON.stringify(filtersV2.filters.map(f => ({ name: f.name, value: f.value }))));
+      }
+
       res.json({ ok: true, data: filtersV2 });
     } catch (error: any) {
       console.error('[FiltersV2] GET error:', error.message);
@@ -2194,6 +2201,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // REB 2.9B Stage 1: Log successful filter value updates
       if (filterName !== undefined && value !== undefined) {
         console.log(`[REB 2.9B Stage 1][filters-v2] ${filterName} updated userId=${userId} mode=${mode} value=${updatedFilterValues[filterName]}`);
+      }
+      
+      // REB 2.9C Section 2B: Log filter updates from UI (first 20 only)
+      if (!globalThis.__reb29c_api_puts) globalThis.__reb29c_api_puts = 0;
+      globalThis.__reb29c_api_puts++;
+      if (globalThis.__reb29c_api_puts <= 20) {
+        console.log(`[REB2.9C][UI->API] Filter updated (put ${globalThis.__reb29c_api_puts}/20):`, { filterName, value, manualOverrideEnabled });
       }
       
       console.log(`[FiltersV2:${requestId}] Override flags updated successfully`);

@@ -5,6 +5,9 @@ import { WatchlistPair } from '@shared/schema';
 import { strategyAlerts } from './strategy-alerts';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 
+// REB 2.9C Section 4: Global cycle counter for diagnostic logging (auto-disables after 20)
+if (!(globalThis as any).__reb29c_cycle) (globalThis as any).__reb29c_cycle = 0;
+
 // LEGACY — Do NOT wire to Stage-3.
 // TODO: Remove in Phase 8.12 (auth+role+stability cleanup)
 // This 10-minute scanner is no longer the source of truth for real-time market data.
@@ -704,6 +707,9 @@ export async function collectMixedBatch(
 ): Promise<BatchResult> {
   const startTime = Date.now();
   
+  // REB 2.9C Section 4: Increment global cycle counter
+  (globalThis as any).__reb29c_cycle++;
+  
   // STEP 1: Fetch ALL Kraken tickers for volume ranking
   console.log('[8.6.7][DEBUG] STEP 1: Fetching ALL Kraken tickers for volume ranking...');
   const [tickers, pairsObj] = await Promise.all([
@@ -841,34 +847,47 @@ export async function collectMixedBatch(
     //   rejected = true;
     // }
     
+    // REB 2.9C Section 4: Log filter checks (first 20 cycles only, sample 5 pairs per cycle)
+    const reb29c_shouldLog = (globalThis as any).__reb29c_cycle <= 20 && i < 5;
+    
     // Filter 2: Stablecoins
     if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
+      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=stablecoin pair=${pair.symbol} value=${baseCurrency} result=FAIL`);
       breakdown.failed_stablecoin++;
       rejected = true;
     }
     
     // Filter 3: Min volume
     if (!rejected && volume24h < minVolume) {
+      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=minVolume pair=${pair.symbol} value=${volume24h.toFixed(0)} threshold=${minVolume} result=FAIL`);
       breakdown.failed_min_volume++;
       rejected = true;
     }
     
     // Filter 4: Daily range (volatility)
     if (!rejected && dailyRange < minDailyRange) {
+      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=dailyRange pair=${pair.symbol} value=${dailyRange.toFixed(2)}% threshold=${minDailyRange}% result=FAIL`);
       breakdown.failed_daily_range++;
       rejected = true;
     }
     
     // Filter 5: Min price
     if (!rejected && currentPrice < minPrice) {
+      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=minPrice pair=${pair.symbol} value=$${currentPrice.toFixed(4)} threshold=$${minPrice} result=FAIL`);
       breakdown.failed_min_price++;
       rejected = true;
     }
     
     // Filter 6: Bid-ask spread
     if (!rejected && bidAskSpread > maxBidAskSpread) {
+      if (reb29c_shouldLog) console.log(`[REB2.9C][MarketScanner][Check] filter=bidAskSpread pair=${pair.symbol} value=${bidAskSpread.toFixed(2)}% threshold=${maxBidAskSpread}% result=FAIL`);
       breakdown.failed_spread++;
       rejected = true;
+    }
+    
+    // REB 2.9C: Log pairs that passed all filters
+    if (!rejected && reb29c_shouldLog) {
+      console.log(`[REB2.9C][MarketScanner][Check] pair=${pair.symbol} result=PASSED_ALL_FILTERS`);
     }
     
     // Pair passed all filters
@@ -900,6 +919,24 @@ export async function collectMixedBatch(
   
   const survivorCount = survivors.length;
   console.log(`[8.6.7][DEBUG] Survivors AFTER FX5 filters: ${survivorCount}/${batch.length}`);
+  
+  // REB 2.9C Section 6: End-of-cycle summary (first 20 cycles only)
+  if ((globalThis as any).__reb29c_cycle <= 20) {
+    console.log(`[REB2.9C][FX5][CycleSummary] Cycle ${(globalThis as any).__reb29c_cycle}/${mode}:`, {
+      totalEvaluated: batch.length,
+      totalSurvived: survivorCount,
+      activePoolSize: survivors.length,
+      breakdown: {
+        passed: breakdown.passed_all_filters,
+        alreadyActive: breakdown.already_active,
+        failedVolume: breakdown.failed_min_volume,
+        failedSpread: breakdown.failed_spread,
+        failedRange: breakdown.failed_daily_range,
+        failedPrice: breakdown.failed_min_price,
+        failedStablecoin: breakdown.failed_stablecoin
+      }
+    });
+  }
   
   const duration = Date.now() - startTime;
   console.log(`[Scan:${mode}] Mixed batch collected: ${survivorCount} eligible (${topNBatch.length} Top-N + ${tierBBatch.length} Tier-B) — ${duration}ms`);

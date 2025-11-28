@@ -134,6 +134,27 @@ export class Fx5ScannerService {
         return null;
       }
 
+      // REB 2.9C Section 3: Log filter values at cycle start (first 20 cycles only)
+      const reb29cCycle = mode === 'paper' ? this.paperCycleCount + 1 : this.liveCycleCount + 1;
+      if (reb29cCycle <= 20) {
+        console.log(`[REB2.9C][FX5][CycleStart] Cycle ${reb29cCycle}/${mode}:`, {
+          minVolume: filters.minVolume,
+          minLiquidity: filters.minLiquidity,
+          minPrice: filters.minPrice,
+          maxPrice: filters.maxPrice,
+          rsiMin: filters.rsiMin,
+          rsiMax: filters.rsiMax,
+          volatilityMin: filters.volatilityMin,
+          volatilityMax: filters.volatilityMax,
+          maxBidAskSpread: filters.maxBidAskSpread,
+          universeSize: filters.universeSize,
+          activeTimeframes: filters.activeTimeframes,
+          minHistoryDays: filters.minHistoryDays,
+          excludeStablecoins: filters.excludeStablecoins,
+          allowRegulatedOnly: filters.allowRegulatedOnly
+        });
+      }
+
       // REB 2.1: Execute batch-first FX5 scanning (Phase 8.6.7 truth state)
       const batchResult: BatchResult = await collectMixedBatch(
         this.krakenService,
