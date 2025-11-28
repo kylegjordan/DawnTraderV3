@@ -308,7 +308,8 @@ export interface SymbolTraceEntry {
   wasCountedAlreadyActive: boolean;  // What scanner *reported*
   shouldBeAlreadyActive: boolean;    // What REB audit says SHOULD be active
 
-  mismatchType: 'NONE' | 'FORMAT' | 'NOT_FOUND' | 'ORDER' | 'LIMIT';
+  // REB 2.11C: Simplified mismatch types (removed FORMAT since normalization is not the issue)
+  mismatchType: 'NONE' | 'MISSING' | 'EXTRA';
 }
 
 // REB 2.11B: Symbol trace buffer (400 entries ~= 20 cycles x survivors)
@@ -1553,9 +1554,11 @@ export async function collectMixedBatch(
       mismatchType: 'NONE',
     };
     
-    // Classify mismatch type
+    // REB 2.11C: Classify mismatch type (MISSING = should be active but wasn't, EXTRA = counted but shouldn't be)
     if (trace.shouldBeAlreadyActive && !trace.wasCountedAlreadyActive) {
-      trace.mismatchType = activePoolEntry === null ? 'NOT_FOUND' : 'FORMAT';
+      trace.mismatchType = 'MISSING';
+    } else if (!trace.shouldBeAlreadyActive && trace.wasCountedAlreadyActive) {
+      trace.mismatchType = 'EXTRA';
     }
     
     // Push trace into buffer with FIFO limit
