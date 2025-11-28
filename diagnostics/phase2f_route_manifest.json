@@ -1303,6 +1303,16 @@
     ]
   },
   {
+    "path": "/api/diagnostics/reb-2-11B",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/intent/execute",
     "methods": [
       "POST"
