@@ -164,8 +164,9 @@ const THRESHOLD_CONCEPTUAL: Record<string, string> = {
   passed_all_filters: "No extra rules — count of pairs that passed every filter this scan",
 };
 
-// REB 2.8.1: Truth filter categories (9 total, ordered per truth screenshots)
-// Removed: failed_market_cap, failed_guardrail_risk (backend may still compute, intentionally hidden from UI)
+// REB 2.8.1: Truth filter categories (ordered per truth screenshots)
+// Hidden from UI: failed_market_cap, failed_guardrail_risk, failed_quote_currency (REB 2.12A)
+// Backend still computes these values - only hidden from Filter Insights display
 const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   'passed_all_filters',
   'failed_min_price',
@@ -173,7 +174,7 @@ const ALLOWED_FILTER_CATEGORIES: (keyof FilterBreakdown)[] = [
   'failed_spread',
   'failed_daily_range',
   'failed_stablecoin',
-  'failed_quote_currency',
+  // 'failed_quote_currency', // REB 2.12A: Hidden from UI, backend still computes
   'already_active',
   'failed_history',
 ];

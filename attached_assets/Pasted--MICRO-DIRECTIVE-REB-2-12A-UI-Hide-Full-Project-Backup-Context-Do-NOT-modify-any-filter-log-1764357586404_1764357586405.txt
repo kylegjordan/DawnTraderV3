@@ -1,0 +1,99 @@
+✅ MICRO-DIRECTIVE: REB 2.12A — UI Hide + Full Project Backup
+
+Context:
+
+Do NOT modify any filter logic.
+
+Do NOT delete the quote-currency filter or backend handling.
+
+Only hide its display in the Filter Insights breakdown table.
+
+Then generate a complete ZIP backup of the entire project (excluding the /DawnTrader_v2 folder).
+
+Users:
+
+username: testuser123  
+password: SecurePass123!
+
+
+or
+
+username: kylegjordan  
+password: Miami@6821
+
+🟦 REB 2.12A — Directive
+
+Paste the following directly into Replit:
+
+REB 2.12A — UI Patch + Full Project Backup
+1. Hide the “ValidQuoteCurrency” row in the Filter Insights breakdown
+
+Goal:
+Hide only the UI row from the filter-breakdown table at the bottom of the Screeners → Filter Insights section.
+Do NOT remove logic, do NOT delete references — only suppress display.
+
+Actions:
+
+Locate the Filter Insights component (usually under:
+client/src/components/goals/filter-insights.tsx
+or
+filters-with-override.tsx extended view).
+
+In the filter breakdown table renderer:
+
+Find the row whose label or internal key is ValidQuoteCurrency, validQuoteCurrency, or similar.
+
+Wrap that specific row with a guard such as:
+
+if (filter.key === 'validQuoteCurrency') return null;
+
+
+or remove it from the mapped list:
+
+const visibleRows = rows.filter(r => r.key !== 'validQuoteCurrency');
+
+
+Do NOT hide or modify any other rows.
+
+Confirm that:
+
+All other filters remain visible
+
+ValidQuoteCurrency is hidden
+
+Logic & diagnostics (REB 2.10, REB 2.11, etc.) still include the value normally.
+
+2. Create a full project ZIP backup
+
+Goal:
+Create a complete backup of the Replit project.
+
+Rules:
+
+Include entire project
+
+Exclude /DawnTrader_v2 if present
+
+Create ZIP inside project root as:
+dawntrader-backup-YYYYMMDD.zip
+
+Actions:
+
+Run a filesystem compression command inside the Replit environment:
+
+zip -r dawntrader-backup-$(date +"%Y%m%d").zip . -x "DawnTrader_v2/*"
+
+
+Ensure ZIP is created in project root.
+
+Provide download link or confirm ZIP presence.
+
+3. Confirm completion
+
+After finishing the above, Replit must output:
+
+"UI row 'ValidQuoteCurrency' hidden successfully"
+
+"Backup ZIP created: dawntrader-backup-YYYYMMDD.zip"
+
+⭐ END OF DIRECTIVE
