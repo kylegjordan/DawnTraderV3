@@ -75,8 +75,8 @@ export class SignalOrchestrator {
       'mean_reversion',
       'range_trading',
       'vwap_bounce',
-      'liquidity_trap'
-      // DHMA disabled pending proper parameter loading
+      'liquidity_trap',
+      'dhma' // REB 2.12D: DHMA re-enabled with multi-timeframe confirmation
     ]);
     
     this.strategyEngine = new StrategyEngine();

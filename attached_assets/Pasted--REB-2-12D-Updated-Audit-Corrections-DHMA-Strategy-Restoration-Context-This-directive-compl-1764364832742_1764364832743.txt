@@ -1,0 +1,150 @@
+🚀 REB 2.12D (Updated) — Audit Corrections + DHMA Strategy Restoration
+Context
+
+This directive completes the repair of missing features from Phases 8.8.1 and 8.8.2, and fully restores the DHMA strategy to operational status.
+Use only testuser123 for automated calls.
+
+🟩 PART A — Implement missing Phase 8.8.1 Lifecycle Events
+
+(unchanged — previous directive stands)
+
+🟩 PART B — Create the Trade Executor Abstraction Layer
+
+(unchanged — previous directive stands)
+
+🟩 PART C — Implement missing 8.8.2 Strategy Features (improved)
+
+Including Liquidity Factor, Volatility Weighting, and Multi-Timeframe Confirmation.
+
+Multi-timeframe confirmation must be implemented as:
+
+function confirmMultiTimeframe(symbol, primaryTf) {
+  // secondary timeframes
+  const confirmations = ['15m', '1h'];
+
+  // all must agree with primary
+  return confirmations.every(tf => checkTrend(symbol, tf) === checkTrend(symbol, primaryTf));
+}
+
+
+If:
+
+all agree → confidence +10%
+
+disagree → confidence –10%
+
+This supports DHMA and several other strategies.
+
+🟩 PART D — Restore & Re-enable DHMA Strategy (NEW)
+1. Restore DHMA Parameter Loading
+
+Add the missing parameter block to strategy-engine:
+
+DHMA Window
+
+DHMA Slow MA
+
+DHMA Fast MA
+
+DHMA volatility multiplier
+
+DHMA confirmation settings
+
+Parameters must load from:
+
+shared/strategies-config.json
+
+
+or equivalent config source.
+
+2. Re-connect DHMA to Historical Data
+
+DHMA requires:
+
+Daily OHLC candles (from the REB 2.14 module)
+
+5m and 15m historical trends
+
+Price momentum calculation
+
+Re-connect its helper functions to:
+
+getHistoricalCandles(symbol, timeframe)
+
+3. Apply Multi-Timeframe Confirmation
+
+DHMA must call the multi-timeframe confirmation helper.
+
+Implementation example:
+
+if (!confirmMultiTimeframe(symbol, '5m')) {
+    confidence -= 0.10;
+}
+
+4. Register DHMA back into the Strategy Registry
+
+Uncomment or restore:
+
+registerStrategy('DHMA', DHMAStrategy)
+
+
+Inside:
+
+server/services/strategy-engine.ts
+
+
+Ensure DHMA is included in:
+
+activeStrategies[]
+
+5. Validate DHMA Output
+
+DHMA should emit:
+
+confidence
+
+trend direction
+
+strength
+
+recommended action
+
+stop-loss suggestion
+
+Add REB2.12D logging:
+
+[REB2.12D][DHMA] { symbol, confidence, direction, valid }
+
+🟩 PART E — Remove Legacy 24h Aggregator
+
+As before:
+
+DELETE server/services/scan-24h-aggregator.ts
+
+
+Do not remove the working fx5-24h-window.ts.
+
+🟩 PART F — Produce Verification Report
+
+Create:
+
+docs/audits/phase-8.8.1-8.8.2-corrections-with-dhma.md
+
+
+Report must include:
+
+lifecycle events implemented (screenshots/logs)
+
+trade executor installed
+
+strategy improvements (liquidity / volatility / MTF confirmation)
+
+DHMA restored and producing signals
+
+DHMA test output for at least 3 tickers
+
+confirmation that no regressions occurred
+
+End of Directive
+
+Implement all parts A–F exactly as described using testuser123 credentials only.
