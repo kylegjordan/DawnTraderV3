@@ -1273,6 +1273,16 @@
     ]
   },
   {
+    "path": "/api/passive-learning/debug",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/intent/execute",
     "methods": [
       "POST"

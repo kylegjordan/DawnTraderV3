@@ -9,7 +9,7 @@ import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
-import { MarketScanner } from "./services/market-scanner";
+import { MarketScanner, getPassiveLearningBuffer } from "./services/market-scanner";
 import { RiskManager, buildSettingsFromModeLevel } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
@@ -5379,6 +5379,48 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.error('[StateAwareness] Error fetching debug snapshot:', error);
       res.status(500).json({ 
         error: 'Failed to fetch system state (debug)', 
+        message: error.message 
+      });
+    }
+  });
+
+  // ==================== REB 2.10: Passive Learning Debug Endpoint ====================
+  
+  // GET /api/passive-learning/debug - Get passive learning diagnostic buffer
+  apiRouter.get('/passive-learning/debug', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const buffer = getPassiveLearningBuffer();
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : buffer.length;
+      const cycleId = req.query.cycle ? parseInt(req.query.cycle as string) : undefined;
+      
+      let results = buffer;
+      
+      // Filter by cycle if specified
+      if (cycleId !== undefined) {
+        results = buffer.filter(record => record.cycleStart.cycle === cycleId);
+      }
+      
+      // Apply limit (get most recent cycles)
+      if (limit < results.length) {
+        results = results.slice(-limit);
+      }
+      
+      res.json({
+        ok: true,
+        meta: {
+          bufferSize: buffer.length,
+          maxBufferSize: 20,
+          returnedCycles: results.length,
+          oldestCycle: buffer.length > 0 ? buffer[0].cycleStart.cycle : null,
+          newestCycle: buffer.length > 0 ? buffer[buffer.length - 1].cycleStart.cycle : null,
+        },
+        cycles: results,
+      });
+    } catch (error: any) {
+      console.error('[REB2.10] Error fetching passive-learning buffer:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to fetch passive-learning debug data', 
         message: error.message 
       });
     }
