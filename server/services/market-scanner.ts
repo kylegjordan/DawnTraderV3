@@ -1633,8 +1633,9 @@ export async function collectMixedBatch(
   
   // REB 2.11 A4: Cross-validation - check for FALSE NEGATIVES (pairs that passed but missing from survivors)
   // This catches cases where a pair passed all filters but wasn't added to survivors
+  // REB 2.11C: Also exclude pairs that are already in the pool (counted as already_active)
   for (const passed of passedPairs) {
-    if (!survivorSet.has(passed.pair) && !activeSymbols.has(passed.pair)) {
+    if (!survivorSet.has(passed.pair) && !poolSymbols.has(passed.pair) && !activeTradeSymbols.has(passed.pair)) {
       const mismatch: REB211MismatchEntry = {
         cycle: cycleNum,
         mode,
@@ -1649,8 +1650,9 @@ export async function collectMixedBatch(
   
   // Check 3: Verify expiry cleanup is functioning (check if pool would have expired entries)
   // Since we can't access active-filter-pool directly here, we check our own survivors consistency
+  // REB 2.11C: Use alreadyActiveReportedList.length for accurate count
   const expiredRemoved = pairSnapshots.filter(p => !p.filterResults.passed).length > 0 
-    ? passedSet.size === survivorSet.size + activeSymbols.size || passedSet.size <= survivorSet.size + 5
+    ? passedSet.size === survivorSet.size + alreadyActiveReportedList.length || passedSet.size <= survivorSet.size + 5
     : true;
   
   const integritySnapshot: REB211IntegritySnapshot = {
