@@ -5623,6 +5623,102 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== REB 2.14: Historical Data Integrity Validation ====================
+
+  // GET /api/reb-2-14/run - Run historical data integrity validation
+  apiRouter.get('/reb-2-14/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reb214HistoricalTest } = await import('./services/reb-2-14-historical-test');
+      
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+      
+      console.log(`[REB2.14] Running historical data integrity validation in ${mode} mode...`);
+      
+      const result = await reb214HistoricalTest.runValidation(mode);
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error('[REB2.14] Error running validation:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to run REB 2.14 historical validation', 
+        message: error.message 
+      });
+    }
+  });
+
+  // ==================== REB 2.15: FX5 Multi-Cycle Pipeline Certification ====================
+
+  // GET /api/reb-2-15/run - Run FX5 multi-cycle pipeline certification
+  apiRouter.get('/reb-2-15/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reb215Certification } = await import('./services/reb-2-15-certification');
+      
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+      const cycleCount = req.query.cycles ? parseInt(req.query.cycles as string) : 6;
+      
+      console.log(`[REB2.15] Running FX5 multi-cycle certification in ${mode} mode with ${cycleCount} cycles...`);
+      
+      const result = await reb215Certification.runCertification(mode, cycleCount);
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error('[REB2.15] Error running certification:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to run REB 2.15 pipeline certification', 
+        message: error.message 
+      });
+    }
+  });
+
+  // ==================== REB 2.14-15: Combined Certification ====================
+
+  // GET /api/reb-2-14-15/run-all - Run both REB 2.14 and REB 2.15 sequentially
+  apiRouter.get('/reb-2-14-15/run-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reb214HistoricalTest } = await import('./services/reb-2-14-historical-test');
+      const { reb215Certification } = await import('./services/reb-2-15-certification');
+      
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+      
+      console.log(`[REB2.14-15] Running combined certification in ${mode} mode...`);
+      console.log(`[REB2.14-15] Step 1/2: Historical Data Integrity Validation`);
+      
+      const reb214Result = await reb214HistoricalTest.runValidation(mode);
+      
+      console.log(`[REB2.14-15] Step 2/2: FX5 Multi-Cycle Pipeline Certification`);
+      
+      const reb215Result = await reb215Certification.runCertification(mode, 6);
+      
+      const summary = {
+        reb214_ok: reb214Result.ok,
+        reb215_ok: reb215Result.ok,
+        all_ok: reb214Result.ok && reb215Result.ok,
+        issuesFound: reb214Result.summary.failed + reb215Result.errors.length,
+        warningsFound: reb214Result.summary.warnings + reb215Result.warnings.length,
+      };
+      
+      console.log(`[REB2.14-15] Combined certification complete`);
+      console.log(`[REB2.14-15] REB 2.14: ${reb214Result.ok ? 'PASS' : 'FAIL'}`);
+      console.log(`[REB2.14-15] REB 2.15: ${reb215Result.ok ? 'PASS' : 'FAIL'}`);
+      console.log(`[REB2.14-15] Overall: ${summary.all_ok ? 'PASS' : 'FAIL'}`);
+      
+      res.json({
+        reb214: reb214Result,
+        reb215: reb215Result,
+        summary,
+      });
+    } catch (error: any) {
+      console.error('[REB2.14-15] Error running combined certification:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to run combined REB 2.14-15 certification', 
+        message: error.message 
+      });
+    }
+  });
+
   // ==================== Phase 8.7.2: Intent Execution Framework ====================
 
   // POST /api/intent/execute - Execute validated intent
