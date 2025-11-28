@@ -1894,8 +1894,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       // Phase 28: Read actual override flags from database instead of hardcoding
-      const managedByLottie = screenerData.managedByLottie ?? true;
-      const manualOverrideEnabled = screenerData.manualOverrideEnabled ?? false;
+      // REB 2.12C: Read per-filter overrides from filterOverrides JSON
+      const globalManagedByLottie = screenerData.managedByLottie ?? true;
+      const globalManualOverrideEnabled = screenerData.manualOverrideEnabled ?? false;
+      const filterOverrides = (screenerData.filterOverrides as Record<string, { manualOverrideEnabled?: boolean }>) ?? {};
+      
+      // REB 2.12C: Helper to get per-filter override mode (falls back to global if not set)
+      const getFilterOverride = (filterName: string) => {
+        const perFilterOverride = filterOverrides[filterName];
+        if (perFilterOverride && typeof perFilterOverride.manualOverrideEnabled === 'boolean') {
+          return {
+            managedByLottie: globalManagedByLottie,
+            manualOverrideEnabled: perFilterOverride.manualOverrideEnabled
+          };
+        }
+        return {
+          managedByLottie: globalManagedByLottie,
+          manualOverrideEnabled: globalManualOverrideEnabled
+        };
+      };
       
       // Convert to FiltersV2 format with control metadata as ARRAY
       const filtersV2 = {
@@ -1904,136 +1921,119 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           {
             name: "minVolume",
             value: parseFloat(screenerData.minVolume),
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("minVolume"),
             displayName: "Min Volume ($)",
             category: "Volume & Liquidity"
           },
           {
             name: "minLiquidity",
             value: parseFloat(screenerData.minLiquidity),
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("minLiquidity"),
             displayName: "Min Liquidity ($)",
             category: "Volume & Liquidity"
           },
           {
             name: "minPrice",
             value: parseFloat(screenerData.minPrice),
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("minPrice"),
             displayName: "Min Price ($)",
             category: "Price Range"
           },
           {
             name: "maxPrice",
             value: parseFloat(screenerData.maxPrice),
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("maxPrice"),
             displayName: "Max Price ($)",
             category: "Price Range"
           },
           {
             name: "maxBidAskSpread",
             value: parseFloat(screenerData.maxBidAskSpread),
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("maxBidAskSpread"),
             displayName: "Max Bid-Ask Spread (%)",
             category: "Risk & Volatility"
           },
           {
             name: "volatilityMin",
             value: parseFloat(screenerData.volatilityMin),
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("volatilityMin"),
             displayName: "Min Volatility (%)",
             category: "Risk & Volatility"
           },
           {
             name: "volatilityMax",
             value: parseFloat(screenerData.volatilityMax),
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("volatilityMax"),
             displayName: "Max Volatility (%)",
             category: "Risk & Volatility"
           },
           {
             name: "minMarketCap",
             value: parseFloat(screenerData.minMarketCap),
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("minMarketCap"),
             displayName: "Min Market Cap ($)",
             category: "Market Filters"
           },
           {
             name: "excludeStablecoins",
             value: screenerData.excludeStablecoins,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("excludeStablecoins"),
             displayName: "Exclude Stablecoins",
             category: "Market Filters"
           },
           {
             name: "allowRegulatedOnly",
             value: screenerData.allowRegulatedOnly,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("allowRegulatedOnly"),
             displayName: "Regulated Only",
             category: "Market Filters"
           },
           {
             name: "rsiMin",
             value: screenerData.rsiMin,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("rsiMin"),
             displayName: "Min RSI",
             category: "Technical Indicators"
           },
           {
             name: "rsiMax",
             value: screenerData.rsiMax,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("rsiMax"),
             displayName: "Max RSI",
             category: "Technical Indicators"
           },
           {
             name: "universeSize",
             value: screenerData.universeSize,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("universeSize"),
             displayName: "Market Universe Size",
             category: "Universe & Signal Controls"
           },
           {
             name: "quoteCurrencies",
             value: screenerData.quoteCurrencies,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("quoteCurrencies"),
             displayName: "Quote Currencies",
             category: "Universe & Signal Controls"
           },
           {
             name: "activeTimeframes",
             value: screenerData.activeTimeframes,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("activeTimeframes"),
             displayName: "Active Timeframes",
             category: "Universe & Signal Controls"
           },
           {
             name: "confidenceThreshold",
             value: screenerData.confidenceThreshold,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("confidenceThreshold"),
             displayName: "Confidence Threshold (%)",
             category: "Universe & Signal Controls"
           },
           {
             name: "minHistoryDays",
             value: screenerData.minHistoryDays ?? 30,
-            managedByLottie,
-            manualOverrideEnabled,
+            ...getFilterOverride("minHistoryDays"),
             displayName: "Minimum History (Days)",
             category: "Data Quality"
           }
@@ -2109,8 +2109,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         manualOverrideEnabled: currentManualOverrideEnabled,
         lastUpdatedBy: currentLastUpdatedBy,
         lockedByUser: currentLockedByUser,
+        filterOverrides: currentFilterOverrides,
         ...filterValues
       } = current;
+
+      // REB 2.12C: Per-filter override storage
+      const existingFilterOverrides = (currentFilterOverrides as Record<string, { manualOverrideEnabled?: boolean }>) ?? {};
 
       // REB 2.9B Stage 1: Apply filter value updates if provided
       const updatedFilterValues: Record<string, any> = { ...filterValues };
@@ -2139,12 +2143,29 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
       }
       
+      // REB 2.12C: Build per-filter overrides when a specific filter is being toggled
+      // IMPORTANT: Always preserve existing overrides, only modify the specific filter being changed
+      let updatedFilterOverrides = { ...existingFilterOverrides };
+      console.log(`[FiltersV2:${requestId}] REB 2.12C: Existing filterOverrides = ${JSON.stringify(existingFilterOverrides)}`);
+      
+      if (filterName && manualOverrideEnabled !== undefined) {
+        // Store per-filter override mode
+        updatedFilterOverrides[filterName] = { manualOverrideEnabled };
+        console.log(`[FiltersV2:${requestId}] REB 2.12C: Set per-filter override for ${filterName} = { manualOverrideEnabled: ${manualOverrideEnabled} }`);
+      }
+      
+      console.log(`[FiltersV2:${requestId}] REB 2.12C: Updated filterOverrides = ${JSON.stringify(updatedFilterOverrides)}`);
+      console.log(`[FiltersV2:${requestId}] REB 2.12C: Override count = ${Object.keys(updatedFilterOverrides).length}`);
+      
       // Update override flags and/or filter values while preserving all other filter values
+      // REB 2.12C: When filterName is specified, don't update global override flags
       const updatePayload = {
         mode: current.mode,
         ...updatedFilterValues,
-        managedByLottie: managedByLottie ?? currentManagedByLottie,
-        manualOverrideEnabled: manualOverrideEnabled ?? currentManualOverrideEnabled,
+        // Only update global flags if no specific filter is being toggled
+        managedByLottie: filterName ? currentManagedByLottie : (managedByLottie ?? currentManagedByLottie),
+        manualOverrideEnabled: filterName ? currentManualOverrideEnabled : (manualOverrideEnabled ?? currentManualOverrideEnabled),
+        filterOverrides: updatedFilterOverrides,
         lastUpdatedBy: userId
       };
       
@@ -2166,7 +2187,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }));
       }
       
-      if (manualOverrideEnabled !== undefined && currentManualOverrideEnabled !== manualOverrideEnabled) {
+      // REB 2.12C: Log per-filter override changes instead of global when filterName is provided
+      if (filterName && manualOverrideEnabled !== undefined) {
+        const oldOverride = existingFilterOverrides[filterName]?.manualOverrideEnabled;
+        if (oldOverride !== manualOverrideEnabled) {
+          auditPromises.push(storage.addAuditLog({
+            entityType: 'filters',
+            field: `${filterName}.manualOverrideEnabled`,
+            oldValue: String(oldOverride ?? 'undefined'),
+            newValue: String(manualOverrideEnabled),
+            changedBy: userId,
+            tradingMode: mode
+          }));
+        }
+      } else if (manualOverrideEnabled !== undefined && currentManualOverrideEnabled !== manualOverrideEnabled) {
+        // Global override change (only when no filterName specified)
         auditPromises.push(storage.addAuditLog({
           entityType: 'filters',
           field: 'manualOverrideEnabled',

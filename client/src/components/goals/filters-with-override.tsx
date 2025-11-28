@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Filter, Info, Sparkles, CircleDot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
@@ -107,14 +107,12 @@ export function FiltersWithOverride() {
   const { toast } = useToast();
   const { mode } = useTradingMode();
   
-  // Local override state - each filter independent
+  // REB 2.12C: Local override state derived from server per-filter data
+  // This state is synced with server on every fetch - no stale caching
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   
   // Local string state for number inputs (always formatted with commas)
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
-  
-  // Track if we've initialized from server data (to avoid re-init on refetch)
-  const initializedRef = useRef(false);
   
   // Phase 3b: WebSocket integration for real-time sync
   useOverrideState();
@@ -136,14 +134,19 @@ export function FiltersWithOverride() {
     },
   });
 
-  // Initialize local overrides and values from server data ONCE
+  // REB 2.12C: Always sync local state with server per-filter data on every fetch
+  // This ensures navigation away and back always reflects the correct per-filter override modes
   useEffect(() => {
-    if (filtersData?.data?.filters && !initializedRef.current) {
+    if (filtersData?.data?.filters) {
       const newOverrides: Record<string, boolean> = {};
       const newLocalValues: Record<string, string> = {};
       
       filtersData.data.filters.forEach((f) => {
+        // REB 2.12C: Use per-filter manualOverrideEnabled from server (not global)
+        // overrides[name] = true means LATTi mode (managedByLottie AND NOT manualOverrideEnabled)
+        // overrides[name] = false means Manual mode (manualOverrideEnabled = true)
         newOverrides[f.name] = f.managedByLottie && !f.manualOverrideEnabled;
+        
         // Stage 3: ALWAYS initialize with formatted value for numeric amount filters
         if (isNumericAmountFilter(f.name) && (typeof f.value === 'number' || typeof f.value === 'string')) {
           newLocalValues[f.name] = formatNumber(f.value);
@@ -154,14 +157,8 @@ export function FiltersWithOverride() {
       
       setOverrides(newOverrides);
       setLocalValues(newLocalValues);
-      initializedRef.current = true;
     }
   }, [filtersData]);
-  
-  // Reset initialization flag when mode changes
-  useEffect(() => {
-    initializedRef.current = false;
-  }, [mode]);
 
   // Override mutation
   const updateOverrideMutation = useMutation({
@@ -182,6 +179,10 @@ export function FiltersWithOverride() {
       }
       
       return data;
+    },
+    onSuccess: () => {
+      // REB 2.12C: Invalidate cache to ensure per-filter overrides sync on navigation
+      queryClient.invalidateQueries({ queryKey: ['/api/filters-v2', mode] });
     },
     onError: (error: any, variables) => {
       toast({
