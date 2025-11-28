@@ -475,22 +475,39 @@
 
 ### Summary
 - **Test Duration:** 10 minutes (5 snapshots at 2-minute intervals)
-- **Engine Status:** Remained ACTIVE throughout entire test
+- **Engine Status:** Remained ACTIVE throughout entire test (51+ scan cycles executed)
 - **Active Trades:** 0 (no trading signals triggered during test period)
+- **Scanner Universe:** ~1,552 pairs processed per cycle
 
-### REB 2.11A Active Pool Audit Results
-- All cycles captured successfully
-- No mismatches detected (missedPairs: 0, overcountedPairs: 0)
-- Active pool tracking functioning correctly
+### REB 2.11A Active Pool Audit Findings
+
+**Key Discovery:** The audit detected `missedPairs` in paper mode cycles:
+- Cycle 13: 1 missed pair (XAN/USD)
+- Cycle 23: 4 missed pairs (BRICK/USD, FWOG/USD, PENGU/USD, SHX/USD)
+- Cycle 33: 6 missed pairs (SHX/USD, KAS/USD, RIZE/USD, TANSSI/USD, FLR/USD, PLUME/USD)
+- Cycle 45: 5 missed pairs (FLR/USD, PLUME/USD, FARTCOIN/USD, XRP/USD, XAN/USD)
+
+**Analysis:**
+- `missedPairs` = survivors that were in activeBeforeCleanup but not reported as "already_active"
+- `overcountedPairs` = always 0 (no false positives)
+- `alreadyActiveReported` = consistently 0 (no pairs being marked as already_active)
+- `alreadyActiveShouldBe` = ranges from 0-5 (survivors that SHOULD be marked)
+
+**Interpretation:** 
+The audit is revealing that pairs ARE being added to the active filter pool (evidenced by activeBeforeCount growing from 15 to 170+ entries), but when those same pairs appear again as survivors, they are NOT being flagged as "already_active" in the scanner output. This indicates a potential issue in the alreadyActive detection logic.
+
+**Live Mode Comparison:**
+Live mode cycles consistently show 0 entries in activeBeforeCleanup/activeAfterCleanup, which is expected since no live trading session was running.
 
 ### Key Observations
 1. Paper trading engine maintained stable operation for full 10-minute duration
-2. Scanner cycles executed regularly, processing ~1550 pairs per cycle
-3. Filter pipeline operating correctly with survivors selected
-4. REB 2.11A diagnostics capturing accurate pre/post-cleanup snapshots
+2. Scanner cycles executed regularly (~30-second intervals)
+3. Active filter pool is accumulating entries correctly (15 → 170+ pairs)
+4. REB 2.11A diagnostics successfully detecting alreadyActive breakdown discrepancies
+5. No overcounted pairs (false positives) detected
 
-### Test Result: PASS
-The paper trading system operated correctly for the full test duration with all diagnostic systems functioning as expected.
+### Test Result: PASS (with findings)
+The paper trading system operated correctly for the full test duration. The REB 2.11A diagnostic audit successfully identified potential mismatches in the alreadyActive breakdown that warrant further investigation.
 
 ---
 
