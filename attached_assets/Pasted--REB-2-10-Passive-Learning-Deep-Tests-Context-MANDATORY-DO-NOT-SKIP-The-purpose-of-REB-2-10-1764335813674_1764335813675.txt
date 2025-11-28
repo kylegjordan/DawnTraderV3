@@ -1,0 +1,316 @@
+🚨 REB 2.10 — Passive Learning Deep Tests
+Context (MANDATORY — DO NOT SKIP)
+
+The purpose of REB 2.10 is to fully restore the Passive Learning Deep Test system that existed in Releases 8.6 and 8.7 before the regressions.
+
+Passive Learning is not the same as LATTi learning logic.
+It does not adjust filters, modify trading behavior, or perform inference.
+
+Its sole purpose is:
+
+“Verify that the FX5 engine is producing complete, consistent, deeply structured learning data that future LATTi models will consume.”
+
+This includes:
+
+Complete cycle diagnostics
+
+Per-pair filter evaluation snapshots
+
+Correct filter pass/fail reasons
+
+Correct market data capture
+
+Correct trading-age (history days) detection
+
+Correct state snapshots for each FX5 cycle
+
+No missing fields
+
+No malformed structures
+
+No regressions from the 8.6 / 8.7 implementation
+
+REB 2.10 is 100% diagnostic & read-only, with no changes to trading behavior and no changes to LATTi.
+
+👤 Test User Credentials (MANDATORY)
+
+Use these credentials for all UI tests and API tests:
+
+username: testuser123
+password: SecurePass123!
+
+
+Use this account when authentication is required.
+
+📌 Scope of REB 2.10
+✔ MUST Implement:
+
+Cycle Snapshot JSON output
+
+Per-pair Evaluation Snapshot JSON output
+
+Full Cycle Summary Snapshot JSON output
+
+Correct filter-config snapshot at cycle start
+
+Consistent ordering, formatting, and field names
+
+Logging improvements
+
+Restoration of all missing deep-diagnostic fields from 8.6 / 8.7
+
+A diagnostic-only storage buffer (in-memory only)
+
+No modification to actual filter behavior
+
+✔ MUST NOT Modify:
+
+LATTi learning engine
+
+Filter logic (now that REB 2.9D is complete)
+
+Trading engine behavior
+
+Database schema
+
+UI components (Screeners tab is already complete)
+
+Any output structure used by the live or paper trading behavior
+
+⚠ MUST preserve:
+
+Cycle timing
+
+FX5 engine performance
+
+Pool management logic
+
+📦 (A) Required Additions — Data Snapshots
+
+REQUIRE the FX5 engine to produce three passive-learning snapshot objects per cycle:
+
+1. CycleStart Snapshot
+
+Create a JSON object per cycle:
+
+{
+  cycle: number,
+  mode: "paper" | "live",
+  timestamp: ISO8601,
+  filters: {
+    minVolume: number,
+    minLiquidity: number,
+    minPrice: number,
+    maxPrice: number,
+    rsiMin: number,
+    rsiMax: number,
+    volatilityMin: number,
+    volatilityMax: number,
+    maxBidAskSpread: number,
+    universeSize: number,
+    activeTimeframes: string[],
+    minHistoryDays: number,
+    excludeStablecoins: boolean,
+    allowRegulatedOnly: boolean
+  }
+}
+
+
+This is logged as:
+
+[REB2.10][CycleStart] { ...snapshot }
+
+2. Per-Pair Evaluation Snapshot
+
+For every pair evaluated in FX5:
+
+{
+  cycle: number,
+  mode: string,
+  pair: string,
+  timestamp: ISO8601,
+  marketData: {
+    price: number,
+    spreadPct: number,
+    volume: number,
+    liquidity: number,
+    rsi: number | null,
+    volatility: number | null,
+    historyDays: number | null,
+    quoteCurrency: string
+  },
+  filterResults: {
+    failedVolume: boolean,
+    failedLiquidity: boolean,
+    failedPrice: boolean,
+    failedRange: boolean,
+    failedRSI: boolean,
+    failedVolatility: boolean,
+    failedSpread: boolean,
+    failedStablecoin: boolean,
+    failedHistory: boolean,
+    passed: boolean
+  }
+}
+
+
+Logged as:
+
+[REB2.10][PairSnapshot] { ...snapshot }
+
+3. CycleSummary Snapshot
+
+Create a final summary object:
+
+{
+  cycle: number,
+  mode: string,
+  timestamp: ISO8601,
+  totals: {
+    evaluated: number,
+    survived: number
+  },
+  breakdown: {
+    failedVolume: number,
+    failedLiquidity: number,
+    failedPrice: number,
+    failedRange: number,
+    failedRSI: number,
+    failedVolatility: number,
+    failedSpread: number,
+    failedStablecoin: number,
+    failedHistory: number,
+    passed: number
+  },
+  activePoolSize: number
+}
+
+
+Logged as:
+
+[REB2.10][CycleSummary] { ...snapshot }
+
+🧠 (B) Passive Learning Diagnostic Buffer
+
+Add a simple in-memory buffer (array) to market-scanner.ts:
+
+Stores last 20 cycles of:
+
+CycleStart Snapshot
+
+All PairSnapshots
+
+CycleSummary Snapshot
+
+Do NOT persist to database.
+On server restart, this is cleared.
+
+Add a new GET endpoint:
+
+GET /api/passive-learning/debug
+
+
+Returns:
+
+{
+  cycles: [
+    {
+      cycleStart: {...},
+      pairs: [...],
+      cycleSummary: {...}
+    },
+    ...
+  ]
+}
+
+
+This endpoint is read-only and for QA verification only.
+
+🔍 (C) Required Diagnostic Logging Enhancements
+
+Replace all REB2.9C / REB2.9D logs with:
+
+[REB2.10][CycleStart]
+
+[REB2.10][PairSnapshot]
+
+[REB2.10][FilterCheck]
+
+[REB2.10][HistoryCheck]
+
+[REB2.10][CycleSummary]
+
+[REB2.10][LearningBuffer]
+
+Ensure logging is:
+
+clean
+
+JSON formatted
+
+easy to read
+
+consistent across cycles
+
+🧪 (D) Verification Requirements (MANDATORY)
+
+After implementation, Replit must:
+
+✔ 1. Run paper-sim for at least 3 full FX5 cycles
+
+Using:
+
+username: testuser123
+password: SecurePass123!
+
+✔ 2. Provide:
+
+3 CycleStart snapshots
+
+3 CycleSummary snapshots
+
+3 × ~60 PairSnapshots
+
+Output of /api/passive-learning/debug
+
+✔ 3. Confirm:
+
+No null fields except where defined
+
+History filter pass/fail logic correct
+
+Spread, RSI, volatility values correct
+
+Filters reflect UI/API truth
+
+Universe size respected
+
+Timeframes reflected correctly
+
+Snapshot ordering correct
+
+✔ 4. Performance:
+
+Execution time per cycle must NOT increase by more than 2–3 ms
+
+No slowdown in UI or scans
+
+🛑 (E) Non-Negotiable Rules
+
+The agent must NOT:
+
+modify LATTi
+
+modify live trading output behavior
+
+modify database schema
+
+change business logic of filters
+
+introduce new dependencies
+
+write logs to disk beyond existing workflow logs
+
+persist learning buffers
+
+🚀 Directive END

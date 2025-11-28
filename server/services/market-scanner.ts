@@ -5,14 +5,124 @@ import { WatchlistPair } from '@shared/schema';
 import { strategyAlerts } from './strategy-alerts';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
 
-// REB 2.9D Section 4: Global cycle counter for diagnostic logging (auto-disables after 20)
-if (!(globalThis as any).__reb29d_cycle) (globalThis as any).__reb29d_cycle = 0;
+// ============================================================================
+// REB 2.10: Passive Learning Deep Tests - Types & Buffer
+// ============================================================================
 
-// REB 2.9D: History check counter for rate-limited logging
-let reb29dHistoryCheckCount = 0;
-const REB_2_9D_HISTORY_LOG_LIMIT = 50;
+// REB 2.10: Global cycle counter for diagnostic logging
+if (!(globalThis as any).__reb210_cycle) (globalThis as any).__reb210_cycle = 0;
 
-// REB 2.9D: History filter context type
+// REB 2.10: History check counter for rate-limited logging
+let reb210HistoryCheckCount = 0;
+const REB_2_10_HISTORY_LOG_LIMIT = 50;
+
+// REB 2.10: Per-pair snapshot counter (limit to prevent log spam)
+let reb210PairSnapshotCount = 0;
+const REB_2_10_PAIR_LOG_LIMIT = 100; // Log first 100 pair snapshots per server lifetime
+
+// REB 2.10: CycleStart Snapshot Type
+export interface REB210CycleStartSnapshot {
+  cycle: number;
+  mode: 'paper' | 'live';
+  timestamp: string;
+  filters: {
+    minVolume: number;
+    minLiquidity: number;
+    minPrice: number;
+    maxPrice: number;
+    rsiMin: number;
+    rsiMax: number;
+    volatilityMin: number;
+    volatilityMax: number;
+    maxBidAskSpread: number;
+    universeSize: number;
+    activeTimeframes: string[];
+    minHistoryDays: number;
+    excludeStablecoins: boolean;
+    allowRegulatedOnly: boolean;
+  };
+}
+
+// REB 2.10: Per-Pair Evaluation Snapshot Type
+export interface REB210PairSnapshot {
+  cycle: number;
+  mode: string;
+  pair: string;
+  timestamp: string;
+  marketData: {
+    price: number;
+    spreadPct: number;
+    volume: number;
+    liquidity: number;
+    rsi: number | null;
+    volatility: number | null;
+    historyDays: number | null;
+    quoteCurrency: string;
+  };
+  filterResults: {
+    failedVolume: boolean;
+    failedLiquidity: boolean;
+    failedPrice: boolean;
+    failedRange: boolean;
+    failedRSI: boolean;
+    failedVolatility: boolean;
+    failedSpread: boolean;
+    failedStablecoin: boolean;
+    failedHistory: boolean;
+    passed: boolean;
+  };
+}
+
+// REB 2.10: CycleSummary Snapshot Type
+export interface REB210CycleSummarySnapshot {
+  cycle: number;
+  mode: string;
+  timestamp: string;
+  totals: {
+    evaluated: number;
+    survived: number;
+  };
+  breakdown: {
+    failedVolume: number;
+    failedLiquidity: number;
+    failedPrice: number;
+    failedRange: number;
+    failedRSI: number;
+    failedVolatility: number;
+    failedSpread: number;
+    failedStablecoin: number;
+    failedHistory: number;
+    passed: number;
+  };
+  activePoolSize: number;
+}
+
+// REB 2.10: Complete Cycle Record for Buffer
+export interface REB210CycleRecord {
+  cycleStart: REB210CycleStartSnapshot;
+  pairs: REB210PairSnapshot[];
+  cycleSummary: REB210CycleSummarySnapshot;
+}
+
+// REB 2.10: In-memory Passive Learning Diagnostic Buffer (last 20 cycles)
+const REB_2_10_BUFFER_SIZE = 20;
+const passiveLearningBuffer: REB210CycleRecord[] = [];
+
+// REB 2.10: Expose buffer getter for API endpoint
+export function getPassiveLearningBuffer(): REB210CycleRecord[] {
+  return [...passiveLearningBuffer];
+}
+
+// REB 2.10: Add a cycle record to buffer (maintains FIFO of last 20)
+function addCycleToBuffer(record: REB210CycleRecord): void {
+  passiveLearningBuffer.push(record);
+  if (passiveLearningBuffer.length > REB_2_10_BUFFER_SIZE) {
+    passiveLearningBuffer.shift();
+  }
+  console.log(`[REB2.10][LearningBuffer] Cycle ${record.cycleStart.cycle} stored (buffer size: ${passiveLearningBuffer.length}/${REB_2_10_BUFFER_SIZE})`);
+}
+
+// REB 2.10: History filter context type
 type HistoryFilterContext = {
   minHistoryDays?: number | null;
   mode: 'paper' | 'live' | 'backtest';
@@ -20,7 +130,7 @@ type HistoryFilterContext = {
 };
 
 /**
- * REB 2.9D: Check if a pair passes the minimum history filter
+ * REB 2.10: Check if a pair passes the minimum history filter
  * Uses Kraken daily OHLC candles to determine trading age
  */
 async function passesHistoryFilter(
@@ -30,19 +140,18 @@ async function passesHistoryFilter(
   const { minHistoryDays, mode, krakenService } = ctx;
 
   if (!minHistoryDays || minHistoryDays <= 0) {
-    // No minimum configured → pass
     return { passed: true, days: null };
   }
 
   const days = await krakenService.getPairHistoryDays(pair, mode);
 
-  // If we cannot determine history, be conservative & fail (matches original safety behavior)
+  // REB 2.10: If we cannot determine history (null), be conservative & fail
   const passed = typeof days === 'number' && days >= minHistoryDays;
 
-  // REB 2.9D diagnostics (limited for performance)
-  if (reb29dHistoryCheckCount < REB_2_9D_HISTORY_LOG_LIMIT) {
-    reb29dHistoryCheckCount++;
-    console.log('[REB2.9D][HistoryCheck]', {
+  // REB 2.10: History check diagnostics (rate-limited)
+  if (reb210HistoryCheckCount < REB_2_10_HISTORY_LOG_LIMIT) {
+    reb210HistoryCheckCount++;
+    console.log('[REB2.10][HistoryCheck]', {
       pair,
       mode,
       days,
@@ -757,29 +866,42 @@ export async function collectMixedBatch(
 ): Promise<BatchResult> {
   const startTime = Date.now();
   
-  // REB 2.9D Section 4: Increment global cycle counter
-  (globalThis as any).__reb29d_cycle++;
-  const cycleNum = (globalThis as any).__reb29d_cycle;
+  // REB 2.10: Increment global cycle counter
+  (globalThis as any).__reb210_cycle++;
+  const cycleNum = (globalThis as any).__reb210_cycle;
+  const cycleTimestamp = new Date().toISOString();
   
-  // REB 2.9D CycleStart: Log filter configuration at cycle start (first 20 cycles only)
-  if (cycleNum <= 20) {
-    console.log(`[REB2.9D][FX5][CycleStart] Cycle ${cycleNum}/${mode}:`, {
-      minVolume: filters.minVolume ?? '1000000.00',
-      minLiquidity: filters.minLiquidity ?? '500000.00',
-      minPrice: filters.minPrice ?? '0.01000000',
-      maxPrice: filters.maxPrice ?? '100000.00',
-      rsiMin: filters.rsiMin ?? 30,
-      rsiMax: filters.rsiMax ?? 70,
-      volatilityMin: filters.volatilityMin ?? '0.50',
-      volatilityMax: filters.volatilityMax ?? '5.00',
-      maxBidAskSpread: filters.maxBidAskSpread ?? '1.00',
-      universeSize: filters.universeSize ?? 100,
-      activeTimeframes: filters.activeTimeframes ?? ['5m', '15m', '1h'],
-      minHistoryDays: filters.minHistoryDays ?? 30,
-      excludeStablecoins: filters.excludeStablecoins ?? true,
-      allowRegulatedOnly: filters.allowRegulatedOnly ?? false,
-    });
-  }
+  // REB 2.10: Parse filter values for snapshot
+  const parsedFilters = {
+    minVolume: parseFloat(filters.minVolume ?? '1000000.00'),
+    minLiquidity: parseFloat(filters.minLiquidity ?? '500000.00'),
+    minPrice: parseFloat(filters.minPrice ?? '0.01000000'),
+    maxPrice: parseFloat(filters.maxPrice ?? '100000.00'),
+    rsiMin: filters.rsiMin ?? 30,
+    rsiMax: filters.rsiMax ?? 70,
+    volatilityMin: parseFloat(filters.volatilityMin ?? '0.50'),
+    volatilityMax: parseFloat(filters.volatilityMax ?? '5.00'),
+    maxBidAskSpread: parseFloat(filters.maxBidAskSpread ?? '1.00'),
+    universeSize: filters.universeSize ?? 100,
+    activeTimeframes: filters.activeTimeframes ?? ['5m', '15m', '1h'],
+    minHistoryDays: filters.minHistoryDays ?? 30,
+    excludeStablecoins: filters.excludeStablecoins ?? true,
+    allowRegulatedOnly: filters.allowRegulatedOnly ?? false,
+  };
+  
+  // REB 2.10: Create CycleStart Snapshot
+  const cycleStartSnapshot: REB210CycleStartSnapshot = {
+    cycle: cycleNum,
+    mode,
+    timestamp: cycleTimestamp,
+    filters: parsedFilters,
+  };
+  
+  // REB 2.10: Log CycleStart (all cycles - buffer handles storage)
+  console.log('[REB2.10][CycleStart]', JSON.stringify(cycleStartSnapshot));
+  
+  // REB 2.10: Array to collect per-pair snapshots for this cycle
+  const pairSnapshots: REB210PairSnapshot[] = [];
   
   // STEP 1: Fetch ALL Kraken tickers for volume ranking
   console.log('[8.6.7][DEBUG] STEP 1: Fetching ALL Kraken tickers for volume ranking...');
@@ -861,15 +983,14 @@ export async function collectMixedBatch(
     passed_all_filters: 0,
   };
   
-  // Extract filter criteria
-  const minVolume = parseFloat(filters.minVolume ?? '1000000.00');
-  const minDailyRange = parseFloat(filters.volatilityMin ?? '0.50');
-  const minPrice = parseFloat(filters.minPrice ?? '0.01');
-  const maxBidAskSpread = parseFloat(filters.maxBidAskSpread ?? '1.00');
-  const excludeStablecoins = filters.excludeStablecoins ?? true;
+  // REB 2.10: Extract filter criteria from parsedFilters
+  const minVolume = parsedFilters.minVolume;
+  const minDailyRange = parsedFilters.volatilityMin;
+  const minPrice = parsedFilters.minPrice;
+  const maxBidAskSpread = parsedFilters.maxBidAskSpread;
+  const excludeStablecoins = parsedFilters.excludeStablecoins;
   const stablecoinPatterns = ['USDT', 'USDC', 'DAI', 'BUSD', 'UST'];
-  // REB 2.9B: Extract minHistoryDays from filters (dynamic value from LATTI)
-  const minHistoryDays = filters.minHistoryDays ?? 30;
+  const minHistoryDays = parsedFilters.minHistoryDays;
   
   // Parse allowed quote currencies
   let allowedQuotes: string[] = [];
@@ -881,7 +1002,7 @@ export async function collectMixedBatch(
     allowedQuotes = [];
   }
   
-  // REB 2.9D: History filter context for passesHistoryFilter helper
+  // REB 2.10: History filter context for passesHistoryFilter helper
   const historyFilterCtx: HistoryFilterContext = {
     minHistoryDays: minHistoryDays,
     mode,
@@ -892,7 +1013,7 @@ export async function collectMixedBatch(
   let topNSurvivors = 0;
   let tierBSurvivors = 0;
   
-  // Evaluate each pair in the batch
+  // REB 2.10: Evaluate each pair in the batch with full snapshot capture
   for (let i = 0; i < batch.length; i++) {
     const pair = batch[i];
     const fromTopN = i < TOP_N_BATCH_SIZE;
@@ -911,71 +1032,99 @@ export async function collectMixedBatch(
     const bidPrice = parseFloat(ticker.b[0]);
     const bidAskSpread = ((askPrice - bidPrice) / bidPrice) * 100;
     
+    // REB 2.10: Track individual filter results for this pair
+    const filterResults = {
+      failedVolume: false,
+      failedLiquidity: false,
+      failedPrice: false,
+      failedRange: false,
+      failedRSI: false,
+      failedVolatility: false,
+      failedSpread: false,
+      failedStablecoin: false,
+      failedHistory: false,
+      passed: true,
+    };
+    
     let rejected = false;
-    
-    // REB 2.9B Stage 2: Quote currency filter BYPASSED (UI-only per 1120 truth)
-    // Quote currencies are stored in config and surfaced in UI but NOT used for pair filtering
-    // because Kraken's quirky codes (e.g. ZUSD, XBT) make it too brittle to maintain
-    // if (!rejected && allowedQuotes.length > 0 && !allowedQuotes.includes(normalizedQuote || '')) {
-    //   breakdown.failed_quote_currency++;
-    //   rejected = true;
-    // }
-    
-    // REB 2.9D Section 4: Log filter checks (first 20 cycles only, sample 5 pairs per cycle)
-    const reb29d_shouldLog = cycleNum <= 20 && i < 5;
+    let historyDays: number | null = null;
     
     // Filter 2: Stablecoins
     if (!rejected && excludeStablecoins && stablecoinPatterns.some(p => baseCurrency?.includes(p))) {
-      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=stablecoin pair=${pair.symbol} value=${baseCurrency} result=FAIL`);
+      filterResults.failedStablecoin = true;
+      filterResults.passed = false;
       breakdown.failed_stablecoin++;
       rejected = true;
     }
     
     // Filter 3: Min volume
     if (!rejected && volume24h < minVolume) {
-      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=minVolume pair=${pair.symbol} value=${volume24h.toFixed(0)} threshold=${minVolume} result=FAIL`);
+      filterResults.failedVolume = true;
+      filterResults.passed = false;
       breakdown.failed_min_volume++;
       rejected = true;
     }
     
     // Filter 4: Daily range (volatility)
     if (!rejected && dailyRange < minDailyRange) {
-      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=dailyRange pair=${pair.symbol} value=${dailyRange.toFixed(2)}% threshold=${minDailyRange}% result=FAIL`);
+      filterResults.failedRange = true;
+      filterResults.passed = false;
       breakdown.failed_daily_range++;
       rejected = true;
     }
     
     // Filter 5: Min price
     if (!rejected && currentPrice < minPrice) {
-      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=minPrice pair=${pair.symbol} value=$${currentPrice.toFixed(4)} threshold=$${minPrice} result=FAIL`);
+      filterResults.failedPrice = true;
+      filterResults.passed = false;
       breakdown.failed_min_price++;
       rejected = true;
     }
     
     // Filter 6: Bid-ask spread
     if (!rejected && bidAskSpread > maxBidAskSpread) {
-      if (reb29d_shouldLog) console.log(`[REB2.9D][MarketScanner][Check] filter=bidAskSpread pair=${pair.symbol} value=${bidAskSpread.toFixed(2)}% threshold=${maxBidAskSpread}% result=FAIL`);
+      filterResults.failedSpread = true;
+      filterResults.passed = false;
       breakdown.failed_spread++;
       rejected = true;
     }
     
-    // REB 2.9D: Log pairs that passed all synchronous filters
-    if (!rejected && reb29d_shouldLog) {
-      console.log(`[REB2.9D][MarketScanner][Check] pair=${pair.symbol} result=PASSED_SYNC_FILTERS`);
-    }
-    
-    // REB 2.9D Filter 7: Minimum History (async) - Only check if other filters passed
+    // REB 2.10 Filter 7: Minimum History (async) - Only check if other filters passed
     if (!rejected && minHistoryDays > 0) {
       const historyResult = await passesHistoryFilter(pair.symbol, historyFilterCtx);
+      historyDays = historyResult.days ?? null;
       if (!historyResult.passed) {
+        filterResults.failedHistory = true;
+        filterResults.passed = false;
         breakdown.failed_history++;
         rejected = true;
       }
     }
     
-    // REB 2.9D: Log pairs that passed ALL filters including history
-    if (!rejected && reb29d_shouldLog) {
-      console.log(`[REB2.9D][MarketScanner][Check] pair=${pair.symbol} result=PASSED_ALL_FILTERS`);
+    // REB 2.10: Create Per-Pair Snapshot (all pairs, for buffer storage)
+    const pairSnapshot: REB210PairSnapshot = {
+      cycle: cycleNum,
+      mode,
+      pair: pair.symbol,
+      timestamp: new Date().toISOString(),
+      marketData: {
+        price: currentPrice,
+        spreadPct: bidAskSpread,
+        volume: volume24h,
+        liquidity: volume24h * currentPrice,
+        rsi: null,
+        volatility: dailyRange,
+        historyDays,
+        quoteCurrency: normalizedQuote || '',
+      },
+      filterResults,
+    };
+    pairSnapshots.push(pairSnapshot);
+    
+    // REB 2.10: Log first N pair snapshots (rate-limited for performance)
+    if (reb210PairSnapshotCount < REB_2_10_PAIR_LOG_LIMIT) {
+      reb210PairSnapshotCount++;
+      console.log('[REB2.10][PairSnapshot]', JSON.stringify(pairSnapshot));
     }
     
     // Pair passed all filters
@@ -1008,24 +1157,40 @@ export async function collectMixedBatch(
   const survivorCount = survivors.length;
   console.log(`[8.6.7][DEBUG] Survivors AFTER FX5 filters: ${survivorCount}/${batch.length}`);
   
-  // REB 2.9D Section 6: End-of-cycle summary (first 20 cycles only)
-  if (cycleNum <= 20) {
-    console.log(`[REB2.9D][FX5][CycleSummary] Cycle ${cycleNum}/${mode}:`, {
-      totalEvaluated: batch.length,
-      totalSurvived: survivorCount,
-      activePoolSize: survivors.length,
-      breakdown: {
-        passed: breakdown.passed_all_filters,
-        alreadyActive: breakdown.already_active,
-        failedVolume: breakdown.failed_min_volume,
-        failedSpread: breakdown.failed_spread,
-        failedRange: breakdown.failed_daily_range,
-        failedPrice: breakdown.failed_min_price,
-        failedStablecoin: breakdown.failed_stablecoin,
-        failedHistory: breakdown.failed_history
-      }
-    });
-  }
+  // REB 2.10: Create CycleSummary Snapshot
+  const cycleSummarySnapshot: REB210CycleSummarySnapshot = {
+    cycle: cycleNum,
+    mode,
+    timestamp: new Date().toISOString(),
+    totals: {
+      evaluated: batch.length,
+      survived: survivorCount,
+    },
+    breakdown: {
+      failedVolume: breakdown.failed_min_volume,
+      failedLiquidity: 0,
+      failedPrice: breakdown.failed_min_price,
+      failedRange: breakdown.failed_daily_range,
+      failedRSI: 0,
+      failedVolatility: 0,
+      failedSpread: breakdown.failed_spread,
+      failedStablecoin: breakdown.failed_stablecoin,
+      failedHistory: breakdown.failed_history,
+      passed: breakdown.passed_all_filters + breakdown.already_active,
+    },
+    activePoolSize: survivors.length,
+  };
+  
+  // REB 2.10: Log CycleSummary (all cycles)
+  console.log('[REB2.10][CycleSummary]', JSON.stringify(cycleSummarySnapshot));
+  
+  // REB 2.10: Store complete cycle record in buffer
+  const cycleRecord: REB210CycleRecord = {
+    cycleStart: cycleStartSnapshot,
+    pairs: pairSnapshots,
+    cycleSummary: cycleSummarySnapshot,
+  };
+  addCycleToBuffer(cycleRecord);
   
   const duration = Date.now() - startTime;
   console.log(`[Scan:${mode}] Mixed batch collected: ${survivorCount} eligible (${topNBatch.length} Top-N + ${tierBBatch.length} Tier-B) — ${duration}ms`);
