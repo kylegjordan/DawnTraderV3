@@ -1,0 +1,201 @@
+✅ REB 2.12B — Phase 8.8.1 & 8.8.2 Audit Directive
+
+Context for Replit:
+
+This is a diagnostic-only audit.
+
+No code changes should be made during this audit.
+
+Produce a comprehensive report outlining what exists, what is missing, and what was overwritten during the REB rebuild.
+
+This audit focuses only on the artifacts from Phase 8.8.1 and 8.8.2, prior to the rollback.
+
+🟦 REB 2.12B — Full Audit Directive (Paste This into Replit)
+REB 2.12B — DIAGNOSTIC-ONLY AUDIT OF 8.8.1 AND 8.8.2
+
+User credentials for all endpoint tests:
+
+username: testuser123  
+password: SecurePass123!
+
+📌 PART A — Locate All Code & Features from Phase 8.8.1 and 8.8.2
+Objective:
+
+Identify every feature, change, or structural modification that was originally implemented during 8.8.1 and 8.8.2 before the GitHub corruption and rollback.
+
+Instructions:
+
+Search the entire project for signatures, components, and logic tied to:
+
+8.8.1 — Trading Engine Wiring & Readiness
+
+Strategy engine → FX5 scanner wiring
+
+Signal generation plumbing
+
+Trade executor stubs
+
+Lifecycle events:
+
+signalGenerated
+
+signalValidated
+
+readyToTrade
+
+paperTradeExecuted
+
+Any placeholder or mock wiring created as temporary connections
+
+Logging statements beginning with:
+
+[8.8.1]
+[88x1]
+[StrategyWiring]
+
+
+Test harness code used to validate readiness
+
+Output Required:
+List all files and line numbers where 8.8.1 logic exists.
+Mark each as:
+
+SURVIVES (still present and intact)
+OVERWRITTEN (missing or replaced)
+PARTIALLY BROKEN (present but nonfunctional)
+
+8.8.2 — FX5 → Strategy Engine → Trade Simulator Integration
+
+Identify code related to the intended 8.8.2 wiring:
+
+FX5 survivors forwarded to strategy engine
+
+Strategy calculations for:
+
+trend score
+
+liquidity factor
+
+volatility weighting
+
+multi-timeframe confirmation
+
+Signal validation logic
+
+Entry/exit rule placeholders
+
+Strategy guardrails integration
+
+Any temporary toggles labeled:
+
+// 8.8.2 TEMP
+// TODO 8.8.2
+// pre-trade validation
+
+
+Output Required:
+Provide the same 3-tier classification:
+
+SURVIVES  
+OVERWRITTEN  
+PARTIALLY BROKEN
+
+📌 PART B — Audit and Identify the Obsolete “24-Hour Aggregator”
+Objective:
+
+Find the incorrect legacy 24-hour aggregator that existed before REB rebuild (the one that confused FX5 integration).
+
+Instructions:
+
+Search for:
+
+aggregate24h
+fx5-24h-window.ts
+24hAggregator
+DailyWindow
+scan24hAggregator.ts
+get24hHistory
+twentyFourHour
+
+
+Also search within comments for:
+
+(24h)
+24 h
+24-hour
+use24h
+
+
+For each matching code block:
+
+Determine whether it was used:
+
+As a mistaken data source for FX5
+
+As a mistaken source for Filter Insights
+
+As a latency-aggregated proxy for Kraken data
+
+Determine if it is still referenced from:
+
+market-scanner.ts
+
+fx5-scanner.ts
+
+filter-insights.tsx
+
+routes.ts
+
+any state caches
+
+Identify whether any of the following behaviors are still present:
+
+Counts being pulled from a 24h aggregator instead of real-time scanner
+
+Price/volume/RSI values being overridden by a 24h snapshot
+
+Mixed or stale state feeding signals or filter breakdowns
+
+Output Required:
+A report listing:
+
+FILE, LINE RANGE
+USE LOCATION
+STATUS: ACTIVE / DEAD CODE / INTERFERING
+IMPACT: HARMLESS / BREAKING SCANNERS / BREAKING INSIGHTS
+RECOMMENDATION: KEEP / REMOVE
+
+📌 PART C — Output a Single Consolidated Audit Report
+Format:
+
+Place the final report in the project at:
+
+docs/audits/phase-8.8.1-8.8.2-audit.json
+
+The report MUST contain:
+
+All findings from Part A
+
+All findings from Part B
+
+A summary of “what needs to be rebuilt to resume 8.8.3”
+
+A ranked list:
+
+BLOCKERS (must be repaired before 8.8.3)
+
+WARNINGS (needs repair later)
+
+SAFE (no action needed)
+
+📌 PART D — DO NOT FIX ANYTHING YET
+
+This audit must be non-destructive.
+
+No code changes.
+No removals.
+No refactoring.
+
+Just audit + report.
+
+⭐ END OF DIRECTIVE (REB 2.12B)

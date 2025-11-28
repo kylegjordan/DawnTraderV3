@@ -1,0 +1,416 @@
+{
+  "auditMetadata": {
+    "auditId": "REB-2.12B",
+    "auditDate": "2025-11-28",
+    "auditType": "DIAGNOSTIC-ONLY",
+    "auditScope": "Phase 8.8.1 and 8.8.2 Artifacts",
+    "testCredentials": {
+      "username": "testuser123",
+      "password": "SecurePass123!"
+    }
+  },
+  
+  "partA_phase881": {
+    "objective": "Identify code and features from Phase 8.8.1 (Trading Engine Wiring & Readiness)",
+    "findings": [
+      {
+        "artifact": "[8.8.1][AUDIT] Logging Statements",
+        "files": [
+          {
+            "path": "server/services/paper-sim-diagnostic.ts",
+            "lines": "350-352",
+            "content": "Eligible sample, Breakdown keys, Breakdown counts logging"
+          },
+          {
+            "path": "server/services/filtered-pairs-service.ts",
+            "lines": "124-126",
+            "content": "Eligible sample, Total eligible, Field check logging"
+          }
+        ],
+        "status": "SURVIVES",
+        "recommendation": "SAFE - Diagnostic logging preserved"
+      },
+      {
+        "artifact": "Phase 8.8.1 Audit Reports",
+        "files": [
+          {"path": "reports/phase-8.8/8.8.1-scanner-audit.md", "purpose": "Scanner output structure audit"},
+          {"path": "reports/phase-8.8/8.8.1A-stage3-locations.md", "purpose": "Stage-3 component locations"},
+          {"path": "reports/phase-8.8/8.8.1A-truth-constraint.md", "purpose": "Truth constraint behavior"},
+          {"path": "reports/phase-8.8/8.8.1A-ws-events.md", "purpose": "WebSocket events documentation"}
+        ],
+        "status": "SURVIVES",
+        "recommendation": "SAFE - Documentation preserved"
+      },
+      {
+        "artifact": "Strategy Engine → FX5 Scanner Wiring",
+        "files": [
+          {"path": "server/services/signal-orchestrator.ts", "lines": "1-462", "purpose": "Orchestrates strategy evaluation on filtered symbols"}
+        ],
+        "status": "SURVIVES",
+        "notes": "SignalOrchestrator loads filtered symbols and evaluates strategies. Trading engine starts SignalOrchestrator on engine.start()"
+      },
+      {
+        "artifact": "Signal Generation Plumbing",
+        "files": [
+          {"path": "server/services/strategy-engine.ts", "lines": "1-1082", "purpose": "8 active strategies generating StrategySignal objects"}
+        ],
+        "status": "SURVIVES",
+        "notes": "StrategySignal interface defined with symbol, strategy, entryPrice, stopPrice, targetPrice, confidence, metadata"
+      },
+      {
+        "artifact": "Trade Executor Stubs",
+        "status": "NOT_IMPLEMENTED",
+        "notes": "No TradeExecutor class or stub exists. Trading is handled via TradingEngine.processSignal() which forwards to paper/live execution services directly"
+      },
+      {
+        "artifact": "Lifecycle Event: signalGenerated",
+        "files": [
+          {"path": "server/services/stage-c-validator.ts", "lines": "15, 92-136, 204+", "purpose": "signalGenerated boolean in validation results"}
+        ],
+        "status": "SURVIVES",
+        "notes": "Used in test harness for strategy validation, not in production signal flow"
+      },
+      {
+        "artifact": "Lifecycle Event: signalValidated",
+        "status": "NOT_IMPLEMENTED",
+        "notes": "No explicit signalValidated event emitter exists in codebase"
+      },
+      {
+        "artifact": "Lifecycle Event: readyToTrade",
+        "status": "NOT_IMPLEMENTED",
+        "notes": "No explicit readyToTrade event emitter exists in codebase"
+      },
+      {
+        "artifact": "Lifecycle Event: paperTradeExecuted",
+        "status": "NOT_IMPLEMENTED",
+        "notes": "Paper trades are executed but no explicit paperTradeExecuted event is emitted"
+      },
+      {
+        "artifact": "Test Harness Code",
+        "files": [
+          {"path": "test-stagec-validation.ts", "purpose": "Stage-C validator test harness"},
+          {"path": "server/services/stage-c-validator.ts", "purpose": "Full stage-C validation with 8 strategies"}
+        ],
+        "status": "SURVIVES",
+        "recommendation": "SAFE"
+      }
+    ]
+  },
+
+  "partA_phase882": {
+    "objective": "Identify code and features from Phase 8.8.2 (FX5 → Strategy Engine → Trade Simulator Integration)",
+    "findings": [
+      {
+        "artifact": "FX5 Scanner Service",
+        "files": [
+          {"path": "server/services/fx5-scanner.ts", "lines": "1-342", "purpose": "30-second autonomous scanner for paper/live modes"}
+        ],
+        "status": "SURVIVES",
+        "notes": "Fully operational. Scans run independently of trading engine state. Updates Stage-3 cache and emits WebSocket events."
+      },
+      {
+        "artifact": "Stage-3 State Cache",
+        "files": [
+          {"path": "server/services/stage3-state-cache.ts", "lines": "1-120+", "purpose": "Single source of truth for scan cycle state"}
+        ],
+        "status": "SURVIVES",
+        "notes": "ActiveFilteredPair tracking for detailed pool management"
+      },
+      {
+        "artifact": "Stage-3 Event Emitter",
+        "files": [
+          {"path": "server/services/stage3-emitter.ts", "lines": "1-300+", "purpose": "WebSocket event broadcasting for scan_tick and breakdown events"}
+        ],
+        "status": "SURVIVES",
+        "notes": "Phase 8.8.2-MAP-FINAL: Complete ScanTickPayload emission"
+      },
+      {
+        "artifact": "FX5 Survivors → Strategy Engine Forwarding",
+        "files": [
+          {"path": "server/services/signal-orchestrator.ts", "lines": "67-86", "purpose": "Loads filtered symbols and evaluates strategies"}
+        ],
+        "status": "PARTIALLY_IMPLEMENTED",
+        "notes": "SignalOrchestrator evaluates filtered symbols but lacks explicit 'FX5 survivors forwarding' event/method"
+      },
+      {
+        "artifact": "Strategy Calculations: Trend Score",
+        "files": [
+          {"path": "server/services/strategy-engine.ts", "lines": "816", "purpose": "calculateTrendStrength() method"}
+        ],
+        "status": "SURVIVES",
+        "notes": "Calculates percentage of rising bars. Used by SMA trend ride strategy."
+      },
+      {
+        "artifact": "Strategy Calculations: Liquidity Factor",
+        "status": "NOT_IMPLEMENTED",
+        "notes": "No liquidityFactor calculation exists in strategy-engine.ts. Volume is used as proxy."
+      },
+      {
+        "artifact": "Strategy Calculations: Volatility Weighting",
+        "status": "NOT_IMPLEMENTED",
+        "notes": "No explicit volatility weighting in strategy calculations. Daily range is available but not weighted."
+      },
+      {
+        "artifact": "Multi-Timeframe Confirmation",
+        "status": "NOT_IMPLEMENTED",
+        "notes": "No multi-timeframe analysis implemented. All strategies use single timeframe data."
+      },
+      {
+        "artifact": "Signal Validation Logic",
+        "files": [
+          {"path": "server/services/strategy-engine.ts", "lines": "854+", "purpose": "Confidence threshold filtering"},
+          {"path": "server/services/pre-execution-validator.ts", "purpose": "Pre-execution validation logic"}
+        ],
+        "status": "SURVIVES",
+        "notes": "Confidence-based filtering (70% threshold). Pre-execution validator exists separately."
+      },
+      {
+        "artifact": "Entry/Exit Rule Placeholders",
+        "status": "OVERWRITTEN",
+        "notes": "No placeholders exist. Full entry/exit logic implemented for all 8 active strategies."
+      },
+      {
+        "artifact": "Strategy Guardrails Integration",
+        "files": [
+          {"path": "server/services/phase-8.6.5-enhancements.ts", "lines": "496-534", "purpose": "feedToStrategyGuardrails() method"},
+          {"path": "server/services/learning-cycle-service.ts", "lines": "163-166", "purpose": "Learning feedback to strategy guardrails"}
+        ],
+        "status": "SURVIVES",
+        "notes": "Strategy guardrails receive learning feedback from Phase 8.6.5 enhancements"
+      },
+      {
+        "artifact": "Phase 8.8.2 Implementation Reports",
+        "files": [
+          {"path": "reports/phase-8.8/8.8.2-FINAL-IMPLEMENTATION-REPORT.md"},
+          {"path": "reports/phase-8.8/8.8.2-FINAL-VERIFICATION-REPORT.md"},
+          {"path": "reports/phase-8.8/8.8.2C-signal-engine-audit.md"},
+          {"path": "reports/phase-8.8/8.8.2D-runtime-verification.md"},
+          {"path": "reports/phase-8.8/8.8.2D-singleton-scan.md"},
+          {"path": "reports/phase-8.8/8.8.2-UI-rollback-COMPLETE.md"}
+        ],
+        "status": "SURVIVES",
+        "recommendation": "SAFE - Documentation preserved"
+      },
+      {
+        "artifact": "8.8.2 TEMP / TODO Comments",
+        "status": "NOT_FOUND",
+        "notes": "No temporary toggles or TODO comments labeled with 8.8.2 found in server code"
+      }
+    ]
+  },
+
+  "partB_legacy24hAggregator": {
+    "objective": "Audit and identify the obsolete 24-hour aggregator that existed before REB rebuild",
+    "findings": [
+      {
+        "file": "server/services/scan-24h-aggregator.ts",
+        "lineRange": "1-304",
+        "useLocation": "Exported singleton scan24hAggregator, historically called by Stage3Emitter",
+        "status": "DEAD_CODE",
+        "impact": "HARMLESS",
+        "notes": "Class exists and is exported, but references are commented out in stage3-emitter.ts",
+        "recommendation": "REMOVE - Replaced by fx5-24h-window.ts"
+      },
+      {
+        "file": "server/services/stage3-emitter.ts",
+        "lineRange": "183",
+        "content": "// const aggregatorStatus = scan24hAggregator.getStatus();",
+        "status": "DEAD_CODE",
+        "impact": "HARMLESS",
+        "notes": "Commented out reference to legacy aggregator",
+        "recommendation": "KEEP - Comment documents legacy removal"
+      },
+      {
+        "file": "server/services/stage3-emitter.ts",
+        "lineRange": "236",
+        "content": "// REB 2.8.5A: Legacy aggregator removed - 24h tracking now handled by fx5-24h-window.ts",
+        "status": "DEAD_CODE",
+        "impact": "HARMLESS",
+        "notes": "Documentation comment",
+        "recommendation": "KEEP - Documents migration"
+      },
+      {
+        "file": "server/services/fx5-24h-window.ts",
+        "lineRange": "1-341",
+        "useLocation": "Active replacement for legacy aggregator",
+        "status": "ACTIVE",
+        "impact": "HARMLESS",
+        "notes": "REB 2.8.5A/2.8.6B: Lightweight FX5-native 24h window implementation. Single-gate pattern using isEngineActive only.",
+        "recommendation": "KEEP - Current production implementation"
+      },
+      {
+        "file": "replit.md",
+        "lineRange": "64",
+        "content": "The legacy scan24hAggregator was replaced with an FX5-native module (fx5-24h-window.ts)",
+        "status": "DOCUMENTATION",
+        "impact": "HARMLESS",
+        "notes": "Project documentation correctly reflects migration",
+        "recommendation": "KEEP"
+      },
+      {
+        "searchPattern": "aggregate24h",
+        "status": "NOT_FOUND_IN_SERVER",
+        "notes": "No active references in server code"
+      },
+      {
+        "searchPattern": "DailyWindow",
+        "status": "NOT_FOUND",
+        "notes": "No matches found"
+      },
+      {
+        "searchPattern": "get24hHistory",
+        "status": "NOT_FOUND",
+        "notes": "No matches found"
+      },
+      {
+        "searchPattern": "twentyFourHour",
+        "status": "FOUND_UNRELATED",
+        "notes": "Found in risk-manager.ts, paper-metrics.ts, heuristic-trader.ts for 24-hour time window calculations. These are NOT related to the legacy aggregator.",
+        "impact": "HARMLESS",
+        "recommendation": "KEEP - Standard time window calculations"
+      }
+    ],
+    "legacyAggregatorStatus": {
+      "usedAsMistakenDataSourceForFX5": false,
+      "usedAsMistakenSourceForFilterInsights": false,
+      "usedAsLatencyAggregatedProxy": false,
+      "stillReferencedFrom": {
+        "marketScanner": false,
+        "fx5Scanner": false,
+        "filterInsights": false,
+        "routes": false,
+        "stateCaches": false
+      },
+      "problematicBehaviors": {
+        "countsFromLegacyAggregator": false,
+        "valuesOverriddenBy24hSnapshot": false,
+        "mixedOrStaleState": false
+      }
+    }
+  },
+
+  "partC_summary": {
+    "phase881Status": {
+      "overallStatus": "PARTIALLY_IMPLEMENTED",
+      "survives": [
+        "8.8.1 audit logging statements",
+        "Audit report documentation",
+        "Strategy engine → Signal orchestrator wiring",
+        "Signal generation (StrategySignal interface)",
+        "signalGenerated in test validators"
+      ],
+      "overwritten": [],
+      "partiallyBroken": [],
+      "notImplemented": [
+        "Trade executor stubs",
+        "signalValidated lifecycle event",
+        "readyToTrade lifecycle event",
+        "paperTradeExecuted lifecycle event"
+      ]
+    },
+    "phase882Status": {
+      "overallStatus": "MOSTLY_COMPLETE",
+      "survives": [
+        "FX5 Scanner Service (30-second autonomous scanning)",
+        "Stage-3 State Cache",
+        "Stage-3 Event Emitter",
+        "Signal validation logic",
+        "Strategy guardrails integration",
+        "Implementation reports and documentation"
+      ],
+      "overwritten": [
+        "Entry/exit rule placeholders (replaced with full implementations)"
+      ],
+      "partiallyBroken": [
+        "FX5 survivors → strategy engine forwarding (works but lacks explicit event)"
+      ],
+      "notImplemented": [
+        "Liquidity factor calculation",
+        "Volatility weighting in strategies",
+        "Multi-timeframe confirmation"
+      ]
+    },
+    "whatNeedsToBeRebuiltForPhase883": [
+      "Trade executor abstraction layer (paper vs live executors)",
+      "Lifecycle event system (signalValidated, readyToTrade, paperTradeExecuted)",
+      "Multi-timeframe analysis framework",
+      "Liquidity factor scoring",
+      "Volatility weighting in signal confidence"
+    ]
+  },
+
+  "partD_blockerWarningsSafe": {
+    "BLOCKERS": [
+      {
+        "id": "BLOCK-001",
+        "description": "No trade executor abstraction exists",
+        "impact": "Cannot implement clean paper vs live trading separation",
+        "requiredFor": "8.8.3 Trade Simulator"
+      },
+      {
+        "id": "BLOCK-002",
+        "description": "Lifecycle events not implemented",
+        "impact": "Cannot track signal → validation → execution flow",
+        "requiredFor": "8.8.3 Audit trail and debugging"
+      }
+    ],
+    "WARNINGS": [
+      {
+        "id": "WARN-001",
+        "description": "Legacy scan-24h-aggregator.ts still exists",
+        "impact": "Code bloat, potential confusion",
+        "recommendation": "Remove in future cleanup phase"
+      },
+      {
+        "id": "WARN-002",
+        "description": "No multi-timeframe analysis",
+        "impact": "Strategies limited to single timeframe signals",
+        "recommendation": "Add in Phase 8.8.4+"
+      },
+      {
+        "id": "WARN-003",
+        "description": "DHMA strategy disabled (parameter loading issue)",
+        "impact": "1 of 9 strategies inactive",
+        "recommendation": "Fix parameter loading in future phase"
+      }
+    ],
+    "SAFE": [
+      {
+        "id": "SAFE-001",
+        "description": "FX5 Scanner fully operational",
+        "notes": "30-second scanning works for both paper/live modes"
+      },
+      {
+        "id": "SAFE-002",
+        "description": "8 strategies active and functional",
+        "notes": "vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trading, vwap_bounce, liquidity_trap"
+      },
+      {
+        "id": "SAFE-003",
+        "description": "Stage-3 truth architecture preserved",
+        "notes": "WebSocket events and REST endpoints working correctly"
+      },
+      {
+        "id": "SAFE-004",
+        "description": "24h aggregation via fx5-24h-window.ts",
+        "notes": "Legacy aggregator successfully replaced"
+      },
+      {
+        "id": "SAFE-005",
+        "description": "Phase 8.8.1/8.8.2 audit documentation preserved",
+        "notes": "All reports in reports/phase-8.8/ directory"
+      }
+    ]
+  },
+
+  "auditConclusion": {
+    "status": "COMPLETE",
+    "codeChanges": "NONE (diagnostic only)",
+    "recommendation": "Proceed to Phase 8.8.3 after addressing BLOCKERS. Legacy scan-24h-aggregator.ts can be cleaned up in a later maintenance phase.",
+    "nextSteps": [
+      "1. Design trade executor abstraction layer",
+      "2. Implement lifecycle event system",
+      "3. Begin Phase 8.8.3 Trade Simulator implementation"
+    ]
+  }
+}
