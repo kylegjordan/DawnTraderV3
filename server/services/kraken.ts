@@ -1,6 +1,14 @@
 import crypto from "crypto";
 import { canonicalFromPairInfo, normalizeSymbolArray } from './utils/symbol-canonicalizer.js';
 
+// REB 2.9D: History days cache for minimum history filter
+const historyDaysCache = new Map<string, { days: number | null; fetchedAt: number }>();
+const HISTORY_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function makeHistoryKey(pair: string, mode: 'paper' | 'live' | 'backtest' | undefined): string {
+  return `${mode || 'unknown'}::${pair}`;
+}
+
 interface KrakenConfig {
   apiKey: string;
   apiSecret: string;
@@ -593,7 +601,48 @@ export class KrakenService {
     this.balanceCache.clear();
     this.openOrdersCache.clear();
     this.closedOrdersCache.clear();
+    historyDaysCache.clear();
     console.log('[Kraken] All caches cleared');
+  }
+
+  /**
+   * REB 2.9D: Get the number of days of trading history for a pair
+   * Uses daily (1440m) OHLC candles to determine trading age
+   * Results are cached for 30 minutes to avoid hitting Kraken repeatedly
+   */
+  async getPairHistoryDays(
+    pair: string,
+    mode: 'paper' | 'live' | 'backtest' | undefined
+  ): Promise<number | null> {
+    const cacheKey = makeHistoryKey(pair, mode);
+    const now = Date.now();
+    const cached = historyDaysCache.get(cacheKey);
+
+    if (cached && now - cached.fetchedAt < HISTORY_CACHE_TTL_MS) {
+      return cached.days;
+    }
+
+    try {
+      // 1440 = 1-day candles (matches the 8.6 / 8.7 truth)
+      const { ohlc } = await this.getOHLCData(pair, 1440);
+      
+      if (!ohlc || ohlc.length === 0) {
+        // No history → treat as NULL (caller decides pass/fail semantics)
+        historyDaysCache.set(cacheKey, { days: null, fetchedAt: now });
+        return null;
+      }
+
+      // 8.6/8.7 behavior: number of daily candles == history days
+      const days = ohlc.length;
+
+      historyDaysCache.set(cacheKey, { days, fetchedAt: now });
+      return days;
+    } catch (err) {
+      // Log once per pair per TTL window at WARN level
+      console.warn('[REB2.9D][History][Error]', { pair, error: (err as Error).message });
+      historyDaysCache.set(cacheKey, { days: null, fetchedAt: now });
+      return null;
+    }
   }
 
   // Utility methods

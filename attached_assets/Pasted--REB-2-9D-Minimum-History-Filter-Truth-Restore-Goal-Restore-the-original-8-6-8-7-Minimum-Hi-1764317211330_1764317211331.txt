@@ -1,0 +1,326 @@
+🔧 REB 2.9D — Minimum History Filter Truth Restore
+
+Goal:
+Restore the original 8.6 / 8.7 “Minimum History (Days)” behavior using Kraken OHLC history (daily candles), with clean code and targeted diagnostics — without changing any UI or database schema.
+
+🔒 Hard Constraints
+
+Do NOT touch:
+
+client/ (UI is already correct)
+
+shared/schema.ts
+
+Screener tables or DB migrations
+
+Use existing configuration only:
+
+minHistoryDays is already exposed via /api/filters-v2
+
+Use that value exactly as currently wired (no new columns / tables)
+
+Performance:
+
+History checks must be cached to avoid hitting Kraken on every cycle for the same pair.
+
+Logging must be sampling-limited / auto-disabled like REB 2.9C.
+
+1) Restore History-Filter Support in Kraken Service
+
+File: server/services/kraken.ts
+
+1.1 Add cached daily OHLC history helper
+
+Add a small, focused helper to compute “trading age in days” for a given pair using daily (1440m) OHLC candles.
+
+Implementation outline (TypeScript / pseudo-code-level):
+
+// At top-level of kraken.ts (near other caches)
+const historyDaysCache = new Map<string, { days: number; fetchedAt: number }>();
+const HISTORY_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+// Utility to get a stable cache key
+function makeHistoryKey(pair: string, mode: 'paper' | 'live' | 'backtest' | undefined) {
+  // mode mainly to avoid mixing configs; you may already have a canonical symbol form
+  return `${mode || 'unknown'}::${pair}`;
+}
+
+
+Then add an async method to the Kraken service:
+
+// Inside KrakenService class
+async getPairHistoryDays(
+  pair: string,
+  mode: 'paper' | 'live' | 'backtest' | undefined
+): Promise<number | null> {
+  const cacheKey = makeHistoryKey(pair, mode);
+  const now = Date.now();
+  const cached = historyDaysCache.get(cacheKey);
+
+  if (cached && now - cached.fetchedAt < HISTORY_CACHE_TTL_MS) {
+    return cached.days;
+  }
+
+  try {
+    // 1440 = 1-day candles (matches the 8.6 / 8.7 truth)
+    const candles = await this.getOHLC(pair, 1440); 
+    if (!candles || candles.length === 0) {
+      // No history → treat as NULL (caller decides pass/fail semantics)
+      return null;
+    }
+
+    // 8.6/8.7 behavior: number of daily candles == history days
+    const days = candles.length;
+
+    historyDaysCache.set(cacheKey, { days, fetchedAt: now });
+    return days;
+  } catch (err) {
+    // Log once per pair per TTL window at WARN level
+    console.warn('[REB2.9D][History][Error]', { pair, error: (err as Error).message });
+    return null;
+  }
+}
+
+
+Important: Re-use any existing getOHLC/fetchOHLC helper you already have in kraken.ts if it exists. Do not duplicate HTTP logic.
+
+2) Wire History Filter into FX5 Batch Scanner
+
+File: server/services/market-scanner.ts
+(Where collectMixedBatch and filter checks already live.)
+
+2.1 Add a small “passes history filter” helper
+
+Near your other filter helpers (minPrice, volatility, etc.), add:
+
+// Types depend on existing code, adjust to local types
+type HistoryFilterContext = {
+  minHistoryDays?: number | null;
+  mode: 'paper' | 'live' | 'backtest';
+  krakenService: KrakenService;
+};
+
+let reb29dHistoryCheckCount = 0;
+const REB_2_9D_HISTORY_LOG_LIMIT = 50;
+
+async function passesHistoryFilter(
+  pair: string,
+  ctx: HistoryFilterContext
+): Promise<{ passed: boolean; reason?: 'failedHistory'; days?: number | null }> {
+  const { minHistoryDays, mode, krakenService } = ctx;
+
+  if (!minHistoryDays || minHistoryDays <= 0) {
+    // No minimum configured → pass
+    return { passed: true, days: null };
+  }
+
+  const days = await krakenService.getPairHistoryDays(pair, mode);
+
+  // If we cannot determine history, be conservative & fail (matches original safety behavior)
+  const passed = typeof days === 'number' && days >= minHistoryDays;
+
+  // REB 2.9D diagnostics (limited for performance)
+  if (reb29dHistoryCheckCount < REB_2_9D_HISTORY_LOG_LIMIT) {
+    reb29dHistoryCheckCount++;
+    console.log('[REB2.9D][HistoryCheck]', {
+      pair,
+      mode,
+      days,
+      threshold: minHistoryDays,
+      result: passed ? 'PASS' : 'FAIL',
+    });
+  }
+
+  if (!passed) {
+    return { passed: false, reason: 'failedHistory', days };
+  }
+
+  return { passed: true, days };
+}
+
+
+If you already have a breakdown.failedHistory category in your aggregation, reuse that label string 'failedHistory' so it flows into Filter Insights correctly.
+
+2.2 Apply history filter inside collectMixedBatch
+
+Inside collectMixedBatch (or equivalent batch selection loop), where you already:
+
+Evaluate per-pair filters and
+
+Accumulate breakdown reasons (failedPrice, failedStablecoin, etc.),
+
+add history filtering to the evaluation pipeline.
+
+High-level pattern (pseudo-code – adapt to your function names):
+
+// Pseudocode inside the main loop that decides whether a pair survives
+const ctx: HistoryFilterContext = {
+  minHistoryDays: filters.minHistoryDays,   // from /api/filters-v2
+  mode,
+  krakenService,
+};
+
+// ... existing checks: volume, price, spread, etc ...
+
+// After other filters pass but BEFORE marking as survivor:
+const historyResult = await passesHistoryFilter(symbol, ctx);
+if (!historyResult.passed) {
+  breakdown.failedHistory = (breakdown.failedHistory || 0) + 1;
+  // mark this pair as filtered out for 'failedHistory'
+  continue; // do not push into survivors
+}
+
+// If we reach here, pair passes all filters including minHistoryDays
+survivors.push(symbol);
+
+
+Key points:
+
+Use the same filters.minHistoryDays value that comes from FiltersWithOverride → /api/filters-v2 (which we just finished fixing).
+
+Ensure breakdown.failedHistory is wired into the 24h aggregator and Filter Insights (you already have failed_history there; this should feed that path).
+
+3) Diagnostics: Upgrade REB 2.9C → 2.9D for History
+
+We already have REB 2.9C logging for:
+
+CycleStart filter values
+
+MarketScanner filter checks
+
+CycleSummary breakdown
+
+Now we extend it to history.
+
+3.1 CycleStart should clearly show minHistoryDays
+
+You already log something like:
+
+[REB2.9C][FX5][CycleStart] Cycle 1/paper: { ... minHistoryDays: 30, ... }
+
+
+✔ Leave this as-is or update the tag to:
+
+[REB2.9D][FX5][CycleStart] ...
+
+
+but keep the same JSON fields (including minHistoryDays) so we can compare runs over time.
+
+3.2 Add HistoryCheck logs (already partially done in helper)
+
+We already added:
+
+console.log('[REB2.9D][HistoryCheck]', {
+  pair,
+  mode,
+  days,
+  threshold: minHistoryDays,
+  result: passed ? 'PASS' : 'FAIL',
+});
+
+
+This should be the only place where history check logging occurs. No extra noise.
+
+3.3 Ensure CycleSummary includes failedHistory
+
+In the end-of-cycle summary log:
+
+[REB2.9D][FX5][CycleSummary] Cycle 1/paper: {
+  totalEvaluated: 60,
+  totalSurvived: 11,
+  activePoolSize: 11,
+  breakdown: {
+    passed: 11,
+    alreadyActive: 0,
+    failedVolume: 0,
+    failedSpread: 0,
+    failedRange: 1,
+    failedPrice: 48,
+    failedStablecoin: 0,
+    failedHistory: 3             // ← Ensure this is present when applicable
+  }
+}
+
+
+Make sure:
+
+breakdown.failedHistory is incremented where we filter out for history, and
+
+Included in whatever object you log for CycleSummary.
+
+3.4 Auto-disable / rate-limit
+
+Reuse the same global limit pattern as REB 2.9C:
+
+Keep reb29dHistoryCheckCount with a fixed upper bound (e.g. 50), so logs don’t grow unbounded.
+
+No config flags required; this is temporary instrumentation and can later be removed cleanly by deleting the REB2.9D-specific code block.
+
+4) Safety & Scope Check
+
+✅ No UI changes
+✅ No DB or schema changes
+✅ No new filter queries / tables
+✅ Only touches:
+
+server/services/kraken.ts
+
+server/services/market-scanner.ts
+
+(And minor tag rename in existing logging, if needed)
+
+All behavior is:
+
+Identical in semantics to the 8.6 / 8.7 truth:
+
+Use Kraken OHLC daily candles to determine history days
+
+Compare with minHistoryDays from FiltersWithOverride
+
+Filter out pairs that don’t meet the minimum
+
+Improved in diagnostics (clear [REB2.9D][HistoryCheck] + failedHistory in breakdown)
+
+Cleaner in code structure (single helper, cached, typed context)
+
+5) Verification Steps Replit Should Run
+
+Please have Replit perform and report back:
+
+Code / Type Safety
+
+npm run type-check
+
+Confirm no new TS errors in kraken.ts or market-scanner.ts.
+
+Short Paper-Sim Run (2–3 minutes)
+
+Start paper trading (paper mode) using your test user.
+
+Let it run at least 4–6 FX5 cycles.
+
+Log Extract
+
+Provide a consolidated snippet including:
+
+Several [REB2.9D][FX5][CycleStart] lines (showing minHistoryDays)
+
+Several [REB2.9D][HistoryCheck] lines (PASS & FAIL examples)
+
+At least 2 [REB2.9D][FX5][CycleSummary] logs showing failedHistory in breakdown.
+
+Manual Cross-Check
+
+In the Screeners tab (Screeners / Filter Automation Control):
+
+Set Minimum History (Days) to 60.
+
+Save and refresh.
+
+Run paper-sim again briefly.
+
+Check logs for:
+
+threshold: 60 in [REB2.9D][HistoryCheck]
+
+An increase in failedHistory count in CycleSummary compared to the 30-day run.
