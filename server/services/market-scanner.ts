@@ -1506,7 +1506,7 @@ export async function collectMixedBatch(
   // Build ticker map for Kraken symbol lookup (from batch pairs)
   const tickerMap: Record<string, { krakenSymbol: string }> = {};
   for (const p of batch) {
-    tickerMap[p.symbol] = { krakenSymbol: p.krakenPair || p.symbol };
+    tickerMap[p.symbol] = { krakenSymbol: p.pairName || p.symbol };
   }
   
   // Create symbol trace entries for each survivor

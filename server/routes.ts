@@ -9,7 +9,7 @@ import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
-import { MarketScanner, getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer } from "./services/market-scanner";
+import { MarketScanner, getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
 import { RiskManager, buildSettingsFromModeLevel } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
@@ -5524,6 +5524,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.status(500).json({ 
         ok: false,
         error: 'Failed to fetch REB 2.11A audit data', 
+        message: error.message 
+      });
+    }
+  });
+
+  // GET /api/diagnostics/reb-2-11B - Get REB 2.11B Symbol Mapping Trace Data
+  apiRouter.get('/diagnostics/reb-2-11B', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const traces = getReb211bSymbolTraces(limit);
+      
+      res.json({
+        ok: true,
+        traces,
+      });
+    } catch (error: any) {
+      console.error('[REB2.11B] Error fetching symbol trace buffer:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to fetch REB 2.11B symbol trace data', 
         message: error.message 
       });
     }
