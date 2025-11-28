@@ -1376,8 +1376,23 @@ export async function collectMixedBatch(
     // Pair passed all filters
     if (!rejected) {
       // REB 2.11C: Check if already in active filter pool (THE FIX)
-      // Previously checked activeTradeSymbols (wrong) - now checks poolSymbols (correct)
-      if (poolSymbols.has(pair.symbol)) {
+      // Check both raw and normalized symbol to handle any format differences
+      const rawSymbol = pair.symbol;
+      const normalizedSymbol = rawSymbol.trim().toUpperCase();
+      
+      // Check for match in pool (raw, normalized, or case-insensitive)
+      let isInPool = poolSymbols.has(rawSymbol) || poolSymbols.has(normalizedSymbol);
+      if (!isInPool) {
+        // Case-insensitive fallback check
+        for (const poolEntry of poolSymbols) {
+          if (poolEntry.toUpperCase() === normalizedSymbol) {
+            isInPool = true;
+            break;
+          }
+        }
+      }
+      
+      if (isInPool) {
         breakdown.already_active++;
         // REB 2.11A: Track which pairs are counted as already_active
         alreadyActiveReportedList.push(pair.symbol);
@@ -1451,11 +1466,14 @@ export async function collectMixedBatch(
   // REB 2.11A: Capture active filter pool state AFTER any cleanup
   const activeAfter = activeFilterPool.getSymbolsAfterCleanup(mode);
   
-  // REB 2.11A: Compute what SHOULD have been counted as "already active"
-  // These are survivors that were already in the active filter pool BEFORE cleanup
+  // REB 2.11C: Updated audit logic
+  // Pairs that passed all filters = survivors (new pairs) + alreadyActiveReportedList (pairs in pool)
   const survivorsList = survivors.map(s => s.symbol);
+  const allPassedSymbols = [...survivorsList, ...alreadyActiveReportedList];
   const activeBeforeSet = new Set(activeBefore);
-  const shouldBeActive = survivorsList.filter(sym => activeBeforeSet.has(sym));
+  
+  // REB 2.11C: "Should be active" = pairs that passed filters AND were in pool BEFORE cleanup
+  const shouldBeActive = allPassedSymbols.filter(sym => activeBeforeSet.has(sym));
   
   // REB 2.11A: Compute mismatches
   const alreadyActiveReportedSet = new Set(alreadyActiveReportedList);
