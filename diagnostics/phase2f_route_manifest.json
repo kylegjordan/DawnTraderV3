@@ -1313,6 +1313,26 @@
     ]
   },
   {
+    "path": "/api/reb-2-12/run",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/reb-2-12/run-all",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/intent/execute",
     "methods": [
       "POST"

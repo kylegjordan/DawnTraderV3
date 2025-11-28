@@ -1,0 +1,350 @@
+📄 REB 2.12 DIRECTIVE — FINAL FILTER WIRING VALIDATION
+
+Context:
+This directive performs manual, controlled, filter-by-filter validation to confirm that every filter:
+
+Receives the correct UI value
+
+Persists through API correctly
+
+Feeds into FX5 with correct type
+
+Produces expected PASS / FAIL results
+
+Appears correctly in the filter breakdown counters
+
+Appears correctly in REB 2.10 passive learning snapshots
+
+Interacts correctly with Minimum History
+
+Interacts correctly with AlreadyActive
+
+Interacts correctly with universeSize and activeTimeframes
+
+This is a diagnostic-only phase.
+NO production behavior changes.
+NO DB schema changes.
+NO UI changes.
+
+Use test user:
+
+username: testuser123
+password: SecurePass123!
+
+
+—
+
+PHASE 1 — Create the REB 2.12 Controlled Test Harness
+Add a new endpoint:
+GET /api/reb-2-12/run
+
+
+This endpoint triggers a controlled 1-cycle FX5 scan with forced parameters.
+
+For each test, return:
+
+{
+  cycleStartFilters,
+  survivors,
+  filterCounts,
+  passiveLearningSnapshot,
+  activePoolBefore,
+  activePoolAfter
+}
+
+
+This MUST:
+
+bypass 30-second intervals
+
+run a single deterministic FX5 cycle
+
+not alter active pool state except where logic requires
+
+PHASE 2 — Implement Controlled Filter Overwrites
+
+The test harness must allow overriding one filter at a time.
+
+Example:
+/api/reb-2-12/run?minPrice=500&universeSize=25
+
+
+For each query param:
+
+override the filter value only for this diagnostic run
+
+do not persist to DB
+
+do not update user filters
+
+do not update LATTi values
+
+do not update screeners state
+
+This is a “sandbox test.”
+
+PHASE 3 — Run 15 Explicit Tests Inside the Harness
+For each test Replit must:
+
+Inject override(s)
+
+Run one FX5 scan
+
+Return survivors + breakdown + REB 2.10 snapshot
+
+Log the test result under [REB2.12]
+
+Not modify production state
+
+Test 1 — Volume filter high cutoff
+
+Override:
+
+minVolume = 999999999
+
+
+Expected:
+
+survivors = 0
+
+filterCounts.failedVolume = universeSize
+
+All others = 0
+
+Test 2 — Volume low cutoff
+
+Override:
+
+minVolume = 0
+
+
+Expected:
+
+failedVolume = 0
+
+survivors > 0
+
+—
+
+Test 3 — Liquidity filter high cutoff
+
+Override:
+
+minLiquidity = 999999999
+
+
+Expected:
+
+all pairs fail
+
+failedVolume = 0
+
+failedLiquidity = universeSize
+
+Test 4 — Min price
+
+Override:
+
+minPrice = 10
+
+
+Expected:
+
+Most L1 altcoins fail
+
+failedPrice > 60% of universe
+
+Test 5 — Max price
+
+Override:
+
+maxPrice = 0.1
+
+
+Expected:
+
+Bitcoin, ETH, ATOM, etc fail
+
+Low-priced coins survive
+
+Test 6 — Spread
+
+Override:
+
+maxBidAskSpread = 0.02
+
+
+Expected:
+
+Low-liquidity pairs fail spread check
+
+Spread-driven failures increase
+
+Test 7 — Volatility high max
+
+Override:
+
+volatilityMax = 0.1
+
+
+Expected:
+
+Nearly all coins fail
+
+Volatility is almost always > 0.1
+
+Test 8 — RSI min / max
+
+Override:
+
+rsiMin = 0
+rsiMax = 30
+
+
+Expected:
+
+Only bearish pairs survive
+
+rsiMax-driven failures should be > 70%
+
+Test 9 — Exclude stablecoins
+
+Override:
+
+excludeStablecoins = true
+
+
+Expected:
+
+USDC/USDT/USD stable pairs fail
+
+failedStablecoin > 0
+
+Test 10 — allowRegulatedOnly
+
+Override:
+
+allowRegulatedOnly = true
+
+
+Expected:
+
+Most pairs fail
+
+Regulated assets survive (BTC/USD, ETH/USD, a few others)
+
+Test 11 — activeTimeframes edge-case
+
+Override:
+
+activeTimeframes = ['1d']
+
+
+Expected:
+
+Universe greatly reduced
+
+Should still produce survivors
+
+No errors
+
+No mis-wired dropdown issues
+
+Test 12 — universeSize
+
+Override:
+
+universeSize = 10
+
+
+Expected:
+
+Universe limited to 10 pairs
+
+All filter breakdown ratios adjust accordingly
+
+Test 13 — Minimum history (edge case)
+
+Override:
+
+minHistoryDays = 365
+
+
+Expected:
+
+Only oldest pairs survive
+
+failedHistory increases
+
+Test 14 — AlreadyActive forced
+
+First:
+
+Allow a pair to enter active pool normally
+
+Then run:
+
+Override:
+
+no override; allow survivors to be the same; universeSize small
+
+
+Expected:
+
+alreadyActive > 0
+
+Test 15 — Multi-filter interaction
+
+Override:
+
+minVolume=0 & rsiMax=20 & minHistoryDays=60 & universeSize=50
+
+
+Expected:
+
+pass/fail must match logical AND
+
+No contradictions
+
+No mismatched counting
+
+PHASE 4 — Return a Full Summary
+
+Return:
+
+{
+  tests: [
+    {
+      testName,
+      overrides,
+      survivorsCount,
+      filterCounts,
+      failedHistory,
+      alreadyActive,
+      passiveLearningSnapshotId,
+      warnings: [],
+      errors: []
+    }
+  ]
+}
+
+PHASE 5 — DO NOT:
+
+Do NOT modify filter logic
+
+Do NOT modify LATTi
+
+Do NOT persist override values
+
+Do NOT touch the UI
+
+Do NOT touch the DB
+
+This is DIAGNOSTIC ONLY.
+
+PHASE 6 — Only After All Tests Pass
+
+Print:
+
+[REB2.12] ALL FILTERS VALIDATED
+READY FOR REB 2.13 (GitHub Reintegration)

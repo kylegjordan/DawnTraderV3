@@ -5549,6 +5549,80 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== REB 2.12: Final Filter Wiring Validation ====================
+
+  // GET /api/reb-2-12/run - Run a single controlled FX5 cycle with optional filter overrides
+  apiRouter.get('/reb-2-12/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reb212TestHarness } = await import('./services/reb-2-12-test-harness');
+      
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+      
+      const overrides: any = {};
+      if (req.query.minVolume !== undefined) overrides.minVolume = parseFloat(req.query.minVolume as string);
+      if (req.query.minLiquidity !== undefined) overrides.minLiquidity = parseFloat(req.query.minLiquidity as string);
+      if (req.query.minPrice !== undefined) overrides.minPrice = parseFloat(req.query.minPrice as string);
+      if (req.query.maxPrice !== undefined) overrides.maxPrice = parseFloat(req.query.maxPrice as string);
+      if (req.query.rsiMin !== undefined) overrides.rsiMin = parseInt(req.query.rsiMin as string);
+      if (req.query.rsiMax !== undefined) overrides.rsiMax = parseInt(req.query.rsiMax as string);
+      if (req.query.volatilityMin !== undefined) overrides.volatilityMin = parseFloat(req.query.volatilityMin as string);
+      if (req.query.volatilityMax !== undefined) overrides.volatilityMax = parseFloat(req.query.volatilityMax as string);
+      if (req.query.maxBidAskSpread !== undefined) overrides.maxBidAskSpread = parseFloat(req.query.maxBidAskSpread as string);
+      if (req.query.universeSize !== undefined) overrides.universeSize = parseInt(req.query.universeSize as string);
+      if (req.query.minHistoryDays !== undefined) overrides.minHistoryDays = parseInt(req.query.minHistoryDays as string);
+      if (req.query.excludeStablecoins !== undefined) overrides.excludeStablecoins = req.query.excludeStablecoins === 'true';
+      if (req.query.allowRegulatedOnly !== undefined) overrides.allowRegulatedOnly = req.query.allowRegulatedOnly === 'true';
+      if (req.query.activeTimeframes !== undefined) {
+        try {
+          overrides.activeTimeframes = JSON.parse(req.query.activeTimeframes as string);
+        } catch {
+          overrides.activeTimeframes = (req.query.activeTimeframes as string).split(',');
+        }
+      }
+      
+      console.log(`[REB2.12] Received run request - mode: ${mode}, overrides:`, overrides);
+      
+      const result = await reb212TestHarness.runControlledCycle(mode, overrides);
+      
+      res.json({
+        ok: true,
+        ...result,
+      });
+    } catch (error: any) {
+      console.error('[REB2.12] Error running controlled cycle:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to run REB 2.12 controlled cycle', 
+        message: error.message 
+      });
+    }
+  });
+
+  // GET /api/reb-2-12/run-all - Run all 15 validation tests
+  apiRouter.get('/reb-2-12/run-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { reb212TestHarness } = await import('./services/reb-2-12-test-harness');
+      
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+      
+      console.log(`[REB2.12] Running ALL 15 validation tests in ${mode} mode...`);
+      
+      const results = await reb212TestHarness.runAllTests(mode);
+      
+      res.json({
+        ok: true,
+        ...results,
+      });
+    } catch (error: any) {
+      console.error('[REB2.12] Error running all tests:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to run REB 2.12 validation tests', 
+        message: error.message 
+      });
+    }
+  });
+
   // ==================== Phase 8.7.2: Intent Execution Framework ====================
 
   // POST /api/intent/execute - Execute validated intent
