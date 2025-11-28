@@ -1,0 +1,152 @@
+✅ REB 2.12C — Override Mode State Isolation & Persistence Fix (Directive for Replit)
+
+USE ONLY test user credentials:
+
+username: testuser123
+password: SecurePass123!
+
+🧩 Context for This Fix (must be included for Repl.it)
+
+The Goals Engine UI has a state synchronization bug affecting the Manual vs. LATTi toggle for each filter.
+The backend is correct — each filter’s overrideMode is stored correctly — but the frontend incorrectly restores override modes using stale cached state.
+
+❌ Current Broken Behavior
+
+User sets one filter to Manual (or LATTi).
+
+User navigates away and returns to Goals Engine.
+
+All filters adopt the last selected override mode, even though the API returns unique overrideMode values per filter.
+
+✔️ What Should Happen
+
+Each filter must restore its own overrideMode from the backend (filters-v2 API).
+
+Local UI state must never override this with a global value.
+
+Navigating away and returning should always show the actual per-filter mode.
+
+🎯 Root Cause
+
+The bug is caused by incorrect client-state merging inside:
+
+client/src/components/goals/use-override-state.tsx
+
+client/src/components/goals/filters-with-override.tsx
+
+The hook currently applies one mode to all filters, using a global overrideMode instead of per-filter overrides.
+
+✅ REB 2.12C — Required Fixes
+
+Repl.it must apply ALL items below:
+
+1. Rewrite useOverrideState initialization
+
+Ensure that overrideState is initialized per filter, using backend values directly.
+
+Replace the current initialization logic with this:
+
+const initialOverrideState = filtersFromServer.reduce((acc, filter) => {
+  acc[filter.name] = {
+    overrideMode: filter.overrideMode,  // <-- Correct per-filter mode
+    value: filter.value
+  };
+  return acc;
+}, {});
+
+❗ Remove ANY logic that:
+
+Copies a global overrideMode into all filters
+
+Merges old UI state into new server state
+
+Applies a "last-used" override state to all filters
+
+Only the backend values should seed state.
+
+2. Fix FiltersWithOverride.tsx to always read overrideMode from the server
+
+Wherever overrideMode is obtained from the local UI state for display, replace it with the live server filter:
+
+const overrideMode = currentFilter.overrideMode;
+
+
+Ensure that local UI state is only used while the user is actively editing — and never used to initialize or bulk-apply override modes.
+
+3. Remove any “global overrideMode” variable or fallback
+
+Search for:
+
+overrideState.overrideMode
+
+globalOverrideMode
+
+any variable that sets a default for all filters
+
+Delete or isolate it so it cannot override per-filter server state.
+
+Each filter must maintain its own independent overrideMode.
+
+4. Ensure updates only affect the filter being edited
+
+Confirm:
+
+onOverrideModeChange(filterName, newMode)
+
+
+only updates:
+
+overrideState[filterName].overrideMode
+
+
+and not the entire overrideState object.
+
+5. After fixing: verify with this test sequence
+
+Repl.it must run this verification using testuser123 / SecurePass123!
+
+Step-by-step test:
+
+Open Goals Engine
+
+Change only Min Volume to Manual
+
+Navigate to Reports
+
+Navigate back to Goals Engine
+
+EXPECTED:
+
+Min Volume = Manual
+
+All other filters remain LATTi
+
+Flip only Max RSI to Manual
+
+Navigate away and back
+
+EXPECTED:
+
+Only Min Volume and Max RSI in Manual
+
+All other filters still LATTi
+
+Any deviation = still broken.
+
+📌 Directive Summary (for Repl.it)
+
+Please implement the REB 2.12C Override Mode Isolation Fix:
+
+Fix overrideMode desync caused by improper state merging in useOverrideState
+
+Read initial overrideMode per filter from backend API only
+
+Remove any global overrideMode fallback
+
+Update UI logic to respect per-filter override modes
+
+Ensure navigation does not reset all filters to the last-toggled mode
+
+Verify via the provided 8-step test using testuser123 / SecurePass123!
+
+This fix is frontend-only and does not require backend modifications.

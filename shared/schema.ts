@@ -399,9 +399,11 @@ export const screenerFilters = pgTable("screener_filters", {
   confidenceThreshold: integer("confidence_threshold").default(60), // Minimum confidence % (40-90)
   
   // Phase 28: Override Persistence
-  managedByLottie: boolean("managed_by_lottie").notNull().default(true), // true = LATTI manages filters
-  manualOverrideEnabled: boolean("manual_override_enabled").notNull().default(false), // true = user has manual control
+  managedByLottie: boolean("managed_by_lottie").notNull().default(true), // true = LATTI manages filters (global fallback)
+  manualOverrideEnabled: boolean("manual_override_enabled").notNull().default(false), // true = user has manual control (global fallback)
   lockedByUser: jsonb("locked_by_user").default(sql`'{}'::jsonb`), // Per-filter lock status
+  // REB 2.12C: Per-filter override modes - stores { filterName: { manualOverrideEnabled: boolean } }
+  filterOverrides: jsonb("filter_overrides").default(sql`'{}'::jsonb`),
   lastUpdatedBy: varchar("last_updated_by", { length: 255 }), // User ID or 'latti' or 'system'
   
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
