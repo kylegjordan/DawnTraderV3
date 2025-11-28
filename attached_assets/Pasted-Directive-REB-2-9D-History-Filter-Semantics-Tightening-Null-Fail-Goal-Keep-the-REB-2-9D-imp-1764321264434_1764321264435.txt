@@ -1,0 +1,111 @@
+Directive: REB 2.9D – History Filter Semantics Tightening (Null → Fail)
+
+Goal:
+Keep the REB 2.9D implementation (Kraken OHLC history, caching, REB2.9D logs, failedHistory breakdown) exactly as is, but change one behavioral detail:
+
+If history cannot be determined (no candles / error), the pair should FAIL the history check, not pass.
+
+This should match the original 8.6/8.7 intent:
+“Do not trade pairs unless we know they have at least N days of trading history.”
+
+1) Kraken: keep getPairHistoryDays() as is
+
+File: server/services/kraken.ts
+
+Do not change:
+
+The history cache
+
+The daily OHLC lookup
+
+Error handling / logging in getPairHistoryDays()
+
+It should still return:
+
+number = number of daily candles (days of history)
+
+null = “no usable history / request failed”
+
+2) Market Scanner: change passesHistoryFilter semantics
+
+File: server/services/market-scanner.ts
+
+Locate the history filter helper added in REB 2.9D, something like:
+
+async function passesHistoryFilter(
+  pair: string,
+  ctx: HistoryFilterContext
+): Promise<{ passed: boolean; reason?: 'failedHistory'; days?: number | null }> {
+  const { minHistoryDays, mode, krakenService } = ctx;
+
+  if (!minHistoryDays || minHistoryDays <= 0) {
+    return { passed: true, days: null };
+  }
+
+  const days = await krakenService.getPairHistoryDays(pair, mode);
+
+  // CURRENT (null-means-pass) – this is what we want to change:
+  const passed = days == null || days >= minHistoryDays;
+  ...
+}
+
+
+Change the core decision so that:
+
+days == null → FAIL
+
+Only days >= minHistoryDays → PASS
+
+Example target version:
+
+const days = await krakenService.getPairHistoryDays(pair, mode);
+
+// NEW semantics: be conservative
+// - If we can't determine history (days == null), treat as fail.
+// - Only pass when days >= minHistoryDays.
+const passed = typeof days === 'number' && days >= minHistoryDays;
+
+if (reb29dHistoryCheckCount < REB_2_9D_HISTORY_LOG_LIMIT) {
+  reb29dHistoryCheckCount++;
+  console.log('[REB2.9D][HistoryCheck]', {
+    pair,
+    mode,
+    days,
+    threshold: minHistoryDays,
+    result: passed ? 'PASS' : 'FAIL',
+  });
+}
+
+if (!passed) {
+  return { passed: false, reason: 'failedHistory', days };
+}
+
+return { passed: true, days };
+
+
+Do not change:
+
+The logging tag [REB2.9D][HistoryCheck]
+
+The reason: 'failedHistory'
+
+The cache usage
+
+Where this helper is called in collectMixedBatch
+(it should still run after the other filters and increment breakdown.failedHistory when it fails)
+
+3) Quick sanity check
+
+After the change, please:
+
+Run npx tsc --noEmit and confirm there are no new errors.
+
+Start paper sim for ~1–2 minutes.
+
+Grab a few log lines showing:
+
+A [REB2.9D][HistoryCheck] with days: null and result: 'FAIL'
+
+The next [REB2.9D][FX5][CycleSummary] showing a non-zero failedHistory count in breakdown.
+
+That’s it — no schema, no UI, no new filters. Just tightening the semantics so the minimum-history rule really does what it says on the tin.
