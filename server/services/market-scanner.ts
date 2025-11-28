@@ -4,6 +4,7 @@ import { storage } from '../storage';
 import { WatchlistPair } from '@shared/schema';
 import { strategyAlerts } from './strategy-alerts';
 import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
+import { activeFilterPool } from './active-filter-pool.js';
 
 // ============================================================================
 // REB 2.10: Passive Learning Deep Tests - Types & Buffer
@@ -251,6 +252,42 @@ function addToMismatchBuffer(entry: REB211MismatchEntry): void {
 function addToStressBuffer(snapshot: REB211StressSnapshot): void {
   stressBuffer.push(snapshot);
   if (stressBuffer.length > REB_2_11_BUFFER_SIZE) stressBuffer.shift();
+}
+
+// ============================================================================
+// REB 2.11A: Active Pool / AlreadyActive Breakdown Audit
+// ============================================================================
+
+// REB 2.11A - ActiveAuditEntry interface
+interface ActiveAuditEntry {
+  cycle: number;
+  mode: 'paper' | 'live';
+  timestamp: string;
+
+  survivors: string[];
+  activeBeforeCleanup: string[];
+  activeAfterCleanup: string[];
+
+  alreadyActiveReported: string[];
+  alreadyActiveShouldBe: string[];
+  mismatches: {
+    missedPairs: string[];  // should be counted but weren't
+    overcountedPairs: string[]; // counted but not actually active
+  };
+}
+
+// REB 2.11A: Audit buffer (last 20 cycles)
+const activeAuditBuffer: ActiveAuditEntry[] = [];
+
+export function getActiveAuditBuffer(limit = 20): ActiveAuditEntry[] {
+  return activeAuditBuffer.slice(-limit);
+}
+
+function addToActiveAuditBuffer(entry: ActiveAuditEntry): void {
+  activeAuditBuffer.push(entry);
+  if (activeAuditBuffer.length > 20) {
+    activeAuditBuffer.shift();
+  }
 }
 
 // REB 2.11: Stress test configuration
@@ -1134,9 +1171,15 @@ export async function collectMixedBatch(
   // STEP 4: Apply FX5 filters to ONLY those 60 symbols
   console.log(`[8.6.7][DEBUG] STEP 4: Applying FX5 filters to ${batch.length} batch symbols...`);
   
+  // REB 2.11A: Capture active filter pool state BEFORE any cleanup
+  const activeBefore = activeFilterPool.getSymbolsRaw(mode);
+  
   // Get active trades to exclude
   const activeTrades = await storage.getActiveTrades(mode);
   const activeSymbols = new Set(activeTrades.map(t => t.symbol));
+  
+  // REB 2.11A: Track which symbols are actually counted as already_active
+  const alreadyActiveReportedList: string[] = [];
   
   // Initialize breakdown counters
   const breakdown = {
@@ -1302,6 +1345,8 @@ export async function collectMixedBatch(
       // Check if already active
       if (activeSymbols.has(pair.symbol)) {
         breakdown.already_active++;
+        // REB 2.11A: Track which pairs are counted as already_active
+        alreadyActiveReportedList.push(pair.symbol);
       } else {
         breakdown.passed_all_filters++;
         
@@ -1364,6 +1409,67 @@ export async function collectMixedBatch(
   
   const duration = Date.now() - startTime;
   console.log(`[Scan:${mode}] Mixed batch collected: ${survivorCount} eligible (${topNBatch.length} Top-N + ${tierBBatch.length} Tier-B) — ${duration}ms`);
+  
+  // ============================================================================
+  // REB 2.11A: Active Pool / AlreadyActive Breakdown Audit
+  // ============================================================================
+  
+  // REB 2.11A: Capture active filter pool state AFTER any cleanup
+  const activeAfter = activeFilterPool.getSymbolsAfterCleanup(mode);
+  
+  // REB 2.11A: Compute what SHOULD have been counted as "already active"
+  // These are survivors that were already in the active filter pool BEFORE cleanup
+  const survivorsList = survivors.map(s => s.symbol);
+  const activeBeforeSet = new Set(activeBefore);
+  const shouldBeActive = survivorsList.filter(sym => activeBeforeSet.has(sym));
+  
+  // REB 2.11A: Compute mismatches
+  const alreadyActiveReportedSet = new Set(alreadyActiveReportedList);
+  const shouldBeActiveSet = new Set(shouldBeActive);
+  
+  // Pairs that SHOULD be counted as already_active but WEREN'T
+  const missedPairs = shouldBeActive.filter(sym => !alreadyActiveReportedSet.has(sym));
+  
+  // Pairs that WERE counted as already_active but SHOULDN'T have been
+  const overcountedPairs = alreadyActiveReportedList.filter(sym => !shouldBeActiveSet.has(sym));
+  
+  // REB 2.11A: Push audit entry into buffer
+  const auditEntry: ActiveAuditEntry = {
+    cycle: cycleNum,
+    mode,
+    timestamp: new Date().toISOString(),
+    survivors: survivorsList,
+    activeBeforeCleanup: activeBefore,
+    activeAfterCleanup: activeAfter,
+    alreadyActiveReported: alreadyActiveReportedList,
+    alreadyActiveShouldBe: shouldBeActive,
+    mismatches: {
+      missedPairs,
+      overcountedPairs,
+    },
+  };
+  addToActiveAuditBuffer(auditEntry);
+  
+  // REB 2.11A: Log mismatches if any
+  if (missedPairs.length > 0 || overcountedPairs.length > 0) {
+    console.log('[REB2.11A][MISMATCH]', JSON.stringify({
+      cycle: cycleNum,
+      mode,
+      missedCount: missedPairs.length,
+      overcountedCount: overcountedPairs.length,
+      missedPairs,
+      overcountedPairs,
+    }));
+  } else {
+    console.log('[REB2.11A][OK]', JSON.stringify({
+      cycle: cycleNum,
+      mode,
+      survivorCount: survivorsList.length,
+      activeBeforeCount: activeBefore.length,
+      activeAfterCount: activeAfter.length,
+      alreadyActiveCount: alreadyActiveReportedList.length,
+    }));
+  }
   
   // ============================================================================
   // REB 2.11: Active Pool Stability Validation Diagnostics

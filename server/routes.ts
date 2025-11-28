@@ -9,7 +9,7 @@ import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./services/kraken";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { AIAnalyst } from "./services/ai-analyst";
-import { MarketScanner, getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer } from "./services/market-scanner";
+import { MarketScanner, getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer } from "./services/market-scanner";
 import { RiskManager, buildSettingsFromModeLevel } from "./services/risk-manager";
 import { aiOpportunitiesService } from "./services/ai-opportunities";
 import { dailyBriefService } from "./services/daily-brief";
@@ -5504,6 +5504,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.status(500).json({ 
         ok: false,
         error: 'Failed to fetch REB 2.11 diagnostic data', 
+        message: error.message 
+      });
+    }
+  });
+
+  // GET /api/diagnostics/reb-2-11A - Get REB 2.11A Active Pool / AlreadyActive Breakdown Audit
+  apiRouter.get('/diagnostics/reb-2-11A', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const cycles = getActiveAuditBuffer(limit);
+      
+      res.json({
+        ok: true,
+        cycles,
+      });
+    } catch (error: any) {
+      console.error('[REB2.11A] Error fetching audit buffer:', error);
+      res.status(500).json({ 
+        ok: false,
+        error: 'Failed to fetch REB 2.11A audit data', 
         message: error.message 
       });
     }

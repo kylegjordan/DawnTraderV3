@@ -1,0 +1,211 @@
+# REB 2.11A — Active Pool / AlreadyActive Breakdown Audit
+# Purpose: verify whether the "alreadyActive" breakdown category is working correctly.
+# Scope: DIAGNOSTIC ONLY – NO functional changes, no schema changes, no performance degradation.
+
+---
+
+## 1. OVERVIEW
+
+Implement a read-only diagnostic audit that:
+
+1. Monitors 20 FX5 cycles (~10 minutes)
+2. Captures detailed overlap between:
+   - Survivor set for the cycle
+   - Active pool before TTL cleanup
+   - Active pool after TTL cleanup
+3. Logs every symbol that appears in survivors AND active pool
+4. Validates whether these symbols are counted in the breakdown under `alreadyActive`
+5. Flags mismatches
+
+This is focused ONLY on the "alreadyActive" metric.
+
+---
+
+## 2. IMPLEMENTATION DETAILS
+
+### 2.1 Add an in-memory audit buffer (size: last 20 cycles)
+
+In **server/services/market-scanner.ts** add at the top:
+
+```ts
+// REB 2.11A - Active Pool / AlreadyActive Audit Buffer
+interface ActiveAuditEntry {
+  cycle: number;
+  mode: 'paper' | 'live';
+  timestamp: string;
+
+  survivors: string[];
+  activeBeforeCleanup: string[];
+  activeAfterCleanup: string[];
+
+  alreadyActiveReported: string[];
+  alreadyActiveShouldBe: string[];
+  mismatches: {
+    missedPairs: string[];  // should be counted but weren’t
+    overcountedPairs: string[]; // counted but not actually active
+  };
+}
+
+const activeAuditBuffer: ActiveAuditEntry[] = [];
+export const getActiveAuditBuffer = (limit = 20) =>
+  activeAuditBuffer.slice(-limit);
+```
+
+---
+
+### 2.2 In collectMixedBatch(), capture these sets:
+
+Add variables near the top of the function:
+
+```ts
+// REB 2.11A - Capture sets for audit
+const activeBefore = Array.from(activeFilterPool.getActiveSymbols(mode));
+```
+
+After TTL cleanup:
+
+```ts
+const activeAfter = Array.from(activeFilterPool.getActiveSymbols(mode));
+```
+
+After you compute survivors:
+
+```ts
+const survivorsList = survivors.map(p => p.symbol);
+```
+
+Capture the breakdown's alreadyActive list:
+
+```ts
+const alreadyActiveReportedList =
+  breakdown.alreadyActiveList ?? []; // ensure list exists
+```
+
+---
+
+### 2.3 Compute what SHOULD have been counted as “already active”
+
+Before creating the CycleSummary snapshot:
+
+```ts
+// REB 2.11A - Correct already active logic
+const shouldBeActive = survivorsList.filter(sym =>
+  activeBefore.includes(sym)
+);
+```
+
+Compute mismatches:
+
+```ts
+const missed = shouldBeActive.filter(sym =>
+  !alreadyActiveReportedList.includes(sym)
+);
+const overcounted = alreadyActiveReportedList.filter(sym =>
+  !shouldBeActive.includes(sym)
+);
+```
+
+---
+
+### 2.4 Push audit entry into buffer
+
+```ts
+activeAuditBuffer.push({
+  cycle,
+  mode,
+  timestamp: new Date().toISOString(),
+
+  survivors: survivorsList,
+  activeBeforeCleanup: activeBefore,
+  activeAfterCleanup: activeAfter,
+
+  alreadyActiveReported: alreadyActiveReportedList,
+  alreadyActiveShouldBe: shouldBeActive,
+  mismatches: {
+    missedPairs: missed,
+    overcountedPairs: overcounted,
+  },
+});
+
+// keep only last 20 cycles
+if (activeAuditBuffer.length > 20) {
+  activeAuditBuffer.shift();
+}
+```
+
+---
+
+## 3. ADD API ENDPOINT
+
+In **server/routes.ts** add:
+
+```ts
+import { getActiveAuditBuffer } from './services/market-scanner';
+
+app.get('/api/diagnostics/reb-2-11A', authenticateToken, async (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 20;
+  return res.json({
+    ok: true,
+    cycles: getActiveAuditBuffer(limit),
+  });
+});
+```
+
+---
+
+## 4. RUNNING THE AUDIT (REPLIT MUST DO THIS)
+
+After updating the code and restarting:
+
+```
+1. Authenticate as testuser123
+2. Start paper mode:
+   POST /api/paper-sim/start
+3. Allow FX5 to run for ~10 minutes (20 cycles)
+4. Stop paper mode:
+   POST /api/paper-sim/stop
+5. Retrieve audit:
+   GET /api/diagnostics/reb-2-11A?limit=20
+```
+
+---
+
+## 5. EXPECTED OUTPUT
+
+The endpoint will return entries like:
+
+```json
+{
+  "cycle": 12,
+  "mode": "paper",
+  "survivors": ["XRP/USD", "ADA/USD", "BTC/USD"],
+  "activeBeforeCleanup": ["BTC/USD", "ETH/USD"],
+  "alreadyActiveReported": ["BTC/USD"],
+  "alreadyActiveShouldBe": ["BTC/USD"],
+  "mismatches": {
+    "missedPairs": [],
+    "overcountedPairs": []
+  }
+}
+```
+
+We are specifically looking for:
+
+- **missedPairs.length > 0** → BUG  
+- **overcountedPairs.length > 0** → BUG  
+- Consistently zero values → suspicious  
+- Drift between survivors & active pool sets  
+
+---
+
+## 6. IMPORTANT RESTRICTIONS
+- ❌ NO filter logic changes  
+- ❌ NO modification to survivor selection  
+- ❌ NO modification to active pool TTL behavior  
+- ❌ NO database writes  
+
+Diagnostics only.
+
+---
+
+# END OF DIRECTIVE

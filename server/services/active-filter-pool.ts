@@ -187,6 +187,25 @@ class ActiveFilterPoolService {
   }
 
   /**
+   * REB 2.11A: Get raw symbols from pool WITHOUT triggering cleanup
+   * Used for diagnostic audits that need to see pre-cleanup state
+   */
+  getSymbolsRaw(mode: 'paper' | 'live'): string[] {
+    const pool = this.getPool(mode);
+    return Array.from(pool.keys());
+  }
+
+  /**
+   * REB 2.11A: Get symbols after cleanup
+   * Used for diagnostic audits that need to see post-cleanup state
+   */
+  getSymbolsAfterCleanup(mode: 'paper' | 'live'): string[] {
+    this.removeExpiredEntries(mode);
+    const pool = this.getPool(mode);
+    return Array.from(pool.keys());
+  }
+
+  /**
    * Get pool size (non-expired entries)
    */
   getPoolSize(mode: 'paper' | 'live'): number {
