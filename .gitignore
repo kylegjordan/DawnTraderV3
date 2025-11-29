@@ -9,3 +9,5 @@ docs/backups/
 .env
 npm-debug.log
 .DS_Store
+backups/
+diagnostic-reports/
