@@ -1,0 +1,77 @@
+# ===============================================
+# REB 2.12E — FULL SYSTEM TEST & LOG REPORT RUN
+# ===============================================
+
+You must run a full backend verification test suite to ensure 
+that all REB 2.12D changes (lifecycle events, trade executor, 
+strategy-features, DHMA restoration, and 8.81/8.82 wiring fixes)
+are stable, correct, and free of regressions.
+
+# 1. TEST USER CREDENTIALS (USE ONLY THESE)
+username: testuser123
+password: SecurePass123!
+
+# 2. WHAT TO RUN
+Run the following diagnostics in order:
+
+(1) REB 2.14 Historical Data Integrity Test
+    GET /api/reb-2-14/run?mode=paper
+
+(2) REB 2.15 FX5 Multi-Cycle Pipeline Certification
+    GET /api/reb-2-15/run?mode=paper&cycles=6
+
+(3) Combined 2.14 + 2.15 Certification
+    GET /api/reb-2-14-15/run-all?mode=paper
+
+(4) REB 2.10 Passive Learning Check
+    Ensure buffer grows for each cycle and returns valid snapshots:
+    GET /api/passive-learning/debug?limit=5
+
+(5) REB 2.11A Active Pool Audit
+    GET /api/diagnostics/reb-2-11A?limit=5
+
+(6) REB 2.11B Symbol Mapping Trace
+    GET /api/diagnostics/reb-2-11B?limit=50
+
+(7) REB 2.11C AlreadyActive Final Verification
+    Confirm:
+      - missedCount = 0
+      - overcountedCount = 0
+      - alreadyActiveReported > 0
+
+# 3. CREATE A SINGLE CONSOLIDATED REPORT
+Create a markdown report:
+
+docs/test-reports/REB2.12E-FULL-SYSTEM-VERIFICATION.md
+
+The report MUST include:
+- Timestamp
+- All endpoint results
+- Summary of survivors, active pool, filterCounts
+- Validation that lifecycle-events emit correctly
+- Validation that DHMA strategy fires at least once
+- Confirmation that no runtime errors or enum errors appear in logs
+- Confirmation that no LSP errors appear in newly modified files
+- A final PASS/FAIL result
+
+# 4. IMPORTANT REQUIREMENTS
+- MUST use only paper mode
+- DO NOT start any live trading
+- MUST include 6 full FX5 cycles (approx 3 minutes)
+- MUST include raw excerpts from server logs
+- MUST include JSON snippets for REB 2.14, 2.15, 2.10, 2.11A, 2.11B, 2.11C
+- MUST confirm that DHMA is enabled and generating signals
+
+# 5. DELIVERABLES
+Return ONLY:
+- “Report created”
+- The summary section of the output
+- Any warnings/errors encountered
+
+Do NOT modify any system code during this directive.
+Do NOT perform schema changes.
+This is a READ-ONLY audit.
+
+# ===============================================
+# END OF DIRECTIVE
+# ===============================================
