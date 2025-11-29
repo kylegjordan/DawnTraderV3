@@ -1,39 +1,11 @@
-# === DawnTrader V3 GitHub Ignore Rules ===
 node_modules/
 dist/
 build/
 logs/
-backup/
+*.log
+docs/backups/
 *.zip
 *.tar.gz
-docs/backups/
-diagnostic-reports/
-attached_assets/
-*.ndjson
-npm-debug.log*
-.yarn/
-.pnpm-store/
 .env
+npm-debug.log
 .DS_Store
-server/public
-vite.config.ts.*
-
-# Phase 3: Repo hygiene - block large SQL/dump files
-backups/*.sql
-*.sql.gz
-*.sql.bz2
-*.dump
-*.backup
-*.bak
-*.old
-diagnostic-dumps/
-backup-*.sql
-temp-*.sql
-migration-backup-*.sql
-
-# Large log files
-*.log.gz
-*.log.bak
-
-# Compiled diagnostics
-dist/diagnostics/*.json
