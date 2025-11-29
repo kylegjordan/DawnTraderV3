@@ -1,0 +1,270 @@
+🔧 REB 2.12F — Strategy Manifest & Health Check
+
+Context for Replit (include this intro):
+
+We have 9 strategies visible in the Strategies tab UI:
+
+VWAP Pullback
+
+ABCD Long
+
+SMA Trend Ride
+
+Breakout
+
+Mean Reversion
+
+Range Trading
+
+VWAP Bounce
+
+Liquidity Trap
+
+DHMA
+
+Previous REB reports mentioned “8 strategies active and functional”, which suggests either the audit wording was outdated or one of the 9 is not fully wired into the backend (strategy engine / signal orchestrator).
+
+Goal of REB 2.12F:
+
+Create a definitive, self-reported Strategy Manifest and a small health check that confirms:
+
+All 9 strategies exist in the backend
+
+All 9 are enabled and wired into the signal orchestrator
+
+All 9 can generate and pass signals under the right conditions
+
+DHMA is included and healthy, not special-cased or left out
+
+This must be diagnostic-only:
+no UI changes, no DB schema changes, no risk to trading logic.
+
+✅ PART A — Strategy Manifest Endpoint
+
+Locate the strategy registration / orchestration code:
+
+server/services/strategy-engine.ts
+
+server/services/signal-orchestrator.ts
+
+Any strategy metadata/config file used by the UI (if applicable)
+
+Implement a new diagnostic endpoint:
+
+GET /api/diagnostics/strategies
+
+The endpoint should return a JSON payload like:
+
+{
+  "ok": true,
+  "strategies": [
+    {
+      "id": "vwap_pullback",
+      "displayName": "VWAP Pullback",
+      "enabled": true,
+      "engineModule": "strategy-engine.ts:runVWAPPullback",
+      "supportsPaper": true,
+      "supportsLive": true,
+      "tags": ["intra-day", "trend-following"],
+      "parametersSummary": {
+        "riskPerTrade": 0.01,
+        "timeframes": ["5m", "15m"],
+        "minVolumeUsd": 50000
+      }
+    }
+  ]
+}
+
+
+Exact field names can differ, but it must include at least:
+
+id (internal key)
+
+displayName (what the UI calls it)
+
+enabled (boolean; what orchestrator actually uses)
+
+engineModule (where/how it’s implemented)
+
+supportsPaper and supportsLive (true/false)
+
+A basic parametersSummary object with key strategy params
+
+Cross-check in code:
+
+Make sure each of these UI names has a corresponding manifest entry:
+
+VWAP Pullback
+
+ABCD Long
+
+SMA Trend Ride
+
+Breakout
+
+Mean Reversion
+
+Range Trading
+
+VWAP Bounce
+
+Liquidity Trap
+
+DHMA
+
+If any are missing or enabled: false, treat that as a bug in this phase and fix it (see Part C).
+
+✅ PART B — Strategy Health Check (No Trades, Signals Only)
+
+Add a new endpoint:
+
+POST /api/reb-2-12F/strategy-health?mode=paper
+
+Behavior:
+
+Uses FX5 scanner outputs and the current filter settings.
+
+Runs a short, controlled sequence of N cycles (e.g., 3–5 cycles) in paper mode only.
+
+For each cycle, have the strategy engine:
+
+run each strategy,
+
+count:
+
+how many candidate signals were produced per strategy,
+
+how many passed validation / guardrails.
+
+The endpoint should return something like:
+
+{
+  "ok": true,
+  "mode": "paper",
+  "cycles": 4,
+  "summary": {
+    "totalCandidateSignals": 37,
+    "totalValidatedSignals": 9
+  },
+  "perStrategy": [
+    {
+      "id": "vwap_pullback",
+      "displayName": "VWAP Pullback",
+      "candidateSignals": 5,
+      "validatedSignals": 2,
+      "active": true
+    },
+    {
+      "id": "dhma",
+      "displayName": "DHMA",
+      "candidateSignals": 4,
+      "validatedSignals": 1,
+      "active": true
+    }
+  ],
+  "warnings": []
+}
+
+
+Notes:
+
+This test must not place trades.
+
+It can reuse Stage-3 / signal-orchestrator internals, but should short-circuit before execution.
+
+If market conditions produce 0 signals for some strategies during the run, still include them in perStrategy with candidateSignals: 0 and validatedSignals: 0. That’s not necessarily a bug.
+
+✅ PART C — Ensure all 9 strategies are enabled & wired
+
+If during Part A/B you discover that any of these 9 are missing or disabled:
+
+VWAP Pullback
+
+ABCD Long
+
+SMA Trend Ride
+
+Breakout
+
+Mean Reversion
+
+Range Trading
+
+VWAP Bounce
+
+Liquidity Trap
+
+DHMA
+
+…then please:
+
+Wiring fixes:
+
+Ensure each strategy has a run<StrategyName> implementation in strategy-engine.ts.
+
+Ensure each strategy is registered in signal-orchestrator.ts with:
+
+a unique strategy ID,
+
+the correct handler,
+
+enabled flags for paper + live.
+
+Ensure no “experimental / disabled” flag is preventing it from running in paper mode.
+
+DHMA specific:
+
+Confirm DHMA is:
+
+Registered in the orchestrator,
+
+Using the shared features you implemented in strategy-features.ts where appropriate,
+
+Included in the manifest and in the health check.
+
+Log a short diagnostic entry (info level) when the health check runs, listing the strategy IDs and their enabled states, something like:
+
+[REB2.12F][StrategyHealth] strategies=[
+  { id: 'vwap_pullback', enabled: true },
+  { id: 'abcd_long', enabled: true },
+  ...
+  { id: 'dhma', enabled: true }
+]
+
+✅ PART D — Write a simple verification report
+
+Create a new report file:
+
+docs/test-reports/REB2.12F-STRATEGY-MANIFEST-AND-HEALTH.md
+
+Include:
+
+The JSON response from GET /api/diagnostics/strategies (or a summarized table).
+
+The JSON response from POST /api/reb-2-12F/strategy-health?mode=paper.
+
+A short human-readable conclusion:
+
+How many strategies found
+
+Exact names & IDs
+
+Whether all 9 UI strategies are present and enabled
+
+Whether DHMA is confirmed enabled & healthy
+
+Any warnings or TODOs
+
+✅ PART E — Constraints
+
+No DB schema changes in this phase.
+
+No UI changes.
+
+No changes to actual trading execution — health test must be signals-only.
+
+Use only the test user for any scripted calls:
+
+username: testuser123
+
+password: SecurePass123!

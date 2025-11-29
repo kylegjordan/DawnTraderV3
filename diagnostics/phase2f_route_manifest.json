@@ -1363,6 +1363,26 @@
     ]
   },
   {
+    "path": "/api/diagnostics/strategies",
+    "methods": [
+      "GET"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
+    "path": "/api/reb-2-12F/strategy-health",
+    "methods": [
+      "POST"
+    ],
+    "middlewares": [
+      "authenticateToken",
+      "anonymous"
+    ]
+  },
+  {
     "path": "/api/intent/execute",
     "methods": [
       "POST"

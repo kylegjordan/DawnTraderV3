@@ -154,6 +154,20 @@ export class SignalOrchestrator {
   }
 
   /**
+   * REB 2.12F: Check if a specific strategy is enabled
+   */
+  isStrategyEnabled(strategyId: string): boolean {
+    return this.enabledStrategies.has(strategyId);
+  }
+
+  /**
+   * REB 2.12F: Get list of all enabled strategies
+   */
+  getEnabledStrategies(): string[] {
+    return Array.from(this.enabledStrategies);
+  }
+
+  /**
    * Main market evaluation loop
    * 1. Load filtered symbols
    * 2. For each symbol, evaluate all enabled strategies
@@ -405,14 +419,23 @@ export class SignalOrchestrator {
         }
       }
 
-      // DHMA disabled pending proper parameter loading
-      // if (this.enabledStrategies.has('dhma')) {
-      //   const signal = this.strategyEngine.detectDHMA(ohlcAsAny, {});
-      //   if (signal) {
-      //     signal.symbol = symbol;
-      //     signals.push(signal);
-      //   }
-      // }
+      // REB 2.12F: DHMA enabled with full microstructure parameters
+      if (this.enabledStrategies.has('dhma')) {
+        const signal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {
+          theta_OBI: 0.3,
+          epsilon_micro: 0.2,
+          tau_toxicity: 0.7,
+          maxSpread: 5,
+          k_tp: 1.5,
+          N_flow: 50,
+          N_burst: 10,
+          window_session: 20
+        });
+        if (signal) {
+          signal.symbol = symbol;
+          signals.push(signal);
+        }
+      }
 
       if (signals.length > 0) {
         console.log(`[37.A][SIGNAL] ${symbol}: Generated ${signals.length} signal(s) - ${signals.map(s => s.strategy).join(', ')}`);

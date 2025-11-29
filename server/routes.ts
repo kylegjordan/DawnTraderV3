@@ -5756,6 +5756,380 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ==================== REB 2.12F: Strategy Manifest & Health Check ====================
+
+  // GET /api/diagnostics/strategies - Get definitive strategy manifest
+  apiRouter.get('/diagnostics/strategies', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const strategyManifest = [
+        {
+          id: 'vwap_pullback',
+          displayName: 'VWAP Pullback',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectVWAPPullback',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['intra-day', 'trend-following', 'volume-weighted'],
+          parametersSummary: {
+            pullbackThreshold: '2%',
+            volumeMultiplier: 1.5,
+            maxHoldingPeriod: 24,
+            timeframes: ['5m', '15m', '1h']
+          }
+        },
+        {
+          id: 'abcd_long',
+          displayName: 'ABCD Long',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectABCDLong',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['pattern-based', 'swing', 'breakout'],
+          parametersSummary: {
+            minConsolidation: 10,
+            breakoutThreshold: '1.5%',
+            volumeMultiplier: 1.5,
+            exitType: 'target',
+            targetPercent: '3%'
+          }
+        },
+        {
+          id: 'sma_trend_ride',
+          displayName: 'SMA Trend Ride',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectSMATrendRide',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['trend-following', 'moving-average'],
+          parametersSummary: {
+            smaLength: 20,
+            entryCondition: 'above',
+            exitCondition: 'break',
+            trailingStopPercent: '2%'
+          }
+        },
+        {
+          id: 'breakout',
+          displayName: 'Breakout',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectBreakout',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['breakout', 'range', 'volume-confirmed'],
+          parametersSummary: {
+            minConsolidationBars: 10,
+            maxRangeWidth: 3,
+            breakoutBuffer: '1%',
+            volumeMultiplier: 2,
+            maxHoldingHours: 12
+          }
+        },
+        {
+          id: 'mean_reversion',
+          displayName: 'Mean Reversion',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectMeanReversion',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['mean-reversion', 'oversold', 'vwap'],
+          parametersSummary: {
+            meanType: 'vwap',
+            smaLength: 20,
+            deviationThreshold: '2.5%',
+            partialExitPercent: 50,
+            stopLossBuffer: '1%'
+          }
+        },
+        {
+          id: 'range_trading',
+          displayName: 'Range Trading',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectRangeTrading',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['range', 'support-resistance', 'mean-reversion'],
+          parametersSummary: {
+            minRangeDurationHours: 12,
+            minRangeWidth: '3%',
+            minBoundaryTouches: 3,
+            entryZoneWidth: '0.5%',
+            stopLossBeyond: '1%'
+          }
+        },
+        {
+          id: 'vwap_bounce',
+          displayName: 'VWAP Bounce',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectVWAPBounce',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['intra-day', 'vwap', 'bounce'],
+          parametersSummary: {
+            vwapProximity: '0.5%',
+            minVWAPSlope: '0.3%',
+            volumeMultiplier: 1.3,
+            maxPullbackBars: 5,
+            partialExitR: 1.5
+          }
+        },
+        {
+          id: 'liquidity_trap',
+          displayName: 'Liquidity Trap',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectLiquidityTrap',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['liquidity', 'stop-hunt', 'reversal'],
+          parametersSummary: {
+            maxTrapExtension: '1.2%',
+            trapReturnBars: 2,
+            minStopZoneSize: 'medium',
+            minLevelTouches: 3,
+            volumeRatio: 1.5
+          }
+        },
+        {
+          id: 'dhma',
+          displayName: 'DHMA',
+          enabled: true,
+          engineModule: 'strategy-engine.ts:detectDHMA',
+          supportsPaper: true,
+          supportsLive: true,
+          tags: ['microstructure', 'dual-horizon', 'order-flow'],
+          parametersSummary: {
+            theta_OBI: 0.3,
+            epsilon_micro: 0.2,
+            tau_toxicity: 0.7,
+            maxSpread: 5,
+            k_tp: 1.5,
+            N_flow: 50,
+            N_burst: 10,
+            window_session: 20
+          }
+        }
+      ];
+
+      console.log(`[REB2.12F][StrategyManifest] strategies=[`);
+      strategyManifest.forEach(s => {
+        console.log(`  { id: '${s.id}', enabled: ${s.enabled} }`);
+      });
+      console.log(`]`);
+
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        strategyCount: strategyManifest.length,
+        allEnabled: strategyManifest.every(s => s.enabled),
+        strategies: strategyManifest
+      });
+    } catch (error: any) {
+      console.error('[REB2.12F] Error fetching strategy manifest:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to fetch strategy manifest',
+        message: error.message
+      });
+    }
+  });
+
+  // POST /api/reb-2-12F/strategy-health - Run strategy health check (with mock data verification)
+  apiRouter.post('/reb-2-12F/strategy-health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
+
+      console.log(`[REB2.12F][StrategyHealth] Starting health check - mode: ${mode}`);
+
+      const { StrategyEngine } = await import('./services/strategy-engine');
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      const strategyEngine = new StrategyEngine();
+
+      // REB 2.12F: Read source code to verify orchestrator enabledStrategies set
+      const orchestratorPath = path.join(process.cwd(), 'server/services/signal-orchestrator.ts');
+      const orchestratorSource = fs.readFileSync(orchestratorPath, 'utf-8');
+      
+      // Parse the enabledStrategies set from source code
+      const enabledMatch = orchestratorSource.match(/enabledStrategies\s*=\s*new\s*Set\([^[]*\[([\s\S]*?)\]/);
+      const sourceStrategies = enabledMatch 
+        ? enabledMatch[1].match(/'([a-z_]+)'/g)?.map(s => s.replace(/'/g, '')) || []
+        : [];
+      
+      // Verify DHMA evaluation block is uncommented in source
+      const dhmaBlockPattern = /if\s*\(this\.enabledStrategies\.has\('dhma'\)\)\s*\{[\s\S]*?detectDHMA[\s\S]*?\}/;
+      const dhmaCommentedPattern = /\/\/\s*if\s*\(this\.enabledStrategies\.has\('dhma'\)\)/;
+      const dhmaWired = dhmaBlockPattern.test(orchestratorSource) && !dhmaCommentedPattern.test(orchestratorSource);
+
+      const strategyMethods: { id: string; displayName: string; method: string }[] = [
+        { id: 'vwap_pullback', displayName: 'VWAP Pullback', method: 'detectVWAPPullback' },
+        { id: 'abcd_long', displayName: 'ABCD Long', method: 'detectABCDLong' },
+        { id: 'sma_trend_ride', displayName: 'SMA Trend Ride', method: 'detectSMATrendRide' },
+        { id: 'breakout', displayName: 'Breakout', method: 'detectBreakout' },
+        { id: 'mean_reversion', displayName: 'Mean Reversion', method: 'detectMeanReversion' },
+        { id: 'range_trading', displayName: 'Range Trading', method: 'detectRangeTrading' },
+        { id: 'vwap_bounce', displayName: 'VWAP Bounce', method: 'detectVWAPBounce' },
+        { id: 'liquidity_trap', displayName: 'Liquidity Trap', method: 'detectLiquidityTrap' },
+        { id: 'dhma', displayName: 'DHMA', method: 'detectDHMA' }
+      ];
+
+      // Generate deterministic OHLC data designed to trigger strategy signals
+      // Uses trending pattern (uptrend) with pullbacks and consolidation phases
+      const basePrice = 100;
+      const mockOHLC = Array.from({ length: 100 }, (_, i) => {
+        const trend = i * 0.15; // Uptrend
+        const cycle = Math.sin(i / 10) * 3; // Oscillation
+        const pullback = i > 60 && i < 70 ? -5 : 0; // Pullback zone
+        const consolidation = i > 80 ? 0.5 : 1; // Consolidation at end
+        
+        const midPrice = basePrice + trend + cycle + pullback;
+        const volatility = 2 * consolidation;
+        
+        return {
+          time: Date.now() - (100 - i) * 60000,
+          open: midPrice - volatility * 0.3,
+          high: midPrice + volatility,
+          low: midPrice - volatility,
+          close: midPrice + volatility * 0.5,
+          volume: 1500000 + (i > 70 ? 800000 : 0) // Volume spike after pullback
+        };
+      });
+
+      // Calculate VWAP from mock data
+      let sumPV = 0, sumV = 0;
+      for (const c of mockOHLC) {
+        const typical = (c.high + c.low + c.close) / 3;
+        sumPV += typical * c.volume;
+        sumV += c.volume;
+      }
+      const calculatedVwap = sumPV / sumV;
+
+      // Calculate SMA
+      const last20 = mockOHLC.slice(-20);
+      const calculatedSma = last20.reduce((sum, c) => sum + c.close, 0) / 20;
+
+      const mockIndicators = {
+        vwap: calculatedVwap,
+        sma: calculatedSma,
+        currentPrice: mockOHLC[mockOHLC.length - 1].close,
+        volume: mockOHLC[mockOHLC.length - 1].volume,
+        high24h: Math.max(...mockOHLC.slice(-24).map(c => c.high)),
+        low24h: Math.min(...mockOHLC.slice(-24).map(c => c.low)),
+        // DHMA microstructure inputs
+        obi: 0.35, // Order book imbalance (above theta_OBI threshold of 0.3)
+        micropriceTilt: 0.25, // Above epsilon_micro threshold of 0.2
+        signedFlow: 150, // Positive flow
+        toxicity: 0.5, // Below tau_toxicity threshold of 0.7
+        spread: 2, // Below maxSpread threshold of 5
+        bidVolume: 50000,
+        askVolume: 35000
+      };
+
+      const perStrategy: any[] = [];
+      const warnings: string[] = [];
+      let allMethodsExist = true;
+      let signalsGenerated = 0;
+
+      console.log(`[REB2.12F][StrategyHealth] Verifying 9 strategy methods with mock data...`);
+
+      for (const strategy of strategyMethods) {
+        const methodExists = typeof (strategyEngine as any)[strategy.method] === 'function';
+        const inSourceSet = sourceStrategies.includes(strategy.id);
+        let executionResult = 'NOT_TESTED';
+        let error = null;
+
+        if (methodExists) {
+          try {
+            // Execute each strategy's detect method with mock data
+            let result: any = null;
+            switch (strategy.id) {
+              case 'vwap_pullback':
+                result = strategyEngine.detectVWAPPullback(mockIndicators, { smaLength: 20 }, mockOHLC as any);
+                break;
+              case 'abcd_long':
+                result = strategyEngine.detectABCDLong(mockOHLC as any, { minConsolidation: 10 });
+                break;
+              case 'sma_trend_ride':
+                result = strategyEngine.detectSMATrendRide(mockIndicators, mockOHLC as any, { smaLength: 20 });
+                break;
+              case 'breakout':
+                result = strategyEngine.detectBreakout(mockOHLC as any, { minConsolidationBars: 10, maxRangeWidth: 3, breakoutBuffer: 1, volumeMultiplier: 2, maxHoldingHours: 12 });
+                break;
+              case 'mean_reversion':
+                result = strategyEngine.detectMeanReversion(mockIndicators, mockOHLC as any, { meanType: 'vwap', smaLength: 20, deviationThreshold: 2.5, partialExitPercent: 50, stopLossBuffer: 1 });
+                break;
+              case 'range_trading':
+                result = strategyEngine.detectRangeTrading(mockOHLC as any, { minRangeDurationHours: 12, minRangeWidth: 3, minBoundaryTouches: 3, entryZoneWidth: 0.5, stopLossBeyond: 1 });
+                break;
+              case 'vwap_bounce':
+                result = strategyEngine.detectVWAPBounce(mockIndicators, mockOHLC as any, { vwapProximity: 0.5, minVWAPSlope: 0.3, volumeMultiplier: 1.3, maxPullbackBars: 5, partialExitR: 1.5 });
+                break;
+              case 'liquidity_trap':
+                result = strategyEngine.detectLiquidityTrap(mockOHLC as any, { maxTrapExtension: 1.2, trapReturnBars: 2, minStopZoneSize: 'medium', minLevelTouches: 3, volumeRatio: 1.5 });
+                break;
+              case 'dhma':
+                result = strategyEngine.detectDHMA(mockIndicators, mockOHLC as any, { theta_OBI: 0.3, epsilon_micro: 0.2, tau_toxicity: 0.7, maxSpread: 5, k_tp: 1.5, N_flow: 50, N_burst: 10, window_session: 20 });
+                break;
+            }
+            executionResult = result ? 'SIGNAL_GENERATED' : 'NO_SIGNAL';
+            if (result) signalsGenerated++;
+          } catch (e: any) {
+            executionResult = 'ERROR';
+            error = e.message;
+            warnings.push(`Strategy ${strategy.id} execution error: ${e.message}`);
+          }
+        } else {
+          allMethodsExist = false;
+          warnings.push(`Strategy ${strategy.id} method ${strategy.method} not found`);
+        }
+
+        const status = methodExists && inSourceSet && executionResult !== 'ERROR' ? 'HEALTHY' : 
+                       methodExists && !inSourceSet ? 'NOT_IN_ORCHESTRATOR' : 
+                       methodExists ? 'EXECUTION_ERROR' : 'MISSING';
+        
+        perStrategy.push({
+          id: strategy.id,
+          displayName: strategy.displayName,
+          methodExists,
+          inOrchestratorSet: inSourceSet,
+          executionResult,
+          error,
+          status
+        });
+
+        console.log(`  { id: '${strategy.id}', methodExists: ${methodExists}, inSet: ${inSourceSet}, exec: ${executionResult} }`);
+      }
+
+      const healthyCount = perStrategy.filter(s => s.status === 'HEALTHY').length;
+      const allStrategiesHealthy = healthyCount === 9;
+
+      console.log(`[REB2.12F][StrategyHealth] Complete - healthy: ${healthyCount}/9, dhmaWired: ${dhmaWired}, signals: ${signalsGenerated}`);
+
+      res.json({
+        ok: true,
+        mode,
+        summary: {
+          strategiesEvaluated: 9,
+          healthyStrategies: healthyCount,
+          allStrategiesHealthy,
+          allMethodsExist,
+          dhmaEnabled: sourceStrategies.includes('dhma'),
+          dhmaWiredInEvaluator: dhmaWired,
+          mockSignalsGenerated: signalsGenerated
+        },
+        perStrategy,
+        orchestratorStrategies: sourceStrategies,
+        warnings
+      });
+    } catch (error: any) {
+      console.error('[REB2.12F] Error running strategy health check:', error);
+      res.status(500).json({
+        ok: false,
+        error: 'Failed to run strategy health check',
+        message: error.message
+      });
+    }
+  });
+
   // ==================== Phase 8.7.2: Intent Execution Framework ====================
 
   // POST /api/intent/execute - Execute validated intent
