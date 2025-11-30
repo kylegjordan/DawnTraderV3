@@ -1,0 +1,295 @@
+⭐ REB 8.8.3-D-FIX — Remove Watchlist Subsystem & Use Active Filtered Pool for Strategy Evaluation
+Directive for Replit (Safe Full Removal + Green Path Continuation)
+
+Authentication:
+
+username: "testuser123"
+password: "SecurePass123!"
+
+🧠 Context (Replit must read first)
+
+Phase 8.8.3-D Green Path test is running, but no trades open.
+
+Logs show:
+Scanning 3 watchlist pairs … 0 signals, 0 trades
+
+UI shows:
+Active Filtered Pool = 137 pairs, Ready-To-Buy = empty, Active Trades = empty.
+
+This proves the Strategy Engine is being fed Watchlist instead of the FX5 Active Filtered Pool.
+
+The intended architecture is:
+
+FX5 Filtered Pool (Active Filtered Pool)
+    → Strategy Engine (all 9 strategies)
+    → Ready-to-Buy
+    → Trade Executor
+    → Portfolio + Ledger
+
+
+Watchlist is a legacy/temporary subsystem and must be removed completely if safe.
+
+Goal of this directive:
+
+Eliminate Watchlist as a trading input and as a feature (code, APIs, DB), if no hidden dependencies remain.
+
+Replace the symbol source for strategy evaluation with the Active Filtered Pool (all pairs).
+
+Re-run the Green Path test and confirm that at least one trade opens and closes.
+
+🛠️ Task 1 — Safety Scan Before Full Watchlist Removal
+
+Replit must first perform a safety scan to ensure no unexpected dependencies remain.
+
+Search across the entire repo for:
+
+watchlist
+Watchlist
+getWatchlist
+addWatchlist
+removeWatchlist
+watch_list
+user_watchlist
+
+
+Categorize each reference into:
+
+T1.1 Trading-Engine Paths
+
+paper-execution-engine
+
+signal-orchestrator
+
+strategy-engine
+
+trading-engine
+
+T1.2 API & Storage
+
+server/routes.ts
+
+server/storage.ts
+
+T1.3 UI / Frontend
+
+client/src/**
+
+T1.4 Database
+
+migrations
+
+schema
+
+table/column names in SQL
+
+If Replit finds any non-trading, non-UI, non-DB reference that could affect other critical systems (e.g., security, auth, roles), it must:
+
+Document it
+
+Not remove it blindly
+
+Flag it in the final report
+
+If all references are limited to the expected areas (trading, API, UI, DB), proceed with removal.
+
+🧹 Task 2 — Remove Watchlist from Trading Engine
+
+In backend files, Replit must:
+
+2.1 paper-execution-engine.ts
+
+Find any code that uses watchlist as a symbol source, e.g.:
+
+const pairs = await storage.getWatchlist(userId);
+
+
+Replace it with the Active Filtered Pool:
+
+const pairs = await storage.getActiveFilteredPool({ mode: 'paper' });
+
+
+Requirements:
+
+Use the deduped, non-expired Active Filtered Pool.
+
+No manual limits inside scanForSignals() (we want full real-world behavior).
+
+If the pool is empty, log a clear info message and skip evaluation gracefully.
+
+2.2 signal-orchestrator.ts & strategy-engine.ts
+
+Ensure no function receives “watchlist” symbols.
+
+Confirm that the input to strategy evaluation is now only the set of symbols returned from the Active Filtered Pool.
+
+Add a short debug log (temporary):
+
+console.log('[8.8.3-D-FIX][EVAL_INPUT]', {
+  mode,
+  symbolCount: symbols.length,
+  sample: symbols.slice(0, 5),
+});
+
+
+This should show symbolCount ~ 100+ (not 3).
+
+🔚 Task 3 — Remove Watchlist APIs & Storage
+3.1 server/storage.ts
+
+Remove methods such as:
+
+getWatchlist(...)
+addToWatchlist(...)
+removeFromWatchlist(...)
+
+
+Remove any helper types/interfaces specific to watchlist.
+
+3.2 server/routes.ts
+
+Remove any endpoints like:
+
+/api/watchlist
+/api/watchlist/add
+/api/watchlist/remove
+
+
+Remove associated handlers and route registrations.
+
+3.3 Other services
+
+Remove any watchlist-related logic in services (if found), such as:
+
+subscriptions
+
+notifications
+
+“favorites” for trading
+
+🖥️ Task 4 — Remove Watchlist from Frontend
+
+Search client/src for any watchlist usage:
+
+Components, hooks, or pages referencing “watchlist”.
+
+Any hidden or unused UI.
+
+Remove:
+
+Watchlist-related components.
+
+API calls for watchlist.
+
+UI toggles/menus listing watchlist.
+
+This ensures there is no way for the UI to reintroduce watchlist behavior.
+
+🗄️ Task 5 — Remove Watchlist from Database (If Safe)
+
+Replit must inspect the database schema:
+
+Identify watchlist tables/columns (e.g. watchlists, user_watchlist, etc.).
+
+Confirm they are not referenced outside the code we’re removing.
+
+If safe:
+
+Drop or deprecate the watchlist table(s) with a migration or via direct SQL.
+
+Document the DB changes in the final report.
+
+If not safe (unexpected dependency):
+
+Do not drop the table.
+
+Instead, document findings in the report and mark the DB removal as deferred.
+
+🔁 Task 6 — Re-Run Green Path Evaluation After Fix
+
+After completing Tasks 2–5:
+
+Restart the backend workflow.
+
+Login as testuser123.
+
+Ensure:
+
+killSwitchTripped === false
+
+Trading mode = PAPER
+
+Trading toggle = STOPPED
+
+Start paper trading:
+
+POST /api/trading/start { "mode": "paper" }
+
+
+Confirm:
+
+isEngineActive(paper) === true
+
+paper-sim/status.isRunning === true
+
+Let the system run for at least 3 full evaluation cycles (90+ seconds).
+
+Verify logs:
+
+[8.8.3-D-FIX][EVAL_INPUT] shows symbolCount close to the Active Filtered Pool size (e.g. 100+).
+
+[8.8.3-B][STRATEGY] logs appear for many symbols, not just 3.
+
+You see realistic combinations of strategy rejections and occasional candidates.
+
+Observe Ready-To-Buy:
+
+Verify at least some symbols enter the Ready-To-Buy list, unless all strategies legitimately reject them.
+
+If zero signals after multiple cycles, log why (e.g., thresholds too strict).
+
+Attempt to get at least one trade open and closed:
+
+If a trade opens → record [TRADE_OPEN] + [TRADE_CLOSE] logs.
+
+If not, document clearly why (e.g., strategies too conservative, thresholds too strict).
+
+🧾 Task 7 — Final Report
+
+Create:
+
+docs/audits/REB_8.8.3-D-FIX_Active_Filtered_Pool_Strategy_Evaluation.md
+
+
+This report must include:
+
+Summary of Watchlist removal
+
+Files changed (backend, frontend, DB)
+
+Whether DB tables were dropped or left in place
+
+New strategy input behavior
+
+Confirmation that Active Filtered Pool is now the sole source
+
+Sample log of [8.8.3-D-FIX][EVAL_INPUT]
+
+Green Path results
+
+Did at least one trade open/close?
+
+If yes → include full lifecycle trace (symbol, entry, exit, P&L).
+
+If no → explain in detail (e.g., all strategies rejected all pairs).
+
+Risks & follow-ups
+
+Any deferred DB work
+
+Any remaining references to watchlist (if any)
+
+✅ Final Expected Console Message
+
+Replit must end with something like:
+
+“REB 8.8.3-D-FIX complete. Watchlist removed from trading path, Active Filtered Pool now drives strategy evaluation, Green Path test executed. See REB_8.8.3-D-FIX_Active_Filtered_Pool_Strategy_Evaluation.md for details.”

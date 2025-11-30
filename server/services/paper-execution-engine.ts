@@ -4,6 +4,7 @@ import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from '.
 import { RiskManager, buildSettingsFromModeLevel } from './risk-manager';
 import type { TradingSettings, PriceData } from '@shared/schema';
 import { contextBridge } from './context-bridge';
+import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail';
@@ -331,11 +332,19 @@ export class PaperExecutionEngine {
         return;
       }
       
-      // Get watchlist pairs to scan
-      const watchlist = await storage.getWatchlist({ mode: this.mode });
+      // REB 8.8.3-D-FIX: Get Active Filtered Pool (replaces watchlist)
+      // The Active Filtered Pool contains all pairs that passed FX5 filters (deduped, non-expired)
+      const activePool: ActiveFilteredPair[] = activeFilterPool.getActivePool(this.mode);
       
-      if (!watchlist || watchlist.length === 0) {
-        console.log(`[PaperExecution:${this.mode}] No watchlist pairs configured - skipping signal scan`);
+      // Debug log for evaluation input verification
+      console.log('[8.8.3-D-FIX][EVAL_INPUT]', {
+        mode: this.mode,
+        symbolCount: activePool.length,
+        sample: activePool.slice(0, 5).map(p => p.symbol),
+      });
+      
+      if (!activePool || activePool.length === 0) {
+        console.log(`[PaperExecution:${this.mode}] Active Filtered Pool is empty - skipping signal scan (FX5 may still be populating)`);
         this.lastCycleSummary = {
           timestamp: cycleTimestamp,
           readyToBuyCount: 0,
@@ -343,7 +352,7 @@ export class PaperExecutionEngine {
           evaluatedSymbols: [],
           tradesExecuted: 0,
           mode: this.mode,
-          skippedReason: 'no_watchlist'
+          skippedReason: 'empty_active_pool'
         };
         return;
       }
@@ -381,7 +390,7 @@ export class PaperExecutionEngine {
         timeFormat: '24hr',
       } as unknown as TradingSettings;
       
-      console.log(`[PaperExecution:${this.mode}] Scanning ${watchlist.length} watchlist pairs for signals...`);
+      console.log(`[PaperExecution:${this.mode}] Scanning ${activePool.length} Active Filtered Pool pairs for signals...`);
       
       const evaluatedSymbols: string[] = [];
       let readyToBuyCount = 0;
@@ -396,8 +405,8 @@ export class PaperExecutionEngine {
         this.lastCycleSummary = {
           timestamp: cycleTimestamp,
           readyToBuyCount: 0,
-          pulledCount: watchlist.length,
-          evaluatedSymbols: watchlist.map(w => w.symbol),
+          pulledCount: activePool.length,
+          evaluatedSymbols: activePool.map(p => p.symbol),
           tradesExecuted: 0,
           mode: this.mode,
           skippedReason: 'max_positions_reached'
@@ -405,8 +414,8 @@ export class PaperExecutionEngine {
         return;
       }
       
-      // Scan each watchlist symbol for signals
-      for (const pair of watchlist) {
+      // REB 8.8.3-D-FIX: Scan each Active Filtered Pool symbol for signals
+      for (const pair of activePool) {
         if (openPositions.length + tradesExecuted >= maxPositions) {
           console.log(`[PaperExecution:${this.mode}] Position limit reached during scan`);
           break;
