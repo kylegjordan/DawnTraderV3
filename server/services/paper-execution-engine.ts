@@ -1,7 +1,7 @@
 import { storage } from '../storage';
 import { KrakenService } from './kraken';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
-import { RiskManager } from './risk-manager';
+import { RiskManager, buildSettingsFromModeLevel } from './risk-manager';
 import type { TradingSettings, PriceData } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 
@@ -313,17 +313,126 @@ export class PaperExecutionEngine {
     const cycleTimestamp = new Date().toISOString();
     
     try {
-      // Phase 41F-L.E2E-PURGE: getTradingSettings method removed
-      // Signal scanning temporarily disabled pending migration to guardrails_v2
-      console.log(`[PaperExecution:${this.mode}] Signal scanning disabled (pending guardrails_v2 migration)`);
+      // REB 8.8.3-D: Get trading settings from mode-level guardrails
+      const modeSettings = await buildSettingsFromModeLevel(this.mode);
       
-      // Update summary with disabled state
+      // Check if kill switch is tripped
+      if (modeSettings.killSwitchTripped) {
+        console.log(`[PaperExecution:${this.mode}] Kill switch is tripped - skipping signal scan`);
+        this.lastCycleSummary = {
+          timestamp: cycleTimestamp,
+          readyToBuyCount: 0,
+          pulledCount: 0,
+          evaluatedSymbols: [],
+          tradesExecuted: 0,
+          mode: this.mode,
+          skippedReason: 'kill_switch_tripped'
+        };
+        return;
+      }
+      
+      // Get watchlist pairs to scan
+      const watchlist = await storage.getWatchlist({ mode: this.mode });
+      
+      if (!watchlist || watchlist.length === 0) {
+        console.log(`[PaperExecution:${this.mode}] No watchlist pairs configured - skipping signal scan`);
+        this.lastCycleSummary = {
+          timestamp: cycleTimestamp,
+          readyToBuyCount: 0,
+          pulledCount: 0,
+          evaluatedSymbols: [],
+          tradesExecuted: 0,
+          mode: this.mode,
+          skippedReason: 'no_watchlist'
+        };
+        return;
+      }
+      
+      // REB 8.8.3-D: Build TradingSettings-compatible object from mode-level guardrails only
+      // Note: getTradingSettings removed - use guardrails_v2 + defaults
+      // Cast to unknown first to avoid type mismatch, then to TradingSettings
+      const settings = {
+        id: 'runtime-mode-settings',
+        globalContextId: 'default',
+        userId: null,
+        riskPerTradePct: modeSettings.riskPerTradePct || '4.00',
+        maxOpenTrades: modeSettings.maxOpenTrades || 3,
+        maxExposurePercent: modeSettings.maxExposurePercent || '25.00',
+        smaLength: 20,
+        minVolume: '30000000.00',
+        minDailyRange: '6.50',
+        minPrice: '0.01',
+        maxBidAskSpread: '1.00',
+        excludeStablecoins: true,
+        minDataHistoryDays: 90,
+        allowedTradingPairs: ['USD', 'USDT'],
+        blacklistedSymbols: [],
+        whitelistedSymbols: [],
+        vwapTimeframe: 60,
+        vwapPullbackThreshold: '2.00',
+        timezone: 'UTC',
+        updatedAt: new Date(),
+        riskPerTrade: null,
+        slippageToleranceMajors: '0.50',
+        slippageToleranceMidcaps: '2.00',
+        slippageToleranceSmall: '5.00',
+        stopBufferPercent: '0.30',
+        aiCapitalAllocation: false,
+        timeFormat: '24hr',
+      } as unknown as TradingSettings;
+      
+      console.log(`[PaperExecution:${this.mode}] Scanning ${watchlist.length} watchlist pairs for signals...`);
+      
+      const evaluatedSymbols: string[] = [];
+      let readyToBuyCount = 0;
+      let tradesExecuted = 0;
+      
+      // Check open positions limit
+      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const maxPositions = settings.maxOpenTrades || 3;
+      
+      if (openPositions.length >= maxPositions) {
+        console.log(`[PaperExecution:${this.mode}] Max open positions (${maxPositions}) reached - skipping new signals`);
+        this.lastCycleSummary = {
+          timestamp: cycleTimestamp,
+          readyToBuyCount: 0,
+          pulledCount: watchlist.length,
+          evaluatedSymbols: watchlist.map(w => w.symbol),
+          tradesExecuted: 0,
+          mode: this.mode,
+          skippedReason: 'max_positions_reached'
+        };
+        return;
+      }
+      
+      // Scan each watchlist symbol for signals
+      for (const pair of watchlist) {
+        if (openPositions.length + tradesExecuted >= maxPositions) {
+          console.log(`[PaperExecution:${this.mode}] Position limit reached during scan`);
+          break;
+        }
+        
+        try {
+          evaluatedSymbols.push(pair.symbol);
+          const hasSignal = await this.checkSymbolForSignal(pair.symbol, settings);
+          if (hasSignal) {
+            readyToBuyCount++;
+            tradesExecuted++;
+          }
+        } catch (symbolError) {
+          console.error(`[PaperExecution:${this.mode}] Error scanning ${pair.symbol}:`, symbolError);
+        }
+      }
+      
+      console.log(`[PaperExecution:${this.mode}] Scan complete: ${evaluatedSymbols.length} symbols, ${readyToBuyCount} signals, ${tradesExecuted} trades`);
+      
+      // Update summary with scan results
       this.lastCycleSummary = {
         timestamp: cycleTimestamp,
-        readyToBuyCount: 0,
-        pulledCount: 0,
-        evaluatedSymbols: [],
-        tradesExecuted: 0,
+        readyToBuyCount,
+        pulledCount: evaluatedSymbols.length,
+        evaluatedSymbols,
+        tradesExecuted,
         mode: this.mode
       };
     } catch (error) {
@@ -334,7 +443,8 @@ export class PaperExecutionEngine {
         pulledCount: 0,
         evaluatedSymbols: [],
         tradesExecuted: 0,
-        mode: this.mode
+        mode: this.mode,
+        error: String(error)
       };
     }
   }

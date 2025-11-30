@@ -2534,6 +2534,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 41F-L.E2E-PURGE: Pre-flight checks using mode-level configuration only
       console.log('[PREFLIGHT] Running pre-flight validation checks...');
       const preflightErrors: string[] = [];
+      let startingBalance: number = 0; // REB 8.8.3-D: Store balance for engine start
       
       try {
         // 1. Validate Goals Engine configuration exists (mode-level)
@@ -2559,7 +2560,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         if (!portfolioState) {
           preflightErrors.push('Portfolio state not initialized - please initialize portfolio before starting');
         } else {
-          console.log('[PREFLIGHT] ✅ Portfolio state exists (balance: $' + portfolioState.balance + ')');
+          startingBalance = parseFloat(portfolioState.balance); // REB 8.8.3-D: Extract balance for engine start
+          console.log('[PREFLIGHT] ✅ Portfolio state exists (balance: $' + startingBalance + ')');
         }
         
         // 3. Quick Kraken API connectivity check (non-blocking)
@@ -2609,9 +2611,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           console.log('[ENGINE_STARTING_PAPER] Importing paper-sim-service...');
           // Start paper trading simulation
           const { startPaperSimulation } = await import('./services/paper-sim-service.js');
-          console.log('[ENGINE_STARTING_PAPER] Calling startPaperSimulation...');
-          const result = await startPaperSimulation(userId, { skipAutoWatchlist: true });
-          console.log(`[TradingStart] Paper simulation started for user ${userId}`);
+          console.log(`[ENGINE_STARTING_PAPER] Calling startPaperSimulation (balance: $${startingBalance})...`);
+          const result = await startPaperSimulation(userId, { 
+            skipAutoWatchlist: true,
+            startingBalance // REB 8.8.3-D: Pass extracted balance to paper simulation
+          });
+          console.log(`[TradingStart] Paper simulation started for user ${userId} with balance $${startingBalance}`);
           console.log('[ENGINE_START_COMPLETED]', { mode: 'paper', sessionId: result.data?.sessionId });
           console.log('[ENGINE_ACTIVE][DEBUG] Engine reached ACTIVE state');
           return result;
