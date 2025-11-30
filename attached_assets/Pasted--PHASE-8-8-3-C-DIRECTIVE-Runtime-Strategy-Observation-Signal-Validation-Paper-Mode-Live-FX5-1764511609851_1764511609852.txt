@@ -1,0 +1,253 @@
+✅ PHASE 8.8.3-C DIRECTIVE — Runtime Strategy Observation & Signal Validation
+
+(Paper Mode • Live FX5 Data • No Modifications Allowed)
+
+________________________________________
+CONTEXT FOR REPLIT
+
+We are in Phase 8.8.3, validating the strategy pipeline before Phase 9 (full rebuild) and before 8.8.3-D (minimal trade execution test).
+Subphases:
+
+8.8.3-A — Static Audit ✔️
+
+8.8.3-B — Diagnostic Logging Impl ✔️
+
+8.8.3-C — Runtime Observation & Behavioral Validation (THIS DIRECTIVE)
+
+8.8.3-D — End-to-End Minimal Trade Test
+
+8.8.3-C must evaluate actual strategy behavior using:
+
+Paper Mode only
+Real FX5-filtered symbols
+Full strategy set
+No code modifications (logging only)
+
+The purpose is to gather the true behavior of:
+
+Strategy Selection Layer
+
+Strategy Engine
+
+Signal Generation
+
+Routing & Guardrails
+
+DHMA microstructure filters
+
+Error conditions
+
+Malformed signal patterns
+
+This phase does NOT fix anything.
+It observes, measures, records, and summarizes.
+
+👤 TEST USER CREDS (same as earlier)
+username: testuser123
+password: SecurePass123!
+
+🎯 OBJECTIVES FOR REPLIT
+
+Replit must:
+
+1. Run DawnTrader’s live FX5 evaluation cycles in paper mode
+
+Let the system run for:
+
+10 full evaluation cycles (approx. 5 minutes)
+
+OR until at least 30 symbols have been processed
+
+Whichever is longer.
+
+2. Capture ALL [8.8.3-C] and [8.8.3-B] logs
+
+Replit must collect:
+
+Strategy selection logs
+
+Per-strategy input/output logs
+
+Signal routing logs
+
+Guardrail logs
+
+DHMA rejection reasons
+
+Any malformed StrategySignal entries
+
+Any unexpected errors or anomalies
+
+3. Produce the 8.8.3-C Runtime Analysis Report
+
+Two artifacts must be produced:
+
+A. docs/audits/REB-8.8.3-C_Runtime_Observation.md
+
+Human-readable summary containing:
+
+Which strategies fired signals (and how often)
+
+Which strategies produced zero signals
+
+Which symbols produced signals
+
+Guardrail PASS/BLOCK stats
+
+Selection-layer behavior (selected vs skipped)
+
+Any malformed StrategySignal values
+
+Any unexpected numeric anomalies
+
+Any latency or evaluation-time anomalies
+
+Whether DHMA microstructure input fields were populated correctly
+
+B. docs/audits/REB-8.8.3-C_Raw_Logs.json
+
+Machine-readable rollup of all logged JSON structures.
+
+🧪 STEP-BY-STEP EXECUTION
+STEP 1 — Start Paper Mode with FX5 Filtering
+
+Use normal DawnTrader boot sequence
+
+Start the trading engine in paper mode
+
+Confirm FX5 scan filtering is active
+
+STEP 2 — Run Evaluation Cycles
+
+Let system run:
+
+10 full 30-second cycles
+
+OR until 30+ symbols evaluated
+
+During this, the app will automatically emit extensive logging added in 8.8.3-B.
+
+STEP 3 — Collect All Diagnostic Logging
+
+Grep:
+
+grep "\[8.8.3-B\]" /tmp/logs/Start_application_*.log
+
+
+Save each JSON block into a consolidated log file:
+
+For orchestrator: [EVAL_CYCLE]
+
+For strategies: [STRATEGY]
+
+For routing: [ROUTING]
+
+For guardrails: [GUARDRAIL]
+
+For DHMA rejects: [STRATEGY] rejectionReason
+
+STEP 4 — Analyze Runtime Behavior (NO CODE CHANGES)
+
+Replit must analyze:
+
+A. Strategy Selection Layer Behavior
+
+For each symbol:
+
+Which strategies were selected?
+
+Which were skipped?
+
+Does selection vary by market regime?
+
+Did DHMA get selected only for trending symbols?
+
+Does everything run all 9 strategies? (If so, document it)
+
+Are any strategies never being selected?
+
+B. Strategy Output Behavior
+
+Determine:
+
+Which strategies fired at least one valid StrategySignal
+
+Which produced only null outputs
+
+Whether stop < entry < target is satisfied
+
+Whether confidence values are sane
+
+Any malformed signals
+
+C. Guardrail Behavior
+
+Count:
+
+Guardrail PASS events
+
+Guardrail BLOCK events (categorized by reason)
+
+Identify:
+
+Any unexpected or invalid guardrail blocks
+
+Whether valid signals are being blocked incorrectly
+
+D. DHMA Microstructure Health
+
+Check:
+
+Are obi, micropriceTilt, burstRegime, toxicity populated?
+
+Are rejection reasons consistent?
+
+Is DHMA confidence ever > 0?
+
+E. Timing & Performance
+
+Record:
+
+Execution time per symbol
+
+Any variability or spikes
+
+Any evaluation cycles skipping pairs
+
+STEP 5 — Produce Required Files
+1. REB-8.8.3-C_Runtime_Observation.md
+
+Must include:
+
+Summary table of all strategies
+
+Which strategies fired signals
+
+Which produced none
+
+Guardrail PASS/BLOCK metrics
+
+Selection-layer behavior summary
+
+DHMA microstructure summary
+
+List of malformed signals
+
+Recommendations for 8.8.3-D
+
+2. REB-8.8.3-C_Raw_Logs.json
+
+A JSON array of:
+
+All runtime logs captured
+
+Grouped by category (strategy, orchestrator, routing, guardrail, DHMA)
+
+🏁 EXPECTED FINAL OUTPUT
+
+Replit must complete by stating:
+
+“REB 8.8.3-C complete. Runtime strategy behavior observed and documented. Raw logs and analytical report produced. Ready for 8.8.3-D.”
+
+________________________________________
+✅ END OF DIRECTIVE — Phase 8.8.3-C
