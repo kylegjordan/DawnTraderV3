@@ -306,6 +306,23 @@ export class PaperExecutionEngine {
     // Delete open position
     await storage.deletePaperSimOpenPosition(this.mode, positionId);
 
+    // [8.8.3-F][CLOSE] REB 8.8.3-F: Lifecycle log for trade closed
+    console.log(`[8.8.3-F][CLOSE]`, JSON.stringify({
+      tradeId: trade?.id || null,
+      symbol: position.symbol,
+      strategy: position.strategyName,
+      direction: position.side,
+      entryPrice: avgPrice,
+      exitPrice: actualExitPrice,
+      size: quantity,
+      grossPnl: grossPnl,
+      netPnl: netPnl,
+      pnlPercent: pnlPercent,
+      fees: totalFees,
+      closeReason: exitCondition.type,
+      timestamp: new Date().toISOString()
+    }));
+
     console.log(`[PaperExecution:${this.mode}] Position ${position.symbol} closed successfully`);
   }
 
@@ -738,6 +755,17 @@ export class PaperExecutionEngine {
     if (!riskCheck.approved) {
       console.log(`[PaperExecution:${this.mode}] Paper trade rejected by risk manager: ${riskCheck.reason}`);
       
+      // [8.8.3-F][RISK_REJECT] REB 8.8.3-F: Lifecycle log for risk rejection
+      console.log(`[8.8.3-F][RISK_REJECT]`, JSON.stringify({
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        direction: 'long',
+        entryPrice: signal.entryPrice,
+        reason: riskCheck.reason,
+        code: riskCheck.code || 'UNKNOWN',
+        timestamp: new Date().toISOString()
+      }));
+      
       // [27.F.14.B] INSTRUMENTATION: Risk check failed
       console.log(`[27.F.14.B][PaperSim] risk_check_failed {symbol:"${signal.symbol}", reason:"${riskCheck.reason}"}`);
       contextBridge.broadcast({
@@ -783,10 +811,18 @@ export class PaperExecutionEngine {
       }
     });
 
-    // Calculate position size based on risk
-    const riskAmount = parseFloat(settings.riskPerTrade || '100');
+    // REB 8.8.3-F: Calculate position size using guardrails_v2 percentage-based risk
+    // Portfolio value from settings, risk percentage from guardrails_v2
+    const portfolioValue = parseFloat(settings.portfolioValue || '50000');
+    const riskPerTradePct = parseFloat(settings.riskPerTradePct || '4.0');
+    const riskAmount = (portfolioValue * riskPerTradePct) / 100;
     const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
-    const quantity = riskAmount / stopDistance;
+    const quantity = stopDistance > 0 ? riskAmount / stopDistance : 0;
+    
+    if (quantity <= 0) {
+      console.log(`[8.8.3-F][RISK_REJECT] Invalid position size (quantity=${quantity}) - skipping trade`);
+      return;
+    }
 
     // Apply entry slippage and fees
     const slippage = signal.entryPrice * (this.SLIPPAGE_PERCENT / 100);
@@ -878,6 +914,20 @@ export class PaperExecutionEngine {
 
       console.log(`[PaperExecution:${this.mode}] Simulated trade opened: ${signal.symbol} (Trade ID: ${trade.id})`);
 
+      // [8.8.3-F][OPEN] REB 8.8.3-F: Lifecycle log for trade opened
+      console.log(`[8.8.3-F][OPEN]`, JSON.stringify({
+        tradeId: trade.id,
+        symbol: signal.symbol,
+        strategy: signal.strategy,
+        direction: 'long',
+        entryPrice: actualEntryPrice,
+        size: quantity,
+        stopLoss: signal.stopPrice,
+        takeProfit: signal.targetPrice,
+        confidence: signal.confidence,
+        timestamp: new Date().toISOString()
+      }));
+
       // [27.F.14.DIAG] DIAGNOSTIC: Trade insert successful
       console.log(`[DB] trade_insert_ok {tradeId:${trade.id}, symbol:${signal.symbol}}`);
       contextBridge.broadcast({
@@ -948,6 +998,8 @@ export class PaperExecutionEngine {
   /**
    * Phase 37: Process external signal from SignalOrchestrator
    * Public method for SignalOrchestrator to submit signals for execution
+   * 
+   * REB 8.8.3-F: Restored execution using guardrails_v2 + risk-manager path
    */
   async processSignal(signal: StrategySignal): Promise<void> {
     if (!this.isRunning) {
@@ -963,10 +1015,19 @@ export class PaperExecutionEngine {
         return;
       }
 
-      // Phase 41F-L.E2E-PURGE: getTradingSettings method removed
-      // Signal processing temporarily disabled pending migration to guardrails_v2
-      console.log(`[PaperExecution:${this.mode}] Signal processing disabled (pending guardrails_v2 migration) for ${signal.symbol}`);
-      return;
+      // REB 8.8.3-F: Use guardrails_v2 to build settings (replaces legacy getTradingSettings)
+      const settings = await buildSettingsFromModeLevel(this.mode, systemContext.lastStartedBy);
+      
+      // REB 8.8.3-F: Check kill switch before processing
+      if (settings.killSwitchTripped) {
+        console.log(`[8.8.3-F][RISK_REJECT] Kill switch tripped - signal rejected for ${signal.symbol}`);
+        return;
+      }
+
+      // REB 8.8.3-F: Execute trade using modern path
+      console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
+      await this.executeSimulatedTrade(signal, settings);
+      
     } catch (error) {
       console.error(`[PaperExecution:${this.mode}] Error processing signal for ${signal.symbol}:`, error);
     }

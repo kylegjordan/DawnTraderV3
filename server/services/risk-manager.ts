@@ -164,6 +164,7 @@ export async function buildSettingsFromModeLevel(
   const riskPct = getRiskPercentageV2(mode, guardrails);
 
   // REB 8.8.3-KS-B: Build settings object using killSwitchTripped (tradingSuspended removed)
+  // REB 8.8.3-F: Added maxPositionPercent to allow trades to pass position size cap check
   return {
     portfolioValue: portfolioValue.toString(),
     riskPerTradePct: riskPct.toString(),
@@ -171,6 +172,7 @@ export async function buildSettingsFromModeLevel(
     maxOpenTrades: Number(guardrails.maxOpenPositions) || 5,
     dailyLossKillSwitch: guardrails.dailyLossKillSwitchPct ? guardrails.dailyLossKillSwitchPct.toString() : '7.00',
     maxExposurePercent: '50.00', // Not in guardrails_v2, using safe default
+    maxPositionPercent: '30.00', // REB 8.8.3-F: 30% max single position (reasonable for paper trading)
     autoTrade: false,
   };
 }
