@@ -568,6 +568,74 @@ export class PaperExecutionEngine {
         }
       });
 
+      // REB 8.8.3-E: Save signal to trading_signals table for Ready-to-Buy display
+      // This populates the RTB tab with real strategy signals from Active Filtered Pool
+      // Parse base/quote currencies from symbol (handles "BTC/USD", "BTCUSD", "FETEUR" formats)
+      let baseCurrency: string;
+      let quoteCurrency: string;
+      
+      if (bestSignal.symbol.includes('/')) {
+        // Format: "BTC/USD" or "VINE/USD"
+        const parts = bestSignal.symbol.split('/');
+        baseCurrency = parts[0];
+        quoteCurrency = parts[1];
+      } else {
+        // Format: "BTCUSD", "FETEUR", "XBTUSDT" - need to detect quote suffix
+        const quotePatterns = ['USDT', 'USD', 'EUR', 'BTC', 'ETH', 'GBP', 'ZUSD', 'ZEUR'];
+        let matched = false;
+        for (const quote of quotePatterns) {
+          if (bestSignal.symbol.endsWith(quote)) {
+            baseCurrency = bestSignal.symbol.slice(0, -quote.length);
+            quoteCurrency = quote;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          // Fallback: assume last 3 chars are quote currency
+          baseCurrency = bestSignal.symbol.slice(0, -3);
+          quoteCurrency = bestSignal.symbol.slice(-3);
+        }
+      }
+      
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
+      
+      try {
+        await storage.saveTradingSignal({
+          mode: this.mode,
+          symbol: bestSignal.symbol,
+          baseCurrency,
+          quoteCurrency,
+          strategy: bestSignal.strategy as any,
+          confidence: bestSignal.confidence.toString(),
+          entryPrice: bestSignal.entryPrice.toString(),
+          stopPrice: bestSignal.stopPrice.toString(),
+          targetPrice: bestSignal.targetPrice.toString(),
+          currentPrice: indicators.currentPrice.toString(),
+          vwap: indicators.vwap?.toString() || null,
+          volume24h: indicators.volume?.toString() || null,
+          dailyRange: indicators.high24h && indicators.low24h && indicators.currentPrice > 0
+            ? (((indicators.high24h - indicators.low24h) / indicators.currentPrice) * 100).toFixed(2)
+            : null,
+          status: 'active',
+          expiresAt,
+          metadata: {
+            detectedBy: 'paper_execution_engine',
+            source: 'active_filtered_pool',
+            scanCycle: new Date().toISOString()
+          }
+        });
+        
+        console.log('[8.8.3-E][RTB_ENQUEUE]', {
+          mode: this.mode,
+          symbol: bestSignal.symbol,
+          strategy: bestSignal.strategy,
+          confidence: bestSignal.confidence,
+        });
+      } catch (signalError) {
+        console.error(`[8.8.3-E][RTB_ENQUEUE] Failed to save signal for ${bestSignal.symbol}:`, signalError);
+      }
+
       await this.executeSimulatedTrade(bestSignal, settings);
       return true;
     }

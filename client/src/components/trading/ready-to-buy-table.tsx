@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, TrendingUp, ArrowUpDown } from "lucide-react";
+import { RefreshCw, TrendingUp, ArrowUpDown, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TradingSignal {
@@ -175,21 +175,12 @@ export default function ReadyToBuyTable() {
             Ready-to-Buy Signals ({sortedSignals.length})
           </CardTitle>
           {lastUpdated && (
-            <p className="text-sm text-muted-foreground mt-1" data-testid="text-last-updated">
-              Last updated: {lastUpdated.toLocaleTimeString()}
+            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1" data-testid="text-last-updated">
+              <Clock className="w-3 h-3" />
+              Auto-updates every 30s | Last: {lastUpdated.toLocaleTimeString()}
             </p>
           )}
         </div>
-        <Button 
-          onClick={handleRefresh} 
-          variant="outline" 
-          size="sm"
-          disabled={isLoading}
-          data-testid="button-refresh-signals"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
       </CardHeader>
       <CardContent>
         {isLoading && !data ? (

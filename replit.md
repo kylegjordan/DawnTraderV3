@@ -79,6 +79,8 @@ Critical portfolio balance synchronization for paper trading mode ensures `portf
 
 **REB 8.8.3-KS-B Kill Switch Unification** (November 30, 2025) unified kill switch state management around `killSwitchTripped` as single source of truth. Key changes: (1) `tripKillSwitch()` now also stops engine, (2) Trading start endpoint auto-clears kill switch, (3) Manual reset endpoints deprecated, (4) Frontend uses "Resume Trading" button calling `/api/trading/start`. `tradingSuspended` field eliminated. Documentation: `docs/audits/REB_8.8.3-KS-B_Kill_Switch_Unification_Complete.md`.
 
+**REB 8.8.3-E Ready-to-Buy Integration** (November 30, 2025) wired Ready-to-Buy (RTB) system to real strategy signals from Active Filtered Pool. Key changes: (1) Paper execution engine now saves TradingSignal to database after best strategy signal selection, (2) Comprehensive symbol parsing for base/quote currencies (handles "BTC/USD", "FETEUR", "XBTUSDT" formats), (3) Removed legacy Refresh button from RTB component, (4) Added "Auto-updates every 30s" text with Clock icon. Signal flow: Strategy detection → saveTradingSignal → database → /api/trading-signals → RTB table (30s auto-refresh). Files modified: `server/services/paper-execution-engine.ts`, `client/src/components/trading/ready-to-buy-table.tsx`. Debug logging: `[8.8.3-E][RTB_ENQUEUE]` and `[8.8.3-E][RTB_API]` prefixes.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

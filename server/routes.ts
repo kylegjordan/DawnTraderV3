@@ -3610,6 +3610,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Trading Signals (Ready-to-Buy opportunities)
+  // REB 8.8.3-E: Now returns real strategy signals from Active Filtered Pool pipeline
   apiRouter.get('/trading-signals', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -3621,6 +3622,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         status: status as string | undefined 
       });
       console.log('[Phase-27.F.15.B.1] Updated route /api/trading-signals → mode-based only');
+      
+      // REB 8.8.3-E: Debug logging for RTB API verification
+      console.log('[8.8.3-E][RTB_API]', {
+        mode,
+        count: signals.length,
+        sample: signals.slice(0, 3).map(s => s.symbol),
+      });
       
       res.json(signals);
     } catch (error) {
