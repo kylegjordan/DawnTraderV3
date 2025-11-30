@@ -1,0 +1,147 @@
+🚀 REB 8.8.3-A — Strategy Engine Deep Audit (Read-Only Diagnostic Phase)
+
+Context:
+We are beginning Phase 8.8.3. In this first subphase, we perform a 100% diagnostic, zero-modification audit of the entire strategy engine.
+This audit must produce a complete Strategy Status Map – Part 1 to guide the minimum fixes and the subsequent rebuild in Phase 9.
+
+Authentication (use only the test user):
+
+username: testuser123
+password: SecurePass123!
+
+🎯 Objectives for 8.8.3-A
+
+Replit must:
+
+1. Map ALL 9 strategies and their dependencies
+
+For each strategy:
+
+required indicators
+
+imported modules
+
+expected FX5 inputs
+
+data shape expectations
+
+microstructure requirements
+
+risk parameters
+
+timeframes used
+
+output fields generated
+
+2. Identify all legacy V1/V2 references
+
+Search for:
+
+old scoring logic
+
+deprecated indicators
+
+unused params
+
+dead code paths
+
+V1/V2 signal objects
+
+Dema / Nodal placeholders
+
+old guardrail files referenced
+
+3. Document missing indicator inputs
+
+For each strategy, list:
+
+what indicators they expect
+
+what indicators exist today
+
+what indicators are missing
+
+what must be added in Phase 9
+
+4. Validate output compatibility with ready-to-buy
+
+For each strategy:
+
+check shape of StrategySignal return
+
+check missing fields
+
+check invalid/NaN values
+
+check type mismatches
+
+check timestamp fields
+
+check if ready-to-buy can accept the output
+
+5. Guardrail compatibility audit
+
+Check whether:
+
+guardrails falsely reject valid strategy signals
+
+guardrails expect fields strategies do not supply
+
+cooldown logic blocks strategy evaluation incorrectly
+
+max positions or kill-switch logic misfires
+
+6. Produce the Strategy Status Map — Part 1
+
+Format (JSON + Markdown summary):
+
+For each strategy:
+
+strategyName:
+  status: working | partial | broken
+  requiredIndicators: [...]
+  availableIndicators: [...]
+  missingIndicators: [...]
+  dependencies: [...]
+  legacyReferences: [...]
+  outputCompatibility:
+      readyToBuyCompatible: true/false
+      issues: [...]
+  guardrailCompatibility:
+      passes: true/false
+      issues: [...]
+  notes: [...]
+
+
+Also produce:
+
+Global Indicator Availability Map
+
+Missing Microstructure Requirements Map
+
+Legacy Logic Map
+
+Strategy Compatibility Summary
+
+Phase 9 Rebuild Dependencies List
+
+Write the results to:
+
+docs/audits/PHASE_8.8.3A_STRATEGY_ENGINE_AUDIT.json
+docs/audits/PHASE_8.8.3A_STRATEGY_ENGINE_AUDIT.md
+
+🧪 Verification Replit Must Perform
+
+After the audit is generated, Replit must:
+
+✔ Display the JSON summary (top-level only)
+✔ Display the Markdown summary (first 50 lines)
+✔ Confirm that no code was modified
+✔ Confirm the audit includes all 9 strategies
+✔ Confirm that dependencies include DHMA microstructure inputs
+
+🏁 Final Expected Output
+
+Replit should end with a message:
+
+“REB 8.8.3-A audit complete. Strategy Status Map generated successfully. No code modified.”
