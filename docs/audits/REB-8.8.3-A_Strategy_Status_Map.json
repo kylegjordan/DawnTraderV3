@@ -402,5 +402,22 @@
       "description": "Deprecation warning in getRiskPercentage() - complete migration to getRiskPercentageV2()",
       "impact": "Code cleanliness and reduced technical debt"
     }
-  ]
+  ],
+  "diagnosticLogging": {
+    "phase": "REB-8.8.3-B",
+    "status": "COMPLETE",
+    "implementedAt": "2025-11-30T13:30:00.000Z",
+    "logPrefix": "[8.8.3-B]",
+    "components": {
+      "signalOrchestrator": {
+        "prefix": "[8.8.3-B][EVAL_CYCLE]",
+        "coverage": "per-symbol evaluation telemetry"
+      },
+      "strategyEngine": {
+        "prefix": "[8.8.3-B][STRATEGY]",
+        "coverage": "all 9 strategies with input/output JSON"
+      }
+    },
+    "grepCommand": "grep \"\\[8.8.3-B\\]\" /tmp/logs/Start_application_*.log"
+  }
 }

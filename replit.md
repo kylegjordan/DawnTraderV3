@@ -73,6 +73,8 @@ Critical portfolio balance synchronization for paper trading mode ensures `portf
 
 **REB 8.8.3-A Strategy Engine Deep Audit** (November 30, 2025) completed comprehensive read-only diagnostic of all 9 strategies (vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trading, vwap_bounce, liquidity_trap, dhma). All strategies confirmed HEALTHY with full indicator availability, complete guardrail integration, and consistent signal interfaces. No legacy V1/V2 code paths detected. LHTS (Local Heuristic Trader Service) confirmed as active Walter stand-in for offline optimization. Audit outputs: `docs/audits/REB-8.8.3-A_Strategy_Status_Map.json` and `.md`.
 
+**REB 8.8.3-B Diagnostic Logging** (November 30, 2025) implemented comprehensive JSON diagnostic logging across all 9 strategies and SignalOrchestrator for runtime behavior validation. Each strategy now emits `[8.8.3-B][STRATEGY]` logs with input snapshots and signal outputs. SignalOrchestrator emits `[8.8.3-B][EVAL_CYCLE]` logs for per-symbol evaluation telemetry. Logs can be filtered via `grep "\[8.8.3-B\]"`. Documentation: `docs/audits/REB-8.8.3-B_Diagnostic_Logging.md`.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

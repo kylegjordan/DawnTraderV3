@@ -82,9 +82,9 @@ export class StrategyEngine {
       
       console.log(`[VWAP Strategy] ✅ Signal generated - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${finalTarget.toFixed(2)}`);
       
-      return {
+      const signal = {
         symbol: '', // Will be set by caller
-        strategy: 'vwap_pullback',
+        strategy: 'vwap_pullback' as const,
         entryPrice,
         stopPrice,
         targetPrice: finalTarget,
@@ -94,13 +94,28 @@ export class StrategyEngine {
           nearVWAPPercent: Math.abs(currentPrice - vwap) / vwap * 100,
           reversalConfirmed: hasReversalPattern,
           volumeMultiplier,
-          maxHoldingPeriod, // ✅ Including for exit condition checks
+          maxHoldingPeriod,
           appliedPullbackThreshold: pullbackThreshold * 100
         }
       };
+
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: signal.symbol || "(pending)",
+        strategy: "vwap_pullback",
+        inputSnapshot: { currentPrice, vwap, high24h, low24h, volume },
+        output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+      }));
+
+      return signal;
     }
     
     console.log(`[VWAP Strategy] ❌ No signal - priceAboveVWAP=${priceAboveVWAP}, nearVWAP=${nearVWAP}, reversal=${hasReversalPattern}, volume=${hasVolumeConfirmation}`);
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "vwap_pullback",
+      inputSnapshot: { currentPrice, vwap, high24h, low24h, volume },
+      output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+    }));
     return null;
   }
 
@@ -173,9 +188,9 @@ export class StrategyEngine {
       
       console.log(`[ABCD Strategy] ✅ Signal generated - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
-      return {
+      const signal = {
         symbol: '',
-        strategy: 'abcd_long',
+        strategy: 'abcd_long' as const,
         entryPrice,
         stopPrice,
         targetPrice,
@@ -192,9 +207,24 @@ export class StrategyEngine {
           trailingStopPercent: exitType === 'trailing' ? trailingStopPercent * 100 : null
         }
       };
+
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "abcd_long",
+        inputSnapshot: { currentPrice, cHigh, currentVolume, avgVolume },
+        output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+      }));
+
+      return signal;
     }
     
     console.log(`[ABCD Strategy] ❌ No signal - breakout=${isBreakout}, volumeConfirmed=${hasVolumeConfirmation}`);
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "abcd_long",
+      inputSnapshot: { currentPrice: current ? parseFloat(current.close) : null, cHigh: cHigh || null },
+      output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+    }));
     return null;
   }
 
@@ -264,9 +294,9 @@ export class StrategyEngine {
       
       console.log(`[SMA Strategy] ✅ Signal generated - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
-      return {
+      const signal = {
         symbol: '',
-        strategy: 'sma_trend_ride',
+        strategy: 'sma_trend_ride' as const,
         entryPrice,
         stopPrice,
         targetPrice,
@@ -280,9 +310,24 @@ export class StrategyEngine {
           distanceFromSMA: Math.abs(currentPrice - sma) / sma * 100
         }
       };
+
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "sma_trend_ride",
+        inputSnapshot: { currentPrice, sma, volume },
+        output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+      }));
+
+      return signal;
     }
     
     console.log(`[SMA Strategy] ❌ No signal - entryCondition=${entryCondition}, entrySignal=${entrySignal}`);
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "sma_trend_ride",
+      inputSnapshot: { currentPrice, sma, volume },
+      output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+    }));
     return null;
   }
 
@@ -328,9 +373,9 @@ export class StrategyEngine {
       
       console.log(`[Breakout] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
-      return {
+      const signal = {
         symbol: '',
-        strategy: 'breakout',
+        strategy: 'breakout' as const,
         entryPrice,
         stopPrice,
         targetPrice,
@@ -344,8 +389,23 @@ export class StrategyEngine {
           maxHoldingHours
         }
       };
+
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "breakout",
+        inputSnapshot: { currentPrice, breakoutLevel, currentVolume, avgVolume },
+        output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+      }));
+
+      return signal;
     }
     
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "breakout",
+      inputSnapshot: { currentPrice, breakoutLevel: rangeResult?.rangeHigh || null, isRange: rangeResult?.isRange || false },
+      output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+    }));
     return null;
   }
 
@@ -393,9 +453,9 @@ export class StrategyEngine {
       
       console.log(`[MeanReversion] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
-      return {
+      const signal = {
         symbol: '',
-        strategy: 'mean_reversion',
+        strategy: 'mean_reversion' as const,
         entryPrice,
         stopPrice,
         targetPrice,
@@ -408,8 +468,23 @@ export class StrategyEngine {
           oversoldLevel: -deviationThreshold * 100
         }
       };
+
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "mean_reversion",
+        inputSnapshot: { currentPrice, vwap, meanValue, deviation: deviation * 100 },
+        output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+      }));
+
+      return signal;
     }
     
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "mean_reversion",
+      inputSnapshot: { currentPrice, vwap, meanValue: meanValue || null },
+      output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+    }));
     return null;
   }
 
@@ -455,9 +530,9 @@ export class StrategyEngine {
       
       console.log(`[RangeTrading] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
-      return {
+      const signal = {
         symbol: '',
-        strategy: 'range_trading',
+        strategy: 'range_trading' as const,
         entryPrice,
         stopPrice,
         targetPrice,
@@ -470,8 +545,23 @@ export class StrategyEngine {
           entryZoneWidth: entryZoneWidth * 100
         }
       };
+
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "range_trading",
+        inputSnapshot: { currentPrice, rangeHigh: rangeResult.rangeHigh, rangeLow: rangeResult.rangeLow },
+        output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+      }));
+
+      return signal;
     }
     
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "range_trading",
+      inputSnapshot: { currentPrice, isRange: rangeResult?.isRange || false },
+      output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+    }));
     return null;
   }
 
@@ -523,9 +613,9 @@ export class StrategyEngine {
       
       console.log(`[VWAPBounce] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
-      return {
+      const signal = {
         symbol: '',
-        strategy: 'vwap_bounce',
+        strategy: 'vwap_bounce' as const,
         entryPrice,
         stopPrice,
         targetPrice,
@@ -538,8 +628,23 @@ export class StrategyEngine {
           volumeRatio: volume / avgVolume
         }
       };
+
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "vwap_bounce",
+        inputSnapshot: { currentPrice, vwap, volume },
+        output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+      }));
+
+      return signal;
     }
     
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "vwap_bounce",
+      inputSnapshot: { currentPrice, vwap, volume },
+      output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+    }));
     return null;
   }
 
@@ -591,9 +696,9 @@ export class StrategyEngine {
       
       console.log(`[LiquidityTrap] ✅ Signal - Entry: $${entryPrice.toFixed(2)}, Stop: $${stopPrice.toFixed(2)}, Target: $${targetPrice.toFixed(2)}`);
       
-      return {
+      const signal = {
         symbol: '',
-        strategy: 'liquidity_trap',
+        strategy: 'liquidity_trap' as const,
         entryPrice,
         stopPrice,
         targetPrice,
@@ -606,8 +711,23 @@ export class StrategyEngine {
           volumeReversal: currentVolume / breakoutVolume
         }
       };
+
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "liquidity_trap",
+        inputSnapshot: { currentPrice: currentBarPrice, rangeHigh: rangeResult.rangeHigh, breakoutHigh },
+        output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+      }));
+
+      return signal;
     }
     
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "liquidity_trap",
+      inputSnapshot: { currentPrice: priceHistory.length > 0 ? parseFloat(priceHistory[priceHistory.length - 1].close) : null },
+      output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+    }));
     return null;
   }
 
@@ -980,11 +1100,23 @@ export class StrategyEngine {
     // Entry rules: block if toxicity too high or spread too wide
     if (toxicity > tau_toxicity) {
       console.log(`[DHMA] ❌ High toxicity ${toxicity.toFixed(2)} > ${tau_toxicity}`);
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "dhma",
+        inputSnapshot: { currentPrice, toxicity, tau_toxicity },
+        output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null, rejectionReason: "high_toxicity" }
+      }));
       return null;
     }
     
     if (spreadTicks > maxSpread) {
       console.log(`[DHMA] ❌ Wide spread ${spreadTicks.toFixed(1)}t > ${maxSpread}t`);
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "dhma",
+        inputSnapshot: { currentPrice, spreadTicks, maxSpread },
+        output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null, rejectionReason: "wide_spread" }
+      }));
       return null;
     }
     
@@ -1008,6 +1140,12 @@ export class StrategyEngine {
     
     if (!longSignal && !shortSignal) {
       console.log('[DHMA] ❌ No regime alignment or insufficient OBI/tilt');
+      console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+        symbol: "(pending)",
+        strategy: "dhma",
+        inputSnapshot: { currentPrice, obi, micropriceTilt, burstRegime, sessionRegime },
+        output: { hasSignal: false, entryPrice: null, stopPrice: null, targetPrice: null, confidence: null }
+      }));
       return null;
     }
     
@@ -1071,6 +1209,13 @@ export class StrategyEngine {
         realizedVolatility: realizedVol
       }
     };
+
+    console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
+      symbol: "(pending)",
+      strategy: "dhma",
+      inputSnapshot: { currentPrice, obi, micropriceTilt, burstRegime, sessionRegime },
+      output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
+    }));
     
     // Phase 41F-I: Record signal emission metric (non-blocking)
     telemetryService.recordTradeMetric('signal_emit', {

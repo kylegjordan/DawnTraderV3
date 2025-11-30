@@ -1,0 +1,462 @@
+✅ PHASE 8.8.3-B DIRECTIVE — Minimum Strategy Engine Fix
+(Runtime Wiring, Strategy Selection & Behavioral Validation)
+________________________________________
+
+💠 Context: Where 8.8.3-B Fits
+
+Phase 8.8 — Build Real-Time Data Pipeline
+
+Subphases:
+
+8.8.1 — Scanner Output Audit ✅
+
+8.8.2 — Signal Engine Audit ✅
+
+8.8.3 — Strategy Engine Audit
+
+8.8.3-A — Strategy Engine Deep Audit (Read-Only) ✅
+
+8.8.3-B — Minimum Strategy Engine Fix (this directive)
+
+8.8.3-C — Minimum Strategy Output Fix + Signal Validation
+
+8.8.3-D — Minimal End-to-End Trade Test
+
+8.8.3-A confirmed:
+
+All 9 strategies are structurally HEALTHY
+
+Indicators are available
+
+Guardrails are integrated
+
+No legacy V1/V2 strategy code
+
+LHTS (Heuristic Trader / LATTI) is active but non-legacy
+
+8.8.3-B now moves from static structure → runtime behavior:
+
+We must prove that strategies are actually evaluated correctly in real time, that the strategy selection / predictive ranking layer does what we think it does, and that signals flow cleanly into the execution pipeline without malformed data or hidden blocks.
+
+This phase allows minimal, surgical code changes (no rewrites, no new big features).
+
+👤 Test User Details (Use This Account)
+
+Use only this account for all UI / API login during this phase:
+
+username: testuser123
+password: SecurePass123!
+
+🎯 Objective
+
+Make the existing strategy engine actually “go live” in paper mode with correct runtime behavior, by:
+
+Validating that strategies are evaluated correctly on real FX5-filtered symbols.
+
+Auditing and logging the strategy selection / predictive ranking layer:
+
+Which strategies are chosen per symbol
+
+Which are skipped and why
+
+Ensuring StrategySignal → Ready-To-Trade → TradeExecutor wiring is correct and robust against malformed data.
+
+Confirming LATTI/LHTS is purely passive (observing and learning only, not making trading decisions).
+
+This is not the big strategy rebuild (that’s Phase 9).
+This is “make what we have actually behave correctly at runtime.”
+
+📦 Key Files You Will Be Working With
+
+From the REB 8.8.3-A audit:
+
+server/services/strategy-engine.ts
+
+server/services/signal-orchestrator.ts
+
+server/services/trade-executor.ts
+
+server/services/risk-manager.ts
+
+server/services/guardrail-policy.ts
+
+server/services/adaptive-guardrails.ts (LATTI)
+
+server/services/dhma-tuning-service.ts
+
+server/services/heuristic-trader.ts (LHTS / LATTI stand-in)
+
+You may open additional files as needed, but keep code changes minimal.
+
+🔷 STEP 1 — Locate and Document the Strategy Selection / Predictive Ranking Logic
+
+We previously established that not all 9 strategies should be evaluated for every pair. Instead, a predictive ranking layer should:
+
+Look at the symbol’s regime (trend vs range), volatility, volume, liquidity etc.
+
+Choose 2–3 “best fit” strategies for that symbol in this market regime.
+
+1.1 Find the selection logic
+
+Search the codebase for any selection / ranking logic, for example:
+
+selectStrategiesForSymbol, strategySelection, rankStrategies, strategyRanking, etc.
+
+It may live in strategy-engine.ts, signal-orchestrator.ts, or a helper.
+
+If you find nothing and strategies are always run “all at once”, note that explicitly.
+
+1.2 Document how it works
+
+Create a new section in:
+
+docs/audits/REB-8.8.3-B_Strategy_Runtime_Diagnostics.md
+
+Describe for the selection logic:
+
+File + function name
+
+Inputs (symbol features: volatility, volume, high24h/low24h, VWAP distance, etc.)
+
+Outputs (which strategies, in what order)
+
+Rules / thresholds used
+
+Any hard-coded strategy exclusions
+
+If no such logic exists, write:
+
+“Strategy selection layer not implemented — all strategies evaluated uniformly.”
+
+No redesign yet. We just surface what exists.
+
+🔷 STEP 2 — Add Runtime Logging for Strategy Selection Per Symbol
+
+We need to see which strategies are actually being chosen for each symbol in live cycles.
+
+In the orchestrator (likely SignalOrchestrator in server/services/signal-orchestrator.ts), at the point where you decide which strategies to run for a given symbol:
+
+Compute or retrieve:
+
+selectedStrategies (e.g. ['dhma', 'breakout'])
+
+skippedStrategies (the rest of the 9)
+
+Any regime / classification (trend, range, volatility regime, liquidity class).
+
+Add a log line like:
+
+console.log("[8.8.3-B][SELECTION]", {
+  symbol,
+  regime: regimeInfo, // trend/range/volatility etc. if available
+  selectedStrategies,
+  skippedStrategies
+});
+
+
+Requirements:
+
+This must log once per symbol per evaluation cycle.
+
+Do not spam full orderbook or candle history — keep logs compact.
+
+Ensure logs are JSON-like objects (so they’re easy to parse later).
+
+If all 9 strategies are always evaluated, log:
+
+console.log("[8.8.3-B][SELECTION]", {
+  symbol,
+  regime: regimeInfo || null,
+  selectedStrategies: "ALL_STRATEGIES",
+  skippedStrategies: []
+});
+
+🔷 STEP 3 — Add Runtime Logging Inside Each Strategy Evaluation
+
+Inside server/services/strategy-engine.ts, for each entry point:
+
+evaluateVWAPPullbackStrategy()
+
+evaluateABCDLongStrategy()
+
+evaluateSMATrendRideStrategy()
+
+evaluateBreakoutStrategy()
+
+evaluateMeanReversionStrategy()
+
+evaluateRangeTradingStrategy()
+
+evaluateVWAPBounceStrategy()
+
+evaluateLiquidityTrapStrategy()
+
+evaluateDHMAStrategy()
+
+After computing the StrategySignal (or deciding there is no trade), log:
+
+console.log("[8.8.3-B][STRATEGY]", {
+  symbol,
+  strategy: "vwap_pullback", // or the actual strategy name
+  inputSnapshot: {
+    currentPrice,
+    vwap,
+    sma,
+    high24h,
+    low24h,
+    volume
+    // only include fields relevant to that strategy
+  },
+  output: {
+    hasSignal: !!signal,           // true/false
+    entryPrice: signal?.entryPrice ?? null,
+    stopPrice: signal?.stopPrice ?? null,
+    targetPrice: signal?.targetPrice ?? null,
+    confidence: signal?.confidence ?? null
+  }
+});
+
+
+If a strategy decides “no signal”, set hasSignal: false and leave prices null.
+
+Make sure this does not crash if any fields are undefined — guard your logs.
+
+This lets us see:
+
+Whether each strategy is actually being evaluated.
+
+Whether it ever produces signals in realistic conditions.
+
+Whether confidence values and price structure look sane.
+
+🔷 STEP 4 — Validate and Harden StrategySignal → Ready-To-Trade Wiring
+
+From the 8.8.3-A audit, StrategySignal → TradeSignal mapping is structurally compatible.
+
+Now we need to protect against bad runtime values.
+
+Where signals are handed off to the ready-to-trade / ready-to-buy pipeline (likely via lifecycleEventsService.emitReadyToTrade()):
+
+Add a small validation function that checks:
+
+function validateStrategySignal(signal: StrategySignal): { ok: boolean; reason?: string } {
+  if (!signal.symbol) return { ok: false, reason: "missing symbol" };
+  if (!signal.strategy) return { ok: false, reason: "missing strategy" };
+  if (typeof signal.entryPrice !== "number" || signal.entryPrice <= 0)
+    return { ok: false, reason: "invalid entryPrice" };
+  if (typeof signal.stopPrice !== "number" || signal.stopPrice <= 0)
+    return { ok: false, reason: "invalid stopPrice" };
+  if (typeof signal.targetPrice !== "number" || signal.targetPrice <= 0)
+    return { ok: false, reason: "invalid targetPrice" };
+  if (signal.stopPrice >= signal.entryPrice)
+    return { ok: false, reason: "stopPrice >= entryPrice" };
+  if (signal.targetPrice <= signal.entryPrice)
+    return { ok: false, reason: "targetPrice <= entryPrice" };
+  if (typeof signal.confidence !== "number" || signal.confidence < 0 || signal.confidence > 100)
+    return { ok: false, reason: "invalid confidence" };
+
+  return { ok: true };
+}
+
+
+Before emitting:
+
+const validation = validateStrategySignal(strategySignal);
+if (!validation.ok) {
+  console.warn("[8.8.3-B][ROUTING] Dropped malformed StrategySignal", {
+    reason: validation.reason,
+    signal: strategySignal
+  });
+  return;
+}
+
+console.log("[8.8.3-B][ROUTING] StrategySignal accepted", {
+  symbol: strategySignal.symbol,
+  strategy: strategySignal.strategy
+});
+
+// existing emitReadyToTrade() call here
+
+
+Only minimal fixes allowed:
+
+If you discover a strategy consistently generates malformed data, fix the calculations in that strategy just enough to satisfy sane values (no big rewrites).
+
+🔷 STEP 5 — Confirm Guardrail + Cooldown Behavior With Real Signals
+
+Use the existing RiskManager and GuardrailPolicy wiring.
+
+When a StrategySignal passes through risk checks:
+
+Log when risk / guardrails accept the signal:
+
+console.log("[8.8.3-B][GUARDRAIL] PASS", {
+  symbol: signal.symbol,
+  strategy: signal.strategy
+});
+
+
+Log when risk / guardrails reject the signal:
+
+console.log("[8.8.3-B][GUARDRAIL] BLOCK", {
+  symbol: signal.symbol,
+  strategy: signal.strategy,
+  reason: "maxPositions" // or "dailyLoss", "cooldown", etc.
+});
+
+
+Goal:
+
+Verify that valid signals are not being blocked incorrectly.
+
+Verify that invalid or excessive signals are properly blocked.
+
+Document any surprising or incorrect behavior in the final diagnostic.
+
+🔷 STEP 6 — Confirm LATTI / LHTS Is Passive Only (No Trade Authority)
+
+From REB 8.8.3-A:
+
+heuristic-trader.ts (LHTS) is ACTIVE but is meant to be a Walter / LATTI stand-in for offline optimization, not a live decision-maker.
+
+In this phase:
+
+Inspect server/services/heuristic-trader.ts and any usage in:
+
+server/routes.ts
+
+server/index.ts
+
+server/startup.ts
+
+Ensure that LHTS / LATTI does NOT:
+
+Place trades
+
+Modify risk parameters in real time
+
+Override strategy outputs
+
+Change confidence values used by the executor
+
+If you find any live hooks that allow LHTS to influence trade decisions in real time:
+
+Add a clear guard to disable that behavior in Phase 8 (paper mode) and log:
+
+console.log("[8.8.3-B][LATTI] Live decision hook disabled for Phase 8.8 (passive mode only)");
+
+
+LHTS should be allowed to:
+
+Observe signals
+
+Log outcomes
+
+Update internal tuning state
+
+…but not drive execution. That is part of a later LATTI / Lottie phase.
+
+🔷 STEP 7 — Run Controlled Paper-Mode Test and Capture Logs
+
+Using testuser123:
+
+Start DawnTrader in paper mode with normal FX5 filtering active.
+
+Let the system run for at least 5–10 full evaluation cycles (enough for multiple symbols and regimes).
+
+Capture logs that include:
+
+[8.8.3-B][SELECTION]
+
+[8.8.3-B][STRATEGY]
+
+[8.8.3-B][ROUTING]
+
+[8.8.3-B][GUARDRAIL]
+
+[8.8.3-B][LATTI] (if any)
+
+🔷 STEP 8 — Generate Diagnostic Reports
+
+Create the following files:
+
+8.1 Runtime Diagnostics (Markdown)
+
+docs/audits/REB-8.8.3-B_Strategy_Runtime_Diagnostics.md
+
+Include:
+
+High-level summary:
+
+Which strategies produced signals
+
+Whether malformed signals occurred and were fixed
+
+Guardrail blocks overview
+
+Per-strategy notes:
+
+Did it fire? How often?
+
+Any obvious logical problems?
+
+8.2 Strategy Selection Logs (JSON)
+
+docs/audits/REB-8.8.3-B_Strategy_Selection_Logs.json
+
+Structure suggestion:
+
+[
+  {
+    "cycleId": "2025-11-30T12:34:00Z",
+    "symbol": "BTC/USD",
+    "regime": "trend",
+    "selectedStrategies": ["dhma", "breakout"],
+    "skippedStrategies": ["mean_reversion", "range_trading", "..."]
+  }
+]
+
+8.3 LATTI / LHTS Behavior Note (Markdown section)
+
+In the same REB-8.8.3-B_Strategy_Runtime_Diagnostics.md, add a section:
+
+LATTI / LHTS Behavior in 8.8.3-B
+
+Files inspected: …
+
+Live decision hooks: disabled / not present
+
+Data ingestion: active
+
+Notes: …
+
+✅ Verification Checklist (What You Must Confirm Before Finishing)
+
+Before you declare success, verify:
+
+ At least some strategies produced non-null StrategySignals in real-time.
+
+ Strategy selection logs show a clear mapping of selected vs skipped strategies per symbol.
+
+ No StrategySignal with malformed numeric fields reached the ready-to-trade stage.
+
+ Guardrail logs show both PASS and BLOCK events in realistic scenarios.
+
+ LHTS / LATTI is confirmed passive only for Phase 8.8.
+
+ All new logs are namespaced with [8.8.3-B] so they can be filtered easily.
+
+ The three diagnostic artifacts were created and saved:
+
+REB-8.8.3-B_Strategy_Runtime_Diagnostics.md
+
+REB-8.8.3-B_Strategy_Selection_Logs.json
+
+🏁 Final Expected Output (What to Say When Done)
+
+When you finish this directive, end your report with:
+
+“REB 8.8.3-B complete. Runtime strategy behavior validated, strategy selection layer logged, minimal wiring fixes applied, diagnostics written. Ready for 8.8.3-C.”
+
+________________________________________
+✅ End of Directive — Phase 8.8.3-B (Minimum Strategy Engine Fix)

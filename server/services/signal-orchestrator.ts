@@ -237,13 +237,48 @@ export class SignalOrchestrator {
 
       for (const symbol of eligibleSymbols) {
         try {
+          // [8.8.3-B][SELECTION] Log strategy selection per symbol
+          // Currently all strategies are evaluated uniformly - no regime-based selection
+          const selectedStrategies = Array.from(this.enabledStrategies);
+          console.log("[8.8.3-B][SELECTION]", JSON.stringify({
+            symbol,
+            regime: null, // No regime classification implemented
+            selectedStrategies: "ALL_STRATEGIES",
+            skippedStrategies: [],
+            enabledCount: selectedStrategies.length
+          }));
+
           const signals = await this.evaluateSymbol(symbol, settings, filters);
           symbolsEvaluated++;
           strategiesRun += this.enabledStrategies.size;
           signalsGenerated += signals.length;
 
-          // Forward signals to callback
+          // Forward signals to callback with validation
           for (const signal of signals) {
+            // [8.8.3-B] Validate signal before forwarding
+            const validation = this.validateStrategySignal(signal);
+            if (!validation.ok) {
+              console.warn("[8.8.3-B][ROUTING] Dropped malformed StrategySignal", JSON.stringify({
+                reason: validation.reason,
+                symbol: signal.symbol,
+                strategy: signal.strategy,
+                entryPrice: signal.entryPrice,
+                stopPrice: signal.stopPrice,
+                targetPrice: signal.targetPrice,
+                confidence: signal.confidence
+              }));
+              continue;
+            }
+
+            console.log("[8.8.3-B][ROUTING] StrategySignal accepted", JSON.stringify({
+              symbol: signal.symbol,
+              strategy: signal.strategy,
+              entryPrice: signal.entryPrice?.toFixed(4),
+              stopPrice: signal.stopPrice?.toFixed(4),
+              targetPrice: signal.targetPrice?.toFixed(4),
+              confidence: signal.confidence?.toFixed(2)
+            }));
+
             if (this.onSignalCallback) {
               await this.onSignalCallback(signal);
               signalsForwarded++;
@@ -480,5 +515,28 @@ export class SignalOrchestrator {
     const recentPrices = data.slice(-period).map((c: any) => parseFloat(c.close || c[4]));
     const sum = recentPrices.reduce((acc: number, price: number) => acc + price, 0);
     return sum / period;
+  }
+
+  /**
+   * [8.8.3-B] Validate StrategySignal for malformed data before forwarding
+   * Ensures all required fields are present and have valid values
+   */
+  private validateStrategySignal(signal: StrategySignal): { ok: boolean; reason?: string } {
+    if (!signal.symbol) return { ok: false, reason: "missing symbol" };
+    if (!signal.strategy) return { ok: false, reason: "missing strategy" };
+    if (typeof signal.entryPrice !== "number" || signal.entryPrice <= 0 || !isFinite(signal.entryPrice))
+      return { ok: false, reason: "invalid entryPrice" };
+    if (typeof signal.stopPrice !== "number" || signal.stopPrice <= 0 || !isFinite(signal.stopPrice))
+      return { ok: false, reason: "invalid stopPrice" };
+    if (typeof signal.targetPrice !== "number" || signal.targetPrice <= 0 || !isFinite(signal.targetPrice))
+      return { ok: false, reason: "invalid targetPrice" };
+    if (signal.stopPrice >= signal.entryPrice)
+      return { ok: false, reason: "stopPrice >= entryPrice (invalid for long)" };
+    if (signal.targetPrice <= signal.entryPrice)
+      return { ok: false, reason: "targetPrice <= entryPrice (invalid for long)" };
+    if (typeof signal.confidence !== "number" || signal.confidence < 0 || signal.confidence > 100 || !isFinite(signal.confidence))
+      return { ok: false, reason: "invalid confidence (must be 0-100)" };
+
+    return { ok: true };
   }
 }
