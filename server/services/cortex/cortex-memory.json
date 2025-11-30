@@ -1,60 +1,60 @@
 {
   "bob_snapshot": {
-    "timestamp": "2025-11-30T17:20:32.468Z",
+    "timestamp": "2025-11-30T17:21:32.472Z",
     "modules": {
       "MetricsBob": {
         "name": "MetricsBob",
-        "lastUpdate": "2025-11-30T17:20:32.466Z",
+        "lastUpdate": "2025-11-30T17:21:32.467Z",
         "stale": false,
-        "hitRate": "82.6%",
+        "hitRate": "83.6%",
         "cacheSize": 4,
         "ttl": 60
       },
       "DataBob": {
         "name": "DataBob",
-        "lastUpdate": "2025-11-30T17:20:32.466Z",
+        "lastUpdate": "2025-11-30T17:21:32.467Z",
         "stale": false,
-        "hitRate": "82.6%",
+        "hitRate": "83.6%",
         "cacheSize": 4,
         "ttl": 60
       },
       "ConfigBob": {
         "name": "ConfigBob",
-        "lastUpdate": "2025-11-30T17:20:32.466Z",
+        "lastUpdate": "2025-11-30T17:21:32.467Z",
         "stale": false,
-        "hitRate": "82.6%",
+        "hitRate": "83.6%",
         "cacheSize": 4,
         "ttl": 60
       },
       "StrategyBob": {
         "name": "StrategyBob",
-        "lastUpdate": "2025-11-30T17:20:32.466Z",
+        "lastUpdate": "2025-11-30T17:21:32.467Z",
         "stale": false,
-        "hitRate": "82.6%",
+        "hitRate": "83.6%",
         "cacheSize": 4,
         "ttl": 60
       },
       "TradeBob": {
         "name": "TradeBob",
-        "lastUpdate": "2025-11-30T17:20:32.466Z",
+        "lastUpdate": "2025-11-30T17:21:32.467Z",
         "stale": false,
-        "hitRate": "82.6%",
+        "hitRate": "83.6%",
         "cacheSize": 4,
         "ttl": 60
       },
       "InsightBob": {
         "name": "InsightBob",
-        "lastUpdate": "2025-11-30T17:20:32.466Z",
+        "lastUpdate": "2025-11-30T17:21:32.467Z",
         "stale": false,
-        "hitRate": "82.6%",
+        "hitRate": "83.6%",
         "cacheSize": 4,
         "ttl": 60
       },
       "UIBob": {
         "name": "UIBob",
-        "lastUpdate": "2025-11-30T17:20:32.466Z",
+        "lastUpdate": "2025-11-30T17:21:32.467Z",
         "stale": false,
-        "hitRate": "82.6%",
+        "hitRate": "83.6%",
         "cacheSize": 4,
         "ttl": 60
       }
@@ -62,9 +62,9 @@
     "overallStats": {
       "modulesActive": 7,
       "totalCacheSize": 4,
-      "overallHitRate": "82.6%",
-      "totalHits": 190,
-      "totalMisses": 40
+      "overallHitRate": "83.6%",
+      "totalHits": 351,
+      "totalMisses": 69
     },
     "recentChanges": [],
     "systemHealth": "healthy",
@@ -73,23 +73,23 @@
       "warnings": [],
       "criticalIssues": [],
       "metrics": {
-        "timestamp": "2025-11-30T17:20:32.468Z",
+        "timestamp": "2025-11-30T17:21:32.471Z",
         "system": {
           "cpuUsage": 46.9,
           "memoryUsage": {
             "total": 67430191104,
-            "used": 27863609344,
-            "free": 39566581760,
-            "percentUsed": 41
+            "used": 29186277376,
+            "free": 38243913728,
+            "percentUsed": 43
           },
-          "uptime": 101
+          "uptime": 161
         },
         "cache": {
-          "hitRate": 83,
-          "missRate": 17,
-          "totalRequests": 228,
-          "hits": 190,
-          "misses": 38
+          "hitRate": 84,
+          "missRate": 16,
+          "totalRequests": 418,
+          "hits": 351,
+          "misses": 67
         },
         "latency": {
           "cortex": null,
@@ -98,11 +98,11 @@
         },
         "schedulers": {
           "cortexSync": {
-            "uptime": 101,
-            "lastRun": "2025-11-30T17:20:02.469Z"
+            "uptime": 161,
+            "lastRun": "2025-11-30T17:21:02.475Z"
           },
           "analytics": {
-            "uptime": 101,
+            "uptime": 161,
             "lastRun": "2025-11-30T17:19:02.827Z"
           }
         },
@@ -136,7 +136,7 @@
         },
         "execution": {
           "marketDataSource": "rest_fallback",
-          "lastTickAgeMs": 10456,
+          "lastTickAgeMs": 10460,
           "avgSubmitAckMs": 0,
           "avgSlippageBps": 0,
           "avgFeesPerTrade": 0,
@@ -158,10 +158,10 @@
     "current": {
       "view": "Dashboard",
       "mode": "live",
-      "timestamp": "2025-11-30T17:20:32.466Z"
+      "timestamp": "2025-11-30T17:21:32.468Z"
     }
   },
-  "last_sync": "2025-11-30T17:20:32.468Z",
+  "last_sync": "2025-11-30T17:21:32.472Z",
   "memory": {
     "analytics_live_6c591801-3072-431d-b192-30aaf426f15e": {
       "value": {
