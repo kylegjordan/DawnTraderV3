@@ -1,0 +1,396 @@
+# Coherency Rules Reference
+
+> Full contents of `audit/coherency_rules.yaml`
+
+---
+
+```yaml
+# Coherency Rules for Guardrails V2
+# Phase 2: LATTi Goals + Guardrails Modernization
+# Generated from Phase 1 audit findings
+
+metadata:
+  version: "2.2-phase28efinal"
+  generated_from_audit: true
+  author: "Architect"
+  timestamp: "2025-10-29T13:30+00:00"
+  purpose: "Define validation rules for Core Four guardrails to ensure coherent risk management"
+  enforcement: "Backend validation on PUT /api/guardrails, migration validation"
+  phase: "Phase 28.E Final - Control Modes Reference & Documentation"
+  changelog: "Phase 28.E Final: Added Control Modes Reference to UI, finalized documentation, version updated to v2.2-phase28efinal"
+
+# Core Four Guardrails:
+# 1. portfolio_risk_per_trade_pct - Percentage of portfolio risked per trade
+# 2. symbol_cooldown_minutes - Cooldown period before re-trading same symbol
+# 3. max_open_positions - Maximum concurrent open positions
+# 4. daily_loss_kill_switch_pct - Portfolio loss % triggering auto-shutdown
+
+rules:
+  - name: "Risk ≤ 50% × KillSwitch"
+    id: "RULE_001"
+    description: "Portfolio risk per trade must not exceed 50% of daily loss kill switch (extreme fail-safe)"
+    condition: "portfolio_risk_per_trade_pct <= daily_loss_kill_switch_pct * 0.5"
+    rationale: "Phase 28.E: Simplified extreme fail-safe ensuring at least 2x buffer between risk per trade and kill switch threshold"
+    severity: "error"
+    error_message: "Portfolio risk per trade ({value}%) cannot exceed 50% of daily loss kill switch ({kill_switch}%). Maximum allowed: {max_allowed}%"
+    phase: "Phase 28.E"
+    example_valid:
+      - portfolio_risk_per_trade_pct: 3.50
+        daily_loss_kill_switch_pct: 7.00
+        result: "PASS (3.50 <= 7.00 * 0.5)"
+    example_invalid:
+      - portfolio_risk_per_trade_pct: 4.00
+        daily_loss_kill_switch_pct: 7.00
+        result: "FAIL (4.00 > 3.50)"
+
+  - name: "Total Exposure ≤ 50% Cap"
+    id: "RULE_002"
+    description: "Total portfolio exposure (positions * risk) must not exceed 50%"
+    condition: "max_open_positions * portfolio_risk_per_trade_pct <= 50"
+    rationale: "Phase 28.E: Simplified fail-safe preventing aggregate risk from exceeding half of portfolio value"
+    severity: "error"
+    error_message: "Total exposure ({total}%) exceeds 50% of portfolio. Reduce max positions or risk per trade."
+    phase: "Phase 28.E"
+    example_valid:
+      - max_open_positions: 5
+        portfolio_risk_per_trade_pct: 1.50
+        total_exposure: 7.50
+        result: "PASS (7.50 <= 50)"
+    example_invalid:
+      - max_open_positions: 100
+        portfolio_risk_per_trade_pct: 1.50
+        total_exposure: 150.00
+        result: "FAIL (150.00 > 50)"
+
+  - name: "Cooldown ≥ 0 minutes"
+    id: "RULE_003"
+    description: "Symbol cooldown must be at least 0 minutes (default allowed)"
+    condition: "symbol_cooldown_minutes >= 0"
+    rationale: "Phase 28.E: Simplified fail-safe allowing zero cooldown for maximum flexibility"
+    severity: "error"
+    error_message: "Symbol cooldown ({value} minutes) cannot be negative"
+    phase: "Phase 28.E"
+    example_valid:
+      - symbol_cooldown_minutes: 0
+        result: "PASS"
+      - symbol_cooldown_minutes: 15
+        result: "PASS"
+    example_invalid:
+      - symbol_cooldown_minutes: -5
+        result: "FAIL"
+
+  - name: "Cooldown Maximum"
+    id: "RULE_004"
+    description: "Symbol cooldown must not exceed 90 minutes"
+    condition: "symbol_cooldown_minutes <= 90"
+    rationale: "Ensures reasonable trading velocity - longer cooldowns reduce opportunity capture"
+    severity: "warn"
+    error_message: "Symbol cooldown ({value} minutes) exceeds recommended maximum of 90 minutes"
+    example_valid:
+      - symbol_cooldown_minutes: 60
+        result: "PASS"
+    example_invalid:
+      - symbol_cooldown_minutes: 120
+        result: "WARN"
+
+  - name: "Manual Override Exclusivity"
+    id: "RULE_005"
+    description: "Parameter cannot be both manual override and LATTI-managed simultaneously"
+    condition: "not (is_manual_override and tuned_by_latti)"
+    rationale: "Ensures clear ownership - either user controls or LATTI controls, not both"
+    severity: "error"
+    error_message: "Conflicting control flags: is_manual_override and tuned_by_latti cannot both be true"
+    notes: "Enforced in Phase 2 via /api/guardrails-v2 PUT endpoint validation. UI for manual override toggles planned for Phase 3."
+    example_valid:
+      - is_manual_override: true
+        tuned_by_latti: false
+        result: "PASS (manual control)"
+      - is_manual_override: false
+        tuned_by_latti: true
+        result: "PASS (LATTI control)"
+    example_invalid:
+      - is_manual_override: true
+        tuned_by_latti: true
+        result: "FAIL (conflicting ownership)"
+
+  - name: "Portfolio Risk Range"
+    id: "RULE_006"
+    description: "Portfolio risk per trade must be between 0.10% and 5.00%"
+    condition: "portfolio_risk_per_trade_pct >= 0.10 and portfolio_risk_per_trade_pct <= 5.00"
+    rationale: "Enforces sane risk bounds - too low (< 0.10%) limits growth, too high (> 5%) invites ruin"
+    severity: "error"
+    error_message: "Portfolio risk per trade ({value}%) must be between 0.10% and 5.00%"
+    example_valid:
+      - portfolio_risk_per_trade_pct: 1.50
+        result: "PASS"
+    example_invalid:
+      - portfolio_risk_per_trade_pct: 6.00
+        result: "FAIL (exceeds 5.00%)"
+
+  - name: "Kill Switch ≤ 25% of Portfolio"
+    id: "RULE_007"
+    description: "Daily loss kill switch must be between 1.00% and 25.00%"
+    condition: "daily_loss_kill_switch_pct >= 1.00 and daily_loss_kill_switch_pct <= 25.00"
+    rationale: "Phase 28.E: Fail-safe ensuring kill switch stays within reasonable bounds (1-25%)"
+    severity: "error"
+    error_message: "Daily loss kill switch ({value}%) must be between 1.00% and 25.00%"
+    phase: "Phase 28.E"
+    example_valid:
+      - daily_loss_kill_switch_pct: 7.00
+        result: "PASS"
+      - daily_loss_kill_switch_pct: 25.00
+        result: "PASS"
+    example_invalid:
+      - daily_loss_kill_switch_pct: 30.00
+        result: "FAIL (exceeds 25.00%)"
+
+  - name: "Max Positions Range"
+    id: "RULE_008"
+    description: "Maximum open positions must be between 1 and 20"
+    condition: "max_open_positions >= 1 and max_open_positions <= 20"
+    rationale: "Minimum 1 position enables trading, maximum 20 prevents over-diversification and management overhead"
+    severity: "error"
+    error_message: "Maximum open positions ({value}) must be between 1 and 20"
+    example_valid:
+      - max_open_positions: 5
+        result: "PASS"
+    example_invalid:
+      - max_open_positions: 50
+        result: "FAIL (exceeds 20)"
+
+  - name: "Mode Isolation"
+    id: "RULE_009"
+    description: "Each mode (paper/live) must have exactly one guardrails record"
+    condition: "COUNT(*) = 1 per mode"
+    rationale: "Enforces global-per-mode architecture - no duplicate or missing records"
+    severity: "error"
+    error_message: "Mode {mode} must have exactly one guardrails record, found {count}"
+    enforcement: "Database unique constraint on mode column"
+    notes: "Enforced via uniqueIndex('guardrails_v2_mode_idx') in schema"
+
+  - name: "Learning Expansion Safety Caps"
+    id: "RULE_010"
+    description: "Learning-adjusted preset values must not exceed global safety caps"
+    condition: |
+      portfolio_risk_per_trade_pct <= 5.00 AND
+      daily_loss_kill_switch_pct <= 25.00 AND
+      symbol_cooldown_minutes <= 90 AND
+      max_open_positions <= 20
+    rationale: "Phase 6 adaptive learning engine automatically expands preset boundaries by 5% when performance meets threshold. Safety caps prevent runaway expansion and ensure system remains within acceptable risk limits. Phase 28.E: Updated kill switch cap to 25% to align with RULE_007."
+    severity: "error"
+    error_message: "Learning-adjusted value exceeds safety cap: {parameter} = {value} (max: {cap})"
+    phase: "Phase 6 / Phase 28.E"
+    enforcement: "GoalsLearningEngine service enforces caps during expansion calculations"
+    safety_caps:
+      portfolio_risk_per_trade_pct: 5.00
+      daily_loss_kill_switch_pct: 25.00
+      symbol_cooldown_minutes: 90
+      max_open_positions: 20
+    notes: |
+      - Learning engine expands presets by 5% when 30-day avg return >= 80% of target
+      - All expansions are capped at safety maximums to prevent excessive risk
+      - Caps apply to both manual presets and learning-adjusted presets
+      - Provides backstop against algorithmic over-optimization
+    example_valid:
+      - portfolio_risk_per_trade_pct: 4.95
+        daily_loss_kill_switch_pct: 24.50
+        result: "PASS (within caps)"
+    example_invalid:
+      - portfolio_risk_per_trade_pct: 5.50
+        result: "FAIL (exceeds 5.00% cap)"
+      - daily_loss_kill_switch_pct: 26.00
+        result: "FAIL (exceeds 25.00% cap)"
+
+# Migration-specific validation rules
+migration_rules:
+  - name: "Legacy Data Preservation"
+    id: "MIG_001"
+    description: "All active modes must have corresponding v2 records after migration"
+    condition: "Every mode in system_context has a guardrails_v2 record"
+    severity: "error"
+    validation_query: |
+      SELECT sc.tradingMode 
+      FROM system_context sc
+      LEFT JOIN guardrails_v2 g ON sc.tradingMode = g.mode
+      WHERE g.id IS NULL
+
+  - name: "Percent Conversion Accuracy"
+    id: "MIG_002"
+    description: "Migrated percent values must be mathematically consistent"
+    condition: "Converted values match formula: (legacy_value / portfolio_equity) * 100"
+    severity: "error"
+    notes: "Validate using reference portfolio balance at migration time"
+
+  - name: "No Data Loss"
+    id: "MIG_003"
+    description: "Legacy records must be preserved in transitional view"
+    condition: "COUNT(guardrails) = COUNT(v_guardrails_transitional)"
+    severity: "error"
+    validation_query: |
+      SELECT COUNT(*) as legacy_count FROM guardrails
+      UNION ALL
+      SELECT COUNT(*) as view_count FROM v_guardrails_transitional
+
+# Enforcement Strategy
+enforcement:
+  backend:
+    - endpoint: "PUT /api/guardrails"
+      rules: ["RULE_001", "RULE_002", "RULE_003", "RULE_004", "RULE_005", "RULE_006", "RULE_007", "RULE_008"]
+      timing: "pre-commit validation before database write"
+      failure_action: "return 400 Bad Request with specific rule violation message"
+    
+    - endpoint: "POST /api/tuning/enable"
+      rules: ["RULE_001", "RULE_006"]
+      timing: "validate LATTI field bounds against guardrail limits"
+      failure_action: "reject tuning policy if bounds exceed guardrails"
+  
+  database:
+    - constraint: "guardrails_v2_mode_idx"
+      rule: "RULE_009"
+      type: "UNIQUE INDEX"
+    
+    - constraint: "check_portfolio_risk_range"
+      rule: "RULE_006"
+      type: "CHECK constraint"
+      sql: "portfolio_risk_per_trade_pct >= 0.10 AND portfolio_risk_per_trade_pct <= 5.00"
+    
+    - constraint: "check_kill_switch_range"
+      rule: "RULE_007"
+      type: "CHECK constraint"
+      sql: "daily_loss_kill_switch_pct >= 1.00 AND daily_loss_kill_switch_pct <= 20.00"
+    
+    - constraint: "check_positions_range"
+      rule: "RULE_008"
+      type: "CHECK constraint"
+      sql: "max_open_positions >= 1 AND max_open_positions <= 20"
+    
+    - constraint: "check_cooldown_minimum"
+      rule: "RULE_003"
+      type: "CHECK constraint"
+      sql: "symbol_cooldown_minutes >= 1"
+
+# Testing Matrix
+test_cases:
+  valid_scenarios:
+    - name: "Baseline Configuration"
+      portfolio_risk_per_trade_pct: 0.90
+      symbol_cooldown_minutes: 15
+      max_open_positions: 5
+      daily_loss_kill_switch_pct: 7.00
+      is_manual_override: false
+      tuned_by_latti: true
+      expected_result: "PASS all rules"
+    
+    - name: "Conservative Configuration"
+      portfolio_risk_per_trade_pct: 0.50
+      symbol_cooldown_minutes: 30
+      max_open_positions: 3
+      daily_loss_kill_switch_pct: 5.00
+      is_manual_override: false
+      tuned_by_latti: true
+      expected_result: "PASS all rules"
+    
+    - name: "Aggressive Configuration"
+      portfolio_risk_per_trade_pct: 2.00
+      symbol_cooldown_minutes: 5
+      max_open_positions: 10
+      daily_loss_kill_switch_pct: 20.00
+      is_manual_override: true
+      tuned_by_latti: false
+      expected_result: "PASS all rules"
+  
+  invalid_scenarios:
+    - name: "Risk Exceeds Kill Switch Threshold"
+      portfolio_risk_per_trade_pct: 1.50
+      daily_loss_kill_switch_pct: 7.00
+      expected_violation: "RULE_001"
+      expected_message: "Portfolio risk per trade (1.50%) cannot exceed 10% of daily loss kill switch (7.00%). Maximum allowed: 0.70%"
+    
+    - name: "Conflicting Control Flags"
+      is_manual_override: true
+      tuned_by_latti: true
+      expected_violation: "RULE_005"
+      expected_message: "Conflicting control flags: is_manual_override and tuned_by_latti cannot both be true"
+    
+    - name: "Risk Out of Range"
+      portfolio_risk_per_trade_pct: 6.00
+      expected_violation: "RULE_006"
+      expected_message: "Portfolio risk per trade (6.00%) must be between 0.10% and 5.00%"
+    
+    - name: "Total Exposure Exceeds 100%"
+      max_open_positions: 100
+      portfolio_risk_per_trade_pct: 1.50
+      expected_violation: "RULE_002 (warn)"
+      expected_message: "Total exposure (150.00%) exceeds 100% of portfolio"
+
+# Phase 3 Extensions (Future)
+phase_3_additions:
+  - name: "Per-Parameter Manual Override Tracking"
+    description: "Track which specific Core Four parameters are manually overridden"
+    schema_addition: "locked_by_user JSONB { riskPerTrade: boolean, cooldown: boolean, positions: boolean, killSwitch: boolean }"
+    
+  - name: "LATTI Adjustment Auditing"
+    description: "Log all LATTI automatic adjustments with before/after values"
+    table: "latti_adjustment_log"
+    columns: ["timestamp", "mode", "parameter_name", "old_value", "new_value", "reason"]
+
+# Integration Points
+integrations:
+  latti:
+    service: "HeuristicTraderService"
+    reads: ["portfolio_risk_per_trade_pct", "symbol_cooldown_minutes", "max_open_positions"]
+    respects: "is_manual_override flag (skips adjustment if true)"
+    enforces: ["RULE_001", "RULE_006"]
+  
+  risk_manager:
+    service: "RiskManager"
+    reads: ["portfolio_risk_per_trade_pct", "daily_loss_kill_switch_pct", "max_open_positions"]
+    enforces: ["RULE_001", "RULE_007", "RULE_008"]
+    triggers: "Emergency shutdown on kill switch breach"
+  
+  trading_engine:
+    service: "TradingEngine"
+    reads: ["symbol_cooldown_minutes", "max_open_positions"]
+    enforces: ["RULE_003", "RULE_008"]
+    blocks: "New trade execution if guardrails violated"
+
+# Audit Trail
+changelog:
+  - version: "2.0"
+    date: "2025-10-28"
+    changes: "Initial coherency rules definition from Phase 1 audit"
+    author: "Architect"
+  - version: "2.1"
+    date: "TBD"
+    changes: "Phase 3 - Add per-parameter manual override rules"
+    status: "planned"
+```
+
+---
+
+## Quick Reference: Core Rules Summary
+
+| Rule ID | Name | Severity | Condition |
+|---------|------|----------|-----------|
+| RULE_001 | Risk ≤ 50% × KillSwitch | error | `portfolio_risk_per_trade_pct <= daily_loss_kill_switch_pct * 0.5` |
+| RULE_002 | Total Exposure ≤ 50% Cap | error | `max_open_positions * portfolio_risk_per_trade_pct <= 50` |
+| RULE_003 | Cooldown ≥ 0 minutes | error | `symbol_cooldown_minutes >= 0` |
+| RULE_004 | Cooldown Maximum | warn | `symbol_cooldown_minutes <= 90` |
+| RULE_005 | Manual Override Exclusivity | error | `not (is_manual_override and tuned_by_latti)` |
+| RULE_006 | Portfolio Risk Range | error | `0.10% <= portfolio_risk_per_trade_pct <= 5.00%` |
+| RULE_007 | Kill Switch Range | error | `1.00% <= daily_loss_kill_switch_pct <= 25.00%` |
+| RULE_008 | Max Positions Range | error | `1 <= max_open_positions <= 20` |
+| RULE_009 | Mode Isolation | error | Exactly one record per mode (paper/live) |
+| RULE_010 | Learning Expansion Safety Caps | error | All values within safety caps |
+
+## Core Four Guardrails
+
+1. **portfolio_risk_per_trade_pct** - Percentage of portfolio risked per trade (0.10% - 5.00%)
+2. **symbol_cooldown_minutes** - Cooldown period before re-trading same symbol (0-90 min)
+3. **max_open_positions** - Maximum concurrent open positions (1-20)
+4. **daily_loss_kill_switch_pct** - Portfolio loss % triggering auto-shutdown (1.00% - 25.00%)
+
+---
+
+*Generated: November 30, 2025*  
+*Source: `audit/coherency_rules.yaml` v2.2-phase28efinal*
