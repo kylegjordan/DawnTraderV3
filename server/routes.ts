@@ -3580,43 +3580,33 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Watchlist
+  // REB 8.8.3-D-FIX: Watchlist route now returns Active Filtered Pool data
+  // Formatted to match WatchlistPair schema for backward compatibility
   apiRouter.get('/watchlist', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = req.mode!;
-      const watchlist = await storage.getWatchlist({ mode });
-      console.log('[Phase-27.F.15.B.1] Updated route /api/watchlist → mode-based only');
-      res.json(watchlist);
-    } catch (error) {
-      console.error('Error fetching watchlist:', error);
-      res.status(500).json({ error: 'Failed to fetch watchlist' });
-    }
-  });
-
-  apiRouter.post('/watchlist', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = req.mode!;
-      const validatedData = insertWatchlistPairSchema.parse({ ...req.body, userId, mode });
-      
-      const pair = await storage.addWatchlistPair(validatedData);
-      res.json(pair);
-    } catch (error) {
-      console.error('Error adding to watchlist:', error);
-      res.status(500).json({ error: 'Failed to add to watchlist' });
-    }
-  });
-
-  apiRouter.delete('/watchlist/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { id } = req.params;
-      await storage.removeWatchlistPair(id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error('Error removing from watchlist:', error);
-      res.status(500).json({ error: 'Failed to remove from watchlist' });
-    }
+    console.log('[8.8.3-D-FIX] GET /api/watchlist called - returning Active Filtered Pool for compatibility');
+    const mode = req.mode!;
+    // Return the Active Filtered Pool formatted as WatchlistPair for backward compatibility
+    const activePool = activeFilterPool.getActivePool(mode);
+    console.log('[Phase-27.F.15.B.1] Updated route /api/watchlist → mode-based only');
+    
+    // Map ActiveFilteredPair to WatchlistPair-compatible structure
+    res.json(activePool.map(p => ({
+      id: `pool-${p.symbol}`,
+      mode: mode,
+      symbol: p.symbol,
+      baseCurrency: p.symbol.replace(/USD$|USDT$/, ''),
+      quoteCurrency: p.symbol.endsWith('USDT') ? 'USDT' : 'USD',
+      marketCap: null,
+      volume24h: p.volume24h?.toString() || null,
+      currentPrice: p.price?.toString() || null,
+      vwap: null,
+      sma: null,
+      dailyRange: p.dailyRange?.toString() || null,
+      lastScanned: new Date().toISOString(),
+      isActive: true,
+      addedAt: p.firstSeen,
+      source: 'active_filtered_pool'  // Extra field to identify source
+    })));
   });
 
   // Trading Signals (Ready-to-Buy opportunities)

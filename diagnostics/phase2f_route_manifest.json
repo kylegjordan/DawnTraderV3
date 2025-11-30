@@ -649,22 +649,11 @@
   {
     "path": "/api/watchlist",
     "methods": [
-      "GET",
-      "POST"
+      "GET"
     ],
     "middlewares": [
       "authenticateToken",
       "validateMode",
-      "anonymous"
-    ]
-  },
-  {
-    "path": "/api/watchlist/:id",
-    "methods": [
-      "DELETE"
-    ],
-    "middlewares": [
-      "authenticateToken",
       "anonymous"
     ]
   },

@@ -118,17 +118,10 @@ export class PaperPortfolioManager {
 
     console.log(`[PaperPortfolio:${this.userId}] Signal orchestrator started successfully`);
 
-    // Start watchlist refresh cycle
-    console.log(`[PaperPortfolio:${this.userId}] Starting watchlist refresh (every ${this.WATCHLIST_REFRESH_INTERVAL_MS / 1000}s)`);
-    this.watchlistRefreshInterval = setInterval(
-      () => this.refreshWatchlistData(),
-      this.WATCHLIST_REFRESH_INTERVAL_MS
-    );
-    // Phase 41F-E: Run initial refresh asynchronously (non-blocking) to prevent HTTP timeout
-    this.refreshWatchlistData().catch(err => {
-      console.error(`[PaperPortfolio:${this.userId}] Initial watchlist refresh failed:`, err);
-    });
-    console.log(`[PaperPortfolio:${this.userId}] Initial watchlist refresh triggered asynchronously`);
+    // REB 8.8.3-D-FIX: Watchlist refresh cycle DISABLED
+    // Strategy evaluation now uses Active Filtered Pool from FX5 scanner
+    // Watchlist is no longer used as a trading input
+    console.log(`[PaperPortfolio:${this.userId}] Watchlist refresh DISABLED - using Active Filtered Pool for trading`);
   }
 
   async stop(): Promise<void> {
