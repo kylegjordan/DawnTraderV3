@@ -71,6 +71,8 @@ Final fixes for Primary Metrics addressed issues with countdown UI stuck at 0s, 
 
 Critical portfolio balance synchronization for paper trading mode ensures `portfolioState.balance` (canonical source of truth) stays synchronized with `paperSimSessions.startingBalance` across all success and failure paths.
 
+**REB 8.8.3-A Strategy Engine Deep Audit** (November 30, 2025) completed comprehensive read-only diagnostic of all 9 strategies (vwap_pullback, abcd_long, sma_trend_ride, breakout, mean_reversion, range_trading, vwap_bounce, liquidity_trap, dhma). All strategies confirmed HEALTHY with full indicator availability, complete guardrail integration, and consistent signal interfaces. No legacy V1/V2 code paths detected. LHTS (Local Heuristic Trader Service) confirmed as active Walter stand-in for offline optimization. Audit outputs: `docs/audits/REB-8.8.3-A_Strategy_Status_Map.json` and `.md`.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.
