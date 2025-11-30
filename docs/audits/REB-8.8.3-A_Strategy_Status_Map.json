@@ -1,0 +1,406 @@
+{
+  "auditMetadata": {
+    "auditId": "REB-8.8.3-A",
+    "title": "Strategy Engine Deep Audit",
+    "phase": "Read-Only Diagnostic",
+    "timestamp": "2025-11-30T12:00:00.000Z",
+    "version": "1.0.0",
+    "auditor": "Automated System Analysis",
+    "scope": "Strategy Engine infrastructure, signal flow, guardrail integration, legacy detection"
+  },
+  "executiveSummary": {
+    "totalStrategies": 9,
+    "healthyStrategies": 9,
+    "degradedStrategies": 0,
+    "failingStrategies": 0,
+    "legacyReferencesFound": 1,
+    "criticalIssues": 0,
+    "recommendations": 3
+  },
+  "strategies": {
+    "vwap_pullback": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateVWAPPullbackStrategy()",
+      "description": "Identifies VWAP pullback opportunities when price retraces to VWAP in trending markets",
+      "requiredIndicators": ["vwap", "currentPrice", "high24h", "low24h"],
+      "indicatorAvailability": {
+        "vwap": true,
+        "currentPrice": true,
+        "high24h": true,
+        "low24h": true
+      },
+      "parameters": {
+        "user_configurable": ["vwapDeviationPercent"],
+        "source": "TradingSettings.strategyParams"
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings"]
+    },
+    "abcd_long": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateABCDLongStrategy()",
+      "description": "Detects ABCD harmonic pattern for long entries with Fibonacci-based targets",
+      "requiredIndicators": ["currentPrice", "high24h", "low24h"],
+      "indicatorAvailability": {
+        "currentPrice": true,
+        "high24h": true,
+        "low24h": true
+      },
+      "parameters": {
+        "user_configurable": ["abcdFibLevel"],
+        "source": "TradingSettings.strategyParams"
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings"]
+    },
+    "sma_trend_ride": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateSMATrendRideStrategy()",
+      "description": "Trend-following strategy using SMA crossovers with ATR-based stops",
+      "requiredIndicators": ["sma", "currentPrice"],
+      "indicatorAvailability": {
+        "sma": true,
+        "currentPrice": true
+      },
+      "parameters": {
+        "user_configurable": ["smaPeriod", "smaDeviationPercent"],
+        "source": "TradingSettings.strategyParams"
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings"]
+    },
+    "breakout": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateBreakoutStrategy()",
+      "description": "Identifies breakouts from consolidation with volume confirmation",
+      "requiredIndicators": ["currentPrice", "high24h", "low24h", "volume"],
+      "indicatorAvailability": {
+        "currentPrice": true,
+        "high24h": true,
+        "low24h": true,
+        "volume": true
+      },
+      "parameters": {
+        "user_configurable": ["breakoutThreshold", "volumeMultiplier"],
+        "source": "TradingSettings.strategyParams"
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings"]
+    },
+    "mean_reversion": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateMeanReversionStrategy()",
+      "description": "Mean reversion trades when price deviates significantly from VWAP",
+      "requiredIndicators": ["vwap", "currentPrice"],
+      "indicatorAvailability": {
+        "vwap": true,
+        "currentPrice": true
+      },
+      "parameters": {
+        "user_configurable": ["meanReversionThreshold"],
+        "source": "TradingSettings.strategyParams"
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings"]
+    },
+    "range_trading": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateRangeTradingStrategy()",
+      "description": "Range-bound trading between support and resistance levels",
+      "requiredIndicators": ["currentPrice", "high24h", "low24h"],
+      "indicatorAvailability": {
+        "currentPrice": true,
+        "high24h": true,
+        "low24h": true
+      },
+      "parameters": {
+        "user_configurable": ["rangePercent"],
+        "source": "TradingSettings.strategyParams"
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings"]
+    },
+    "vwap_bounce": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateVWAPBounceStrategy()",
+      "description": "Bounce trades off VWAP support/resistance with momentum confirmation",
+      "requiredIndicators": ["vwap", "currentPrice"],
+      "indicatorAvailability": {
+        "vwap": true,
+        "currentPrice": true
+      },
+      "parameters": {
+        "user_configurable": ["vwapBouncePercent"],
+        "source": "TradingSettings.strategyParams"
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings"]
+    },
+    "liquidity_trap": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateLiquidityTrapStrategy()",
+      "description": "Detects liquidity traps and false breakouts for contrarian entries",
+      "requiredIndicators": ["currentPrice", "high24h", "low24h", "volume"],
+      "indicatorAvailability": {
+        "currentPrice": true,
+        "high24h": true,
+        "low24h": true,
+        "volume": true
+      },
+      "parameters": {
+        "user_configurable": ["liquidityTrapThreshold"],
+        "source": "TradingSettings.strategyParams"
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings"]
+    },
+    "dhma": {
+      "status": "HEALTHY",
+      "location": "server/services/strategy-engine.ts",
+      "entryPoint": "evaluateDHMAStrategy()",
+      "description": "Dynamic Hull Moving Average strategy with multi-timeframe confirmation and microstructure analysis",
+      "requiredIndicators": ["currentPrice", "volume", "vwap", "sma", "high24h", "low24h"],
+      "indicatorAvailability": {
+        "currentPrice": true,
+        "volume": true,
+        "vwap": true,
+        "sma": true,
+        "high24h": true,
+        "low24h": true
+      },
+      "parameters": {
+        "user_configurable": ["dhmaConfidenceThreshold", "dhmaTuningEnabled"],
+        "source": "TradingSettings.strategyParams + dhma_tuning_state table"
+      },
+      "specialFeatures": {
+        "multiTimeframeConfirmation": true,
+        "liquidityFactorScoring": true,
+        "volatilityWeighting": true,
+        "microstructureAnalysis": {
+          "obi": "Order Book Imbalance",
+          "micropriceTilt": "Mid-price asymmetry",
+          "signedFlowRatio": "Buy/Sell volume ratio",
+          "toxicity": "Adverse selection detection"
+        }
+      },
+      "outputFormat": {
+        "compatible": true,
+        "interface": "StrategySignal",
+        "fields": ["symbol", "strategy", "entryPrice", "stopPrice", "targetPrice", "confidence", "metadata"]
+      },
+      "guardrailCompatibility": {
+        "compatible": true,
+        "validatedBy": ["RiskManager.checkPreTradeRisk()", "GuardrailPolicy.validate()"]
+      },
+      "dependencies": ["TechnicalIndicators", "PriceData history", "TradingSettings", "DHMATuningService"]
+    }
+  },
+  "signalFlow": {
+    "orchestrator": {
+      "file": "server/services/signal-orchestrator.ts",
+      "class": "SignalOrchestrator",
+      "evaluationCycle": "30 seconds",
+      "flow": [
+        "1. Fetch tradeable pairs from market data",
+        "2. Calculate technical indicators (VWAP, SMA, price levels)",
+        "3. Evaluate all 9 strategies via StrategyEngine.evaluateAll()",
+        "4. Filter signals by confidence threshold",
+        "5. Apply risk validation via RiskManager.checkPreTradeRisk()",
+        "6. Emit signalValidated lifecycle event",
+        "7. Queue signals for execution"
+      ]
+    },
+    "executor": {
+      "file": "server/services/trade-executor.ts",
+      "classes": ["PaperTradeExecutor", "LiveTradeExecutor"],
+      "abstractBase": "BaseTradeExecutor",
+      "executionFlow": [
+        "1. Validate signal (RiskManager pre-trade checks)",
+        "2. Emit signalValidated event",
+        "3. Calculate position size from risk amount",
+        "4. Simulate latency and slippage (paper mode)",
+        "5. Create trade record in paper_sim_trades",
+        "6. Create position in paper_sim_open_positions",
+        "7. Emit paperTradeExecuted event"
+      ]
+    }
+  },
+  "guardrailIntegration": {
+    "guardrailPolicy": {
+      "file": "server/services/guardrail-policy.ts",
+      "purpose": "Single backend source of truth for guardrail values with coherency enforcement",
+      "coherencyRulesFile": "audit/coherency_rules.yaml",
+      "keyRules": {
+        "RULE_001": "Risk ≤ 50% × KillSwitch",
+        "RULE_002": "Total Exposure ≤ 50% Cap",
+        "RULE_003": "Mutual exclusivity of LATTI and manual override"
+      },
+      "validation": "CoherencyValidationResult with status (PASS/WARN/FAIL)"
+    },
+    "adaptiveGuardrails": {
+      "file": "server/services/adaptive-guardrails.ts",
+      "purpose": "LATTI learning from trade outcomes and user behavior",
+      "learningModes": ["slow", "normal", "aggressive", "disabled"],
+      "throttle": "Max 3 changes per 24 hours (normal mode)",
+      "adjustmentRange": "±1-5% micro-adjustments within coherency bounds"
+    },
+    "riskManager": {
+      "file": "server/services/risk-manager.ts",
+      "preTradeChecks": [
+        "Trading suspended (kill switch)",
+        "Stop-loss validation",
+        "Max 1 position per asset",
+        "Max open positions limit",
+        "Daily loss limit enforcement",
+        "Symbol cooldown period",
+        "Max exposure percentage"
+      ],
+      "modeAwareness": "Separate paper/live validation paths"
+    }
+  },
+  "legacyReferences": {
+    "detected": [
+      {
+        "type": "heuristicTrader",
+        "location": "server/services/heuristic-trader.ts",
+        "status": "ACTIVE",
+        "purpose": "Local Heuristic Trader Service (LHTS) - Walter stand-in for offline trading optimization",
+        "note": "Not legacy - provides autonomous parameter adjustments without external API dependencies",
+        "references": [
+          "server/routes.ts",
+          "server/index.ts",
+          "server/startup.ts"
+        ]
+      }
+    ],
+    "notFound": [
+      "V1/V2 strategy references",
+      "Deprecated DEMA strategy",
+      "Nodal Surge strategy",
+      "Legacy scoring systems"
+    ]
+  },
+  "outputCompatibility": {
+    "strategySignalInterface": {
+      "file": "server/services/strategy-engine.ts",
+      "fields": {
+        "symbol": "string",
+        "strategy": "StrategyName (union type)",
+        "entryPrice": "number",
+        "stopPrice": "number",
+        "targetPrice": "number",
+        "confidence": "number (0-100)",
+        "metadata": "Record<string, any> (optional)"
+      }
+    },
+    "tradeSignalInterface": {
+      "file": "server/services/trade-executor.ts",
+      "fields": {
+        "symbol": "string",
+        "strategy": "StrategyType",
+        "entryPrice": "number",
+        "stopPrice": "number",
+        "targetPrice": "number",
+        "confidence": "number",
+        "metadata": "any (optional)"
+      }
+    },
+    "compatibility": "FULL - StrategySignal maps directly to TradeSignal",
+    "readyToBuyFlow": "Signals emit readyToTrade lifecycle event with full position details"
+  },
+  "recommendations": [
+    {
+      "id": "REC-001",
+      "priority": "LOW",
+      "title": "Address LSP Diagnostics",
+      "description": "Fix 10 LSP diagnostics in trade-executor.ts, risk-manager.ts, guardrail-policy.ts, heuristic-trader.ts",
+      "impact": "Code quality and maintainability"
+    },
+    {
+      "id": "REC-002",
+      "priority": "MEDIUM",
+      "title": "Document DHMA Tuning State Schema",
+      "description": "Add comprehensive documentation for dhma_tuning_state table structure and tuning cycle",
+      "impact": "Developer onboarding and maintenance"
+    },
+    {
+      "id": "REC-003",
+      "priority": "LOW",
+      "title": "Consolidate Risk Manager Helpers",
+      "description": "Deprecation warning in getRiskPercentage() - complete migration to getRiskPercentageV2()",
+      "impact": "Code cleanliness and reduced technical debt"
+    }
+  ]
+}
