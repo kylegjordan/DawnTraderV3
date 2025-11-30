@@ -1,0 +1,290 @@
+⭐ REB 8.8.3-KS-A — Kill Switch & Trading State Audit (Read-Only Diagnostic Phase)
+
+FULL DIRECTIVE FOR REPLIT
+
+🧠 Context
+
+We are currently stabilizing Phase 8.8 (Real-Time Pipeline) and must verify the correctness of the trading state → engine state → passive learning relationships, as well as the daily-loss kill switch behavior.
+
+DawnTrader’s architecture defines:
+
+✔ isEngineActive[mode]
+
+The single authoritative source of whether a mode (paper, live) is running in:
+
+Active trading, or
+
+Passive learning (when isEngineActive === false).
+
+✔ Passive learning
+
+Is not a mode.
+It is always derived as:
+
+passiveLearning = !isEngineActive
+
+✔ Daily Loss Kill Switch
+
+There is only one kill switch, and it is triggered only when realized 24-hour loss ≥ daily loss % threshold.
+
+When triggered:
+
+isEngineActive[mode] must flip from ACTIVE → STOPPED
+
+The system remains in passive learning
+
+No separate “kill switch state machine” should exist
+
+✔ LATTI
+
+May adjust guardrail/filter numeric values (if set to LATTI-controlled),
+but LATTI must not:
+
+Stop trading
+
+Trip any kill switch
+
+Set isEngineActive
+
+Set any “tradingSuspended” or “killSwitchTripped” fields
+
+✔ Manual Trading Toggle (header)
+
+This is the normal user-controlled start/stop mechanism, and should:
+
+Set isEngineActive[mode] ← True/False
+
+Not trip kill switch states
+
+🎯 Objective of this Audit
+
+Produce a precise, forensic map of:
+
+How trading active/stopped is currently implemented,
+
+How kill switch states are implemented,
+
+Whether any secondary/legacy kill-switch logic exists,
+
+Where LATTI or Coherency rules may be improperly interacting,
+
+What flags or states currently determine whether DawnTrader is ACTIVE or PASSIVE,
+
+Every code path that can stop the engine.
+
+No modifications will be made in this phase.
+
+Output will be a human-readable report + JSON state map.
+
+🧾 Replit Tasks
+
+Replit must complete all of the following.
+
+1. Trace Trading State → Engine State Wiring
+
+For both modes (paper, live):
+
+Identify:
+
+What field(s) represent “trading active” or “stopped”
+
+The code that sets these fields when the user toggles trading ON or OFF in the UI.
+
+Trace exactly how and where isEngineActive[mode] is updated.
+
+Document everywhere isEngineActive is read to decide:
+
+Whether the orchestrator runs
+
+Whether strategies run
+
+Whether guardrails run
+
+Whether execution runs
+
+Whether scanning runs (should always run)
+
+Whether the active pool should be cleared (stopped case)
+
+Output:
+A table listing each read/write location for isEngineActive.
+
+2. Daily Loss Kill Switch Logic – Full Audit
+
+Replit must trace the actual implementation of:
+
+How 24h P/L is calculated
+
+Where the daily loss percentage threshold is read
+
+Where the comparison is made
+
+Where the kill switch is actually tripped
+
+What fields get set when it trips
+
+What fields get cleared (if any)
+
+Whether a user restarting trading resets the 24h monitoring window as intended
+
+Specifically:
+
+For each kill-switch-related flag:
+
+killSwitchTripped
+
+tradingSuspended
+
+Any boolean containing “kill” or “switch”
+
+Replit must document:
+
+Where it is written (every code path)
+
+Where it is read
+
+What effect that read has (stop engine? stop execution? stop strategies?)
+
+Whether it affects isEngineActive
+
+Whether it triggers a redirect to /kill-switch
+
+Whether it persists in DB
+
+Output:
+A matrix showing all kill-switch-related flags and their read/write semantics.
+
+3. Manual Trading Toggle Audit
+
+Replit must trace the top-of-app toggle:
+
+Where the toggle sends API requests
+
+What backend function receives them
+
+What fields change (e.g. isEngineActive)
+
+Whether ANY kill-switch-like flag is set by the toggle
+
+Whether any “tradingSuspended” field is impacted
+
+Whether the toggle incorrectly interacts with any kill-switch logic
+
+Output:
+A clear mapping of toggle → backend state transitions.
+
+4. Audit for Hidden or Secondary Kill-Switch Systems
+
+The system must have only one kill-switch mechanism:
+the daily loss kill switch.
+
+Replit must identify and document:
+
+Any legacy “kill switch” fields
+
+Any global “safety halt” fields
+
+Any “tradingSuspended” flags
+
+Any “global emergency stop” logic
+
+Any AutonomyController / SafetyController logic that sets any kill-switch-like state
+
+Any Coherency rule that sets kill-switch-like state
+
+Any “safety violation” system that can stop trading or engine
+
+Output:
+A section titled “Unexpected Kill-Switch Mechanisms Found” listing any logic not aligned with the intended architecture.
+
+5. LATTI & Coherency Influence Audit
+
+Replit must document:
+
+A. LATTI’s write capabilities
+
+Which guardrails LATTI may adjust
+
+How adjustments are written
+
+Confirm LATTI does not write:
+
+isEngineActive
+
+killSwitchTripped
+
+tradingSuspended
+
+Any other engine-halting flag
+
+B. Coherency Rules
+
+Confirm coherency errors do not stop the engine
+
+Confirm coherency rules are only validators, not kill-switch triggers
+
+Identify any pathways where coherency sets a suspension flag
+
+Output:
+A section called “LATTI & Coherency Effects on Trading State”.
+
+6. Runtime Trace (Minimal Logging)
+
+Replit must add temporary console logging (namespaced [KS-A]) ONLY IF necessary to reveal:
+
+When isEngineActive changes
+
+When killSwitchTripped changes
+
+When tradingSuspended changes
+
+When 24-hour P/L check runs
+
+When kill-switch logic runs
+
+Replit must NOT alter system logic — logs only.
+
+7. Final Documentation to Produce
+
+Replit must generate two files:
+
+📄 A. docs/audits/REB_8.8.3-KS-A_Kill_Switch_Trading_State_Audit.md
+
+Must include:
+
+Full trading state → engine state → passive learning diagram
+
+All kill-switch-related flags and behaviors
+
+All code paths that can stop trading or the engine
+
+How daily loss is calculated and used
+
+How trading toggle actually works
+
+Whether any hidden kill-switch-like systems exist
+
+Summary of deviations from the intended architecture
+
+Clear bullet list:
+“What currently stops trading”
+“What currently stops the engine”
+“What should stop trading vs what should not”
+
+📄 B. docs/audits/REB_8.8.3-KS-A_State_Flags_Map.json
+
+Structured JSON mapping each flag:
+
+{
+  "flagName": {
+    "writes": ["file:line", "file:line"],
+    "reads": ["file:line", "file:line"],
+    "effects": ["stops engine", "redirects UI", ...]
+  }
+}
+
+🏁 Expected Completion Message
+
+Replit must end with:
+
+“REB 8.8.3-KS-A complete. Kill Switch & Trading State Audit finished. Documentation generated. No logic changed.”

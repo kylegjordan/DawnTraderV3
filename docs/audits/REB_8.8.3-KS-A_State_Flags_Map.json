@@ -1,0 +1,290 @@
+{
+  "metadata": {
+    "audit": "REB 8.8.3-KS-A",
+    "date": "2025-11-30",
+    "purpose": "Kill Switch & Trading State Flags Forensic Map",
+    "status": "COMPLETE"
+  },
+  "flags": {
+    "isEngineActive": {
+      "storage": "system_context table (per mode)",
+      "type": "boolean",
+      "purpose": "Single source of truth for trading engine running state",
+      "writes": [
+        { "file": "server/routes.ts", "line": 2655, "action": "Set true", "trigger": "POST /api/trading/start" },
+        { "file": "server/routes.ts", "line": 2776, "action": "Set false", "trigger": "POST /api/trading/stop" },
+        { "file": "server/routes.ts", "line": 2877, "action": "Set false", "trigger": "POST /api/admin/force-stop" },
+        { "file": "server/services/trading-state-sync.ts", "line": 123, "action": "Set false", "trigger": "Startup stale reset (paper)" },
+        { "file": "server/services/trading-state-sync.ts", "line": 128, "action": "Set false", "trigger": "Startup stale reset (live)" },
+        { "file": "server/services/trading-state-sync.ts", "line": 252, "action": "Set isActive", "trigger": "Debounced state sync" }
+      ],
+      "reads": [
+        { "file": "server/routes.ts", "line": 3059, "purpose": "Trading status endpoint" },
+        { "file": "server/routes.ts", "line": 3149, "purpose": "Unified state response" },
+        { "file": "server/routes.ts", "line": 5097, "purpose": "System flags (paper)" },
+        { "file": "server/routes.ts", "line": 5098, "purpose": "System flags (live)" },
+        { "file": "server/services/command-router.ts", "line": 158, "purpose": "Mode detection (live)" },
+        { "file": "server/services/command-router.ts", "line": 159, "purpose": "Mode detection (paper)" },
+        { "file": "server/services/command-router.ts", "line": 358, "purpose": "Status command (live)" },
+        { "file": "server/services/command-router.ts", "line": 359, "purpose": "Status command (paper)" },
+        { "file": "server/services/baseline-indicator.ts", "line": 236, "purpose": "Baseline engine check" }
+      ],
+      "effects": [
+        "Determines if orchestrator/engine runs",
+        "Derives passiveLearning = !isEngineActive",
+        "Gates FX5 Active Pool population",
+        "Gates 24h metrics recording"
+      ]
+    },
+    "killSwitchTripped": {
+      "storage": "guardrails_v2 table (per mode)",
+      "type": "boolean",
+      "purpose": "Daily loss kill switch state (persistent)",
+      "writes": [
+        { "file": "server/services/guardrail-policy.ts", "line": 369, "action": "Set true", "trigger": "tripKillSwitch()" },
+        { "file": "server/services/guardrail-policy.ts", "line": 400, "action": "Set false", "trigger": "resetKillSwitch()" }
+      ],
+      "reads": [
+        { "file": "server/routes.ts", "line": 1598, "purpose": "Effective guardrails response" },
+        { "file": "server/routes.ts", "line": 14513, "purpose": "Walter blocks trading start" },
+        { "file": "server/storage.ts", "line": 882, "purpose": "Guardrails summary" },
+        { "file": "server/services/guardrail-policy.ts", "line": 418, "purpose": "isKillSwitchTripped() check" },
+        { "file": "server/services/risk-manager.ts", "line": 170, "purpose": "Convert to tradingSuspended" }
+      ],
+      "effects": [
+        "Blocks trading start via Walter",
+        "Included in guardrails effective values",
+        "Persisted across server restarts"
+      ]
+    },
+    "tradingSuspended": {
+      "storage": "Legacy (trading_settings or derived from killSwitchTripped)",
+      "type": "boolean",
+      "purpose": "Legacy kill switch flag (user-level)",
+      "writes": [
+        { "file": "server/services/risk-manager.ts", "line": 1046, "action": "Set true", "trigger": "Daily loss kill switch triggers" },
+        { "file": "server/services/alert-action-handler.ts", "line": 207, "action": "Set false", "trigger": "Kill switch reset action" },
+        { "file": "server/test-guardrails.ts", "line": 187, "action": "Set true", "trigger": "Test setup" },
+        { "file": "server/test-guardrails.ts", "line": 218, "action": "Set false", "trigger": "Test cleanup" }
+      ],
+      "reads": [
+        { "file": "server/services/risk-manager.ts", "line": 170, "purpose": "Build TradingSettings" },
+        { "file": "server/services/risk-manager.ts", "line": 312, "purpose": "Block pre-trade risk check" },
+        { "file": "server/services/risk-manager.ts", "line": 1006, "purpose": "Skip kill switch check if already suspended" },
+        { "file": "server/services/market-scanner.ts", "line": 613, "purpose": "Skip strategies if suspended" },
+        { "file": "server/services/paper-sim-diagnostic.ts", "line": 462, "purpose": "Add guardrail reason" }
+      ],
+      "effects": [
+        "Blocks new trades via risk check",
+        "Skips strategy evaluation in market scanner"
+      ]
+    },
+    "passiveLearning": {
+      "storage": "Derived (NOT stored)",
+      "type": "boolean (derived)",
+      "purpose": "Indicates learning mode when engine stopped",
+      "derivation": "passiveLearning = !isEngineActive",
+      "writes": [
+        { "note": "NOT WRITTEN - always derived from isEngineActive" }
+      ],
+      "reads": [
+        { "file": "server/routes.ts", "line": 3153, "purpose": "Trading status passiveLearning field" },
+        { "file": "server/routes.ts", "line": 5064, "purpose": "System config passiveLearning" },
+        { "file": "server/routes.ts", "line": 5102, "purpose": "Passive mode computation" },
+        { "file": "server/services/fx5-scanner.ts", "lines": "180-193", "purpose": "Pool population gate" }
+      ],
+      "effects": [
+        "FX5 skips metrics recording",
+        "Active Pool remains empty",
+        "UI shows passive learning indicator"
+      ]
+    },
+    "killSwitchActive_RealtimePaperExecutor": {
+      "storage": "In-memory (realtime-paper-executor.ts)",
+      "type": "boolean",
+      "purpose": "Execution latency/WS failure kill switch (LOCAL)",
+      "writes": [
+        { "file": "server/services/realtime-paper-executor.ts", "line": 218, "action": "Set true", "trigger": "activateKillSwitch(reason)" },
+        { "file": "server/services/realtime-paper-executor.ts", "line": 238, "action": "Set false", "trigger": "Self-repair successful" }
+      ],
+      "reads": [
+        { "file": "server/services/realtime-paper-executor.ts", "line": 266, "purpose": "Status reporting" }
+      ],
+      "effects": [
+        "Blocks new executions in realtime-paper-executor only",
+        "Does NOT affect isEngineActive",
+        "Does NOT affect killSwitchTripped",
+        "Does NOT redirect UI",
+        "Self-repairs after 30s cooldown"
+      ],
+      "note": "SECONDARY MECHANISM - local to realtime executor only"
+    },
+    "killSwitchReason": {
+      "storage": "guardrails_v2 table (per mode)",
+      "type": "string | null",
+      "purpose": "Reason message for kill switch trip",
+      "writes": [
+        { "file": "server/services/guardrail-policy.ts", "line": 370, "action": "Set reason", "trigger": "tripKillSwitch()" },
+        { "file": "server/services/guardrail-policy.ts", "line": 401, "action": "Set null", "trigger": "resetKillSwitch()" }
+      ],
+      "reads": [
+        { "note": "Used for display purposes when killSwitchTripped is true" }
+      ],
+      "effects": [
+        "Provides explanation for kill switch activation"
+      ]
+    },
+    "killSwitchTrippedAt": {
+      "storage": "guardrails_v2 table (per mode)",
+      "type": "timestamp | null",
+      "purpose": "Timestamp of kill switch trip",
+      "writes": [
+        { "file": "server/services/guardrail-policy.ts", "line": 371, "action": "Set new Date()", "trigger": "tripKillSwitch()" },
+        { "file": "server/services/guardrail-policy.ts", "line": 402, "action": "Set null", "trigger": "resetKillSwitch()" }
+      ],
+      "reads": [
+        { "note": "Used for audit trail and display" }
+      ],
+      "effects": [
+        "Records when kill switch was activated"
+      ]
+    },
+    "dailyLossKillSwitchPct": {
+      "storage": "guardrails_v2 table (per mode)",
+      "type": "string (decimal)",
+      "purpose": "Threshold percentage for daily loss kill switch",
+      "writes": [
+        { "file": "server/routes.ts", "line": 1448, "action": "Update value", "trigger": "PUT /api/guardrails-v2" },
+        { "file": "server/services/heuristic-trader.ts", "line": 1024, "action": "LATTI adjustment", "trigger": "Heuristic rule" }
+      ],
+      "reads": [
+        { "file": "server/services/risk-manager.ts", "line": 1017, "purpose": "Kill switch threshold comparison" },
+        { "file": "server/services/guardrail-policy.ts", "line": 171, "purpose": "Parse for effective values" }
+      ],
+      "effects": [
+        "Determines threshold for kill switch trigger",
+        "Subject to coherency rule RULE_007 (max 25%)"
+      ]
+    }
+  },
+  "killSwitchTriggerPaths": {
+    "dailyLossKillSwitch": {
+      "description": "Primary kill switch - triggers on 24h realized loss >= threshold",
+      "entryPoint": "risk-manager.ts:checkKillSwitch()",
+      "calculation": "risk-manager.ts:calculate24hPL()",
+      "comparison": "lossPercent >= dailyLossKillSwitchPct",
+      "actions": [
+        "Close all open trades",
+        "Create kill_switch_events record",
+        "Set tradingSuspended: true",
+        "Set killSwitchTripped: true (via guardrail-policy)"
+      ],
+      "resetPath": "POST /api/guardrails-v2/kill-switch/reset?mode=paper|live"
+    },
+    "latencyKillSwitch": {
+      "description": "Secondary kill switch - execution latency or WS failure",
+      "entryPoint": "realtime-paper-executor.ts:checkKillSwitch()",
+      "triggers": [
+        "Execution latency > 500ms",
+        "WebSocket disconnected AND no data > 10s"
+      ],
+      "actions": [
+        "Set local killSwitchActive: true",
+        "Block new executions in this module"
+      ],
+      "resetPath": "Automatic self-repair after 30s cooldown"
+    }
+  },
+  "tradingStateTransitions": {
+    "userStartsTrading": {
+      "endpoint": "POST /api/trading/start",
+      "stateChanges": {
+        "isEngineActive": "true",
+        "killSwitchTripped": "unchanged",
+        "tradingSuspended": "unchanged",
+        "passiveLearning": "false (derived)"
+      }
+    },
+    "userStopsTrading": {
+      "endpoint": "POST /api/trading/stop",
+      "stateChanges": {
+        "isEngineActive": "false",
+        "killSwitchTripped": "unchanged",
+        "tradingSuspended": "unchanged",
+        "passiveLearning": "true (derived)"
+      }
+    },
+    "dailyLossKillSwitchTrips": {
+      "trigger": "24h loss >= threshold",
+      "stateChanges": {
+        "isEngineActive": "unchanged (should review)",
+        "killSwitchTripped": "true",
+        "tradingSuspended": "true",
+        "passiveLearning": "unchanged"
+      }
+    },
+    "killSwitchReset": {
+      "endpoint": "POST /api/guardrails-v2/kill-switch/reset",
+      "stateChanges": {
+        "isEngineActive": "unchanged",
+        "killSwitchTripped": "false",
+        "tradingSuspended": "false",
+        "passiveLearning": "unchanged"
+      }
+    }
+  },
+  "lattiWriteCapabilities": {
+    "canAdjust": [
+      "portfolioRiskPerTradePct",
+      "symbolCooldownMinutes",
+      "maxOpenPositions",
+      "dailyLossKillSwitchPct (numeric value only)",
+      "Various screener filter values"
+    ],
+    "cannotSet": [
+      "isEngineActive",
+      "killSwitchTripped",
+      "tradingSuspended",
+      "passiveLearning"
+    ],
+    "verificationNotes": "LATTI uses updateGuardrails() and updateScreeners() which only modify numeric parameters"
+  },
+  "coherencyRulesImpact": {
+    "function": "Validation only - returns PASS/WARN/FAIL",
+    "canStop": {
+      "engine": false,
+      "trading": false,
+      "killSwitch": false
+    },
+    "canBlock": {
+      "guardrailSave": true
+    },
+    "relevantRules": [
+      { "id": "RULE_001", "description": "Risk <= 50% × KillSwitch" },
+      { "id": "RULE_007", "description": "KillSwitch <= 25%" }
+    ]
+  },
+  "deviationsFromSpec": [
+    {
+      "id": "DEV-001",
+      "severity": "Medium",
+      "description": "Secondary latency-based kill switch exists in realtime-paper-executor.ts",
+      "location": "server/services/realtime-paper-executor.ts:201-246",
+      "recommendation": "Document as operational safeguard, verify scope isolation"
+    },
+    {
+      "id": "DEV-002",
+      "severity": "Low",
+      "description": "Dual kill switch flags exist: killSwitchTripped (guardrails_v2) and tradingSuspended (legacy)",
+      "location": "Multiple files",
+      "recommendation": "Consider consolidation to single flag"
+    },
+    {
+      "id": "DEV-003",
+      "severity": "Low",
+      "description": "In-memory guardrails_v2.killSwitchTripped cache referenced in Walter integration",
+      "location": "server/routes.ts:14513",
+      "recommendation": "Verify cache synchronization with database"
+    }
+  ]
+}
