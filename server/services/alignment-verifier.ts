@@ -121,7 +121,7 @@ export class AlignmentVerifier {
       // 8. Broadcast verification result
       await this.contextBridge.broadcast({
         type: "state_update",
-        userId: null, // System-level event
+        userId: undefined, // System-level event
         mode: mode, // Include mode if provided (user-initiated) or undefined (autonomous)
         payload: {
           eventType: "alignment_verification_complete",

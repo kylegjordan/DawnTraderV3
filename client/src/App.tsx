@@ -1,6 +1,6 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
@@ -11,7 +11,6 @@ import Sidebar from "@/components/layout/sidebar";
 import TopBar from "@/components/layout/top-bar";
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useQuery } from "@tanstack/react-query";
 import NotFound from "@/pages/not-found";
 import { TradingModeProvider } from "@/contexts/trading-mode-context";
 import { RequestTraceProvider } from "@/hooks/use-request-trace";
@@ -19,12 +18,12 @@ import { ensureValidToken } from "@/lib/auth";
 import WalterFloatingAssistant from "@/components/walter-floating-assistant";
 import { LATTIToastListener } from "@/components/latti-toast-listener";
 import { ProfiledRoute } from "@/components/profiled-route";
+import { AlertTriangle, X } from "lucide-react";
 
 const Settings = lazy(() => import("@/pages/settings"));
 const WalterPage = lazy(() => import("@/pages/walter"));
 const WatchlistPage = lazy(() => import("@/pages/watchlist"));
 const ActiveTradesPage = lazy(() => import("@/pages/active-trades"));
-const KillSwitchScreen = lazy(() => import("@/pages/kill-switch"));
 const ReportsPage = lazy(() => import("@/pages/reports"));
 const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
 const BriefingsPage = lazy(() => import("@/pages/briefings"));
@@ -40,6 +39,41 @@ function LoadingFallback() {
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
         <p className="text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+interface KillSwitchBannerProps {
+  dailyLossLimit: number;
+  onDismiss: () => void;
+}
+
+function KillSwitchBanner({ dailyLossLimit, onDismiss }: KillSwitchBannerProps) {
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 bg-destructive text-destructive-foreground px-4 py-3 shadow-lg" data-testid="kill-switch-banner">
+      <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <div>
+            <span className="font-semibold">Kill Switch Triggered</span>
+            <span className="hidden sm:inline ml-2">—</span>
+            <span className="hidden sm:inline ml-2">
+              Your portfolio exceeded the Daily Loss Kill Switch limit of {dailyLossLimit}%. Trading has been stopped.
+            </span>
+            <span className="sm:hidden block text-sm opacity-90">
+              Trading stopped. Toggle trading ON to resume.
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="p-1 hover:bg-destructive-foreground/10 rounded-full transition-colors"
+          aria-label="Dismiss banner"
+          data-testid="kill-switch-banner-dismiss"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
     </div>
   );
@@ -95,7 +129,6 @@ function getPageContext(location: string): string {
     '/ai-transparency': 'AI Transparency',
     '/settings': 'Settings',
     '/system/config': 'System Configuration',
-    '/kill-switch': 'Kill Switch',
     '/walter': 'Walter Chat'
   };
   
@@ -104,23 +137,26 @@ function getPageContext(location: string): string {
 
 function Router() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [killSwitchBannerDismissed, setKillSwitchBannerDismissed] = useState(false);
   const isMobile = useIsMobile();
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
   
-  // REB 8.8.3-KS-B: Check kill switch status using killSwitchTripped (not tradingSuspended)
-  // Phase 40.2: Aligned to 15s for faster kill switch detection
-  const { data: settings } = useQuery<{ killSwitchTripped?: boolean }>({
+  // REB 8.8.3-KS-FINAL: Check kill switch status for banner display
+  const { data: settings } = useQuery<{ killSwitchTripped?: boolean; dailyLossKillSwitch?: number }>({
     queryKey: ['/api/settings'],
     refetchInterval: 15000,
     staleTime: 15000,
     refetchOnWindowFocus: false
   });
   
+  // Reset banner dismissal when kill switch trips again
   useEffect(() => {
-    // REB 8.8.3-KS-B: No longer auto-redirect to /kill-switch
-    // User can freely navigate. Kill switch banner shows on dashboard instead.
-    // Trading is stopped but user can resume by toggling trading on.
-  }, [settings, location, setLocation]);
+    if (settings?.killSwitchTripped) {
+      setKillSwitchBannerDismissed(false);
+    }
+  }, [settings?.killSwitchTripped]);
+  
+  const showKillSwitchBanner = settings?.killSwitchTripped && !killSwitchBannerDismissed;
 
   // Check if on public routes (login/register)
   const isPublicRoute = location === '/login' || location === '/register';
@@ -138,7 +174,14 @@ function Router() {
   // Protected routes (require auth)
   return (
     <RequireAuth>
-      <div className="flex h-screen overflow-hidden bg-background">
+      {/* REB 8.8.3-KS-FINAL: Kill Switch Banner - Option A UX */}
+      {showKillSwitchBanner && (
+        <KillSwitchBanner 
+          dailyLossLimit={settings?.dailyLossKillSwitch || 15}
+          onDismiss={() => setKillSwitchBannerDismissed(true)}
+        />
+      )}
+      <div className={`flex h-screen overflow-hidden bg-background ${showKillSwitchBanner ? 'pt-12' : ''}`}>
         <Sidebar 
           isOpen={sidebarOpen} 
           onClose={() => setSidebarOpen(false)}
@@ -178,7 +221,6 @@ function Router() {
               <Route path="/insights" component={FilterInsightsPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/system/config" component={SystemConfigPage} />
-              <Route path="/kill-switch" component={KillSwitchScreen} />
               <Route path="/:rest*">
                 <Redirect to="/" />
               </Route>

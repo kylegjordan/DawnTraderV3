@@ -697,10 +697,11 @@ class AutonomyControllerService {
     for (const action of actions) {
       try {
         // Phase 9.0: Verify action against alignment policies before execution
+        // REB 8.8.3-KS-FINAL: Use 'operational' policy type (valid enum value)
         const verification = await this.alignmentVerifier.verifyAction({
           actionType: action,
           actionParams: { userId, parentRunId },
-          policyType: 'autonomy',
+          policyType: 'operational',
           requestedBy: 'AutonomyController'
         });
 

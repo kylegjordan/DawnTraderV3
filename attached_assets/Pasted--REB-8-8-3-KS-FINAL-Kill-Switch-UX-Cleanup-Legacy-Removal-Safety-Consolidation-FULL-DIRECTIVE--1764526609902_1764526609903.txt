@@ -1,0 +1,262 @@
+⭐ REB 8.8.3-KS-FINAL — Kill Switch UX Cleanup, Legacy Removal & Safety Consolidation
+FULL DIRECTIVE FOR REPLIT
+
+Authentication:
+
+username: testuser123
+password: SecurePass123!
+
+🧠 CONTEXT (Replit must follow exactly)
+
+The Kill Switch architecture has been successfully unified in REB 8.8.3-KS-B.
+However:
+
+A legacy kill-switch screen still exists
+
+Redirect logic can still route users to /kill-switch
+
+A stale “local latency kill switch” subsystem exists in realtime-paper-executor
+
+AlignmentVerifier & ReflectiveIntelligenceService still emit warnings
+
+DawnTrader now requires Option A UX:
+
+A top-of-screen persistent banner when kill switch triggers
+
+NO special screen
+
+NO redirect
+
+NO manual reset button
+
+ONLY the Trading toggle controls resuming trading
+
+Passive learning, FX5 gating, and isEngineActive behavior must remain unchanged.
+
+This directive removes the old UX, removes obsolete safety code, cleans errors, installs the correct kill-switch UX, and prepares the system for Phase 8.8.3-D.
+
+🛠️ REPLIT TASKS — Execute ALL of the following (in this order)
+🔷 1. REMOVE THE LEGACY KILL-SWITCH SCREEN ENTIRELY
+Remove file:
+client/src/pages/kill-switch.tsx
+
+Remove route from:
+client/src/App.tsx
+
+
+Search for:
+
+'/kill-switch'
+<KillSwitchScreen />
+killSwitch
+safety mode
+
+
+Delete ALL kill-switch-specific routing.
+
+Remove any redirect logic:
+
+Search for:
+
+if (killSwitchTripped)
+setLocation('/kill-switch')
+navigate('/kill-switch')
+
+
+Delete all.
+
+Remove any kill-switch-specific layouts or wrappers.
+
+After this step, DawnTrader must have no dedicated kill-switch screen.
+
+🔷 2. INSTALL OPTION A — TOP-OF-SCREEN BANNER FOR KILL SWITCH
+
+In client/src/App.tsx (or a global layout wrapper), implement:
+
+✔ A persistent, dismissible top alert strip
+
+It must appear as:
+
+Kill Switch Triggered  
+Your portfolio exceeded the Daily Loss Kill Switch limit of X%.  
+Trading has been stopped.
+
+
+Requirements:
+
+Visible whenever killSwitchTripped === true
+
+Full-width banner (top of viewport)
+
+Dismissible with ✕
+
+Does NOT block navigation
+
+Not modal
+
+Not a redirect
+
+Not a separate page
+
+Disappears after dismiss
+
+Will reappear if kill switch triggers again later
+
+Technical:
+
+Place the banner in a component rendered above all page routes, e.g.:
+
+{killSwitchTripped && !bannerDismissed && <KillSwitchBanner />}
+
+
+Store dismissal in local state only (not persistent).
+
+🔷 3. REMOVE THE LEGACY SECONDARY KILL SWITCH SUBSYSTEM
+
+Search for the subsystem in:
+
+server/services/realtime-paper-executor.ts
+
+
+Look for code patterns like:
+
+killSwitchActive
+latencyKillSwitch
+localKillSwitch
+if (latency > xxxms) ...
+self-healing after 30s
+
+Completely remove:
+
+The kill-switch-like flag
+
+The gating logic
+
+The “freeze execution” behavior
+
+Any retry timers that gate execution
+
+Any console logs related to it
+
+Preserve ONLY:
+
+Logging warnings or metrics about latency (optional)
+
+Real-time executor behavior
+
+NO safety gating logic remains here
+
+The real-time executor must NEVER stop trading or execution due to internal logic.
+
+🔷 4. CLEAN UP ALIGNMENT / REFLECTIVE WARNINGS (KS-C)
+
+Replit must identify all warnings from:
+
+AlignmentVerifier
+
+ReflectiveIntelligenceService
+
+Any schema mismatches (enum types, array literal mismatches)
+
+Perform ONLY the following:
+
+A. Identify root causes
+
+Add temporary [KS-C] logs (if needed) to locate exact triggers.
+
+B. Fix only actual schema mismatches
+
+Examples:
+
+Replace array literal mismatches
+
+Fix enum value mismatches
+
+Remove unused reflective checks
+
+Update incorrect type references
+
+Remove checks referencing legacy fields (e.g., tradingSuspended)
+
+C. Remove stale reflective rules referencing deleted systems
+
+Remove reflective checks on tradingSuspended
+
+Remove reflective checks on the deleted kill-switch screen
+
+Remove reflective checks tied to deprecated safety logic
+
+D. Remove or silence ONLY warnings proven irrelevant
+
+Warnings MUST NOT be ignored blindly.
+Replit must verify the cause and confirm the code is safe before removal.
+
+E. Update docs
+
+Include list of cleaned warnings in the final KS-FINAL implementation report.
+
+🔷 5. VERIFY UI KILL-SWITCH UX LOGIC WORKS END-TO-END
+
+Replit must perform the following checks:
+
+1. When kill switch triggers:
+
+Trading auto-stops (isEngineActive = false)
+
+Banner appears
+
+No redirect
+
+No special screen
+
+No modal
+
+No resume button
+
+Trading toggle shows STOPPED
+
+2. When the user toggles trading ON:
+
+killSwitchTripped clears
+
+Banner disappears
+
+24h loss baseline resets
+
+Engine starts
+
+No errors
+
+3. Log cleanliness:
+
+No reflective or alignment warnings
+
+No kill-switch UX errors
+
+No legacy kill switch logs
+
+🔷 6. DOCUMENTATION REQUIREMENTS
+
+Replit must generate:
+
+📄 docs/audits/REB_8.8.3-KS-FINAL_Implementation_Report.md
+
+Containing:
+
+Summary of kill-switch screen removal
+
+Summary of UX banner implementation
+
+Summary of legacy kill-switch subsystem removal
+
+Summary of warnings cleaned
+
+Before/after screenshots (if possible)
+
+Confirmation that engine responds correctly
+
+🏁 EXPECTED FINAL MESSAGE
+
+Replit must conclude with:
+
+“REB 8.8.3-KS-FINAL complete. Kill switch screen removed, banner UX installed, legacy kill switch eliminated, reflective warnings resolved.”

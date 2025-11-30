@@ -32,16 +32,10 @@ export interface RealTimeTradeResult {
 
 class RealtimePaperExecutor {
   private mdCoordinator = getMarketDataCoordinator();
-  private killSwitchActive = false;
-  private killSwitchReason: string | null = null;
 
   // Concurrency controls
   private activeOrdersPerSymbol: Map<string, number> = new Map();
   private readonly MAX_CONCURRENT_PER_SYMBOL = 3;
-  
-  // Kill-switch thresholds
-  private readonly DAILY_LOSS_THRESHOLD = -1000; // $1000 daily loss
-  private readonly LATENCY_THRESHOLD_MS = 5000; // 5 second latency
   
   constructor() {
     // Subscribe to market data updates
@@ -59,11 +53,6 @@ class RealtimePaperExecutor {
     const startTime = Date.now();
 
     try {
-      // Check kill-switch
-      if (this.killSwitchActive) {
-        throw new Error(`Kill-switch active: ${this.killSwitchReason}`);
-      }
-
       // Check concurrency limits
       this.checkConcurrencyLimits(request.symbol);
 
@@ -140,9 +129,6 @@ class RealtimePaperExecutor {
 
       const executionTimeMs = Date.now() - startTime;
 
-      // Check kill-switch conditions
-      this.checkKillSwitch(executionTimeMs);
-
       return {
         orderId,
         success: true,
@@ -196,56 +182,6 @@ class RealtimePaperExecutor {
   }
 
   /**
-   * Check kill-switch conditions
-   */
-  private checkKillSwitch(latencyMs: number): void {
-    // Latency threshold
-    if (latencyMs > this.LATENCY_THRESHOLD_MS) {
-      this.activateKillSwitch(`Execution latency exceeded ${this.LATENCY_THRESHOLD_MS}ms`);
-    }
-
-    // WebSocket failure
-    const mdStatus = this.mdCoordinator.getStatus();
-    if (!mdStatus.wsConnected && mdStatus.lastTickAgeMs > 10000) {
-      this.activateKillSwitch('Cascading WS failure - no data > 10s');
-    }
-  }
-
-  /**
-   * Activate kill-switch
-   */
-  private activateKillSwitch(reason: string): void {
-    if (!this.killSwitchActive) {
-      this.killSwitchActive = true;
-      this.killSwitchReason = reason;
-      console.error(`[RT-Paper] 🚨 KILL-SWITCH ACTIVATED: ${reason}`);
-      
-      // Trigger self-repair after cooldown
-      setTimeout(() => this.attemptSelfRepair(), 30000); // 30 second cooldown
-    }
-  }
-
-  /**
-   * Attempt to reset kill-switch
-   */
-  private attemptSelfRepair(): void {
-    console.log('[RT-Paper] Attempting self-repair...');
-    
-    // Check if conditions improved
-    const mdStatus = this.mdCoordinator.getStatus();
-    
-    if (mdStatus.wsConnected || mdStatus.lastTickAgeMs < 2000) {
-      this.killSwitchActive = false;
-      this.killSwitchReason = null;
-      console.log('[RT-Paper] ✅ Self-repair successful - kill-switch reset');
-    } else {
-      console.log('[RT-Paper] ⚠️  Self-repair failed - conditions not improved');
-      // Try again later
-      setTimeout(() => this.attemptSelfRepair(), 30000);
-    }
-  }
-
-  /**
    * Record trade in paper portfolio
    */
   private async recordPaperTrade(trade: any): Promise<void> {
@@ -263,10 +199,6 @@ class RealtimePaperExecutor {
     const execMetrics = executionTiming.getMetrics(10);
 
     return {
-      killSwitch: {
-        active: this.killSwitchActive,
-        reason: this.killSwitchReason,
-      },
       marketData: {
         source: mdStatus.dataSource,
         wsConnected: mdStatus.wsConnected,

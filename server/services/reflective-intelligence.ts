@@ -8,6 +8,15 @@ import { contextBridge } from './context-bridge';
 import { nanoid } from 'nanoid';
 
 /**
+ * REB 8.8.3-KS-FINAL: Convert JS array to PostgreSQL text[] literal format
+ * PostgreSQL expects {"a","b","c"} not ["a","b","c"]
+ */
+function toPgArray(arr: string[]): string {
+  if (!arr || arr.length === 0) return '{}';
+  return `{${arr.map(s => `"${s.replace(/"/g, '\\"')}"`).join(',')}}`;
+}
+
+/**
  * Reflection depth levels
  */
 type ReflectionDepth = 'surface' | 'analytical' | 'deep' | 'meta';
@@ -97,8 +106,8 @@ class ReflectiveIntelligenceService {
         ${input.subjectArea},
         ${analysis.text},
         ${JSON.stringify(analysis.insights)}::jsonb,
-        ${JSON.stringify(analysis.questions)}::text[],
-        ${JSON.stringify(analysis.suggestions)}::text[],
+        ${toPgArray(analysis.questions)}::text[],
+        ${toPgArray(analysis.suggestions)}::text[],
         ${analysis.confidence},
         ${JSON.stringify({ mode, contextData: input.contextData })}::jsonb
       )
@@ -250,9 +259,9 @@ class ReflectiveIntelligenceService {
         ${input.outcomeObserved || null},
         ${input.qualityRating}::quality_rating,
         ${input.accuracyScore || null},
-        ${JSON.stringify(analysis.biases)}::text[],
+        ${toPgArray(analysis.biases)}::text[],
         ${analysis.lessons},
-        ${JSON.stringify(analysis.alternatives)}::text[],
+        ${toPgArray(analysis.alternatives)}::text[],
         ${analysis.wouldRepeat},
         ${JSON.stringify({ mode })}::jsonb
       )
