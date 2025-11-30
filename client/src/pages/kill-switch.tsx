@@ -22,7 +22,7 @@ import { Link, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface KillSwitchStatus {
-  tradingSuspended: boolean;
+  killSwitchTripped: boolean;
   dailyLossKillSwitch: number;
   current24hPL?: {
     lossPercent: number;
@@ -53,24 +53,25 @@ export default function KillSwitchScreen() {
     }
   });
 
-  // Reset mutation
-  const resetMutation = useMutation({
+  // REB 8.8.3-KS-B: Resume trading mutation (starts trading, auto-clears kill switch)
+  const resumeTradingMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest('POST', '/api/kill-switch/reset', { notes });
+      return await apiRequest('POST', '/api/trading/start', { mode: 'paper' });
     },
     onSuccess: () => {
       toast({
-        title: "Kill Switch Reset",
-        description: "Trading has been resumed. You can now place new trades.",
+        title: "Trading Resumed",
+        description: "Kill switch cleared. Trading has been resumed.",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/kill-switch/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trading-status'] });
       setLocation('/');
     },
     onError: (error: any) => {
       toast({
-        title: "Reset Failed",
-        description: error.message || "Failed to reset kill switch",
+        title: "Failed to Resume Trading",
+        description: error.message || "Failed to resume trading",
         variant: "destructive",
       });
     }
@@ -99,9 +100,9 @@ export default function KillSwitchScreen() {
     chatMutation.mutate();
   };
 
-  // Redirect if not suspended
+  // REB 8.8.3-KS-B: Redirect if kill switch not tripped
   useEffect(() => {
-    if (status && !status.tradingSuspended) {
+    if (status && !status.killSwitchTripped) {
       setLocation('/');
     }
   }, [status, setLocation]);
@@ -120,7 +121,7 @@ export default function KillSwitchScreen() {
     );
   }
 
-  if (!status?.tradingSuspended) {
+  if (!status?.killSwitchTripped) {
     return null;
   }
 
@@ -279,12 +280,13 @@ export default function KillSwitchScreen() {
           </Card>
         )}
 
-        {/* Actions Card */}
+        {/* Actions Card - REB 8.8.3-KS-B */}
         <Card>
           <CardHeader>
             <CardTitle>Next Steps</CardTitle>
             <CardDescription>
-              You can analyze what went wrong with AI assistance, or reset the kill switch to resume trading.
+              You can analyze what went wrong with AI assistance, or resume trading when ready.
+              The kill switch will automatically clear when you start trading.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -303,33 +305,33 @@ export default function KillSwitchScreen() {
 
             <Separator />
 
-            {/* Reset Section */}
+            {/* REB 8.8.3-KS-B: Resume Trading Section */}
             <div className="space-y-3">
               <div>
-                <h3 className="font-semibold mb-1">Reset Kill Switch</h3>
+                <h3 className="font-semibold mb-1">Resume Trading</h3>
                 <p className="text-sm text-muted-foreground">
-                  Add notes about your decision to resume trading (optional):
+                  When you're ready, click below to resume trading. The kill switch will be
+                  automatically cleared and a fresh 24-hour loss window will start.
                 </p>
               </div>
               
               <Textarea
-                placeholder="E.g., Reviewed trades, adjusted settings, ready to resume..."
+                placeholder="E.g., Reviewed trades, adjusted settings, ready to resume... (optional notes)"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="min-h-[100px]"
-                data-testid="input-reset-notes"
+                data-testid="input-resume-notes"
               />
 
               <Button
-                onClick={() => resetMutation.mutate()}
-                disabled={resetMutation.isPending}
+                onClick={() => resumeTradingMutation.mutate()}
+                disabled={resumeTradingMutation.isPending}
                 size="lg"
                 className="w-full"
-                variant="destructive"
-                data-testid="button-reset-kill-switch"
+                data-testid="button-resume-trading"
               >
                 <RotateCw className="w-5 h-5 mr-2" />
-                {resetMutation.isPending ? 'Resetting...' : 'Reset Kill Switch & Resume Trading'}
+                {resumeTradingMutation.isPending ? 'Resuming...' : 'Resume Trading'}
               </Button>
             </div>
           </CardContent>

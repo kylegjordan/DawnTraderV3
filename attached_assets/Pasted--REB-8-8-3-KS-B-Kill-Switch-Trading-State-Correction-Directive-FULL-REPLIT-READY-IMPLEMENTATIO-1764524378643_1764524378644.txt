@@ -1,0 +1,286 @@
+⭐ REB 8.8.3-KS-B — Kill Switch & Trading State Correction Directive
+
+FULL REPLIT-READY IMPLEMENTATION INSTRUCTION
+
+🔐 Authentication
+
+Use the test user:
+
+username: testuser123
+password: SecurePass123!
+
+🧠 Context (Follow Exactly)
+
+This phase corrects the kill-switch and trading-state wiring so that DawnTrader behaves as intended:
+
+✔ There is only ONE kill switch
+
+→ The Daily Loss Kill Switch (24h realized loss ≥ dailyLossKillSwitchPct).
+
+✔ When the kill switch triggers
+
+It must:
+
+Use the same code path as toggling Trading Active → Stopped
+(sets isEngineActive[mode] = false, clears Active Pool, enters passive learning).
+
+Set only one flag:
+killSwitchTripped[mode] = true
+(persistent until user restarts trading).
+
+Trigger one UI alert/banner:
+“Your portfolio has exceeded the Daily Loss Kill Switch limit of X%.
+Trading has been stopped. You may resume trading at your own risk.”
+
+NOT stop scanning.
+
+NOT freeze orchestrator functions globally.
+
+NOT require pressing any ‘Reset Kill Switch’ button.
+
+NOT use any secondary kill-switch-like fields.
+
+NOT interact with LATTI or Coherency rules.
+
+✔ When the user toggles trading from STOPPED → ACTIVE
+
+This must:
+
+Clear killSwitchTripped[mode] automatically,
+
+Set isEngineActive[mode] = true,
+
+Start 24-hour loss calculation window fresh,
+
+NOT require hitting any special endpoint.
+
+✔ Remove all references to tradingSuspended
+
+This field is obsolete, confusing, and against intended architecture.
+
+✔ Maintain REB 2.8.6 Passive Learning Behavior
+
+passiveLearning = !isEngineActive
+Must remain untouched and correctly derived-only.
+
+🛠️ WHAT REPLIT MUST DO (Step-by-Step Implementation Tasks)
+
+This is the exact correction plan and must be executed in this order.
+
+🔷 1. Remove tradingSuspended Everywhere (Backend + Frontend)
+
+Replit must:
+
+A. Remove the field from:
+
+risk-manager.ts
+
+market-scanner
+
+guardrail-policy
+
+paper-execution-engine
+
+trading-engine
+
+All route handlers returning it
+
+Anything referencing “suspended”, “tradingSuspended”, or “suspend”
+
+B. Remove all logic that:
+
+Writes to tradingSuspended
+
+Reads tradingSuspended
+
+Uses it as a gating condition for strategies or pre-trade checks
+
+C. Search patterns:
+tradingSuspended
+suspended
+suspend
+trading_suspended
+
+
+Replace all gating with kill switch behavior or engine state, as specified below.
+
+🔷 2. Unify Kill Switch Behavior (Single Flag Only)
+
+The ONLY kill-switch flag must be:
+
+guardrails_v2.killSwitchTripped (per mode)
+
+
+Replit must ensure:
+
+A. All kill-switch tripping calls go through:
+guardrailPolicy.tripKillSwitch(mode, reason)
+
+B. tripKillSwitch() must:
+
+Write:
+
+killSwitchTripped = true
+
+killSwitchTimestamp = now
+
+killSwitchReason = “DAILY_LOSS_THRESHOLD_EXCEEDED” (or auto-generated)
+
+Stop Trading:
+
+Invoke the same code path used by /api/trading/stop for that mode:
+
+systemContext.setEngineActive(mode, false)
+
+Clear active pool
+
+Emit system state update events
+
+Emit a broadcast:
+
+system:killswitch_tripped
+
+
+Containing:
+
+mode
+
+lossPercent
+
+threshold
+
+timestamp
+
+C. No other flags (legacy or otherwise) may be set.
+🔷 3. Eliminate the Kill-Switch Reset Endpoint
+
+Delete or deprecate:
+
+POST /api/guardrails-v2/kill-switch/reset
+
+
+And remove UI references to it.
+
+🔷 4. User Toggle From STOPPED → ACTIVE Automatically Clears Kill Switch
+
+Modify the trading-start handler:
+
+POST /api/trading/start
+
+
+Replit must:
+
+Set isEngineActive[mode] = true
+
+Clear kill switch:
+
+killSwitchTripped = false
+killSwitchTimestamp = null
+killSwitchReason = null
+
+
+Reset daily-loss 24-hour baseline in RiskManager
+(start a fresh measurement window)
+
+Emit broadcast:
+
+system:killswitch_cleared
+
+🔷 5. Correct Kill-Switch 24h Loss Logic
+
+Daily-loss kill switch must:
+
+Calculate 24h realized loss only
+
+Compare to dailyLossKillSwitchPct
+
+If threshold reached → call tripKillSwitch()
+
+Ensure:
+
+No legacy code also triggers kill-switch-like behavior
+
+No unrealized loss or volatility flags trigger kill switch
+
+LATTI cannot trigger kill switch
+
+Coherency cannot trigger kill switch
+
+🔷 6. UI Behavior Changes (Minimal)
+
+Replit must:
+
+A. Remove:
+
+Kill-switch “reset” screens
+
+Any “reset kill switch” buttons
+
+Any redirects enforcing “kill-switch screen only”
+
+B. Add:
+
+When killSwitchTripped = true AND user enters the app:
+
+Display an alert banner:
+
+“Your portfolio loss exceeded the Daily Loss Kill Switch limit of X%.
+Trading has been stopped. You may resume trading at your own risk.”
+
+User dismisses banner → no backend action.
+
+C. Trading toggle remains the sole action to restart trading.
+🔷 7. Keep “Latency Kill Switch” Local Only
+
+In realtime-paper-executor.ts:
+
+Keep the local killSwitchActive fuse
+
+Clearly comment it as local subsystem safety
+
+Ensure it does not write to:
+
+killSwitchTripped
+
+any database flag
+
+isEngineActive
+
+This safeguard must remain totally isolated.
+
+🔷 8. Update/Rebuild Documentation
+
+Replit must update or regenerate:
+
+docs/audits/REB_8.8.3-KS-А_Kill_Switch_Trading_State_Audit.md (append a KS-B section)
+
+Add:
+docs/audits/REB_8.8.3-KS-B_Fix_Implementation_Report.md
+
+🔷 9. Verification Required
+
+Replit must confirm ALL of the following:
+
+The kill switch only triggers on 24h realized loss.
+
+The kill switch only uses killSwitchTripped.
+
+tradingSuspended is fully removed.
+
+isEngineActive = false when kill switch fires.
+
+Passive learning behavior continues correctly.
+
+User restart (toggle to ACTIVE) resets kill switch automatically.
+
+No more “kill switch reset” screen or endpoints remain.
+
+LATTI & Coherency cannot trip kill switch.
+
+Local latency fuse remains local.
+
+🏁 Final Expected Output
+
+Replit must conclude with:
+
+“REB 8.8.3-KS-B complete. Kill Switch & Trading State corrected. Unified kill-switch behavior implemented. System aligned with intended architecture.”

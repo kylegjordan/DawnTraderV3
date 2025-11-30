@@ -75,6 +75,10 @@ Critical portfolio balance synchronization for paper trading mode ensures `portf
 
 **REB 8.8.3-B Diagnostic Logging** (November 30, 2025) implemented comprehensive JSON diagnostic logging across all 9 strategies and SignalOrchestrator for runtime behavior validation. Each strategy now emits `[8.8.3-B][STRATEGY]` logs with input snapshots and signal outputs. SignalOrchestrator emits `[8.8.3-B][EVAL_CYCLE]` logs for per-symbol evaluation telemetry. Logs can be filtered via `grep "\[8.8.3-B\]"`. Documentation: `docs/audits/REB-8.8.3-B_Diagnostic_Logging.md`.
 
+**REB 8.8.3-KS-A Kill Switch Audit** (November 30, 2025) completed comprehensive read-only audit of all trading state flags and kill switch mechanisms. Documented relationships between `killSwitchTripped`, `tradingSuspended`, `isEngineActive`, and `passiveLearning` flags. Identified redundancy between `killSwitchTripped` and `tradingSuspended`. Audit outputs: `docs/audits/REB_8.8.3-KS-A_Kill_Switch_Trading_State_Audit.md` and `REB_8.8.3-KS-A_State_Flags_Map.json`.
+
+**REB 8.8.3-KS-B Kill Switch Unification** (November 30, 2025) unified kill switch state management around `killSwitchTripped` as single source of truth. Key changes: (1) `tripKillSwitch()` now also stops engine, (2) Trading start endpoint auto-clears kill switch, (3) Manual reset endpoints deprecated, (4) Frontend uses "Resume Trading" button calling `/api/trading/start`. `tradingSuspended` field eliminated. Documentation: `docs/audits/REB_8.8.3-KS-B_Kill_Switch_Unification_Complete.md`.
+
 ## External Dependencies
 -   **Kraken Exchange API**: Market data, trade execution, account management.
 -   **OpenAI GPT-4o / GPT-4o mini API**: AI analysis, conversational assistance, AI Opportunities, voice transcription.

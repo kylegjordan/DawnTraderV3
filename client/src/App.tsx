@@ -107,9 +107,9 @@ function Router() {
   const isMobile = useIsMobile();
   const [location, setLocation] = useLocation();
   
-  // Check kill switch status and auto-redirect
+  // REB 8.8.3-KS-B: Check kill switch status using killSwitchTripped (not tradingSuspended)
   // Phase 40.2: Aligned to 15s for faster kill switch detection
-  const { data: settings } = useQuery<{ tradingSuspended?: boolean }>({
+  const { data: settings } = useQuery<{ killSwitchTripped?: boolean }>({
     queryKey: ['/api/settings'],
     refetchInterval: 15000,
     staleTime: 15000,
@@ -117,10 +117,9 @@ function Router() {
   });
   
   useEffect(() => {
-    const allowedPaths = ['/kill-switch', '/settings'];
-    if (settings?.tradingSuspended && !allowedPaths.includes(location)) {
-      setLocation('/kill-switch');
-    }
+    // REB 8.8.3-KS-B: No longer auto-redirect to /kill-switch
+    // User can freely navigate. Kill switch banner shows on dashboard instead.
+    // Trading is stopped but user can resume by toggling trading on.
   }, [settings, location, setLocation]);
 
   // Check if on public routes (login/register)

@@ -458,8 +458,8 @@ export class PaperSimDiagnosticService {
 
       reasons.push(`${bestSignal.strategy}:${bestSignal.confidence.toFixed(2)}`);
 
-      // Quick guardrail check (simplified - just check kill switch and position limit)
-      if (settings.tradingSuspended) {
+      // REB 8.8.3-KS-B: Quick guardrail check using killSwitchTripped (not tradingSuspended)
+      if ((settings as any).killSwitchTripped) {
         reasons.push('guardrail:kill_switch_active');
       } else {
         // Lightweight risk check - just validate stop loss exists

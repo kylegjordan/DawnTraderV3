@@ -602,16 +602,12 @@ export class MarketScanner {
     try {
       // Phase 27.F.15.B.4: getWatchlist is now mode-only (global)
       const watchlist = await storage.getWatchlist({ mode });
-// Phase 41F-L.E2E-PURGE: DISABLED -       const settings = await storage.getTradingSettings(userId);
       
-      // Phase 41F-L.E2E-PURGE: Trading settings disabled, using default values
-      const settings = {
-        tradingSuspended: false
-      };
-
-      // Check if trading is suspended by kill switch
-      if (settings.tradingSuspended) {
-        console.log('🚨 Trading suspended by Kill Switch — strategies skipped.');
+      // REB 8.8.3-KS-B: Check kill switch via guardrailPolicy (tradingSuspended removed)
+      const { guardrailPolicy } = await import('./guardrail-policy.js');
+      const killSwitchTripped = await guardrailPolicy.isKillSwitchTripped(mode);
+      if (killSwitchTripped) {
+        console.log('🚨 Kill switch tripped — strategies skipped. Resume trading to continue.');
         return;
       }
 

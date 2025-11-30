@@ -194,7 +194,8 @@ export class AlertActionHandler {
   }
 
   /**
-   * Handle kill switch actions
+   * REB 8.8.3-KS-B: Handle kill switch actions
+   * Kill switch is now auto-cleared on trading start, so these actions are informational only
    */
   private static async handleKillSwitchAction(
     alert: SystemAlert,
@@ -202,23 +203,20 @@ export class AlertActionHandler {
     userId: string
   ): Promise<ActionResult> {
     if (action === 'approve' || action === 'retry') {
-      // Reset kill switch
-      await storage.updateTradingSettings(userId, {
-        tradingSuspended: false
-      });
-
+      // REB 8.8.3-KS-B: Kill switch is auto-cleared when user starts trading
+      // This action just acknowledges the alert
       return {
         success: true,
-        message: 'Kill switch reset. Trading can resume.',
-        data: { tradingSuspended: false }
+        message: 'Kill switch acknowledged. Resume trading to continue.',
+        data: { action: 'acknowledged' }
       };
     }
 
     if (action === 'ignore') {
       return {
         success: true,
-        message: 'Kill switch remains active',
-        data: { tradingSuspended: true }
+        message: 'Kill switch alert dismissed. Resume trading when ready.',
+        data: { action: 'ignored' }
       };
     }
 

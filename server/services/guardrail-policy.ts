@@ -352,16 +352,20 @@ class GuardrailPolicyService {
   // ============================================================================
 
   /**
-   * Trip the circuit breaker for a specific mode.
-   * This immediately blocks all new trades and can trigger position closure.
+   * REB 8.8.3-KS-B: Trip the kill switch for a specific mode.
+   * Uses the SAME code path as /api/trading/stop:
+   * 1. Set killSwitchTripped = true
+   * 2. Set isEngineActive = false (via updateSystemContext)
+   * 3. Clear Active Filter Pool
+   * 4. Broadcast system:killswitch_tripped event
    * State is persisted to database for restart resilience.
    */
-  public async tripKillSwitch(mode: TradingMode, reason: string): Promise<void> {
-    console.log(`[GuardrailPolicy] ⚠️ KILL SWITCH TRIPPED for ${mode}: ${reason}`);
+  public async tripKillSwitch(mode: TradingMode, reason: string, lossPercent?: number, threshold?: number): Promise<void> {
+    console.log(`[GuardrailPolicy] 🚨 KILL SWITCH TRIPPED for ${mode}: ${reason}`);
     
-    // Persist to database
+    // 1. Persist kill switch state to database
     const guardrails = await storage.getGuardrailsV2({ mode });
-    const {  lockedByUser, ...rest } = guardrails;
+    const { lockedByUser, ...rest } = guardrails;
     await storage.upsertGuardrailsV2({
       ...rest,
       mode,
@@ -371,16 +375,60 @@ class GuardrailPolicyService {
       killSwitchTrippedAt: new Date()
     });
     
+    // 2. REB 8.8.3-KS-B: Stop trading using SAME path as /api/trading/stop
+    // Set isEngineActive = false
+    await storage.updateSystemContext(mode, {
+      isEngineActive: false,
+      changeReason: `Kill switch tripped: ${reason}`
+    });
+    console.log(`[GuardrailPolicy][KS-B] Set isEngineActive=false for ${mode}`);
+    
+    // 3. REB 8.8.3-KS-B: Clear Active Filter Pool (same as trading stop)
+    try {
+      const { activeFilterPool } = await import('./fx5-scanner.js');
+      activeFilterPool.enforcePassiveModeIfStopped(mode, false);
+      console.log(`[GuardrailPolicy][KS-B] Cleared Active Pool for ${mode}`);
+    } catch (err: any) {
+      console.error(`[GuardrailPolicy] Failed to clear Active Pool:`, err.message);
+    }
+    
+    // 4. Stop the appropriate engine
+    try {
+      if (mode === 'paper') {
+        const { stopPaperSimulation } = await import('./paper-sim-service.js');
+        await stopPaperSimulation('system'); // System-initiated stop
+        console.log(`[GuardrailPolicy][KS-B] Paper simulation stopped`);
+      } else {
+        const { globalLiveEngine } = await import('./global-live-engine.js');
+        await globalLiveEngine.stop();
+        console.log(`[GuardrailPolicy][KS-B] Live trading engine stopped`);
+      }
+    } catch (err: any) {
+      console.error(`[GuardrailPolicy] Failed to stop engine:`, err.message);
+    }
+    
     const current = this.metrics.killSwitchTrips.get(mode) || 0;
     this.metrics.killSwitchTrips.set(mode, current + 1);
     
-    // Emit telemetry event
+    // 5. Broadcast kill switch event
     await this.emitEvent('guardrail.kill_switch.tripped', {
+      type: 'system:killswitch_tripped',
       mode,
       reason,
+      lossPercent: lossPercent || 0,
+      threshold: threshold || 0,
       timestamp: new Date().toISOString(),
       tripCount: current + 1
     });
+    
+    // 6. Broadcast state change for UI
+    try {
+      const { tradingStateSync } = await import('./trading-state-sync.js');
+      tradingStateSync.broadcastUserUpdate('system')
+        .catch(err => console.warn('[GuardrailPolicy] Broadcast error:', err.message));
+    } catch (err: any) {
+      console.error(`[GuardrailPolicy] Failed to broadcast state:`, err.message);
+    }
   }
 
   /**

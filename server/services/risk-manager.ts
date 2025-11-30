@@ -163,16 +163,15 @@ export async function buildSettingsFromModeLevel(
   const portfolioValue = await getPortfolioBalanceV2(mode, userId, globalContextId);
   const riskPct = getRiskPercentageV2(mode, guardrails);
 
-  // Build complete settings object from mode-level data
+  // REB 8.8.3-KS-B: Build settings object using killSwitchTripped (tradingSuspended removed)
   return {
     portfolioValue: portfolioValue.toString(),
     riskPerTradePct: riskPct.toString(),
-    tradingSuspended: guardrails.killSwitchTripped || false,
+    killSwitchTripped: guardrails.killSwitchTripped || false,
     maxOpenTrades: Number(guardrails.maxOpenPositions) || 5,
     dailyLossKillSwitch: guardrails.dailyLossKillSwitchPct ? guardrails.dailyLossKillSwitchPct.toString() : '7.00',
     maxExposurePercent: '50.00', // Not in guardrails_v2, using safe default
     autoTrade: false,
-    // Add other fields as needed for compatibility
   };
 }
 
@@ -308,11 +307,11 @@ export class RiskManager {
     signal: TradeSignal,
     settings: TradingSettings
   ): Promise<RiskCheckResult> {
-    // Check 0: Trading suspended (kill switch)
-    if (settings.tradingSuspended) {
+    // REB 8.8.3-KS-B: Check kill switch tripped (tradingSuspended removed)
+    if ((settings as any).killSwitchTripped) {
       return {
         approved: false,
-        reason: '🚨 Trading suspended due to Kill Switch activation. Reset required before resuming trades.'
+        reason: '🚨 Trading stopped due to Kill Switch activation. Resume trading to continue.'
       };
     }
 
@@ -995,19 +994,20 @@ export class RiskManager {
   }
 
   /**
-   * Check kill switch thresholds and trigger if needed
+   * REB 8.8.3-KS-B: Check kill switch thresholds and trigger if needed
+   * Uses guardrailPolicy.tripKillSwitch() which stops trading via same path as /api/trading/stop
    */
   async checkKillSwitch(mode: 'live' | 'paper', settings: TradingSettings): Promise<{
     triggered: boolean;
     eventType: 'none' | 'warning' | 'kill_switch';
     message: string;
   }> {
-    // Skip if already suspended
-    if (settings.tradingSuspended) {
+    // REB 8.8.3-KS-B: Skip if kill switch already tripped (not tradingSuspended)
+    if ((settings as any).killSwitchTripped) {
       return { triggered: false, eventType: 'none', message: '' };
     }
     
-    const pl24h = await this.calculate24hPL(userId, settings);
+    const pl24h = await this.calculate24hPL(mode, settings);
     
     // Only check if there's a loss
     if (pl24h.totalPL >= 0) {
@@ -1015,10 +1015,10 @@ export class RiskManager {
     }
     
     const killSwitchThreshold = parseFloat(settings.dailyLossKillSwitch || '7.00');
-    const warningTriggerPercent = parseFloat(settings.dailyLossWarningTrigger || '75.00');
+    const warningTriggerPercent = parseFloat((settings as any).dailyLossWarningTrigger || '75.00');
     const warningThreshold = (warningTriggerPercent / 100) * killSwitchThreshold;
     
-    console.log(`\n🛡️  Kill Switch Monitor:`);
+    console.log(`\n🛡️  Kill Switch Monitor [${mode}]:`);
     console.log(`   24h Loss: ${pl24h.lossPercent.toFixed(2)}% ($${Math.abs(pl24h.totalPL).toFixed(2)})`);
     console.log(`   Warning Threshold: ${warningThreshold.toFixed(2)}%`);
     console.log(`   Kill Switch Threshold: ${killSwitchThreshold.toFixed(2)}%`);
@@ -1028,11 +1028,11 @@ export class RiskManager {
       console.log(`   🚨 KILL SWITCH TRIGGERED!`);
       
       // Close all open trades
-      const closedTrades = await this.closeAllTrades(userId);
+      const closedTrades = await this.closeAllTrades(mode);
       
       // Log kill switch event
       await storage.createKillSwitchEvent({
-        userId,
+        userId: 'system',
         eventType: 'kill_switch',
         portfolioValueBefore: pl24h.portfolioValueBefore.toString(),
         portfolioValueAfter: pl24h.portfolioValueCurrent.toString(),
@@ -1042,13 +1042,20 @@ export class RiskManager {
         tradesClosed: JSON.stringify(closedTrades)
       });
       
-      // Suspend trading
-      await storage.updateTradingSettings(userId, { tradingSuspended: true });
+      // REB 8.8.3-KS-B: Use guardrailPolicy.tripKillSwitch() to stop trading
+      // This sets killSwitchTripped=true AND stops trading (isEngineActive=false)
+      const { guardrailPolicy } = await import('./guardrail-policy.js');
+      await guardrailPolicy.tripKillSwitch(
+        mode, 
+        `DAILY_LOSS_THRESHOLD_EXCEEDED: ${pl24h.lossPercent.toFixed(2)}% >= ${killSwitchThreshold}%`,
+        pl24h.lossPercent,
+        killSwitchThreshold
+      );
       
       return {
         triggered: true,
         eventType: 'kill_switch',
-        message: `🚨 Kill Switch Triggered: Portfolio down ${pl24h.lossPercent.toFixed(2)}% in last 24h. All trades closed. Trading suspended.`
+        message: `🚨 Kill Switch Triggered: Portfolio down ${pl24h.lossPercent.toFixed(2)}% in last 24h. All trades closed. Trading stopped.`
       };
     }
     
@@ -1058,7 +1065,7 @@ export class RiskManager {
       
       // Log warning event
       await storage.createKillSwitchEvent({
-        userId,
+        userId: 'system',
         eventType: 'warning',
         portfolioValueBefore: pl24h.portfolioValueBefore.toString(),
         portfolioValueAfter: pl24h.portfolioValueCurrent.toString(),
@@ -1079,15 +1086,10 @@ export class RiskManager {
   }
 
   /**
-   * Close all open trades (called when kill switch triggers)
+   * REB 8.8.3-KS-B: Close all open trades (called when kill switch triggers)
    * Phase 27.F.13.A: Mode-aware - closes positions from correct table
-   * Phase 27.F.13.O: Get mode from user, not from system_context(userId)
    */
-  private async closeAllTrades(userId: string): Promise<any[]> {
-    // Get mode from user, not from system_context(userId)
-    const user = await storage.getUser(userId);
-    const mode = user?.tradingMode || 'paper';
-    
+  private async closeAllTrades(mode: 'live' | 'paper'): Promise<any[]> {
     const closedTrades = [];
     
     if (mode === 'paper') {

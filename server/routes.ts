@@ -1641,35 +1641,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // POST /api/guardrails-v2/kill-switch/reset?mode=paper|live - Reset the kill switch
+  // REB 8.8.3-KS-B: Kill switch reset endpoint DEPRECATED
+  // Kill switch is now auto-cleared when user starts trading via /api/trading/start
   apiRouter.post('/guardrails-v2/kill-switch/reset', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = req.query.mode as 'live' | 'paper';
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
-      }
-
-      const { guardrailPolicy } = await import('./services/guardrail-policy');
-      
-      // Reset the kill switch (now async for database persistence)
-      await guardrailPolicy.resetKillSwitch(mode);
-
-      console.log(`[GuardrailsV2:KillSwitch] Kill switch reset for ${mode} by user ${userId}`);
-
-      res.json({ 
-        ok: true, 
-        data: { 
-          mode, 
-          tripped: false, 
-          timestamp: new Date().toISOString()
-        } 
-      });
-    } catch (error: any) {
-      console.error('[GuardrailsV2:KillSwitch] POST reset error:', error.message);
-      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
-    }
+    res.status(410).json({ 
+      ok: false,
+      error: 'This endpoint is deprecated (REB 8.8.3-KS-B)',
+      message: 'Kill switch is automatically cleared when you start trading. Use the Trading toggle to resume trading.',
+      migration: 'Kill switch reset now happens automatically on POST /api/trading/start'
+    });
   });
 
   // Phase 4: Goals Presets API Endpoints
@@ -2529,6 +2509,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[TradingStart] User ${userId} requesting start in ${mode} mode`);
       console.log('[ENGINE_VALIDATED_MODE]', { mode });
       
+      // REB 8.8.3-KS-B: Check if kill switch is tripped (will be cleared AFTER successful start)
+      const { guardrailPolicy } = await import('./services/guardrail-policy.js');
+      const wasKillSwitchTripped = await guardrailPolicy.isKillSwitchTripped(mode);
+      if (wasKillSwitchTripped) {
+        console.log(`[KS-B] Kill switch is tripped for ${mode} mode - will clear after successful engine start`);
+      }
+      
       // Get API credentials from environment secrets only
       const apiKey = process.env.KRAKEN_API_KEY;
       const apiSecret = process.env.KRAKEN_API_SECRET;
@@ -2647,6 +2634,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log('[ENGINE_WAITING_START] Waiting for engine start with 30s timeout...');
       const result = await Promise.race([startEnginePromise, timeoutPromise]) as any;
       
+      // REB 8.8.3-KS-B: Clear kill switch AFTER successful engine start (atomic truth)
+      // This ensures kill switch only clears when engine actually started successfully
+      if (wasKillSwitchTripped) {
+        console.log(`[KS-B] Engine started successfully - now clearing kill switch for ${mode} mode`);
+        await guardrailPolicy.resetKillSwitch(mode);
+        console.log(`[KS-B] Kill switch cleared for ${mode} mode`);
+        
+        // Broadcast kill switch cleared event
+        const { contextBridge } = await import('./services/context-bridge.js');
+        contextBridge.broadcast({
+          type: 'system:killswitch_cleared',
+          payload: {
+            mode,
+            userId,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+      
       // REB 2.8.5D: Update system context AFTER successful engine start (atomic truth)
       // This ensures isEngineActive only flips true when engine is actually running
       // Trade-off: 1-scan delay vs guaranteed truth consistency
@@ -2713,19 +2719,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         timeout: elapsed >= 9900 // True if timeout occurred
       });
       
-      // REB 2.8.5D: No rollback needed - context update happens AFTER successful start
-      // If we reach this catch block, context was never flipped to true
+      // REB 8.8.3-KS-B: Kill switch was never cleared because engine failed to start
+      // This is the correct behavior - kill switch remains tripped until trading successfully starts
+      console.log(`[KS-B] Engine start failed - kill switch remains in its current state`);
       
       if (error.message?.includes('timeout')) {
         return res.status(504).json({ 
           error: 'Engine start timeout', 
-          message: 'Trading engine failed to start within 10 seconds. Check server logs for details.',
+          message: 'Trading engine failed to start within 30 seconds. Please try again.',
           reason: 'timeout',
           elapsed: `${elapsed}ms`
         });
       }
       
-      res.status(500).json({ error: 'Failed to start trading', details: error.message });
+      res.status(500).json({ 
+        error: 'Failed to start trading', 
+        details: error.message,
+        message: 'Engine failed to start. Please try again or check system logs.'
+      });
     }
   });
 
@@ -8486,14 +8497,28 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // Phase 41F-L.E2E-PURGE: DEPRECATED - Use /api/guardrails-v2/kill-switch endpoints instead
-  // Legacy Kill Switch endpoints - replaced by mode-level guardrails_v2 API
+  // REB 8.8.3-KS-B: Kill Switch status endpoint for frontend compatibility
   apiRouter.get('/kill-switch/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    res.status(410).json({ 
-      error: 'This endpoint is deprecated',
-      message: 'Kill switch now operates at mode-level. Use GET /api/guardrails-v2?mode=paper or /api/guardrails-v2?mode=live to check kill_switch_tripped status.',
-      migration: 'User-level settings eliminated in Phase 41F-L.E2E-PURGE'
-    });
+    try {
+      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
+      
+      const { guardrailPolicy } = await import('./services/guardrail-policy.js');
+      const guardrails = await storage.getGuardrailsV2({ mode });
+      
+      const killSwitchTripped = await guardrailPolicy.isKillSwitchTripped(mode);
+      const dailyLossKillSwitch = guardrails?.dailyLossKillSwitchPct || 7;
+      
+      res.json({
+        killSwitchTripped,
+        dailyLossKillSwitch,
+        mode,
+        current24hPL: null, // Can be populated from portfolio metrics if needed
+        latestEvent: null
+      });
+    } catch (error: any) {
+      console.error('Kill switch status error:', error);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   apiRouter.post('/kill-switch/check', async (req: AuthenticatedRequest, res) => {
@@ -8504,11 +8529,12 @@ Provide specific, actionable recommendations.`,
     });
   });
 
+  // REB 8.8.3-KS-B: Kill switch reset is now automatic on trading start
   apiRouter.post('/kill-switch/reset', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     res.status(410).json({ 
-      error: 'This endpoint is deprecated',
-      message: 'Use POST /api/guardrails-v2/kill-switch/reset?mode=paper or mode=live to reset the kill switch.',
-      migration: 'User-level settings eliminated in Phase 41F-L.E2E-PURGE'
+      error: 'This endpoint is deprecated (REB 8.8.3-KS-B)',
+      message: 'Kill switch is automatically cleared when you start trading. Use POST /api/trading/start with { mode: "paper" or "live" } to resume trading.',
+      migration: 'Kill switch reset now happens automatically on trading start'
     });
   });
 
@@ -8592,7 +8618,7 @@ Provide specific, actionable recommendations.`,
         success: true,
         simulatedTrade,
         killSwitchResult: result,
-        tradingSuspended: updatedSettings?.tradingSuspended || false,
+        killSwitchTripped: updatedSettings?.killSwitchTripped || false,
         targetLossPercent
       });
     } catch (error: any) {
@@ -8629,7 +8655,7 @@ Provide specific, actionable recommendations.`,
       const riskCheck = await riskManager.checkPreTradeRisk(userId, testSignal, settings);
 
       res.json({
-        tradingSuspended: settings.tradingSuspended,
+        killSwitchTripped: settings.killSwitchTripped,
         riskCheckApproved: riskCheck.approved,
         riskCheckReason: riskCheck.reason,
         testSignal
