@@ -1,0 +1,272 @@
+⭐ REB 8.8.3-D — Minimum Viable End-to-End Trade Lifecycle Test (Green Path Pre-Test)
+Directive for Replit Implementation
+
+Authentication:
+
+username: testuser123
+password: SecurePass123!
+
+🧠 CONTEXT (Replit must read carefully before executing)
+
+The following phases are already complete:
+
+✔ 8.8.3-A – Strategy Engine Audit
+
+✔ 8.8.3-B – Minimum Strategy Engine Fix (wiring)
+
+✔ 8.8.3-C – Strategy Flow Validation
+
+✔ 8.8.3-KS-B – Kill Switch Unification
+
+✔ 8.8.3-KS-FINAL – Kill Switch UX, Safety Cleanup, Legacy Removal
+
+The system is now stable:
+
+killSwitchTripped = single source of truth
+
+isEngineActive = true/false for trading state
+
+passiveLearning = !isEngineActive
+
+No redirect screens
+
+No secondary kill switches
+
+Clean logs
+
+Strategy layer instrumented with [8.8.3-B] diagnostics
+
+We are now ready to perform the first real, full end-to-end trade test in DawnTrader V3.
+
+This test MUST complete successfully before Phase 8.8.4 → 8.8.10.
+
+🎯 PRIMARY OBJECTIVE
+
+Produce at least ONE real simulated trade that completes the full lifecycle:
+
+FX5 → Strategy Engine → Signal → Ready-To-Buy
+→ Trade Opened → Monitoring Loop → Trade Closed
+→ Portfolio Updated → Ledger Updated
+
+
+All steps must be verifiable in logs.
+
+🛠️ REPLIT TASKS — Follow these EXACT steps in order
+🔷 1. Preparation & Preconditions
+1.1 Confirm Kill Switch is NOT tripped
+
+Call the settings or guardrails endpoint
+
+Verify killSwitchTripped === false for paper mode
+
+If true, toggle Trading ON (this clears kill switch after successful engine start)
+
+1.2 Confirm trading is STOPPED initially
+isEngineActive(paper) === false
+
+1.3 Confirm the following subsystems are running:
+
+FX5 scanner
+
+SignalOrchestrator
+
+StrategyEngine
+
+PaperTradeExecutor
+
+Market data ingestion
+
+Passive learning (when engine is off)
+
+1.4 Review diagnostic logs and ensure:
+
+No legacy kill-switch errors
+
+No reflective/alignment warnings
+
+No strategy-engine exceptions
+
+🔷 2. Start Paper Trading Engine (Begin the Test Window)
+
+Trigger:
+
+POST /api/trading/start
+
+
+Expected:
+
+isEngineActive becomes TRUE
+
+passiveLearning goes FALSE
+
+FX5 scanning cadence accelerates
+
+Strategy evaluations begin (30s cycle)
+
+[8.8.3-B] logs appear in console
+
+[EVAL_CYCLE]
+
+[STRATEGY]
+
+[ROUTING]
+
+🔷 3. Capture FX5 → Strategy Evaluation Cycle
+
+Let the engine run for at least 3 full cycles (90 seconds).
+
+Replit must collect logs for:
+
+✔ [8.8.3-B][EVAL_CYCLE]
+
+Symbol
+
+Indicator snapshot
+
+Strategies evaluated
+
+Execution time
+
+✔ [8.8.3-B][STRATEGY]
+
+For each strategy:
+
+Inputs
+
+Outputs
+
+Reasons for rejection
+
+Confidence
+
+✔ [8.8.3-B][ROUTING]
+
+Validation results
+
+StrategySignal object shape
+
+Buy/Sell intent
+
+All logs must be captured in the test report.
+
+🔷 4. Observe Ready-To-Buy Behavior
+
+Replit must verify:
+
+At least one valid StrategySignal is routed
+
+Ready-to-Buy queue is populated
+
+No guardrail blocks legitimate trades
+
+No malformed StrategySignal appears
+
+No kill-switch interference
+
+Record the ready-to-buy events.
+
+🔷 5. Observe Trade Open Event
+
+Replit must wait for the first actual trade to open.
+
+Collect:
+
+[TRADE_OPEN] logs
+
+Trade object fields
+
+Entry price
+
+Stop/target
+
+Trade ID
+
+Portfolio risk allocation
+
+Record the trade object in the report.
+
+🔷 6. Observe Trade Monitoring Loop
+
+During the monitoring cycle:
+
+PnL updates
+
+Price tracking
+
+Guardrail evaluation
+
+Trailing logic (if applicable)
+
+Logging of stage transitions
+
+Record at least one monitoring loop iteration.
+
+🔷 7. Observe Trade Close Event
+
+Replit must wait for the first trade to close.
+
+Collect:
+
+[TRADE_CLOSE] logs
+
+Exit price
+
+Profit/Loss
+
+Duration
+
+Reason for close (TP, SL, signal, time, etc.)
+
+Clean ledger record
+
+Confirm:
+
+Portfolio updates immediately
+
+Ledger entry is persisted
+
+No ghost trades
+
+No double-close
+
+🔷 8. Generate Final Diagnostic Report
+
+Replit must produce:
+
+📄 docs/audits/REB_8.8.3-D_Green_Path_Test_Report.md
+
+Including:
+
+1. FX5 → Strategy → Ready-to-Buy → Trade Open → Trade Close logs
+2. Full lifecycle trace for the first trade
+3. Any warnings, errors, or unexpected behavior
+4. Confirmation that:
+
+Scanner behaved correctly
+
+Strategy engine functioned end-to-end
+
+Ready-to-buy had valid signals
+
+Paper engine executed trades
+
+Monitoring loop worked
+
+Portfolio + ledger updated
+
+No kill-switch interference
+
+No race conditions or concurrency bugs
+
+5. A verdict:
+
+GREEN PATH SUCCESS
+or
+
+GREEN PATH FAILED + list of issues
+
+🔷 9. Final Expected Message
+
+Replit must conclude with:
+
+“REB 8.8.3-D complete. Green Path lifecycle executed. See REB_8.8.3-D_Green_Path_Test_Report.md.”
