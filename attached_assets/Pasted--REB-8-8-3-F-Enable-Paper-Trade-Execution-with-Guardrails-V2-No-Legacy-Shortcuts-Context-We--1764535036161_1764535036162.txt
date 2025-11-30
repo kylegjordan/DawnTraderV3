@@ -1,0 +1,339 @@
+🚀 REB 8.8.3-F — Enable Paper Trade Execution with Guardrails V2 (No Legacy Shortcuts)
+
+Context
+
+We are in Phase 8.8.3, and have already completed:
+
+8.8.3-A — Strategy Audit
+
+8.8.3-B — Diagnostic Logging
+
+8.8.3-C — Strategy Flow / Kill Switch Audit
+
+8.8.3-KS-A/B/FINAL — Kill Switch + Trading State fixes
+
+8.8.3-D-FIX — Strategy evaluation from Active Filtered Pool instead of watchlist
+
+8.8.3-E — Ready-to-Buy wired to real strategy signals and refresh button removed
+
+Current state:
+
+FX5 → Active Filtered Pool ✅
+
+Strategy Engine evaluates pool and produces signals ✅
+
+Valid signals are saved to trading_signals and shown in Ready-to-Buy ✅
+
+Trade execution is still disabled by a “pending guardrails_v2 migration” placeholder ❌
+
+Goal of this directive:
+
+Re-enable paper trade execution, using the modern guardrails_v2 + risk manager + trading engine path only (no legacy V1/V2 shortcuts), so that valid RTB signals can open and manage simulated trades end-to-end.
+
+🔐 Authentication for all tests
+
+Use the test user:
+
+username: "testuser123"
+password: "SecurePass123!"
+
+
+Use paper mode for everything in this directive.
+
+Header to include for mode-specific APIs:
+
+x-app-mode: paper
+
+🎯 High-Level Requirements
+
+Signal → Trade execution path must use guardrails_v2 + risk-manager, not legacy structures.
+
+Kill switch semantics must remain as already implemented:
+
+killSwitchTripped lives in guardrails_v2
+
+Kill switch does not block signal generation or RTB display
+
+Kill switch only blocks engine start, and stops trading when tripped
+
+LATTi / autonomy must not be able to start/stop trading or trip/clear kill switch.
+
+Execution must be paper-mode only and must not touch live trading.
+
+After this directive, we must be able to see at least one trade:
+
+Appearing in Open Trades
+
+Being monitored
+
+Eventually closed
+
+PnL + portfolio + ledger updated
+
+📦 Part 1 — Audit the Current Execution Blockers
+
+Objective: Find exactly where execution is being blocked by “pending guardrails_v2 migration” and map the desired path.
+
+Search for the migration placeholder:
+
+Look for log messages like:
+
+"Signal processing disabled (pending guardrails_v2 migration)"
+
+"pending guardrails_v2 migration"
+
+Likely locations:
+
+server/services/paper-execution-engine.ts
+
+server/services/trading-engine.ts
+
+server/services/risk-manager.ts
+
+For each location, document in a short comment (or in docs/audits/REB_8.8.3-F_Execution_Path_Notes.md):
+
+Where the pipeline currently stops (e.g., scanForSignals, processSignal, executeTrade, etc.).
+
+Which methods would be called next if it weren’t blocked:
+
+Risk checks
+
+Position sizing
+
+Trade creation
+
+Lifecycle tracking
+
+Confirm the modern components that must be used:
+
+guardrails_v2 access via guardrail-policy.ts
+
+risk-manager.ts (for:
+
+per-trade risk
+
+total exposure
+
+max positions
+
+cooldown checks
+
+kill switch checks only via its normal logic, not a custom “pre-kill”)
+
+paper-execution-engine.ts
+
+paper-portfolio-manager.ts
+
+trading-engine.ts or equivalent executor for paper trades
+
+lifecycle events service (lifecycle-events.ts if used)
+
+Output: A short internal note or code comments mapping “signal → risk-manager → trade executor → portfolio”.
+
+⚙️ Part 2 — Restore Signal → Execution Path (Paper Mode, Guardrails V2 Only)
+
+Objective: For each valid strategy signal in paper mode, use guardrails_v2 + risk-manager to decide whether to open a trade and, if so, call the correct executor.
+
+2.1 Re-enable processing of strategy signals
+
+In the place where the pipeline is currently blocked (likely in paper-execution-engine.ts):
+
+Remove / replace the early-return that logs "Signal processing disabled (pending guardrails_v2 migration)".
+
+Instead, call a real execution path, roughly in this shape (pseudo-logic):
+
+// inside signal processing loop for paper mode
+const settings = await riskManager.buildSettingsFromGuardrailsV2({
+  mode: 'paper',
+  userId,
+});
+
+const riskCheck = await riskManager.validateSignal({
+  mode: 'paper',
+  settings,
+  signal,          // StrategySignal from strategy-engine
+  portfolioState,  // current positions + balance
+});
+
+if (!riskCheck.allowed) {
+  // log rejection with [8.8.3-F][RISK_REJECT]
+  continue;
+}
+
+// construct trade request from signal + riskCheck.positionSize
+const tradeRequest: PaperTradeRequest = {
+  mode: 'paper',
+  symbol: signal.symbol,
+  direction: signal.direction,   // long/short
+  entryPrice: signal.entryPrice, // or currentPrice
+  stopLoss: signal.stopPrice,
+  takeProfit: signal.targetPrice,
+  size: riskCheck.size,
+  strategy: signal.strategyName,
+  metadata: { ... },
+};
+
+// call the paper trade executor / trading engine
+const tradeResult = await paperPortfolioManager.openTrade(tradeRequest);
+// or whatever the current executor is
+
+
+Important constraints:
+
+Use existing risk-manager functions where possible; don’t invent new guardrail logic.
+
+Respect all guardrails_v2 in paper mode:
+
+portfolio risk per trade
+
+total exposure
+
+max open positions
+
+symbol cooldown
+
+daily loss kill switch (reactive, via existing risk logic)
+
+Do not reintroduce tradingSuspended or any “secondary kill switch”.
+
+2.2 Use correct trading state & kill switch logic
+
+Only process signals / open trades when:
+
+isEngineActive.paper === true
+
+killSwitchTripped === false at engine start (as already implemented)
+
+Do not stop scanning or signal generation when kill switch trips.
+
+Kill switch should stop trading (no new trades) by stopping the engine, not silently ignore signals with engine still marked active.
+
+📈 Part 3 — Ensure Trade Lifecycle Completes
+
+Objective: Once a trade is opened, its lifecycle must be fully managed.
+
+Verify and, if needed, fix:
+
+Open → Monitor → Close
+
+The monitoring loop (likely in paper-portfolio-manager.ts or paper-execution-engine.ts) must:
+
+Re-value open trades on price updates
+
+Check stop loss / take profit logic
+
+Apply any time-based or strategy-based close rules
+
+Call a close method when appropriate
+
+Portfolio & Ledger Updates
+
+When a trade opens/closes:
+
+Portfolio balance should update (realized PnL)
+
+Unrealized PnL should reflect current price
+
+Position tables updated
+
+Trade history / ledger entry created
+
+Guardrail Updates
+
+Risk / exposure / 24h PnL metrics should update so that:
+
+Future risk checks see correct exposure
+
+Daily loss kill switch can trigger when threshold exceeded
+
+Do not let guardrails silently close trades behind the scenes without logging.
+
+Lifecycle Logging ([8.8.3-F])
+
+Add focused, JSON-style logs:
+
+[8.8.3-F][OPEN] when a trade is opened
+
+[8.8.3-F][CLOSE] when a trade is closed
+
+[8.8.3-F][RISK_REJECT] when a signal is rejected by risk-manager
+
+Include at least:
+
+symbol, strategy, direction
+
+entryPrice, size
+
+reason for rejection / close
+
+🖥 Part 4 — UI & API Confirmation
+
+Objective: Confirm the front end reflects the new behavior correctly in paper mode.
+
+Use testuser123 and the existing UI.
+
+Start the paper engine from the Trading page (toggle → ACTIVE, mode=PAPER).
+
+Watch:
+
+Filter Insights → see Active Filtered Pool
+
+Ready-to-Buy → see signals populate (already working)
+
+Open Trades (tab) → verify:
+
+At least one trade appears after a few cycles
+
+Columns show symbol, size, entry, PnL, etc.
+
+Confirm Trade History (if available) records closed trades.
+
+No additional UI changes are required for this directive.
+
+✅ Part 5 — Green Path Test for 8.8.3-F
+
+Objective: Prove the minimum viable end-to-end trade using the modern stack.
+
+Run one complete test and summarize in logs + docs:
+
+Start paper trading (/api/trading/start with mode: "paper").
+
+Wait for at least 3–5 evaluation cycles.
+
+Capture logs showing:
+
+A symbol from Active Filtered Pool
+
+Strategy signal generated
+
+Risk manager approving the trade
+
+Trade opened ([8.8.3-F][OPEN])
+
+Trade monitored
+
+Trade closed ([8.8.3-F][CLOSE])
+
+Portfolio / ledger updates
+
+Confirm via API/UI:
+
+/api/trading-signals returns signals (as before)
+
+/api/trades or equivalent shows open/closed trades
+
+UI shows at least one trade in Open Trades and later in history.
+
+Create:
+
+docs/audits/REB_8.8.3-F_Paper_Execution_Green_Path.md
+
+Short narrative of the green path
+
+Key logs (sanitized)
+
+Any limitations or TODOs for Phase 9
+
+End this directive with a message:
+
+"REB 8.8.3-F paper execution with guardrails_v2 is complete. At least one full trade lifecycle (open → monitor → close → portfolio/ledger update) has been verified in paper mode using real FX5 → strategy → RTB signals."
