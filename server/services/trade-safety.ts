@@ -1,0 +1,465 @@
+/**
+ * Phase 8.8.3-H4: Trade Safety Service
+ * 
+ * All pre-trade risk checks are driven by guardrails_v2 values.
+ * No hidden risk rules - everything is visible in the Guardrails tab.
+ * 
+ * This replaces the legacy RiskManager class with transparent,
+ * guardrail-driven helper functions.
+ */
+
+import { storage } from '../storage';
+import { TradingSettings, PaperSimOpenPosition, Trade } from '@shared/schema';
+import { 
+  buildSettingsFromGuardrails, 
+  getRiskPercentageV2, 
+  calculateRiskAmount,
+  getPortfolioBalanceV2 
+} from './guardrail-settings';
+import { fxConversionService } from './fx-conversion-service.js';
+import { marketDataService } from './market-data';
+
+export interface TradeCandidate {
+  symbol: string;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice?: number;
+  strategy: string;
+  atr?: number;
+}
+
+export type TradeSafetyResultCode = 
+  | 'KILL_SWITCH'
+  | 'NO_STOP_LOSS'
+  | 'INVALID_STOP_LOSS'
+  | 'POSITION_LIMIT'
+  | 'COOLDOWN'
+  | 'MAX_POSITION'
+  | 'LPCP_LOW_PRICE'
+  | 'LPCP_MIN_NOTIONAL'
+  | 'FX_CONVERSION_FAILED'
+  | 'PORTFOLIO_RISK'
+  | 'INSUFFICIENT_BALANCE'
+  | 'MAX_EXPOSURE'
+  | 'MAX_TRADES';
+
+export type TradeSafetyResult = 
+  | { ok: true }
+  | { ok: false; code: TradeSafetyResultCode; reason: string };
+
+interface ActivePosition {
+  symbol: string;
+  quantity: string;
+  entryPrice: string;
+  avgPrice?: string;
+}
+
+/**
+ * Phase 8.8.3-H4: Get active positions from correct table based on trading mode
+ * Live mode: reads from trades table
+ * Paper mode: reads from paper_sim_open_positions table
+ */
+async function getActivePositions(mode: 'live' | 'paper'): Promise<ActivePosition[]> {
+  if (mode === 'paper') {
+    const paperPositions = await storage.getPaperSimOpenPositions('paper');
+    return paperPositions.map(p => ({
+      symbol: p.symbol,
+      quantity: p.quantity,
+      entryPrice: p.avgPrice,
+      avgPrice: p.avgPrice,
+    }));
+  } else {
+    const activeTrades = await storage.getActiveTrades('live');
+    return activeTrades.map(t => ({
+      symbol: t.symbol,
+      quantity: t.quantity,
+      entryPrice: t.entryPrice,
+    }));
+  }
+}
+
+/**
+ * Normalize symbol for comparison (handles Kraken variants)
+ */
+function normalizeSymbol(symbol: string): string {
+  let normalized = symbol.replace(/^[XZ]+/, '');
+  normalized = normalized.replace(/\/USD|USD|ZUSD|\/ZUSD/g, '');
+  if (normalized === 'BT') {
+    normalized = 'BTC';
+  }
+  return normalized;
+}
+
+/**
+ * Check 1: Kill Switch
+ * Guardrail: killSwitchTripped (boolean)
+ */
+function checkKillSwitch(settings: TradingSettings): TradeSafetyResult {
+  if ((settings as any).killSwitchTripped) {
+    return {
+      ok: false,
+      code: 'KILL_SWITCH',
+      reason: 'Trading stopped due to Kill Switch activation. Resume trading to continue.'
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Check 2: Stop-Loss Required
+ * Every trade must have a valid stop-loss below entry price
+ */
+function checkStopLossRequired(trade: TradeCandidate): TradeSafetyResult {
+  if (!trade.stopPrice || trade.stopPrice === 0) {
+    return {
+      ok: false,
+      code: 'NO_STOP_LOSS',
+      reason: 'Stop-loss is required for all trades'
+    };
+  }
+
+  if (trade.stopPrice >= trade.entryPrice) {
+    return {
+      ok: false,
+      code: 'INVALID_STOP_LOSS',
+      reason: 'Stop-loss must be below entry price for long positions'
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Check 3: Max 1 Position Per Asset
+ * Prevents multiple simultaneous positions in the same asset
+ */
+async function checkMaxPositionsPerAsset(
+  mode: 'live' | 'paper',
+  trade: TradeCandidate
+): Promise<TradeSafetyResult> {
+  console.log(`[8.8.3-H4][GUARDRAIL_CHECK] max_positions_per_asset {symbol:${trade.symbol}, mode:${mode}}`);
+  
+  const activePositions = await getActivePositions(mode);
+  const normalizedSymbol = normalizeSymbol(trade.symbol);
+  
+  const existingPosition = activePositions.find(pos => {
+    const posSymbol = normalizeSymbol(pos.symbol);
+    return posSymbol === normalizedSymbol;
+  });
+
+  if (existingPosition) {
+    console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:POSITION_LIMIT, symbol:${trade.symbol}, existing:true`);
+    return {
+      ok: false,
+      code: 'POSITION_LIMIT',
+      reason: `Already have an open position in ${normalizedSymbol}. Max 1 position per asset allowed.`
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Check 4: Symbol Cooldown Period
+ * Guardrail: symbolCooldownMinutes (number)
+ * Prevents trading the same symbol within specified cooldown period
+ */
+async function checkSymbolCooldown(
+  mode: 'live' | 'paper',
+  trade: TradeCandidate
+): Promise<TradeSafetyResult> {
+  console.log(`[8.8.3-H4][GUARDRAIL_CHECK] cooldown {symbol:${trade.symbol}, mode:${mode}}`);
+  
+  try {
+    const guardrails = await storage.getGuardrails({ mode });
+    if (!guardrails || guardrails.cooldownMinutes === null || guardrails.cooldownMinutes === undefined) {
+      return { ok: true };
+    }
+
+    const cooldownMinutes = guardrails.cooldownMinutes;
+    if (cooldownMinutes === 0) {
+      return { ok: true };
+    }
+
+    const lastTrades = await storage.getTrades(mode, {
+      symbol: trade.symbol,
+      status: 'closed' as const,
+      limit: 1
+    });
+
+    if (!lastTrades || lastTrades.length === 0) {
+      return { ok: true };
+    }
+
+    const lastTrade = lastTrades[0];
+    const lastTradeTime = new Date(lastTrade.exitTime || lastTrade.entryTime).getTime();
+    const currentTime = Date.now();
+    const minutesSinceLastTrade = (currentTime - lastTradeTime) / (1000 * 60);
+
+    if (minutesSinceLastTrade < cooldownMinutes) {
+      const remainingMinutes = Math.ceil(cooldownMinutes - minutesSinceLastTrade);
+      console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:COOLDOWN, symbol:${trade.symbol}, remaining:${remainingMinutes}min`);
+      return {
+        ok: false,
+        code: 'COOLDOWN',
+        reason: `Symbol ${trade.symbol} is in cooldown period. ${remainingMinutes} minute(s) remaining.`
+      };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    console.error(`[8.8.3-H4] Error checking cooldown:`, error);
+    return { ok: true };
+  }
+}
+
+/**
+ * Check 5: Position Size Cap
+ * Guardrail: maxPositionPercentPct (number)
+ * Prevents oversized positions as a percentage of portfolio
+ */
+async function checkPositionSizeCap(
+  mode: 'live' | 'paper',
+  trade: TradeCandidate,
+  settings: TradingSettings
+): Promise<TradeSafetyResult> {
+  const portfolioValue = parseFloat(settings.portfolioValue?.toString() || '0') || 50000;
+  const riskPerTradePct = parseFloat(settings.riskPerTradePct?.toString() || '4');
+  const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
+  const stopDistance = Math.abs(trade.entryPrice - trade.stopPrice);
+  
+  if (stopDistance === 0) {
+    return { ok: true };
+  }
+  
+  const positionSize = riskAmount / stopDistance;
+  const positionValue = positionSize * trade.entryPrice;
+  
+  const maxPositionPercent = parseFloat(String((settings as any).maxPositionPercent || '10.00'));
+  const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
+  const positionPercent = (positionValue / portfolioValue) * 100;
+
+  console.log(`[8.8.3-H4][GUARDRAIL_CHECK] position_size_cap: ${positionPercent.toFixed(1)}% of portfolio, max=${maxPositionPercent}%`);
+
+  if (positionPercent > maxPositionPercent) {
+    console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:MAX_POSITION, position:${positionPercent.toFixed(1)}%, max:${maxPositionPercent}%`);
+    return {
+      ok: false,
+      code: 'MAX_POSITION',
+      reason: `Position size (${positionPercent.toFixed(1)}% = $${positionValue.toFixed(2)}) exceeds ${maxPositionPercent}% portfolio limit ($${maxPositionValue.toFixed(2)})`
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Check 6: Low-Priced Coin Protection (LPCP)
+ * Guardrails:
+ * - lpcpLowPriceThresholdUsd (number)
+ * - lpcpMinStopAtrMultiple (number) 
+ * - lpcpMinNotionalUsd (number)
+ * 
+ * For coins with price ≤ threshold (in USD):
+ * 1. Applies ATR-floor stop distance rule
+ * 2. Applies minimum notional rule
+ */
+async function checkLowPricedCoinProtection(
+  mode: 'live' | 'paper',
+  trade: TradeCandidate,
+  settings: TradingSettings
+): Promise<TradeSafetyResult> {
+  console.log(`[8.8.3-H4][LPCP] check_start {symbol:${trade.symbol}, price:${trade.entryPrice}, mode:${mode}}`);
+  
+  try {
+    const extSettings = settings as any;
+    const threshold = extSettings.lpcpLowPriceThresholdUsd || 0.50;
+    const minStopAtrMult = extSettings.lpcpMinStopAtrMultiple || 3.0;
+    const minPositionNotional = extSettings.lpcpMinNotionalUsd || 25.00;
+    
+    const { baseCurrency, quoteCurrency } = fxConversionService.parseSymbol(trade.symbol);
+    console.log(`[8.8.3-H4][LPCP][FX] Symbol parsed: ${trade.symbol} → base=${baseCurrency}, quote=${quoteCurrency}`);
+    
+    let entryPriceUSD = trade.entryPrice;
+    let stopPriceUSD = trade.stopPrice;
+    
+    if (fxConversionService.requiresConversion(quoteCurrency)) {
+      try {
+        entryPriceUSD = await fxConversionService.convertToUSD(trade.entryPrice, quoteCurrency);
+        stopPriceUSD = await fxConversionService.convertToUSD(trade.stopPrice, quoteCurrency);
+        console.log(`[8.8.3-H4][LPCP][FX] Converted: ${trade.entryPrice} ${quoteCurrency} → $${entryPriceUSD.toFixed(6)} USD`);
+      } catch (fxError) {
+        console.error(`[8.8.3-H4][LPCP][FX_FAIL] FX conversion failed:`, fxError);
+        return {
+          ok: false,
+          code: 'FX_CONVERSION_FAILED',
+          reason: `FX conversion failed for ${quoteCurrency}. Unable to verify low-priced coin protection.`
+        };
+      }
+    }
+    
+    if (entryPriceUSD > threshold) {
+      console.log(`[8.8.3-H4][LPCP] skipped: price $${entryPriceUSD.toFixed(6)} > threshold $${threshold}`);
+      return { ok: true };
+    }
+    
+    console.log(`[8.8.3-H4][LPCP] active: price $${entryPriceUSD.toFixed(6)} ≤ threshold $${threshold}`);
+    
+    let atr = trade.atr || 0;
+    if (!atr) {
+      try {
+        const marketData = await marketDataService.getMarketData(baseCurrency);
+        if (marketData.atr) {
+          atr = marketData.atr;
+          if (fxConversionService.requiresConversion(quoteCurrency)) {
+            atr = await fxConversionService.convertToUSD(atr, quoteCurrency);
+          }
+        } else {
+          atr = entryPriceUSD * 0.02;
+        }
+      } catch {
+        atr = entryPriceUSD * 0.02;
+      }
+    }
+    
+    const strategyStopUSD = Math.abs(entryPriceUSD - stopPriceUSD);
+    const atrFloorStopUSD = atr * minStopAtrMult;
+    
+    const portfolioValue = parseFloat(settings.portfolioValue?.toString() || '50000');
+    const riskPerTradePct = parseFloat(settings.riskPerTradePct?.toString() || '4');
+    const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
+    
+    const effectiveStopUSD = Math.max(strategyStopUSD, atrFloorStopUSD);
+    const positionSize = effectiveStopUSD > 0 ? riskAmount / effectiveStopUSD : 0;
+    const positionNotionalUSD = positionSize * entryPriceUSD;
+    
+    console.log(`[8.8.3-H4][LPCP] notional check: $${positionNotionalUSD.toFixed(2)} USD, min=$${minPositionNotional.toFixed(2)}`);
+    
+    if (positionNotionalUSD < minPositionNotional) {
+      console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:LPCP_MIN_NOTIONAL, notional:$${positionNotionalUSD.toFixed(2)}, min:$${minPositionNotional.toFixed(2)}`);
+      return {
+        ok: false,
+        code: 'LPCP_MIN_NOTIONAL',
+        reason: `Low-priced protection: trade notional ($${positionNotionalUSD.toFixed(2)} USD) below minimum ($${minPositionNotional.toFixed(2)})`
+      };
+    }
+    
+    console.log(`[8.8.3-H4][LPCP] check passed`);
+    return { ok: true };
+    
+  } catch (error) {
+    console.error(`[8.8.3-H4][LPCP] check error:`, error);
+    return { ok: true };
+  }
+}
+
+/**
+ * Check 7: Max Open Trades
+ * Guardrail: maxOpenPositions (number)
+ */
+async function checkMaxOpenTrades(
+  mode: 'live' | 'paper',
+  settings: TradingSettings
+): Promise<TradeSafetyResult> {
+  const activePositions = await getActivePositions(mode);
+  const maxOpenTrades = (settings as any).maxOpenTrades || 5;
+
+  if (activePositions.length >= maxOpenTrades) {
+    console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:MAX_TRADES, current:${activePositions.length}, max:${maxOpenTrades}`);
+    return {
+      ok: false,
+      code: 'MAX_TRADES',
+      reason: `Maximum open trades limit reached (${maxOpenTrades})`
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Phase 8.8.3-H4: Main pre-trade guardrail check
+ * 
+ * Replaces RiskManager.checkPreTradeRisk() with a transparent,
+ * guardrail-driven implementation. All checks use values from
+ * guardrails_v2 that are visible in the Guardrails tab.
+ * 
+ * @param mode Trading mode (live/paper)
+ * @param trade Trade candidate to validate
+ * @param userId Optional user ID for context lookup
+ * @returns TradeSafetyResult with ok=true or ok=false with code and reason
+ */
+export async function checkGuardrailRisk(
+  mode: 'live' | 'paper',
+  trade: TradeCandidate,
+  userId?: string
+): Promise<TradeSafetyResult> {
+  console.log(`[8.8.3-H4][GUARDRAIL_CHECK] Starting pre-trade checks for ${trade.symbol} (mode=${mode})`);
+  
+  const settings = await buildSettingsFromGuardrails(mode, userId);
+  
+  const killSwitchCheck = checkKillSwitch(settings);
+  if (!killSwitchCheck.ok) return killSwitchCheck;
+  
+  const stopLossCheck = checkStopLossRequired(trade);
+  if (!stopLossCheck.ok) return stopLossCheck;
+  
+  const assetCheck = await checkMaxPositionsPerAsset(mode, trade);
+  if (!assetCheck.ok) return assetCheck;
+  
+  const cooldownCheck = await checkSymbolCooldown(mode, trade);
+  if (!cooldownCheck.ok) return cooldownCheck;
+  
+  const positionSizeCheck = await checkPositionSizeCap(mode, trade, settings);
+  if (!positionSizeCheck.ok) return positionSizeCheck;
+  
+  const lpcpCheck = await checkLowPricedCoinProtection(mode, trade, settings);
+  if (!lpcpCheck.ok) return lpcpCheck;
+  
+  const maxTradesCheck = await checkMaxOpenTrades(mode, settings);
+  if (!maxTradesCheck.ok) return maxTradesCheck;
+  
+  console.log(`[8.8.3-H4][GUARDRAIL_PASS] All pre-trade checks passed for ${trade.symbol}`);
+  return { ok: true };
+}
+
+/**
+ * Calculate position size based on risk amount and stop distance
+ * @param symbol Trading pair symbol
+ * @param riskAmount Risk amount in USD
+ * @param entryPrice Entry price
+ * @param stopPrice Stop loss price
+ * @returns Position sizing info
+ */
+export function calculatePositionSize(
+  riskAmount: number,
+  entryPrice: number,
+  stopPrice: number
+): {
+  quantity: number;
+  notionalValue: number;
+} {
+  const stopDistance = Math.abs(entryPrice - stopPrice);
+  if (stopDistance === 0) {
+    return { quantity: 0, notionalValue: 0 };
+  }
+  
+  const quantity = riskAmount / stopDistance;
+  const notionalValue = quantity * entryPrice;
+  
+  return { quantity, notionalValue };
+}
+
+/**
+ * Calculate risk/reward ratio
+ */
+export function calculateRiskReward(
+  entryPrice: number,
+  stopPrice: number,
+  targetPrice: number
+): { risk: number; reward: number; ratio: number } {
+  const risk = Math.abs(entryPrice - stopPrice);
+  const reward = Math.abs(targetPrice - entryPrice);
+  const ratio = risk > 0 ? reward / risk : 0;
+
+  return { risk, reward, ratio };
+}
