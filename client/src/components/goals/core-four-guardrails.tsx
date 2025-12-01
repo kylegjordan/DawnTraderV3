@@ -101,7 +101,7 @@ export function CoreFourGuardrails() {
         }
       });
       if (!response.ok) {
-        throw new Error('Failed to fetch Core Four guardrails');
+        throw new Error('Failed to fetch Core Guardrails');
       }
       return response.json();
     },
@@ -131,7 +131,7 @@ export function CoreFourGuardrails() {
         refetchType: 'all'
       });
       toast({
-        title: "Core Four Guardrails updated",
+        title: "Core Guardrails updated",
         description: `Risk parameters have been saved successfully for ${mode} mode.`,
       });
       setHasChanges(false);
