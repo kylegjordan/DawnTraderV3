@@ -7,6 +7,7 @@ import CoherencyRulesTab from "@/components/goals/coherency-rules-tab";
 import WalterPurposeTab from "@/components/goals/walter-purpose-tab";
 import TuningTab from "@/components/goals/tuning-tab";
 import { CoreFourGuardrails } from "@/components/goals/core-four-guardrails";
+import { LowPricedProtectionCard } from "@/components/goals/low-priced-protection-card";
 import { FiltersWithOverride } from "@/components/goals/filters-with-override";
 import { PresetsGrid } from "@/components/goals/presets-grid";
 import ModeBanner from "@/components/mode-banner";
@@ -93,7 +94,10 @@ export default function GoalsEnginePage() {
         </TabsContent>
 
         <TabsContent value="guardrails" className="mt-6">
-          <CoreFourGuardrails />
+          <div className="space-y-6">
+            <CoreFourGuardrails />
+            <LowPricedProtectionCard />
+          </div>
         </TabsContent>
 
         <TabsContent value="screener" className="mt-6">
