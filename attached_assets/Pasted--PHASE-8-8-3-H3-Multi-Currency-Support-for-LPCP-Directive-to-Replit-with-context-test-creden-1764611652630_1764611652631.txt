@@ -1,0 +1,182 @@
+✅ PHASE 8.8.3-H3 — Multi-Currency Support for LPCP
+(Directive to Replit — with context & test credentials)
+
+Summary:
+Enable Low-Priced Coin Protection (LPCP) to operate correctly on pairs quoted in EUR, GBP, USDT, JPY, CAD, etc., not only USD.
+All LPCP guardrails (Low-Price Threshold, Min Stop ATR multiple, Min Notional) must operate on USD-normalized values, even when the quote currency differs.
+
+🧭 CONTEXT FOR REPL.IT
+
+The LPCP module was implemented in Phase 8.8.3-H.
+
+LATTi/manual locking was fixed in Phase 8.8.3-H2.
+
+LPCP currently assumes that all quote currencies = USD, which is incorrect for many Kraken pairs.
+
+This phase adds an FX conversion layer so that LPCP logic remains consistent across markets.
+
+🧪 Test User Credentials
+
+Use:
+
+username: testuser123
+password: SecurePass123!
+
+🎯 OBJECTIVE
+
+Ensure LPCP evaluates all trades using USD-equivalent values, regardless of quote currency.
+
+This includes:
+
+Low-Price Threshold
+
+ATR stop-floor
+
+Minimum Trade Notional
+
+No other guardrails, strategies, scanners, or pool lifecycles should be modified.
+
+📌 REQUIREMENTS FOR IMPLEMENTATION
+1. Extract quote currency from each symbol
+
+Modify the same location where LPCP checks run (risk-manager):
+
+Support symbol formats:
+
+XRP/USD
+
+ARBEUR
+
+BTCUSDT
+
+ETH/GBP
+
+Kraken legacy: XETHXXBT
+
+Ensure reliable extraction of:
+
+baseCurrency  
+quoteCurrency
+
+2. Create a new FX Conversion Service
+
+New file:
+
+server/services/fx-conversion-service.ts
+
+Responsibilities:
+A. Cache FX quotes (30 seconds TTL)
+
+Fetch once every 30 seconds:
+
+USDT/USD
+
+EUR/USD
+
+GBP/USD
+
+JPY/USD
+
+CAD/USD
+
+CHF/USD
+
+Use Kraken endpoint:
+
+/0/public/Ticker?pair=USDTUSD,EURUSD,GBPUSD,JPYUSD,CADUSD,CHFUSD
+
+B. Provide function
+async function convertToUSD(value: number, quoteCurrency: string): number
+
+
+Logic:
+
+If quote = USD → return value
+
+Else use cached FX multiplier:
+
+if cache empty → fetch immediately
+
+if fetch fails → fail-safe: block trade + log error [8.8.3-H3][FX_FAIL]
+
+3. Apply FX conversion inside LPCP
+
+Update risk-manager:
+
+Convert before running LPCP:
+priceUSD = convertToUSD(entryPrice, quoteCurrency)
+atrUSD   = convertToUSD(atrValue, quoteCurrency)
+notionalUSD = convertToUSD(positionNotional, quoteCurrency)
+stopDistanceUSD = convertToUSD(stopDistance, quoteCurrency)
+
+
+Then run the same existing LPCP logic with these USD values.
+
+No other logic changes.
+
+4. Logging Requirements
+
+Log with the tag:
+
+[8.8.3-H3][FX]
+
+
+Examples:
+
+Rate fetched
+
+Cache used
+
+Conversion applied
+
+Fail-safe triggered
+
+5. Testing Requirements
+Test with testuser123 / SecurePass123!
+A. USD pair
+
+VINE/USD
+→ behavior unchanged
+
+B. USDT pair
+
+XRP/USDT
+→ LPCP must treat price as USD
+
+C. EUR pair
+
+ARB/EUR
+→ LPCP must compare price × EUR/USD rate
+
+D. JPY pair
+
+BTC/JPY
+→ correctly bypass LPCP
+
+E. Low-priced EUR pair
+
+ARB/EUR @ 0.40 EUR
+→ USD = 0.44 → LPCP should trigger
+
+Must confirm:
+
+No UI changes
+
+No regression in RTB or Active Filtered Pool
+
+No strategy or scanner changes
+
+Position sizing unaffected
+
+Only LPCP behavior changes
+
+6. Deliverables
+
+Replit must produce:
+
+Updated code modules
+
+Logs demonstrating USD conversion
+
+A small audit file:
+docs/phase_8.8.3-H3_multi_currency_LPCP.md
