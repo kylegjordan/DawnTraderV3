@@ -289,6 +289,8 @@ export interface IStorage {
   updateSignalStatus(id: string, status: string, executedAt?: Date): Promise<TradingSignal>;
   expireOldSignals(params: { mode: 'live' | 'paper'; beforeDate: Date }): Promise<void>;
   expireAllExpiredSignals(): Promise<number>;
+  deleteAllTradingSignals(mode: 'live' | 'paper'): Promise<number>; // REB 8.8.3-I: Clear RTB on reset
+  consumeSignalBySymbol(mode: 'live' | 'paper', symbol: string): Promise<TradingSignal | null>; // REB 8.8.3-I: Consume signal when trade opens
 
   // Trade methods
   getTrades(mode: 'live' | 'paper', filters?: { status?: string; symbol?: string; strategy?: string; limit?: number }): Promise<Trade[]>;
@@ -1325,7 +1327,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTradingSignals(params: { mode: 'live' | 'paper'; status?: string }): Promise<TradingSignal[]> {
-    // Phase 27.F.15.A: Side-effect purge of expired signals SCOPED to mode only (GLOBAL)
+    // REB 8.8.3-I: Side-effect purge of expired signals SCOPED to mode only (GLOBAL)
     try {
       const purgedRows = await db
         .delete(tradingSignals)
@@ -1336,7 +1338,7 @@ export class DatabaseStorage implements IStorage {
         .returning();
       
       if (purgedRows.length > 0) {
-        console.log(`[RealtimeCleanup] Purged ${purgedRows.length} expired on fetch (mode=${params.mode})`);
+        console.log(`[8.8.3-I][RTB_TTL_EXPIRE] Purged ${purgedRows.length} expired signals on fetch (mode=${params.mode})`);
       }
     } catch (error) {
       // Non-critical, continue with query
@@ -1394,6 +1396,37 @@ export class DatabaseStorage implements IStorage {
       ))
       .returning();
     return result.length;
+  }
+  
+  // REB 8.8.3-I: Clear all RTB signals for a mode (used during simulation reset)
+  async deleteAllTradingSignals(mode: 'live' | 'paper'): Promise<number> {
+    const result = await db
+      .delete(tradingSignals)
+      .where(eq(tradingSignals.mode, mode))
+      .returning();
+    console.log(`[8.8.3-I][RTB_RESET] Cleared ${result.length} signals for mode=${mode}`);
+    return result.length;
+  }
+  
+  // REB 8.8.3-I: Consume RTB signal when trade opens (mark as executed)
+  async consumeSignalBySymbol(mode: 'live' | 'paper', symbol: string): Promise<TradingSignal | null> {
+    const [result] = await db
+      .update(tradingSignals)
+      .set({ 
+        status: 'executed',
+        executedAt: new Date()
+      })
+      .where(and(
+        eq(tradingSignals.mode, mode),
+        eq(tradingSignals.symbol, symbol),
+        eq(tradingSignals.status, 'active')
+      ))
+      .returning();
+    
+    if (result) {
+      console.log(`[8.8.3-I][RTB_CONSUMED] Signal consumed for ${symbol} in mode=${mode}`);
+    }
+    return result || null;
   }
 
   // Phase 27.F.15.B.3: Mode-based trade methods (GLOBAL per mode)

@@ -28,6 +28,7 @@ export class PaperExecutionEngine {
   private readonly FEE_PERCENT = 0.10; // 0.10% trading fee
   private readonly MONITOR_INTERVAL_MS = 10000; // Check every 10 seconds
   private readonly MAX_PRICE_HISTORY = 100; // Keep last 100 candles per symbol
+  private readonly RTB_TTL_SECONDS = 30; // REB 8.8.3-I: RTB signals expire after one FX5 cycle (30 seconds)
 
   constructor(mode: 'live' | 'paper') {
     this.mode = mode;
@@ -585,72 +586,87 @@ export class PaperExecutionEngine {
         }
       });
 
-      // REB 8.8.3-E: Save signal to trading_signals table for Ready-to-Buy display
-      // This populates the RTB tab with real strategy signals from Active Filtered Pool
-      // Parse base/quote currencies from symbol (handles "BTC/USD", "BTCUSD", "FETEUR" formats)
-      let baseCurrency: string;
-      let quoteCurrency: string;
+      // REB 8.8.3-I: Check if symbol already has an active trade/position before RTB enqueue
+      // For paper mode, check paper-sim open positions; for live mode, check broadcast trades
+      const hasActiveTrade = this.mode === 'paper'
+        ? (await storage.getPaperSimOpenPositions(this.mode)).some(pos => pos.symbol === bestSignal.symbol)
+        : (await storage.getActiveTrades(this.mode)).some(trade => trade.symbol === bestSignal.symbol);
       
-      if (bestSignal.symbol.includes('/')) {
-        // Format: "BTC/USD" or "VINE/USD"
-        const parts = bestSignal.symbol.split('/');
-        baseCurrency = parts[0];
-        quoteCurrency = parts[1];
+      if (hasActiveTrade) {
+        console.log(`[8.8.3-I][RTB_REJECT_ACTIVE] Symbol ${bestSignal.symbol} already has active trade - skipping RTB enqueue`);
+        // Still execute the trade logic below if needed, just don't add to RTB
       } else {
-        // Format: "BTCUSD", "FETEUR", "XBTUSDT" - need to detect quote suffix
-        const quotePatterns = ['USDT', 'USD', 'EUR', 'BTC', 'ETH', 'GBP', 'ZUSD', 'ZEUR'];
-        let matched = false;
-        for (const quote of quotePatterns) {
-          if (bestSignal.symbol.endsWith(quote)) {
-            baseCurrency = bestSignal.symbol.slice(0, -quote.length);
-            quoteCurrency = quote;
-            matched = true;
-            break;
-          }
-        }
-        if (!matched) {
-          // Fallback: assume last 3 chars are quote currency
-          baseCurrency = bestSignal.symbol.slice(0, -3);
-          quoteCurrency = bestSignal.symbol.slice(-3);
-        }
-      }
-      
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
-      
-      try {
-        await storage.saveTradingSignal({
-          mode: this.mode,
-          symbol: bestSignal.symbol,
-          baseCurrency,
-          quoteCurrency,
-          strategy: bestSignal.strategy as any,
-          confidence: bestSignal.confidence.toString(),
-          entryPrice: bestSignal.entryPrice.toString(),
-          stopPrice: bestSignal.stopPrice.toString(),
-          targetPrice: bestSignal.targetPrice.toString(),
-          currentPrice: indicators.currentPrice.toString(),
-          vwap: indicators.vwap?.toString() || null,
-          volume24h: indicators.volume?.toString() || null,
-          dailyRange: indicators.high24h && indicators.low24h && indicators.currentPrice > 0
-            ? (((indicators.high24h - indicators.low24h) / indicators.currentPrice) * 100).toFixed(2)
-            : null,
-          status: 'active',
-          expiresAt,
-          metadata: {
-            detectedBy: 'paper_execution_engine',
-            source: 'active_filtered_pool',
-            scanCycle: new Date().toISOString()
-          }
-        });
+        // REB 8.8.3-E: Save signal to trading_signals table for Ready-to-Buy display
+        // This populates the RTB tab with real strategy signals from Active Filtered Pool
+        // Parse base/quote currencies from symbol (handles "BTC/USD", "BTCUSD", "FETEUR" formats)
+        let baseCurrency = '';
+        let quoteCurrency = '';
         
-        console.log('[8.8.3-E][RTB_ENQUEUE]', {
-          mode: this.mode,
-          symbol: bestSignal.symbol,
-          strategy: bestSignal.strategy,
-          confidence: bestSignal.confidence,
-        });
-      } catch (signalError) {
-        console.error(`[8.8.3-E][RTB_ENQUEUE] Failed to save signal for ${bestSignal.symbol}:`, signalError);
+        if (bestSignal.symbol.includes('/')) {
+          // Format: "BTC/USD" or "VINE/USD"
+          const parts = bestSignal.symbol.split('/');
+          baseCurrency = parts[0];
+          quoteCurrency = parts[1];
+        } else {
+          // Format: "BTCUSD", "FETEUR", "XBTUSDT" - need to detect quote suffix
+          const quotePatterns = ['USDT', 'USD', 'EUR', 'BTC', 'ETH', 'GBP', 'ZUSD', 'ZEUR'];
+          let matched = false;
+          for (const quote of quotePatterns) {
+            if (bestSignal.symbol.endsWith(quote)) {
+              baseCurrency = bestSignal.symbol.slice(0, -quote.length);
+              quoteCurrency = quote;
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) {
+            // Fallback: assume last 3 chars are quote currency
+            baseCurrency = bestSignal.symbol.slice(0, -3);
+            quoteCurrency = bestSignal.symbol.slice(-3);
+          }
+        }
+        
+        // REB 8.8.3-I: TTL = 30 seconds (one FX5 cycle)
+        const expiresAt = new Date(Date.now() + this.RTB_TTL_SECONDS * 1000);
+        
+        try {
+          await storage.saveTradingSignal({
+            mode: this.mode,
+            symbol: bestSignal.symbol,
+            baseCurrency,
+            quoteCurrency,
+            strategy: bestSignal.strategy as any,
+            confidence: bestSignal.confidence.toString(),
+            entryPrice: bestSignal.entryPrice.toString(),
+            stopPrice: bestSignal.stopPrice.toString(),
+            targetPrice: bestSignal.targetPrice.toString(),
+            currentPrice: indicators.currentPrice.toString(),
+            vwap: indicators.vwap?.toString() || null,
+            volume24h: indicators.volume?.toString() || null,
+            dailyRange: indicators.high24h && indicators.low24h && indicators.currentPrice > 0
+              ? (((indicators.high24h - indicators.low24h) / indicators.currentPrice) * 100).toFixed(2)
+              : null,
+            status: 'active',
+            expiresAt,
+            metadata: {
+              detectedBy: 'paper_execution_engine',
+              source: 'active_filtered_pool',
+              scanCycle: new Date().toISOString(),
+              ttlSeconds: this.RTB_TTL_SECONDS
+            }
+          });
+          
+          console.log('[8.8.3-I][RTB_ENQUEUE]', {
+            mode: this.mode,
+            symbol: bestSignal.symbol,
+            strategy: bestSignal.strategy,
+            confidence: bestSignal.confidence,
+            ttlSeconds: this.RTB_TTL_SECONDS,
+            expiresAt: expiresAt.toISOString()
+          });
+        } catch (signalError) {
+          console.error(`[8.8.3-I][RTB_ENQUEUE] Failed to save signal for ${bestSignal.symbol}:`, signalError);
+        }
       }
 
       await this.executeSimulatedTrade(bestSignal, settings);
@@ -913,6 +929,16 @@ export class PaperExecutionEngine {
       });
 
       console.log(`[PaperExecution:${this.mode}] Simulated trade opened: ${signal.symbol} (Trade ID: ${trade.id})`);
+
+      // REB 8.8.3-I: Consume RTB signal when trade opens (remove from Ready-to-Buy)
+      try {
+        const consumedSignal = await storage.consumeSignalBySymbol(this.mode, signal.symbol);
+        if (consumedSignal) {
+          console.log(`[8.8.3-I][RTB_CONSUMED] Signal ${consumedSignal.id} consumed for ${signal.symbol}`);
+        }
+      } catch (consumeError) {
+        console.warn(`[8.8.3-I][RTB_CONSUMED] Failed to consume signal for ${signal.symbol}:`, consumeError);
+      }
 
       // [8.8.3-F][OPEN] REB 8.8.3-F: Lifecycle log for trade opened
       console.log(`[8.8.3-F][OPEN]`, JSON.stringify({

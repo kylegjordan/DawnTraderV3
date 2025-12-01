@@ -6599,6 +6599,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       await storage.deleteAllPaperSimOpenPositions('paper');
       await storage.deleteAllPaperSimTradeLogs('paper');
       
+      // REB 8.8.3-I: Clear RTB signals on simulation reset
+      const clearedSignals = await storage.deleteAllTradingSignals('paper');
+      console.log(`[8.8.3-I][RTB_RESET] Cleared ${clearedSignals} RTB signals during simulation reset`);
+      
       // Reset portfolio state for paper mode
       const systemContext = await storage.getSystemContext('paper');
       console.log('[LATTIManager] Retrieved system context for mode: paper');
